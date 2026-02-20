@@ -1230,6 +1230,128 @@ const tools = [
         required: ["keywords"]
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_task",
+      description: "Update an existing task's details like title, description, due date, priority, or assigned staff. Use this when the user asks to change, edit, or modify a task.",
+      parameters: {
+        type: "object",
+        properties: {
+          task_id: {
+            type: "string",
+            description: "The UUID of the task to update"
+          },
+          task_title_search: {
+            type: "string",
+            description: "Search for the task by title keywords if task_id is not known"
+          },
+          title: {
+            type: "string",
+            description: "New title for the task"
+          },
+          description: {
+            type: "string",
+            description: "New description for the task"
+          },
+          due_date: {
+            type: "string",
+            description: "New due date in YYYY-MM-DD format"
+          },
+          priority: {
+            type: "string",
+            enum: ["low", "medium", "high"],
+            description: "New priority level"
+          },
+          assigned_to: {
+            type: "string",
+            description: "UUID of the staff member to assign the task to"
+          }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "complete_task",
+      description: "Mark a task as completed. Use this when the user says a task is done, finished, or completed.",
+      parameters: {
+        type: "object",
+        properties: {
+          task_id: {
+            type: "string",
+            description: "The UUID of the task to complete"
+          },
+          task_title_search: {
+            type: "string",
+            description: "Search for the task by title keywords if task_id is not known"
+          }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "reopen_task",
+      description: "Reopen a completed task back to pending. Use this when the user wants to undo a task completion or reopen a task.",
+      parameters: {
+        type: "object",
+        properties: {
+          task_id: {
+            type: "string",
+            description: "The UUID of the task to reopen"
+          },
+          task_title_search: {
+            type: "string",
+            description: "Search for the task by title keywords if task_id is not known"
+          }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_task",
+      description: "Delete a task permanently. Use this when the user asks to remove or delete a task.",
+      parameters: {
+        type: "object",
+        properties: {
+          task_id: {
+            type: "string",
+            description: "The UUID of the task to delete"
+          },
+          task_title_search: {
+            type: "string",
+            description: "Search for the task by title keywords if task_id is not known"
+          }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_claim_tasks",
+      description: "List all tasks for the current claim or a specific claim. Use this when the user asks to see tasks, show tasks, or wants a task overview.",
+      parameters: {
+        type: "object",
+        properties: {
+          status_filter: {
+            type: "string",
+            enum: ["pending", "completed", "all"],
+            description: "Filter by task status. Default is 'all'."
+          },
+          client_name: {
+            type: "string",
+            description: "Client/policyholder name to look up a different claim's tasks"
+          }
+        }
+      }
+    }
   }
 ];
 // Helper function to get full Darwin-level claim context
@@ -1664,7 +1786,49 @@ async function searchTasksByKeywords(
   }
 }
 
-// Helper function to get date range based on time period
+// Helper function to find a task by title search within a claim
+async function findTaskByTitle(supabase: any, titleSearch: string, claimId?: string): Promise<any | null> {
+  try {
+    let query = supabase
+      .from("tasks")
+      .select("id, title, description, status, priority, due_date, claim_id, assigned_to")
+      .ilike("title", `%${titleSearch}%`)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    
+    if (claimId) {
+      query = query.eq("claim_id", claimId);
+    }
+    
+    const { data, error } = await query;
+    if (error || !data || data.length === 0) return null;
+    return data[0];
+  } catch (err) {
+    console.error("Error finding task by title:", err);
+    return null;
+  }
+}
+
+// Helper function to resolve a task from either task_id or title search
+async function resolveTask(supabase: any, taskId?: string, titleSearch?: string, claimId?: string): Promise<{ task: any | null; error?: string }> {
+  if (taskId) {
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("id, title, description, status, priority, due_date, claim_id, assigned_to")
+      .eq("id", taskId)
+      .single();
+    if (error || !data) return { task: null, error: "Task not found with that ID" };
+    return { task: data };
+  }
+  if (titleSearch) {
+    const task = await findTaskByTitle(supabase, titleSearch, claimId);
+    if (!task) return { task: null, error: `No task found matching "${titleSearch}"` };
+    return { task };
+  }
+  return { task: null, error: "No task ID or search term provided" };
+}
+
+
 function getDateRange(timePeriod: string): { start: Date; end: Date } {
   const now = new Date();
   const end = new Date(now);
@@ -3006,7 +3170,21 @@ GET ADJUSTER INTERACTIONS (get_adjuster_interactions):
   - "what claims have supplement tasks" → search_tasks({ keywords: ["supplement"] })
   - "show completed inspection tasks" → search_tasks({ keywords: ["inspection"], status: "completed" })
 
-IMPORTANT: When the user asks about finding tasks with certain words or topics, ALWAYS use the search_tasks tool. The fuzzy matching will find related terms even if the user's wording doesn't exactly match the task titles.`;
+IMPORTANT: When the user asks about finding tasks with certain words or topics, ALWAYS use the search_tasks tool. The fuzzy matching will find related terms even if the user's wording doesn't exactly match the task titles.
+
+*** TASK MANAGEMENT (update_task, complete_task, reopen_task, delete_task, list_claim_tasks) ***
+- update_task: Change task title, description, due date, priority, or assignee. Can find tasks by title keywords.
+- complete_task: Mark a task as done. Can find by title keywords.
+- reopen_task: Reopen a completed task back to pending.
+- delete_task: Permanently remove a task.
+- list_claim_tasks: Show all tasks for the current claim or a specific claim.
+- All task tools support finding tasks by title search (task_title_search) — no need for exact task IDs.
+- Examples:
+  - "mark the follow-up task as done" → complete_task({ task_title_search: "follow-up" })
+  - "change the inspection task due date to next Friday" → update_task({ task_title_search: "inspection", due_date: "2026-02-27" })
+  - "delete the old estimate task" → delete_task({ task_title_search: "estimate" })
+  - "show me all tasks on this claim" → list_claim_tasks({})
+  - "reopen the supplement task" → reopen_task({ task_title_search: "supplement" })`;
 
     // Fetch available workspaces for context
     let workspacesContext = "";
@@ -3989,6 +4167,206 @@ ${knowledgeBaseContext || ''}`
           } catch (parseErr) {
             console.error("Error in search_tasks:", parseErr);
             answer += `\n\n❌ **Error searching tasks:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "update_task") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Updating task:", params);
+            
+            const { task, error: findErr } = await resolveTask(supabase, params.task_id, params.task_title_search, claimId || undefined);
+            if (!task) {
+              answer += `\n\n❌ **Task not found:** ${findErr}`;
+              continue;
+            }
+            
+            const updateData: any = {};
+            if (params.title) updateData.title = params.title;
+            if (params.description) updateData.description = params.description;
+            if (params.due_date) updateData.due_date = params.due_date;
+            if (params.priority) updateData.priority = params.priority;
+            if (params.assigned_to) updateData.assigned_to = params.assigned_to;
+            updateData.updated_at = new Date().toISOString();
+            
+            if (Object.keys(updateData).length <= 1) {
+              answer += `\n\n❌ **No changes specified** for task "${task.title}".`;
+              continue;
+            }
+            
+            const { error: updateError } = await supabase
+              .from("tasks")
+              .update(updateData)
+              .eq("id", task.id);
+            
+            if (updateError) {
+              answer += `\n\n❌ **Failed to update task:** ${updateError.message}`;
+            } else {
+              const changes = Object.entries(updateData)
+                .filter(([k]) => k !== "updated_at")
+                .map(([k, v]) => `${k}: ${v}`)
+                .join(", ");
+              answer += `\n\n✅ **Task updated:** "${task.title}" → ${changes}`;
+            }
+          } catch (parseErr) {
+            console.error("Error in update_task:", parseErr);
+            answer += `\n\n❌ **Error updating task:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "complete_task") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Completing task:", params);
+            
+            const { task, error: findErr } = await resolveTask(supabase, params.task_id, params.task_title_search, claimId || undefined);
+            if (!task) {
+              answer += `\n\n❌ **Task not found:** ${findErr}`;
+              continue;
+            }
+            
+            if (task.status === "completed") {
+              answer += `\n\n⚠️ **Task already completed:** "${task.title}"`;
+              continue;
+            }
+            
+            const { error: updateError } = await supabase
+              .from("tasks")
+              .update({ status: "completed", completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+              .eq("id", task.id);
+            
+            if (updateError) {
+              answer += `\n\n❌ **Failed to complete task:** ${updateError.message}`;
+            } else {
+              answer += `\n\n✅ **Task completed:** "${task.title}"`;
+            }
+          } catch (parseErr) {
+            console.error("Error in complete_task:", parseErr);
+            answer += `\n\n❌ **Error completing task:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "reopen_task") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Reopening task:", params);
+            
+            const { task, error: findErr } = await resolveTask(supabase, params.task_id, params.task_title_search, claimId || undefined);
+            if (!task) {
+              answer += `\n\n❌ **Task not found:** ${findErr}`;
+              continue;
+            }
+            
+            if (task.status === "pending") {
+              answer += `\n\n⚠️ **Task already pending:** "${task.title}"`;
+              continue;
+            }
+            
+            const { error: updateError } = await supabase
+              .from("tasks")
+              .update({ status: "pending", completed_at: null, updated_at: new Date().toISOString() })
+              .eq("id", task.id);
+            
+            if (updateError) {
+              answer += `\n\n❌ **Failed to reopen task:** ${updateError.message}`;
+            } else {
+              answer += `\n\n✅ **Task reopened:** "${task.title}"`;
+            }
+          } catch (parseErr) {
+            console.error("Error in reopen_task:", parseErr);
+            answer += `\n\n❌ **Error reopening task:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "delete_task") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Deleting task:", params);
+            
+            const { task, error: findErr } = await resolveTask(supabase, params.task_id, params.task_title_search, claimId || undefined);
+            if (!task) {
+              answer += `\n\n❌ **Task not found:** ${findErr}`;
+              continue;
+            }
+            
+            const { error: deleteError } = await supabase
+              .from("tasks")
+              .delete()
+              .eq("id", task.id);
+            
+            if (deleteError) {
+              answer += `\n\n❌ **Failed to delete task:** ${deleteError.message}`;
+            } else {
+              answer += `\n\n✅ **Task deleted:** "${task.title}"`;
+            }
+          } catch (parseErr) {
+            console.error("Error in delete_task:", parseErr);
+            answer += `\n\n❌ **Error deleting task:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "list_claim_tasks") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Listing claim tasks:", params);
+            
+            let targetClaimId = claimId;
+            let targetClaimName = claim?.policyholder_name || "";
+            
+            if (params.client_name) {
+              const foundClaim = await findClaimByClientName(supabase, params.client_name);
+              if (foundClaim) {
+                targetClaimId = foundClaim.id;
+                targetClaimName = foundClaim.policyholder_name;
+              } else {
+                answer += `\n\n❌ **No claim found** for "${params.client_name}"`;
+                continue;
+              }
+            }
+            
+            if (!targetClaimId) {
+              answer += `\n\n❌ **No claim specified.** Please provide a client name or use this from within a claim.`;
+              continue;
+            }
+            
+            let query = supabase
+              .from("tasks")
+              .select("id, title, description, status, priority, due_date, assigned_to, created_at")
+              .eq("claim_id", targetClaimId)
+              .order("created_at", { ascending: false });
+            
+            if (params.status_filter && params.status_filter !== "all") {
+              query = query.eq("status", params.status_filter);
+            }
+            
+            const { data: tasks, error: tasksError } = await query.limit(50);
+            
+            if (tasksError) {
+              answer += `\n\n❌ **Error fetching tasks:** ${tasksError.message}`;
+              continue;
+            }
+            
+            if (!tasks || tasks.length === 0) {
+              answer += `\n\nNo ${params.status_filter && params.status_filter !== "all" ? params.status_filter + " " : ""}tasks found for ${targetClaimName || "this claim"}.`;
+              continue;
+            }
+            
+            const pending = tasks.filter((t: any) => t.status === "pending");
+            const completed = tasks.filter((t: any) => t.status === "completed");
+            
+            let result = `\n\n📋 Tasks for ${targetClaimName || "this claim"} (${pending.length} pending, ${completed.length} completed):\n\n`;
+            
+            if (pending.length > 0) {
+              result += "PENDING:\n";
+              for (const t of pending) {
+                const dueDate = t.due_date ? new Date(t.due_date).toLocaleDateString() : "No due date";
+                const priority = t.priority ? ` [${t.priority}]` : "";
+                result += `  ⏳ ${t.title}${priority} — Due: ${dueDate}\n`;
+                if (t.description) result += `     ${t.description.substring(0, 100)}\n`;
+              }
+            }
+            
+            if (completed.length > 0 && (params.status_filter === "all" || params.status_filter === "completed")) {
+              result += "\nCOMPLETED:\n";
+              for (const t of completed) {
+                result += `  ✅ ${t.title}\n`;
+              }
+            }
+            
+            answer += result;
+          } catch (parseErr) {
+            console.error("Error in list_claim_tasks:", parseErr);
+            answer += `\n\n❌ **Error listing tasks:** Invalid parameters`;
           }
         }
       }
