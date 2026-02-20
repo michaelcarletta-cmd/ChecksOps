@@ -300,7 +300,8 @@ async function handleOutlookSync(req: Request): Promise<Response> {
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
       `&scope=${encodeURIComponent('https://graph.microsoft.com/Mail.Read offline_access User.Read')}` +
       `&state=${state}` +
-      `&response_mode=query`;
+      `&response_mode=query` +
+      `&prompt=select_account`;
 
     return json({ success: true, authUrl });
   }
