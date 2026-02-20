@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Brain, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,9 +11,11 @@ import {
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
-import { Brain, Loader2, Send, Mail, MessageSquare, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { DarwinStructuredRenderer } from "@/components/darwin/DarwinStructuredRenderer";
+import { DarwinModeToggle } from "@/components/darwin/DarwinModeToggle";
+import type { DarwinMode, DarwinStructuredResult } from "@/components/darwin/types";
 
 interface TaskAIAssistantProps {
   task: {
@@ -31,78 +34,57 @@ interface TaskAIAssistantProps {
   onTaskUpdated?: () => void;
 }
 
-interface SuggestedAction {
-  type: "email" | "sms" | "note";
-  title: string;
-  content: string;
-}
-
 interface ClaimData {
   id: string;
   claim_number: string | null;
-  policyholder_name: string | null;
-  policyholder_email: string | null;
-  policyholder_phone: string | null;
-  adjuster_name: string | null;
-  adjuster_email: string | null;
-  adjuster_phone: string | null;
 }
 
-interface AdjusterData {
-  adjuster_name: string;
-  adjuster_email: string | null;
-  adjuster_phone: string | null;
-}
+const parseStructuredResult = (value: unknown): DarwinStructuredResult | null => {
+  const parsedValue =
+    typeof value === "string"
+      ? (() => {
+          try {
+            return JSON.parse(value);
+          } catch {
+            return null;
+          }
+        })()
+      : value;
 
-const TaskAIAssistant = ({ task, claimId, onTaskUpdated }: TaskAIAssistantProps) => {
+  if (!parsedValue || typeof parsedValue !== "object") return null;
+
+  const candidate = parsedValue as Partial<DarwinStructuredResult>;
+  if (typeof candidate.steelman_opponent !== "string") return null;
+  if (!candidate.talking_points || typeof candidate.talking_points !== "object") return null;
+  return parsedValue as DarwinStructuredResult;
+};
+
+const TaskAIAssistant = ({ task, claimId }: TaskAIAssistantProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [sendingAction, setSendingAction] = useState<number | null>(null);
-  const [analysis, setAnalysis] = useState<string | null>(null);
-  const [suggestedActions, setSuggestedActions] = useState<SuggestedAction[]>([]);
+  const [analysis, setAnalysis] = useState<DarwinStructuredResult | null>(null);
   const [customPrompt, setCustomPrompt] = useState("");
   const [claimData, setClaimData] = useState<ClaimData | null>(null);
-  const [primaryAdjuster, setPrimaryAdjuster] = useState<AdjusterData | null>(null);
-  const [userSignature, setUserSignature] = useState<string>("Freedom Adjustment");
+  const [mode, setMode] = useState<DarwinMode>("scripts");
   const { toast } = useToast();
 
   const handleAnalyzeTask = async () => {
     setLoading(true);
     setAnalysis(null);
-    setSuggestedActions([]);
 
     try {
-      // Fetch claim details, primary adjuster, and user signature in parallel
-      const [claimResult, adjustersResult, userResult] = await Promise.all([
-        supabase.from("claims").select("*").eq("id", claimId).single(),
-        supabase.from("claim_adjusters").select("adjuster_name, adjuster_email, adjuster_phone").eq("claim_id", claimId).eq("is_primary", true).single(),
-        supabase.auth.getUser(),
-      ]);
+      const { data: claim, error: claimError } = await supabase
+        .from("claims")
+        .select("*")
+        .eq("id", claimId)
+        .single();
 
-      const claim = claimResult.data;
+      if (claimError) throw claimError;
       setClaimData(claim);
-      
-      // Set primary adjuster if found
-      if (adjustersResult.data) {
-        setPrimaryAdjuster(adjustersResult.data);
-      }
-
-      // Fetch user's email signature
-      if (userResult.data?.user?.id) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("email_signature")
-          .eq("id", userResult.data.user.id)
-          .single();
-        
-        if (profile?.email_signature) {
-          setUserSignature(profile.email_signature);
-        }
-      }
 
       const { data, error } = await supabase.functions.invoke("darwin-ai-analysis", {
         body: {
-          claimId: claimId,
+          claimId,
           analysisType: "task_followup",
           additionalContext: {
             task: {
@@ -112,165 +94,35 @@ const TaskAIAssistant = ({ task, claimId, onTaskUpdated }: TaskAIAssistantProps)
               status: task.status,
               priority: task.priority,
             },
-            claim: claim,
-            adjuster: adjustersResult.data,
+            claim,
             customPrompt: customPrompt || undefined,
           },
+          mode,
         },
       });
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
-      setAnalysis(data.analysis);
-      if (data.suggestedActions) {
-        setSuggestedActions(data.suggestedActions);
+      const structuredResult = parseStructuredResult(data?.result ?? data);
+      if (!structuredResult) {
+        throw new Error("Darwin returned an invalid structured response");
       }
-    } catch (error: any) {
+      setAnalysis(structuredResult);
+      toast({
+        title: "Analysis complete",
+        description: "Darwin generated structured task guidance",
+      });
+    } catch (error) {
       console.error("Error analyzing task:", error);
       toast({
-        title: "Error",
+        title: "Analysis failed",
         description: "Failed to analyze task",
         variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSendAction = async (action: SuggestedAction, index: number) => {
-    if (!claimData) return;
-
-    setSendingAction(index);
-
-    try {
-      if (action.type === "email") {
-        // Prioritize adjuster (insurance company) over client
-        const adjusterEmail = primaryAdjuster?.adjuster_email || claimData.adjuster_email;
-        const adjusterName = primaryAdjuster?.adjuster_name || claimData.adjuster_name;
-        
-        const recipientEmail = adjusterEmail || claimData.policyholder_email;
-        const recipientName = adjusterEmail ? (adjusterName || "Adjuster") : (claimData.policyholder_name || "there");
-
-        if (!recipientEmail) {
-          toast({
-            title: "No recipient",
-            description: "No email address found for this claim",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        // Replace merge field placeholders in content
-        let processedContent = action.content
-          .replace(/\[Recipient Name\]/gi, recipientName)
-          .replace(/\[Policyholder Name\]/gi, claimData.policyholder_name || "")
-          .replace(/\[Adjuster Name\]/gi, adjusterName || "")
-          .replace(/\[Claim Number\]/gi, claimData.claim_number || "")
-          .replace(/Dear \[.*?\],/gi, `Dear ${recipientName},`);
-
-        // Append signature to email content
-        const emailBody = `${processedContent}\n\n${userSignature}`;
-
-        const { error } = await supabase.functions.invoke("send-email", {
-          body: {
-            recipients: [{ email: recipientEmail, name: recipientName, type: "task_followup" }],
-            subject: `Re: Claim #${claimData.claim_number || claimId.slice(0, 8)}`,
-            body: emailBody,
-            claimId: claimId,
-          },
-        });
-
-        if (error) throw error;
-
-        // Mark task as completed since AI has sent the follow-up
-        const now = new Date().toISOString();
-        await supabase
-          .from("tasks")
-          .update({
-            status: 'completed',
-            completed_at: now,
-            updated_at: now,
-          })
-          .eq("id", task.id);
-
-        // Trigger refresh if callback provided
-        onTaskUpdated?.();
-
-        toast({
-          title: "Email sent & task completed",
-          description: `Follow-up email sent to ${recipientEmail}. Task marked as completed.`,
-        });
-      } else if (action.type === "sms") {
-        // Prioritize adjuster phone over client
-        const adjusterPhone = primaryAdjuster?.adjuster_phone || claimData.adjuster_phone;
-        const recipientPhone = adjusterPhone || claimData.policyholder_phone;
-
-        if (!recipientPhone) {
-          toast({
-            title: "No recipient",
-            description: "No phone number found for this claim",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        const { error } = await supabase.functions.invoke("send-sms", {
-          body: {
-            toNumber: recipientPhone,
-            messageBody: action.content,
-            claimId: claimId,
-          },
-        });
-
-        if (error) throw error;
-
-        toast({
-          title: "SMS sent",
-          description: `Follow-up SMS sent to ${recipientPhone}`,
-        });
-      } else if (action.type === "note") {
-        const { error } = await supabase.from("claim_updates").insert({
-          claim_id: claimId,
-          content: action.content,
-          update_type: "note",
-        });
-
-        if (error) throw error;
-
-        toast({
-          title: "Note added",
-          description: "Follow-up note added to claim",
-        });
-      }
-    } catch (error: any) {
-      console.error("Error sending action:", error);
-      toast({
-        title: "Error",
-        description: `Failed to send ${action.type}`,
-        variant: "destructive",
-      });
-    } finally {
-      setSendingAction(null);
-    }
-  };
-
-  const getActionIcon = (type: string) => {
-    switch (type) {
-      case "email":
-        return <Mail className="h-4 w-4" />;
-      case "sms":
-        return <MessageSquare className="h-4 w-4" />;
-      default:
-        return <FileText className="h-4 w-4" />;
-    }
-  };
-
-  const copyToClipboard = (content: string) => {
-    navigator.clipboard.writeText(content);
-    toast({
-      title: "Copied",
-      description: "Content copied to clipboard",
-    });
   };
 
   return (
@@ -280,29 +132,31 @@ const TaskAIAssistant = ({ task, claimId, onTaskUpdated }: TaskAIAssistantProps)
           <Brain className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[80vh]">
+      <DialogContent className="max-h-[85vh] max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Brain className="h-5 w-5" />
             AI Task Follow-up Assistant
           </DialogTitle>
           <DialogDescription>
-            Get AI-powered suggestions to follow up on: <strong>{task.title}</strong>
+            Darwin will generate a structured strategy for: <strong>{task.title}</strong>
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="p-3 bg-muted/50 rounded-lg text-sm">
+          <div className="rounded-lg bg-muted/50 p-3 text-sm">
             <div className="font-medium">Task: {task.title}</div>
             {task.description && (
-              <div className="text-muted-foreground mt-1">{task.description}</div>
+              <div className="mt-1 text-muted-foreground">{task.description}</div>
             )}
-            <div className="flex gap-4 mt-2 text-muted-foreground">
+            <div className="mt-2 flex flex-wrap gap-4 text-muted-foreground">
               <span>Claim: {claimData?.claim_number || claimId.slice(0, 8)}</span>
               <span>Priority: {task.priority}</span>
               {task.due_date && <span>Due: {new Date(task.due_date).toLocaleDateString()}</span>}
             </div>
           </div>
+
+          <DarwinModeToggle value={mode} onChange={setMode} />
 
           <div className="space-y-2">
             <label className="text-sm font-medium">Additional context (optional)</label>
@@ -310,79 +164,31 @@ const TaskAIAssistant = ({ task, claimId, onTaskUpdated }: TaskAIAssistantProps)
               placeholder="Add any specific instructions or context for the follow-up..."
               value={customPrompt}
               onChange={(e) => setCustomPrompt(e.target.value)}
-              rows={2}
+              rows={3}
             />
           </div>
 
           <Button onClick={handleAnalyzeTask} disabled={loading} className="w-full">
             {loading ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Analyzing...
               </>
             ) : (
               <>
-                <Brain className="h-4 w-4 mr-2" />
-                Generate Follow-up Suggestions
+                <Brain className="mr-2 h-4 w-4" />
+                Generate Follow-up Strategy
               </>
             )}
           </Button>
 
           {analysis && (
-            <ScrollArea className="h-[300px] border rounded-lg p-4">
-              <div className="space-y-4">
-                <div>
-                  <h4 className="font-medium mb-2">Analysis & Recommendations</h4>
-                  <div className="text-sm whitespace-pre-wrap text-muted-foreground">
-                    {analysis}
-                  </div>
-                </div>
-
-                {suggestedActions.length > 0 && (
-                  <div>
-                    <h4 className="font-medium mb-2">Suggested Actions</h4>
-                    <div className="space-y-3">
-                      {suggestedActions.map((action, index) => (
-                        <div key={index} className="border rounded-lg p-3 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 font-medium text-sm">
-                              {getActionIcon(action.type)}
-                              {action.title}
-                            </div>
-                            <div className="flex gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => copyToClipboard(action.content)}
-                              >
-                                Copy
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => handleSendAction(action, index)}
-                                disabled={sendingAction === index}
-                              >
-                                {sendingAction === index ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <>
-                                    <Send className="h-4 w-4 mr-1" />
-                                    Send
-                                  </>
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                          <div className="text-sm text-muted-foreground bg-muted/30 p-2 rounded">
-                            {action.content}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </ScrollArea>
+            <div className="space-y-2 border-t pt-4">
+              <h4 className="font-medium">Structured Rebuttal Output</h4>
+              <ScrollArea className="h-[460px] rounded-lg border p-4 bg-muted/30">
+                <DarwinStructuredRenderer result={analysis} />
+              </ScrollArea>
+            </div>
           )}
         </div>
       </DialogContent>

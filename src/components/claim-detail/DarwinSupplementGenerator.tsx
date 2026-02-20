@@ -10,9 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { PlusCircle, Loader2, Copy, Download, Sparkles, Upload, X, FileText, History, FolderOpen, Camera, Ruler, ChevronDown, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { PlusCircle, Loader2, Sparkles, Upload, X, FileText, History, FolderOpen, Camera, Ruler, ChevronDown, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useClaimFiles } from "@/hooks/useClaimFiles";
 import { ClaimFileSelector } from "./ClaimFileSelector";
+import { DarwinStructuredRenderer } from "@/components/darwin/DarwinStructuredRenderer";
+import { DarwinModeToggle } from "@/components/darwin/DarwinModeToggle";
+import type { DarwinMode, DarwinStructuredResult } from "@/components/darwin/types";
 interface DarwinSupplementGeneratorProps {
   claimId: string;
   claim: any;
@@ -37,10 +40,30 @@ interface MeasurementFile {
   folder_name: string | null;
 }
 
-export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGeneratorProps) => {
+const parseStructuredResult = (value: unknown): DarwinStructuredResult | null => {
+  const parsedValue =
+    typeof value === "string"
+      ? (() => {
+          try {
+            return JSON.parse(value);
+          } catch {
+            return null;
+          }
+        })()
+      : value;
+
+  if (!parsedValue || typeof parsedValue !== "object") return null;
+
+  const candidate = parsedValue as Partial<DarwinStructuredResult>;
+  if (typeof candidate.steelman_opponent !== "string") return null;
+  if (!candidate.talking_points || typeof candidate.talking_points !== "object") return null;
+  return parsedValue as DarwinStructuredResult;
+};
+
+export const DarwinSupplementGenerator = ({ claimId }: DarwinSupplementGeneratorProps) => {
   const [existingEstimate, setExistingEstimate] = useState("");
   const [additionalNotes, setAdditionalNotes] = useState("");
-  const [analysis, setAnalysis] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<DarwinStructuredResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [ourEstimatePdf, setOurEstimatePdf] = useState<File | null>(null);
   const [insuranceEstimatePdf, setInsuranceEstimatePdf] = useState<File | null>(null);
@@ -54,6 +77,7 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
   const [measurementFiles, setMeasurementFiles] = useState<MeasurementFile[]>([]);
   const [loadingEvidence, setLoadingEvidence] = useState(true);
   const [evidenceExpanded, setEvidenceExpanded] = useState(true);
+  const [mode, setMode] = useState<DarwinMode>("evidence");
   const ourEstimateInputRef = useRef<HTMLInputElement>(null);
   const insuranceEstimateInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -188,7 +212,10 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
         .single();
 
       if (data) {
-        setAnalysis(data.result);
+        const previousResult = parseStructuredResult(data.result);
+        if (previousResult) {
+          setAnalysis(previousResult);
+        }
         setLastAnalyzed(new Date(data.created_at));
         setLastFileName(data.pdf_file_name || null);
       }
@@ -364,7 +391,8 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
               vents: manualMeasurements.vents || null,
               skylights: manualMeasurements.skylights || null
             } : null
-          }
+          },
+          mode,
         }
       });
 
@@ -374,7 +402,11 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
         throw new Error(data.error);
       }
 
-      setAnalysis(data.result);
+      const structuredResult = parseStructuredResult(data?.result ?? data);
+      if (!structuredResult) {
+        throw new Error("Darwin returned an invalid structured response");
+      }
+      setAnalysis(structuredResult);
       setLastAnalyzed(new Date());
       const fileNames = [ourFileName, insuranceFileName].filter(Boolean).join(' vs ');
       setLastFileName(fileNames || null);
@@ -385,7 +417,7 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
         claim_id: claimId,
         analysis_type: 'supplement',
         input_summary: `${fileNames || existingEstimate.substring(0, 100)} | Photos: ${photoAnalyses.length} | Measurements: ${measurementContents.length}`,
-        result: data.result,
+        result: JSON.stringify(structuredResult, null, 2),
         pdf_file_name: fileNames || null,
         created_by: userData.user?.id
       });
@@ -419,25 +451,6 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
     p.ai_condition_rating?.toLowerCase() === 'failed'
   ).length;
 
-  const copyToClipboard = () => {
-    if (analysis) {
-      navigator.clipboard.writeText(analysis);
-      toast({ title: "Copied", description: "Supplement copied to clipboard" });
-    }
-  };
-
-  const downloadAsText = () => {
-    if (analysis) {
-      const blob = new Blob([analysis], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `supplement-${claim.claim_number || claimId}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-  };
-
   const ourEstimateFile = claimFiles.find(f => f.id === selectedOurEstimateId);
   const insuranceEstimateFile = claimFiles.find(f => f.id === selectedInsuranceEstimateId);
 
@@ -453,6 +466,8 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <DarwinModeToggle value={mode} onChange={setMode} />
+
         {lastAnalyzed && (
           <div className="p-3 bg-muted/50 rounded-md text-sm text-muted-foreground flex items-center gap-2">
             <History className="h-4 w-4" />
@@ -935,21 +950,9 @@ export const DarwinSupplementGenerator = ({ claimId, claim }: DarwinSupplementGe
 
         {analysis && (
           <div className="space-y-3 pt-4 border-t">
-            <div className="flex items-center justify-between">
-              <h4 className="font-medium">Supplement Analysis</h4>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={copyToClipboard}>
-                  <Copy className="h-4 w-4 mr-1" />
-                  Copy
-                </Button>
-                <Button variant="outline" size="sm" onClick={downloadAsText}>
-                  <Download className="h-4 w-4 mr-1" />
-                  Download
-                </Button>
-              </div>
-            </div>
-            <ScrollArea className="h-[400px] border rounded-md p-4 bg-muted/30">
-              <pre className="whitespace-pre-wrap text-sm">{analysis}</pre>
+            <h4 className="font-medium">Structured Rebuttal Output</h4>
+            <ScrollArea className="h-[520px] border rounded-md p-4 bg-muted/30">
+              <DarwinStructuredRenderer result={analysis} />
             </ScrollArea>
           </div>
         )}

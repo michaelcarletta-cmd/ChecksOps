@@ -18,6 +18,208 @@ const corsHeaders = {
 // Size threshold for using native extraction vs AI multimodal (8MB base64 ~ 6MB file)
 const AI_EXTRACTION_LIMIT = 8 * 1024 * 1024;
 
+const STRUCTURED_DARWIN_ANALYSIS_TYPES = new Set<string>([
+  'denial_rebuttal',
+  'next_steps',
+  'supplement',
+  'correspondence',
+  'task_followup',
+]);
+
+type DarwinMode = 'rebuttal' | 'steelman' | 'evidence' | 'scripts';
+
+interface DarwinKeyClaim {
+  claim: string;
+  assumptions: string[];
+}
+
+interface DarwinBestRebuttal {
+  rebuttal: string;
+  reasoning: string;
+  suggested_phrasing: string;
+  strength_score: number;
+}
+
+interface DarwinEvidenceSource {
+  label: string;
+  url?: string;
+}
+
+interface DarwinEvidencePackItem {
+  key_facts: string[];
+  sources: DarwinEvidenceSource[];
+  relevance: string;
+}
+
+interface DarwinTalkingPoints {
+  '30-sec': string;
+  '2-min': string;
+  '5-min': string;
+}
+
+interface DarwinStructuredResult {
+  steelman_opponent: string;
+  their_key_claims: DarwinKeyClaim[];
+  my_best_rebuttals: DarwinBestRebuttal[];
+  evidence_pack: DarwinEvidencePackItem[];
+  questions_to_clarify: string[];
+  risk_flags: string[];
+  talking_points: DarwinTalkingPoints;
+  confidence: number;
+  uncertainties: string[];
+}
+
+const DARWIN_STRUCTURED_SCHEMA = `{
+  "steelman_opponent": "string",
+  "their_key_claims": [{"claim": "string", "assumptions": ["string"]}],
+  "my_best_rebuttals": [{"rebuttal": "string", "reasoning": "string", "suggested_phrasing": "string", "strength_score": 0-100}],
+  "evidence_pack": [{"key_facts": ["string"], "sources": [{"label": "string", "url": "optional"}], "relevance": "string"}],
+  "questions_to_clarify": ["string"],
+  "risk_flags": ["string"],
+  "talking_points": {"30-sec": "string", "2-min": "string", "5-min": "string"},
+  "confidence": 0-100,
+  "uncertainties": ["string"]
+}`;
+
+function normalizeDarwinMode(mode?: string): DarwinMode {
+  if (!mode) return 'rebuttal';
+  const normalized = mode.toLowerCase().trim();
+  if (normalized === 'rebuttal' || normalized === 'steelman' || normalized === 'evidence' || normalized === 'scripts') {
+    return normalized;
+  }
+  return 'rebuttal';
+}
+
+function buildStructuredModeInstructions(mode: DarwinMode): string {
+  const modeInstructions: Record<DarwinMode, string> = {
+    rebuttal: 'Prioritize strongest counterarguments, direct rebuttal logic, and high-impact phrasing.',
+    steelman: 'Prioritize charitable reconstruction of the opposing case before rebutting it.',
+    evidence: 'Prioritize verifiable facts, citations, source quality, and uncertainty transparency.',
+    scripts: 'Prioritize practical speaking scripts, talking points, and ready-to-use language.',
+  };
+
+  return `
+CRITICAL OUTPUT RULES:
+- You MUST return ONLY valid JSON. No markdown. No prose outside JSON. No code fences.
+- JSON MUST match this exact schema and key names:
+${DARWIN_STRUCTURED_SCHEMA}
+- Active mode: "${mode}".
+- Mode guidance: ${modeInstructions[mode]}
+- confidence and strength_score must be numbers from 0 to 100.
+- If uncertain, use conservative confidence and fill uncertainties with specific gaps.`;
+}
+
+function stripCodeFence(raw: string): string {
+  const trimmed = raw.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  if (fenced) return fenced[1].trim();
+  return trimmed;
+}
+
+function toRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function toStringValue(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((v) => typeof v === 'string')
+    .map((v) => String(v).trim())
+    .filter((v) => v.length > 0);
+}
+
+function clampScore(value: unknown, fallback = 0): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function ensureStructuredResult(raw: unknown): DarwinStructuredResult {
+  const obj = toRecord(raw) ?? {};
+
+  const theirKeyClaimsRaw = Array.isArray(obj.their_key_claims) ? obj.their_key_claims : [];
+  const their_key_claims: DarwinKeyClaim[] = theirKeyClaimsRaw.map((item) => {
+    const entry = toRecord(item) ?? {};
+    return {
+      claim: toStringValue(entry.claim),
+      assumptions: toStringArray(entry.assumptions),
+    };
+  });
+
+  const rebuttalsRaw = Array.isArray(obj.my_best_rebuttals) ? obj.my_best_rebuttals : [];
+  const my_best_rebuttals: DarwinBestRebuttal[] = rebuttalsRaw.map((item) => {
+    const entry = toRecord(item) ?? {};
+    return {
+      rebuttal: toStringValue(entry.rebuttal),
+      reasoning: toStringValue(entry.reasoning),
+      suggested_phrasing: toStringValue(entry.suggested_phrasing),
+      strength_score: clampScore(entry.strength_score, 0),
+    };
+  });
+
+  const evidencePackRaw = Array.isArray(obj.evidence_pack) ? obj.evidence_pack : [];
+  const evidence_pack: DarwinEvidencePackItem[] = evidencePackRaw.map((item) => {
+    const entry = toRecord(item) ?? {};
+    const sourcesRaw = Array.isArray(entry.sources) ? entry.sources : [];
+    const sources: DarwinEvidenceSource[] = sourcesRaw.map((sourceItem) => {
+      const source = toRecord(sourceItem) ?? {};
+      const url = toStringValue(source.url);
+      return {
+        label: toStringValue(source.label),
+        ...(url ? { url } : {}),
+      };
+    });
+    return {
+      key_facts: toStringArray(entry.key_facts),
+      sources,
+      relevance: toStringValue(entry.relevance),
+    };
+  });
+
+  const talkingPointsRaw = toRecord(obj.talking_points) ?? {};
+  const talking_points: DarwinTalkingPoints = {
+    '30-sec': toStringValue(talkingPointsRaw['30-sec']),
+    '2-min': toStringValue(talkingPointsRaw['2-min']),
+    '5-min': toStringValue(talkingPointsRaw['5-min']),
+  };
+
+  return {
+    steelman_opponent: toStringValue(obj.steelman_opponent),
+    their_key_claims,
+    my_best_rebuttals,
+    evidence_pack,
+    questions_to_clarify: toStringArray(obj.questions_to_clarify),
+    risk_flags: toStringArray(obj.risk_flags),
+    talking_points,
+    confidence: clampScore(obj.confidence, 0),
+    uncertainties: toStringArray(obj.uncertainties),
+  };
+}
+
+function parseStructuredResponse(rawResponse: string): DarwinStructuredResult {
+  const withoutFence = stripCodeFence(rawResponse);
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(withoutFence);
+  } catch {
+    const firstBrace = withoutFence.indexOf('{');
+    const lastBrace = withoutFence.lastIndexOf('}');
+    if (firstBrace === -1 || lastBrace <= firstBrace) {
+      throw new Error('Model response did not contain a JSON object.');
+    }
+    const jsonSlice = withoutFence.slice(firstBrace, lastBrace + 1);
+    parsed = JSON.parse(jsonSlice);
+  }
+
+  return ensureStructuredResult(parsed);
+}
+
 // Extract text from PDF using pdf.js (Deno-compatible, no AI, lower memory usage)
 async function extractTextFromPDFNative(base64Content: string, fileName: string): Promise<string> {
   console.log(`Native PDF extraction for: ${fileName}`);
@@ -384,6 +586,7 @@ interface DismantlerResult {
 interface AnalysisRequest {
   claimId: string;
   analysisType: 'denial_rebuttal' | 'next_steps' | 'supplement' | 'correspondence' | 'task_followup' | 'engineer_report_rebuttal' | 'claim_briefing' | 'document_compilation' | 'demand_package' | 'estimate_work_summary' | 'document_comparison' | 'smart_extraction' | 'weakness_detection' | 'photo_linking' | 'code_lookup' | 'smart_follow_ups' | 'task_generation' | 'outcome_prediction' | 'carrier_email_draft' | 'one_click_package' | 'auto_summary' | 'compliance_check' | 'document_classify' | 'auto_draft_rebuttal' | 'estimate_gap_analysis' | 'photo_to_xactimate' | 'systematic_dismantling' | 'position_detection' | 'dobi_letter' | 'estimate_comparison' | 'document_timeline';
+  mode?: string;
   content?: string;
   pdfContent?: string;
   pdfFileName?: string;
@@ -418,10 +621,12 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { claimId, analysisType, content, pdfContent, pdfFileName, pdfContents, additionalContext, claim: providedClaim, contextData, darwinNotes: providedNotes, claimFactsPack: providedClaimFactsPack, enableEvidenceIndex: enableEvidenceIndexParam, enableDismantler: enableDismantlerParam }: AnalysisRequest = await req.json();
+    const { claimId, analysisType, mode, content, pdfContent, pdfFileName, pdfContents, additionalContext, claim: providedClaim, contextData, darwinNotes: providedNotes, claimFactsPack: providedClaimFactsPack, enableEvidenceIndex: enableEvidenceIndexParam, enableDismantler: enableDismantlerParam }: AnalysisRequest = await req.json();
+    const darwinMode = normalizeDarwinMode(mode);
+    const useStructuredDarwinOutput = STRUCTURED_DARWIN_ANALYSIS_TYPES.has(analysisType);
     const enableEvidenceIndex = enableEvidenceIndexParam !== false;
     const enableDismantler = enableDismantlerParam !== false;
-    console.log(`Darwin AI Analysis - Type: ${analysisType}, Claim: ${claimId}, Has PDF: ${!!pdfContent}, ClaimFactsPack: ${!!providedClaimFactsPack}, enableEvidenceIndex: ${enableEvidenceIndex}, enableDismantler: ${enableDismantler}`);
+    console.log(`Darwin AI Analysis - Type: ${analysisType}, Mode: ${darwinMode}, Claim: ${claimId}, Has PDF: ${!!pdfContent}, ClaimFactsPack: ${!!providedClaimFactsPack}, enableEvidenceIndex: ${enableEvidenceIndex}, enableDismantler: ${enableDismantler}`);
 
     // Fetch claim data
     const { data: claim, error: claimError } = await supabase
@@ -4796,6 +5001,11 @@ BAD FAITH TIMELINE INDICATORS
 
     }
 
+    if (useStructuredDarwinOutput) {
+      systemPrompt = `${systemPrompt}\n\n${buildStructuredModeInstructions(darwinMode)}`;
+      userPrompt = `${userPrompt}\n\nSTRUCTURED_MODE_REQUEST: ${darwinMode}`;
+    }
+
     // Build messages array - handle PDF content with multimodal format
     let messages: any[];
     
@@ -5147,13 +5357,14 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     console.log(`Model fallback chain: ${modelFallbackChain.join(' -> ')} (PDF processing: ${needsPdfProcessing})`);
     
     // For task_followup, use tool calling to get structured actions
+    const useTaskFollowupToolCalling = analysisType === 'task_followup' && !useStructuredDarwinOutput;
     let baseRequestBody: any = {
       messages,
       temperature: 0.7,
       max_tokens: 8000,
     };
     
-    if (analysisType === 'task_followup') {
+    if (useTaskFollowupToolCalling) {
       baseRequestBody.tools = [
         {
           type: 'function',
@@ -5334,11 +5545,11 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     
     console.log(`Darwin AI analysis completed using model: ${successfulModel}`);
 
-    // For task_followup, parse the tool call response
+    // For task_followup in legacy mode, parse the tool call response
     let suggestedActions: Array<{type: string; title: string; content: string}> = [];
     let analysisResult = '';
     
-    if (analysisType === 'task_followup') {
+    if (useTaskFollowupToolCalling) {
       const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
       if (toolCall?.function?.arguments) {
         try {
@@ -5380,6 +5591,12 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         }
       }
     }
+
+    let structuredResult: DarwinStructuredResult | null = null;
+    if (useStructuredDarwinOutput) {
+      structuredResult = parseStructuredResponse(analysisResult);
+      analysisResult = JSON.stringify(structuredResult, null, 2);
+    }
     
     console.log(`Darwin AI Analysis completed for ${analysisType}, result length: ${analysisResult.length}`);
 
@@ -5414,7 +5631,8 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     try {
       const shouldRunDismantler =
         enableDismantler &&
-        analysisType !== 'systematic_dismantling';
+        analysisType !== 'systematic_dismantling' &&
+        !useStructuredDarwinOutput;
 
       if (shouldRunDismantler && analysisResult) {
         const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -5682,6 +5900,13 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       console.error(
         'Carrier Dismantler middleware error (non-fatal):',
         middlewareErr,
+      );
+    }
+
+    if (useStructuredDarwinOutput && structuredResult) {
+      return new Response(
+        JSON.stringify(structuredResult),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 

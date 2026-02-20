@@ -6,28 +6,51 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { FileWarning, Loader2, Copy, Download, Sparkles, Upload, X, FileText, History, FolderOpen } from "lucide-react";
+import { FileWarning, Loader2, Sparkles, Upload, X, FileText, History, FolderOpen } from "lucide-react";
 import { useClaimFiles } from "@/hooks/useClaimFiles";
 import { ClaimFileSelector } from "./ClaimFileSelector";
 import { useDeclaredPosition } from "@/hooks/useDeclaredPosition";
 import { PositionGateBanner } from "./PositionGateBanner";
-import { publishCarrierDismantler } from "@/lib/darwinDismantlerBus";
+import { DarwinStructuredRenderer } from "@/components/darwin/DarwinStructuredRenderer";
+import { DarwinModeToggle } from "@/components/darwin/DarwinModeToggle";
+import type { DarwinMode, DarwinStructuredResult } from "@/components/darwin/types";
 
 interface DarwinDenialAnalyzerProps {
   claimId: string;
   claim: any;
 }
 
-export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerProps) => {
+const parseStructuredResult = (value: unknown): DarwinStructuredResult | null => {
+  const parsedValue =
+    typeof value === "string"
+      ? (() => {
+          try {
+            return JSON.parse(value);
+          } catch {
+            return null;
+          }
+        })()
+      : value;
+
+  if (!parsedValue || typeof parsedValue !== "object") return null;
+
+  const candidate = parsedValue as Partial<DarwinStructuredResult>;
+  if (typeof candidate.steelman_opponent !== "string") return null;
+  if (!candidate.talking_points || typeof candidate.talking_points !== "object") return null;
+  return parsedValue as DarwinStructuredResult;
+};
+
+export const DarwinDenialAnalyzer = ({ claimId }: DarwinDenialAnalyzerProps) => {
   const [denialContent, setDenialContent] = useState("");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [selectedClaimFileId, setSelectedClaimFileId] = useState<string | null>(null);
-  const [analysis, setAnalysis] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<DarwinStructuredResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastAnalyzed, setLastAnalyzed] = useState<Date | null>(null);
   const [lastFileName, setLastFileName] = useState<string | null>(null);
   const [inputMethod, setInputMethod] = useState<string>("claim-files");
   const [provisionalOverride, setProvisionalOverride] = useState(false);
+  const [mode, setMode] = useState<DarwinMode>("rebuttal");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   
@@ -47,7 +70,10 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
         .single();
 
       if (data) {
-        setAnalysis(data.result);
+        const previousResult = parseStructuredResult(data.result);
+        if (previousResult) {
+          setAnalysis(previousResult);
+        }
         setLastAnalyzed(new Date(data.created_at));
         setLastFileName(data.pdf_file_name || null);
       }
@@ -136,6 +162,7 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
             } : {}),
             ...(provisionalOverride ? { provisionalPosition: true } : {}),
           },
+          mode,
         }
       });
 
@@ -145,15 +172,12 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
         throw new Error(data.error);
       }
 
-      setAnalysis(data.result);
-      if (data?.carrierDismantler) {
-        publishCarrierDismantler({
-          claimId,
-          analysisType: "denial_rebuttal",
-          carrierDismantler: data.carrierDismantler,
-          claimFactsPack: data.claimFactsPack ?? null,
-        });
+      const structuredResult = parseStructuredResult(data?.result ?? data);
+      if (!structuredResult) {
+        throw new Error("Darwin returned an invalid structured response");
       }
+      setAnalysis(structuredResult);
+
       setLastAnalyzed(new Date());
       setLastFileName(fileName || null);
 
@@ -163,7 +187,7 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
         claim_id: claimId,
         analysis_type: 'denial_rebuttal',
         input_summary: fileName || denialContent.substring(0, 200),
-        result: data.result,
+        result: JSON.stringify(structuredResult, null, 2),
         pdf_file_name: fileName || null,
         created_by: userData.user?.id
       });
@@ -181,25 +205,6 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
       });
     } finally {
       setLoading(false);
-    }
-  };
-
-  const copyToClipboard = () => {
-    if (analysis) {
-      navigator.clipboard.writeText(analysis);
-      toast({ title: "Copied", description: "Rebuttal copied to clipboard" });
-    }
-  };
-
-  const downloadAsText = () => {
-    if (analysis) {
-      const blob = new Blob([analysis], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `rebuttal-${claim.claim_number || claimId}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
     }
   };
 
@@ -224,6 +229,7 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
           loading={positionLoading}
           onOverride={() => setProvisionalOverride(true)}
         />
+        <DarwinModeToggle value={mode} onChange={setMode} />
         {lastAnalyzed && (
           <div className="p-3 bg-muted/50 rounded-md text-sm text-muted-foreground flex items-center gap-2">
             <History className="h-4 w-4" />
@@ -327,21 +333,9 @@ export const DarwinDenialAnalyzer = ({ claimId, claim }: DarwinDenialAnalyzerPro
 
         {analysis && (
           <div className="space-y-3 pt-4 border-t">
-            <div className="flex items-center justify-between">
-              <h4 className="font-medium">Generated Rebuttal</h4>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={copyToClipboard}>
-                  <Copy className="h-4 w-4 mr-1" />
-                  Copy
-                </Button>
-                <Button variant="outline" size="sm" onClick={downloadAsText}>
-                  <Download className="h-4 w-4 mr-1" />
-                  Download
-                </Button>
-              </div>
-            </div>
-            <ScrollArea className="h-[400px] border rounded-md p-4 bg-muted/30">
-              <pre className="whitespace-pre-wrap text-sm font-mono">{analysis}</pre>
+            <h4 className="font-medium">Structured Rebuttal Output</h4>
+            <ScrollArea className="h-[520px] border rounded-md p-4 bg-muted/30">
+              <DarwinStructuredRenderer result={analysis} />
             </ScrollArea>
           </div>
         )}
