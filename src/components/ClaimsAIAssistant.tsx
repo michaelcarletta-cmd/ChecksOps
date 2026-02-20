@@ -82,10 +82,16 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
         data.answer.includes("Task completed:") ||
         data.answer.includes("Task reopened:") ||
         data.answer.includes("Task deleted:") ||
-        data.answer.includes("Tasks for")
+        data.answer.includes("Tasks for") ||
+        data.answer.includes("Bulk Task Processing Complete") ||
+        data.answer.includes("task(s) processed")
       );
-      if (hasTaskOps && claimId) {
-        queryClient.invalidateQueries({ queryKey: ["claim-tasks", claimId] });
+      if (hasTaskOps) {
+        if (claimId) {
+          queryClient.invalidateQueries({ queryKey: ["claim-tasks", claimId] });
+        }
+        queryClient.invalidateQueries({ queryKey: ["claim-tasks"] });
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
       }
 
       // Check if bulk operations were performed (detect by response content)
