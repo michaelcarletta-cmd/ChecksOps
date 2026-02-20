@@ -4488,6 +4488,7 @@ ${knowledgeBaseContext || ''}`
             
             let totalProcessed = 0;
             let totalFollowUps = 0;
+            let totalNotes = 0;
             const results: string[] = [];
             
             for (const claim of resolvedClaimIds) {
@@ -4540,6 +4541,18 @@ ${knowledgeBaseContext || ''}`
                 }
               }
               
+              // Add a claim note (claim_updates) if note provided
+              if (params.note) {
+                const { error: noteErr } = await supabase
+                  .from("claim_updates")
+                  .insert({
+                    claim_id: claim.id,
+                    content: params.note,
+                    update_type: "note",
+                  });
+                if (!noteErr) totalNotes++;
+              }
+
               // Create follow-up task if requested
               if (params.create_follow_up) {
                 const followUpData: any = {
@@ -4563,11 +4576,11 @@ ${knowledgeBaseContext || ''}`
                 }
               }
               
-              results.push(`✅ ${claim.name}: ${claimProcessed} task(s) processed${params.create_follow_up ? ' + follow-up created' : ''}`);
+              results.push(`✅ ${claim.name}: ${claimProcessed} task(s) processed${params.note ? ' + note added' : ''}${params.create_follow_up ? ' + follow-up created' : ''}`);
             }
             
             answer += `\n\n📋 **Bulk Task Processing Complete**\n`;
-            answer += `Claims: ${resolvedClaimIds.length} | Tasks processed: ${totalProcessed}${totalFollowUps > 0 ? ` | Follow-ups created: ${totalFollowUps}` : ''}\n\n`;
+            answer += `Claims: ${resolvedClaimIds.length} | Tasks processed: ${totalProcessed}${totalNotes > 0 ? ` | Notes added: ${totalNotes}` : ''}${totalFollowUps > 0 ? ` | Follow-ups created: ${totalFollowUps}` : ''}\n\n`;
             answer += results.join('\n');
             
             // Flag for UI refresh
