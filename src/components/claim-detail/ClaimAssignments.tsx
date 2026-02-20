@@ -386,12 +386,15 @@ export function ClaimAssignments({
               assignedStaff.map((as) => (
                 <Badge key={as.staff_id} variant="secondary" className="flex items-center gap-1">
                   {as.profiles.full_name || as.profiles.email}
-                  <button
+                  <Button
                     onClick={() => handleRemoveStaff(as.staff_id)}
-                    className="ml-1 hover:text-destructive"
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="ml-1 h-5 w-5 p-0"
                   >
                     <X className="h-3 w-3" />
-                  </button>
+                  </Button>
                 </Badge>
               ))
             )}
@@ -434,12 +437,15 @@ export function ClaimAssignments({
               assignedContractors.map((ac) => (
                 <Badge key={ac.contractor_id} variant="secondary" className="flex items-center gap-1">
                   {ac.profiles.full_name || ac.profiles.email}
-                  <button
+                  <Button
                     onClick={() => handleRemoveContractor(ac.contractor_id)}
-                    className="ml-1 hover:text-destructive"
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="ml-1 h-5 w-5 p-0"
                   >
                     <X className="h-3 w-3" />
-                  </button>
+                  </Button>
                 </Badge>
               ))
             )}

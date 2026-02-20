@@ -617,13 +617,13 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
         className={cn(
           "grid gap-6 items-start",
           showCopilot
-            ? "lg:grid-cols-[16rem_minmax(0,1fr)] xl:grid-cols-[16rem_minmax(0,1fr)_24rem]"
-            : "lg:grid-cols-[16rem_minmax(0,1fr)]",
+            ? "md:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)_24rem]"
+            : "md:grid-cols-[15rem_minmax(0,1fr)]",
         )}
       >
         {/* Left rail */}
-        <div className="hidden lg:block w-64 flex-shrink-0">
-          <Card className="border-border/50 lg:sticky lg:top-4">
+        <div className="hidden md:block w-60 flex-shrink-0">
+          <Card className="border-border/50 md:sticky md:top-4">
             <CardHeader className="py-3">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Zap className="h-4 w-4 text-primary" />
@@ -660,7 +660,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
         {/* Center column */}
         <div className="min-w-0 space-y-4">
           {/* Mobile workspace switcher */}
-          <div className="lg:hidden">
+          <div className="md:hidden">
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
               {workspaceSections.map((section) => {
                 const SectionIcon = section.icon;
@@ -735,17 +735,20 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             </CardContent>
           </Card>
 
-          <Card id="darwin-workspace" className="border-primary/20">
-            <CardHeader className="pb-3 border-b bg-gradient-to-r from-primary/5 to-transparent">
+          <Card
+            id="darwin-workspace"
+            className="border-primary/20 flex flex-col md:h-[calc(100vh-8.5rem)] md:max-h-[980px]"
+          >
+            <CardHeader className="pb-3 border-b bg-gradient-to-r from-primary/5 to-transparent shrink-0">
               <CardTitle className="text-base flex items-center gap-2">
                 <activeWorkspaceMeta.icon className="h-4 w-4 text-primary" />
                 {activeWorkspaceMeta.title}
               </CardTitle>
               <CardDescription>{activeWorkspaceMeta.description}</CardDescription>
             </CardHeader>
-            <CardContent className="p-4 space-y-4">
+            <CardContent className="p-4 md:flex-1 md:overflow-y-auto">
               <Suspense fallback={<LoadingFallback />}>
-                {renderActiveWorkspace()}
+                <div className="space-y-4">{renderActiveWorkspace()}</div>
               </Suspense>
             </CardContent>
           </Card>

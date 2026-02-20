@@ -127,13 +127,15 @@ export function TeamMemberSelect({
                 className="flex items-center gap-1 pr-1"
               >
                 {name}
-                <button
+                <Button
                   type="button"
                   onClick={() => removeMember(selectedMembers[index])}
-                  className="ml-1 hover:bg-muted rounded-full p-0.5"
+                  variant="ghost"
+                  size="icon"
+                  className="ml-1 h-5 w-5 rounded-full p-0"
                 >
                   <X className="h-3 w-3" />
-                </button>
+                </Button>
               </Badge>
             ))}
           </div>

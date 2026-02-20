@@ -145,27 +145,33 @@ export function RichTextEditor({ value, onChange, placeholder, rows = 4 }: RichT
           </PopoverTrigger>
           <PopoverContent className="w-auto p-2">
             <div className="flex flex-col gap-1">
-              <button
+              <Button
                 type="button"
-                className="px-3 py-1 text-sm hover:bg-muted rounded"
+                variant="ghost"
+                size="sm"
+                className="justify-start px-3 py-1 h-auto text-sm"
                 onClick={() => execCommand('fontSize', '2')}
               >
                 Small
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="px-3 py-1 text-base hover:bg-muted rounded"
+                variant="ghost"
+                size="sm"
+                className="justify-start px-3 py-1 h-auto text-base"
                 onClick={() => execCommand('fontSize', '3')}
               >
                 Normal
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="px-3 py-1 text-lg hover:bg-muted rounded"
+                variant="ghost"
+                size="sm"
+                className="justify-start px-3 py-1 h-auto text-lg"
                 onClick={() => execCommand('fontSize', '4')}
               >
                 Large
-              </button>
+              </Button>
             </div>
           </PopoverContent>
         </Popover>
