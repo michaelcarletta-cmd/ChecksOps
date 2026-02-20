@@ -251,10 +251,26 @@ export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
     return map;
   }, [emailAttachments]);
 
-  // Decode email bodies that may be incorrectly stored as base64
+  // Decode email bodies and deduplicate (prefer outlook_sync with full body over truncated inbound)
   const decodedEmails = useMemo(() => {
     if (!emails) return [];
-    return emails.map(email => ({
+    
+    // Deduplicate: if an outlook_sync email contains the same content as a truncated inbound email, keep only the fuller version
+    const deduplicated = emails.filter((email: any) => {
+      if (email.recipient_type !== 'inbound') return true;
+      // Check if there's an outlook_sync email with the same subject that contains this email's body
+      const hasFullerVersion = emails.some((other: any) => 
+        other.id !== email.id &&
+        other.recipient_type === 'outlook_sync' &&
+        other.subject === email.subject &&
+        other.body && email.body &&
+        other.body.length > email.body.length &&
+        other.body.includes(email.body.substring(0, Math.min(50, email.body.length)))
+      );
+      return !hasFullerVersion;
+    });
+    
+    return deduplicated.map(email => ({
       ...email,
       decodedBody: decodeEmailBody(email.body)
     }));
