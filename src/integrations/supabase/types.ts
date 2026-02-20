@@ -1945,6 +1945,8 @@ export type Database = {
       }
       claim_outcomes: {
         Row: {
+          bad_faith_alleged: boolean | null
+          carrier_reversal_occurred: boolean | null
           claim_id: string
           created_at: string
           created_by: string | null
@@ -1952,22 +1954,31 @@ export type Database = {
           days_to_first_payment: number | null
           effective_evidence: Json | null
           failed_arguments: Json | null
+          final_litigation_readiness: number | null
+          final_pressure_index: number | null
           final_settlement: number | null
+          final_wsi: number | null
           id: string
           initial_estimate: number | null
           key_leverage_points: Json | null
+          litigation_filed: boolean | null
           missing_evidence_impact: string | null
           notes: string | null
+          predicted_carrier_move_snapshot: Json | null
+          prediction_accuracy_flag: boolean | null
           recovery_percentage: number | null
           resolution_date: string | null
           resolution_type: string | null
           settlement_variance: number | null
           supplements_approved: number | null
+          total_claimed_amount: number | null
           total_supplements_submitted: number | null
           updated_at: string
           winning_arguments: Json | null
         }
         Insert: {
+          bad_faith_alleged?: boolean | null
+          carrier_reversal_occurred?: boolean | null
           claim_id: string
           created_at?: string
           created_by?: string | null
@@ -1975,22 +1986,31 @@ export type Database = {
           days_to_first_payment?: number | null
           effective_evidence?: Json | null
           failed_arguments?: Json | null
+          final_litigation_readiness?: number | null
+          final_pressure_index?: number | null
           final_settlement?: number | null
+          final_wsi?: number | null
           id?: string
           initial_estimate?: number | null
           key_leverage_points?: Json | null
+          litigation_filed?: boolean | null
           missing_evidence_impact?: string | null
           notes?: string | null
+          predicted_carrier_move_snapshot?: Json | null
+          prediction_accuracy_flag?: boolean | null
           recovery_percentage?: number | null
           resolution_date?: string | null
           resolution_type?: string | null
           settlement_variance?: number | null
           supplements_approved?: number | null
+          total_claimed_amount?: number | null
           total_supplements_submitted?: number | null
           updated_at?: string
           winning_arguments?: Json | null
         }
         Update: {
+          bad_faith_alleged?: boolean | null
+          carrier_reversal_occurred?: boolean | null
           claim_id?: string
           created_at?: string
           created_by?: string | null
@@ -1998,17 +2018,24 @@ export type Database = {
           days_to_first_payment?: number | null
           effective_evidence?: Json | null
           failed_arguments?: Json | null
+          final_litigation_readiness?: number | null
+          final_pressure_index?: number | null
           final_settlement?: number | null
+          final_wsi?: number | null
           id?: string
           initial_estimate?: number | null
           key_leverage_points?: Json | null
+          litigation_filed?: boolean | null
           missing_evidence_impact?: string | null
           notes?: string | null
+          predicted_carrier_move_snapshot?: Json | null
+          prediction_accuracy_flag?: boolean | null
           recovery_percentage?: number | null
           resolution_date?: string | null
           resolution_type?: string | null
           settlement_variance?: number | null
           supplements_approved?: number | null
+          total_claimed_amount?: number | null
           total_supplements_submitted?: number | null
           updated_at?: string
           winning_arguments?: Json | null
@@ -2277,7 +2304,9 @@ export type Database = {
           claim_id: string
           confidence: number | null
           created_at: string
+          data_basis_count: number | null
           id: string
+          model_type: string | null
           predicted_timeline: string | null
           prediction: string
           prediction_type: string
@@ -2290,7 +2319,9 @@ export type Database = {
           claim_id: string
           confidence?: number | null
           created_at?: string
+          data_basis_count?: number | null
           id?: string
+          model_type?: string | null
           predicted_timeline?: string | null
           prediction: string
           prediction_type: string
@@ -2303,7 +2334,9 @@ export type Database = {
           claim_id?: string
           confidence?: number | null
           created_at?: string
+          data_basis_count?: number | null
           id?: string
+          model_type?: string | null
           predicted_timeline?: string | null
           prediction?: string
           prediction_type?: string
@@ -2323,8 +2356,14 @@ export type Database = {
       claim_scenario_simulations: {
         Row: {
           claim_id: string
+          confidence_score: number | null
           created_at: string
+          data_basis_count: number | null
           id: string
+          model_type: string | null
+          projected_litigation_delta: number | null
+          projected_pressure_delta: number | null
+          projected_wsi_delta: number | null
           result_explanation: string | null
           result_litigation_readiness: number | null
           result_pressure_index: number | null
@@ -2335,8 +2374,14 @@ export type Database = {
         }
         Insert: {
           claim_id: string
+          confidence_score?: number | null
           created_at?: string
+          data_basis_count?: number | null
           id?: string
+          model_type?: string | null
+          projected_litigation_delta?: number | null
+          projected_pressure_delta?: number | null
+          projected_wsi_delta?: number | null
           result_explanation?: string | null
           result_litigation_readiness?: number | null
           result_pressure_index?: number | null
@@ -2347,8 +2392,14 @@ export type Database = {
         }
         Update: {
           claim_id?: string
+          confidence_score?: number | null
           created_at?: string
+          data_basis_count?: number | null
           id?: string
+          model_type?: string | null
+          projected_litigation_delta?: number | null
+          projected_pressure_delta?: number | null
+          projected_wsi_delta?: number | null
           result_explanation?: string | null
           result_litigation_readiness?: number | null
           result_pressure_index?: number | null
@@ -2521,6 +2572,7 @@ export type Database = {
           auto_refresh_enabled: boolean | null
           carrier_conduct_risk_score: number | null
           claim_id: string
+          confidence_scores: Json | null
           counter_strategies: Json | null
           coverage_strength_score: number | null
           coverage_triggers_detected: Json | null
@@ -2535,12 +2587,14 @@ export type Database = {
           litigation_readiness_factors: Json | null
           litigation_readiness_score: number | null
           matched_playbooks: Json | null
+          model_type: string | null
           overall_health_score: number | null
           predicted_carrier_move: Json | null
           pressure_index_factors: Json | null
           pressure_index_level: string | null
           pressure_index_score: number | null
           procedural_compliance_score: number | null
+          raw_inputs: Json | null
           recommended_next_moves: Json | null
           scenario_simulations: Json | null
           senior_pa_opinion: string | null
@@ -2548,6 +2602,7 @@ export type Database = {
           timeline_risk_score: number | null
           updated_at: string
           warnings: Json | null
+          weight_version: string | null
           wsi_components: Json | null
           wsi_score: number | null
         }
@@ -2556,6 +2611,7 @@ export type Database = {
           auto_refresh_enabled?: boolean | null
           carrier_conduct_risk_score?: number | null
           claim_id: string
+          confidence_scores?: Json | null
           counter_strategies?: Json | null
           coverage_strength_score?: number | null
           coverage_triggers_detected?: Json | null
@@ -2570,12 +2626,14 @@ export type Database = {
           litigation_readiness_factors?: Json | null
           litigation_readiness_score?: number | null
           matched_playbooks?: Json | null
+          model_type?: string | null
           overall_health_score?: number | null
           predicted_carrier_move?: Json | null
           pressure_index_factors?: Json | null
           pressure_index_level?: string | null
           pressure_index_score?: number | null
           procedural_compliance_score?: number | null
+          raw_inputs?: Json | null
           recommended_next_moves?: Json | null
           scenario_simulations?: Json | null
           senior_pa_opinion?: string | null
@@ -2583,6 +2641,7 @@ export type Database = {
           timeline_risk_score?: number | null
           updated_at?: string
           warnings?: Json | null
+          weight_version?: string | null
           wsi_components?: Json | null
           wsi_score?: number | null
         }
@@ -2591,6 +2650,7 @@ export type Database = {
           auto_refresh_enabled?: boolean | null
           carrier_conduct_risk_score?: number | null
           claim_id?: string
+          confidence_scores?: Json | null
           counter_strategies?: Json | null
           coverage_strength_score?: number | null
           coverage_triggers_detected?: Json | null
@@ -2605,12 +2665,14 @@ export type Database = {
           litigation_readiness_factors?: Json | null
           litigation_readiness_score?: number | null
           matched_playbooks?: Json | null
+          model_type?: string | null
           overall_health_score?: number | null
           predicted_carrier_move?: Json | null
           pressure_index_factors?: Json | null
           pressure_index_level?: string | null
           pressure_index_score?: number | null
           procedural_compliance_score?: number | null
+          raw_inputs?: Json | null
           recommended_next_moves?: Json | null
           scenario_simulations?: Json | null
           senior_pa_opinion?: string | null
@@ -2618,6 +2680,7 @@ export type Database = {
           timeline_risk_score?: number | null
           updated_at?: string
           warnings?: Json | null
+          weight_version?: string | null
           wsi_components?: Json | null
           wsi_score?: number | null
         }
@@ -2626,6 +2689,62 @@ export type Database = {
             foreignKeyName: "claim_strategic_insights_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: true
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_strategic_snapshots: {
+        Row: {
+          claim_id: string
+          confidence_scores: Json | null
+          created_at: string
+          drift_reason: string | null
+          id: string
+          litigation_readiness: number | null
+          predicted_move: Json | null
+          pressure_index: number | null
+          pressure_level: string | null
+          raw_inputs: Json | null
+          strategic_drift_flag: boolean | null
+          weight_version: string | null
+          wsi: number | null
+        }
+        Insert: {
+          claim_id: string
+          confidence_scores?: Json | null
+          created_at?: string
+          drift_reason?: string | null
+          id?: string
+          litigation_readiness?: number | null
+          predicted_move?: Json | null
+          pressure_index?: number | null
+          pressure_level?: string | null
+          raw_inputs?: Json | null
+          strategic_drift_flag?: boolean | null
+          weight_version?: string | null
+          wsi?: number | null
+        }
+        Update: {
+          claim_id?: string
+          confidence_scores?: Json | null
+          created_at?: string
+          drift_reason?: string | null
+          id?: string
+          litigation_readiness?: number | null
+          predicted_move?: Json | null
+          pressure_index?: number | null
+          pressure_level?: string | null
+          raw_inputs?: Json | null
+          strategic_drift_flag?: boolean | null
+          weight_version?: string | null
+          wsi?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_strategic_snapshots_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claims"
             referencedColumns: ["id"]
           },
@@ -4703,6 +4822,66 @@ export type Database = {
         }
         Relationships: []
       }
+      prediction_accuracy_metrics: {
+        Row: {
+          actual_move: string | null
+          carrier_name: string | null
+          claim_id: string | null
+          claim_type: string | null
+          confidence_at_prediction: number | null
+          created_at: string
+          days_difference: number | null
+          id: string
+          match: boolean | null
+          predicted_move: string
+          prediction_id: string | null
+          resolved_at: string | null
+        }
+        Insert: {
+          actual_move?: string | null
+          carrier_name?: string | null
+          claim_id?: string | null
+          claim_type?: string | null
+          confidence_at_prediction?: number | null
+          created_at?: string
+          days_difference?: number | null
+          id?: string
+          match?: boolean | null
+          predicted_move: string
+          prediction_id?: string | null
+          resolved_at?: string | null
+        }
+        Update: {
+          actual_move?: string | null
+          carrier_name?: string | null
+          claim_id?: string | null
+          claim_type?: string | null
+          confidence_at_prediction?: number | null
+          created_at?: string
+          days_difference?: number | null
+          id?: string
+          match?: boolean | null
+          predicted_move?: string
+          prediction_id?: string | null
+          resolved_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prediction_accuracy_metrics_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prediction_accuracy_metrics_prediction_id_fkey"
+            columns: ["prediction_id"]
+            isOneToOne: false
+            referencedRelation: "claim_predictive_analysis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           approval_status: string
@@ -4852,6 +5031,78 @@ export type Database = {
           version?: number
         }
         Relationships: []
+      }
+      scenario_accuracy_metrics: {
+        Row: {
+          action_executed_at: string | null
+          actual_litigation_delta: number | null
+          actual_pressure_delta: number | null
+          actual_wsi_delta: number | null
+          claim_id: string
+          created_at: string
+          id: string
+          outcome_measured_at: string | null
+          projected_litigation_delta: number | null
+          projected_pressure_delta: number | null
+          projected_wsi_delta: number | null
+          scenario_action: string
+          scenario_simulation_id: string | null
+          variance_litigation: number | null
+          variance_pressure: number | null
+          variance_wsi: number | null
+        }
+        Insert: {
+          action_executed_at?: string | null
+          actual_litigation_delta?: number | null
+          actual_pressure_delta?: number | null
+          actual_wsi_delta?: number | null
+          claim_id: string
+          created_at?: string
+          id?: string
+          outcome_measured_at?: string | null
+          projected_litigation_delta?: number | null
+          projected_pressure_delta?: number | null
+          projected_wsi_delta?: number | null
+          scenario_action: string
+          scenario_simulation_id?: string | null
+          variance_litigation?: number | null
+          variance_pressure?: number | null
+          variance_wsi?: number | null
+        }
+        Update: {
+          action_executed_at?: string | null
+          actual_litigation_delta?: number | null
+          actual_pressure_delta?: number | null
+          actual_wsi_delta?: number | null
+          claim_id?: string
+          created_at?: string
+          id?: string
+          outcome_measured_at?: string | null
+          projected_litigation_delta?: number | null
+          projected_pressure_delta?: number | null
+          projected_wsi_delta?: number | null
+          scenario_action?: string
+          scenario_simulation_id?: string | null
+          variance_litigation?: number | null
+          variance_pressure?: number | null
+          variance_wsi?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scenario_accuracy_metrics_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scenario_accuracy_metrics_scenario_simulation_id_fkey"
+            columns: ["scenario_simulation_id"]
+            isOneToOne: false
+            referencedRelation: "claim_scenario_simulations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       signature_field_templates: {
         Row: {
@@ -5183,6 +5434,48 @@ export type Database = {
           state_code?: string
           state_name?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      strategic_weight_versions: {
+        Row: {
+          carrier_risk_weight: number
+          compliance_weight: number
+          coverage_weight: number
+          created_at: string
+          created_by: string | null
+          effective_date: string
+          evidence_weight: number
+          id: string
+          leverage_weight: number
+          notes: string | null
+          version_name: string
+        }
+        Insert: {
+          carrier_risk_weight?: number
+          compliance_weight?: number
+          coverage_weight?: number
+          created_at?: string
+          created_by?: string | null
+          effective_date?: string
+          evidence_weight?: number
+          id?: string
+          leverage_weight?: number
+          notes?: string | null
+          version_name: string
+        }
+        Update: {
+          carrier_risk_weight?: number
+          compliance_weight?: number
+          coverage_weight?: number
+          created_at?: string
+          created_by?: string | null
+          effective_date?: string
+          evidence_weight?: number
+          id?: string
+          leverage_weight?: number
+          notes?: string | null
+          version_name?: string
         }
         Relationships: []
       }
