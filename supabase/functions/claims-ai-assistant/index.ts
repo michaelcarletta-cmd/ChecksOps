@@ -966,6 +966,31 @@ const tools = [
   {
     type: "function",
     function: {
+      name: "add_claim_note",
+      description: "Add a note to a specific claim's Notes & Activity section. Use this when the user says 'add a note to the [name] claim', 'note on the claim', 'make a note', etc. This is the PRIMARY tool for adding notes to claims. Do NOT use add_notepad_item for this.",
+      parameters: {
+        type: "object",
+        properties: {
+          client_name: {
+            type: "string",
+            description: "The client/policyholder last name or full name to find the claim (e.g., 'Shelly', 'Vincent Shelly')"
+          },
+          claim_id: {
+            type: "string",
+            description: "Only use this if you have an actual UUID. Otherwise use client_name."
+          },
+          note: {
+            type: "string",
+            description: "The note content to add to the claim's Notes & Activity section"
+          }
+        },
+        required: ["note"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
       name: "add_notepad_item",
       description: "Add an item to the user's personal DASHBOARD notepad/quick notes ONLY. Use this ONLY when the user explicitly says 'add to my notepad', 'add to my quick notes', or 'jot down for me'. Do NOT use this when the user says 'add a note to the claim' — that should go to claim_updates via other tools.",
       parameters: {
@@ -3176,9 +3201,10 @@ WORKSPACE SHARING: You can share claims to workspaces for partner collaboration!
 You can also specify claims by name using client_names array, or by ID using claim_ids array.
 
 NOTEPAD vs CLAIM NOTES — CRITICAL DISTINCTION:
-- add_notepad_item → writes to the user's DASHBOARD quick notepad. ONLY use when user says "add to my notepad", "jot down for me", "remind me later"
-- bulk_process_tasks with note → writes to the CLAIM's Notes & Activity section. Use when user says "add a note to the claim", "note on the claim", "update the claim notes"
-- When the user says "add a note" while discussing claims/tasks, they ALWAYS mean a CLAIM NOTE, not the dashboard notepad!
+- add_claim_note → PRIMARY tool for adding notes to a claim's Notes & Activity section. Use when user says "add a note to the [name] claim", "make a note on the claim", "note on the claim". ALWAYS use this for claim notes.
+- add_notepad_item → ONLY for the user's personal DASHBOARD quick notepad. Use ONLY when user explicitly says "add to my notepad", "jot down for me", "remind me later"
+- When the user says "add a note" or "make a note" while discussing claims, they ALWAYS mean a CLAIM NOTE → use add_claim_note
+- NEVER use add_notepad_item for claim-related notes!
 
 *** SYSTEM-WIDE SEARCH CAPABILITIES ***
 
@@ -3835,6 +3861,62 @@ Be relentlessly focused on advancing the claim toward a fair, full, and fast set
           } catch (parseErr) {
             console.error("Error in bulk_share_to_workspace:", parseErr);
             answer += `\n\n❌ **Error sharing to workspace:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "add_claim_note") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Adding claim note:", params);
+            
+            // Get user ID
+            const authHeader = req.headers.get("authorization");
+            if (!authHeader) {
+              answer += `\n\n❌ **Cannot add note:** Not authenticated`;
+              continue;
+            }
+            const { data: { user } } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+            if (!user) {
+              answer += `\n\n❌ **Cannot add note:** User not found`;
+              continue;
+            }
+            
+            // Resolve claim
+            let resolvedClaimId = params.claim_id;
+            let claimName = "";
+            if (!resolvedClaimId && params.client_name) {
+              const foundClaim = await findClaimByClientName(supabase, params.client_name);
+              if (foundClaim) {
+                resolvedClaimId = foundClaim.id;
+                claimName = foundClaim.policyholder_name;
+              }
+            }
+            // Also try from conversation context (claimId variable)
+            if (!resolvedClaimId && claimId) {
+              resolvedClaimId = claimId;
+            }
+            
+            if (!resolvedClaimId) {
+              answer += `\n\n❌ **Could not find claim** for "${params.client_name || 'unknown'}". Please specify the client name.`;
+              continue;
+            }
+            
+            const { error: noteErr } = await supabase
+              .from("claim_updates")
+              .insert({
+                claim_id: resolvedClaimId,
+                content: params.note,
+                update_type: "note",
+                user_id: user.id,
+              });
+            
+            if (noteErr) {
+              console.error("Failed to insert claim note:", noteErr);
+              answer += `\n\n❌ **Failed to add note:** ${noteErr.message}`;
+            } else {
+              answer += `\n\n✅ **Note added to ${claimName || "claim"}:** "${params.note}"`;
+            }
+          } catch (parseErr) {
+            console.error("Error in add_claim_note:", parseErr);
+            answer += `\n\n❌ **Error adding claim note:** Invalid parameters`;
           }
         } else if (toolCall.function.name === "add_notepad_item") {
           try {
