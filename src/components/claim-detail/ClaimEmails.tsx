@@ -255,18 +255,25 @@ export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
   const decodedEmails = useMemo(() => {
     if (!emails) return [];
     
+    // Normalize subject for comparison (strip Re:/Fwd:/RE:/FW: prefixes, spaces, punctuation)
+    const normalizeSubject = (s: string) => 
+      (s || '').replace(/^(re|fwd|fw|forward):\s*/gi, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+    
     // Deduplicate: if an outlook_sync email contains the same content as a truncated inbound email, keep only the fuller version
     const deduplicated = emails.filter((email: any) => {
       if (email.recipient_type !== 'inbound') return true;
-      // Check if there's an outlook_sync email with the same subject that contains this email's body
-      const hasFullerVersion = emails.some((other: any) => 
-        other.id !== email.id &&
-        other.recipient_type === 'outlook_sync' &&
-        other.subject === email.subject &&
-        other.body && email.body &&
-        other.body.length > email.body.length &&
-        other.body.includes(email.body.substring(0, Math.min(50, email.body.length)))
-      );
+      const inboundSubjectNorm = normalizeSubject(email.subject);
+      // Check if there's an outlook_sync email with a matching subject that has more content
+      const hasFullerVersion = emails.some((other: any) => {
+        if (other.id === email.id || other.recipient_type !== 'outlook_sync') return false;
+        const otherSubjectNorm = normalizeSubject(other.subject);
+        // Subject must share the core identifier (one contains the other)
+        const subjectMatch = inboundSubjectNorm.includes(otherSubjectNorm) || otherSubjectNorm.includes(inboundSubjectNorm);
+        if (!subjectMatch || !other.body || !email.body) return false;
+        // The outlook version must be longer and contain the start of the inbound body
+        return other.body.length > email.body.length &&
+          other.body.includes(email.body.substring(0, Math.min(50, email.body.length)));
+      });
       return !hasFullerVersion;
     });
     
