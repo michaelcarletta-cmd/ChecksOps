@@ -48,8 +48,6 @@ function cleanEmailText(text: string): string {
     .replace(/^[^\x20-\x7E\n]*[\x00-\x1F\x7F-\xFF]{10,}[^\x20-\x7E\n]*$/gm, '')
     // Remove gibberish sequences (20+ non-ASCII chars in a row)
     .replace(/[^\x20-\x7E\n\r\t]{20,}/g, '')
-    // Remove email reply/thread content (everything after "From:" header in replies)
-    .replace(/\n\nFrom:[\s\S]*$/m, '')
     // Remove image placeholders like [A computer and phone with a screen...]
     .replace(/\[[^\]]*Description automatically generated\][^\n]*/g, '')
     // Remove CID image references
@@ -201,13 +199,27 @@ export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
   const { data: emails, isLoading } = useQuery({
     queryKey: ["emails", claimId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("emails")
-        .select("*")
-        .eq("claim_id", claimId)
-        .order("sent_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      const allEmails: any[] = [];
+      let offset = 0;
+      const batchSize = 1000;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from("emails")
+          .select("*")
+          .eq("claim_id", claimId)
+          .order("sent_at", { ascending: false })
+          .range(offset, offset + batchSize - 1);
+        if (error) throw error;
+        if (data && data.length > 0) {
+          allEmails.push(...data);
+          offset += batchSize;
+          hasMore = data.length === batchSize;
+        } else {
+          hasMore = false;
+        }
+      }
+      return allEmails;
     },
   });
 
