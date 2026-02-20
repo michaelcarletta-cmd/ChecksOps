@@ -1,4 +1,5 @@
  import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
  import { IndicatorState, IndicatorValue } from "./types";
  import { CheckCircle2, XCircle, HelpCircle } from "lucide-react";
  
@@ -29,23 +30,10 @@
  
    const getButtonClasses = (buttonState: IndicatorState) => {
      const isActive = state === buttonState;
-     
-     const baseClasses = "flex items-center gap-1 px-2 py-1 text-xs rounded border transition-colors";
-     
-     if (!isActive) {
-       return cn(baseClasses, "border-muted bg-background hover:bg-muted/50 text-muted-foreground");
-     }
-     
-     switch (buttonState) {
-       case 'present':
-         return cn(baseClasses, "border-green-500 bg-green-500/10 text-green-700 dark:text-green-400");
-       case 'absent':
-         return cn(baseClasses, "border-muted bg-muted/50 text-muted-foreground");
-       case 'unknown':
-         return cn(baseClasses, "border-yellow-500 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400");
-       default:
-         return baseClasses;
-     }
+    return cn(
+      "h-7 px-2 text-xs gap-1",
+      isActive ? "ring-2 ring-primary/30" : "opacity-85",
+    );
    };
  
    return (
@@ -68,33 +56,39 @@
        </div>
        
        <div className="flex gap-1 flex-shrink-0">
-         <button
+        <Button
            type="button"
+          size="sm"
+          variant={state === "present" ? "default" : "outline"}
            onClick={() => handleStateChange('present')}
            className={getButtonClasses('present')}
            title="Present: Indicator is observed or documented"
          >
            <CheckCircle2 className="h-3 w-3" />
            Yes
-         </button>
-         <button
+        </Button>
+        <Button
            type="button"
+          size="sm"
+          variant={state === "absent" ? "default" : "outline"}
            onClick={() => handleStateChange('absent')}
            className={getButtonClasses('absent')}
            title="Absent: Explicitly observed NOT to exist"
          >
            <XCircle className="h-3 w-3" />
            No
-         </button>
-         <button
+        </Button>
+        <Button
            type="button"
+          size="sm"
+          variant={state === "unknown" ? "default" : "outline"}
            onClick={() => handleStateChange('unknown')}
            className={getButtonClasses('unknown')}
            title="Unknown: Not observed, not documented, or not evaluated"
          >
            <HelpCircle className="h-3 w-3" />
            ?
-         </button>
+        </Button>
        </div>
      </div>
    );

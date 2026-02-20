@@ -481,13 +481,15 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
                     <span className="truncate max-w-[150px]">
                       {recipient.label}
                     </span>
-                    <button
+                    <Button
                       type="button"
                       onClick={() => removeRecipient(recipient.phone)}
-                      className="ml-1 hover:bg-muted rounded p-0.5"
+                      variant="ghost"
+                      size="icon"
+                      className="ml-1 h-5 w-5 rounded p-0"
                     >
                       <X className="h-3 w-3" />
-                    </button>
+                    </Button>
                   </Badge>
                 ))}
               </div>

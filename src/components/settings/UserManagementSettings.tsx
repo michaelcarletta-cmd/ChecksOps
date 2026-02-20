@@ -419,12 +419,15 @@ export function UserManagementSettings() {
                         className="flex items-center gap-2"
                       >
                         {ROLE_LABELS[userRole.role]}
-                        <button
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
                           onClick={() => removeRole(userRole.id, user.id, userRole.role)}
-                          className="ml-1 hover:text-destructive transition-colors"
+                          className="ml-1 h-5 w-5 p-0"
                         >
                           <Trash2 className="h-3 w-3" />
-                        </button>
+                        </Button>
                       </Badge>
                     ))
                   )}

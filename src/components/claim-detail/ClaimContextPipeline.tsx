@@ -259,19 +259,19 @@ export const ClaimContextPipeline = ({ claimId, claim }: Props) => {
         <div className="flex items-center gap-1 px-2">
           {STAGES.map((s, i) => (
             <div key={s.key} className="flex items-center gap-1">
-              <button
+              <Button
+                type="button"
+                variant={s.key === stage ? "default" : "outline"}
+                size="sm"
                 onClick={() => i <= currentStageIdx && setStage(s.key)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                  s.key === stage
-                    ? "bg-primary text-primary-foreground"
-                    : i < currentStageIdx
-                    ? "bg-primary/20 text-primary cursor-pointer"
-                    : "bg-muted text-muted-foreground"
+                disabled={i > currentStageIdx}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium h-auto ${
+                  i < currentStageIdx && s.key !== stage ? "opacity-80" : ""
                 }`}
               >
                 {i < currentStageIdx ? <CheckCircle className="h-3 w-3" /> : <span>{s.num}</span>}
                 {s.label}
-              </button>
+              </Button>
               {i < STAGES.length - 1 && <ArrowRight className="h-3 w-3 text-muted-foreground" />}
             </div>
           ))}
@@ -545,16 +545,18 @@ export const ClaimContextPipeline = ({ claimId, claim }: Props) => {
 
                     {estimateResult.estimate.map((scopeBlock, si) => (
                       <Card key={si}>
-                        <button
+                        <Button
+                          type="button"
+                          variant="ghost"
                           onClick={() => toggleScope(scopeBlock.scope)}
-                          className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors"
+                          className="w-full flex items-center justify-between p-3 h-auto hover:bg-muted/30 transition-colors rounded-none"
                         >
                           <div className="flex items-center gap-2">
                             {expandedScopes.has(scopeBlock.scope) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                             <span className="font-medium capitalize text-sm">{scopeBlock.scope}</span>
                             <Badge variant="secondary" className="text-[10px]">{scopeBlock.items.length} items</Badge>
                           </div>
-                        </button>
+                        </Button>
                         {expandedScopes.has(scopeBlock.scope) && (
                           <CardContent className="pt-0">
                             <div className="space-y-1">
