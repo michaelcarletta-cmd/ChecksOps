@@ -89,8 +89,8 @@ async function fetchGraphEmails(accessToken: string, maxPages = 10): Promise<any
   let url: string | null =
     `https://graph.microsoft.com/v1.0/me/messages?` +
     `$filter=receivedDateTime ge ${thirtyDaysAgo}` +
-    `&$select=from,toRecipients,subject,receivedDateTime,bodyPreview,internetMessageId` +
-    `&$top=250&$orderby=receivedDateTime desc`;
+    `&$select=from,toRecipients,subject,receivedDateTime,body,bodyPreview,internetMessageId` +
+    `&$top=250&$orderby=receivedDateTime desc&$count=false`;
 
   let page = 0;
   while (url && page < maxPages) {
@@ -113,16 +113,44 @@ async function fetchGraphEmails(accessToken: string, maxPages = 10): Promise<any
     }
 
     const data = await response.json();
-    const emails = (data.value || []).map((msg: any) => ({
-      from: msg.from?.emailAddress?.address || 'Unknown',
-      from_name: msg.from?.emailAddress?.name || '',
-      to: msg.toRecipients?.[0]?.emailAddress?.address || 'Unknown',
-      to_name: msg.toRecipients?.[0]?.emailAddress?.name || '',
-      subject: msg.subject || '(No Subject)',
-      date: msg.receivedDateTime,
-      body_preview: msg.bodyPreview || '',
-      message_id: msg.internetMessageId || '',
-    }));
+    const emails = (data.value || []).map((msg: any) => {
+      // Extract full body text – prefer plain text, strip HTML tags if HTML
+      let fullBody = '';
+      if (msg.body?.content) {
+        if (msg.body.contentType === 'text') {
+          fullBody = msg.body.content;
+        } else {
+          // Strip HTML tags to get plain text
+          fullBody = msg.body.content
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<\/p>/gi, '\n\n')
+            .replace(/<\/div>/gi, '\n')
+            .replace(/<\/li>/gi, '\n')
+            .replace(/<[^>]+>/g, '')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+        }
+      }
+      return {
+        from: msg.from?.emailAddress?.address || 'Unknown',
+        from_name: msg.from?.emailAddress?.name || '',
+        to: msg.toRecipients?.[0]?.emailAddress?.address || 'Unknown',
+        to_name: msg.toRecipients?.[0]?.emailAddress?.name || '',
+        subject: msg.subject || '(No Subject)',
+        date: msg.receivedDateTime,
+        full_body: fullBody || msg.bodyPreview || '',
+        body_preview: msg.bodyPreview || '',
+        message_id: msg.internetMessageId || '',
+      };
+    });
 
     allEmails.push(...emails);
     url = data['@odata.nextLink'] || null;
@@ -227,7 +255,7 @@ async function runBulkSync(supabase: any, allConnections: any[]): Promise<{ tota
         const { error: insertError } = await supabase.from('emails').insert({
           claim_id: claim.id,
           subject: email.subject,
-          body: email.body_preview,
+         body: email.full_body,
           recipient_email: isInbound ? email.from : email.to,
           recipient_name: isInbound ? email.from_name : email.to_name,
           recipient_type: 'outlook_sync',
@@ -387,7 +415,7 @@ async function handleOutlookSync(req: Request): Promise<Response> {
       const { error: insertError } = await supabase.from('emails').insert({
         claim_id,
         subject: email.subject,
-        body: email.body_preview,
+        body: email.full_body,
         recipient_email: isInbound ? email.from : email.to,
         recipient_name: isInbound ? email.from_name : email.to_name,
         recipient_type: 'outlook_sync',
