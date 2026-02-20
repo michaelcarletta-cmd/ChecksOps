@@ -255,32 +255,33 @@ export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
   const decodedEmails = useMemo(() => {
     if (!emails) return [];
     
-    // Normalize subject for comparison (strip Re:/Fwd:/RE:/FW: prefixes, spaces, punctuation)
+    // Normalize subject for comparison (strip Re:/Fwd:/RE:/FW: prefixes and non-alphanumeric)
     const normalizeSubject = (s: string) => 
       (s || '').replace(/^(re|fwd|fw|forward):\s*/gi, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
     
-    // Deduplicate: if an outlook_sync email contains the same content as a truncated inbound email, keep only the fuller version
-    const deduplicated = emails.filter((email: any) => {
-      if (email.recipient_type !== 'inbound') return true;
-      const inboundSubjectNorm = normalizeSubject(email.subject);
-      // Check if there's an outlook_sync email with a matching subject that has more content
-      const hasFullerVersion = emails.some((other: any) => {
-        if (other.id === email.id || other.recipient_type !== 'outlook_sync') return false;
-        const otherSubjectNorm = normalizeSubject(other.subject);
-        // Subject must share the core identifier (one contains the other)
-        const subjectMatch = inboundSubjectNorm.includes(otherSubjectNorm) || otherSubjectNorm.includes(inboundSubjectNorm);
-        if (!subjectMatch || !other.body || !email.body) return false;
-        // The outlook version must be longer and contain the start of the inbound body
-        return other.body.length > email.body.length &&
-          other.body.includes(email.body.substring(0, Math.min(50, email.body.length)));
-      });
-      return !hasFullerVersion;
+    // Enrich truncated inbound emails with fuller body from outlook_sync when available
+    return emails.map((email: any) => {
+      let body = email.body;
+      
+      // If this is a short inbound email, look for a fuller outlook_sync version
+      if (email.recipient_type === 'inbound' && body && body.length < 300) {
+        const inboundSubjectNorm = normalizeSubject(email.subject);
+        const fullerVersion = emails.find((other: any) => {
+          if (other.id === email.id || other.recipient_type !== 'outlook_sync') return false;
+          const otherSubjectNorm = normalizeSubject(other.subject);
+          const subjectMatch = inboundSubjectNorm.includes(otherSubjectNorm) || otherSubjectNorm.includes(inboundSubjectNorm);
+          return subjectMatch && other.body && other.body.length > body.length;
+        });
+        if (fullerVersion) {
+          body = fullerVersion.body;
+        }
+      }
+      
+      return {
+        ...email,
+        decodedBody: decodeEmailBody(body)
+      };
     });
-    
-    return deduplicated.map(email => ({
-      ...email,
-      decodedBody: decodeEmailBody(email.body)
-    }));
   }, [emails]);
 
   const handleDownloadAttachment = async (filePath: string, fileName: string) => {
