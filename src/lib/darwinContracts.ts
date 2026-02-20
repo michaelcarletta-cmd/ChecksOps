@@ -11,7 +11,6 @@
  * CI fails if CONTRACT_VERSION differs between that file and this one.
  */
 
-// @ts-ignore - path resolves at build time for edge functions
 import type { FolderKey } from "../../../supabase/functions/_shared/darwin-contracts";
 export type { FolderKey };
 

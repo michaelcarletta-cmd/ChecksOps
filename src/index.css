@@ -45,9 +45,6 @@ All colors MUST be HSL.
 
     --radius: 0.5rem;
 
-    --gradient-start: 270 60% 60%;
-    --gradient-end: 170 60% 55%;
-
     --sidebar-background: 220 60% 20%;
     --sidebar-foreground: 0 0% 100%;
     --sidebar-primary: 0 0% 100%;

@@ -123,7 +123,7 @@ export function ConstructionStatusSelect({
       onValueChange={handleStatusChange} 
       disabled={loading || disabled}
     >
-      <SelectTrigger className="min-w-[160px] max-w-[220px] w-auto rounded-none bg-gradient-to-r from-[hsl(var(--gradient-start))] to-[hsl(var(--gradient-end))] text-white border-none hover:opacity-90">
+      <SelectTrigger className="min-w-[160px] max-w-[220px] w-auto rounded-none">
         {currentStatusObj ? (
           <div className="flex items-center gap-2">
             <div
