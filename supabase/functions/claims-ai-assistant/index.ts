@@ -967,7 +967,7 @@ const tools = [
     type: "function",
     function: {
       name: "add_notepad_item",
-      description: "Add an item to the user's personal notepad/quick notes on the dashboard. Use this when the user asks you to remind them of something, jot something down, add to their notes, or save a quick note for later.",
+      description: "Add an item to the user's personal DASHBOARD notepad/quick notes ONLY. Use this ONLY when the user explicitly says 'add to my notepad', 'add to my quick notes', or 'jot down for me'. Do NOT use this when the user says 'add a note to the claim' — that should go to claim_updates via other tools.",
       parameters: {
         type: "object",
         properties: {
@@ -1356,7 +1356,7 @@ const tools = [
     type: "function",
     function: {
       name: "bulk_process_tasks",
-      description: "Process tasks across multiple claims at once. Can add a note to tasks, mark them as completed, and/or create follow-up tasks. Use this when the user asks to update, clear, complete, or process tasks across multiple claims. The user may reference claims by client/policyholder names.",
+      description: "Process tasks across multiple claims at once. Can add a CLAIM NOTE (to the claim's Notes & Activity section), mark tasks as completed, and/or create follow-up tasks. Use this when the user asks to update, clear, complete, or process tasks across multiple claims. IMPORTANT: When the user says 'add a note' in the context of claims/tasks, they mean a claim note in Notes & Activity — NOT the dashboard quick notepad.",
       parameters: {
         type: "object",
         properties: {
@@ -1376,7 +1376,7 @@ const tools = [
           },
           note: {
             type: "string",
-            description: "Note/description to add to each task before completing it"
+            description: "Note to add to the CLAIM's Notes & Activity section (claim_updates table). This is NOT the dashboard quick notepad."
           },
           complete_tasks: {
             type: "boolean",
@@ -3175,10 +3175,10 @@ WORKSPACE SHARING: You can share claims to workspaces for partner collaboration!
 
 You can also specify claims by name using client_names array, or by ID using claim_ids array.
 
-NOTEPAD: You can add items to the user's personal notepad on their dashboard!
-- Use add_notepad_item when the user asks you to remind them of something, jot something down, add to their notes, or save a quick note
-- Examples: "remind me to call the adjuster tomorrow", "add to my notes: follow up on Smith claim", "jot down that I need to review the Johnson estimate"
-- The note will appear as a bullet point on their dashboard notepad
+NOTEPAD vs CLAIM NOTES — CRITICAL DISTINCTION:
+- add_notepad_item → writes to the user's DASHBOARD quick notepad. ONLY use when user says "add to my notepad", "jot down for me", "remind me later"
+- bulk_process_tasks with note → writes to the CLAIM's Notes & Activity section. Use when user says "add a note to the claim", "note on the claim", "update the claim notes"
+- When the user says "add a note" while discussing claims/tasks, they ALWAYS mean a CLAIM NOTE, not the dashboard notepad!
 
 *** SYSTEM-WIDE SEARCH CAPABILITIES ***
 
