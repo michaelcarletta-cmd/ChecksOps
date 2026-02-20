@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const gradientButtonStyles =
-  "!border !border-primary/20 !bg-[linear-gradient(135deg,#ffffff_0%,hsl(220,80%,92%)_40%,hsl(220,60%,55%)_100%)] !text-blue-900 shadow-sm hover:!bg-[linear-gradient(135deg,#ffffff_0%,hsl(220,80%,90%)_35%,hsl(220,60%,50%)_100%)] hover:!text-blue-900 hover:shadow-md";
+  "!border !border-blue-200 !bg-[linear-gradient(135deg,#ffffff_0%,hsl(220,80%,92%)_50%,hsl(220,60%,55%)_100%)] !text-blue-900 shadow-sm hover:!bg-[linear-gradient(135deg,#ffffff_0%,hsl(220,80%,88%)_45%,hsl(220,60%,50%)_100%)] hover:!text-blue-950 hover:shadow-md";
 
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
