@@ -87,6 +87,7 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
   const predictedMove = insights?.predicted_carrier_move ?? null;
   const strategicMemo = insights?.strategic_memo ?? null;
   const scenarioSims = insights?.scenario_simulations ?? null;
+  const confidenceScores = insights?.confidence_scores ?? null;
   const evidenceAssessment = insights ? {
     strong_evidence: Array.isArray(insights.leverage_points) ? insights.leverage_points.map((p: any) => typeof p === 'string' ? p : p.title || p.description) : [],
     weak_missing_evidence: Array.isArray(insights.evidence_gaps) ? insights.evidence_gaps : [],
@@ -94,6 +95,27 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
     ...((insights as any)?.evidence_assessment_extended || {}),
   } : null;
   const counterTactics = (insights?.counter_strategies as any[]) ?? null;
+
+  // Drift detection from latest snapshot
+  const [driftDetected, setDriftDetected] = useState(false);
+  const [driftReason, setDriftReason] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || !claimId) return;
+    supabase
+      .from('claim_strategic_snapshots')
+      .select('strategic_drift_flag, drift_reason')
+      .eq('claim_id', claimId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setDriftDetected(!!data.strategic_drift_flag);
+          setDriftReason(data.drift_reason);
+        }
+      });
+  }, [isOpen, claimId, insights]);
 
   const getScoreColor = (score: number | null) => {
     if (score === null) return "text-muted-foreground";
@@ -141,11 +163,14 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
             {/* === TOP STATS BAR === */}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
               {/* WSI */}
-              <WSIBreakdown wsiScore={wsiScore} components={wsiComponents}>
+              <WSIBreakdown wsiScore={wsiScore} components={wsiComponents} confidenceScores={confidenceScores}>
                 <Card className="bg-gradient-to-br from-primary/10 to-primary/5 cursor-pointer hover:from-primary/15 transition-colors">
                   <CardContent className="p-3 text-center">
                     <div className={`text-3xl font-bold ${getScoreColor(wsiScore)}`}>{wsiScore ?? "--"}</div>
                     <div className="text-[10px] text-muted-foreground mt-0.5">WSI Score</div>
+                    {confidenceScores?.overall && (
+                      <div className="text-[9px] text-muted-foreground capitalize">{confidenceScores.overall} conf.</div>
+                    )}
                   </CardContent>
                 </Card>
               </WSIBreakdown>
@@ -161,7 +186,7 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
               </LitigationReadiness>
 
               {/* Pressure Index */}
-              <PressureIndex score={pressureScore} level={pressureLevel} factors={pressureFactors}>
+              <PressureIndex score={pressureScore} level={pressureLevel} factors={pressureFactors} confidenceLevel={confidenceScores?.pressure_index?.level}>
                 <Card className="cursor-pointer hover:bg-accent/50 transition-colors">
                   <CardContent className="p-3 text-center">
                     {pressureLevel ? (
@@ -240,7 +265,7 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
                           </div>
                         ))}
                       </div>
-                      <PredictedCarrierMove prediction={predictedMove} />
+                      <PredictedCarrierMove prediction={predictedMove} confidenceLevel={confidenceScores?.predicted_move?.level} />
                     </div>
                   ) : insights ? (
                     <div className="space-y-3">
@@ -299,10 +324,10 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
             </div>
 
             {/* === SCENARIO SIMULATION === */}
-            <ScenarioSimulator scenarios={scenarioSims} />
+            <ScenarioSimulator scenarios={scenarioSims} confidenceLevel={confidenceScores?.scenarios?.level} />
 
             {/* === STRATEGIC MEMO === */}
-            <StrategicMemo memo={strategicMemo} claimNumber={claim?.claim_number} />
+            <StrategicMemo memo={strategicMemo} claimNumber={claim?.claim_number} driftDetected={driftDetected} driftReason={driftReason} />
 
             {/* Legacy Senior PA Opinion fallback */}
             {!strategicMemo && insights?.senior_pa_opinion && (

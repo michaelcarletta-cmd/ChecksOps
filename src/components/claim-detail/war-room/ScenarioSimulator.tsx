@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, FlaskConical, TrendingUp } from "lucide-react";
+import { ChevronDown, FlaskConical } from "lucide-react";
 import { useState } from "react";
 
 interface Scenario {
@@ -16,18 +16,29 @@ interface Scenario {
 
 interface ScenarioSimulatorProps {
   scenarios: Scenario[] | null;
+  confidenceLevel?: string | null;
 }
 
-const DeltaBadge = ({ value, label }: { value: number; label: string }) => (
-  <div className="text-center">
-    <div className={`text-sm font-bold ${value > 0 ? "text-success" : value < 0 ? "text-destructive" : "text-muted-foreground"}`}>
-      {value > 0 ? `+${value}` : value}
+const DeltaBadge = ({ value, label }: { value: number; label: string }) => {
+  // Cap display deltas to reasonable ranges for credibility
+  const displayValue = Math.min(Math.max(value, -30), 30);
+  return (
+    <div className="text-center">
+      <div className={`text-sm font-bold ${displayValue > 0 ? "text-success" : displayValue < 0 ? "text-destructive" : "text-muted-foreground"}`}>
+        {displayValue > 0 ? `+${displayValue}` : displayValue}
+      </div>
+      <div className="text-[10px] text-muted-foreground">{label}</div>
     </div>
-    <div className="text-[10px] text-muted-foreground">{label}</div>
-  </div>
-);
+  );
+};
 
-export const ScenarioSimulator = ({ scenarios }: ScenarioSimulatorProps) => {
+const confColors: Record<string, string> = {
+  high: "bg-success/20 text-success",
+  medium: "bg-warning/20 text-warning",
+  low: "bg-muted text-muted-foreground",
+};
+
+export const ScenarioSimulator = ({ scenarios, confidenceLevel }: ScenarioSimulatorProps) => {
   const [open, setOpen] = useState(false);
 
   if (!scenarios || scenarios.length === 0) return null;
@@ -41,6 +52,11 @@ export const ScenarioSimulator = ({ scenarios }: ScenarioSimulatorProps) => {
               <span className="flex items-center gap-2">
                 <FlaskConical className="h-4 w-4 text-primary" />
                 Scenario Simulation Engine
+                {confidenceLevel && (
+                  <Badge className={`text-[10px] ml-1 ${confColors[confidenceLevel] || confColors.low}`}>
+                    {confidenceLevel.charAt(0).toUpperCase() + confidenceLevel.slice(1)} Confidence
+                  </Badge>
+                )}
               </span>
               <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
             </CardTitle>
@@ -48,7 +64,10 @@ export const ScenarioSimulator = ({ scenarios }: ScenarioSimulatorProps) => {
         </Card>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+        <p className="text-[10px] text-muted-foreground mt-2 mb-1 px-1">
+          Projected impact if action is taken. Deltas are estimates based on available claim data and historical patterns.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
           {scenarios.map((s, i) => (
             <Card key={i} className="border border-border">
               <CardContent className="p-3 space-y-2">
