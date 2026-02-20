@@ -1351,6 +1351,61 @@ const tools = [
         }
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "bulk_process_tasks",
+      description: "Process tasks across multiple claims at once. Can add a note to tasks, mark them as completed, and/or create follow-up tasks. Use this when the user asks to update, clear, complete, or process tasks across multiple claims. The user may reference claims by client/policyholder names.",
+      parameters: {
+        type: "object",
+        properties: {
+          client_names: {
+            type: "array",
+            items: { type: "string" },
+            description: "List of client/policyholder names to find claims for"
+          },
+          claim_ids: {
+            type: "array",
+            items: { type: "string" },
+            description: "List of claim UUIDs (if known)"
+          },
+          task_title_search: {
+            type: "string",
+            description: "Optional keyword to filter which tasks to process (e.g. 'follow-up', 'inspection'). If not provided, processes ALL pending tasks on the matched claims."
+          },
+          note: {
+            type: "string",
+            description: "Note/description to add to each task before completing it"
+          },
+          complete_tasks: {
+            type: "boolean",
+            description: "Whether to mark the matched tasks as completed. Default true."
+          },
+          create_follow_up: {
+            type: "boolean",
+            description: "Whether to create a new follow-up task on each claim after processing"
+          },
+          follow_up_title: {
+            type: "string",
+            description: "Title for the follow-up task"
+          },
+          follow_up_due_date: {
+            type: "string",
+            description: "Due date for follow-up task in YYYY-MM-DD format"
+          },
+          follow_up_priority: {
+            type: "string",
+            enum: ["low", "medium", "high"],
+            description: "Priority for follow-up task"
+          },
+          follow_up_description: {
+            type: "string",
+            description: "Description for the follow-up task"
+          }
+        }
+      }
+    }
   }
 ];
 // Helper function to get full Darwin-level claim context
@@ -3178,6 +3233,16 @@ GET ADJUSTER INTERACTIONS (get_adjuster_interactions):
 
 IMPORTANT: When the user asks about finding tasks with certain words or topics, ALWAYS use the search_tasks tool. The fuzzy matching will find related terms even if the user's wording doesn't exactly match the task titles.
 
+*** BULK TASK PROCESSING (bulk_process_tasks) - USE FOR MULTI-CLAIM TASK OPERATIONS! ***
+- Use this when the user asks to update/clear/complete tasks across MULTIPLE claims at once
+- Can find claims by client names (client_names array)
+- Can add a note to tasks, mark them completed, AND create follow-up tasks — all in one call
+- Examples:
+  - "update the tasks on these 5 claims with a note and clear them" → bulk_process_tasks({ client_names: ["Smith", "Jones", ...], note: "Contacted client", complete_tasks: true })
+  - "clear all tasks on the filtered claims and create follow-ups for next week" → bulk_process_tasks({ client_names: [...], complete_tasks: true, create_follow_up: true, follow_up_title: "Follow-up", follow_up_due_date: "2026-02-27" })
+  - "add a note to all tasks on these claims" → bulk_process_tasks({ client_names: [...], note: "Note text", complete_tasks: false })
+- IMPORTANT: When the user says "the claims on this page" or "filtered claims", ask them for the client names or use the claims list context to identify them.
+
 *** TASK MANAGEMENT (update_task, complete_task, reopen_task, delete_task, list_claim_tasks) ***
 - update_task: Change task title, description, due date, priority, or assignee. Can find tasks by title keywords.
 - complete_task: Mark a task as done. Can find by title keywords.
@@ -4389,6 +4454,129 @@ ${knowledgeBaseContext || ''}`
           } catch (parseErr) {
             console.error("Error in list_claim_tasks:", parseErr);
             answer += `\n\n❌ **Error listing tasks:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "bulk_process_tasks") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Bulk processing tasks:", params);
+            
+            // Resolve claim IDs from client names
+            const resolvedClaimIds: { id: string; name: string }[] = [];
+            
+            if (params.claim_ids && params.claim_ids.length > 0) {
+              for (const cid of params.claim_ids) {
+                const { data: c } = await supabase.from("claims").select("id, policyholder_name").eq("id", cid).single();
+                if (c) resolvedClaimIds.push({ id: c.id, name: c.policyholder_name });
+              }
+            }
+            
+            if (params.client_names && params.client_names.length > 0) {
+              for (const name of params.client_names) {
+                const found = await findClaimByClientName(supabase, name);
+                if (found) {
+                  resolvedClaimIds.push({ id: found.id, name: found.policyholder_name });
+                } else {
+                  answer += `\n⚠️ Could not find claim for "${name}"`;
+                }
+              }
+            }
+            
+            if (resolvedClaimIds.length === 0) {
+              answer += `\n\n❌ **No claims found** to process tasks for.`;
+              continue;
+            }
+            
+            let totalProcessed = 0;
+            let totalFollowUps = 0;
+            const results: string[] = [];
+            
+            for (const claim of resolvedClaimIds) {
+              // Find tasks on this claim
+              let taskQuery = supabase
+                .from("tasks")
+                .select("id, title, description, status, claim_id")
+                .eq("claim_id", claim.id)
+                .eq("status", "pending");
+              
+              if (params.task_title_search) {
+                taskQuery = taskQuery.ilike("title", `%${params.task_title_search}%`);
+              }
+              
+              const { data: tasks, error: fetchErr } = await taskQuery.limit(50);
+              
+              if (fetchErr || !tasks || tasks.length === 0) {
+                results.push(`⚠️ ${claim.name}: No matching pending tasks found`);
+                continue;
+              }
+              
+              let claimProcessed = 0;
+              
+              for (const task of tasks) {
+                const updateData: any = { updated_at: new Date().toISOString() };
+                
+                // Add note to description
+                if (params.note) {
+                  const existingDesc = task.description || "";
+                  const noteTimestamp = new Date().toLocaleDateString();
+                  updateData.description = existingDesc 
+                    ? `${existingDesc}\n\n[${noteTimestamp}] ${params.note}`
+                    : `[${noteTimestamp}] ${params.note}`;
+                }
+                
+                // Complete the task
+                if (params.complete_tasks !== false) {
+                  updateData.status = "completed";
+                  updateData.completed_at = new Date().toISOString();
+                }
+                
+                const { error: updateErr } = await supabase
+                  .from("tasks")
+                  .update(updateData)
+                  .eq("id", task.id);
+                
+                if (!updateErr) {
+                  claimProcessed++;
+                  totalProcessed++;
+                }
+              }
+              
+              // Create follow-up task if requested
+              if (params.create_follow_up) {
+                const followUpData: any = {
+                  claim_id: claim.id,
+                  title: params.follow_up_title || "Follow-up",
+                  description: params.follow_up_description || "",
+                  priority: params.follow_up_priority || "medium",
+                  status: "pending",
+                };
+                
+                if (params.follow_up_due_date) {
+                  followUpData.due_date = params.follow_up_due_date;
+                }
+                
+                const { error: createErr } = await supabase
+                  .from("tasks")
+                  .insert(followUpData);
+                
+                if (!createErr) {
+                  totalFollowUps++;
+                }
+              }
+              
+              results.push(`✅ ${claim.name}: ${claimProcessed} task(s) processed${params.create_follow_up ? ' + follow-up created' : ''}`);
+            }
+            
+            answer += `\n\n📋 **Bulk Task Processing Complete**\n`;
+            answer += `Claims: ${resolvedClaimIds.length} | Tasks processed: ${totalProcessed}${totalFollowUps > 0 ? ` | Follow-ups created: ${totalFollowUps}` : ''}\n\n`;
+            answer += results.join('\n');
+            
+            // Flag for UI refresh
+            if (totalProcessed > 0) {
+              answer += `\n\nTasks updated successfully.`;
+            }
+          } catch (parseErr) {
+            console.error("Error in bulk_process_tasks:", parseErr);
+            answer += `\n\n❌ **Error processing bulk tasks:** Invalid parameters`;
           }
         }
       }
