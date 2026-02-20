@@ -260,17 +260,20 @@ export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
       (s || '').replace(/^(re|fwd|fw|forward):\s*/gi, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
     
     // Enrich truncated inbound emails with fuller body from outlook_sync when available
+    // Only enrich if the outlook_sync version actually contains the inbound body (same email, just fuller)
     return emails.map((email: any) => {
       let body = email.body;
       
-      // If this is a short inbound email, look for a fuller outlook_sync version
+      // If this is a short inbound email, look for a fuller outlook_sync version that contains the same content
       if (email.recipient_type === 'inbound' && body && body.length < 300) {
         const inboundSubjectNorm = normalizeSubject(email.subject);
+        const bodyStart = body.substring(0, Math.min(40, body.length)).trim();
         const fullerVersion = emails.find((other: any) => {
           if (other.id === email.id || other.recipient_type !== 'outlook_sync') return false;
           const otherSubjectNorm = normalizeSubject(other.subject);
           const subjectMatch = inboundSubjectNorm.includes(otherSubjectNorm) || otherSubjectNorm.includes(inboundSubjectNorm);
-          return subjectMatch && other.body && other.body.length > body.length;
+          // The fuller version must contain the beginning of the inbound body to be the same email
+          return subjectMatch && other.body && other.body.length > body.length && other.body.includes(bodyStart);
         });
         if (fullerVersion) {
           body = fullerVersion.body;
