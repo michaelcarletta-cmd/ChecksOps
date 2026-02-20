@@ -8,57 +8,68 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Navy, White & Gray Theme */
-    --background: 0 0% 98%;
-    --foreground: 220 30% 15%;
+    /* Dark platform theme inspired by reference UI */
+    --background: 224 28% 6%;
+    --foreground: 220 18% 92%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 220 30% 15%;
+    --card: 223 23% 9%;
+    --card-foreground: 220 18% 92%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 30% 15%;
+    --popover: 223 23% 9%;
+    --popover-foreground: 220 18% 92%;
 
-    --primary: 220 60% 25%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 220 25% 96%;
 
-    --secondary: 220 15% 92%;
-    --secondary-foreground: 220 30% 15%;
+    --secondary: 223 18% 15%;
+    --secondary-foreground: 220 15% 90%;
 
-    --muted: 220 15% 95%;
-    --muted-foreground: 220 15% 45%;
+    --muted: 223 18% 13%;
+    --muted-foreground: 220 12% 66%;
 
-    --accent: 220 50% 30%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 221 19% 18%;
+    --accent-foreground: 220 16% 92%;
 
-    --destructive: 0 70% 50%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
 
-    --success: 145 65% 40%;
+    --success: 145 63% 44%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 35 85% 50%;
-    --warning-foreground: 220 30% 15%;
+    --warning: 38 92% 58%;
+    --warning-foreground: 224 28% 10%;
 
-    --border: 220 15% 85%;
-    --input: 220 15% 90%;
-    --ring: 220 60% 25%;
+    --border: 220 16% 20%;
+    --input: 220 16% 18%;
+    --ring: 217 91% 60%;
 
     --radius: 0.5rem;
 
-    --sidebar-background: 220 60% 55%;
-    --sidebar-foreground: 220 30% 15%;
-    --sidebar-primary: 220 30% 15%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 80% 92%;
-    --sidebar-accent-foreground: 220 30% 15%;
-    --sidebar-border: 220 40% 80%;
-    --sidebar-ring: 220 60% 40%;
+    --sidebar-background: 224 26% 8%;
+    --sidebar-foreground: 220 11% 68%;
+    --sidebar-primary: 224 30% 12%;
+    --sidebar-primary-foreground: 220 20% 96%;
+    --sidebar-accent: 220 13% 90%;
+    --sidebar-accent-foreground: 224 30% 12%;
+    --sidebar-border: 221 20% 14%;
+    --sidebar-ring: 217 91% 60%;
 
-    --chart-1: 220 60% 25%;
-    --chart-2: 220 30% 50%;
+    --chart-1: 217 91% 60%;
+    --chart-2: 200 80% 54%;
     --chart-3: 145 65% 40%;
-    --chart-4: 35 85% 50%;
-    --chart-5: 0 70% 50%;
+    --chart-4: 38 92% 58%;
+    --chart-5: 0 72% 51%;
+
+    /* Shared button tokens */
+    --button-light-bg: 220 19% 95%;
+    --button-light-hover: 220 20% 90%;
+    --button-light-border: 220 14% 80%;
+    --button-light-foreground: 224 30% 12%;
+
+    --button-dark-bg: 223 18% 12%;
+    --button-dark-hover: 223 18% 16%;
+    --button-dark-border: 220 15% 24%;
+    --button-dark-foreground: 220 15% 90%;
   }
 }
 
@@ -70,6 +81,8 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground font-sans;
     font-feature-settings: "cv11", "ss01";
+    background-image: radial-gradient(circle at top center, hsl(216 72% 20% / 0.28) 0%, transparent 42%);
+    background-attachment: fixed;
   }
 
   h1, h2, h3, h4, h5, h6 {
