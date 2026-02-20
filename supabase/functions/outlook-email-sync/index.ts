@@ -268,12 +268,14 @@ async function runBulkSync(supabase: any, allConnections: any[]): Promise<{ tota
 
       const { data: existingEmails } = await supabase
         .from('emails')
-        .select('subject, sent_at')
+        .select('id, subject, sent_at, body, recipient_type')
         .eq('claim_id', claim.id);
 
-      const existingKeys = new Set(
-        existingEmails?.map((e: any) => `${e.subject}|${new Date(e.sent_at).toISOString().substring(0, 16)}`) || []
-      );
+      const existingBodyMap = new Map<string, { id: string; body_length: number }>();
+      existingEmails?.forEach((e: any) => {
+        const key = `${e.subject}|${new Date(e.sent_at).toISOString().substring(0, 16)}`;
+        existingBodyMap.set(key, { id: e.id, body_length: (e.body || '').length });
+      });
 
       let claimImported = 0;
       for (const email of matchingEmails) {
@@ -281,7 +283,15 @@ async function runBulkSync(supabase: any, allConnections: any[]): Promise<{ tota
         try { sentAt = new Date(email.date).toISOString(); } catch { sentAt = new Date().toISOString(); }
 
         const key = `${email.subject}|${sentAt.substring(0, 16)}`;
-        if (existingKeys.has(key)) continue;
+        const existing = existingBodyMap.get(key);
+        
+        if (existing) {
+          // Update truncated inbound emails with fuller outlook body
+          if (existing.body_length < 500 && email.full_body.length > existing.body_length) {
+            await supabase.from('emails').update({ body: email.full_body }).eq('id', existing.id);
+          }
+          continue;
+        }
 
         const isInbound = email.to.toLowerCase() === conn.email_address.toLowerCase() ||
                           email.from.toLowerCase() !== conn.email_address.toLowerCase();
@@ -289,7 +299,7 @@ async function runBulkSync(supabase: any, allConnections: any[]): Promise<{ tota
         const { error: insertError } = await supabase.from('emails').insert({
           claim_id: claim.id,
           subject: email.subject,
-         body: email.full_body,
+          body: email.full_body,
           recipient_email: isInbound ? email.from : email.to,
           recipient_name: isInbound ? email.from_name : email.to_name,
           recipient_type: 'outlook_sync',
@@ -298,7 +308,7 @@ async function runBulkSync(supabase: any, allConnections: any[]): Promise<{ tota
 
         if (!insertError) {
           claimImported++;
-          existingKeys.add(key);
+          existingBodyMap.set(key, { id: '', body_length: email.full_body.length });
         }
       }
 
@@ -434,14 +444,18 @@ async function handleOutlookSync(req: Request): Promise<Response> {
 
     const { data: existingEmails } = await supabase
       .from('emails')
-      .select('subject, sent_at')
+      .select('id, subject, sent_at, body, recipient_type')
       .eq('claim_id', claim_id);
 
-    const existingKeys = new Set(
-      existingEmails?.map((e: any) => `${e.subject}|${new Date(e.sent_at).toISOString().substring(0, 16)}`) || []
-    );
+    // Build a map of existing emails keyed by subject|sentAt for dedup + truncation detection
+    const existingBodyMap = new Map<string, { id: string; body_length: number; recipient_type: string }>();
+    existingEmails?.forEach((e: any) => {
+      const key = `${e.subject}|${new Date(e.sent_at).toISOString().substring(0, 16)}`;
+      existingBodyMap.set(key, { id: e.id, body_length: (e.body || '').length, recipient_type: e.recipient_type || '' });
+    });
 
     let importedCount = 0;
+    let updatedCount = 0;
     let firstInsertError: string | null = null;
 
     for (const email of matchingEmails) {
@@ -449,7 +463,17 @@ async function handleOutlookSync(req: Request): Promise<Response> {
       try { sentAt = new Date(email.date).toISOString(); } catch { sentAt = new Date().toISOString(); }
 
       const key = `${email.subject}|${sentAt.substring(0, 16)}`;
-      if (existingKeys.has(key)) continue;
+      const existing = existingBodyMap.get(key);
+      
+      if (existing) {
+        // If the existing record is truncated (short body, typically from inbound webhook)
+        // and the outlook version has more content, update the body
+        if (existing.body_length < 500 && email.full_body.length > existing.body_length) {
+          await supabase.from('emails').update({ body: email.full_body }).eq('id', existing.id);
+          updatedCount++;
+        }
+        continue;
+      }
 
       const isInbound = email.to.toLowerCase() === connection.email_address.toLowerCase() ||
                         email.from.toLowerCase() !== connection.email_address.toLowerCase();
@@ -468,7 +492,7 @@ async function handleOutlookSync(req: Request): Promise<Response> {
         if (!firstInsertError) firstInsertError = insertError.message;
       } else {
         importedCount++;
-        existingKeys.add(key);
+        existingBodyMap.set(key, { id: '', body_length: email.full_body.length, recipient_type: 'outlook_sync' });
       }
     }
 
@@ -486,6 +510,7 @@ async function handleOutlookSync(req: Request): Promise<Response> {
       total_fetched: emails.length,
       matching: matchingEmails.length,
       imported: importedCount,
+      updated_truncated: updatedCount,
     };
     if (firstInsertError) {
       result.warning = `Some emails could not be saved: ${firstInsertError}`;
