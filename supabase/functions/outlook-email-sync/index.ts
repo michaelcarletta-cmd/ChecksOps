@@ -163,7 +163,7 @@ async function fetchGraphEmails(accessToken: string, maxPages = 10): Promise<any
 
 // --------------- Claim matching ---------------
 
-function buildClaimMatchTerms(claimNumber: string | null | undefined, policyholderName: string | null | undefined): string[] {
+function buildClaimNumberTerms(claimNumber: string | null | undefined): string[] {
   const terms: string[] = [];
   if (claimNumber?.trim()) {
     const normalized = claimNumber.trim().toLowerCase();
@@ -176,8 +176,6 @@ function buildClaimMatchTerms(claimNumber: string | null | undefined, policyhold
       if (cn.length >= 8) terms.push(`${cn.substring(0, 2)}-${cn.substring(2, 6)}-${cn.substring(6)}`);
     }
   }
-  const lastName = getPolicyholderLastName(policyholderName);
-  if (lastName) terms.push(lastName);
   return [...new Set(terms)];
 }
 
@@ -188,10 +186,38 @@ function getPolicyholderLastName(name: string | null | undefined): string | null
   return last && last.length >= 2 ? last.toLowerCase() : null;
 }
 
-function subjectMatchesClaim(subject: string, matchTerms: string[]): boolean {
-  if (matchTerms.length === 0) return false;
-  const subjectLower = (subject || '').toLowerCase();
-  return matchTerms.some(term => subjectLower.includes(term));
+/**
+ * Strict matching: an email matches a claim ONLY if the subject contains the claim number.
+ * Last name alone is NOT sufficient — it caused false positives with common surnames.
+ * Last name is used only as a secondary confirmation when claim number is also present,
+ * or when the email is from/to a known adjuster/carrier email for that claim.
+ */
+function emailMatchesClaim(
+  email: { subject: string; from: string; to: string },
+  claim: { claim_number: string | null; policyholder_name: string | null; insurance_email: string | null },
+  adjusterEmails: string[]
+): boolean {
+  const subjectLower = (email.subject || '').toLowerCase();
+  const claimTerms = buildClaimNumberTerms(claim.claim_number);
+
+  // Primary match: claim number appears in the subject — high confidence
+  if (claimTerms.length > 0 && claimTerms.some(term => subjectLower.includes(term))) {
+    return true;
+  }
+
+  // Secondary match: last name in subject AND email is from/to a known adjuster or carrier
+  const lastName = getPolicyholderLastName(claim.policyholder_name);
+  if (lastName && subjectLower.includes(lastName)) {
+    const fromLower = (email.from || '').toLowerCase();
+    const toLower = (email.to || '').toLowerCase();
+    const knownEmails = [...adjusterEmails];
+    if (claim.insurance_email) knownEmails.push(claim.insurance_email.toLowerCase());
+    if (knownEmails.some(known => fromLower === known || toLower === known)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // --------------- Bulk sync ---------------
@@ -228,8 +254,16 @@ async function runBulkSync(supabase: any, allConnections: any[]): Promise<{ tota
     if (!openClaims || openClaims.length === 0) continue;
 
     for (const claim of openClaims) {
-      const matchTerms = buildClaimMatchTerms(claim.claim_number, claim.policyholder_name);
-      const matchingEmails = emails.filter((email: any) => subjectMatchesClaim(email.subject, matchTerms));
+      // Fetch adjuster emails for this claim
+      const { data: adjusterRows } = await supabase
+        .from('claim_adjusters')
+        .select('adjuster_email')
+        .eq('claim_id', claim.id);
+      const adjusterEmails = (adjusterRows || [])
+        .map((a: any) => a.adjuster_email?.toLowerCase())
+        .filter(Boolean);
+
+      const matchingEmails = emails.filter((email: any) => emailMatchesClaim(email, claim, adjusterEmails));
       if (matchingEmails.length === 0) continue;
 
       const { data: existingEmails } = await supabase
@@ -387,8 +421,16 @@ async function handleOutlookSync(req: Request): Promise<Response> {
       return json({ success: false, error: `Email fetch failed: ${graphErr.message}` });
     }
 
-    const matchTerms = buildClaimMatchTerms(claim.claim_number, claim.policyholder_name);
-    const matchingEmails = emails.filter(email => subjectMatchesClaim(email.subject, matchTerms));
+    // Fetch adjuster emails for this claim
+    const { data: adjusterRows } = await supabase
+      .from('claim_adjusters')
+      .select('adjuster_email')
+      .eq('claim_id', claim_id);
+    const adjusterEmails = (adjusterRows || [])
+      .map((a: any) => a.adjuster_email?.toLowerCase())
+      .filter(Boolean);
+
+    const matchingEmails = emails.filter(email => emailMatchesClaim(email, claim, adjusterEmails));
 
     const { data: existingEmails } = await supabase
       .from('emails')
