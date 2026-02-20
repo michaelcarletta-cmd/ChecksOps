@@ -853,6 +853,196 @@ Generate a COMPLETE strategic analysis. You MUST return ONLY valid JSON matching
 CRITICAL: Return ONLY the JSON object. No explanation, no markdown formatting, no code blocks.`;
 
       responseFormat = 'strategic_analysis';
+    } else if (analysisType === 'war_room_2') {
+      // --- WAR ROOM 2.0: Expanded strategic intelligence ---
+      // Fetch carrier behavior analytics for global intelligence context
+      let carrierIntelContext = '';
+      if (claim.insurance_company) {
+        const { data: carrierAnalytics } = await supabase
+          .from('carrier_behavior_analytics')
+          .select('*')
+          .ilike('carrier_name', `%${claim.insurance_company.split(' ')[0]}%`)
+          .limit(1)
+          .maybeSingle();
+
+        if (carrierAnalytics) {
+          carrierIntelContext = `
+GLOBAL CARRIER INTELLIGENCE (${carrierAnalytics.carrier_name}):
+- Total Claims Analyzed: ${carrierAnalytics.total_claims_analyzed || 0}
+- Avg Days to Deny: ${carrierAnalytics.avg_days_to_deny ?? 'N/A'}
+- Avg Days to Pay: ${carrierAnalytics.avg_days_to_pay ?? 'N/A'}
+- Initial Denial Rate: ${carrierAnalytics.initial_denial_rate ? (carrierAnalytics.initial_denial_rate * 100).toFixed(0) + '%' : 'N/A'}
+- Reversal Rate After Engineer Report: ${carrierAnalytics.reversal_rate_after_engineer ? (carrierAnalytics.reversal_rate_after_engineer * 100).toFixed(0) + '%' : 'N/A'}
+- Reversal Rate After Supplement: ${carrierAnalytics.reversal_rate_after_supplement ? (carrierAnalytics.reversal_rate_after_supplement * 100).toFixed(0) + '%' : 'N/A'}
+- Litigation Frequency: ${carrierAnalytics.litigation_frequency ? (carrierAnalytics.litigation_frequency * 100).toFixed(0) + '%' : 'N/A'}
+- Avg First Offer vs Final: ${carrierAnalytics.avg_first_offer_vs_final ? (carrierAnalytics.avg_first_offer_vs_final * 100).toFixed(0) + '%' : 'N/A'}
+`;
+        }
+      }
+
+      userPrompt = `Perform a WAR ROOM 2.0 comprehensive strategic analysis of this claim:
+
+${claimContext}
+${carrierIntelContext}
+
+You MUST return ONLY valid JSON matching this EXACT structure (no markdown, no code blocks, just raw JSON):
+
+{
+  "wsi": {
+    "total": 72,
+    "components": {
+      "coverage_strength": { "score": 75, "weight": 25, "explanation": "Why this score" },
+      "evidence_quality": { "score": 60, "weight": 25, "explanation": "Why this score" },
+      "negotiation_leverage": { "score": 80, "weight": 20, "explanation": "Why this score" },
+      "procedural_compliance": { "score": 70, "weight": 15, "explanation": "Why this score" },
+      "carrier_conduct_risk": { "score": 65, "weight": 15, "explanation": "Why this score" }
+    }
+  },
+  "litigation_readiness": {
+    "score": 55,
+    "factors": {
+      "expert_reports_present": { "met": false, "detail": "No engineer report on file" },
+      "damages_quantified": { "met": true, "detail": "Estimate of $X on file" },
+      "causation_documented": { "met": true, "detail": "Photos and timeline support causation" },
+      "statutory_violations_logged": { "met": false, "detail": "No violations tracked yet" },
+      "pre_suit_demand_drafted": { "met": false, "detail": "No demand letter sent" },
+      "evidence_gaps_remaining": { "met": false, "detail": "Missing engineer report and code analysis" }
+    }
+  },
+  "pressure_index": {
+    "score": 65,
+    "level": "moderate",
+    "factors": {
+      "statutory_violations": { "present": true, "detail": "Carrier exceeded 15-day response" },
+      "missed_deadlines": { "present": false, "detail": "No missed deadlines" },
+      "bad_faith_indicators": { "present": true, "detail": "Unreasonable delay pattern" },
+      "complaint_exposure": { "present": false, "detail": "No DOI complaint filed" },
+      "litigation_cost_risk": { "present": false, "detail": "Low complexity case" }
+    }
+  },
+  "predicted_carrier_move": {
+    "prediction": "Carrier will likely issue partial denial citing wear and tear within 14 days",
+    "confidence": 72,
+    "timeline": "within 14 days",
+    "basis": ["Carrier pattern shows 62% initial denial for roof claims", "No engineer report yet"]
+  },
+  "strategic_memo": {
+    "executive_summary": "Brief strategic overview of claim posture",
+    "strongest_leverage": "What gives us the most negotiation power",
+    "greatest_vulnerability": "Biggest weakness in the claim",
+    "immediate_action": "What to do RIGHT NOW",
+    "thirty_day_plan": "Step-by-step tactical plan for next 30 days",
+    "escalation_trigger": "What condition would trigger escalation (NOI, complaint, litigation)",
+    "settlement_range": "Estimated settlement range with reasoning",
+    "bad_faith_viability": "Assessment of bad faith claim viability"
+  },
+  "scenario_simulations": [
+    {
+      "action": "obtain_engineer_report",
+      "label": "What if we obtain an engineer report?",
+      "result_wsi_delta": 12,
+      "result_litigation_delta": 20,
+      "result_pressure_delta": 5,
+      "win_probability_range": "65-80%",
+      "explanation": "Engineer report would strengthen evidence and causation documentation"
+    },
+    {
+      "action": "send_noi",
+      "label": "What if we send Notice of Intent?",
+      "result_wsi_delta": 5,
+      "result_litigation_delta": 15,
+      "result_pressure_delta": 25,
+      "win_probability_range": "60-75%",
+      "explanation": "NOI creates statutory pressure and formal escalation path"
+    },
+    {
+      "action": "escalate_supervisor",
+      "label": "What if we escalate to supervisor?",
+      "result_wsi_delta": 3,
+      "result_litigation_delta": 0,
+      "result_pressure_delta": 10,
+      "win_probability_range": "55-70%",
+      "explanation": "Supervisor escalation may expedite decision"
+    },
+    {
+      "action": "file_doi_complaint",
+      "label": "What if we file DOI complaint?",
+      "result_wsi_delta": 2,
+      "result_litigation_delta": 10,
+      "result_pressure_delta": 30,
+      "win_probability_range": "60-80%",
+      "explanation": "DOI complaint creates regulatory pressure"
+    }
+  ],
+  "warnings": [
+    {
+      "type": "deadline_risk|evidence_gap|coverage_opportunity|carrier_violation|documentation_issue|strategy_alert",
+      "severity": "critical|high|medium|low",
+      "title": "Brief warning title",
+      "message": "Detailed explanation",
+      "suggested_action": "What to do"
+    }
+  ],
+  "leverage_opportunities": [
+    {
+      "title": "Leverage point name",
+      "description": "Why this creates pressure",
+      "how_to_use": "Specific action to take"
+    }
+  ],
+  "coverage_trigger_analysis": [
+    {
+      "trigger": "What condition exists",
+      "coverage_opportunity": "What coverage this unlocks",
+      "reasoning": "Why this applies",
+      "confidence": "high|medium|low",
+      "action_required": "What to do"
+    }
+  ],
+  "evidence_assessment": {
+    "strong_evidence": ["List of strong evidence items"],
+    "weak_missing_evidence": ["List of gaps or weak evidence"],
+    "recommendations": ["Specific recommendations"],
+    "required_by_loss_type": ["Evidence items required for this specific loss type"],
+    "missing_evidence_risk_score": 35,
+    "per_denial_defensive_evidence": [
+      {
+        "denial_reason": "Wear and tear",
+        "required_evidence": ["Engineer report", "Material age documentation"],
+        "have": ["Photos showing hail damage"],
+        "missing": ["Engineer report"]
+      }
+    ]
+  },
+  "recommended_next_moves": [
+    {
+      "priority": 1,
+      "action": "What to do",
+      "timeline": "immediately|this_week|can_wait",
+      "rationale": "Why this matters"
+    }
+  ],
+  "counter_tactics": [
+    {
+      "trigger_condition": "IF carrier delays beyond 15 days",
+      "recommended_action": "Send 10-day demand letter citing statute",
+      "escalation_if_no_response": "File DOI complaint",
+      "letter_type": "10_day_demand",
+      "success_rate_estimate": 72
+    }
+  ],
+  "senior_pa_opinion": "A 2-3 sentence opinion of what a senior PA would focus on."
+}
+
+CRITICAL RULES:
+- Return ONLY the JSON object. No explanation, no markdown formatting, no code blocks.
+- All scores are 0-100.
+- scenario_simulations deltas are how much each score INCREASES if that action is taken.
+- Pressure index level must be "low", "moderate", or "high".
+- Do NOT cite case law. Reference statutes and admin codes only.
+- Frame everything as strategic suggestions, not legal advice.`;
+
+      responseFormat = 'war_room_2';
     } else if (analysisType === 'quick_warnings') {
       userPrompt = `Quickly scan this claim for any critical warnings or issues that need immediate attention:
 
@@ -1181,6 +1371,137 @@ Give me:
           shown_in_context: 'insights_panel'
         }));
 
+        await supabase.from('claim_warnings_log').insert(warningsToInsert);
+      }
+    }
+
+    // Store WAR ROOM 2.0 insights
+    if (analysisType === 'war_room_2' && typeof parsedResult === 'object' && parsedResult.wsi) {
+      const wsi = parsedResult.wsi || {};
+      const litReadiness = parsedResult.litigation_readiness || {};
+      const pressure = parsedResult.pressure_index || {};
+      const warnings = parsedResult.warnings || [];
+      const leveragePoints = parsedResult.leverage_opportunities || [];
+      const coverageTriggers = parsedResult.coverage_trigger_analysis || [];
+      const evidenceGaps = parsedResult.evidence_assessment?.weak_missing_evidence || [];
+      const nextMoves = parsedResult.recommended_next_moves || [];
+      const seniorPaOpinion = parsedResult.senior_pa_opinion || '';
+
+      // Fetch matching carrier playbooks
+      let matchedPlaybooks: any[] = [];
+      if (claim.insurance_company) {
+        const { data: playbooks } = await supabase
+          .from('carrier_playbooks')
+          .select('*')
+          .eq('is_active', true)
+          .ilike('carrier_name', `%${claim.insurance_company.split(' ')[0]}%`)
+          .order('priority', { ascending: true })
+          .limit(10);
+        
+        if (playbooks && playbooks.length > 0) {
+          const claimAge = daysOpen || 0;
+          matchedPlaybooks = playbooks.filter((pb: any) => {
+            const trigger = pb.trigger_condition;
+            if (!trigger || typeof trigger !== 'object') return true;
+            if (trigger.delay_days?.gte && claimAge >= trigger.delay_days.gte) return true;
+            if (trigger.first_denial && hasDenialLetter) return true;
+            if (trigger.engineer_report_received && hasEngineerReport) return true;
+            return false;
+          }).slice(0, 5);
+        }
+      }
+
+      // Upsert strategic insights with War Room 2.0 fields
+      const { error: upsertError } = await supabase
+        .from('claim_strategic_insights')
+        .upsert({
+          claim_id: claimId,
+          // Legacy fields (backward compat)
+          coverage_strength_score: wsi.components?.coverage_strength?.score ?? null,
+          evidence_quality_score: wsi.components?.evidence_quality?.score ?? null,
+          leverage_score: wsi.components?.negotiation_leverage?.score ?? null,
+          timeline_risk_score: null,
+          overall_health_score: wsi.total ?? null,
+          // War Room 2.0 fields
+          wsi_score: wsi.total ?? null,
+          wsi_components: wsi.components ?? null,
+          procedural_compliance_score: wsi.components?.procedural_compliance?.score ?? null,
+          carrier_conduct_risk_score: wsi.components?.carrier_conduct_risk?.score ?? null,
+          litigation_readiness_score: litReadiness.score ?? null,
+          litigation_readiness_factors: litReadiness.factors ?? null,
+          pressure_index_score: pressure.score ?? null,
+          pressure_index_level: pressure.level ?? null,
+          pressure_index_factors: pressure.factors ?? null,
+          strategic_memo: parsedResult.strategic_memo ?? null,
+          predicted_carrier_move: parsedResult.predicted_carrier_move ?? null,
+          scenario_simulations: parsedResult.scenario_simulations ?? null,
+          // Shared fields
+          warnings: warnings,
+          leverage_points: leveragePoints,
+          coverage_triggers_detected: coverageTriggers,
+          evidence_gaps: evidenceGaps,
+          recommended_next_moves: nextMoves,
+          counter_strategies: parsedResult.counter_tactics ?? null,
+          matched_playbooks: matchedPlaybooks,
+          senior_pa_opinion: typeof seniorPaOpinion === 'string' ? seniorPaOpinion : JSON.stringify(seniorPaOpinion),
+          last_analyzed_at: new Date().toISOString(),
+          analysis_version: '2.0'
+        }, {
+          onConflict: 'claim_id'
+        });
+
+      if (upsertError) {
+        console.error('Error saving War Room 2.0 insights:', upsertError);
+      } else {
+        console.log('War Room 2.0 insights saved for claim', claimId);
+      }
+
+      // Store predictive analysis
+      if (parsedResult.predicted_carrier_move) {
+        const pred = parsedResult.predicted_carrier_move;
+        await supabase.from('claim_predictive_analysis').insert({
+          claim_id: claimId,
+          prediction_type: 'carrier_next_move',
+          prediction: pred.prediction,
+          confidence: pred.confidence,
+          basis: pred.basis,
+          predicted_timeline: pred.timeline,
+        });
+      }
+
+      // Store scenario simulations
+      if (Array.isArray(parsedResult.scenario_simulations)) {
+        // Clear old simulations for this claim
+        await supabase.from('claim_scenario_simulations').delete().eq('claim_id', claimId);
+        
+        const simRows = parsedResult.scenario_simulations.map((s: any) => ({
+          claim_id: claimId,
+          scenario_action: s.action,
+          scenario_label: s.label,
+          result_wsi: (wsi.total ?? 0) + (s.result_wsi_delta ?? 0),
+          result_litigation_readiness: (litReadiness.score ?? 0) + (s.result_litigation_delta ?? 0),
+          result_pressure_index: (pressure.score ?? 0) + (s.result_pressure_delta ?? 0),
+          result_win_probability_range: s.win_probability_range,
+          result_explanation: s.explanation,
+        }));
+        
+        if (simRows.length > 0) {
+          await supabase.from('claim_scenario_simulations').insert(simRows);
+        }
+      }
+
+      // Log warnings
+      if (Array.isArray(warnings) && warnings.length > 0) {
+        const warningsToInsert = warnings.map((w: any) => ({
+          claim_id: claimId,
+          warning_type: w.type || 'strategy_alert',
+          severity: w.severity || 'medium',
+          title: w.title || 'Warning',
+          message: w.message || w.description || '',
+          suggested_action: w.suggested_action || w.action || '',
+          context: w.context ? JSON.stringify(w.context) : null,
+          shown_in_context: 'war_room_2'
+        }));
         await supabase.from('claim_warnings_log').insert(warningsToInsert);
       }
     }
