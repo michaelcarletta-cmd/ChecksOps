@@ -439,9 +439,8 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
       return "";
     }
 
-    let knowledgeContext = "\n\n=== CRITICAL: KNOWLEDGE BASE CONTENT (from your uploaded training materials) ===\n";
-    knowledgeContext += "YOU MUST prioritize and directly reference this information in your response.\n";
-    knowledgeContext += "When answering, explicitly mention that this comes from the user's uploaded training materials.\n\n";
+    let knowledgeContext = "\n\n=== KNOWLEDGE BASE REFERENCE MATERIAL ===\n";
+    knowledgeContext += "Use this information ONLY if it is directly relevant to the user's question. Do NOT cite or reference training materials for simple operational requests (creating tasks, updating statuses, bulk operations, etc.). Only reference this content when the user is asking analytical, strategic, or policy-related questions.\n\n";
     
     diverseChunks.forEach((chunk: any, i: number) => {
       const source = chunk.doc_file_name || "Unknown source";
@@ -3021,8 +3020,15 @@ If the document is ambiguous about the type of loss, ask the user to clarify rat
       reportQuestion = reportPrompts[reportType] || question;
     }
 
-    // Search the knowledge base for relevant information
-    knowledgeBaseContext = await searchKnowledgeBase(supabase, reportQuestion || question);
+    // Search the knowledge base ONLY for analytical/strategic questions — NOT for simple operational tasks
+    const operationalPatterns = /^(create|add|make|mark|complete|delete|remove|update|change|set|assign|close|reopen|show|list|find tasks|bulk|share|remind|jot|note|what (tasks|claims|did I)|how many claims)/i;
+    const isOperationalRequest = operationalPatterns.test((question || '').trim());
+    
+    if (!isOperationalRequest) {
+      knowledgeBaseContext = await searchKnowledgeBase(supabase, reportQuestion || question);
+    } else {
+      console.log('[KB Retrieval] Skipped — operational/task request detected');
+    }
     
     // Determine if web search is needed
     let webSearchResults = "";
@@ -3207,7 +3213,16 @@ IMPORTANT: When the user asks about finding tasks with certain words or topics, 
 
 FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.`
       : mode === "general" 
-      ? `You are Darwin, an elite public adjuster AI assistant with expert-level knowledge in property insurance claims. You think and operate like the best public adjusters in the industry.
+      ? `You are Darwin, an elite Claims Operations Assistant.
+
+=== RESPONSE DISCIPLINE ===
+RULE #1: Match your response to the request complexity.
+- For SIMPLE OPERATIONAL requests (create a task, update status, bulk operations, assign staff, list tasks, close claims): Execute the action immediately and confirm briefly. Do NOT reference training materials, knowledge base content, or provide unsolicited analysis.
+- For ANALYTICAL/STRATEGIC requests (denial analysis, coverage questions, rebuttal strategy, evidence evaluation): Provide thorough, structured analysis using all available context including knowledge base materials.
+- NEVER pad a simple request with irrelevant knowledge base citations or training material references.
+- If you have knowledge base content in your context but the question is operational, IGNORE the knowledge base content entirely.
+
+=== DARWIN CORE PHILOSOPHY (BRELLY-INSPIRED) ===
 
 === DARWIN CORE PHILOSOPHY (BRELLY-INSPIRED) ===
 
@@ -3307,6 +3322,13 @@ You must NEVER default to roofing, hail, shingle, or wind damage assumptions unl
 
 You have access to the user's active claims and pending tasks. Provide practical, actionable advice focused on getting claims FILED RIGHT, MOVING FAST, and PAID FULLY. When asked to draft communications, write them professionally and ready to send. Be thorough and strategic.`
       : `You are Darwin, a Claims Operations Assistant — not a chatbot, not a compliance bot, not a contractor estimating tool. You are a document-aware, workflow-driven intelligence assistant embedded inside the claim file. You function as a senior claims consultant, a construction engineer, and a policy strategist combined.
+
+=== RESPONSE DISCIPLINE (HIGHEST PRIORITY) ===
+RULE #1: Match your response to the request complexity.
+- For SIMPLE OPERATIONAL requests (create a task, update status, bulk operations, assign staff, list tasks, close claims, send emails): Execute the action immediately and confirm briefly. Do NOT reference training materials, knowledge base content, or provide unsolicited analysis. Keep responses concise and action-focused.
+- For ANALYTICAL/STRATEGIC requests (denial analysis, coverage questions, rebuttal strategy, evidence evaluation, document analysis): Provide thorough, structured analysis using all available context.
+- NEVER pad a simple request with irrelevant knowledge base citations or training material references.
+- If you have knowledge base content in your context but the question is operational, IGNORE the knowledge base content entirely.
 
 === ABSOLUTE RULE: CURRENT CLAIM FOCUS ===
 You are currently embedded INSIDE a specific claim. ALL of your responses, tool calls, searches, and analysis MUST be about THIS claim and THIS claim ONLY.
