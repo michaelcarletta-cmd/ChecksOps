@@ -735,17 +735,20 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             </CardContent>
           </Card>
 
-          <Card id="darwin-workspace" className="border-primary/20">
-            <CardHeader className="pb-3 border-b bg-gradient-to-r from-primary/5 to-transparent">
+          <Card
+            id="darwin-workspace"
+            className="border-primary/20 flex flex-col lg:h-[calc(100vh-8.5rem)] lg:max-h-[980px]"
+          >
+            <CardHeader className="pb-3 border-b bg-gradient-to-r from-primary/5 to-transparent shrink-0">
               <CardTitle className="text-base flex items-center gap-2">
                 <activeWorkspaceMeta.icon className="h-4 w-4 text-primary" />
                 {activeWorkspaceMeta.title}
               </CardTitle>
               <CardDescription>{activeWorkspaceMeta.description}</CardDescription>
             </CardHeader>
-            <CardContent className="p-4 space-y-4">
+            <CardContent className="p-4 lg:flex-1 lg:overflow-y-auto">
               <Suspense fallback={<LoadingFallback />}>
-                {renderActiveWorkspace()}
+                <div className="space-y-4">{renderActiveWorkspace()}</div>
               </Suspense>
             </CardContent>
           </Card>
