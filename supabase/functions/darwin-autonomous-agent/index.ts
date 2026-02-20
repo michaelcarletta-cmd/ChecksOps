@@ -145,7 +145,7 @@ async function processAutoCompleteTasks(
     .from('tasks')
     .select('*')
     .eq('claim_id', claimId)
-    .eq('is_completed', false)
+    .neq('status', 'completed')
     .or('title.ilike.%follow up%,title.ilike.%follow-up%,title.ilike.%reminder%');
 
   for (const task of followUpTasks || []) {
@@ -163,9 +163,8 @@ async function processAutoCompleteTasks(
       await supabase
         .from('tasks')
         .update({
-          is_completed: true,
+          status: 'completed',
           completed_at: new Date().toISOString(),
-          completed_by: null, // System completed
         })
         .eq('id', task.id);
 
@@ -898,7 +897,7 @@ async function processIdleClaimUpdates(
     .from('tasks')
     .select('title, description, priority')
     .eq('claim_id', claim.id)
-    .eq('is_completed', false)
+    .neq('status', 'completed')
     .order('priority', { ascending: true })
     .limit(5);
   
