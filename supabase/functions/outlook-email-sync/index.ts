@@ -494,31 +494,35 @@ async function handleOutlookSync(req: Request): Promise<Response> {
 
   // ---------- cleanup_and_resync ----------
   if (action === 'cleanup_and_resync') {
-    const { data: outlookEmails, error: listErr } = await supabase
-      .from('emails')
-      .select('id, claim_id, subject')
-      .eq('recipient_type', 'outlook_sync');
-
-    if (listErr) return json({ success: false, error: `Failed to list emails: ${listErr.message}` });
-
+    // Delete ALL outlook_sync emails so they get re-imported with full body content
     let deleted = 0;
-    for (const row of outlookEmails || []) {
-      try {
-        const { data: claim } = await supabase
-          .from('claims')
-          .select('claim_number, policyholder_name')
-          .eq('id', row.claim_id)
-          .single();
+    let deleteOffset = 0;
+    const deleteBatch = 500;
+    let hasMoreToDelete = true;
+    while (hasMoreToDelete) {
+      const { data: batch, error: listErr } = await supabase
+        .from('emails')
+        .select('id')
+        .eq('recipient_type', 'outlook_sync')
+        .range(0, deleteBatch - 1);
 
-        const matchTerms = buildClaimMatchTerms(claim?.claim_number, claim?.policyholder_name);
-        if (!subjectMatchesClaim(row?.subject ?? '', matchTerms)) {
-          const { error: delErr } = await supabase.from('emails').delete().eq('id', row.id);
-          if (!delErr) deleted++;
-        }
-      } catch (e) {
-        console.warn('Cleanup row error:', row?.id, e);
+      if (listErr || !batch || batch.length === 0) {
+        hasMoreToDelete = false;
+        break;
+      }
+
+      const ids = batch.map((r: any) => r.id);
+      const { error: delErr } = await supabase.from('emails').delete().in('id', ids);
+      if (delErr) {
+        console.warn('Batch delete error:', delErr.message);
+        hasMoreToDelete = false;
+      } else {
+        deleted += ids.length;
+        if (batch.length < deleteBatch) hasMoreToDelete = false;
       }
     }
+
+    console.log(`Cleanup: removed ${deleted} outlook_sync emails for full re-import`);
 
     const { data: allConnections, error: connErr } = await supabase
       .from('email_connections')
