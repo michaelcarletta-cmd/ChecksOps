@@ -90,7 +90,7 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar className="border-r border-blue-200 text-blue-900" style={{ background: 'linear-gradient(135deg, #ffffff 0%, hsl(220, 80%, 92%) 40%, hsl(220, 60%, 55%) 100%)' }}>
+    <Sidebar className="border-r border-blue-200 text-blue-900" style={{ background: 'linear-gradient(180deg, hsl(220, 60%, 55%) 0%, hsl(220, 80%, 85%) 50%, #ffffff 100%)' }}>
       <SidebarContent>
         <div className="px-4 py-4 flex items-center">
           <img src={logo} alt="Freedom Claims" className="h-10 w-auto" />
