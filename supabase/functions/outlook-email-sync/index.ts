@@ -217,7 +217,7 @@ async function runBulkSync(supabase: any, allConnections: any[]): Promise<{ tota
           body: email.body_preview,
           recipient_email: isInbound ? email.from : email.to,
           recipient_name: isInbound ? email.from_name : email.to_name,
-          recipient_type: isInbound ? 'inbound' : 'outlook_sync',
+          recipient_type: 'outlook_sync',
           sent_at: sentAt,
         });
 
@@ -377,7 +377,7 @@ async function handleOutlookSync(req: Request): Promise<Response> {
         body: email.body_preview,
         recipient_email: isInbound ? email.from : email.to,
         recipient_name: isInbound ? email.from_name : email.to_name,
-        recipient_type: isInbound ? 'inbound' : 'outlook_sync',
+        recipient_type: 'outlook_sync',
         sent_at: sentAt,
       });
 
