@@ -1,10 +1,9 @@
 import { useState, useEffect, lazy, Suspense, useMemo } from "react";
-import { Brain, ChevronDown, ChevronRight, Loader2, MessageSquare, FileText, Shield, Calculator, Zap, Search, Clock, Sparkles, TrendingUp, Swords, Building2, AlertCircle, Eye, Clipboard, Send } from "lucide-react";
+import { Brain, Loader2, MessageSquare, FileText, Shield, Calculator, Zap, Search, Clock, Sparkles, Swords, Building2, AlertCircle, Eye, Clipboard, Send, type LucideIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { subscribeCarrierDismantler } from "@/lib/darwinDismantlerBus";
@@ -75,48 +74,78 @@ const LoadingFallback = () => (
   </div>
 );
 
-interface ToolCategoryProps {
+type DarwinWorkspaceKey =
+  | "claim-intelligence"
+  | "document-analysis"
+  | "rebuttals"
+  | "package-building"
+  | "regulatory-compliance"
+  | "contents-loss"
+  | "timeline-history"
+  | "automation";
+
+interface DarwinWorkspaceSection {
+  key: DarwinWorkspaceKey;
   title: string;
   description: string;
-  icon: React.ReactNode;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
+  icon: LucideIcon;
 }
 
-const ToolCategory = ({ title, description, icon, defaultOpen = false, children }: ToolCategoryProps) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
+const workspaceSections: DarwinWorkspaceSection[] = [
+  {
+    key: "claim-intelligence",
+    title: "Claim Intelligence",
+    description: "Insights, causation analysis, and recommendations",
+    icon: Search,
+  },
+  {
+    key: "document-analysis",
+    title: "Document Analysis",
+    description: "Compare documents and extract key evidence",
+    icon: FileText,
+  },
+  {
+    key: "rebuttals",
+    title: "Rebuttals & Responses",
+    description: "Counter denials and draft responses quickly",
+    icon: Shield,
+  },
+  {
+    key: "package-building",
+    title: "Package Building",
+    description: "Generate demand packages and outbound docs",
+    icon: Sparkles,
+  },
+  {
+    key: "regulatory-compliance",
+    title: "Regulatory & Compliance",
+    description: "Deadlines, statutes, and compliance checks",
+    icon: Clock,
+  },
+  {
+    key: "contents-loss",
+    title: "Contents & Loss Tracking",
+    description: "ALE, inventory, and hidden damage support",
+    icon: Calculator,
+  },
+  {
+    key: "timeline-history",
+    title: "Timeline & History",
+    description: "Visual and document-driven timelines",
+    icon: Clock,
+  },
+  {
+    key: "automation",
+    title: "Automation Settings",
+    description: "Configure autonomous Darwin workflows",
+    icon: Zap,
+  },
+];
 
-  return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <Card className="border-border/50">
-        <CollapsibleTrigger asChild>
-          <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-md bg-primary/10 text-primary">
-                  {icon}
-                </div>
-                <div>
-                  <CardTitle className="text-base">{title}</CardTitle>
-                  <CardDescription className="text-xs">{description}</CardDescription>
-                </div>
-              </div>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              </Button>
-            </div>
-          </CardHeader>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <CardContent className="pt-0 space-y-4">
-            <Suspense fallback={<LoadingFallback />}>
-              {children}
-            </Suspense>
-          </CardContent>
-        </CollapsibleContent>
-      </Card>
-    </Collapsible>
-  );
+const sectionToWorkspace: Record<string, DarwinWorkspaceKey> = {
+  rebuttals: "rebuttals",
+  "document-analysis": "document-analysis",
+  timeline: "timeline-history",
 };
 
 // Map analysis types to readable names and scroll targets
@@ -129,6 +158,7 @@ const analysisTypeLabels: Record<string, { label: string; section: string }> = {
 
 export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
   const [showCopilot, setShowCopilot] = useState(true);
+  const [activeWorkspace, setActiveWorkspace] = useState<DarwinWorkspaceKey>("claim-intelligence");
   const [autoAnalyses, setAutoAnalyses] = useState<Array<{ id: string; analysis_type: string; created_at: string; input_summary: string }>>([]);
   const [dismissedAnalyses, setDismissedAnalyses] = useState<Set<string>>(new Set());
   const [liveCarrierDismantler, setLiveCarrierDismantler] = useState<{
@@ -230,14 +260,17 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
   };
 
   const scrollToSection = (section: string) => {
-    // Find and open the relevant collapsible section
-    const sectionElement = document.querySelector(`[data-section="${section}"]`);
-    if (sectionElement) {
-      sectionElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const targetWorkspace = sectionToWorkspace[section];
+    if (targetWorkspace) {
+      setActiveWorkspace(targetWorkspace);
     }
+    const workspace = document.getElementById("darwin-workspace");
+    workspace?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const visibleAnalyses = autoAnalyses.filter(a => !dismissedAnalyses.has(a.id));
+  const activeWorkspaceMeta =
+    workspaceSections.find((section) => section.key === activeWorkspace) ?? workspaceSections[0];
 
   const dismantlerText: string | null = useMemo(() => {
     const live = liveCarrierDismantler?.payload;
@@ -401,6 +434,100 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
     toast.success("Request docs template copied");
   };
 
+  const renderActiveWorkspace = () => {
+    switch (activeWorkspace) {
+      case "claim-intelligence":
+        return (
+          <>
+            <DarwinInsightsPanel claimId={claimId} claim={claim} />
+            <DarwinSecondBrain claimId={claimId} claim={claim} />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <DarwinClaimBriefing claimId={claimId} claim={claim} />
+              <DarwinNextSteps claimId={claimId} claim={claim} />
+            </div>
+            <DarwinButForCausation claimId={claimId} claim={claim} />
+            <DarwinOutcomePredictor claimId={claimId} claim={claim} />
+            <DarwinWeatherHistory claimId={claimId} claim={claim} />
+            <DarwinWeaknessDetection claimId={claimId} claim={claim} />
+          </>
+        );
+      case "document-analysis":
+        return (
+          <>
+            <DarwinEstimateComparison claimId={claimId} claim={claim} />
+            <DarwinEstimateGapAnalysis claimId={claimId} claim={claim} />
+            <DarwinSmartExtraction claimId={claimId} claim={claim} />
+            <DarwinDocumentComparison claimId={claimId} claim={claim} />
+            <DarwinSmartDocumentSort claimId={claimId} claim={claim} />
+            <DarwinPhotoLinker claimId={claimId} claim={claim} />
+          </>
+        );
+      case "rebuttals":
+        return (
+          <>
+            <DarwinDeclaredPosition claimId={claimId} claim={claim} />
+            <DarwinProximityPrecedents claimId={claimId} claim={claim} />
+            <DarwinSystematicDismantler claimId={claimId} claim={claim} />
+            <DarwinAutoDraftRebuttal claimId={claimId} claim={claim} />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <DarwinDenialAnalyzer claimId={claimId} claim={claim} />
+              <DarwinEngineerReportAnalyzer claimId={claimId} claim={claim} />
+            </div>
+            <DarwinSupplementGenerator claimId={claimId} claim={claim} />
+            <DarwinCorrespondenceAnalyzer claimId={claimId} claim={claim} />
+            <DarwinSmartFollowUps claimId={claimId} claim={claim} />
+          </>
+        );
+      case "package-building":
+        return (
+          <>
+            <DarwinDemandPackage claimId={claimId} claim={claim} />
+            <RecoverableDepreciationInvoice claimId={claimId} claim={claim} />
+            <DarwinDocumentCompiler claimId={claimId} claim={claim} />
+            <DarwinCarrierEmailDrafter claimId={claimId} claim={claim} />
+          </>
+        );
+      case "regulatory-compliance":
+        return (
+          <>
+            <DarwinStateLawAdvisor claimId={claimId} claim={claim} />
+            <DarwinCarrierDeadlineMonitor claimId={claimId} claim={claim} />
+            <DarwinDeadlineTracker claimId={claimId} claim={claim} />
+            <DarwinQualifyingLanguage claimId={claimId} claim={claim} />
+            <DarwinComplianceChecker claimId={claimId} claim={claim} />
+            <DarwinDOBILetterDrafter claimId={claimId} claim={claim} />
+            <DarwinBuildingCodes claimId={claimId} claim={claim} />
+          </>
+        );
+      case "contents-loss":
+        return (
+          <>
+            <DarwinLossOfUseCalculator claimId={claimId} claim={claim} />
+            <DarwinHomeInventoryBuilder claimId={claimId} claim={claim} />
+            <DarwinHiddenLossDetective claimId={claimId} claim={claim} />
+          </>
+        );
+      case "timeline-history":
+        return (
+          <>
+            <DarwinDocumentTimeline claimId={claimId} claim={claim} />
+            <VisualClaimTimeline claimId={claimId} claim={claim} />
+            <ClaimTimeline claimId={claimId} claim={claim} />
+          </>
+        );
+      case "automation":
+        return (
+          <>
+            <ClaimAutonomySettings claimId={claimId} />
+            <ClaimAutomationSettings claimId={claimId} />
+            <DarwinTaskGenerator claimId={claimId} claim={claim} />
+          </>
+        );
+      default:
+        return null;
+    }
+  };
+
   if (!claimId || !claim) {
     return (
       <div className="flex items-center justify-center p-8 text-muted-foreground">
@@ -429,7 +556,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
           className="gap-2"
         >
           <MessageSquare className="h-4 w-4" />
-          {showCopilot ? "Hide Chat" : "Show Chat"}
+          {showCopilot ? "Hide Assistant Panel" : "Show Assistant Panel"}
         </Button>
       </div>
 
@@ -485,38 +612,76 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
         </Alert>
       )}
 
-      {/* Main Layout: Left rail + center tools + right drawer */}
-      <div className="flex gap-6">
+      {/* Main Layout: sticky navigator + workspace panel + assistant drawer */}
+      <div
+        className={cn(
+          "grid gap-6 items-start",
+          showCopilot
+            ? "lg:grid-cols-[16rem_minmax(0,1fr)] xl:grid-cols-[16rem_minmax(0,1fr)_24rem]"
+            : "lg:grid-cols-[16rem_minmax(0,1fr)]",
+        )}
+      >
         {/* Left rail */}
-        <div className="hidden lg:block w-56 flex-shrink-0">
-          <Card className="border-border/50">
+        <div className="hidden lg:block w-64 flex-shrink-0">
+          <Card className="border-border/50 lg:sticky lg:top-4">
             <CardHeader className="py-3">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Zap className="h-4 w-4 text-primary" />
-                Sections
+                Workspaces
               </CardTitle>
+              <CardDescription className="text-xs">
+                Open one workspace at a time to reduce scrolling.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button variant="outline" size="sm" className="w-full justify-start gap-2" onClick={() => scrollToSection("rebuttals")}>
-                <Shield className="h-4 w-4" />
-                Rebuttals
-              </Button>
-              <Button variant="outline" size="sm" className="w-full justify-start gap-2" onClick={() => scrollToSection("document-analysis")}>
-                <FileText className="h-4 w-4" />
-                Document Analysis
-              </Button>
-              <Button variant="outline" size="sm" className="w-full justify-start gap-2" onClick={() => scrollToSection("timeline")}>
-                <Clock className="h-4 w-4" />
-                Timelines
-              </Button>
+              {workspaceSections.map((section) => {
+                const SectionIcon = section.icon;
+                return (
+                  <Button
+                    key={section.key}
+                    size="sm"
+                    variant={activeWorkspace === section.key ? "default" : "outline"}
+                    onClick={() => setActiveWorkspace(section.key)}
+                    aria-pressed={activeWorkspace === section.key}
+                    className={cn(
+                      "w-full justify-start gap-2 h-auto py-2.5 text-left",
+                      activeWorkspace === section.key && "ring-1 ring-primary/30",
+                    )}
+                  >
+                    <SectionIcon className="h-4 w-4 shrink-0" />
+                    <span className="text-xs leading-4">{section.title}</span>
+                  </Button>
+                );
+              })}
             </CardContent>
           </Card>
         </div>
 
         {/* Center column */}
-        <div className={cn("flex-1", showCopilot ? "min-w-0" : "")}>
+        <div className="min-w-0 space-y-4">
+          {/* Mobile workspace switcher */}
+          <div className="lg:hidden">
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {workspaceSections.map((section) => {
+                const SectionIcon = section.icon;
+                return (
+                  <Button
+                    key={section.key}
+                    size="sm"
+                    variant={activeWorkspace === section.key ? "default" : "outline"}
+                    onClick={() => setActiveWorkspace(section.key)}
+                    className="whitespace-nowrap gap-2"
+                  >
+                    <SectionIcon className="h-4 w-4" />
+                    {section.title}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Top context pills */}
-          <div className="flex flex-wrap gap-2 pb-3">
+          <div className="flex flex-wrap gap-2 pb-1">
             {claim?.insurance_company && (
               <span className="px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs flex items-center gap-1">
                 <Building2 className="h-3 w-3" />
@@ -535,8 +700,6 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             )}
           </div>
 
-          <div className="space-y-4 order-2 lg:order-1">
-          {/* Strategic Command Center - NEW */}
           <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -547,15 +710,14 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             <CardContent className="flex flex-wrap gap-2">
               <Suspense fallback={<LoadingFallback />}>
                 <ClaimWarRoom claimId={claimId} claim={claim} />
-                <CarrierPlaybookDialog 
-                  carrierName={claim?.insurance_company} 
+                <CarrierPlaybookDialog
+                  carrierName={claim?.insurance_company}
                   stateCode={claim?.property_state}
                 />
               </Suspense>
             </CardContent>
           </Card>
 
-          {/* Quick Actions - Always visible */}
           <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -573,130 +735,26 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             </CardContent>
           </Card>
 
-          {/* Strategic Insights - NEW PRIMARY */}
-          <Suspense fallback={<LoadingFallback />}>
-            <DarwinInsightsPanel claimId={claimId} claim={claim} />
-          </Suspense>
-
-          {/* Claim Intelligence */}
-          <ToolCategory
-            title="Claim Intelligence"
-            description="AI-powered insights, causation analysis, and recommendations"
-            icon={<Search className="h-4 w-4" />}
-            defaultOpen={false}
-          >
-            <DarwinButForCausation claimId={claimId} claim={claim} />
-            <DarwinClaimBriefing claimId={claimId} claim={claim} />
-            <DarwinNextSteps claimId={claimId} claim={claim} />
-            <DarwinWeatherHistory claimId={claimId} claim={claim} />
-            <DarwinWeaknessDetection claimId={claimId} claim={claim} />
-          </ToolCategory>
-
-          {/* Document Analysis */}
-          <div data-section="document-analysis">
-            <ToolCategory
-              title="Document Analysis"
-              description="Analyze and compare claim documents"
-              icon={<FileText className="h-4 w-4" />}
-              defaultOpen={autoAnalyses.some(a => a.analysis_type === 'estimate_gap_analysis')}
-            >
-            <DarwinEstimateComparison claimId={claimId} claim={claim} />
-            <DarwinEstimateGapAnalysis claimId={claimId} claim={claim} />
-            <DarwinSmartExtraction claimId={claimId} claim={claim} />
-            <DarwinDocumentComparison claimId={claimId} claim={claim} />
-            <DarwinSmartDocumentSort claimId={claimId} claim={claim} />
-            <DarwinPhotoLinker claimId={claimId} claim={claim} />
-            </ToolCategory>
-          </div>
-
-          {/* Rebuttals & Responses */}
-          <div data-section="rebuttals">
-            <ToolCategory
-              title="Rebuttals & Responses"
-              description="Counter carrier denials and engineer reports"
-              icon={<Shield className="h-4 w-4" />}
-            >
-            <Suspense fallback={<LoadingFallback />}>
-              <DarwinDeclaredPosition claimId={claimId} claim={claim} />
-            </Suspense>
-            <DarwinProximityPrecedents claimId={claimId} claim={claim} />
-            <DarwinSystematicDismantler claimId={claimId} claim={claim} />
-            <DarwinAutoDraftRebuttal claimId={claimId} claim={claim} />
-            <div className="grid gap-4 lg:grid-cols-2">
-              <DarwinDenialAnalyzer claimId={claimId} claim={claim} />
-              <DarwinEngineerReportAnalyzer claimId={claimId} claim={claim} />
-            </div>
-            <DarwinSupplementGenerator claimId={claimId} claim={claim} />
-            <DarwinCorrespondenceAnalyzer claimId={claimId} claim={claim} />
-            </ToolCategory>
-          </div>
-
-          {/* Package Building */}
-          <ToolCategory
-            title="Package Building"
-            description="Generate demand packages and documents"
-            icon={<Sparkles className="h-4 w-4" />}
-          >
-            <DarwinDemandPackage claimId={claimId} claim={claim} />
-            <RecoverableDepreciationInvoice claimId={claimId} claim={claim} />
-            <DarwinDocumentCompiler claimId={claimId} claim={claim} />
-            <DarwinCarrierEmailDrafter claimId={claimId} claim={claim} />
-          </ToolCategory>
-
-          {/* Regulatory & Compliance */}
-          <ToolCategory
-            title="Regulatory & Compliance"
-            description="PA/NJ regulations, deadlines, and compliance"
-            icon={<Clock className="h-4 w-4" />}
-          >
-            <DarwinStateLawAdvisor claimId={claimId} claim={claim} />
-            <DarwinCarrierDeadlineMonitor claimId={claimId} claim={claim} />
-            <DarwinDeadlineTracker claimId={claimId} claim={claim} />
-            <DarwinQualifyingLanguage claimId={claimId} claim={claim} />
-            <DarwinComplianceChecker claimId={claimId} claim={claim} />
-            <DarwinDOBILetterDrafter claimId={claimId} claim={claim} />
-            <DarwinBuildingCodes claimId={claimId} claim={claim} />
-          </ToolCategory>
-
-          {/* Contents & Loss Tracking */}
-          <ToolCategory
-            title="Contents & Loss Tracking"
-            description="Inventory, ALE, and hidden loss detection"
-            icon={<Calculator className="h-4 w-4" />}
-          >
-            <DarwinLossOfUseCalculator claimId={claimId} claim={claim} />
-            <DarwinHomeInventoryBuilder claimId={claimId} claim={claim} />
-            <DarwinHiddenLossDetective claimId={claimId} claim={claim} />
-          </ToolCategory>
-
-          {/* Timeline & History */}
-          <ToolCategory
-            title="Timeline & History"
-            description="Visual claim history, document-based timeline, and audit trail"
-            icon={<Clock className="h-4 w-4" />}
-          >
-            <div data-section="timeline" />
-            <DarwinDocumentTimeline claimId={claimId} claim={claim} />
-            <VisualClaimTimeline claimId={claimId} claim={claim} />
-            <ClaimTimeline claimId={claimId} claim={claim} />
-          </ToolCategory>
-
-          {/* Automation */}
-          <ToolCategory
-            title="Automation Settings"
-            description="Configure AI-powered automations and autonomous mode"
-            icon={<Zap className="h-4 w-4" />}
-            defaultOpen={true}
-          >
-            <ClaimAutonomySettings claimId={claimId} />
-            <ClaimAutomationSettings claimId={claimId} />
-          </ToolCategory>
-          </div>
+          <Card id="darwin-workspace" className="border-primary/20">
+            <CardHeader className="pb-3 border-b bg-gradient-to-r from-primary/5 to-transparent">
+              <CardTitle className="text-base flex items-center gap-2">
+                <activeWorkspaceMeta.icon className="h-4 w-4 text-primary" />
+                {activeWorkspaceMeta.title}
+              </CardTitle>
+              <CardDescription>{activeWorkspaceMeta.description}</CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 space-y-4">
+              <Suspense fallback={<LoadingFallback />}>
+                {renderActiveWorkspace()}
+              </Suspense>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Right drawer */}
-        <div className="hidden xl:block w-96 flex-shrink-0">
-          <Card className="h-full flex flex-col border-primary/20">
+        {showCopilot && (
+          <div className="hidden xl:block w-96 flex-shrink-0 xl:sticky xl:top-4">
+            <Card className="h-[calc(100vh-2rem)] flex flex-col border-primary/20">
             <CardHeader className="py-3 border-b bg-gradient-to-r from-primary/5 to-transparent">
               <div className="flex items-center justify-between gap-2">
                 <div>
@@ -929,8 +987,9 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
                 </div>
               )}
             </CardContent>
-          </Card>
-        </div>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );
