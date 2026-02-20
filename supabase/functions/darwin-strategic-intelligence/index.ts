@@ -1037,10 +1037,12 @@ You MUST return ONLY valid JSON matching this EXACT structure (no markdown, no c
 CRITICAL RULES:
 - Return ONLY the JSON object. No explanation, no markdown formatting, no code blocks.
 - All scores are 0-100.
-- scenario_simulations deltas are how much each score INCREASES if that action is taken.
-- Pressure index level must be "low", "moderate", or "high".
+- scenario_simulations deltas are how much each score INCREASES if that action is taken. Deltas must be proportionate: small actions (escalate to supervisor) should yield small deltas (2-8), large actions (file complaint, obtain engineer report) yield larger deltas (10-25). No single action should delta more than 30.
+- Pressure index level thresholds: "low" = score 0-39 (no strong carrier violations, compliance is acceptable), "moderate" = score 40-69 (some missed deadlines or procedural concerns), "high" = score 70-100 (multiple statutory violations, clear bad faith indicators, missed deadlines). Do NOT assign "high" unless at least 2 strong triggering factors exist.
 - Do NOT cite case law. Reference statutes and admin codes only.
-- Frame everything as strategic suggestions, not legal advice.`;
+- Frame everything as strategic suggestions, not legal advice.
+- TONE CALIBRATION: In the strategic_memo, NEVER use absolute language like "will win", "carrier is acting in bad faith", "guaranteed". Use hedged strategic language: "strategic exposure suggests...", "risk indicators show...", "likely carrier posture may include...", "evidence supports a strong position for...". You are a strategic advisor, not litigation counsel.
+- Each WSI component explanation must reference specific evidence or facts from the claim context (e.g., "Policy on file shows Coverage A limits" not just "Coverage appears adequate").`;
 
       responseFormat = 'war_room_2';
     } else if (analysisType === 'quick_warnings') {
@@ -1387,6 +1389,53 @@ Give me:
       const nextMoves = parsedResult.recommended_next_moves || [];
       const seniorPaOpinion = parsedResult.senior_pa_opinion || '';
 
+      // Fetch current weight version
+      const { data: weightVersion } = await supabase
+        .from('strategic_weight_versions')
+        .select('version_name')
+        .order('effective_date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const currentWeightVersion = weightVersion?.version_name || 'v1';
+
+      // Build confidence scores from rule-based assessment
+      const carrierDataCount = carrierIntelContext ? 1 : 0;
+      const evidenceCount = files.length + photos.length;
+      const dataPoints = evidenceCount + emails.length + diary.length + deadlines.length + checks.length;
+      const confidenceLevel = dataPoints >= 20 ? 'high' : dataPoints >= 8 ? 'medium' : 'low';
+      const confidenceScores = {
+        overall: confidenceLevel,
+        data_basis_count: dataPoints,
+        carrier_pattern_match: carrierDataCount > 0,
+        evidence_volume: evidenceCount,
+        wsi: { level: confidenceLevel, basis: `${evidenceCount} evidence items, ${emails.length} emails` },
+        predicted_move: { level: carrierDataCount > 0 && dataPoints >= 10 ? 'medium' : 'low', basis: carrierDataCount > 0 ? 'Carrier pattern data available' : 'No carrier history' },
+        pressure_index: { level: deadlines.length > 0 ? 'high' : 'medium', basis: `${deadlines.length} deadlines tracked` },
+        scenarios: { level: dataPoints >= 15 ? 'medium' : 'low', basis: `${dataPoints} total data points` },
+      };
+
+      // Build raw inputs snapshot for reconstructability
+      const rawInputs = {
+        files_count: files.length,
+        photos_count: photos.length,
+        emails_count: emails.length,
+        checks_count: checks.length,
+        deadlines_count: deadlines.length,
+        diary_count: diary.length,
+        inspections_count: inspections.length,
+        has_estimate: hasEstimate,
+        has_denial: hasDenialLetter,
+        has_engineer: hasEngineerReport,
+        has_policy: hasPolicy,
+        days_open: daysOpen,
+        days_since_loss: daysSinceLoss,
+        estimate_amount: estimateAmount,
+        total_settlement: totalSettlement,
+        state_code: stateCode,
+        carrier: claim.insurance_company,
+        loss_type: claim.loss_type,
+      };
+
       // Fetch matching carrier playbooks
       let matchedPlaybooks: any[] = [];
       if (claim.insurance_company) {
@@ -1411,7 +1460,7 @@ Give me:
         }
       }
 
-      // Upsert strategic insights with War Room 2.0 fields
+      // Upsert strategic insights with War Room 2.0 fields + confidence & raw inputs
       const { error: upsertError } = await supabase
         .from('claim_strategic_insights')
         .upsert({
@@ -1435,6 +1484,11 @@ Give me:
           strategic_memo: parsedResult.strategic_memo ?? null,
           predicted_carrier_move: parsedResult.predicted_carrier_move ?? null,
           scenario_simulations: parsedResult.scenario_simulations ?? null,
+          // War Room 2.0 hardening fields
+          confidence_scores: confidenceScores,
+          raw_inputs: rawInputs,
+          weight_version: currentWeightVersion,
+          model_type: 'hybrid',
           // Shared fields
           warnings: warnings,
           leverage_points: leveragePoints,
@@ -1456,6 +1510,58 @@ Give me:
         console.log('War Room 2.0 insights saved for claim', claimId);
       }
 
+      // === STRATEGIC SNAPSHOT (every run) ===
+      // Detect strategic drift by comparing to previous snapshot
+      let driftFlag = false;
+      let driftReason: string | null = null;
+      const { data: prevSnapshots } = await supabase
+        .from('claim_strategic_snapshots')
+        .select('wsi, pressure_index, litigation_readiness, created_at')
+        .eq('claim_id', claimId)
+        .order('created_at', { ascending: false })
+        .limit(2);
+
+      if (prevSnapshots && prevSnapshots.length >= 2) {
+        const [prev1, prev2] = prevSnapshots;
+        const currentWsi = wsi.total ?? 0;
+        // WSI declined 2 runs in a row
+        if (prev1.wsi !== null && prev2.wsi !== null && currentWsi < prev1.wsi && prev1.wsi < prev2.wsi) {
+          driftFlag = true;
+          driftReason = `WSI declined 3 consecutive runs: ${prev2.wsi} → ${prev1.wsi} → ${currentWsi}`;
+        }
+        // Pressure Index decreased after it was previously higher (potential escalation failure)
+        if (prev1.pressure_index !== null && (pressure.score ?? 0) < prev1.pressure_index) {
+          // Only flag if we had high pressure before
+          if (prev1.pressure_index >= 65) {
+            driftFlag = true;
+            driftReason = (driftReason ? driftReason + '. ' : '') + `Pressure Index dropped from ${prev1.pressure_index} to ${pressure.score ?? 0} — review escalation effectiveness`;
+          }
+        }
+      } else if (prevSnapshots && prevSnapshots.length === 1) {
+        const prev = prevSnapshots[0];
+        const currentWsi = wsi.total ?? 0;
+        if (prev.wsi !== null && currentWsi < prev.wsi) {
+          // Single decline — note but don't flag yet
+          console.log(`WSI declined: ${prev.wsi} → ${currentWsi} (1 run, not flagging yet)`);
+        }
+      }
+
+      await supabase.from('claim_strategic_snapshots').insert({
+        claim_id: claimId,
+        wsi: wsi.total ?? null,
+        pressure_index: pressure.score ?? null,
+        pressure_level: pressure.level ?? null,
+        litigation_readiness: litReadiness.score ?? null,
+        predicted_move: parsedResult.predicted_carrier_move ?? null,
+        confidence_scores: confidenceScores,
+        raw_inputs: rawInputs,
+        weight_version: currentWeightVersion,
+        strategic_drift_flag: driftFlag,
+        drift_reason: driftReason,
+      });
+
+      console.log(`Strategic snapshot saved for claim ${claimId}${driftFlag ? ' [DRIFT DETECTED]' : ''}`);
+
       // Store predictive analysis
       if (parsedResult.predicted_carrier_move) {
         const pred = parsedResult.predicted_carrier_move;
@@ -1466,6 +1572,8 @@ Give me:
           confidence: pred.confidence,
           basis: pred.basis,
           predicted_timeline: pred.timeline,
+          data_basis_count: dataPoints,
+          model_type: 'hybrid',
         });
       }
 
@@ -1483,6 +1591,12 @@ Give me:
           result_pressure_index: (pressure.score ?? 0) + (s.result_pressure_delta ?? 0),
           result_win_probability_range: s.win_probability_range,
           result_explanation: s.explanation,
+          projected_wsi_delta: s.result_wsi_delta ?? 0,
+          projected_litigation_delta: s.result_litigation_delta ?? 0,
+          projected_pressure_delta: s.result_pressure_delta ?? 0,
+          confidence_score: confidenceScores.scenarios?.level === 'high' ? 80 : confidenceScores.scenarios?.level === 'medium' ? 55 : 30,
+          data_basis_count: dataPoints,
+          model_type: 'hybrid',
         }));
         
         if (simRows.length > 0) {

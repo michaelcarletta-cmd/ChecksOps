@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
-import { Card, CardContent } from "@/components/ui/card";
-import { Info } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Info, Database } from "lucide-react";
 
 interface WSIComponent {
   score: number;
@@ -12,6 +12,7 @@ interface WSIComponent {
 interface WSIBreakdownProps {
   wsiScore: number | null;
   components: Record<string, WSIComponent> | null;
+  confidenceScores?: { overall?: string; data_basis_count?: number } | null;
   children: React.ReactNode;
 }
 
@@ -29,7 +30,21 @@ const getBarColor = (score: number) => {
   return "bg-destructive";
 };
 
-export const WSIBreakdown = ({ wsiScore, components, children }: WSIBreakdownProps) => {
+const getConfidenceBadge = (level?: string) => {
+  if (!level) return null;
+  const colors: Record<string, string> = {
+    high: "bg-success/20 text-success",
+    medium: "bg-warning/20 text-warning",
+    low: "bg-muted text-muted-foreground",
+  };
+  return (
+    <Badge className={`text-[10px] ${colors[level] || colors.low}`}>
+      {level.charAt(0).toUpperCase() + level.slice(1)} Confidence
+    </Badge>
+  );
+};
+
+export const WSIBreakdown = ({ wsiScore, components, confidenceScores, children }: WSIBreakdownProps) => {
   if (!components) return <>{children}</>;
 
   const entries = Object.entries(components);
@@ -43,6 +58,19 @@ export const WSIBreakdown = ({ wsiScore, components, children }: WSIBreakdownPro
             Weighted Strategic Index — {wsiScore ?? "--"}/100
           </DialogTitle>
         </DialogHeader>
+
+        {confidenceScores && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {getConfidenceBadge(confidenceScores.overall)}
+            {confidenceScores.data_basis_count != null && (
+              <span className="flex items-center gap-1">
+                <Database className="h-3 w-3" />
+                {confidenceScores.data_basis_count} data points
+              </span>
+            )}
+          </div>
+        )}
+
         <div className="space-y-4 mt-2">
           {entries.map(([key, comp]) => (
             <div key={key} className="space-y-1.5">
