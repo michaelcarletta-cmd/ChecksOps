@@ -784,14 +784,27 @@ serve(async (req) => {
       .eq('claim_id', claimId);
     context.inspections = inspections || [];
 
-    // Get recent emails
-    const { data: emails } = await supabase
-      .from('emails')
-      .select('*')
-      .eq('claim_id', claimId)
-      .order('created_at', { ascending: false })
-      .limit(10);
-    context.emails = emails || [];
+    // Get ALL emails - paginate to bypass 1000-row default limit
+    const allEmails: any[] = [];
+    let emailOffset = 0;
+    const emailBatchSize = 1000;
+    let hasMoreEmails = true;
+    while (hasMoreEmails) {
+      const { data: emailBatch } = await supabase
+        .from('emails')
+        .select('*')
+        .eq('claim_id', claimId)
+        .order('created_at', { ascending: false })
+        .range(emailOffset, emailOffset + emailBatchSize - 1);
+      if (emailBatch && emailBatch.length > 0) {
+        allEmails.push(...emailBatch);
+        emailOffset += emailBatchSize;
+        hasMoreEmails = emailBatch.length === emailBatchSize;
+      } else {
+        hasMoreEmails = false;
+      }
+    }
+    context.emails = allEmails;
 
     // Get files with folder info
     const { data: files } = await supabase
@@ -3453,7 +3466,7 @@ When discussing damage, ALWAYS reference the specific photos that document it.`;
 REQUESTED COMPONENTS: ${components.join(', ')}
 ${photoDocumentation}
 ${additionalContext?.includeDocuments ? `\nDOCUMENTS ON FILE: ${context.files?.filter((f: any) => !f.file_type?.startsWith('image/'))?.length || 0} documents available` : ''}
-${additionalContext?.includeCommunications ? `\nCOMMUNICATIONS: ${context.emails?.length || 0} emails on file` : ''}
+${additionalContext?.includeCommunications && context.emails?.length > 0 ? `\nCOMMUNICATIONS TIMELINE (${context.emails.length} emails):\n${context.emails.map((e: any) => `--- EMAIL ${e.direction === 'outbound' ? 'SENT' : 'RECEIVED'} (${new Date(e.sent_at || e.created_at).toLocaleDateString()}) ---\nFrom: ${e.from_address || e.sent_by || 'Unknown'}\nTo: ${e.to_address || e.recipient_email || 'Unknown'}\nSubject: ${e.subject || 'No Subject'}\n${e.body ? e.body.substring(0, 2000) : 'No body'}\n`).join('\n')}` : ''}
 ${additionalContext?.includeInspections ? `\nINSPECTIONS:\n${context.inspections?.map((i: any) => `- ${i.inspection_type}: ${i.inspection_date} (${i.status})`).join('\n') || 'None scheduled'}` : ''}
 ${darwinAnalysesSection}
 
