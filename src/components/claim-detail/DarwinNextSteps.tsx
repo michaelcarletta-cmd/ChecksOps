@@ -5,17 +5,41 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Compass, Loader2, RefreshCw, Target, History } from "lucide-react";
+import { DarwinStructuredRenderer } from "@/components/darwin/DarwinStructuredRenderer";
+import { DarwinModeToggle } from "@/components/darwin/DarwinModeToggle";
+import type { DarwinMode, DarwinStructuredResult } from "@/components/darwin/types";
 
 interface DarwinNextStepsProps {
   claimId: string;
   claim: any;
 }
 
+const parseStructuredResult = (value: unknown): DarwinStructuredResult | null => {
+  const parsedValue =
+    typeof value === "string"
+      ? (() => {
+          try {
+            return JSON.parse(value);
+          } catch {
+            return null;
+          }
+        })()
+      : value;
+
+  if (!parsedValue || typeof parsedValue !== "object") return null;
+
+  const candidate = parsedValue as Partial<DarwinStructuredResult>;
+  if (typeof candidate.steelman_opponent !== "string") return null;
+  if (!candidate.talking_points || typeof candidate.talking_points !== "object") return null;
+  return parsedValue as DarwinStructuredResult;
+};
+
 export const DarwinNextSteps = ({ claimId, claim }: DarwinNextStepsProps) => {
-  const [analysis, setAnalysis] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<DarwinStructuredResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastAnalyzed, setLastAnalyzed] = useState<Date | null>(null);
   const [claimAmount, setClaimAmount] = useState<number | null>(null);
+  const [mode, setMode] = useState<DarwinMode>("rebuttal");
   const { toast } = useToast();
 
   // Load previous analysis and settlement data on mount
@@ -32,7 +56,10 @@ export const DarwinNextSteps = ({ claimId, claim }: DarwinNextStepsProps) => {
         .single();
 
       if (previousAnalysis) {
-        setAnalysis(previousAnalysis.result);
+        const previousResult = parseStructuredResult(previousAnalysis.result);
+        if (previousResult) {
+          setAnalysis(previousResult);
+        }
         setLastAnalyzed(new Date(previousAnalysis.created_at));
       }
 
@@ -78,7 +105,8 @@ export const DarwinNextSteps = ({ claimId, claim }: DarwinNextStepsProps) => {
         body: {
           claimId,
           analysisType: 'next_steps',
-          additionalContext: { timeline }
+          additionalContext: { timeline },
+          mode,
         }
       });
 
@@ -88,7 +116,11 @@ export const DarwinNextSteps = ({ claimId, claim }: DarwinNextStepsProps) => {
         throw new Error(data.error);
       }
 
-      setAnalysis(data.result);
+      const structuredResult = parseStructuredResult(data?.result ?? data);
+      if (!structuredResult) {
+        throw new Error("Darwin returned an invalid structured response");
+      }
+      setAnalysis(structuredResult);
       setLastAnalyzed(new Date());
 
       // Save the analysis result
@@ -96,7 +128,7 @@ export const DarwinNextSteps = ({ claimId, claim }: DarwinNextStepsProps) => {
       await supabase.from('darwin_analysis_results').insert({
         claim_id: claimId,
         analysis_type: 'next_steps',
-        result: data.result,
+        result: JSON.stringify(structuredResult, null, 2),
         created_by: userData.user?.id
       });
 
@@ -114,17 +146,6 @@ export const DarwinNextSteps = ({ claimId, claim }: DarwinNextStepsProps) => {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Extract priority sections from the analysis
-  const renderAnalysis = () => {
-    if (!analysis) return null;
-
-    return (
-      <ScrollArea className="h-[500px] border rounded-md p-4 bg-muted/30">
-        <pre className="whitespace-pre-wrap text-sm">{analysis}</pre>
-      </ScrollArea>
-    );
   };
 
   const formatClaimAmount = () => {
@@ -146,6 +167,8 @@ export const DarwinNextSteps = ({ claimId, claim }: DarwinNextStepsProps) => {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <DarwinModeToggle value={mode} onChange={setMode} />
+
         <div className="flex items-center justify-between">
           <div className="space-y-1">
             {lastAnalyzed && (
@@ -201,7 +224,9 @@ export const DarwinNextSteps = ({ claimId, claim }: DarwinNextStepsProps) => {
               <Target className="h-4 w-4" />
               AI Recommendations
             </h4>
-            {renderAnalysis()}
+            <ScrollArea className="h-[520px] border rounded-md p-4 bg-muted/30">
+              <DarwinStructuredRenderer result={analysis} />
+            </ScrollArea>
           </div>
         )}
       </CardContent>

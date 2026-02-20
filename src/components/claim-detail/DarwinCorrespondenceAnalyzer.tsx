@@ -5,19 +5,43 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, Loader2, Copy, Send, Sparkles, History } from "lucide-react";
+import { Mail, Loader2, Sparkles, History } from "lucide-react";
+import { DarwinStructuredRenderer } from "@/components/darwin/DarwinStructuredRenderer";
+import { DarwinModeToggle } from "@/components/darwin/DarwinModeToggle";
+import type { DarwinMode, DarwinStructuredResult } from "@/components/darwin/types";
 
 interface DarwinCorrespondenceAnalyzerProps {
   claimId: string;
   claim: any;
 }
 
-export const DarwinCorrespondenceAnalyzer = ({ claimId, claim }: DarwinCorrespondenceAnalyzerProps) => {
+const parseStructuredResult = (value: unknown): DarwinStructuredResult | null => {
+  const parsedValue =
+    typeof value === "string"
+      ? (() => {
+          try {
+            return JSON.parse(value);
+          } catch {
+            return null;
+          }
+        })()
+      : value;
+
+  if (!parsedValue || typeof parsedValue !== "object") return null;
+
+  const candidate = parsedValue as Partial<DarwinStructuredResult>;
+  if (typeof candidate.steelman_opponent !== "string") return null;
+  if (!candidate.talking_points || typeof candidate.talking_points !== "object") return null;
+  return parsedValue as DarwinStructuredResult;
+};
+
+export const DarwinCorrespondenceAnalyzer = ({ claimId }: DarwinCorrespondenceAnalyzerProps) => {
   const [correspondence, setCorrespondence] = useState("");
   const [previousResponses, setPreviousResponses] = useState("");
-  const [analysis, setAnalysis] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<DarwinStructuredResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastAnalyzed, setLastAnalyzed] = useState<Date | null>(null);
+  const [mode, setMode] = useState<DarwinMode>("rebuttal");
   const { toast } = useToast();
 
   // Load previous analysis on mount
@@ -33,7 +57,10 @@ export const DarwinCorrespondenceAnalyzer = ({ claimId, claim }: DarwinCorrespon
         .single();
 
       if (data) {
-        setAnalysis(data.result);
+        const previousResult = parseStructuredResult(data.result);
+        if (previousResult) {
+          setAnalysis(previousResult);
+        }
         setLastAnalyzed(new Date(data.created_at));
       }
     };
@@ -58,7 +85,8 @@ export const DarwinCorrespondenceAnalyzer = ({ claimId, claim }: DarwinCorrespon
           claimId,
           analysisType: 'correspondence',
           content: correspondence,
-          additionalContext: { previousResponses }
+          additionalContext: { previousResponses },
+          mode,
         }
       });
 
@@ -68,7 +96,11 @@ export const DarwinCorrespondenceAnalyzer = ({ claimId, claim }: DarwinCorrespon
         throw new Error(data.error);
       }
 
-      setAnalysis(data.result);
+      const structuredResult = parseStructuredResult(data?.result ?? data);
+      if (!structuredResult) {
+        throw new Error("Darwin returned an invalid structured response");
+      }
+      setAnalysis(structuredResult);
       setLastAnalyzed(new Date());
 
       // Save the analysis result
@@ -77,7 +109,7 @@ export const DarwinCorrespondenceAnalyzer = ({ claimId, claim }: DarwinCorrespon
         claim_id: claimId,
         analysis_type: 'correspondence',
         input_summary: correspondence.substring(0, 200),
-        result: data.result,
+        result: JSON.stringify(structuredResult, null, 2),
         created_by: userData.user?.id
       });
 
@@ -97,27 +129,6 @@ export const DarwinCorrespondenceAnalyzer = ({ claimId, claim }: DarwinCorrespon
     }
   };
 
-  const copyToClipboard = () => {
-    if (analysis) {
-      navigator.clipboard.writeText(analysis);
-      toast({ title: "Copied", description: "Analysis copied to clipboard" });
-    }
-  };
-
-  // Extract just the draft response section for quick copy
-  const copyDraftResponse = () => {
-    if (analysis) {
-      const draftStart = analysis.indexOf("DRAFT RESPONSE:");
-      if (draftStart !== -1) {
-        const draftContent = analysis.substring(draftStart);
-        navigator.clipboard.writeText(draftContent);
-        toast({ title: "Copied", description: "Draft response copied to clipboard" });
-      } else {
-        copyToClipboard();
-      }
-    }
-  };
-
   return (
     <Card>
       <CardHeader>
@@ -130,6 +141,8 @@ export const DarwinCorrespondenceAnalyzer = ({ claimId, claim }: DarwinCorrespon
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <DarwinModeToggle value={mode} onChange={setMode} />
+
         {lastAnalyzed && (
           <div className="p-3 bg-muted/50 rounded-md text-sm text-muted-foreground flex items-center gap-2">
             <History className="h-4 w-4" />
@@ -177,21 +190,9 @@ export const DarwinCorrespondenceAnalyzer = ({ claimId, claim }: DarwinCorrespon
 
         {analysis && (
           <div className="space-y-3 pt-4 border-t">
-            <div className="flex items-center justify-between">
-              <h4 className="font-medium">Strategic Analysis</h4>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={copyToClipboard}>
-                  <Copy className="h-4 w-4 mr-1" />
-                  Copy All
-                </Button>
-                <Button variant="default" size="sm" onClick={copyDraftResponse}>
-                  <Send className="h-4 w-4 mr-1" />
-                  Copy Draft
-                </Button>
-              </div>
-            </div>
-            <ScrollArea className="h-[400px] border rounded-md p-4 bg-muted/30">
-              <pre className="whitespace-pre-wrap text-sm">{analysis}</pre>
+            <h4 className="font-medium">Structured Rebuttal Output</h4>
+            <ScrollArea className="h-[520px] border rounded-md p-4 bg-muted/30">
+              <DarwinStructuredRenderer result={analysis} />
             </ScrollArea>
           </div>
         )}
