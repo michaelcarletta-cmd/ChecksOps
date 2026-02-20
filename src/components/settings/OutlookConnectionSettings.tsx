@@ -52,7 +52,7 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
         body: { action: "get_auth_url" },
       });
       if (error) throw error;
-      if (data.error) throw new Error(data.error);
+      if (data?.success === false) throw new Error(data.error || "Failed to get auth URL");
       setAuthUrl(data.authUrl);
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
@@ -77,7 +77,7 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
         body: { action: "delete_connection", connection_id: connectionId },
       });
       if (error) throw error;
-      if (data.error) throw new Error(data.error);
+      if (data?.success === false) throw new Error(data.error || "Delete failed");
     },
     onSuccess: () => {
       toast({ title: "Connection removed" });
@@ -91,11 +91,26 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
       const { data, error } = await supabase.functions.invoke("outlook-email-sync", {
         body: { action: "cleanup_and_resync" },
       });
-      // Function returns 200 with { success: false, error: "..." } for failures
-      const bodyError = data && typeof data === "object" && "error" in data ? (data as { error?: string }).error : undefined;
-      const failed = data && typeof data === "object" && "success" in data ? (data as { success?: boolean }).success === false : false;
-      const errMsg = bodyError ?? error?.message ?? (error ? String(error) : undefined);
-      if (error || bodyError || failed) throw new Error(errMsg || "Function call failed");
+
+      // Detect non-2xx style errors (function returned an HTTP error instead of JSON)
+      if (error) {
+        const errMsg = error.message || String(error);
+        const isNon2xx = errMsg.includes("non-2xx") || errMsg.includes("FunctionsHttpError");
+        if (isNon2xx) {
+          throw new Error(
+            "The sync function needs to be redeployed so it returns errors correctly. " +
+            "Deploy the Outlook sync function from the project root: npm run deploy:outlook-sync " +
+            "(or: supabase functions deploy outlook-email-sync). Then try again."
+          );
+        }
+        throw new Error(errMsg);
+      }
+
+      // Handle JSON body errors
+      if (data && typeof data === "object" && data.success === false) {
+        throw new Error(data.error || "Cleanup and resync failed");
+      }
+
       const deleted = data?.deleted ?? 0;
       const imported = data?.total_imported ?? 0;
       const claims = data?.claims_synced ?? 0;
@@ -109,13 +124,13 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
       const message = e?.message || String(e);
       console.error("Cleanup and resync error:", e);
       const hint = message.includes("Unknown action") || message.includes("cleanup_and_resync")
-        ? " Deploy the outlook-email-sync function (e.g. supabase functions deploy outlook-email-sync) and try again."
+        ? " Deploy the Outlook sync function from the project root: npm run deploy:outlook-sync (or: supabase functions deploy outlook-email-sync). Then try again."
         : "";
       toast({
         title: "Cleanup and resync failed",
         description: message + hint,
         variant: "destructive",
-        duration: 10000,
+        duration: 12000,
       });
     } finally {
       setCleanupSyncing(false);

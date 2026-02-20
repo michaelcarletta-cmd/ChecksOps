@@ -779,7 +779,13 @@ serve(async (req) => {
       lines.push(`meta: claimId=${m.claimId} state=${m.state ?? 'n/a'} carrier=${m.carrier ?? 'n/a'} audience=${m.audience ?? 'carrier'} lossType=${m.lossType ?? 'n/a'}`);
       lines.push('documents: ' + (claimFactsPack.documents?.slice(0, 30).map((d) => `${d.docId}:${d.docName}(${d.category ?? '?'}/${d.folderKey})`).join('; ') || 'none'));
       if (claimFactsPack.policy) {
-        lines.push('policy: ' + (claimFactsPack.policy.policyNumber ?? 'n/a') + (claimFactsPack.policy.coverages?.length ? ` coverages=${claimFactsPack.policy.coverages.map((c) => c.name + (c.evidence?.length ? `@${c.evidence.map((e) => e.docName).join(',')}` : '')).join('; ') : ''));
+        const coveragesStr = claimFactsPack.policy.coverages?.length
+          ? ` coverages=${claimFactsPack.policy.coverages.map((cov: any) => {
+              const refs = cov.evidence?.length ? '@' + cov.evidence.map((ev: any) => ev.docName).join(',') : '';
+              return cov.name + refs;
+            }).join('; ')}`
+          : '';
+        lines.push('policy: ' + (claimFactsPack.policy.policyNumber ?? 'n/a') + coveragesStr);
         if (claimFactsPack.policy.missingDocs?.length) lines.push('policy.missingDocs: ' + claimFactsPack.policy.missingDocs.join(', '));
       }
       if (claimFactsPack.estimate) {

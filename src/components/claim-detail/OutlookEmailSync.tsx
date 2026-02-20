@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Mail, RefreshCw, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { RefreshCw, Loader2, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -39,16 +39,25 @@ export function OutlookEmailSync({ claimId }: OutlookEmailSyncProps) {
         body: { action: "sync_emails", claim_id: claimId },
       });
       if (error) throw error;
-      if (data.error) throw new Error(data.error);
+
+      // Handle JSON body errors
+      if (data?.success === false) throw new Error(data.error || "Sync failed");
 
       setLastResult({ imported: data.imported, matching: data.matching });
-      
-      if (data.imported > 0) {
+
+      // Show warning if some emails couldn't be saved
+      if (data.warning) {
+        toast({
+          title: "Sync completed with warnings",
+          description: data.warning,
+          variant: "destructive",
+        });
+        queryClient.invalidateQueries({ queryKey: ["emails", claimId] });
+      } else if (data.imported > 0) {
         toast({
           title: "Emails synced!",
           description: `Imported ${data.imported} new email${data.imported > 1 ? 's' : ''} from Outlook.`,
         });
-        // Refresh the emails list
         queryClient.invalidateQueries({ queryKey: ["emails", claimId] });
       } else if (data.matching > 0) {
         toast({
