@@ -124,9 +124,9 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
 
   const getTitle = () => {
     if (isClaimContext) {
-      return "Darwin AI";
+      return "Darwin — Claims Operations";
     }
-    return "Claims AI Assistant";
+    return "Darwin AI";
   };
 
   const getIcon = () => {
@@ -142,17 +142,18 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
         <Card className="p-6 bg-primary/5 border-primary/20 max-w-sm">
           <div className="text-center space-y-3">
             <Brain className="h-12 w-12 text-primary mx-auto" />
-            <h3 className="font-semibold">Darwin - Your Claim Copilot</h3>
+            <h3 className="font-semibold">Darwin — Claims Operations Assistant</h3>
             <p className="text-sm text-muted-foreground">
-              I have full context on <strong>{policyholderName || claimNumber}</strong>
+              Document-aware intelligence for <strong>{policyholderName || claimNumber}</strong>
             </p>
             <ul className="text-sm text-muted-foreground space-y-1 text-left">
-              <li>• Summarize this claim's status</li>
-              <li>• Draft carrier communications</li>
-              <li>• Analyze settlement details</li>
-              <li>• Suggest next steps</li>
-              <li>• Create tasks for this claim</li>
-              <li>• Answer insurance questions</li>
+              <li>• Upload a document for structured analysis</li>
+              <li>• "Does this denial hold up?"</li>
+              <li>• "What evidence do we need?"</li>
+              <li>• "How do we rebut this?"</li>
+              <li>• "Is this repair feasible?"</li>
+              <li>• Coverage-first strategic guidance</li>
+              <li>• Every response ends with a next step</li>
             </ul>
           </div>
         </Card>
@@ -163,18 +164,17 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
       <Card className="p-6 bg-primary/5 border-primary/20 max-w-sm">
         <div className="text-center space-y-3">
           <Bot className="h-12 w-12 text-primary mx-auto" />
-          <h3 className="font-semibold">Your Claims Assistant</h3>
+          <h3 className="font-semibold">Darwin AI</h3>
           <p className="text-sm text-muted-foreground">
-            I can help you with:
+            Claims operations & workflow assistant
           </p>
           <ul className="text-sm text-muted-foreground space-y-1 text-left">
-            <li>• Draft follow-up communications</li>
-            <li>• Summarize claim statuses</li>
-            <li>• <strong>Create tasks with due dates</strong></li>
-            <li>• <strong>Bulk update statuses</strong></li>
-            <li>• <strong>Bulk close/reopen claims</strong></li>
-            <li>• <strong>Bulk assign staff</strong></li>
-            <li>• Explain insurance terms & regulations</li>
+            <li>• Analyze documents & carrier positions</li>
+            <li>• Create tasks with due dates</li>
+            <li>• Bulk update statuses & assign staff</li>
+            <li>• Search communications & history</li>
+            <li>• Find leads by storm activity</li>
+            <li>• Draft carrier communications</li>
           </ul>
         </div>
       </Card>
