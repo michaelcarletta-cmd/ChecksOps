@@ -189,18 +189,44 @@ export const DarwinSystematicDismantler = ({ claimId, claim }: DarwinSystematicD
       let pdfContents: Array<{ name: string; content: string; folder?: string }> = [];
       let singlePdfBase64: string | null = null;
       let fileName: string | undefined;
+      let downloadFailures: string[] = [];
 
       // Handle multiple claim files
       if (selectedFiles.length > 0) {
         for (const file of selectedFiles) {
-          const base64 = await downloadFileAsBase64(file.file_path);
-          if (base64) {
-            pdfContents.push({
-              name: file.file_name,
-              content: base64,
-              folder: file.folder_name
-            });
+          try {
+            const base64 = await downloadFileAsBase64(file.file_path);
+            if (base64) {
+              pdfContents.push({
+                name: file.file_name,
+                content: base64,
+                folder: file.folder_name
+              });
+            } else {
+              downloadFailures.push(file.file_name);
+              console.warn(`Failed to download file: ${file.file_name} (path: ${file.file_path})`);
+            }
+          } catch (err) {
+            downloadFailures.push(file.file_name);
+            console.error(`Error downloading file ${file.file_name}:`, err);
           }
+        }
+
+        if (pdfContents.length === 0 && downloadFailures.length > 0) {
+          toast({
+            title: "File download failed",
+            description: `Could not download any of the selected files: ${downloadFailures.join(', ')}. Please try re-uploading them.`,
+            variant: "destructive"
+          });
+          setLoading(false);
+          return;
+        }
+
+        if (downloadFailures.length > 0) {
+          toast({
+            title: "Some files skipped",
+            description: `Could not download: ${downloadFailures.join(', ')}. Analyzing ${pdfContents.length} remaining files.`,
+          });
         }
       } else if (pdfFile) {
         // Handle single uploaded PDF
@@ -212,6 +238,80 @@ export const DarwinSystematicDismantler = ({ claimId, claim }: DarwinSystematicD
         }
         singlePdfBase64 = btoa(binary);
         fileName = pdfFile.name;
+      }
+
+      // If file downloads succeeded but files are very large, warn the user
+      const totalSize = pdfContents.reduce((sum, p) => sum + p.content.length, 0);
+      if (totalSize > 15 * 1024 * 1024) {
+        // Over ~11MB of actual files - use text extraction fallback
+        console.log(`Total PDF base64 size: ${totalSize} bytes, using text extraction fallback`);
+        
+        // Try to use extracted_text from the database instead
+        const fileIds = selectedFiles.map(f => f.id);
+        const { data: fileTexts } = await supabase
+          .from('claim_files')
+          .select('id, file_name, extracted_text')
+          .in('id', fileIds);
+        
+        const textContent = (fileTexts || [])
+          .filter(f => f.extracted_text && f.extracted_text.trim().length > 50)
+          .map(f => `=== ${f.file_name} ===\n${f.extracted_text}`)
+          .join('\n\n');
+        
+        if (textContent.length > 200) {
+          // Use text-only mode with extracted text
+          const { data, error } = await supabase.functions.invoke('darwin-ai-analysis', {
+            body: {
+              claimId,
+              analysisType: 'systematic_dismantling',
+              content: textContent,
+              additionalContext: {
+                _useTextOnly: true,
+                previousResponses,
+                ...(isLocked && position ? {
+                  declaredPosition: {
+                    primary_cause_of_loss: position.primary_cause_of_loss,
+                    primary_coverage_theory: position.primary_coverage_theory,
+                    primary_carrier_error: position.primary_carrier_error,
+                    carrier_dependency_statement: position.carrier_dependency_statement,
+                  }
+                } : {}),
+                ...(provisionalOverride ? { provisionalPosition: true } : {}),
+              }
+            }
+          });
+
+          if (error) throw error;
+          if (data?.error) throw new Error(data.error);
+
+          setRawAnalysis(data.result);
+          setLastAnalyzed(new Date());
+          if (data.structured) setResult(data.structured);
+
+          const { data: userData } = await supabase.auth.getUser();
+          await supabase.from('darwin_analysis_results').insert({
+            claim_id: claimId,
+            analysis_type: 'systematic_dismantling',
+            input_summary: data.structured ? JSON.stringify(data.structured) : `${selectedFiles.length} files (text mode)`,
+            result: data.result,
+            pdf_file_name: `${selectedFiles.length} files (text extraction)`,
+            created_by: userData.user?.id
+          });
+
+          toast({
+            title: "Systematic dismantling complete",
+            description: "Analysis used extracted text due to large file sizes"
+          });
+          setLoading(false);
+          return;
+        }
+        
+        // If no extracted text available, limit to 3 files
+        pdfContents = pdfContents.slice(0, 3);
+        toast({
+          title: "Large files detected",
+          description: "Limiting to 3 files to avoid timeouts. Consider selecting fewer files.",
+        });
       }
 
       const { data, error } = await supabase.functions.invoke('darwin-ai-analysis', {
