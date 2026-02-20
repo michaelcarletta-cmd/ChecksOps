@@ -90,7 +90,7 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar className="border-r border-blue-200 text-blue-900" style={{ background: 'linear-gradient(180deg, hsl(220, 60%, 55%) 0%, hsl(220, 80%, 85%) 50%, #ffffff 100%)' }}>
+    <Sidebar className="border-r border-white/20 text-white" style={{ background: 'linear-gradient(180deg, hsl(220, 60%, 55%) 0%, hsl(220, 80%, 85%) 50%, #ffffff 100%)' }}>
       <SidebarContent>
         <div className="px-4 py-4 flex items-center">
           <img src={logo} alt="Freedom Claims" className="h-10 w-auto" />
@@ -104,11 +104,11 @@ export function AppSidebar() {
               {mainItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title}>
-                    <NavLink 
+                     <NavLink 
                       to={item.url} 
                       end={item.url === "/"}
-                      className="text-blue-900 hover:bg-white/40 hover:shadow-sm transition-all relative rounded-md"
-                      activeClassName="bg-white/50 text-blue-950 font-medium shadow-sm border border-blue-200"
+                      className="text-white hover:bg-white/20 hover:shadow-sm transition-all relative rounded-md"
+                      activeClassName="bg-white/30 text-white font-medium shadow-sm border border-white/40"
                     >
                       <item.icon className="h-5 w-5" />
                       <span>{item.title}</span>
@@ -133,7 +133,7 @@ export function AppSidebar() {
           {user && (
             <div className="mb-3">
               {open && (
-                <p className="text-xs text-blue-800 truncate">
+                <p className="text-xs text-white/80 truncate">
                   {user.email}
                 </p>
               )}
@@ -142,7 +142,7 @@ export function AppSidebar() {
           <Button
             onClick={handleSignOut}
             variant="ghost"
-            className="w-full justify-start text-blue-900 hover:bg-white/40"
+            className="w-full justify-start text-white hover:bg-white/20"
           >
             <LogOut className="h-5 w-5" />
             {open && <span className="ml-2">Log Out</span>}
