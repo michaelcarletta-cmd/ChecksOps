@@ -11,8 +11,15 @@
  * CI fails if CONTRACT_VERSION differs between that file and this one.
  */
 
-import type { FolderKey } from "../../../supabase/functions/_shared/darwin-contracts";
-export type { FolderKey };
+export type FolderKey =
+  | "intake"
+  | "policy"
+  | "estimates"
+  | "photos"
+  | "carrier"
+  | "supplements"
+  | "invoices"
+  | "exports";
 
 /** Must match supabase/functions/_shared/darwin-contracts.ts CONTRACT_VERSION (CI checks). */
 export const CONTRACT_VERSION = "2026-02-18";
