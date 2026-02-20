@@ -45,14 +45,14 @@ All colors MUST be HSL.
 
     --radius: 0.5rem;
 
-    --sidebar-background: 270 60% 60%;
-    --sidebar-foreground: 270 40% 15%;
-    --sidebar-primary: 270 40% 15%;
+    --sidebar-background: 220 60% 55%;
+    --sidebar-foreground: 220 30% 15%;
+    --sidebar-primary: 220 30% 15%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 270 80% 92%;
-    --sidebar-accent-foreground: 270 40% 15%;
-    --sidebar-border: 270 40% 80%;
-    --sidebar-ring: 270 60% 40%;
+    --sidebar-accent: 220 80% 92%;
+    --sidebar-accent-foreground: 220 30% 15%;
+    --sidebar-border: 220 40% 80%;
+    --sidebar-ring: 220 60% 40%;
 
     --chart-1: 220 60% 25%;
     --chart-2: 220 30% 50%;
