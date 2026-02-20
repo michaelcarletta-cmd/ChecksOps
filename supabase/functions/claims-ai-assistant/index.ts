@@ -4486,6 +4486,14 @@ ${knowledgeBaseContext || ''}`
               continue;
             }
             
+            // Get user ID for claim note insertion (RLS requires user_id)
+            let bulkUserId: string | null = null;
+            const bulkAuthHeader = req.headers.get("authorization");
+            if (bulkAuthHeader) {
+              const { data: { user: bulkUser } } = await supabase.auth.getUser(bulkAuthHeader.replace("Bearer ", ""));
+              bulkUserId = bulkUser?.id || null;
+            }
+            
             let totalProcessed = 0;
             let totalFollowUps = 0;
             let totalNotes = 0;
@@ -4542,15 +4550,20 @@ ${knowledgeBaseContext || ''}`
               }
               
               // Add a claim note (claim_updates) if note provided
-              if (params.note) {
+              if (params.note && bulkUserId) {
                 const { error: noteErr } = await supabase
                   .from("claim_updates")
                   .insert({
                     claim_id: claim.id,
                     content: params.note,
                     update_type: "note",
+                    user_id: bulkUserId,
                   });
-                if (!noteErr) totalNotes++;
+                if (noteErr) {
+                  console.error("Failed to insert claim note:", noteErr);
+                } else {
+                  totalNotes++;
+                }
               }
 
               // Create follow-up task if requested
