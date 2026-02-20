@@ -82,42 +82,55 @@ async function getAccessToken(connection: any, supabase: any): Promise<string> {
 
 // --------------- Graph API ---------------
 
-async function fetchGraphEmails(accessToken: string): Promise<any[]> {
+async function fetchGraphEmails(accessToken: string, maxPages = 10): Promise<any[]> {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const allEmails: any[] = [];
 
-  const response = await fetch(
+  let url: string | null =
     `https://graph.microsoft.com/v1.0/me/messages?` +
     `$filter=receivedDateTime ge ${thirtyDaysAgo}` +
     `&$select=from,toRecipients,subject,receivedDateTime,bodyPreview,internetMessageId` +
-    `&$top=100&$orderby=receivedDateTime desc`,
-    { headers: { Authorization: `Bearer ${accessToken}` } },
-  );
+    `&$top=250&$orderby=receivedDateTime desc`;
 
-  if (!response.ok) {
-    let detail = '';
-    try {
-      const errBody = await response.json();
-      detail = errBody?.error?.message || errBody?.error_description || '';
-    } catch {
-      detail = await response.text().catch(() => '');
+  let page = 0;
+  while (url && page < maxPages) {
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!response.ok) {
+      let detail = '';
+      try {
+        const errBody = await response.json();
+        detail = errBody?.error?.message || errBody?.error_description || '';
+      } catch {
+        detail = await response.text().catch(() => '');
+      }
+      if (response.status === 401) {
+        throw new Error('Your Outlook connection expired or was revoked. Please reconnect your account in Settings.');
+      }
+      throw new Error(`Graph API error: ${detail || response.status}`);
     }
-    if (response.status === 401) {
-      throw new Error('Your Outlook connection expired or was revoked. Please reconnect your account in Settings.');
-    }
-    throw new Error(`Graph API error: ${detail || response.status}`);
+
+    const data = await response.json();
+    const emails = (data.value || []).map((msg: any) => ({
+      from: msg.from?.emailAddress?.address || 'Unknown',
+      from_name: msg.from?.emailAddress?.name || '',
+      to: msg.toRecipients?.[0]?.emailAddress?.address || 'Unknown',
+      to_name: msg.toRecipients?.[0]?.emailAddress?.name || '',
+      subject: msg.subject || '(No Subject)',
+      date: msg.receivedDateTime,
+      body_preview: msg.bodyPreview || '',
+      message_id: msg.internetMessageId || '',
+    }));
+
+    allEmails.push(...emails);
+    url = data['@odata.nextLink'] || null;
+    page++;
   }
 
-  const data = await response.json();
-  return (data.value || []).map((msg: any) => ({
-    from: msg.from?.emailAddress?.address || 'Unknown',
-    from_name: msg.from?.emailAddress?.name || '',
-    to: msg.toRecipients?.[0]?.emailAddress?.address || 'Unknown',
-    to_name: msg.toRecipients?.[0]?.emailAddress?.name || '',
-    subject: msg.subject || '(No Subject)',
-    date: msg.receivedDateTime,
-    body_preview: msg.bodyPreview || '',
-    message_id: msg.internetMessageId || '',
-  }));
+  console.log(`Fetched ${allEmails.length} emails across ${page} page(s)`);
+  return allEmails;
 }
 
 // --------------- Claim matching ---------------
