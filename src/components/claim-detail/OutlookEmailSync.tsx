@@ -38,17 +38,21 @@ export function OutlookEmailSync({ claimId }: OutlookEmailSyncProps) {
       const { data, error } = await supabase.functions.invoke("outlook-email-sync", {
         body: { action: "sync_emails", claim_id: claimId },
       });
-      if (error) throw error;
-      if (data.error) throw new Error(data.error);
+      const bodyError = data && typeof data === "object" && "error" in data ? (data as { error?: string }).error : undefined;
+      const failed = data && typeof data === "object" && "success" in data ? (data as { success?: boolean }).success === false : false;
+      const errMsg = bodyError ?? error?.message ?? (error ? String(error) : undefined);
+      if (error || bodyError || failed) throw new Error(errMsg || "Sync failed");
 
       setLastResult({ imported: data.imported, matching: data.matching });
-      
+
+      if (data.warning) {
+        toast({ title: "Sync completed with warning", description: data.warning, variant: "destructive" });
+      }
       if (data.imported > 0) {
         toast({
           title: "Emails synced!",
-          description: `Imported ${data.imported} new email${data.imported > 1 ? 's' : ''} from Outlook.`,
+          description: `Imported ${data.imported} new email${data.imported > 1 ? "s" : ""} from Outlook.`,
         });
-        // Refresh the emails list
         queryClient.invalidateQueries({ queryKey: ["emails", claimId] });
       } else if (data.matching > 0) {
         toast({
@@ -62,7 +66,7 @@ export function OutlookEmailSync({ claimId }: OutlookEmailSyncProps) {
         });
       }
     } catch (e: any) {
-      toast({ title: "Sync failed", description: e.message, variant: "destructive" });
+      toast({ title: "Sync failed", description: e?.message ?? String(e), variant: "destructive" });
     } finally {
       setSyncing(false);
     }

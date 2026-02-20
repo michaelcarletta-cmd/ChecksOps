@@ -8,8 +8,11 @@ const corsHeaders = {
 
 // Refresh Microsoft OAuth tokens
 async function refreshTokens(refreshToken: string): Promise<{ access_token: string; refresh_token: string; expires_at: string }> {
-  const MS_CLIENT_ID = Deno.env.get('MS_CLIENT_ID')!;
-  const MS_CLIENT_SECRET = Deno.env.get('MS_CLIENT_SECRET')!;
+  const MS_CLIENT_ID = Deno.env.get('MS_CLIENT_ID');
+  const MS_CLIENT_SECRET = Deno.env.get('MS_CLIENT_SECRET');
+  if (!MS_CLIENT_ID || !MS_CLIENT_SECRET) {
+    throw new Error('Microsoft OAuth is not configured (MS_CLIENT_ID / MS_CLIENT_SECRET). Please reconnect Outlook after the app is configured.');
+  }
 
   const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
     method: 'POST',
@@ -25,7 +28,18 @@ async function refreshTokens(refreshToken: string): Promise<{ access_token: stri
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`Token refresh failed: ${errText}`);
+    let userMessage = 'Token refresh failed.';
+    try {
+      const errJson = JSON.parse(errText);
+      const code = errJson?.error;
+      const desc = errJson?.error_description ?? errJson?.error?.message;
+      if (code === 'invalid_grant' || (desc && /expired|revoked|invalid|invalid_grant/i.test(desc))) {
+        userMessage = 'Your Outlook connection expired or was revoked. Please reconnect your account in Settings.';
+      } else if (desc && desc.length < 120) userMessage = desc;
+    } catch {
+      if (errText.length < 200) userMessage = errText;
+    }
+    throw new Error(userMessage);
   }
 
   const tokens = await response.json();
@@ -46,10 +60,8 @@ async function getAccessToken(connection: any, supabase: any): Promise<string> {
   }
 
   const expiresAt = new Date(tokenData.expires_at);
-  // Refresh if expires within 5 minutes
   if (expiresAt.getTime() - Date.now() < 5 * 60 * 1000) {
     const newTokens = await refreshTokens(tokenData.refresh_token);
-    // Update stored tokens
     await supabase
       .from('email_connections')
       .update({
@@ -72,14 +84,21 @@ async function fetchGraphEmails(accessToken: string): Promise<any[]> {
     `$filter=receivedDateTime ge ${thirtyDaysAgo}` +
     `&$select=from,toRecipients,subject,receivedDateTime,bodyPreview,internetMessageId` +
     `&$top=100&$orderby=receivedDateTime desc`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }
+    { headers: { Authorization: `Bearer ${accessToken}` } },
   );
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`Graph API error (${response.status}): ${errText}`);
+    let userMessage = `Graph API error (${response.status}).`;
+    try {
+      const errJson = JSON.parse(errText);
+      const msg = errJson?.error?.message ?? errJson?.message;
+      if (msg && msg.length < 180) userMessage = msg;
+      else if (response.status === 401) userMessage = 'Outlook access expired or denied. Please reconnect your account in Settings.';
+    } catch {
+      if (errText.length < 150) userMessage = errText;
+    }
+    throw new Error(userMessage);
   }
 
   const data = await response.json();
@@ -95,7 +114,7 @@ async function fetchGraphEmails(accessToken: string): Promise<any[]> {
   }));
 }
 
-// Build match terms from claim number (and common variations) + policyholder last name. Subject must contain at least one.
+// Build match terms from claim number (and variations) + policyholder last name. Subject must contain at least one.
 function buildClaimMatchTerms(claimNumber: string | null | undefined, policyholderName: string | null | undefined): string[] {
   const terms: string[] = [];
   if (claimNumber?.trim()) {
@@ -214,38 +233,51 @@ async function runBulkSync(supabase: any, allConnections: any[]): Promise<{ tota
   return { totalImported, claimsSynced, errors };
 }
 
+const json = (body: object, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
+  let res: Response;
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    res = await handleOutlookSync(req);
+  } catch (outer: any) {
+    const msg = outer?.message ?? String(outer);
+    console.error('Outlook sync outer error:', msg, outer);
+    res = json({ success: false, error: msg });
+  }
+  return res;
+});
+
+async function handleOutlookSync(req: Request): Promise<Response> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return json({ success: false, error: 'Server configuration missing (SUPABASE_URL / service role key).' });
+    }
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     let body: { action?: string; claim_id?: string; connection_id?: string } = {};
     try {
       body = await req.json();
     } catch {
-      return new Response(JSON.stringify({ success: false, error: 'Invalid or missing JSON body' }), {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return json({ success: false, error: 'Invalid or missing JSON body' });
     }
     const { action, claim_id, connection_id } = body;
 
-    // For cron-triggered bulk actions, validate via cron secret or anon key
+    // Auth: cron/anon or authenticated user
     let user: any = null;
     if (action === 'sync_all_claims' || action === 'cleanup_wrong_emails' || action === 'cleanup_and_resync') {
       const cronSecret = req.headers.get('x-cron-secret');
       const expectedSecret = Deno.env.get('CRON_SECRET');
       const authHeader = req.headers.get('Authorization');
       const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-      const isCronCall = (cronSecret && cronSecret === expectedSecret) || 
-                         (authHeader && authHeader === `Bearer ${anonKey}`);
+      const isCronCall = (cronSecret && cronSecret === expectedSecret) || (authHeader && authHeader === `Bearer ${anonKey}`);
       if (!isCronCall) {
-        // Allow authenticated users to trigger it manually too
         if (authHeader) {
           const token = authHeader.replace('Bearer ', '');
           const { data: { user: authUser } } = await supabase.auth.getUser(token);
@@ -267,292 +299,140 @@ serve(async (req) => {
     if (action === 'get_auth_url') {
       const MS_CLIENT_ID = Deno.env.get('MS_CLIENT_ID');
       if (!MS_CLIENT_ID) throw new Error('Microsoft OAuth not configured');
-
       const redirectUri = `${supabaseUrl}/functions/v1/outlook-oauth-callback`;
       const origin = req.headers.get('origin') || req.headers.get('referer') || '';
-      const state = btoa(JSON.stringify({
-        userId: user.id,
-        redirectUrl: origin.replace(/\/$/, '') + '/settings',
-      }));
-
+      const state = btoa(JSON.stringify({ userId: user.id, redirectUrl: origin.replace(/\/$/, '') + '/settings' }));
       const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?` +
-        `client_id=${MS_CLIENT_ID}` +
-        `&response_type=code` +
-        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-        `&scope=${encodeURIComponent('https://graph.microsoft.com/Mail.Read offline_access User.Read')}` +
-        `&state=${state}` +
-        `&response_mode=query`;
-
-      return new Response(JSON.stringify({ authUrl }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+        `client_id=${MS_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&scope=${encodeURIComponent('https://graph.microsoft.com/Mail.Read offline_access User.Read')}&state=${state}&response_mode=query`;
+      return json({ authUrl });
     }
 
     if (action === 'sync_emails') {
       if (!claim_id) throw new Error('claim_id is required');
-
-      // Get user's email connection
-      let query = supabase
-        .from('email_connections')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_active', true);
-
+      let query = supabase.from('email_connections').select('*').eq('user_id', user.id).eq('is_active', true);
       if (connection_id) query = query.eq('id', connection_id);
+      const { data: connection, error: connError } = await query.limit(1).maybeSingle();
+      if (connError) throw new Error(`Failed to load connection: ${connError.message}`);
+      if (!connection) throw new Error('No active email connection found. Please connect your Outlook account in Settings.');
 
-      const { data: connections, error: connError } = await query.limit(1).single();
-      if (connError || !connections) throw new Error('No active email connection found. Please connect your Outlook account in Settings.');
-
-      const connection = connections;
-
-      // Get claim details for matching
-      const { data: claim } = await supabase
-        .from('claims')
-        .select('claim_number, policyholder_email, policyholder_name, insurance_company, insurance_email')
-        .eq('id', claim_id)
-        .single();
-
+      const { data: claim } = await supabase.from('claims').select('claim_number, policyholder_email, policyholder_name, insurance_company, insurance_email').eq('id', claim_id).single();
       if (!claim) throw new Error('Claim not found');
 
-      // Get access token (auto-refreshes if needed)
       let accessToken: string;
       try {
         accessToken = await getAccessToken(connection, supabase);
       } catch (tokenErr: any) {
-        await supabase
-          .from('email_connections')
-          .update({ last_sync_error: tokenErr.message })
-          .eq('id', connection.id);
+        await supabase.from('email_connections').update({ last_sync_error: tokenErr.message }).eq('id', connection.id);
         throw new Error(`Authentication failed: ${tokenErr.message}. Please reconnect your Outlook account.`);
       }
 
-      // Fetch emails via Microsoft Graph
       let emails: any[];
       try {
         emails = await fetchGraphEmails(accessToken);
       } catch (graphErr: any) {
-        await supabase
-          .from('email_connections')
-          .update({ last_sync_error: graphErr.message })
-          .eq('id', connection.id);
+        await supabase.from('email_connections').update({ last_sync_error: graphErr.message }).eq('id', connection.id);
         throw new Error(`Email fetch failed: ${graphErr.message}`);
       }
 
-      // Only sync when subject contains something related to this claim (claim number or policyholder last name)
       const matchTerms = buildClaimMatchTerms(claim.claim_number, claim.policyholder_name);
-
       const matchingEmails = emails.filter(email => subjectMatchesClaim(email.subject, matchTerms));
 
-      // Get existing emails to avoid duplicates
-      const { data: existingEmails } = await supabase
-        .from('emails')
-        .select('subject, sent_at')
-        .eq('claim_id', claim_id);
+      const { data: existingEmails } = await supabase.from('emails').select('subject, sent_at').eq('claim_id', claim_id);
+      const existingKeys = new Set(existingEmails?.map(e => `${e.subject}|${new Date(e.sent_at).toISOString().substring(0, 16)}`) || []);
 
-      const existingKeys = new Set(
-        existingEmails?.map(e => `${e.subject}|${new Date(e.sent_at).toISOString().substring(0, 16)}`) || []
-      );
-
-      // Insert new emails
       let importedCount = 0;
+      let firstInsertError: string | null = null;
       for (const email of matchingEmails) {
         let sentAt: string;
-        try {
-          sentAt = new Date(email.date).toISOString();
-        } catch {
-          sentAt = new Date().toISOString();
-        }
-
+        try { sentAt = new Date(email.date).toISOString(); } catch { sentAt = new Date().toISOString(); }
         const key = `${email.subject}|${sentAt.substring(0, 16)}`;
         if (existingKeys.has(key)) continue;
-
-        const isInbound = email.to.toLowerCase() === connection.email_address.toLowerCase() ||
-                          email.from.toLowerCase() !== connection.email_address.toLowerCase();
-
-        const { error: insertError } = await supabase
-          .from('emails')
-          .insert({
-            claim_id,
-            subject: email.subject,
-            body: email.body_preview,
-            recipient_email: isInbound ? email.from : email.to,
-            recipient_name: isInbound ? email.from_name : email.to_name,
-            recipient_type: isInbound ? 'inbound' : 'outlook_sync',
-            sent_at: sentAt,
-          });
-
-        if (!insertError) {
-          importedCount++;
-          existingKeys.add(key);
-        }
+        const isInbound = (email.to || '').toLowerCase() === (connection.email_address || '').toLowerCase() ||
+                          (email.from || '').toLowerCase() !== (connection.email_address || '').toLowerCase();
+        const { error: insertError } = await supabase.from('emails').insert({
+          claim_id,
+          subject: email.subject ?? '(No Subject)',
+          body: email.body_preview ?? '',
+          recipient_email: isInbound ? email.from : email.to,
+          recipient_name: isInbound ? email.from_name : email.to_name,
+          recipient_type: isInbound ? 'inbound' : 'outlook_sync',
+          sent_at: sentAt,
+        });
+        if (!insertError) { importedCount++; existingKeys.add(key); } else if (!firstInsertError) firstInsertError = insertError.message;
       }
 
-      // Update last sync
-      await supabase
-        .from('email_connections')
-        .update({ last_sync_at: new Date().toISOString(), last_sync_error: null })
-        .eq('id', connection.id);
-
-      return new Response(JSON.stringify({
+      await supabase.from('email_connections').update({ last_sync_at: new Date().toISOString(), last_sync_error: firstInsertError }).eq('id', connection.id);
+      if (firstInsertError && importedCount === 0) throw new Error(`Could not save emails to this claim: ${firstInsertError}`);
+      return json({
         success: true,
         total_fetched: emails.length,
         matching: matchingEmails.length,
         imported: importedCount,
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        ...(firstInsertError && importedCount > 0 ? { warning: `Some emails could not be saved: ${firstInsertError}` } : {}),
       });
     }
 
     if (action === 'delete_connection') {
-      const { error } = await supabase
-        .from('email_connections')
-        .delete()
-        .eq('id', connection_id)
-        .eq('user_id', user.id);
-
+      const { error } = await supabase.from('email_connections').delete().eq('id', connection_id).eq('user_id', user.id);
       if (error) throw error;
-
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return json({ success: true });
     }
 
     if (action === 'cleanup_wrong_emails') {
-      const { data: outlookEmails, error: listErr } = await supabase
-        .from('emails')
-        .select('id, claim_id, subject')
-        .eq('recipient_type', 'outlook_sync');
-
-      if (listErr) {
-        return new Response(JSON.stringify({ success: false, error: listErr.message }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
+      const { data: outlookEmails, error: listErr } = await supabase.from('emails').select('id, claim_id, subject').eq('recipient_type', 'outlook_sync');
+      if (listErr) return json({ success: false, error: listErr.message });
       let deleted = 0;
       for (const row of outlookEmails || []) {
-        const { data: claim } = await supabase
-          .from('claims')
-          .select('claim_number, policyholder_name')
-          .eq('id', row.claim_id)
-          .single();
-
+        const { data: claim } = await supabase.from('claims').select('claim_number, policyholder_name').eq('id', row.claim_id).single();
         const matchTerms = buildClaimMatchTerms(claim?.claim_number, claim?.policyholder_name);
         if (!subjectMatchesClaim(row.subject, matchTerms)) {
           const { error: delErr } = await supabase.from('emails').delete().eq('id', row.id);
           if (!delErr) deleted++;
         }
       }
-
-      console.log(`Cleanup: removed ${deleted} wrongly-attached outlook_sync emails`);
-      return new Response(JSON.stringify({ success: true, deleted }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return json({ success: true, deleted });
     }
 
     if (action === 'cleanup_and_resync') {
       try {
-        const { data: outlookEmails, error: listErr } = await supabase
-          .from('emails')
-          .select('id, claim_id, subject')
-          .eq('recipient_type', 'outlook_sync');
-
-        if (listErr) {
-          return new Response(JSON.stringify({ success: false, error: `Failed to list emails: ${listErr.message}` }), {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-
+        const { data: outlookEmails, error: listErr } = await supabase.from('emails').select('id, claim_id, subject').eq('recipient_type', 'outlook_sync');
+        if (listErr) return json({ success: false, error: `Failed to list emails: ${listErr.message}` });
         let deleted = 0;
         for (const row of outlookEmails || []) {
           try {
-            const { data: claim } = await supabase
-              .from('claims')
-              .select('claim_number, policyholder_name')
-              .eq('id', row.claim_id)
-              .single();
-
+            const { data: claim } = await supabase.from('claims').select('claim_number, policyholder_name').eq('id', row.claim_id).single();
             const matchTerms = buildClaimMatchTerms(claim?.claim_number, claim?.policyholder_name);
             if (!subjectMatchesClaim(row?.subject ?? '', matchTerms)) {
               const { error: delErr } = await supabase.from('emails').delete().eq('id', row.id);
               if (!delErr) deleted++;
             }
-          } catch (e) {
-            console.warn('Cleanup row error:', row?.id, e);
-          }
+          } catch (e) { console.warn('Cleanup row error:', row?.id, e); }
         }
-
-        const { data: allConnections, error: connErr } = await supabase
-          .from('email_connections')
-          .select('*')
-          .eq('is_active', true);
-
+        const { data: allConnections, error: connErr } = await supabase.from('email_connections').select('*').eq('is_active', true);
         if (connErr || !allConnections || allConnections.length === 0) {
-          return new Response(JSON.stringify({
-            success: true,
-            deleted,
-            message: 'No active connections; cleanup done, no resync.',
-            total_imported: 0,
-            claims_synced: 0,
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+          return json({ success: true, deleted, message: 'No active connections; cleanup done, no resync.', total_imported: 0, claims_synced: 0 });
         }
-
         const { totalImported, claimsSynced, errors } = await runBulkSync(supabase, allConnections);
-        console.log(`Cleanup and resync: removed ${deleted} wrong emails; imported ${totalImported} across ${claimsSynced} claims`);
-        return new Response(JSON.stringify({
-          success: true,
-          deleted,
-          total_imported: totalImported,
-          claims_synced: claimsSynced,
-          errors: errors.length > 0 ? errors : undefined,
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return json({ success: true, deleted, total_imported: totalImported, claims_synced: claimsSynced, errors: errors.length > 0 ? errors : undefined });
       } catch (cleanupErr: any) {
         const msg = cleanupErr?.message ?? String(cleanupErr);
         console.error('cleanup_and_resync error:', msg, cleanupErr);
-        return new Response(JSON.stringify({ success: false, error: msg }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        return json({ success: false, error: msg });
       }
     }
 
     if (action === 'sync_all_claims') {
-      const { data: allConnections, error: connErr } = await supabase
-        .from('email_connections')
-        .select('*')
-        .eq('is_active', true);
-
-      if (connErr || !allConnections || allConnections.length === 0) {
-        return new Response(JSON.stringify({ success: true, message: 'No active connections', synced: 0 }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
+      const { data: allConnections, error: connErr } = await supabase.from('email_connections').select('*').eq('is_active', true);
+      if (connErr || !allConnections || allConnections.length === 0) return json({ success: true, message: 'No active connections', synced: 0 });
       const { totalImported, claimsSynced, errors } = await runBulkSync(supabase, allConnections);
-      console.log(`Bulk sync complete: ${totalImported} emails imported across ${claimsSynced} claims`);
-      return new Response(JSON.stringify({
-        success: true,
-        total_imported: totalImported,
-        claims_synced: claimsSynced,
-        errors: errors.length > 0 ? errors : undefined,
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return json({ success: true, total_imported: totalImported, claims_synced: claimsSynced, errors: errors.length > 0 ? errors : undefined });
     }
 
-    throw new Error(`Unknown action: ${action}`);
+    return json({ success: false, error: `Unknown action: ${action}` });
   } catch (error: any) {
     const message = error?.message || String(error);
     console.error('Outlook sync error:', message, error);
-    return new Response(JSON.stringify({ success: false, error: message }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return json({ success: false, error: message });
   }
-});
+}
