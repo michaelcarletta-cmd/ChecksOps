@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { parseIntent } from "../_shared/darwin-command-contracts.ts";
+import { encode as hexEncode } from "https://deno.land/std@0.168.0/encoding/hex.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,6 +11,65 @@ const corsHeaders = {
 /** Normalize phone to last 10 digits for matching */
 function last10(phone: string): string {
   return phone.replace(/\D/g, '').slice(-10);
+}
+
+/** Verify Telnyx webhook signature (ed25519) */
+async function verifyTelnyxSignature(req: Request, body: string): Promise<boolean> {
+  const signature = req.headers.get('telnyx-signature-ed25519');
+  const timestamp = req.headers.get('telnyx-timestamp');
+  
+  if (!signature || !timestamp) {
+    console.warn('Missing Telnyx signature headers');
+    return false;
+  }
+
+  // Verify timestamp is within 5 minutes to prevent replay attacks
+  const timestampMs = parseInt(timestamp, 10) * 1000;
+  const now = Date.now();
+  if (Math.abs(now - timestampMs) > 5 * 60 * 1000) {
+    console.warn('Telnyx timestamp outside tolerance window');
+    return false;
+  }
+
+  try {
+    // Telnyx uses ed25519 with their public key
+    // The signed payload is `timestamp|body`
+    const TELNYX_PUBLIC_KEY = '2b0c2228e7f6449ab0bc15a3100d46220f999abe255e56b7dc1e977cfea27f39';
+    
+    const signedPayload = `${timestamp}|${body}`;
+    const signatureBytes = hexDecode(signature);
+    const publicKeyBytes = hexDecode(TELNYX_PUBLIC_KEY);
+    
+    const key = await crypto.subtle.importKey(
+      'raw',
+      publicKeyBytes,
+      { name: 'Ed25519' },
+      false,
+      ['verify']
+    );
+    
+    const encoder = new TextEncoder();
+    const valid = await crypto.subtle.verify(
+      'Ed25519',
+      key,
+      signatureBytes,
+      encoder.encode(signedPayload)
+    );
+    
+    return valid;
+  } catch (err) {
+    console.error('Signature verification error:', err);
+    return false;
+  }
+}
+
+/** Decode hex string to Uint8Array */
+function hexDecode(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
 }
 
 /** Send an SMS reply via Telnyx */
@@ -35,18 +95,70 @@ async function sendReply(to: string, text: string) {
   return data;
 }
 
+/** Get claims scoped to user's org */
+async function getUserOrgClaims(supabase: any, userId: string, options: { search?: string; limit?: number; openOnly?: boolean } = {}) {
+  const { search, limit = 5, openOnly = false } = options;
+
+  // Get user's org_id
+  const { data: orgMember } = await supabase
+    .from('org_members')
+    .select('org_id')
+    .eq('user_id', userId)
+    .limit(1)
+    .single();
+
+  if (!orgMember?.org_id) return [];
+
+  // Get all user IDs in this org
+  const { data: orgMembers } = await supabase
+    .from('org_members')
+    .select('user_id')
+    .eq('org_id', orgMember.org_id);
+
+  const orgUserIds = (orgMembers || []).map((m: any) => m.user_id);
+  if (orgUserIds.length === 0) return [];
+
+  let query = supabase
+    .from('claims')
+    .select('id, claim_number, policyholder_name, status, updated_at')
+    .in('created_by', orgUserIds);
+
+  if (openOnly) {
+    query = query.eq('is_closed', false);
+  }
+
+  if (search) {
+    query = query.or(`claim_number.ilike.%${search}%,policyholder_name.ilike.%${search}%`);
+  }
+
+  query = query.order('updated_at', { ascending: false }).limit(limit);
+
+  const { data } = await query;
+  return data || [];
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
+    // ── Signature verification ──
+    const rawBody = await req.text();
+    const isValid = await verifyTelnyxSignature(req, rawBody);
+    if (!isValid) {
+      console.error('Invalid Telnyx webhook signature — rejecting request');
+      return new Response(JSON.stringify({ error: 'Invalid signature' }), {
+        status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const payload = await req.json();
-    console.log('Telnyx webhook received:', JSON.stringify(payload).slice(0, 500));
+    const payload = JSON.parse(rawBody);
+    console.log('Telnyx webhook received (verified):', JSON.stringify(payload).slice(0, 500));
 
     const eventType = payload.data?.event_type;
     const messagePayload = payload.data?.payload;
@@ -103,7 +215,6 @@ serve(async (req) => {
 
     // Check for pending verification code
     if (phoneLink && !phoneLink.is_verified) {
-      // Check if message is a verification code
       const codeMatch = messageBody.match(/^\d{6}$/);
       if (codeMatch) {
         const { data: linkRow } = await supabase
@@ -134,7 +245,6 @@ serve(async (req) => {
 
     // ── 2. If no verified user, fall back to claim matching (legacy behavior) ──
     if (!userId) {
-      // Legacy: match by claim phone numbers
       const { data: claims } = await supabase
         .from('claims')
         .select('id, policyholder_phone, adjuster_phone')
@@ -149,7 +259,6 @@ serve(async (req) => {
         claimId = adjusters?.[0]?.claim_id;
       }
 
-      // Store as regular inbound SMS (not Darwin command)
       if (claimId) {
         await supabase.from('sms_messages').insert({
           claim_id: claimId, from_number: fromNumber, to_number: toNumber || '',
@@ -166,7 +275,6 @@ serve(async (req) => {
         });
       }
 
-      // Log to Darwin activity as unverified
       await supabase.from('darwin_sms_activity').insert({
         phone_number: fromNumber, claim_id: claimId || null,
         direction: 'inbound', message_text: messageBody,
@@ -208,24 +316,19 @@ serve(async (req) => {
         .single();
       convState = newState;
     } else if (new Date(convState.expires_at) < new Date()) {
-      // Expired — reset
       await supabase.from('sms_conversation_state')
         .update({ active_claim_id: null, expires_at: new Date(Date.now() + 2 * 3600000).toISOString() })
         .eq('id', convState.id);
       convState.active_claim_id = null;
     }
 
-    // ── 5. Handle "switch" / "claims" commands ──
+    // ── 5. Handle "switch" / "claims" commands (org-scoped) ──
     const switchMatch = messageBody.match(/^switch\s+(.+)/i);
     if (switchMatch) {
       const searchTerm = switchMatch[1].trim();
-      const { data: matchedClaims } = await supabase
-        .from('claims')
-        .select('id, claim_number, policyholder_name')
-        .or(`claim_number.ilike.%${searchTerm}%,policyholder_name.ilike.%${searchTerm}%`)
-        .limit(1);
+      const matchedClaims = await getUserOrgClaims(supabase, userId, { search: searchTerm, limit: 1 });
 
-      if (matchedClaims && matchedClaims.length > 0) {
+      if (matchedClaims.length > 0) {
         const c = matchedClaims[0];
         await supabase.from('sms_conversation_state')
           .update({ active_claim_id: c.id, expires_at: new Date(Date.now() + 2 * 3600000).toISOString() })
@@ -250,14 +353,10 @@ serve(async (req) => {
     }
 
     if (messageBody.toUpperCase() === 'CLAIMS') {
-      const { data: recentClaims } = await supabase
-        .from('claims')
-        .select('claim_number, policyholder_name, status')
-        .order('updated_at', { ascending: false })
-        .limit(5);
+      const recentClaims = await getUserOrgClaims(supabase, userId, { limit: 5 });
       
-      if (recentClaims && recentClaims.length > 0) {
-        const list = recentClaims.map((c, i) => `${i + 1}. ${c.claim_number} — ${c.policyholder_name} (${c.status})`).join('\n');
+      if (recentClaims.length > 0) {
+        const list = recentClaims.map((c: any, i: number) => `${i + 1}. ${c.claim_number} — ${c.policyholder_name} (${c.status})`).join('\n');
         const reply = `Recent claims:\n${list}\n\nReply "Switch [claim #]" to select one.`;
         await sendReply(fromNumber, reply);
       } else {
@@ -268,22 +367,14 @@ serve(async (req) => {
       });
     }
 
-    // ── 6. Resolve active claim context ──
+    // ── 6. Resolve active claim context (org-scoped) ──
     let activeClaimId = convState?.active_claim_id;
     if (!activeClaimId) {
-      // Auto-resolve: most recently updated claim
-      const { data: lastClaim } = await supabase
-        .from('claims')
-        .select('id, claim_number')
-        .eq('is_closed', false)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (lastClaim) {
-        activeClaimId = lastClaim.id;
+      const recentOrgClaims = await getUserOrgClaims(supabase, userId, { limit: 1, openOnly: true });
+      if (recentOrgClaims.length > 0) {
+        activeClaimId = recentOrgClaims[0].id;
         await supabase.from('sms_conversation_state')
-          .update({ active_claim_id: lastClaim.id, expires_at: new Date(Date.now() + 2 * 3600000).toISOString() })
+          .update({ active_claim_id: activeClaimId, expires_at: new Date(Date.now() + 2 * 3600000).toISOString() })
           .eq('id', convState!.id);
       }
     }
@@ -291,7 +382,6 @@ serve(async (req) => {
     // ── 7. Parse intent and route to Darwin ──
     const intent = parseIntent(messageBody);
 
-    // Log activity entry
     const { data: activityRow } = await supabase.from('darwin_sms_activity').insert({
       user_id: userId, phone_number: fromNumber, claim_id: activeClaimId || null,
       direction: 'inbound', message_text: messageBody,
@@ -299,7 +389,6 @@ serve(async (req) => {
     }).select('id').single();
 
     if (intent === 'unknown') {
-      // For unknown intents, try a generic response
       const reply = activeClaimId
         ? `I didn't understand that command. Reply HELP for options. Active claim context is set.`
         : `I didn't understand that command. Reply HELP for options, or "Switch [claim #]" to select a claim.`;
@@ -327,7 +416,7 @@ serve(async (req) => {
       });
     }
 
-    // Route to darwin-command for execution
+    // Route to darwin-command
     try {
       const cmdResp = await fetch(`${SUPABASE_URL}/functions/v1/darwin-command`, {
         method: 'POST',
@@ -344,7 +433,6 @@ serve(async (req) => {
       });
       const cmdResult = await cmdResp.json();
       
-      // Build a concise SMS-friendly reply
       let reply: string;
       if (cmdResult.error) {
         reply = `⚠️ ${cmdResult.error}`;
@@ -358,14 +446,12 @@ serve(async (req) => {
 
       await sendReply(fromNumber, reply);
 
-      // Update activity log
       if (activityRow) {
         await supabase.from('darwin_sms_activity')
           .update({ status: 'completed', darwin_response: reply, claim_id: activeClaimId })
           .eq('id', activityRow.id);
       }
 
-      // Log outbound reply
       await supabase.from('darwin_sms_activity').insert({
         user_id: userId, phone_number: fromNumber, claim_id: activeClaimId,
         direction: 'outbound', message_text: reply,
