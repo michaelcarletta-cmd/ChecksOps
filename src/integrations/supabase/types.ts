@@ -4280,6 +4280,57 @@ export type Database = {
         }
         Relationships: []
       }
+      escalation_trigger_rules: {
+        Row: {
+          condition_logic: Json
+          created_at: string
+          escalation_strength: string
+          id: string
+          is_active: boolean
+          priority_order: number
+          recommended_action: string
+          recommended_artifact: string | null
+          regulation_citation: string
+          regulation_summary: string
+          state_code: string
+          trigger_category: string
+          trigger_name: string
+          updated_at: string
+        }
+        Insert: {
+          condition_logic?: Json
+          created_at?: string
+          escalation_strength: string
+          id?: string
+          is_active?: boolean
+          priority_order?: number
+          recommended_action: string
+          recommended_artifact?: string | null
+          regulation_citation: string
+          regulation_summary: string
+          state_code: string
+          trigger_category: string
+          trigger_name: string
+          updated_at?: string
+        }
+        Update: {
+          condition_logic?: Json
+          created_at?: string
+          escalation_strength?: string
+          id?: string
+          is_active?: boolean
+          priority_order?: number
+          recommended_action?: string
+          recommended_artifact?: string | null
+          regulation_citation?: string
+          regulation_summary?: string
+          state_code?: string
+          trigger_category?: string
+          trigger_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       evidence_effectiveness: {
         Row: {
           carrier_response: string | null

@@ -2854,7 +2854,101 @@ function buildWhatWorked(card: any): string {
   return tactics.length > 0 ? tactics.join(' | ') : 'outcome data not yet captured';
 }
 
-// === PHASE 3: Playbook retrieval for Darwin consultation ===
+// === PHASE 4: Escalation Trigger Evaluation for PA/NJ ===
+async function getEscalationContext(
+  supabase: any, claim: any, claimId: string
+): Promise<string> {
+  try {
+    // Detect state from address
+    const address = (claim?.policyholder_address || '').toUpperCase();
+    let stateCode: string | null = null;
+    if (address.includes('PA') || address.includes('PENNSYLVANIA')) stateCode = 'PA';
+    else if (address.includes('NJ') || address.includes('NEW JERSEY')) stateCode = 'NJ';
+    
+    if (!stateCode) return '';
+
+    // Load rules for this state
+    const { data: rules } = await supabase
+      .from('escalation_trigger_rules')
+      .select('*')
+      .eq('state_code', stateCode)
+      .eq('is_active', true)
+      .order('priority_order');
+
+    if (!rules || rules.length === 0) return '';
+
+    // Load claim deadlines
+    const [deadlinesRes, carrierDeadlinesRes] = await Promise.all([
+      supabase.from('claim_deadlines').select('deadline_type, status').eq('claim_id', claimId),
+      supabase.from('claim_carrier_deadlines').select('deadline_type, status, days_overdue, bad_faith_potential').eq('claim_id', claimId),
+    ]);
+
+    const deadlines = deadlinesRes.data || [];
+    const carrierDeadlines = carrierDeadlinesRes.data || [];
+    const missedCount = carrierDeadlines.filter((d: any) => d.status === 'overdue' || d.status === 'missed').length;
+    const hasCoverageDetermination = carrierDeadlines.some((d: any) => d.deadline_type === 'coverage_determination' && d.status === 'met');
+    
+    const createdAt = claim?.created_at ? new Date(claim.created_at) : new Date();
+    const daysSinceFiled = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+    const coverageAccepted = claim?.status === 'Coverage Accepted' || claim?.status === 'Supplement Submitted';
+    const scopeDisputed = claim?.status === 'Supplement Submitted' || claim?.status === 'Under Review';
+
+    // Simple rule evaluation
+    const firedRules: any[] = [];
+    for (const rule of rules) {
+      const c = rule.condition_logic || {};
+      let fires = true;
+
+      if (c.days_since_claim_filed_gt && daysSinceFiled <= c.days_since_claim_filed_gt) fires = false;
+      if (c.no_coverage_determination && hasCoverageDetermination) fires = false;
+      if (c.coverage_accepted && !coverageAccepted) fires = false;
+      if (c.scope_disputed && !scopeDisputed) fires = false;
+      if (c.missed_deadlines_gt && missedCount <= c.missed_deadlines_gt) fires = false;
+
+      if (c.deadline_type && c.deadline_status_not) {
+        const allDl = [...deadlines, ...carrierDeadlines];
+        const matching = allDl.filter((d: any) => d.deadline_type === c.deadline_type);
+        if (matching.some((d: any) => d.status === c.deadline_status_not)) fires = false;
+      }
+
+      if (fires) firedRules.push(rule);
+    }
+
+    if (firedRules.length === 0) return '';
+
+    // Build context for injection
+    let context = '\n\n=== REGULATORY LEVERAGE CONTEXT (' + stateCode + ') ===\n';
+    context += 'The following escalation triggers have fired for this claim. Use them to inform your strategic recommendations.\n';
+    context += 'RULES:\n';
+    context += '- Cite the statute short reference + plain-language summary when relevant.\n';
+    context += '- Recommend procedural next steps, never threats or legal advice.\n';
+    context += '- Label escalation strength explicitly (soft/formal/regulatory) so user knows the weight.\n';
+    context += '- Maintain strategic, controlled tone — never aggressive.\n\n';
+
+    const strengthOrder: Record<string, number> = { regulatory_leverage: 0, formal_leverage: 1, soft_leverage: 2 };
+    firedRules.sort((a: any, b: any) => (strengthOrder[a.escalation_strength] ?? 3) - (strengthOrder[b.escalation_strength] ?? 3));
+
+    for (const rule of firedRules) {
+      context += `[${rule.escalation_strength.toUpperCase().replace('_', ' ')}] ${rule.trigger_name}\n`;
+      context += `  Citation: ${rule.regulation_citation}\n`;
+      context += `  Summary: ${rule.regulation_summary}\n`;
+      context += `  Recommended Action: ${rule.recommended_action}\n`;
+      if (rule.recommended_artifact) {
+        context += `  Artifact: ${rule.recommended_artifact}\n`;
+      }
+      context += '\n';
+    }
+
+    context += '=== END REGULATORY LEVERAGE CONTEXT ===\n';
+    console.log(`[Escalation] Injected ${firedRules.length} fired triggers for ${stateCode}`);
+    return context;
+  } catch (err) {
+    console.error('[Escalation] Evaluation error:', err);
+    return '';
+  }
+}
+
+
 async function getCarrierPlaybookContext(
   supabase: any, claim: any
 ): Promise<string> {
@@ -3540,19 +3634,22 @@ If the document is ambiguous about the type of loss, ask the user to clarify rat
     
     // Fire cross-claim search for claim mode OR when a document is uploaded (even in general chat)
     const hasUploadedDoc = !!(resolvedDocContent && resolvedDocContent.trim());
+    let escalationContext = "";
     if (!isOperationalRequest && (claimId || hasUploadedDoc)) {
       try {
         const searchQuery = hasUploadedDoc 
           ? `${question || ''} ${resolvedDocContent.substring(0, 2000)}`.trim()
           : question;
-        const [ccResult, pbResult] = await Promise.all([
+        const [ccResult, pbResult, escResult] = await Promise.all([
           searchCrossClaimPrecedents(supabase, searchQuery, claimId || '', claim),
           claim ? getCarrierPlaybookContext(supabase, claim) : Promise.resolve(''),
+          claim && claimId ? getEscalationContext(supabase, claim, claimId) : Promise.resolve(''),
         ]);
         crossClaimContext = ccResult;
         playbookContext = pbResult;
+        escalationContext = escResult;
       } catch (ccErr) {
-        console.error('[CrossClaim/Playbook] Search error:', ccErr);
+        console.error('[CrossClaim/Playbook/Escalation] Search error:', ccErr);
       }
     }
     
@@ -4042,11 +4139,18 @@ Be relentlessly focused on advancing the claim toward a fair, full, and fast set
         content: playbookContext,
       });
     }
-    
+
+    // If we have escalation context, add it
+    if (escalationContext) {
+      conversationMessages.push({
+        role: "assistant",
+        content: escalationContext,
+      });
+    }
+
     if (messages && messages.length > 0 && !reportType) {
       conversationMessages.push(...messages);
     }
-    
     conversationMessages.push({ 
       role: "user", 
       content: reportQuestion 
