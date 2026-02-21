@@ -31,6 +31,7 @@ serve(async (req) => {
 
     const intent = parseIntent(text);
 
+    // ── Financial QA ──
     if (intent === "financial_qa") {
       const finResp = await fetch(`${supabaseUrl}/functions/v1/darwin-financials`, {
         method: "POST",
@@ -62,12 +63,70 @@ serve(async (req) => {
       );
     }
 
+    // ── Create Task (web UI callers) ──
+    if (intent === "create_task") {
+      if (!claimId) {
+        return new Response(
+          JSON.stringify({ intent, error: "This command requires a claim context. Open a claim and try again." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      // Parse title from text (strip prefixes)
+      let title = text
+        .replace(/^(task[:\s]+|create\s+task[:\s]*|add\s+task[:\s]*|remind\s+me\s+(to\s+)?)/i, '')
+        .trim();
+      if (!title) title = "Untitled task";
+
+      // Simple due date: default tomorrow
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + 1);
+
+      const { data: task, error: taskErr } = await supabase.from("tasks").insert({
+        claim_id: claimId,
+        title,
+        due_date: dueDate.toISOString().split('T')[0],
+        status: "pending",
+        created_by: createdBy || null,
+      }).select("id, title, due_date").single();
+
+      if (taskErr) {
+        return new Response(
+          JSON.stringify({ intent, error: taskErr.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          intent,
+          result: `Task created: "${task.title}" due ${task.due_date}`,
+          taskId: task.id,
+          message: "Task created successfully.",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── Send Client Email (web UI callers) ──
+    if (intent === "send_client_email" || intent === "send_client_sms") {
+      if (!claimId) {
+        return new Response(
+          JSON.stringify({ intent, error: "This command requires a claim context. Open a claim and try again." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      return new Response(
+        JSON.stringify({ intent, message: "Client messaging via the command bar is coming soon. Use SMS commands for now." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     if (intent === "unknown" || !claimId) {
       if (intent === "unknown") {
         return new Response(
           JSON.stringify({
             intent: "unknown",
-            message: "I didn’t recognize that command. Try: “Run an analysis on this claim”, “Turn this into an operating manual”, “Write a case study, remove identifying details”, “Turn the case study into a blog and social posts”, or ask a financial question like “What’s been paid and what hasn’t?”",
+            message: "I didn't recognize that command. Try: \"Run an analysis on this claim\", \"Task: call adjuster tomorrow\", \"Text client: we're scheduled Tuesday\", \"Email client: update on your claim\", or ask a financial question like \"What's been paid?\"",
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
