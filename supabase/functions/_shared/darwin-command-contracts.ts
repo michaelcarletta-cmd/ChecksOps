@@ -9,7 +9,8 @@ export type DarwinIntent =
   | "marketing"
   | "financial_qa"
   | "create_task"
-  | "send_email"
+  | "send_client_sms"
+  | "send_client_email"
   | "unknown";
 
 export const INTENT_PATTERNS: Array<{ intent: DarwinIntent; pattern: RegExp }> = [
@@ -18,8 +19,9 @@ export const INTENT_PATTERNS: Array<{ intent: DarwinIntent; pattern: RegExp }> =
   { intent: "case_study", pattern: /case\s+study|write\s+a\s+case\s+study|redact|remove\s+identifying/i },
   { intent: "marketing", pattern: /blog|facebook|instagram|tiktok|marketing\s+assets|turn\s+(the\s+)?case\s+study\s+into/i },
   { intent: "financial_qa", pattern: /what'?s\s+been\s+paid|depreciation|line\s+item|contents\s+vs\s+ale|dwelling\s+coverage|how\s+much\s+(is\s+)?(paid|outstanding)/i },
-  { intent: "create_task", pattern: /create\s+task|add\s+task|remind\s+me/i },
-  { intent: "send_email", pattern: /send\s+email|draft\s+email/i },
+  { intent: "create_task", pattern: /^task[:\s]|create\s+task|add\s+task|remind\s+me|create\s+task\s+for/i },
+  { intent: "send_client_sms", pattern: /text\s+client|send\s+sms\s+(client|update|to)|sms\s+(client|update)/i },
+  { intent: "send_client_email", pattern: /email\s+client|send\s+email\s*(client|update|to)?|email\s+update/i },
 ];
 
 export function parseIntent(text: string): DarwinIntent {

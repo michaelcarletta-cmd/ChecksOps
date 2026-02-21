@@ -6,11 +6,16 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Phone, CheckCircle, Loader2, Send, ShieldCheck, Trash2 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { Phone, CheckCircle, Loader2, Send, ShieldCheck, Trash2, Settings2 } from "lucide-react";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 
 export function PhoneVerificationSettings() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [phoneNumber, setPhoneNumber] = useState("");
   const [step, setStep] = useState<"input" | "verify">("input");
@@ -24,6 +29,71 @@ export function PhoneVerificationSettings() {
       });
       if (error) throw error;
       return data?.link as { phone_number: string; is_verified: boolean; verified_at: string } | null;
+    },
+  });
+
+  // Check if user is admin for send-mode toggle
+  const { data: isAdmin } = useQuery({
+    queryKey: ["user-is-admin", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return false;
+      const { data } = await supabase
+        .from("user_roles")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("role", "admin")
+        .limit(1)
+        .single();
+      return !!data;
+    },
+    enabled: !!user?.id,
+  });
+
+  // Get org send mode setting
+  const { data: smsSettings } = useQuery({
+    queryKey: ["darwin-sms-settings"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("darwin_sms_settings")
+        .select("*")
+        .limit(1)
+        .single();
+      return data as { id: string; send_mode: string; auto_send_roles: string[] } | null;
+    },
+    enabled: !!isAdmin,
+  });
+
+  const toggleSendModeMutation = useMutation({
+    mutationFn: async (newMode: string) => {
+      if (!user?.id) throw new Error("Not authenticated");
+      // Get org_id
+      const { data: orgMember } = await supabase
+        .from("org_members")
+        .select("org_id")
+        .eq("user_id", user.id)
+        .limit(1)
+        .single();
+      if (!orgMember?.org_id) throw new Error("No org found");
+
+      if (smsSettings?.id) {
+        const { error } = await supabase
+          .from("darwin_sms_settings")
+          .update({ send_mode: newMode })
+          .eq("id", smsSettings.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("darwin_sms_settings")
+          .insert({ org_id: orgMember.org_id, send_mode: newMode });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["darwin-sms-settings"] });
+      toast({ title: "Send mode updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to update", description: err.message, variant: "destructive" });
     },
   });
 
@@ -172,6 +242,41 @@ export function PhoneVerificationSettings() {
               </Button>
             </div>
           </div>
+        )}
+
+        {/* Admin-only: Send Mode Toggle */}
+        {isAdmin && (
+          <>
+            <Separator />
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Settings2 className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-sm font-medium text-foreground">SMS Send Mode</Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Controls whether Darwin SMS commands that send messages to clients require confirmation first.
+              </p>
+              <div className="flex items-center gap-3">
+                <Switch
+                  checked={(smsSettings?.send_mode || 'draft') === 'auto_send'}
+                  onCheckedChange={(checked) =>
+                    toggleSendModeMutation.mutate(checked ? 'auto_send' : 'draft')
+                  }
+                  disabled={toggleSendModeMutation.isPending}
+                />
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    {(smsSettings?.send_mode || 'draft') === 'auto_send' ? 'Auto-send' : 'Draft mode'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {(smsSettings?.send_mode || 'draft') === 'auto_send'
+                      ? 'Admins can send client messages immediately without confirmation'
+                      : 'All client messages require SEND confirmation via SMS'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </>
         )}
       </CardContent>
     </Card>

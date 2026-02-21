@@ -3992,6 +3992,9 @@ export type Database = {
       }
       darwin_sms_activity: {
         Row: {
+          action_type: string | null
+          approved_at: string | null
+          approved_by: string | null
           claim_id: string | null
           created_at: string
           darwin_response: string | null
@@ -4000,12 +4003,17 @@ export type Database = {
           id: string
           message_text: string
           metadata: Json | null
+          needs_approval: boolean | null
           parsed_intent: string | null
           phone_number: string
+          result_id: string | null
           status: string
           user_id: string | null
         }
         Insert: {
+          action_type?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
           claim_id?: string | null
           created_at?: string
           darwin_response?: string | null
@@ -4014,12 +4022,17 @@ export type Database = {
           id?: string
           message_text: string
           metadata?: Json | null
+          needs_approval?: boolean | null
           parsed_intent?: string | null
           phone_number: string
+          result_id?: string | null
           status?: string
           user_id?: string | null
         }
         Update: {
+          action_type?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
           claim_id?: string | null
           created_at?: string
           darwin_response?: string | null
@@ -4028,8 +4041,10 @@ export type Database = {
           id?: string
           message_text?: string
           metadata?: Json | null
+          needs_approval?: boolean | null
           parsed_intent?: string | null
           phone_number?: string
+          result_id?: string | null
           status?: string
           user_id?: string | null
         }
@@ -4042,6 +4057,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      darwin_sms_settings: {
+        Row: {
+          auto_send_roles: string[] | null
+          created_at: string
+          id: string
+          org_id: string
+          send_mode: string
+          updated_at: string
+        }
+        Insert: {
+          auto_send_roles?: string[] | null
+          created_at?: string
+          id?: string
+          org_id: string
+          send_mode?: string
+          updated_at?: string
+        }
+        Update: {
+          auto_send_roles?: string[] | null
+          created_at?: string
+          id?: string
+          org_id?: string
+          send_mode?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       document_analysis_results: {
         Row: {
@@ -5929,6 +5971,7 @@ export type Database = {
           id: string
           last_command: string | null
           last_response: string | null
+          pending_action: Json | null
           phone_number: string
           updated_at: string
           user_id: string
@@ -5940,6 +5983,7 @@ export type Database = {
           id?: string
           last_command?: string | null
           last_response?: string | null
+          pending_action?: Json | null
           phone_number: string
           updated_at?: string
           user_id: string
@@ -5951,6 +5995,7 @@ export type Database = {
           id?: string
           last_command?: string | null
           last_response?: string | null
+          pending_action?: Json | null
           phone_number?: string
           updated_at?: string
           user_id?: string
