@@ -110,9 +110,24 @@ async function getUserOrgClaims(supabase: any, userId: string, options: { search
     .select('id, claim_number, policyholder_name, policyholder_phone, policyholder_email, status, updated_at')
     .or(`org_id.eq.${orgMember.org_id},org_id.is.null`);
   if (openOnly) query = query.eq('is_closed', false);
-  if (search) query = query.or(`claim_number.ilike.%${search}%,policyholder_name.ilike.%${search}%`);
+  if (search) {
+    // Strip parenthesized suffixes like "(Test)" and split into meaningful words for broader matching
+    const cleaned = search.replace(/\(.*?\)/g, '').trim();
+    const words = cleaned.split(/\s+/).filter((w: string) => w.length >= 2);
+    if (words.length > 0) {
+      // Build an OR filter: each word must appear in claim_number OR policyholder_name OR adjuster_name
+      const orClauses = words.map((w: string) =>
+        `claim_number.ilike.%${w}%,policyholder_name.ilike.%${w}%,adjuster_name.ilike.%${w}%`
+      ).join(',');
+      query = query.or(orClauses);
+    } else {
+      // Fallback: use the full search string
+      query = query.or(`claim_number.ilike.%${search}%,policyholder_name.ilike.%${search}%`);
+    }
+  }
   query = query.order('updated_at', { ascending: false }).limit(limit);
-  const { data } = await query;
+  const { data, error } = await query;
+  if (error) console.error('getUserOrgClaims error:', error.message);
   return data || [];
 }
 
