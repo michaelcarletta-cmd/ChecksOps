@@ -128,8 +128,6 @@ async function fetchGraphEmails(accessToken: string, maxPages = 10): Promise<any
   let url: string | null =
     `https://graph.microsoft.com/v1.0/me/messages?` +
     `$filter=receivedDateTime ge ${thirtyDaysAgo}` +
-
-
     `&$select=from,toRecipients,subject,receivedDateTime,body,bodyPreview,internetMessageId` +
     `&$top=250&$orderby=receivedDateTime desc&$count=false`;
 
@@ -153,41 +151,13 @@ async function fetchGraphEmails(accessToken: string, maxPages = 10): Promise<any
       throw new Error(`Graph API error: ${detail || response.status}`);
     }
 
-
-    `&$select=from,toRecipients,subject,receivedDateTime,bodyPreview,internetMessageId` +
-    `&$top=100&$orderby=receivedDateTime desc`,
-    { headers: { Authorization: `Bearer ${accessToken}` } },
-  );
-
-    `&$select=from,toRecipients,subject,receivedDateTime,body,bodyPreview,internetMessageId` +
-    `&$top=250&$orderby=receivedDateTime desc&$count=false`;
-(Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
-
-  if (!response.ok) {
-    const errText = await response.text();
-    let userMessage = `Graph API error (${response.status}).`;
-    try {
-      const errJson = JSON.parse(errText);
-      const msg = errJson?.error?.message ?? errJson?.message;
-      if (msg && msg.length < 180) userMessage = msg;
-      else if (response.status === 401) userMessage = 'Outlook access expired or denied. Please reconnect your account in Settings.';
-    } catch {
-      if (errText.length < 150) userMessage = errText;
-    }
-
-    throw new Error(userMessage);
-
-
-(Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
     const data = await response.json();
     const emails = (data.value || []).map((msg: any) => {
-      // Extract full body text – prefer plain text, strip HTML tags if HTML
       let fullBody = '';
       if (msg.body?.content) {
         if (msg.body.contentType === 'text') {
           fullBody = msg.body.content;
         } else {
-          // Strip HTML tags to get plain text
           fullBody = msg.body.content
             .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
             .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
@@ -222,39 +192,11 @@ async function fetchGraphEmails(accessToken: string, maxPages = 10): Promise<any
     allEmails.push(...emails);
     url = data['@odata.nextLink'] || null;
     page++;
-
-(Outlook email sync: claim/subject matching, cleanup, 200 responses)
-=======
-
-(Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
-    `&$select=from,toRecipients,subject,receivedDateTime,bodyPreview,internetMessageId` +
-    `&$top=100&$orderby=receivedDateTime desc`,
-    { headers: { Authorization: `Bearer ${accessToken}` } },
-  );
-
-  if (!response.ok) {
-    const errText = await response.text();
-    let userMessage = `Graph API error (${response.status}).`;
-    try {
-      const errJson = JSON.parse(errText);
-      const msg = errJson?.error?.message ?? errJson?.message;
-      if (msg && msg.length < 180) userMessage = msg;
-      else if (response.status === 401) userMessage = 'Outlook access expired or denied. Please reconnect your account in Settings.';
-    } catch {
-      if (errText.length < 150) userMessage = errText;
-    }
-    throw new Error(userMessage);
-
-(Outlook email sync: claim/subject matching, cleanup, 200 responses)
   }
-
-  
-(Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
 
   console.log(`Fetched ${allEmails.length} emails across ${page} page(s)`);
   return allEmails;
 }
-
 
 
 // --------------- Claim matching ---------------
