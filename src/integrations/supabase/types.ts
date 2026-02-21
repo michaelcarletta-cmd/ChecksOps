@@ -3800,6 +3800,102 @@ export type Database = {
           },
         ]
       }
+      document_analysis_results: {
+        Row: {
+          carrier_name: string | null
+          carrier_position: string | null
+          claim_id: string
+          claim_number_detected: string | null
+          coverage_impact: string | null
+          created_at: string
+          created_by: string | null
+          denial_rationales: string[] | null
+          document_date: string | null
+          document_type: string
+          evidence_gaps: Json | null
+          evidence_pack_type: string | null
+          file_id: string | null
+          file_name: string
+          full_analysis: string | null
+          id: string
+          loss_type: string | null
+          next_step: string | null
+          precedent_claim_ids: string[] | null
+          precedent_summary: Json | null
+          source_mode: string | null
+          state_code: string | null
+          trade: string | null
+          updated_at: string
+        }
+        Insert: {
+          carrier_name?: string | null
+          carrier_position?: string | null
+          claim_id: string
+          claim_number_detected?: string | null
+          coverage_impact?: string | null
+          created_at?: string
+          created_by?: string | null
+          denial_rationales?: string[] | null
+          document_date?: string | null
+          document_type: string
+          evidence_gaps?: Json | null
+          evidence_pack_type?: string | null
+          file_id?: string | null
+          file_name: string
+          full_analysis?: string | null
+          id?: string
+          loss_type?: string | null
+          next_step?: string | null
+          precedent_claim_ids?: string[] | null
+          precedent_summary?: Json | null
+          source_mode?: string | null
+          state_code?: string | null
+          trade?: string | null
+          updated_at?: string
+        }
+        Update: {
+          carrier_name?: string | null
+          carrier_position?: string | null
+          claim_id?: string
+          claim_number_detected?: string | null
+          coverage_impact?: string | null
+          created_at?: string
+          created_by?: string | null
+          denial_rationales?: string[] | null
+          document_date?: string | null
+          document_type?: string
+          evidence_gaps?: Json | null
+          evidence_pack_type?: string | null
+          file_id?: string | null
+          file_name?: string
+          full_analysis?: string | null
+          id?: string
+          loss_type?: string | null
+          next_step?: string | null
+          precedent_claim_ids?: string[] | null
+          precedent_summary?: Json | null
+          source_mode?: string | null
+          state_code?: string | null
+          trade?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_analysis_results_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_analysis_results_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "claim_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       document_templates: {
         Row: {
           category: string | null

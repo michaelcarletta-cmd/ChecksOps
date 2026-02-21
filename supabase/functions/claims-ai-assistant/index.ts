@@ -3031,6 +3031,43 @@ async function searchCrossClaimPrecedents(
   }
 }
 
+// === PHASE 2.5: Persist document analysis to document_analysis_results ===
+async function persistDocumentAnalysis(
+  supabase: any, claimId: string | null, documentName: string | undefined,
+  fullAnalysis: string, crossClaimContext: string, sourceMode: string, claim: any
+) {
+  try {
+    if (!claimId) return;
+    const docType = (() => { const f = fullAnalysis.substring(0,500).toLowerCase(); if(/denial|denied/.test(f)) return 'denial'; if(/estimate|xactimate|rcv/.test(f)) return 'estimate'; if(/engineer/.test(f)) return 'engineering_report'; if(/policy|declaration/.test(f)) return 'policy'; return 'correspondence'; })();
+    const carrierPos = (() => { const l = fullAnalysis.toLowerCase(); if(/carrier.*(deny|denial)/i.test(l)) return 'deny'; if(/carrier.*(limit)/i.test(l)) return 'limit'; if(/scope.*(reduc)/i.test(l)) return 'scope_reduce'; return null; })();
+    const rationales: string[] = [];
+    if(/no direct physical loss/i.test(fullAnalysis)) rationales.push('no direct physical loss');
+    if(/wear (and|&) tear|deterioration/i.test(fullAnalysis)) rationales.push('wear and tear / deterioration');
+    if(/repairable.*(not|rather).*(replac)/i.test(fullAnalysis)) rationales.push('repairable not replace');
+    if(/pre[- ]?existing/i.test(fullAnalysis)) rationales.push('pre-existing damage');
+    const packType = rationales.includes('no direct physical loss') ? 'no_direct_physical_loss' : rationales.includes('wear and tear / deterioration') ? 'wear_and_tear' : rationales.includes('repairable not replace') ? 'repairable_not_replace' : rationales.includes('pre-existing damage') ? 'pre_existing' : null;
+    const nextStepMatch = fullAnalysis.match(/➡\s*(?:NEXT STEP|RECOMMENDED NEXT STEP)[:\s]*\n?([\s\S]*?)(?:\n\n|$)/i);
+    const nextStep = nextStepMatch ? nextStepMatch[1].trim().substring(0,500) : null;
+    const covIdx = fullAnalysis.indexOf('⚖ COVERAGE-FIRST ANALYSIS');
+    const covImpact = covIdx > -1 ? fullAnalysis.substring(covIdx, covIdx + 1000).split('📊')[0].trim().substring(0,1000) : null;
+    const gaps: any[] = [];
+    const checkMatch = fullAnalysis.match(/🧾[\s\S]*?(?=➡|$)/);
+    if (checkMatch) { for (const line of checkMatch[0].split('\n')) { const u = line.match(/□\s*(.+)/); if(u) gaps.push({gap:u[1].trim(),evidence_needed:u[1].trim(),priority:/annotated photo|test square|storm report|moisture map/i.test(u[1])?'HIGH':'MEDIUM'}); }}
+    const precedents: any[] = [];
+    if (crossClaimContext) { for (const m of crossClaimContext.matchAll(/Claim: ([^\s|]+)\s*\|\s*Carrier: ([^\s|]+)/g)) { if(m[1]!=='Unknown') precedents.push({claim_number:m[1],carrier:m[2]}); }}
+    const stateMatch = (claim?.policyholder_address||'').match(/\b([A-Z]{2})\b\s*\d{5}/);
+    await supabase.from('document_analysis_results').insert({
+      claim_id: claimId, file_name: documentName||'Unknown', document_type: docType,
+      carrier_name: claim?.insurance_company||null, state_code: stateMatch?stateMatch[1]:null,
+      loss_type: claim?.loss_type||null, carrier_position: carrierPos, denial_rationales: rationales,
+      coverage_impact: covImpact, evidence_gaps: gaps, evidence_pack_type: packType,
+      next_step: nextStep, full_analysis: fullAnalysis, precedent_claim_ids: [],
+      precedent_summary: precedents, source_mode: sourceMode,
+    });
+    console.log(`[DocAnalysis] Saved analysis for "${documentName}" on claim ${claimId}`);
+  } catch (err) { console.error('[DocAnalysis] Error:', err); }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -3290,22 +3327,62 @@ GENERAL DOCUMENT ANALYSIS:
 
       const structuredInsightFormat = `
 
-YOU MUST RESPOND WITH THIS EXACT STRUCTURED FORMAT:
+YOU MUST RESPOND WITH THIS EXACT STRUCTURED FORMAT — NO EXCEPTIONS:
 
 📄 WHAT THIS DOCUMENT IS
-(Document type, sender/author, date issued, stated purpose)
+(Document type, sender/author, date issued, carrier, claim #, state, trade, loss type)
 
-⚖ COVERAGE IMPACT
-(How does this affect coverage position? What policy provisions apply? What does this mean for the claim?)
+🎯 CARRIER POSITION & CLAIM IMPACT
+(What is the carrier trying to do: deny / limit scope / reduce payment / delay? Quote the EXACT denial rationale(s) detected. If multiple, label each.)
 
-🔎 GAPS / WEAKNESSES
-(What is wrong with the carrier's logic? What evidence is missing from their position? What procedural defects exist? What technical flaws can be challenged?)
+⚖ COVERAGE-FIRST ANALYSIS
+(Coverage basis to establish or attack — use POLICY LANGUAGE FIRST, then state regulations. Do NOT use manufacturer specs as coverage arguments. Manufacturer specs are only relevant as repair-method feasibility support.)
 
-🧾 EVIDENCE NEEDED
-(What specific documents, photos, expert opinions, or data points would strengthen the policyholder's position against this document?)
+📊 PRECEDENTS FROM OUR DATABASE
+(Present the top 3-7 evidence cards from cross-claim retrieval. Each card MUST show:
+ - Claim # | Carrier | Trade | State
+ - WHY RELEVANT: (same carrier, same denial rationale, same trade, same state or STATE MISMATCH tag)
+ - WHAT WORKED: (the specific tactic/evidence that flipped it: engineer rebuttal, matching packet, supplement, appraisal, etc.)
+ - OUTCOME: (first offer vs final, or resolution type)
+If no precedents found, say "No matching precedents in database — this may be a novel scenario.")
 
-➡ RECOMMENDED NEXT STEP
-(ONE clear, tactical, actionable step to advance this claim based on this document)
+🧾 EVIDENCE GAP CHECKLIST
+(The MINIMUM evidence pack needed to defeat this specific denial rationale. Use these templates:)
+
+For "No direct physical loss":
+ □ Annotated photos showing direct impact damage
+ □ Test square results with measurements
+ □ Brittleness/granule loss documentation
+ □ Lift/crease documentation with photos
+ □ Moisture map (if interior involvement)
+ □ Collateral damage indicators (gutters, AC units, soft metals)
+
+For "Wear & tear / deterioration":
+ □ Storm report with date-of-loss weather data
+ □ Collateral damage indicators proving storm causation
+ □ Creased/fractured shingle count with photos
+ □ Hail hit count per test square
+ □ Timeline showing damage post-storm, not pre-existing
+ □ Prior condition proof (Google Street View, MLS photos, underwriting photos)
+
+For "Repairable, not replace":
+ □ Repair feasibility analysis (why repair is not viable)
+ □ Uniformity/appearance argument (sealed system, continuous surface)
+ □ Manufacturer spec ONLY as feasibility support (not coverage trigger)
+ □ Cost comparison: repair vs replace with warranty implications
+
+For "Pre-existing damage":
+ □ Underwriting photos showing pre-loss condition
+ □ Prior inspection reports
+ □ MLS listing photos
+ □ Date-of-loss meteorological data
+ □ Affidavits from homeowner/neighbors
+ □ Google Street View timeline images
+
+(Check off items already present in the claim files. Mark missing items with priority: HIGH / MEDIUM / LOW)
+
+➡ NEXT STEP
+(ONE action, phrased like a colleague: "Do X today; I'll draft Y." — be specific and tactical)
 
 After the structured insight, apply the detailed analysis framework below:`;
 
@@ -3361,10 +3438,16 @@ If the document is ambiguous about the type of loss, ask the user to clarify rat
     let crossClaimContext = "";
     const sourceMode = body.sourceMode || 'hybrid'; // 'internal_only' or 'hybrid'
     
-    if (!isOperationalRequest && claimId) {
+    // Fire cross-claim search for claim mode OR when a document is uploaded (even in general chat)
+    const hasUploadedDoc = !!(resolvedDocContent && resolvedDocContent.trim());
+    if (!isOperationalRequest && (claimId || hasUploadedDoc)) {
       try {
+        // Use the question + doc content for better semantic matching
+        const searchQuery = hasUploadedDoc 
+          ? `${question || ''} ${resolvedDocContent.substring(0, 2000)}`.trim()
+          : question;
         crossClaimContext = await searchCrossClaimPrecedents(
-          supabase, question, claimId, claim
+          supabase, searchQuery, claimId || '', claim
         );
       } catch (ccErr) {
         console.error('[CrossClaim] Search error:', ccErr);
@@ -3661,7 +3744,6 @@ When you see "=== CRITICAL: KNOWLEDGE BASE CONTENT ===" in the context, you MUST
 5. Only supplement with general knowledge if the knowledge base doesn't fully answer the question
 
 FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
-
 
 
 CRITICAL - LOSS TYPE AWARENESS (HIGHEST PRIORITY):
@@ -5026,6 +5108,13 @@ ${knowledgeBaseContext || ''}`
       } catch (saveError) {
         console.error("Error saving report:", saveError);
       }
+    }
+
+    // === PHASE 2.5: Persist document analysis to audit trail ===
+    if (hasUploadedDoc && answer) {
+      persistDocumentAnalysis(
+        supabase, claimId, documentName, answer, crossClaimContext, sourceMode, claim
+      ).catch(err => console.error('[DocAnalysis] Persist error:', err));
     }
 
     return new Response(
