@@ -562,6 +562,119 @@ export type Database = {
         }
         Relationships: []
       }
+      carrier_scenario_playbooks: {
+        Row: {
+          avg_indemnity_delta: number | null
+          avg_time_to_resolution_days: number | null
+          carrier: string
+          confidence_label: string | null
+          confidence_score: number | null
+          created_at: string
+          decision_type: string | null
+          denial_rationale: string | null
+          id: string
+          last_updated_at: string | null
+          loss_type: string | null
+          policy_form: string | null
+          sample_size_recent_12mo: number | null
+          sample_size_total: number | null
+          scenario_key: string
+          state_code: string | null
+          top_resolution_paths: Json | null
+          trade: string | null
+          win_rate: number | null
+        }
+        Insert: {
+          avg_indemnity_delta?: number | null
+          avg_time_to_resolution_days?: number | null
+          carrier: string
+          confidence_label?: string | null
+          confidence_score?: number | null
+          created_at?: string
+          decision_type?: string | null
+          denial_rationale?: string | null
+          id?: string
+          last_updated_at?: string | null
+          loss_type?: string | null
+          policy_form?: string | null
+          sample_size_recent_12mo?: number | null
+          sample_size_total?: number | null
+          scenario_key: string
+          state_code?: string | null
+          top_resolution_paths?: Json | null
+          trade?: string | null
+          win_rate?: number | null
+        }
+        Update: {
+          avg_indemnity_delta?: number | null
+          avg_time_to_resolution_days?: number | null
+          carrier?: string
+          confidence_label?: string | null
+          confidence_score?: number | null
+          created_at?: string
+          decision_type?: string | null
+          denial_rationale?: string | null
+          id?: string
+          last_updated_at?: string | null
+          loss_type?: string | null
+          policy_form?: string | null
+          sample_size_recent_12mo?: number | null
+          sample_size_total?: number | null
+          scenario_key?: string
+          state_code?: string | null
+          top_resolution_paths?: Json | null
+          trade?: string | null
+          win_rate?: number | null
+        }
+        Relationships: []
+      }
+      carrier_scenario_tactics: {
+        Row: {
+          created_at: string
+          id: string
+          last_updated_at: string | null
+          median_delta_when_present: number | null
+          recency_weighted_score: number | null
+          scenario_key: string
+          success_lift: number | null
+          support_count: number | null
+          tactic_name: string
+          tactic_type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_updated_at?: string | null
+          median_delta_when_present?: number | null
+          recency_weighted_score?: number | null
+          scenario_key: string
+          success_lift?: number | null
+          support_count?: number | null
+          tactic_name: string
+          tactic_type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_updated_at?: string | null
+          median_delta_when_present?: number | null
+          recency_weighted_score?: number | null
+          scenario_key?: string
+          success_lift?: number | null
+          support_count?: number | null
+          tactic_name?: string
+          tactic_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "carrier_scenario_tactics_scenario_key_fkey"
+            columns: ["scenario_key"]
+            isOneToOne: false
+            referencedRelation: "carrier_scenario_playbooks"
+            referencedColumns: ["scenario_key"]
+          },
+        ]
+      }
       causation_rubric_weights: {
         Row: {
           category: string
@@ -2002,6 +2115,80 @@ export type Database = {
             foreignKeyName: "claim_loss_of_use_expenses_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_outcome_events: {
+        Row: {
+          carrier: string
+          claim_id: string
+          close_date: string | null
+          coverage_reversal: boolean | null
+          created_at: string
+          decision_type: string | null
+          delta_amount: number | null
+          denial_rationales: string[] | null
+          evidence_types_present: string[] | null
+          final_paid: number | null
+          first_offer: number | null
+          id: string
+          loss_type: string | null
+          policy_form: string | null
+          resolution_type: string | null
+          state_code: string | null
+          tactics_present: string[] | null
+          trade: string | null
+          updated_at: string
+        }
+        Insert: {
+          carrier: string
+          claim_id: string
+          close_date?: string | null
+          coverage_reversal?: boolean | null
+          created_at?: string
+          decision_type?: string | null
+          delta_amount?: number | null
+          denial_rationales?: string[] | null
+          evidence_types_present?: string[] | null
+          final_paid?: number | null
+          first_offer?: number | null
+          id?: string
+          loss_type?: string | null
+          policy_form?: string | null
+          resolution_type?: string | null
+          state_code?: string | null
+          tactics_present?: string[] | null
+          trade?: string | null
+          updated_at?: string
+        }
+        Update: {
+          carrier?: string
+          claim_id?: string
+          close_date?: string | null
+          coverage_reversal?: boolean | null
+          created_at?: string
+          decision_type?: string | null
+          delta_amount?: number | null
+          denial_rationales?: string[] | null
+          evidence_types_present?: string[] | null
+          final_paid?: number | null
+          first_offer?: number | null
+          id?: string
+          loss_type?: string | null
+          policy_form?: string | null
+          resolution_type?: string | null
+          state_code?: string | null
+          tactics_present?: string[] | null
+          trade?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_outcome_events_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
             referencedRelation: "claims"
             referencedColumns: ["id"]
           },
