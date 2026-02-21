@@ -64,6 +64,7 @@ const CarrierPlaybookDialog = lazy(() => import("@/components/claim-detail/Carri
 const DarwinSecondBrain = lazy(() => import("@/components/claim-detail/DarwinSecondBrain").then(m => ({ default: m.DarwinSecondBrain })));
 
 const DarwinCommandBar = lazy(() => import("@/components/claim-detail/DarwinCommandBar").then(m => ({ default: m.DarwinCommandBar })));
+const DarwinGeneratedAssets = lazy(() => import("@/components/claim-detail/DarwinGeneratedAssets").then(m => ({ default: m.DarwinGeneratedAssets })));
 const CarrierScenarioPlaybook = lazy(() => import("@/components/claim-detail/CarrierScenarioPlaybook").then(m => ({ default: m.CarrierScenarioPlaybook })));
 const DarwinEscalationEngine = lazy(() => import("@/components/claim-detail/DarwinEscalationEngine"));
 
@@ -715,6 +716,10 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
               claim={claim}
               placeholder="Hey Darwin… run an analysis, write a case study, or ask: What's been paid and what hasn't?"
             />
+          </Suspense>
+
+          <Suspense fallback={<LoadingFallback />}>
+            <DarwinGeneratedAssets claimId={claimId} />
           </Suspense>
 
           <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
