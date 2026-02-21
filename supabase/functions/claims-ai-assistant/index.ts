@@ -2854,6 +2854,105 @@ function buildWhatWorked(card: any): string {
   return tactics.length > 0 ? tactics.join(' | ') : 'outcome data not yet captured';
 }
 
+// === PHASE 3: Playbook retrieval for Darwin consultation ===
+async function getCarrierPlaybookContext(
+  supabase: any, claim: any
+): Promise<string> {
+  try {
+    const carrier = claim?.insurance_company;
+    if (!carrier) return '';
+
+    const stateMatch = (claim?.policyholder_address || '').match(/\b([A-Z]{2})\b\s*\d{5}/);
+    const state = stateMatch ? stateMatch[1] : (claim?.property_state || null);
+
+    // Tier 1: Exact carrier + state
+    let { data: playbooks } = await supabase
+      .from('carrier_scenario_playbooks')
+      .select('*')
+      .eq('carrier', carrier)
+      .order('sample_size_total', { ascending: false })
+      .limit(5);
+
+    if (!playbooks || playbooks.length === 0) {
+      // Tier 2: Fuzzy carrier match
+      const { data: fuzzy } = await supabase
+        .from('carrier_scenario_playbooks')
+        .select('*')
+        .ilike('carrier', `%${carrier.split(' ')[0]}%`)
+        .order('sample_size_total', { ascending: false })
+        .limit(3);
+      playbooks = fuzzy || [];
+    }
+
+    if (playbooks.length === 0) {
+      console.log('[Playbook] No playbook data for carrier:', carrier);
+      return '';
+    }
+
+    // Fetch tactics for top playbooks
+    const scenarioKeys = playbooks.map((p: any) => p.scenario_key);
+    const { data: allTactics } = await supabase
+      .from('carrier_scenario_tactics')
+      .select('*')
+      .in('scenario_key', scenarioKeys)
+      .order('recency_weighted_score', { ascending: false });
+
+    const tacticsByKey: Record<string, any[]> = {};
+    for (const t of (allTactics || [])) {
+      if (!tacticsByKey[t.scenario_key]) tacticsByKey[t.scenario_key] = [];
+      if (tacticsByKey[t.scenario_key].length < 5) {
+        tacticsByKey[t.scenario_key].push(t);
+      }
+    }
+
+    let context = '\n\n=== CARRIER × SCENARIO PLAYBOOK (DATA-DRIVEN) ===\n';
+    context += 'These are outcome-based playbook entries from historical closed claims. Use them to inform your recommendations.\n';
+    context += 'RULES:\n';
+    context += '- You MUST cite confidence + sample size when referencing playbook data.\n';
+    context += '- A tactic can only be called "proven" if support_count >= 5.\n';
+    context += '- If support_count < 5, label it as "hypothesis / low data".\n';
+    context += '- If the exact scenario match has low data, clearly state: "Exact match low data; broadened to [description]."\n\n';
+
+    for (const pb of playbooks) {
+      const isExactState = pb.state_code === state;
+      const matchTag = isExactState ? 'EXACT' : (pb.state_code ? `STATE MISMATCH (${pb.state_code} vs ${state})` : 'ANY STATE');
+
+      context += `--- PLAYBOOK ENTRY [${matchTag}] ---\n`;
+      context += `Carrier: ${pb.carrier} | State: ${pb.state_code || 'any'} | Trade: ${pb.trade || 'any'} | Loss: ${pb.loss_type || 'any'}\n`;
+      context += `Denial Rationale: ${pb.denial_rationale || 'any'} | Decision: ${pb.decision_type || 'any'}\n`;
+      context += `Win Rate: ${pb.win_rate}% | Avg Delta: $${pb.avg_indemnity_delta || 0} | Sample: ${pb.sample_size_total} (12mo: ${pb.sample_size_recent_12mo})\n`;
+      context += `Confidence: ${pb.confidence_label} (score ${pb.confidence_score})\n`;
+
+      const paths = pb.top_resolution_paths || [];
+      if (paths.length > 0) {
+        context += `Resolution Paths: ${paths.map((p: any) => `${p.path} ${p.pct}%`).join(', ')}\n`;
+      }
+
+      const tactics = tacticsByKey[pb.scenario_key] || [];
+      if (tactics.length > 0) {
+        context += 'Top Tactics:\n';
+        for (const t of tactics) {
+          const proven = t.support_count >= 5 ? 'PROVEN' : 'LOW DATA';
+          context += `  - ${t.tactic_name} (${t.tactic_type}) [${proven}, n=${t.support_count}] `;
+          if (t.success_lift) context += `lift: ${t.success_lift > 0 ? '+' : ''}${t.success_lift}% `;
+          if (t.median_delta_when_present) context += `median: $${t.median_delta_when_present} `;
+          context += '\n';
+        }
+      }
+      context += '--- END ENTRY ---\n\n';
+    }
+
+    context += '=== END PLAYBOOK ===\n';
+    context += 'INSTRUCTION: When recommending tactics, prioritize those with highest support_count and positive success_lift from the playbook. Always cite the confidence level and sample size.\n';
+
+    console.log(`[Playbook] Injected ${playbooks.length} playbook entries for ${carrier}`);
+    return context;
+  } catch (err) {
+    console.error('[Playbook] Retrieval error:', err);
+    return '';
+  }
+}
+
 async function searchCrossClaimPrecedents(
   supabase: any, question: string, currentClaimId: string, claim: any
 ): Promise<string> {
@@ -3436,21 +3535,24 @@ If the document is ambiguous about the type of loss, ask the user to clarify rat
 
     // === CROSS-CLAIM RETRIEVAL: Search vectorized claim docs for precedents ===
     let crossClaimContext = "";
+    let playbookContext = "";
     const sourceMode = body.sourceMode || 'hybrid'; // 'internal_only' or 'hybrid'
     
     // Fire cross-claim search for claim mode OR when a document is uploaded (even in general chat)
     const hasUploadedDoc = !!(resolvedDocContent && resolvedDocContent.trim());
     if (!isOperationalRequest && (claimId || hasUploadedDoc)) {
       try {
-        // Use the question + doc content for better semantic matching
         const searchQuery = hasUploadedDoc 
           ? `${question || ''} ${resolvedDocContent.substring(0, 2000)}`.trim()
           : question;
-        crossClaimContext = await searchCrossClaimPrecedents(
-          supabase, searchQuery, claimId || '', claim
-        );
+        const [ccResult, pbResult] = await Promise.all([
+          searchCrossClaimPrecedents(supabase, searchQuery, claimId || '', claim),
+          claim ? getCarrierPlaybookContext(supabase, claim) : Promise.resolve(''),
+        ]);
+        crossClaimContext = ccResult;
+        playbookContext = pbResult;
       } catch (ccErr) {
-        console.error('[CrossClaim] Search error:', ccErr);
+        console.error('[CrossClaim/Playbook] Search error:', ccErr);
       }
     }
     
@@ -3930,6 +4032,14 @@ Be relentlessly focused on advancing the claim toward a fair, full, and fast set
       conversationMessages.push({
         role: "assistant",
         content: crossClaimContext,
+      });
+    }
+
+    // If we have playbook data, add it as context
+    if (playbookContext) {
+      conversationMessages.push({
+        role: "assistant",
+        content: playbookContext,
       });
     }
     
