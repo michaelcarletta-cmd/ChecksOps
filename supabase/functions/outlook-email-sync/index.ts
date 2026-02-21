@@ -69,8 +69,6 @@ async function refreshTokens(refreshToken: string): Promise<{ access_token: stri
     }
 
     throw new Error(userMessage);
-
-(Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
     const lower = detail.toLowerCase();
     if (lower.includes('expired') || lower.includes('revoked') || lower.includes('invalid_grant') || response.status === 401) {
       throw new Error('Your Outlook connection expired or was revoked. Please reconnect your account in Settings.');
