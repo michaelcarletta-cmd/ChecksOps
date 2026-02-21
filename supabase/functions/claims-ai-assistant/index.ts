@@ -2855,16 +2855,39 @@ function buildWhatWorked(card: any): string {
 }
 
 // === PHASE 4: Escalation Trigger Evaluation for PA/NJ ===
+// FIX #1: Robust state detection with word-boundary regex (avoids APARTMENT/PARK false positives)
+function detectStateCode(claim: any): string | null {
+  // Prefer structured field
+  const structured = (claim?.client_state || claim?.property_state || '').toUpperCase().trim();
+  if (structured === 'PA' || structured === 'PENNSYLVANIA') return 'PA';
+  if (structured === 'NJ' || structured === 'NEW JERSEY') return 'NJ';
+
+  const address = (claim?.policyholder_address || '');
+  if (!address) return null;
+
+  // ZIP-based detection (most reliable): "NJ 08050" or "PA 19103"
+  const zipMatch = address.toUpperCase().match(/\b([A-Z]{2})\s+\d{5}\b/);
+  if (zipMatch) {
+    if (zipMatch[1] === 'PA') return 'PA';
+    if (zipMatch[1] === 'NJ') return 'NJ';
+  }
+
+  // Word-boundary regex patterns (avoids APARTMENT, PARK, PATRICIA false positives)
+  if (/(^|[\s,])PA([\s,]|$)/i.test(address) || /\bPENNSYLVANIA\b/i.test(address)) return 'PA';
+  if (/(^|[\s,])NJ([\s,]|$)/i.test(address) || /\bNEW\s+JERSEY\b/i.test(address)) return 'NJ';
+
+  return null;
+}
+
+// FIX #6: Cap and bound constants for prompt injection guard
+const MAX_ESCALATION_RULES_INJECTED = 5;
+const MAX_ESCALATION_CONTEXT_CHARS = 3000;
+
 async function getEscalationContext(
   supabase: any, claim: any, claimId: string
 ): Promise<string> {
   try {
-    // Detect state from address
-    const address = (claim?.policyholder_address || '').toUpperCase();
-    let stateCode: string | null = null;
-    if (address.includes('PA') || address.includes('PENNSYLVANIA')) stateCode = 'PA';
-    else if (address.includes('NJ') || address.includes('NEW JERSEY')) stateCode = 'NJ';
-    
+    const stateCode = detectStateCode(claim);
     if (!stateCode) return '';
 
     // Load rules for this state
@@ -2893,7 +2916,7 @@ async function getEscalationContext(
     const coverageAccepted = claim?.status === 'Coverage Accepted' || claim?.status === 'Supplement Submitted';
     const scopeDisputed = claim?.status === 'Supplement Submitted' || claim?.status === 'Under Review';
 
-    // Simple rule evaluation
+    // Deterministic rule evaluation
     const firedRules: any[] = [];
     for (const rule of rules) {
       const c = rule.condition_logic || {};
@@ -2905,6 +2928,7 @@ async function getEscalationContext(
       if (c.scope_disputed && !scopeDisputed) fires = false;
       if (c.missed_deadlines_gt && missedCount <= c.missed_deadlines_gt) fires = false;
 
+      // FIX #3: deadline_status_not means "suppress rule if any deadline of this type HAS this status"
       if (c.deadline_type && c.deadline_status_not) {
         const allDl = [...deadlines, ...carrierDeadlines];
         const matching = allDl.filter((d: any) => d.deadline_type === c.deadline_type);
@@ -2916,31 +2940,36 @@ async function getEscalationContext(
 
     if (firedRules.length === 0) return '';
 
-    // Build context for injection
-    let context = '\n\n=== REGULATORY LEVERAGE CONTEXT (' + stateCode + ') ===\n';
-    context += 'The following escalation triggers have fired for this claim. Use them to inform your strategic recommendations.\n';
-    context += 'RULES:\n';
-    context += '- Cite the statute short reference + plain-language summary when relevant.\n';
-    context += '- Recommend procedural next steps, never threats or legal advice.\n';
-    context += '- Label escalation strength explicitly (soft/formal/regulatory) so user knows the weight.\n';
-    context += '- Maintain strategic, controlled tone — never aggressive.\n\n';
-
+    // Sort by strength priority
     const strengthOrder: Record<string, number> = { regulatory_leverage: 0, formal_leverage: 1, soft_leverage: 2 };
     firedRules.sort((a: any, b: any) => (strengthOrder[a.escalation_strength] ?? 3) - (strengthOrder[b.escalation_strength] ?? 3));
 
-    for (const rule of firedRules) {
-      context += `[${rule.escalation_strength.toUpperCase().replace('_', ' ')}] ${rule.trigger_name}\n`;
-      context += `  Citation: ${rule.regulation_citation}\n`;
-      context += `  Summary: ${rule.regulation_summary}\n`;
-      context += `  Recommended Action: ${rule.recommended_action}\n`;
-      if (rule.recommended_artifact) {
-        context += `  Artifact: ${rule.recommended_artifact}\n`;
-      }
-      context += '\n';
+    // FIX #6: Cap injected rules to prevent context overflow
+    const cappedRules = firedRules.slice(0, MAX_ESCALATION_RULES_INJECTED);
+
+    // Build structured context for injection
+    let context = '\n\n=== REGULATORY LEVERAGE CONTEXT (' + stateCode + ') ===\n';
+    context += 'ACTIVE TRIGGERS: ' + cappedRules.length + ' of ' + firedRules.length + ' total.\n';
+    context += 'AUTHORITY CITATION RULES:\n';
+    context += '- Cite statute short reference + plain-language summary.\n';
+    context += '- Recommend procedural next steps only — never threats, accusations, or legal advice.\n';
+    context += '- Label escalation strength (soft/formal/regulatory).\n';
+    context += '- Tone: Strategic and controlled.\n\n';
+
+    for (const rule of cappedRules) {
+      const entry = `[${rule.escalation_strength.toUpperCase().replace('_', ' ')}] ${rule.trigger_name}\n` +
+        `  Citation: ${rule.regulation_citation}\n` +
+        `  Summary: ${rule.regulation_summary}\n` +
+        `  Action: ${rule.recommended_action}\n` +
+        (rule.recommended_artifact ? `  Artifact: ${rule.recommended_artifact}\n` : '') + '\n';
+      
+      // FIX #6: Stop if we'd exceed max chars
+      if (context.length + entry.length > MAX_ESCALATION_CONTEXT_CHARS) break;
+      context += entry;
     }
 
     context += '=== END REGULATORY LEVERAGE CONTEXT ===\n';
-    console.log(`[Escalation] Injected ${firedRules.length} fired triggers for ${stateCode}`);
+    console.log(`[Escalation] Injected ${cappedRules.length}/${firedRules.length} fired triggers for ${stateCode}`);
     return context;
   } catch (err) {
     console.error('[Escalation] Evaluation error:', err);
