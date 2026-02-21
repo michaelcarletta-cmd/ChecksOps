@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { subscribeCarrierDismantler } from "@/lib/darwinDismantlerBus";
+import { DarwinSMSActivityLog } from "@/components/inbox/DarwinSMSActivityLog";
 import type { DismantlerResult, ClaimFactsPack, DecisionCard, MissingDocRequest } from "@/lib/darwinContracts";
 
 // Lazy load all Darwin components
@@ -528,6 +529,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             <ClaimAutonomySettings claimId={claimId} />
             <ClaimAutomationSettings claimId={claimId} />
             <DarwinTaskGenerator claimId={claimId} claim={claim} />
+            <DarwinSMSActivityLog claimId={claimId} limit={20} />
           </>
         );
       default:

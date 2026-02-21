@@ -5,11 +5,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Mail, FileSignature, ArrowRight, Clock, Bot, MessageSquare } from "lucide-react";
+import { Loader2, Mail, FileSignature, ArrowRight, Clock, Bot, MessageSquare, Brain } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { PendingApprovals } from "@/components/inbox/PendingApprovals";
 import { InboxSMSQuickReply } from "@/components/inbox/InboxSMSQuickReply";
+import { DarwinSMSActivityLog } from "@/components/inbox/DarwinSMSActivityLog";
 
 const Inbox = () => {
   const navigate = useNavigate();
@@ -157,6 +158,10 @@ const Inbox = () => {
           <TabsTrigger value="signatures" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">
             <FileSignature className="h-4 w-4 mr-2" />
             Signature Requests ({signatureRequests?.length || 0})
+          </TabsTrigger>
+          <TabsTrigger value="darwin-sms" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">
+            <Brain className="h-4 w-4 mr-2" />
+            Darwin SMS
           </TabsTrigger>
         </TabsList>
 
@@ -414,6 +419,10 @@ const Inbox = () => {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="darwin-sms" className="space-y-4">
+          <DarwinSMSActivityLog />
         </TabsContent>
       </Tabs>
     </div>

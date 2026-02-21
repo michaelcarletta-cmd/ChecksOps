@@ -167,3 +167,6 @@ verify_jwt = false
 
 [functions.collect-payment]
 verify_jwt = false
+
+[functions.phone-verification]
+verify_jwt = false
