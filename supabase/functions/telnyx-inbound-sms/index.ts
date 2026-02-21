@@ -611,8 +611,8 @@ serve(async (req) => {
       });
     }
 
-    // Require active claim for most intents
-    if (!activeClaimId && intent !== 'financial_qa') {
+    // Require active claim for most intents (create_task can resolve its own claim via name matching)
+    if (!activeClaimId && intent !== 'financial_qa' && intent !== 'create_task') {
       const reply = 'No active claim. Reply "Switch [claim #]" or "Claims" to select one.';
       await sendReply(fromNumber, reply);
       if (activityRow) {
@@ -639,6 +639,19 @@ serve(async (req) => {
           taskClaimId = matchedClaims[0].id;
           console.log(`Smart claim resolve: "${mentionedName}" → ${matchedClaims[0].claim_number} (${matchedClaims[0].policyholder_name})`);
         }
+      }
+      
+      // If still no claim, ask user to select one
+      if (!taskClaimId) {
+        const noClaimReply = 'Could not determine which claim this task belongs to. Reply "Switch [claim #]" to set an active claim, or mention the client name (e.g., "Task for John Smith: ...").';
+        await sendReply(fromNumber, noClaimReply);
+        if (activityRow) {
+          await supabase.from('darwin_sms_activity')
+            .update({ status: 'needs_context', darwin_response: noClaimReply }).eq('id', activityRow.id);
+        }
+        return new Response(JSON.stringify({ success: true, action: 'needs_claim' }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       const { data: task, error: taskErr } = await supabase.from('tasks').insert({
