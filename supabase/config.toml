@@ -170,3 +170,6 @@ verify_jwt = false
 
 [functions.phone-verification]
 verify_jwt = false
+
+[functions.darwin-command]
+verify_jwt = false
