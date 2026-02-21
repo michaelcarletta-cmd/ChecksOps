@@ -107,16 +107,185 @@ serve(async (req) => {
       );
     }
 
-    // ── Send Client Email (web UI callers) ──
-    if (intent === "send_client_email" || intent === "send_client_sms") {
+    // ── Send Client SMS ──
+    if (intent === "send_client_sms") {
       if (!claimId) {
         return new Response(
           JSON.stringify({ intent, error: "This command requires a claim context. Open a claim and try again." }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+
+      // Extract message body
+      const msgBody = text
+        .replace(/^(text\s+(the\s+)?client[:\s]*|send\s+(a\s+)?(text|sms|message)\s+(to\s+)?(the\s+)?client[:\s]*|sms\s+(the\s+)?client[:\s]*)/i, '')
+        .trim();
+      if (!msgBody) {
+        return new Response(
+          JSON.stringify({ intent, error: "Please include a message after the command. Example: Text client: We're scheduled Tuesday" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Look up claim phone
+      const { data: claim, error: claimErr } = await supabase
+        .from("claims")
+        .select("policyholder_phone, policyholder_name")
+        .eq("id", claimId)
+        .single();
+
+      if (claimErr || !claim?.policyholder_phone) {
+        return new Response(
+          JSON.stringify({ intent, error: "No phone number found on this claim. Add a policyholder phone first." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Send SMS directly via Telnyx (service-to-service, no user auth needed)
+      const TELNYX_API_KEY = Deno.env.get("TELNYX_API_KEY");
+      const TELNYX_PHONE_NUMBER = Deno.env.get("TELNYX_PHONE_NUMBER");
+      const TELNYX_MESSAGING_PROFILE_ID = Deno.env.get("TELNYX_MESSAGING_PROFILE_ID");
+
+      if (!TELNYX_API_KEY || !TELNYX_PHONE_NUMBER) {
+        return new Response(
+          JSON.stringify({ intent, error: "SMS not configured. Missing Telnyx credentials." }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Normalize phone to E.164
+      const digits = claim.policyholder_phone.replace(/\D/g, "");
+      const toE164 = digits.length === 10 ? `+1${digits}` : digits.length === 11 && digits.startsWith("1") ? `+${digits}` : `+${digits}`;
+
+      const telnyxResp = await fetch("https://api.telnyx.com/v2/messages", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${TELNYX_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from: TELNYX_PHONE_NUMBER,
+          to: toE164,
+          text: msgBody,
+          messaging_profile_id: TELNYX_MESSAGING_PROFILE_ID,
+        }),
+      });
+      const telnyxData = await telnyxResp.json().catch(() => ({}));
+      const smsData: Record<string, any> = {};
+
+      if (!telnyxResp.ok) {
+        smsData.error = telnyxData.errors?.[0]?.detail || "Telnyx API error";
+      } else {
+        smsData.messageId = telnyxData.data?.id;
+        // Insert into sms_messages
+        await supabase.from("sms_messages").insert({
+          claim_id: claimId,
+          from_number: TELNYX_PHONE_NUMBER,
+          to_number: toE164,
+          message_body: msgBody,
+          status: telnyxData.data?.to?.[0]?.status || "queued",
+          direction: "outbound",
+          telnyx_message_id: smsData.messageId,
+          user_id: createdBy || null,
+        });
+      }
+
+      if (smsData.error) {
+        return new Response(
+          JSON.stringify({ intent, error: smsData.error || "Failed to send SMS" }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Log to claim_updates
+      await supabase.from("claim_updates").insert({
+        claim_id: claimId,
+        update_type: "communication_log",
+        content: `SMS sent to ${claim.policyholder_name || claim.policyholder_phone}: ${msgBody}`,
+        user_id: createdBy || null,
+      });
+
       return new Response(
-        JSON.stringify({ intent, message: "Client messaging via the command bar is coming soon. Use SMS commands for now." }),
+        JSON.stringify({
+          intent,
+          result: `SMS sent to ${claim.policyholder_name || claim.policyholder_phone}: "${msgBody}"`,
+          messageId: smsData.messageId || null,
+          message: "SMS sent successfully.",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── Send Client Email ──
+    if (intent === "send_client_email") {
+      if (!claimId) {
+        return new Response(
+          JSON.stringify({ intent, error: "This command requires a claim context. Open a claim and try again." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Extract message body
+      const emailBody = text
+        .replace(/^(email\s+(the\s+)?client[:\s]*|send\s+(an?\s+)?email\s+(to\s+)?(the\s+)?client[:\s]*|draft\s+(an?\s+)?email\s+(to\s+)?(the\s+)?client[:\s]*)/i, '')
+        .trim();
+      if (!emailBody) {
+        return new Response(
+          JSON.stringify({ intent, error: "Please include a message after the command. Example: Email client: carrier approved your estimate" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Look up claim email
+      const { data: claimData, error: claimEmailErr } = await supabase
+        .from("claims")
+        .select("policyholder_email, policyholder_name, claim_number")
+        .eq("id", claimId)
+        .single();
+
+      if (claimEmailErr || !claimData?.policyholder_email) {
+        return new Response(
+          JSON.stringify({ intent, error: "No email address found on this claim. Add a policyholder email first." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Call send-email edge function
+      const emailResp = await fetch(`${supabaseUrl}/functions/v1/send-email`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${supabaseServiceKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          to: claimData.policyholder_email,
+          recipientName: claimData.policyholder_name || claimData.policyholder_email,
+          subject: `Claim Update – ${claimData.claim_number || "Your Claim"}`,
+          body: emailBody,
+          claimId,
+        }),
+      });
+      const emailData = await emailResp.json().catch(() => ({}));
+
+      if (!emailResp.ok || emailData.error) {
+        return new Response(
+          JSON.stringify({ intent, error: emailData.error || "Failed to send email" }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Log to claim_updates
+      await supabase.from("claim_updates").insert({
+        claim_id: claimId,
+        update_type: "communication_log",
+        content: `Email sent to ${claimData.policyholder_name || claimData.policyholder_email}: ${emailBody}`,
+        user_id: createdBy || null,
+      });
+
+      return new Response(
+        JSON.stringify({
+          intent,
+          result: `Email sent to ${claimData.policyholder_name || claimData.policyholder_email}: "${emailBody}"`,
+          messageId: emailData.messageId || null,
+          message: "Email sent successfully.",
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
