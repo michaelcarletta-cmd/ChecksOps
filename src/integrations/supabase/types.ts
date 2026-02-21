@@ -772,6 +772,9 @@ export type Database = {
           created_at: string
           created_by: string | null
           daily_action_limit: number | null
+          darwin_source_mode:
+            | Database["public"]["Enums"]["darwin_source_mode"]
+            | null
           follow_up_current_count: number
           follow_up_enabled: boolean
           follow_up_interval_days: number
@@ -810,6 +813,9 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           daily_action_limit?: number | null
+          darwin_source_mode?:
+            | Database["public"]["Enums"]["darwin_source_mode"]
+            | null
           follow_up_current_count?: number
           follow_up_enabled?: boolean
           follow_up_interval_days?: number
@@ -848,6 +854,9 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           daily_action_limit?: number | null
+          darwin_source_mode?:
+            | Database["public"]["Enums"]["darwin_source_mode"]
+            | null
           follow_up_current_count?: number
           follow_up_enabled?: boolean
           follow_up_interval_days?: number
@@ -1354,6 +1363,120 @@ export type Database = {
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_document_chunks: {
+        Row: {
+          carrier_name: string | null
+          chunk_index: number
+          cited_denial_reasons: string[] | null
+          cited_policy_sections: string[] | null
+          claim_id: string
+          content: string
+          created_at: string
+          decision_type:
+            | Database["public"]["Enums"]["claim_doc_decision"]
+            | null
+          denial_rationale: string | null
+          embedding: string | null
+          evidence_type:
+            | Database["public"]["Enums"]["claim_doc_evidence_type"]
+            | null
+          file_id: string | null
+          id: string
+          loss_date: string | null
+          loss_type: Database["public"]["Enums"]["claim_doc_loss_type"] | null
+          outcome_appraisal_invoked: boolean | null
+          outcome_litigation: boolean | null
+          outcome_paid_amount: number | null
+          outcome_reopened: boolean | null
+          outcome_resolution_type: string | null
+          outcome_supplement_won: boolean | null
+          policy_form: string | null
+          scope_decisions: Json | null
+          state_code: string | null
+          trade: Database["public"]["Enums"]["claim_doc_trade"] | null
+          updated_at: string
+        }
+        Insert: {
+          carrier_name?: string | null
+          chunk_index: number
+          cited_denial_reasons?: string[] | null
+          cited_policy_sections?: string[] | null
+          claim_id: string
+          content: string
+          created_at?: string
+          decision_type?:
+            | Database["public"]["Enums"]["claim_doc_decision"]
+            | null
+          denial_rationale?: string | null
+          embedding?: string | null
+          evidence_type?:
+            | Database["public"]["Enums"]["claim_doc_evidence_type"]
+            | null
+          file_id?: string | null
+          id?: string
+          loss_date?: string | null
+          loss_type?: Database["public"]["Enums"]["claim_doc_loss_type"] | null
+          outcome_appraisal_invoked?: boolean | null
+          outcome_litigation?: boolean | null
+          outcome_paid_amount?: number | null
+          outcome_reopened?: boolean | null
+          outcome_resolution_type?: string | null
+          outcome_supplement_won?: boolean | null
+          policy_form?: string | null
+          scope_decisions?: Json | null
+          state_code?: string | null
+          trade?: Database["public"]["Enums"]["claim_doc_trade"] | null
+          updated_at?: string
+        }
+        Update: {
+          carrier_name?: string | null
+          chunk_index?: number
+          cited_denial_reasons?: string[] | null
+          cited_policy_sections?: string[] | null
+          claim_id?: string
+          content?: string
+          created_at?: string
+          decision_type?:
+            | Database["public"]["Enums"]["claim_doc_decision"]
+            | null
+          denial_rationale?: string | null
+          embedding?: string | null
+          evidence_type?:
+            | Database["public"]["Enums"]["claim_doc_evidence_type"]
+            | null
+          file_id?: string | null
+          id?: string
+          loss_date?: string | null
+          loss_type?: Database["public"]["Enums"]["claim_doc_loss_type"] | null
+          outcome_appraisal_invoked?: boolean | null
+          outcome_litigation?: boolean | null
+          outcome_paid_amount?: number | null
+          outcome_reopened?: boolean | null
+          outcome_resolution_type?: string | null
+          outcome_supplement_won?: boolean | null
+          policy_form?: string | null
+          scope_decisions?: Json | null
+          state_code?: string | null
+          trade?: Database["public"]["Enums"]["claim_doc_trade"] | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_document_chunks_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_document_chunks_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "claim_files"
             referencedColumns: ["id"]
           },
         ]
@@ -6161,6 +6284,38 @@ export type Database = {
         }
         Returns: string
       }
+      match_claim_document_chunks: {
+        Args: {
+          exclude_claim_id?: string
+          filter_carrier?: string
+          filter_decision?: Database["public"]["Enums"]["claim_doc_decision"]
+          filter_evidence_type?: Database["public"]["Enums"]["claim_doc_evidence_type"]
+          filter_loss_type?: Database["public"]["Enums"]["claim_doc_loss_type"]
+          filter_state?: string
+          filter_trade?: Database["public"]["Enums"]["claim_doc_trade"]
+          match_count?: number
+          query_embedding: string
+        }
+        Returns: {
+          carrier_name: string
+          chunk_index: number
+          claim_id: string
+          content: string
+          decision_type: Database["public"]["Enums"]["claim_doc_decision"]
+          denial_rationale: string
+          evidence_type: Database["public"]["Enums"]["claim_doc_evidence_type"]
+          file_id: string
+          id: string
+          loss_date: string
+          loss_type: Database["public"]["Enums"]["claim_doc_loss_type"]
+          outcome_paid_amount: number
+          outcome_resolution_type: string
+          policy_form: string
+          similarity: number
+          state_code: string
+          trade: Database["public"]["Enums"]["claim_doc_trade"]
+        }[]
+      }
       match_knowledge_chunks: {
         Args: {
           filter_category?: string
@@ -6227,6 +6382,66 @@ export type Database = {
         | "contractor"
         | "referrer"
         | "read_only"
+      claim_doc_decision:
+        | "deny_full"
+        | "deny_partial"
+        | "accept"
+        | "underpay"
+        | "rfi"
+        | "pending"
+        | "supplement_approved"
+        | "supplement_denied"
+        | "unknown"
+      claim_doc_evidence_type:
+        | "estimate"
+        | "denial_letter"
+        | "approval_letter"
+        | "engineer_report"
+        | "moisture_map"
+        | "core_sample"
+        | "itel_report"
+        | "ladder_assist"
+        | "photo_analysis"
+        | "policy"
+        | "correspondence"
+        | "invoice"
+        | "supplement"
+        | "rebuttal"
+        | "demand"
+        | "settlement"
+        | "other"
+      claim_doc_loss_type:
+        | "wind"
+        | "hail"
+        | "water"
+        | "fire"
+        | "lightning"
+        | "tornado"
+        | "hurricane"
+        | "theft"
+        | "vandalism"
+        | "collapse"
+        | "mold"
+        | "freeze"
+        | "other"
+      claim_doc_trade:
+        | "roof"
+        | "siding"
+        | "gutters"
+        | "windows"
+        | "doors"
+        | "interior"
+        | "hvac"
+        | "plumbing"
+        | "electrical"
+        | "foundation"
+        | "fence"
+        | "deck"
+        | "garage"
+        | "landscaping"
+        | "contents"
+        | "other"
+      darwin_source_mode: "internal_only" | "hybrid"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -6362,6 +6577,70 @@ export const Constants = {
         "referrer",
         "read_only",
       ],
+      claim_doc_decision: [
+        "deny_full",
+        "deny_partial",
+        "accept",
+        "underpay",
+        "rfi",
+        "pending",
+        "supplement_approved",
+        "supplement_denied",
+        "unknown",
+      ],
+      claim_doc_evidence_type: [
+        "estimate",
+        "denial_letter",
+        "approval_letter",
+        "engineer_report",
+        "moisture_map",
+        "core_sample",
+        "itel_report",
+        "ladder_assist",
+        "photo_analysis",
+        "policy",
+        "correspondence",
+        "invoice",
+        "supplement",
+        "rebuttal",
+        "demand",
+        "settlement",
+        "other",
+      ],
+      claim_doc_loss_type: [
+        "wind",
+        "hail",
+        "water",
+        "fire",
+        "lightning",
+        "tornado",
+        "hurricane",
+        "theft",
+        "vandalism",
+        "collapse",
+        "mold",
+        "freeze",
+        "other",
+      ],
+      claim_doc_trade: [
+        "roof",
+        "siding",
+        "gutters",
+        "windows",
+        "doors",
+        "interior",
+        "hvac",
+        "plumbing",
+        "electrical",
+        "foundation",
+        "fence",
+        "deck",
+        "garage",
+        "landscaping",
+        "contents",
+        "other",
+      ],
+      darwin_source_mode: ["internal_only", "hybrid"],
     },
   },
 } as const

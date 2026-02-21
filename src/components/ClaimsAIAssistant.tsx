@@ -4,11 +4,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Bot, Send, Loader2, Sparkles, Brain } from "lucide-react";
+import { Bot, Send, Loader2, Sparkles, Brain, Globe, Database } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQueryClient } from "@tanstack/react-query";
+import { Toggle } from "@/components/ui/toggle";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
+type SourceMode = "internal_only" | "hybrid";
 
 interface AiMessage {
   role: "user" | "assistant";
@@ -27,6 +31,7 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
   const [aiQuestion, setAiQuestion] = useState("");
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
+  const [sourceMode, setSourceMode] = useState<SourceMode>("hybrid");
   const queryClient = useQueryClient();
 
   // Clear messages when switching between claims
@@ -61,6 +66,7 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
           messages: conversationHistory,
           mode: isClaimContext ? "claim" : "general",
           claimId: claimId || undefined,
+          sourceMode,
         },
       });
 
@@ -221,11 +227,37 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
                 </span>
               )}
             </DialogTitle>
-            {aiMessages.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={clearChat}>
-                Clear Chat
-              </Button>
-            )}
+            <div className="flex items-center gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Toggle
+                    size="sm"
+                    pressed={sourceMode === "hybrid"}
+                    onPressedChange={(pressed) => setSourceMode(pressed ? "hybrid" : "internal_only")}
+                    className="h-7 px-2 data-[state=on]:bg-primary/10"
+                  >
+                    {sourceMode === "hybrid" ? (
+                      <Globe className="h-3.5 w-3.5 mr-1" />
+                    ) : (
+                      <Database className="h-3.5 w-3.5 mr-1" />
+                    )}
+                    <span className="text-[10px]">{sourceMode === "hybrid" ? "Hybrid" : "Internal"}</span>
+                  </Toggle>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p className="text-xs max-w-[200px]">
+                    {sourceMode === "hybrid"
+                      ? "Using internal claim docs + external knowledge base + web sources"
+                      : "Using ONLY internal claim documents and database — no external sources"}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+              {aiMessages.length > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearChat}>
+                  Clear
+                </Button>
+              )}
+            </div>
           </div>
         </DialogHeader>
 

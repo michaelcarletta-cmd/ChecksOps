@@ -182,6 +182,14 @@ serve(async (req) => {
         trigger_source: 'darwin_process_document',
       });
 
+    // === CROSS-CLAIM VECTOR INDEX: Chunk + Embed for retrieval ===
+    if (textContent && textContent.length >= 100 && targetClaimId) {
+      indexDocumentForRetrieval(
+        supabase, targetClaimId, fileId, textContent,
+        classificationResult, file
+      ).catch(err => console.error('Cross-claim indexing error:', err));
+    }
+
     // Check if claim has autonomy enabled and take actions
     const { data: automation } = await supabase
       .from('claim_automations')
@@ -533,6 +541,205 @@ async function triggerDeepAnalysis(
   } catch (error) {
     console.error('triggerDeepAnalysis error:', error);
     // Don't throw - deep analysis failure shouldn't affect classification
+  }
+}
+
+// ============================================================
+// CROSS-CLAIM VECTOR INDEXING
+// Chunk, tag, and embed document text for retrieval
+// ============================================================
+
+const EVIDENCE_TYPE_MAP: Record<string, string> = {
+  'estimate': 'estimate',
+  'denial': 'denial_letter',
+  'approval': 'approval_letter',
+  'engineering_report': 'engineer_report',
+  'policy': 'policy',
+  'correspondence': 'correspondence',
+  'invoice': 'invoice',
+  'rfi': 'correspondence',
+  'photo': 'photo_analysis',
+  'other': 'other',
+};
+
+const LOSS_TYPE_MAP: Record<string, string> = {
+  'wind': 'wind', 'hail': 'hail', 'water': 'water', 'fire': 'fire',
+  'lightning': 'lightning', 'tornado': 'tornado', 'hurricane': 'hurricane',
+  'theft': 'theft', 'vandalism': 'vandalism', 'collapse': 'collapse',
+  'mold': 'mold', 'freeze': 'freeze',
+};
+
+function detectLossType(text: string): string | null {
+  const lower = (text || '').toLowerCase();
+  for (const [keyword, type] of Object.entries(LOSS_TYPE_MAP)) {
+    if (lower.includes(keyword)) return type;
+  }
+  return null;
+}
+
+function detectTrade(text: string): string | null {
+  const lower = (text || '').toLowerCase();
+  const tradeMap: Record<string, string> = {
+    'roof': 'roof', 'shingle': 'roof', 'siding': 'siding', 'gutter': 'gutters',
+    'window': 'windows', 'door': 'doors', 'interior': 'interior', 'drywall': 'interior',
+    'hvac': 'hvac', 'plumbing': 'plumbing', 'electrical': 'electrical',
+    'foundation': 'foundation', 'fence': 'fence', 'deck': 'deck', 'garage': 'garage',
+  };
+  for (const [keyword, trade] of Object.entries(tradeMap)) {
+    if (lower.includes(keyword)) return trade;
+  }
+  return null;
+}
+
+function detectDecisionType(classification: string, metadata: any): string {
+  if (classification === 'denial') {
+    return metadata?.denial_type === 'partial' ? 'deny_partial' : 'deny_full';
+  }
+  if (classification === 'approval') return 'accept';
+  if (classification === 'estimate') return 'pending';
+  return 'unknown';
+}
+
+function chunkText(text: string, chunkSize = 600, overlap = 100): string[] {
+  const chunks: string[] = [];
+  // Try to split on markdown headers first
+  const sections = text.split(/(?=^#{1,3}\s)/m);
+  
+  for (const section of sections) {
+    if (section.length <= chunkSize) {
+      if (section.trim().length > 20) chunks.push(section.trim());
+      continue;
+    }
+    // Sub-chunk long sections
+    for (let i = 0; i < section.length; i += chunkSize - overlap) {
+      const chunk = section.substring(i, i + chunkSize).trim();
+      if (chunk.length > 20) chunks.push(chunk);
+    }
+  }
+  return chunks;
+}
+
+async function indexDocumentForRetrieval(
+  supabase: any,
+  claimId: string,
+  fileId: string,
+  textContent: string,
+  classificationResult: ClassificationResult,
+  file: any
+) {
+  try {
+    console.log(`[CrossClaim Index] Starting indexing for file ${fileId} on claim ${claimId}`);
+    
+    // Get claim metadata for tagging
+    const { data: claim } = await supabase
+      .from('claims')
+      .select('insurance_company, loss_type, loss_date, policyholder_address')
+      .eq('id', claimId)
+      .single();
+
+    const carrierName = claim?.insurance_company || null;
+    const claimLossType = detectLossType(claim?.loss_type || '') || detectLossType(textContent);
+    const trade = detectTrade(textContent);
+    const evidenceType = EVIDENCE_TYPE_MAP[classificationResult.classification] || 'other';
+    const decisionType = detectDecisionType(classificationResult.classification, classificationResult.metadata);
+    
+    // Extract denial rationale if present
+    const denialRationale = classificationResult.metadata?.denial_reason || null;
+    const citedReasons = classificationResult.metadata?.key_phrases || [];
+
+    // Determine state from address
+    const stateMatch = (claim?.policyholder_address || '').match(/\b([A-Z]{2})\b\s*\d{5}/);
+    const stateCode = stateMatch ? stateMatch[1] : null;
+
+    // Chunk the text
+    const chunks = chunkText(textContent);
+    console.log(`[CrossClaim Index] Created ${chunks.length} chunks for file ${fileId}`);
+
+    if (chunks.length === 0) return;
+
+    // Delete existing chunks for this file (in case of reprocess)
+    await supabase.from('claim_document_chunks').delete().eq('file_id', fileId);
+
+    // Insert chunks
+    const chunkRows = chunks.map((content, index) => ({
+      claim_id: claimId,
+      file_id: fileId,
+      chunk_index: index,
+      content,
+      carrier_name: carrierName,
+      loss_type: claimLossType,
+      trade,
+      decision_type: decisionType,
+      evidence_type: evidenceType,
+      denial_rationale: denialRationale,
+      cited_denial_reasons: citedReasons.length > 0 ? citedReasons : null,
+      state_code: stateCode,
+      loss_date: claim?.loss_date || null,
+    }));
+
+    const { data: insertedChunks, error: insertError } = await supabase
+      .from('claim_document_chunks')
+      .insert(chunkRows)
+      .select('id, content');
+
+    if (insertError) {
+      console.error('[CrossClaim Index] Insert error:', insertError.message);
+      return;
+    }
+
+    console.log(`[CrossClaim Index] Inserted ${insertedChunks.length} chunks, generating embeddings...`);
+
+    // Generate embeddings via the generate-embeddings function
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+    const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    const texts = insertedChunks.map((c: any) => c.content);
+    const chunkIds = insertedChunks.map((c: any) => c.id);
+
+    // Call generate-embeddings with the OpenAI key
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    if (!OPENAI_API_KEY) {
+      console.log('[CrossClaim Index] No OPENAI_API_KEY, skipping embeddings');
+      return;
+    }
+
+    // Generate embeddings in batches of 50
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < texts.length; i += BATCH_SIZE) {
+      const batchTexts = texts.slice(i, i + BATCH_SIZE);
+      const batchIds = chunkIds.slice(i, i + BATCH_SIZE);
+
+      const embResponse = await fetch('https://api.openai.com/v1/embeddings', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'text-embedding-3-small',
+          input: batchTexts,
+        }),
+      });
+
+      if (!embResponse.ok) {
+        console.error('[CrossClaim Index] Embedding API error:', embResponse.status);
+        continue;
+      }
+
+      const embData = await embResponse.json();
+      const embeddings = embData.data.map((item: any) => item.embedding);
+
+      for (let j = 0; j < batchIds.length; j++) {
+        await supabase
+          .from('claim_document_chunks')
+          .update({ embedding: embeddings[j] })
+          .eq('id', batchIds[j]);
+      }
+    }
+
+    console.log(`[CrossClaim Index] Successfully indexed ${chunks.length} chunks with embeddings for file ${fileId}`);
+  } catch (error) {
+    console.error('[CrossClaim Index] Error:', error);
   }
 }
 
