@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ interface EscalationRule {
 
 interface EscalationAlert extends EscalationRule {
   fired: boolean;
-  playbook_backing?: { confidence: string; n: number } | null;
+  playbook_backing?: { confidence: string; n: number; label: string } | null;
 }
 
 interface ClaimState {
@@ -38,7 +38,7 @@ interface ClaimState {
   missed_deadline_count: number;
   trade: string | null;
   denial_rationale: string | null;
-  playbook_data: { appraisal_delta: number; sample_size: number } | null;
+  playbook_data: { appraisal_delta: number; sample_size: number; label: string } | null;
 }
 
 interface DarwinEscalationEngineProps {
@@ -61,23 +61,56 @@ const artifactLabels: Record<string, string> = {
   appraisal_demand: "Draft Appraisal Demand",
 };
 
+// --- FIX #1: Robust state detection with word-boundary regex ---
+const STATE_PATTERNS: Array<{ code: string; regex: RegExp }> = [
+  { code: "NJ", regex: /(^|[\s,])NJ([\s,]|$)/i },
+  { code: "NJ", regex: /\bNEW\s+JERSEY\b/i },
+  { code: "PA", regex: /(^|[\s,])PA([\s,]|$)/i },
+  { code: "PA", regex: /\bPENNSYLVANIA\b/i },
+];
+
+// Match state abbreviation preceding a ZIP code (e.g. "NJ 08050")
+const ZIP_STATE_REGEX = /\b([A-Z]{2})\s+\d{5}\b/;
+
 function detectStateFromClaim(claim: any): string | null {
-  const address = (claim?.policyholder_address || "").toUpperCase();
-  if (address.includes("NJ") || address.includes("NEW JERSEY")) return "NJ";
-  if (address.includes("PA") || address.includes("PENNSYLVANIA")) return "PA";
+  // Prefer structured field first
+  const structuredState = (claim?.client_state || claim?.property_state || "").toUpperCase().trim();
+  if (structuredState === "PA" || structuredState === "PENNSYLVANIA") return "PA";
+  if (structuredState === "NJ" || structuredState === "NEW JERSEY") return "NJ";
+
+  const address = (claim?.policyholder_address || "");
+  if (!address) return null;
+
+  // Try ZIP-based detection first (most reliable)
+  const zipMatch = address.toUpperCase().match(ZIP_STATE_REGEX);
+  if (zipMatch) {
+    const abbr = zipMatch[1];
+    if (abbr === "PA") return "PA";
+    if (abbr === "NJ") return "NJ";
+  }
+
+  // Fallback: word-boundary regex patterns
+  for (const { code, regex } of STATE_PATTERNS) {
+    if (regex.test(address)) return code;
+  }
+
   return null;
 }
 
+// --- FIX #3 & #5: Cleaned up rule evaluation ---
 function evaluateRule(rule: EscalationRule, claimState: ClaimState): boolean {
   const c = rule.condition_logic;
   
   if (c.days_since_claim_filed_gt && claimState.days_since_filed <= c.days_since_claim_filed_gt) return false;
   
+  // FIX #3: Renamed semantics — "deadline_status_not" means "fire if no deadline has this status"
+  // i.e., if any deadline of the given type HAS this status, suppress the trigger.
   if (c.deadline_type && c.deadline_status_not) {
     const allDeadlines = [...claimState.deadlines, ...claimState.carrier_deadlines];
     const matching = allDeadlines.filter(d => d.deadline_type === c.deadline_type);
-    if (matching.length === 0) return true; // no deadline tracked = not met
+    // If a matching deadline exists with the "not" status, rule doesn't fire
     if (matching.some(d => d.status === c.deadline_status_not)) return false;
+    // If no deadlines tracked at all for this type, rule fires (absence = not met)
   }
   
   if (c.no_coverage_determination && claimState.has_coverage_determination) return false;
@@ -94,8 +127,12 @@ function evaluateRule(rule: EscalationRule, claimState: ClaimState): boolean {
     if (!claimState.denial_rationale || !claimState.denial_rationale.toLowerCase().includes(c.denial_rationale_contains.toLowerCase())) return false;
   }
   
-  if (c.state_supports_matching) {
-    // PA and NJ both support matching arguments
+  // FIX #5: state_supports_matching — PA and NJ both support matching.
+  // If a rule requires this, it's already baked into the state_code filter.
+  // Explicitly: if condition requires matching support and state is PA/NJ, pass. Otherwise fail.
+  if (c.state_supports_matching === true) {
+    // Both PA and NJ support matching — this is enforced by the state_code column on the rule.
+    // No additional check needed since rules are already filtered by state_code.
   }
   
   if (c.playbook_appraisal_delta_gt !== undefined) {
@@ -104,10 +141,6 @@ function evaluateRule(rule: EscalationRule, claimState: ClaimState): boolean {
   
   if (c.playbook_sample_size_gt !== undefined) {
     if (!claimState.playbook_data || claimState.playbook_data.sample_size <= c.playbook_sample_size_gt) return false;
-  }
-  
-  if (c.document_requests_gt) {
-    // Without tracking doc requests directly, we evaluate based on deadline patterns
   }
 
   return true;
@@ -118,10 +151,24 @@ export const DarwinEscalationEngine = ({ claimId, claim }: DarwinEscalationEngin
   const [loading, setLoading] = useState(true);
   const [showRegulations, setShowRegulations] = useState(false);
   const [regulations, setRegulations] = useState<any[]>([]);
+  // FIX #2: Use useState for mutable claim state instead of mutating useMemo
+  const [enrichedState, setEnrichedState] = useState<{
+    deadlines: Array<{ deadline_type: string; status: string }>;
+    carrier_deadlines: Array<{ deadline_type: string; status: string; days_overdue: number | null; bad_faith_potential: boolean }>;
+    missed_deadline_count: number;
+    has_coverage_determination: boolean;
+    playbook_data: { appraisal_delta: number; sample_size: number; label: string } | null;
+  }>({
+    deadlines: [],
+    carrier_deadlines: [],
+    missed_deadline_count: 0,
+    has_coverage_determination: false,
+    playbook_data: null,
+  });
 
   const detectedState = useMemo(() => detectStateFromClaim(claim), [claim]);
 
-  // Load rules + claim state data
+  // Load rules + regulations
   useEffect(() => {
     if (!detectedState) {
       setLoading(false);
@@ -157,54 +204,93 @@ export const DarwinEscalationEngine = ({ claimId, claim }: DarwinEscalationEngin
     fetchData();
   }, [detectedState]);
 
-  // Build claim state from available data
+  // FIX #2: Build base claim state immutably from claim prop + enriched state
   const claimState = useMemo((): ClaimState => {
     const createdAt = claim?.created_at ? new Date(claim.created_at) : new Date();
     const daysSinceFiled = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
     
     return {
       days_since_filed: daysSinceFiled,
-      deadlines: [],
-      carrier_deadlines: [],
-      has_coverage_determination: false,
+      deadlines: enrichedState.deadlines,
+      carrier_deadlines: enrichedState.carrier_deadlines,
+      has_coverage_determination: enrichedState.has_coverage_determination,
       has_written_position: false,
       coverage_accepted: claim?.status === "Coverage Accepted" || claim?.status === "Supplement Submitted",
       scope_disputed: claim?.status === "Supplement Submitted" || claim?.status === "Under Review",
-      missed_deadline_count: 0,
+      missed_deadline_count: enrichedState.missed_deadline_count,
       trade: claim?.loss_type?.toLowerCase()?.includes("roof") ? "roof" : claim?.loss_type?.toLowerCase()?.includes("siding") ? "siding" : null,
       denial_rationale: null,
-      playbook_data: null,
+      playbook_data: enrichedState.playbook_data,
     };
-  }, [claim]);
+  }, [claim, enrichedState]);
 
-  // Load deadline data to enrich claim state
+  // FIX #2 & #4: Load deadline + scenario-specific playbook data into state properly
   useEffect(() => {
     if (!claimId) return;
     
     const loadDeadlineData = async () => {
-      const [deadlinesRes, carrierDeadlinesRes, playbookRes] = await Promise.all([
+      const carrier = claim?.insurance_company || "";
+      const trade = claim?.loss_type?.toLowerCase()?.includes("roof") ? "roof" 
+        : claim?.loss_type?.toLowerCase()?.includes("siding") ? "siding" : null;
+
+      const [deadlinesRes, carrierDeadlinesRes] = await Promise.all([
         supabase.from("claim_deadlines").select("deadline_type, status").eq("claim_id", claimId),
         supabase.from("claim_carrier_deadlines").select("deadline_type, status, days_overdue, bad_faith_potential").eq("claim_id", claimId),
-        supabase.from("carrier_scenario_playbooks").select("win_rate, avg_indemnity_delta, sample_size_total").eq("carrier", claim?.insurance_company || "").limit(1),
       ]);
 
-      if (deadlinesRes.data) claimState.deadlines = deadlinesRes.data;
-      if (carrierDeadlinesRes.data) {
-        claimState.carrier_deadlines = carrierDeadlinesRes.data as any;
-        const missed = carrierDeadlinesRes.data.filter((d: any) => d.status === "overdue" || d.status === "missed");
-        claimState.missed_deadline_count = missed.length;
-        claimState.has_coverage_determination = carrierDeadlinesRes.data.some((d: any) => d.deadline_type === "coverage_determination" && d.status === "met");
+      const carrierDeadlines = (carrierDeadlinesRes.data || []) as any[];
+      const missed = carrierDeadlines.filter((d: any) => d.status === "overdue" || d.status === "missed");
+
+      // FIX #4: Scenario-specific playbook query with tiered broadening
+      let playbookData: { appraisal_delta: number; sample_size: number; label: string } | null = null;
+      if (carrier) {
+        let playbookQuery = supabase
+          .from("carrier_scenario_playbooks")
+          .select("win_rate, avg_indemnity_delta, sample_size_total, state_code, trade, loss_type")
+          .eq("carrier", carrier);
+
+        if (detectedState) playbookQuery = playbookQuery.eq("state_code", detectedState);
+        if (trade) playbookQuery = playbookQuery.eq("trade", trade);
+
+        const { data: scenarioData } = await playbookQuery.order("sample_size_total", { ascending: false }).limit(1);
+
+        if (scenarioData && scenarioData.length > 0) {
+          const pb = scenarioData[0];
+          playbookData = {
+            appraisal_delta: pb.avg_indemnity_delta || 0,
+            sample_size: pb.sample_size_total || 0,
+            label: (pb.state_code && pb.trade) ? "Scenario-specific" : "Carrier-level aggregate",
+          };
+        } else {
+          // Tier 2: carrier-only fallback
+          const { data: fallback } = await supabase
+            .from("carrier_scenario_playbooks")
+            .select("win_rate, avg_indemnity_delta, sample_size_total")
+            .eq("carrier", carrier)
+            .order("sample_size_total", { ascending: false })
+            .limit(1);
+
+          if (fallback && fallback.length > 0) {
+            playbookData = {
+              appraisal_delta: fallback[0].avg_indemnity_delta || 0,
+              sample_size: fallback[0].sample_size_total || 0,
+              label: "Carrier-level aggregate (not scenario-specific)",
+            };
+          }
+        }
       }
-      if (playbookRes.data && playbookRes.data.length > 0) {
-        claimState.playbook_data = {
-          appraisal_delta: playbookRes.data[0].avg_indemnity_delta || 0,
-          sample_size: playbookRes.data[0].sample_size_total || 0,
-        };
-      }
+
+      setEnrichedState({
+        deadlines: deadlinesRes.data || [],
+        carrier_deadlines: carrierDeadlines,
+        missed_deadline_count: missed.length,
+        has_coverage_determination: carrierDeadlines.some((d: any) => d.deadline_type === "coverage_determination" && d.status === "met"),
+        playbook_data: playbookData,
+      });
     };
 
     loadDeadlineData();
-  }, [claimId, claim?.insurance_company]);
+  }, [claimId, claim?.insurance_company, detectedState, claim?.loss_type]);
 
   // Evaluate which rules fire
   const firedAlerts = useMemo((): EscalationAlert[] => {
@@ -213,7 +299,11 @@ export const DarwinEscalationEngine = ({ claimId, claim }: DarwinEscalationEngin
         ...rule,
         fired: evaluateRule(rule, claimState),
         playbook_backing: claimState.playbook_data && claimState.playbook_data.sample_size > 0
-          ? { confidence: claimState.playbook_data.sample_size >= 25 ? "High" : claimState.playbook_data.sample_size >= 10 ? "Medium" : "Low", n: claimState.playbook_data.sample_size }
+          ? { 
+              confidence: claimState.playbook_data.sample_size >= 25 ? "High" : claimState.playbook_data.sample_size >= 10 ? "Medium" : "Low", 
+              n: claimState.playbook_data.sample_size,
+              label: claimState.playbook_data.label,
+            }
           : null,
       }))
       .filter(a => a.fired)
@@ -337,7 +427,7 @@ export const DarwinEscalationEngine = ({ claimId, claim }: DarwinEscalationEngin
                             )}
                             {alert.playbook_backing && (
                               <Badge variant="secondary" className="text-xs">
-                                Playbook: {alert.playbook_backing.confidence} (n={alert.playbook_backing.n})
+                                Playbook: {alert.playbook_backing.confidence} (n={alert.playbook_backing.n}) — {alert.playbook_backing.label}
                               </Badge>
                             )}
                           </div>
