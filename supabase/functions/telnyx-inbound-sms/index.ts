@@ -262,10 +262,26 @@ function maskPhone(phone: string): string {
   return `...${digits.slice(-4)}`;
 }
 
-/** Classify intent using OpenAI when regex fails */
-async function classifyIntentWithLLM(text: string): Promise<DarwinIntent> {
+/** Keyword-based heuristic fallback when LLM is unavailable */
+function classifyIntentByKeywords(text: string): DarwinIntent {
+  const t = text.toLowerCase();
+  if (/\b(analy[sz]|review|evaluat|look\s*over|inspect)\b/.test(t)) return 'analyze';
+  if (/\b(text|sms|message)\b/.test(t) && /\b(client|update|policyholder|\w+\s+an?\s+update)\b/.test(t)) return 'send_client_sms';
+  if (/\b(email)\b/.test(t) && /\b(client|update|policyholder)\b/.test(t)) return 'send_client_email';
+  if (/\b(task|remind|follow\s*up|schedule)\b/.test(t)) return 'create_task';
+  if (/\b(summar|recap|catch\s+me|what\s+happened|status)\b/.test(t)) return 'summary';
+  if (/\b(paid|outstanding|owed|depreciation|how\s+much)\b/.test(t)) return 'financial_qa';
+  return 'unknown';
+}
+
+/** Classify intent using OpenAI when regex fails, with keyword heuristic fallback */
+async function classifyIntentWithLLM(text: string): Promise<{ intent: DarwinIntent; method: string; rawOutput?: string }> {
   const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-  if (!OPENAI_API_KEY) return 'unknown';
+  if (!OPENAI_API_KEY) {
+    console.warn('LLM fallback: OPENAI_API_KEY missing, using keyword heuristic');
+    const intent = classifyIntentByKeywords(text);
+    return { intent, method: 'keyword_heuristic' };
+  }
   try {
     const resp = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -279,10 +295,10 @@ async function classifyIntentWithLLM(text: string): Promise<DarwinIntent> {
             role: 'system',
             content: `Classify this SMS message into exactly one intent. Reply with ONLY the intent keyword, nothing else.
 Intents: analyze, operating_manual, case_study, marketing, financial_qa, create_task, send_client_sms, send_client_email, summary, unknown
-- analyze: user wants to analyze/review a claim
+- analyze: user wants to analyze/review a claim or run analysis
 - create_task: user wants to create a task, reminder, or follow-up
-- send_client_sms: user wants to text/message a client
-- send_client_email: user wants to email a client
+- send_client_sms: user wants to text/SMS/message a client or person about a claim
+- send_client_email: user wants to email a client or person
 - summary: user wants a recap/status/what happened
 - financial_qa: user asks about payments, amounts, depreciation
 - operating_manual: user wants an operating manual
@@ -294,13 +310,27 @@ Intents: analyze, operating_manual, case_study, marketing, financial_qa, create_
         ],
       }),
     });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error(`LLM fallback: OpenAI returned ${resp.status}: ${errText}`);
+      const intent = classifyIntentByKeywords(text);
+      return { intent, method: 'keyword_heuristic_after_llm_error', rawOutput: errText.slice(0, 200) };
+    }
     const data = await resp.json();
     const raw = (data.choices?.[0]?.message?.content || '').trim().toLowerCase();
+    console.log(`LLM fallback: raw output="${raw}" for text="${text.slice(0, 100)}"`);
     const valid: DarwinIntent[] = ['analyze', 'operating_manual', 'case_study', 'marketing', 'financial_qa', 'create_task', 'send_client_sms', 'send_client_email', 'summary'];
-    return valid.includes(raw as DarwinIntent) ? (raw as DarwinIntent) : 'unknown';
+    if (valid.includes(raw as DarwinIntent)) {
+      return { intent: raw as DarwinIntent, method: 'llm', rawOutput: raw };
+    }
+    // LLM returned something unexpected, try keyword heuristic
+    console.warn(`LLM fallback: unexpected output "${raw}", falling back to keywords`);
+    const intent = classifyIntentByKeywords(text);
+    return { intent, method: 'keyword_heuristic_after_llm_unknown', rawOutput: raw };
   } catch (err) {
     console.error('LLM intent classification error:', err);
-    return 'unknown';
+    const intent = classifyIntentByKeywords(text);
+    return { intent, method: 'keyword_heuristic_after_llm_exception' };
   }
 }
 
@@ -754,12 +784,15 @@ serve(async (req) => {
     // ── 6. Resolve active claim context (no auto-pick — user must explicitly switch) ──
     const activeClaimId = convState?.active_claim_id || null;
 
-    // ── 7. Parse intent and route (regex first, then LLM fallback) ──
+    // ── 7. Parse intent and route (regex first, then LLM fallback with keyword heuristic) ──
     let intent = parseIntent(messageBody);
+    let intentMethod = 'regex';
 
     if (intent === 'unknown') {
-      intent = await classifyIntentWithLLM(messageBody);
-      console.log(`LLM fallback classified intent: ${intent}`);
+      const fallback = await classifyIntentWithLLM(messageBody);
+      intent = fallback.intent;
+      intentMethod = fallback.method;
+      console.log(`Intent fallback: method=${fallback.method}, intent=${intent}, raw=${fallback.rawOutput || 'n/a'}, text="${messageBody.slice(0, 80)}"`);
     }
 
     const { data: activityRow } = await supabase.from('darwin_sms_activity').insert({
@@ -767,6 +800,7 @@ serve(async (req) => {
       direction: 'inbound', message_text: messageBody,
       parsed_intent: intent, status: 'processing',
       action_type: intent === 'create_task' ? 'task_create' : intent.startsWith('send_client_') ? intent.replace('send_client_', 'client_') : 'command',
+      metadata: { intent_method: intentMethod },
     }).select('id').single();
 
     if (intent === 'unknown') {
