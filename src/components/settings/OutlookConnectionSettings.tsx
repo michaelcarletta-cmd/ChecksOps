@@ -122,13 +122,22 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
       queryClient.invalidateQueries({ queryKey: ["emails"] });
     } catch (e: any) {
       const message = e?.message || String(e);
+<<<<<<< HEAD
       console.error("Cleanup and resync error:", e);
       const hint = message.includes("Unknown action") || message.includes("cleanup_and_resync")
         ? " Deploy the Outlook sync function from the project root: npm run deploy:outlook-sync (or: supabase functions deploy outlook-email-sync). Then try again."
         : "";
+=======
+      const isNon2xx = /non-2xx|non-2xx code/i.test(message);
+      const isUnknownAction = message.includes("Unknown action") || message.includes("cleanup_and_resync");
+      const deployHint =
+        " Deploy the Outlook sync function from the project root: npm run deploy:outlook-sync (or: supabase functions deploy outlook-email-sync). Then try again.";
+      const hint = isNon2xx || isUnknownAction ? deployHint : "";
+>>>>>>> 8c7ec8a (Outlook email sync: claim/subject matching, cleanup, 200 responses)
       toast({
         title: "Cleanup and resync failed",
-        description: message + hint,
+        description:
+          (isNon2xx ? "The sync function needs to be redeployed so it returns errors correctly. " : "") + message + hint,
         variant: "destructive",
         duration: 12000,
       });
