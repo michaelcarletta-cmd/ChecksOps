@@ -793,6 +793,7 @@ CRITICAL RULES:
 
     let userPrompt = '';
     let responseFormat = '';
+    let carrierIntelContext = '';
 
     if (analysisType === 'full_strategic_analysis') {
       userPrompt = `Analyze this claim and provide a comprehensive strategic assessment:
@@ -856,7 +857,7 @@ CRITICAL: Return ONLY the JSON object. No explanation, no markdown formatting, n
     } else if (analysisType === 'war_room_2') {
       // --- WAR ROOM 2.0: Expanded strategic intelligence ---
       // Fetch carrier behavior analytics for global intelligence context
-      let carrierIntelContext = '';
+      carrierIntelContext = '';
       if (claim.insurance_company) {
         const { data: carrierAnalytics } = await supabase
           .from('carrier_behavior_analytics')
