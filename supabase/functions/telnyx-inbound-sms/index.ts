@@ -12,6 +12,25 @@ function last10(phone: string): string {
   return phone.replace(/\D/g, '').slice(-10);
 }
 
+/** Decode a string that may be hex or base64 into Uint8Array */
+function smartDecode(input: string): Uint8Array {
+  // If it looks like hex (only hex chars, even length), decode as hex
+  if (/^[0-9a-fA-F]+$/.test(input) && input.length % 2 === 0) {
+    const bytes = new Uint8Array(input.length / 2);
+    for (let i = 0; i < input.length; i += 2) {
+      bytes[i / 2] = parseInt(input.substring(i, i + 2), 16);
+    }
+    return bytes;
+  }
+  // Otherwise decode as base64
+  const binary = atob(input);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
 /** Verify Telnyx webhook signature (ed25519) */
 async function verifyTelnyxSignature(req: Request, body: string): Promise<boolean> {
   const signature = req.headers.get('telnyx-signature-ed25519');
@@ -32,23 +51,18 @@ async function verifyTelnyxSignature(req: Request, body: string): Promise<boolea
       return false;
     }
     const signedPayload = `${timestamp}|${body}`;
-    const signatureBytes = hexDecode(signature);
-    const publicKeyBytes = hexDecode(TELNYX_PUBLIC_KEY);
+    const signatureBytes = smartDecode(signature);
+    const publicKeyBytes = smartDecode(TELNYX_PUBLIC_KEY);
+
+    console.log(`Sig verify: pubkey ${publicKeyBytes.length}B, sig ${signatureBytes.length}B`);
+
     const key = await crypto.subtle.importKey('raw', publicKeyBytes, { name: 'Ed25519' }, false, ['verify']);
     const encoder = new TextEncoder();
     return await crypto.subtle.verify('Ed25519', key, signatureBytes, encoder.encode(signedPayload));
   } catch (err) {
-    console.error('Signature verification error:', err);
+    console.error('Signature verification error:', err.message || err);
     return false;
   }
-}
-
-function hexDecode(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-  }
-  return bytes;
 }
 
 /** Send an SMS reply via Telnyx */
