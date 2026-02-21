@@ -429,8 +429,75 @@ serve(async (req) => {
       : null;
     
     const totalChecksReceived = checks.reduce((sum, c) => sum + (c.amount || 0), 0);
-    const estimateAmount = settlement?.estimate_amount || claim.claim_amount || 0;
+    const carrierEstimate = settlement?.estimate_amount || 0;
     const totalSettlement = settlement?.total_settlement || 0;
+
+    // PA/Freedom Estimate: explicit field first, then fallback to file-based extraction
+    let paEstimate = Number(settlement?.pa_estimate_amount) || 0;
+    
+    if (!paEstimate) {
+      // Fetch folders to identify PA vs carrier folders
+      const { data: folders } = await supabase
+        .from('claim_folders')
+        .select('id, name')
+        .eq('claim_id', claimId);
+      
+      const paFolderIds = new Set(
+        (folders || [])
+          .filter(f => {
+            const name = (f.name || '').toLowerCase();
+            return name.includes('freedom') || name.includes('supporting evidence') || name.includes('estimates');
+          })
+          .map(f => f.id)
+      );
+      
+      // Find estimate files in PA/Freedom folders
+      const paEstimateFiles = files.filter(f => {
+        const cls = (f.document_classification || '').toLowerCase();
+        const fileName = (f.file_name || '').toLowerCase();
+        const isEstimate = cls === 'estimate' || fileName.includes('estimate') || 
+                          fileName.includes('xactimate') || fileName.includes('scope') ||
+                          cls === 'contractor';
+        const isInPaFolder = f.folder_id && paFolderIds.has(f.folder_id);
+        return isEstimate && isInPaFolder;
+      });
+      
+      // If no folder-filtered results, try all estimate files not in carrier folders
+      const carrierFolderIds = new Set(
+        (folders || [])
+          .filter(f => (f.name || '').toLowerCase().includes('carrier'))
+          .map(f => f.id)
+      );
+      
+      const fallbackEstimateFiles = paEstimateFiles.length > 0 ? paEstimateFiles : files.filter(f => {
+        const cls = (f.document_classification || '').toLowerCase();
+        const fileName = (f.file_name || '').toLowerCase();
+        const isEstimate = cls === 'estimate' || fileName.includes('estimate') || fileName.includes('xactimate');
+        const isNotCarrier = !f.folder_id || !carrierFolderIds.has(f.folder_id);
+        return isEstimate && isNotCarrier;
+      });
+      
+      // Extract highest amount from classification_metadata
+      for (const file of fallbackEstimateFiles) {
+        const meta = file.classification_metadata;
+        if (meta && typeof meta === 'object') {
+          const amounts = (meta as any).amounts;
+          if (Array.isArray(amounts)) {
+            for (const a of amounts) {
+              const val = Number(a.amount || a.value || 0);
+              if (val > paEstimate) paEstimate = val;
+            }
+          }
+          // Also check for total_rcv or gross_total in metadata
+          const totalRcv = Number((meta as any).total_rcv || (meta as any).gross_total || 0);
+          if (totalRcv > paEstimate) paEstimate = totalRcv;
+        }
+      }
+    }
+    
+    // Use PA estimate as the primary "estimate" if available, otherwise fall back to carrier or claim amount
+    const estimateAmount = paEstimate || carrierEstimate || claim.claim_amount || 0;
+    const estimateDifference = paEstimate && carrierEstimate ? paEstimate - carrierEstimate : 0;
 
     // Helper function to get actual document date with validation
     // Prefers extracted date from document content, falls back to upload date
@@ -702,12 +769,15 @@ CLAIM OVERVIEW:
 - Policy Number: ${claim.policy_number || 'Not specified'}
 
 FINANCIAL SNAPSHOT:
-- Estimate Amount: $${estimateAmount?.toLocaleString() || '0'}
+- Carrier Estimate (what carrier offered): $${carrierEstimate?.toLocaleString() || '0'}
+- PA/Freedom Estimate (our demand): $${paEstimate ? paEstimate.toLocaleString() : 'Not set'}
+- Estimate Difference (Gap): $${estimateDifference > 0 ? estimateDifference.toLocaleString() : 'N/A'}
 - Total Settlement: $${totalSettlement?.toLocaleString() || '0'}
 - Checks Received: $${totalChecksReceived?.toLocaleString() || '0'} (${checks.length} checks)
 - Deductible: $${settlement?.deductible?.toLocaleString() || claim.deductible?.toLocaleString() || 'Unknown'}
 - Recoverable Depreciation: $${settlement?.recoverable_depreciation?.toLocaleString() || '0'}
 - Coverage Limits: Dwelling $${claim.dwelling_limit?.toLocaleString() || 'Unknown'}, ALE $${claim.ale_limit?.toLocaleString() || 'Unknown'}
+NOTE: The "PA/Freedom Estimate" is the policyholder's actual demand. Use THIS as the claim value for all strategic calculations, NOT the carrier estimate.
 
 EVIDENCE INVENTORY:
 - Total Files: ${files.length}

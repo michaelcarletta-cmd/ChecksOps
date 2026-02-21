@@ -1,0 +1,1 @@
+ALTER TABLE public.claim_settlements ADD COLUMN IF NOT EXISTS pa_estimate_amount DECIMAL(12,2);
