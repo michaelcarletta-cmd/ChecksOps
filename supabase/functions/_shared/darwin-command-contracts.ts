@@ -28,7 +28,7 @@ function stripPrefixes(text: string): string {
 
 export const INTENT_PATTERNS: Array<{ intent: DarwinIntent; pattern: RegExp }> = [
   // ── Analysis ──
-  { intent: "analyze", pattern: /\b(run|do|perform|start|generate|give\s+me)\s+(an?\s+)?(full\s+)?analysis\b|analyze\s+(this\s+)?(claim|file|property)|claim\s+analysis/i },
+  { intent: "analyze", pattern: /\b(run|do|perform|start|generate|give\s+me)\s+(an?\s+)?(full\s+)?analysis\b|analy[sz]e\s+(the\s+)?(claim|file|property|this)|review\s+(the\s+)?(claim|file)|look\s+over\s+(the\s+)?(claim|file)|evaluat(e|ion)\s+(the\s+)?(claim|file)|run\s+analysis\s+on|claim\s+analysis/i },
   // ── Operating manual ──
   { intent: "operating_manual", pattern: /operating\s+manual|scenarios\s*\+\s*mini\s+trainings|turn\s+into\s+(an?\s+)?(operating\s+)?manual/i },
   // ── Case study ──
@@ -42,9 +42,9 @@ export const INTENT_PATTERNS: Array<{ intent: DarwinIntent; pattern: RegExp }> =
   // ── Create task (broadened) ──
   { intent: "create_task", pattern: /^task[:\s]|create\s+(a\s+)?task|add\s+(a\s+)?task|make\s+(a\s+)?task|remind\s+me|set\s+a?\s*reminder|follow\s*up\s+(with|on)|reach\s+out\s+to|schedule\s+(a\s+)?(call|meeting|follow)/i },
   // ── Send client SMS (broadened) ──
-  { intent: "send_client_sms", pattern: /text\s+(the\s+)?client|send\s+(a\s+)?sms\s*(to\s+)?(client|update|policyholder)?|sms\s+(the\s+)?(client|update|policyholder)|message\s+(the\s+)?client|shoot\s+(the\s+)?client\s+(a\s+)?text/i },
+  { intent: "send_client_sms", pattern: /text\s+\w|send\s+(a\s+)?sms|sms\s+\w|message\s+(the\s+)?\w|shoot\s+\w.*\btext\b|send\s+(a\s+)?(text|message)\s+(to\s+)?|text\s+(the\s+)?client|sms\s+(the\s+)?client/i },
   // ── Send client email (broadened) ──
-  { intent: "send_client_email", pattern: /email\s+(the\s+)?client|send\s+(an?\s+)?email\s*(to\s+)?(client|update|policyholder)?|email\s+(the\s+)?(policyholder|update)|draft\s+(an?\s+)?email/i },
+  { intent: "send_client_email", pattern: /email\s+(the\s+)?\w|send\s+(an?\s+)?email|draft\s+(an?\s+)?email|email\s+\w+\s+(an?\s+)?update/i },
 ];
 
 export function parseIntent(text: string): DarwinIntent {
