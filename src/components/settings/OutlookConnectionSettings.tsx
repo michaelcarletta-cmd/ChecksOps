@@ -122,31 +122,12 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
       queryClient.invalidateQueries({ queryKey: ["emails"] });
     } catch (e: any) {
       const message = e?.message || String(e);
-
-
-
-(Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
       console.error("Cleanup and resync error:", e);
-      const hint = message.includes("Unknown action") || message.includes("cleanup_and_resync")
-        ? " Deploy the Outlook sync function from the project root: npm run deploy:outlook-sync (or: supabase functions deploy outlook-email-sync). Then try again."
-        : "";
-
-
-
-(Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
-(Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
       const isNon2xx = /non-2xx|non-2xx code/i.test(message);
       const isUnknownAction = message.includes("Unknown action") || message.includes("cleanup_and_resync");
-      const deployHint =
-        " Deploy the Outlook sync function from the project root: npm run deploy:outlook-sync (or: supabase functions deploy outlook-email-sync). Then try again.";
-      const hint = isNon2xx || isUnknownAction ? deployHint : "";
-
-(Outlook email sync: claim/subject matching, cleanup, 200 responses)
-=======
-
- (Outlook email sync: claim/subject matching, cleanup, 200 responses)
- (Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
-(Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
+      const hint = isNon2xx || isUnknownAction
+        ? " Deploy the Outlook sync function from the project root: npm run deploy:outlook-sync (or: supabase functions deploy outlook-email-sync). Then try again."
+        : "";
       toast({
         title: "Cleanup and resync failed",
         description:

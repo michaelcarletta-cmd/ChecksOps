@@ -221,9 +221,10 @@ serve(async (req) => {
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("draft-escalation-artifact error:", error);
-    return new Response(JSON.stringify({ success: false, error: error.message }), {
+    const errMsg = error instanceof Error ? error.message : "Unknown error";
+    return new Response(JSON.stringify({ success: false, error: errMsg }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
