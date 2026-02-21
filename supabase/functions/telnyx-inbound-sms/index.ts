@@ -667,21 +667,27 @@ serve(async (req) => {
 
     // ── 8. CREATE TASK ──
     if (intent === 'create_task') {
-      const { title, dueDate } = parseTaskFromSMS(messageBody);
-
-      // Extract claim hint from "Task for <hint>:" or "Task for <hint>" syntax
-      // Supports both names ("Task for Smith: call adjuster") and claim numbers ("Task for 24-12345: send docs")
+      // Extract claim hint and task body from "Task for <hint>: <task>" or "Task for <hint> claim to <task>" etc.
       let claimHint: string | null = null;
-      const forColonMatch = messageBody.match(/(?:task|remind\s+me|add\s+task|create\s+(?:a\s+)?task)\s+(?:for|regarding|about|on|re:?)\s+(.+?)(?::\s*|\s+(?:to|claim)\s+)/i);
-      if (forColonMatch) {
-        claimHint = forColonMatch[1].trim().replace(/\s+claim$/i, '');
+      let taskBodyFromHint: string | null = null;
+
+      // Pattern 1: "task for <name> claim to <task>" or "task for <name> to <task>"
+      const claimToMatch = messageBody.match(/(?:task|remind\s+me|add\s+task|create\s+(?:a\s+)?task)\s+(?:for|regarding|about|on|re:?)\s+(.+?)\s+(?:claim\s+)?(?:to\s+|:\s*|—\s*|-\s+)(.+)/i);
+      if (claimToMatch) {
+        claimHint = claimToMatch[1].trim().replace(/\s+claim$/i, '');
+        taskBodyFromHint = claimToMatch[2].trim();
       } else {
-        // Fallback: "Task for <name>" without colon — extract name-like tokens
-        const forMatch = messageBody.match(/(?:task|remind\s+me|add\s+task|create\s+(?:a\s+)?task)\s+(?:for|regarding|about|on|re:?)\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+)+)/i);
+        // Pattern 2: "Task for <name>" without task body separator — extract name-like tokens (including parenthesized parts)
+        const forMatch = messageBody.match(/(?:task|remind\s+me|add\s+task|create\s+(?:a\s+)?task)\s+(?:for|regarding|about|on|re:?)\s+([A-Za-z0-9][A-Za-z0-9'()\s-]+?)(?:\s*$|\s+claim\s*$)/i);
         if (forMatch) {
           claimHint = forMatch[1].trim().replace(/\s+claim$/i, '');
         }
       }
+
+      // Use extracted task body if available, otherwise fall back to parseTaskFromSMS
+      const parsed = parseTaskFromSMS(taskBodyFromHint || messageBody);
+      const title = taskBodyFromHint ? parsed.title || taskBodyFromHint : parsed.title;
+      const dueDate = parsed.dueDate;
 
       // If we have a hint, search for matching claims
       if (claimHint) {
