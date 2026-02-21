@@ -222,7 +222,7 @@ function parseTaskFromSMS(text: string): { title: string; dueDate: string | null
   // Strip trailing time references like "10am", "at 3pm"
   cleaned = cleaned.replace(/\b(at\s+)?\d{1,2}(:\d{2})?\s*(am|pm)\b/gi, '').trim();
   // Clean up extra whitespace and trailing punctuation
-  cleaned = cleaned.replace(/\s{2,}/g, ' ').replace(/^[,\s]+|[,\s]+$/g, '');
+  cleaned = cleaned.replace(/\s{2,}/g, ' ').replace(/^[,\s]+|[,\s?.!]+$/g, '');
 
   // Default: tomorrow if no date found
   if (!dueDate) {
