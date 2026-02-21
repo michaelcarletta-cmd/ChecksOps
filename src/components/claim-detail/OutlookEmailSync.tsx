@@ -42,6 +42,11 @@ export function OutlookEmailSync({ claimId }: OutlookEmailSyncProps) {
       const failed = data && typeof data === "object" && "success" in data ? (data as { success?: boolean }).success === false : false;
       const errMsg = bodyError ?? error?.message ?? (error ? String(error) : undefined);
       if (error || bodyError || failed) throw new Error(errMsg || "Sync failed");
+      if (error) throw error;
+
+      // Handle JSON body errors
+      if (data?.success === false) throw new Error(data.error || "Sync failed");
+(Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
 
       setLastResult({ imported: data.imported, matching: data.matching });
 
@@ -49,6 +54,26 @@ export function OutlookEmailSync({ claimId }: OutlookEmailSyncProps) {
         toast({ title: "Sync completed with warning", description: data.warning, variant: "destructive" });
       }
       if (data.imported > 0) {
+        toast({
+          title: "Sync completed with warnings",
+          description: data.warning,
+          variant: "destructive",
+        });
+        queryClient.invalidateQueries({ queryKey: ["emails", claimId] });
+      } else if (data.imported > 0) {
+      const bodyError = data && typeof data === "object" && "error" in data ? (data as { error?: string }).error : undefined;
+      const failed = data && typeof data === "object" && "success" in data ? (data as { success?: boolean }).success === false : false;
+      const errMsg = bodyError ?? error?.message ?? (error ? String(error) : undefined);
+      if (error || bodyError || failed) throw new Error(errMsg || "Sync failed");
+
+      setLastResult({ imported: data.imported, matching: data.matching });
+
+      if (data.warning) {
+        toast({ title: "Sync completed with warning", description: data.warning, variant: "destructive" });
+      }
+      if (data.imported > 0) {
+(Outlook email sync: claim/subject matching, cleanup, 200 responses)
+(Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
         toast({
           title: "Emails synced!",
           description: `Imported ${data.imported} new email${data.imported > 1 ? "s" : ""} from Outlook.`,
