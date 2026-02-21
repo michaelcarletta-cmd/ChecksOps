@@ -432,31 +432,72 @@ serve(async (req) => {
         });
       }
 
-      // Number selection for recipient disambiguation
+      // Number selection for recipient disambiguation OR pending task claim pick
       const numMatch = upperMsg.match(/^(\d)$/);
-      if (numMatch && pendingAction.recipientPending && pendingAction.candidates) {
+      if (numMatch && pendingAction.candidates) {
         const idx = parseInt(numMatch[1]) - 1;
-        const candidates = pendingAction.candidates as Array<{ name: string; phone?: string; email?: string; role: string }>;
+        const candidates = pendingAction.candidates as Array<any>;
         if (idx >= 0 && idx < candidates.length) {
           const selected = candidates[idx];
-          const updatedAction = {
-            ...pendingAction,
-            recipientPending: false,
-            to: pendingAction.type === 'send_client_sms' ? selected.phone : selected.email,
-            recipientName: selected.name,
-          };
-          // Now show the draft preview
-          const channel = pendingAction.type === 'send_client_sms' ? 'SMS' : 'Email';
-          const toDisplay = pendingAction.type === 'send_client_sms'
-            ? `${selected.name} (${maskPhone(selected.phone || '')})`
-            : `${selected.name} (${selected.email})`;
-          const draftReply = `📝 Draft ${channel} to ${toDisplay}:\n"${updatedAction.body}"\n\nReply SEND to send, EDIT <new text> to modify, or CANCEL.`;
-          await supabase.from('sms_conversation_state')
-            .update({ pending_action: updatedAction }).eq('id', convState!.id);
-          await sendReply(fromNumber, draftReply);
-          return new Response(JSON.stringify({ success: true, action: 'recipient_selected' }), {
-            status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+
+          // ── Pending task claim selection ──
+          if (pendingAction.type === 'create_task' && pendingAction.claimPickPending) {
+            const taskClaimId = selected.id;
+            // Set active claim for future messages
+            await supabase.from('sms_conversation_state')
+              .update({ active_claim_id: taskClaimId, pending_action: null, expires_at: new Date(Date.now() + 2 * 3600000).toISOString() })
+              .eq('id', convState!.id);
+            // Create the task
+            const { data: task, error: taskErr } = await supabase.from('tasks').insert({
+              claim_id: taskClaimId,
+              title: pendingAction.taskTitle,
+              due_date: pendingAction.dueDate,
+              status: 'pending',
+              created_by: userId,
+            }).select('id, title, due_date').single();
+            if (taskErr) {
+              const errReply = `⚠️ Failed to create task: ${taskErr.message}`;
+              await sendReply(fromNumber, errReply);
+            } else {
+              const reply = `✅ Task created on ${selected.claim_number} (${selected.policyholder_name}): "${task.title}" due ${task.due_date}. Visible in CRM.`;
+              await sendReply(fromNumber, reply);
+              await supabase.from('darwin_sms_activity').insert({
+                user_id: userId, phone_number: fromNumber, claim_id: taskClaimId,
+                direction: 'outbound', message_text: reply, parsed_intent: 'create_task',
+                status: 'completed', action_type: 'task_create', result_id: task.id,
+              });
+              await supabase.from('claim_updates').insert({
+                claim_id: taskClaimId,
+                content: `Task created via SMS: "${task.title}" due ${task.due_date}`,
+                update_type: 'task_created',
+                created_by: userId,
+              });
+            }
+            return new Response(JSON.stringify({ success: true, action: 'task_created', taskId: task?.id }), {
+              status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
+          // ── Recipient disambiguation for SMS/email ──
+          if (pendingAction.recipientPending) {
+            const updatedAction = {
+              ...pendingAction,
+              recipientPending: false,
+              to: pendingAction.type === 'send_client_sms' ? selected.phone : selected.email,
+              recipientName: selected.name,
+            };
+            const channel = pendingAction.type === 'send_client_sms' ? 'SMS' : 'Email';
+            const toDisplay = pendingAction.type === 'send_client_sms'
+              ? `${selected.name} (${maskPhone(selected.phone || '')})`
+              : `${selected.name} (${selected.email})`;
+            const draftReply = `📝 Draft ${channel} to ${toDisplay}:\n"${updatedAction.body}"\n\nReply SEND to send, EDIT <new text> to modify, or CANCEL.`;
+            await supabase.from('sms_conversation_state')
+              .update({ pending_action: updatedAction }).eq('id', convState!.id);
+            await sendReply(fromNumber, draftReply);
+            return new Response(JSON.stringify({ success: true, action: 'recipient_selected' }), {
+              status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
         }
       }
 
@@ -628,63 +669,108 @@ serve(async (req) => {
     if (intent === 'create_task') {
       const { title, dueDate } = parseTaskFromSMS(messageBody);
 
-      // Smart claim resolution: if the task text mentions a client name,
-      // try to find that client's claim instead of using active context.
-      let taskClaimId = activeClaimId;
-      const nameHints = title.match(/(?:for|regarding|about|re:?)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/);
-      if (nameHints) {
-        const mentionedName = nameHints[1].trim();
-        const matchedClaims = await getUserOrgClaims(supabase, userId, { search: mentionedName, limit: 1 });
-        if (matchedClaims.length > 0) {
-          taskClaimId = matchedClaims[0].id;
-          console.log(`Smart claim resolve: "${mentionedName}" → ${matchedClaims[0].claim_number} (${matchedClaims[0].policyholder_name})`);
+      // Extract claim hint from "Task for <hint>:" or "Task for <hint>" syntax
+      // Supports both names ("Task for Smith: call adjuster") and claim numbers ("Task for 24-12345: send docs")
+      let claimHint: string | null = null;
+      const forColonMatch = messageBody.match(/(?:task|remind\s+me|add\s+task|create\s+(?:a\s+)?task)\s+(?:for|regarding|about|on|re:?)\s+(.+?)(?::\s*|\s+(?:to|claim)\s+)/i);
+      if (forColonMatch) {
+        claimHint = forColonMatch[1].trim().replace(/\s+claim$/i, '');
+      } else {
+        // Fallback: "Task for <name>" without colon — extract name-like tokens
+        const forMatch = messageBody.match(/(?:task|remind\s+me|add\s+task|create\s+(?:a\s+)?task)\s+(?:for|regarding|about|on|re:?)\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+)+)/i);
+        if (forMatch) {
+          claimHint = forMatch[1].trim().replace(/\s+claim$/i, '');
         }
       }
-      
-      // If still no claim, ask user to select one
-      if (!taskClaimId) {
-        const noClaimReply = 'Could not determine which claim this task belongs to. Reply "Switch [claim #]" to set an active claim, or mention the client name (e.g., "Task for John Smith: ...").';
-        await sendReply(fromNumber, noClaimReply);
-        if (activityRow) {
-          await supabase.from('darwin_sms_activity')
-            .update({ status: 'needs_context', darwin_response: noClaimReply }).eq('id', activityRow.id);
+
+      // If we have a hint, search for matching claims
+      if (claimHint) {
+        const matchedClaims = await getUserOrgClaims(supabase, userId, { search: claimHint, limit: 5 });
+
+        if (matchedClaims.length === 0) {
+          const reply = `No claim found matching "${claimHint}". Reply "Claims" to list your claims, or "Switch [claim #]" to set one.`;
+          await sendReply(fromNumber, reply);
+          if (activityRow) await supabase.from('darwin_sms_activity').update({ status: 'needs_context', darwin_response: reply }).eq('id', activityRow.id);
+          return new Response(JSON.stringify({ success: true, action: 'no_match' }), {
+            status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
         }
-        return new Response(JSON.stringify({ success: true, action: 'needs_claim' }), {
+
+        if (matchedClaims.length === 1) {
+          // Exact match — create task immediately
+          const taskClaimId = matchedClaims[0].id;
+          await supabase.from('sms_conversation_state')
+            .update({ active_claim_id: taskClaimId, expires_at: new Date(Date.now() + 2 * 3600000).toISOString() })
+            .eq('id', convState!.id);
+          const { data: task, error: taskErr } = await supabase.from('tasks').insert({
+            claim_id: taskClaimId, title, due_date: dueDate, status: 'pending', created_by: userId,
+          }).select('id, title, due_date').single();
+          if (taskErr) {
+            const errReply = `⚠️ Failed to create task: ${taskErr.message}`;
+            await sendReply(fromNumber, errReply);
+            if (activityRow) await supabase.from('darwin_sms_activity').update({ status: 'failed', error_message: taskErr.message, darwin_response: errReply }).eq('id', activityRow.id);
+          } else {
+            const reply = `✅ Task created on ${matchedClaims[0].claim_number} (${matchedClaims[0].policyholder_name}): "${task.title}" due ${task.due_date}. Visible in CRM.`;
+            await sendReply(fromNumber, reply);
+            if (activityRow) await supabase.from('darwin_sms_activity').update({ status: 'completed', darwin_response: reply, result_id: task.id, action_type: 'task_create' }).eq('id', activityRow.id);
+            await supabase.from('claim_updates').insert({
+              claim_id: taskClaimId, content: `Task created via SMS: "${task.title}" due ${task.due_date}`,
+              update_type: 'task_created', created_by: userId,
+            });
+          }
+          return new Response(JSON.stringify({ success: true, action: 'task_created', taskId: task?.id }), {
+            status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Multiple matches — ask user to pick
+        const list = matchedClaims.map((c: any, i: number) => `${i + 1}. ${c.claim_number} — ${c.policyholder_name}`).join('\n');
+        const reply = `Multiple claims match "${claimHint}":\n${list}\n\nReply with a number (1-${matchedClaims.length}) to select.`;
+        await supabase.from('sms_conversation_state')
+          .update({
+            pending_action: {
+              type: 'create_task',
+              taskTitle: title,
+              dueDate,
+              claimPickPending: true,
+              candidates: matchedClaims.map((c: any) => ({ id: c.id, claim_number: c.claim_number, policyholder_name: c.policyholder_name })),
+            },
+          }).eq('id', convState!.id);
+        await sendReply(fromNumber, reply);
+        if (activityRow) await supabase.from('darwin_sms_activity').update({ status: 'needs_context', darwin_response: reply }).eq('id', activityRow.id);
+        return new Response(JSON.stringify({ success: true, action: 'disambiguate' }), {
           status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
-      const { data: task, error: taskErr } = await supabase.from('tasks').insert({
-        claim_id: taskClaimId,
-        title,
-        due_date: dueDate,
-        status: 'pending',
-        created_by: userId,
-      }).select('id, title, due_date').single();
-
-      if (taskErr) {
-        const errReply = `⚠️ Failed to create task: ${taskErr.message}`;
-        await sendReply(fromNumber, errReply);
-        if (activityRow) {
-          await supabase.from('darwin_sms_activity')
-            .update({ status: 'failed', error_message: taskErr.message, darwin_response: errReply }).eq('id', activityRow.id);
+      // No "for" hint — use active claim if available
+      if (activeClaimId) {
+        const { data: task, error: taskErr } = await supabase.from('tasks').insert({
+          claim_id: activeClaimId, title, due_date: dueDate, status: 'pending', created_by: userId,
+        }).select('id, title, due_date').single();
+        if (taskErr) {
+          const errReply = `⚠️ Failed to create task: ${taskErr.message}`;
+          await sendReply(fromNumber, errReply);
+          if (activityRow) await supabase.from('darwin_sms_activity').update({ status: 'failed', error_message: taskErr.message, darwin_response: errReply }).eq('id', activityRow.id);
+        } else {
+          const reply = `✅ Task created: "${task.title}" due ${task.due_date}. Visible in CRM.`;
+          await sendReply(fromNumber, reply);
+          if (activityRow) await supabase.from('darwin_sms_activity').update({ status: 'completed', darwin_response: reply, result_id: task.id, action_type: 'task_create' }).eq('id', activityRow.id);
+          await supabase.from('claim_updates').insert({
+            claim_id: activeClaimId, content: `Task created via SMS: "${task.title}" due ${task.due_date}`,
+            update_type: 'task_created', created_by: userId,
+          });
         }
-      } else {
-        const reply = `✅ Task created: "${task.title}" due ${task.due_date}. Visible in CRM.`;
-        await sendReply(fromNumber, reply);
-        if (activityRow) {
-          await supabase.from('darwin_sms_activity')
-            .update({ status: 'completed', darwin_response: reply, result_id: task.id, action_type: 'task_create' }).eq('id', activityRow.id);
-        }
-        // Log to claim activity
-        await supabase.from('claim_updates').insert({
-          claim_id: taskClaimId,
-          content: `Task created via SMS: "${task.title}" due ${task.due_date}`,
-          update_type: 'task_created',
-          created_by: userId,
+        return new Response(JSON.stringify({ success: true, action: 'task_created', taskId: task?.id }), {
+          status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      return new Response(JSON.stringify({ success: true, action: 'task_created', taskId: task?.id }), {
+
+      // No hint and no active claim — ask which claim
+      const noClaimReply = 'Which claim is this task for? Reply CLAIMS to list, or "Switch <claim # / name>" to select one. You can also say "Task for Smith: call adjuster".';
+      await sendReply(fromNumber, noClaimReply);
+      if (activityRow) await supabase.from('darwin_sms_activity').update({ status: 'needs_context', darwin_response: noClaimReply }).eq('id', activityRow.id);
+      return new Response(JSON.stringify({ success: true, action: 'needs_claim' }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
