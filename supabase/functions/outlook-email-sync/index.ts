@@ -57,7 +57,6 @@ async function refreshTokens(refreshToken: string): Promise<{ access_token: stri
     let userMessage = 'Token refresh failed.';
 
     let detail = '';
-(Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
     try {
       const errJson = JSON.parse(errText);
       const code = errJson?.error;
