@@ -3990,6 +3990,59 @@ export type Database = {
           },
         ]
       }
+      darwin_sms_activity: {
+        Row: {
+          claim_id: string | null
+          created_at: string
+          darwin_response: string | null
+          direction: string
+          error_message: string | null
+          id: string
+          message_text: string
+          metadata: Json | null
+          parsed_intent: string | null
+          phone_number: string
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          claim_id?: string | null
+          created_at?: string
+          darwin_response?: string | null
+          direction: string
+          error_message?: string | null
+          id?: string
+          message_text: string
+          metadata?: Json | null
+          parsed_intent?: string | null
+          phone_number: string
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          claim_id?: string | null
+          created_at?: string
+          darwin_response?: string | null
+          direction?: string
+          error_message?: string | null
+          id?: string
+          message_text?: string
+          metadata?: Json | null
+          parsed_intent?: string | null
+          phone_number?: string
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "darwin_sms_activity_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       document_analysis_results: {
         Row: {
           carrier_name: string | null
@@ -5868,6 +5921,50 @@ export type Database = {
           },
         ]
       }
+      sms_conversation_state: {
+        Row: {
+          active_claim_id: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          last_command: string | null
+          last_response: string | null
+          phone_number: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active_claim_id?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          last_command?: string | null
+          last_response?: string | null
+          phone_number: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active_claim_id?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          last_command?: string | null
+          last_response?: string | null
+          phone_number?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_conversation_state_active_claim_id_fkey"
+            columns: ["active_claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sms_messages: {
         Row: {
           claim_id: string
@@ -6226,6 +6323,42 @@ export type Database = {
           id?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      user_phone_links: {
+        Row: {
+          created_at: string
+          id: string
+          is_verified: boolean
+          phone_number: string
+          updated_at: string
+          user_id: string
+          verification_code: string | null
+          verification_expires_at: string | null
+          verified_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_verified?: boolean
+          phone_number: string
+          updated_at?: string
+          user_id: string
+          verification_code?: string | null
+          verification_expires_at?: string | null
+          verified_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_verified?: boolean
+          phone_number?: string
+          updated_at?: string
+          user_id?: string
+          verification_code?: string | null
+          verification_expires_at?: string | null
+          verified_at?: string | null
         }
         Relationships: []
       }

@@ -46,6 +46,7 @@ import { SignatureFieldTemplatesSettings } from "@/components/settings/Signature
 import { CausationRubricSettings } from "@/components/settings/CausationRubricSettings";
 import { RDAutomationSettings } from "@/components/settings/RDAutomationSettings";
 import { OutlookConnectionSettings } from "@/components/settings/OutlookConnectionSettings";
+import { PhoneVerificationSettings } from "@/components/settings/PhoneVerificationSettings";
 interface ClaimStatus {
   id: string;
   name: string;
@@ -520,6 +521,7 @@ export default function Settings() {
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <CardContent className="space-y-6">
+                  <PhoneVerificationSettings />
                   <OutlookConnectionSettings embedded />
                   <MakeIntegrationSettings embedded />
                   <QuickBooksSettings embedded />
