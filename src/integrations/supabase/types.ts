@@ -4678,6 +4678,53 @@ export type Database = {
           },
         ]
       }
+      generated_assets: {
+        Row: {
+          asset_type: string
+          claim_id: string | null
+          content_md: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          metadata_json: Json | null
+          redacted: boolean | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          asset_type: string
+          claim_id?: string | null
+          content_md?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metadata_json?: Json | null
+          redacted?: boolean | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          asset_type?: string
+          claim_id?: string | null
+          content_md?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metadata_json?: Json | null
+          redacted?: boolean | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generated_assets_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       global_automation_settings: {
         Row: {
           created_at: string
