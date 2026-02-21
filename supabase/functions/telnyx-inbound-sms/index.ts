@@ -26,7 +26,11 @@ async function verifyTelnyxSignature(req: Request, body: string): Promise<boolea
     return false;
   }
   try {
-    const TELNYX_PUBLIC_KEY = '2b0c2228e7f6449ab0bc15a3100d46220f999abe255e56b7dc1e977cfea27f39';
+    const TELNYX_PUBLIC_KEY = Deno.env.get('TELNYX_PUBLIC_KEY');
+    if (!TELNYX_PUBLIC_KEY) {
+      console.error('TELNYX_PUBLIC_KEY env var not set — cannot verify webhook');
+      return false;
+    }
     const signedPayload = `${timestamp}|${body}`;
     const signatureBytes = hexDecode(signature);
     const publicKeyBytes = hexDecode(TELNYX_PUBLIC_KEY);
