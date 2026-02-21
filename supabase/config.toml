@@ -164,3 +164,6 @@ verify_jwt = false
 
 [functions.darwin-backfill-claims]
 verify_jwt = false
+
+[functions.collect-payment]
+verify_jwt = false
