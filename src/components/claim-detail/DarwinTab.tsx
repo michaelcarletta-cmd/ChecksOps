@@ -61,8 +61,11 @@ const DarwinDeclaredPosition = lazy(() => import("@/components/claim-detail/Darw
 const ClaimWarRoom = lazy(() => import("@/components/claim-detail/ClaimWarRoom").then(m => ({ default: m.ClaimWarRoom })));
 const CarrierPlaybookDialog = lazy(() => import("@/components/claim-detail/CarrierPlaybookDialog").then(m => ({ default: m.CarrierPlaybookDialog })));
 const DarwinSecondBrain = lazy(() => import("@/components/claim-detail/DarwinSecondBrain").then(m => ({ default: m.DarwinSecondBrain })));
+carle-outlook-sync-fix
+const DarwinCommandBar = lazy(() => import("@/components/claim-detail/DarwinCommandBar").then(m => ({ default: m.DarwinCommandBar })));
 const CarrierScenarioPlaybook = lazy(() => import("@/components/claim-detail/CarrierScenarioPlaybook").then(m => ({ default: m.CarrierScenarioPlaybook })));
 const DarwinEscalationEngine = lazy(() => import("@/components/claim-detail/DarwinEscalationEngine"));
+
 
 interface DarwinTabProps {
   claimId: string;
@@ -703,6 +706,14 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
               </span>
             )}
           </div>
+
+          <Suspense fallback={<LoadingFallback />}>
+            <DarwinCommandBar
+              claimId={claimId}
+              claim={claim}
+              placeholder="Hey Darwin… run an analysis, write a case study, or ask: What's been paid and what hasn't?"
+            />
+          </Suspense>
 
           <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
             <CardHeader className="pb-3">
