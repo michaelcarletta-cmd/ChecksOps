@@ -108,7 +108,7 @@ async function getUserOrgClaims(supabase: any, userId: string, options: { search
   let query = supabase
     .from('claims')
     .select('id, claim_number, policyholder_name, policyholder_phone, policyholder_email, status, updated_at')
-    .eq('org_id', orgMember.org_id);
+    .or(`org_id.eq.${orgMember.org_id},org_id.is.null`);
   if (openOnly) query = query.eq('is_closed', false);
   if (search) query = query.or(`claim_number.ilike.%${search}%,policyholder_name.ilike.%${search}%`);
   query = query.order('updated_at', { ascending: false }).limit(limit);
