@@ -161,3 +161,6 @@ verify_jwt = false
 
 [functions.draft-escalation-artifact]
 verify_jwt = false
+
+[functions.darwin-backfill-claims]
+verify_jwt = false

@@ -3324,6 +3324,7 @@ export type Database = {
           referrer_id: string | null
           signed_pdf_url: string | null
           ssn_last_four: string | null
+          state_code: string | null
           status: string | null
           updated_at: string | null
           workspace_id: string | null
@@ -3387,6 +3388,7 @@ export type Database = {
           referrer_id?: string | null
           signed_pdf_url?: string | null
           ssn_last_four?: string | null
+          state_code?: string | null
           status?: string | null
           updated_at?: string | null
           workspace_id?: string | null
@@ -3450,6 +3452,7 @@ export type Database = {
           referrer_id?: string | null
           signed_pdf_url?: string | null
           ssn_last_four?: string | null
+          state_code?: string | null
           status?: string | null
           updated_at?: string | null
           workspace_id?: string | null
@@ -6630,6 +6633,7 @@ export type Database = {
           referrer_id: string | null
           signed_pdf_url: string | null
           ssn_last_four: string | null
+          state_code: string | null
           status: string | null
           updated_at: string | null
           workspace_id: string | null
