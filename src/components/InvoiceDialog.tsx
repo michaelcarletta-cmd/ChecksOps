@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { FileText, Plus, Trash2, Download, Send, Loader2 } from "lucide-react";
+import { FileText, Plus, Trash2, Download, Send, Loader2, Link, Copy, CheckCircle } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -46,6 +46,8 @@ export function InvoiceDialog({
 }: InvoiceDialogProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isCreatingPaymentLink, setIsCreatingPaymentLink] = useState(false);
+  const [paymentLink, setPaymentLink] = useState<string | null>(null);
   const [companyBranding, setCompanyBranding] = useState<CompanyBranding | null>(null);
   const [formData, setFormData] = useState({
     invoiceNumber: `INV-${Date.now().toString().slice(-8)}`,
@@ -145,19 +147,52 @@ export function InvoiceDialog({
     }
   };
 
+  const generatePaymentLink = async () => {
+    const total = calculateSubtotal();
+    if (total <= 0) {
+      toast.error("Total must be greater than $0");
+      return;
+    }
+
+    setIsCreatingPaymentLink(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("collect-payment", {
+        body: {
+          amount: total,
+          description: `Invoice ${formData.invoiceNumber}`,
+          customerEmail: formData.recipientEmail || undefined,
+          customerName: formData.recipientName,
+          invoiceNumber: formData.invoiceNumber,
+          claimNumber,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.success === false) throw new Error(data.error);
+
+      setPaymentLink(data.url);
+      await navigator.clipboard.writeText(data.url);
+      toast.success("Payment link created & copied to clipboard!");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to create payment link";
+      toast.error(message);
+    } finally {
+      setIsCreatingPaymentLink(false);
+    }
+  };
+
   const sendInvoiceEmail = async () => {
     if (!formData.recipientEmail) {
       toast.error("Recipient email is required to send invoice");
       return;
     }
 
-    if (!generatedPdfUrl) {
-      toast.error("Please generate the invoice first");
-      return;
-    }
-
     setIsSending(true);
     try {
+      const paymentButton = paymentLink
+        ? `<p style="margin: 24px 0;"><a href="${paymentLink}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Pay Online — $${calculateSubtotal().toFixed(2)}</a></p>`
+        : "";
+
       const { error } = await supabase.functions.invoke("send-email", {
         body: {
           to: formData.recipientEmail,
@@ -165,25 +200,27 @@ export function InvoiceDialog({
           html: `
             <h2>Invoice ${formData.invoiceNumber}</h2>
             <p>Dear ${formData.recipientName},</p>
-            <p>Please find attached your invoice.</p>
+            <p>Please find your invoice details below.</p>
             <p><strong>Amount Due:</strong> $${calculateSubtotal().toFixed(2)}</p>
             <p><strong>Due Date:</strong> ${format(new Date(formData.dueDate), "MMMM d, yyyy")}</p>
             ${formData.notes ? `<p><strong>Notes:</strong> ${formData.notes}</p>` : ""}
+            ${paymentButton}
+            ${!paymentLink ? "" : `<p style="font-size: 12px; color: #666;">Or copy this link: ${paymentLink}</p>`}
             <p>Thank you for your business.</p>
           `,
-          attachmentUrl: generatedPdfUrl,
-          attachmentName: `Invoice-${formData.invoiceNumber}.pdf`,
+          attachmentUrl: generatedPdfUrl || undefined,
+          attachmentName: generatedPdfUrl ? `Invoice-${formData.invoiceNumber}.pdf` : undefined,
         },
       });
 
       if (error) throw error;
 
-      toast.success(`Invoice sent to ${formData.recipientEmail}`);
+      toast.success(`Invoice${paymentLink ? " with payment link" : ""} sent to ${formData.recipientEmail}`);
       onOpenChange(false);
       onSuccess?.();
-    } catch (err: any) {
-      console.error("Send invoice error:", err);
-      toast.error(err.message || "Failed to send invoice");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to send invoice";
+      toast.error(message);
     } finally {
       setIsSending(false);
     }
@@ -220,6 +257,7 @@ export function InvoiceDialog({
     });
     setLineItems([{ description: "", quantity: 1, unitPrice: 0 }]);
     setGeneratedPdfUrl(null);
+    setPaymentLink(null);
   };
 
   return (
@@ -369,11 +407,54 @@ export function InvoiceDialog({
             />
           </div>
 
+          {/* Payment Link */}
+          {paymentLink && (
+            <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg border">
+              <CheckCircle className="h-4 w-4 text-green-600 shrink-0" />
+              <span className="text-sm truncate flex-1">{paymentLink}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(paymentLink);
+                  toast.success("Payment link copied!");
+                }}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
           {/* Actions */}
-          <div className="flex gap-2 pt-4 border-t">
+          <div className="flex flex-wrap gap-2 pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={generatePaymentLink}
+              disabled={isCreatingPaymentLink || calculateSubtotal() <= 0 || !formData.recipientName}
+              className="flex-1"
+            >
+              {isCreatingPaymentLink ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : paymentLink ? (
+                <>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Link Created
+                </>
+              ) : (
+                <>
+                  <Link className="h-4 w-4 mr-2" />
+                  Collect Payment
+                </>
+              )}
+            </Button>
+
             <Button
               onClick={generateInvoicePdf}
               disabled={isGenerating || !formData.recipientName}
+              variant="outline"
               className="flex-1"
             >
               {isGenerating ? (
@@ -384,35 +465,35 @@ export function InvoiceDialog({
               ) : (
                 <>
                   <FileText className="h-4 w-4 mr-2" />
-                  Generate Invoice
+                  Generate PDF
                 </>
               )}
             </Button>
 
             {generatedPdfUrl && (
-              <>
-                <Button variant="outline" onClick={downloadInvoice}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Download
-                </Button>
-                <Button
-                  onClick={sendInvoiceEmail}
-                  disabled={isSending || !formData.recipientEmail}
-                >
-                  {isSending ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Sending...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="h-4 w-4 mr-2" />
-                      Send Email
-                    </>
-                  )}
-                </Button>
-              </>
+              <Button variant="outline" onClick={downloadInvoice}>
+                <Download className="h-4 w-4 mr-2" />
+                Download
+              </Button>
             )}
+
+            <Button
+              onClick={sendInvoiceEmail}
+              disabled={isSending || !formData.recipientEmail}
+              className="flex-1"
+            >
+              {isSending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  {paymentLink ? "Send with Payment Link" : "Send Invoice"}
+                </>
+              )}
+            </Button>
           </div>
         </div>
       </DialogContent>
