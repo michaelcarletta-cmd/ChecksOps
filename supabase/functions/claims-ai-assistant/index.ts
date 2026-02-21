@@ -2785,7 +2785,75 @@ async function getStaffMembers(supabase: any): Promise<{ id: string; name: strin
   }
 }
 
-// === CROSS-CLAIM PRECEDENT SEARCH ===
+// === CROSS-CLAIM PRECEDENT SEARCH (2-STEP PIPELINE) ===
+
+// Deny-list: suppress procedural/low-value chunks even if similarity is high
+const PROCEDURAL_PATTERNS = [
+  /please send (photos|documents|info)/i,
+  /attached (please find|are the|is the)/i,
+  /thank you for (your|sending|providing)/i,
+  /we (received|acknowledge|have received) your/i,
+  /per our (conversation|phone call|discussion)/i,
+  /^(dear|to whom|hi |hello )/i,
+  /please (contact|call|reach out|let us know)/i,
+  /^(sincerely|regards|best|thank)/i,
+  /this (email|letter) (is to|confirms|serves)/i,
+];
+
+function isProceduralChunk(content: string): boolean {
+  const trimmed = content.trim();
+  // Very short chunks are often greetings/signatures
+  if (trimmed.length < 80) return true;
+  // Check procedural patterns
+  return PROCEDURAL_PATTERNS.some(p => p.test(trimmed));
+}
+
+// Determine relevance explanation for an evidence card
+function buildRelevanceExplanation(card: any, currentClaim: any): string {
+  const parts: string[] = [];
+  if (card.carrier_name && currentClaim?.insurance_company &&
+      card.carrier_name.toLowerCase() === currentClaim.insurance_company.toLowerCase()) {
+    parts.push('same carrier');
+  }
+  if (card.denial_rationale) parts.push(`denial rationale: "${card.denial_rationale}"`);
+  if (card.trade) parts.push(`trade: ${card.trade}`);
+  if (card.loss_type) parts.push(`peril: ${card.loss_type}`);
+  if (card.state_code) {
+    const claimState = extractState(currentClaim?.policyholder_address || '');
+    if (claimState && card.state_code === claimState) {
+      parts.push('same state');
+    } else if (claimState && card.state_code !== claimState) {
+      parts.push(`STATE MISMATCH (${card.state_code} vs ${claimState})`);
+    }
+  }
+  if (card.cited_policy_sections?.length) parts.push(`policy sections: ${card.cited_policy_sections.join(', ')}`);
+  return parts.length > 0 ? parts.join(' · ') : 'semantic similarity';
+}
+
+function extractState(address: string): string | null {
+  const m = (address || '').match(/\b([A-Z]{2})\b\s*\d{5}/);
+  return m ? m[1] : null;
+}
+
+// Determine "what worked" from outcome data
+function buildWhatWorked(card: any): string {
+  const tactics: string[] = [];
+  if (card.decision_type === 'accept' || card.outcome_resolution_type === 'settled') {
+    if (card.evidence_type === 'engineer_report') tactics.push('engineer rebuttal');
+    if (card.evidence_type === 'estimate') tactics.push('scope/estimate challenge');
+    if (card.evidence_type === 'denial_letter') tactics.push('denial rebuttal submitted');
+    if (card.outcome_supplement_won) tactics.push('supplement approved');
+    if (card.outcome_appraisal_invoked) tactics.push('appraisal invoked');
+    if (card.outcome_litigation) tactics.push('litigation filed');
+    if (card.outcome_reopened) tactics.push('claim reopened successfully');
+  }
+  if (card.outcome_paid_amount && card.outcome_paid_amount > 0) {
+    tactics.push(`paid $${card.outcome_paid_amount.toLocaleString()}`);
+  }
+  if (card.outcome_resolution_type) tactics.push(`resolution: ${card.outcome_resolution_type}`);
+  return tactics.length > 0 ? tactics.join(' | ') : 'outcome data not yet captured';
+}
+
 async function searchCrossClaimPrecedents(
   supabase: any, question: string, currentClaimId: string, claim: any
 ): Promise<string> {
@@ -2797,40 +2865,88 @@ async function searchCrossClaimPrecedents(
       return '';
     }
 
-    // Build filters from claim context
+    // === STEP 1: Structured taxonomy filter ===
+    // Build aggressive filters from claim context
     const carrierName = claim?.insurance_company || null;
+    const claimLossType = claim?.loss_type ? claim.loss_type.toLowerCase() : null;
+    const claimState = extractState(claim?.policyholder_address || '');
     
-    // Search with carrier filter first for most relevant results
-    const { data: results, error } = await supabase.rpc('match_claim_document_chunks', {
+    // Detect query-specific filters from the question text
+    const questionLower = (question || '').toLowerCase();
+    let queryTrade: string | null = null;
+    let queryDecision: string | null = null;
+    const tradeKeywords: Record<string, string> = {
+      'roof': 'roof', 'shingle': 'roof', 'siding': 'siding', 'gutter': 'gutters',
+      'window': 'windows', 'interior': 'interior', 'drywall': 'interior',
+      'hvac': 'hvac', 'plumbing': 'plumbing', 'fence': 'fence',
+    };
+    for (const [kw, trade] of Object.entries(tradeKeywords)) {
+      if (questionLower.includes(kw)) { queryTrade = trade; break; }
+    }
+    if (/denial|denied|deny/i.test(questionLower)) queryDecision = 'deny_full';
+    if (/partial/i.test(questionLower)) queryDecision = 'deny_partial';
+
+    // TIER 1: Narrow search — same carrier + same loss type + filters
+    const { data: tier1Results } = await supabase.rpc('match_claim_document_chunks', {
       query_embedding: queryEmbedding,
-      match_count: 15,
+      match_count: 10,
       filter_carrier: carrierName,
+      filter_loss_type: claimLossType,
+      filter_trade: queryTrade,
+      filter_decision: queryDecision,
+      filter_state: claimState,
       exclude_claim_id: currentClaimId,
     });
 
-    if (error) {
-      console.error('[CrossClaim] Search error:', error.message);
-      return '';
+    let allResults: any[] = (tier1Results || []).filter((r: any) => r.similarity > 0.25);
+    console.log(`[CrossClaim] Tier 1 (narrow): ${allResults.length} results`);
+
+    // TIER 2: Relax state + trade filters if thin
+    if (allResults.length < 5) {
+      const { data: tier2Results } = await supabase.rpc('match_claim_document_chunks', {
+        query_embedding: queryEmbedding,
+        match_count: 10,
+        filter_carrier: carrierName,
+        filter_loss_type: claimLossType,
+        filter_decision: queryDecision,
+        exclude_claim_id: currentClaimId,
+      });
+      const existingIds = new Set(allResults.map((r: any) => r.id));
+      for (const r of (tier2Results || [])) {
+        if (!existingIds.has(r.id) && r.similarity > 0.25) {
+          allResults.push(r);
+          existingIds.add(r.id);
+        }
+      }
+      console.log(`[CrossClaim] Tier 2 (carrier+loss): total ${allResults.length}`);
     }
 
-    // If carrier-specific results are thin, do a broader search
-    let allResults = results || [];
+    // TIER 3: Broad search (no carrier filter) if still thin
     if (allResults.length < 5) {
-      const { data: broadResults } = await supabase.rpc('match_claim_document_chunks', {
+      const { data: tier3Results } = await supabase.rpc('match_claim_document_chunks', {
         query_embedding: queryEmbedding,
         match_count: 10,
         exclude_claim_id: currentClaimId,
       });
-      if (broadResults) {
-        const existingIds = new Set(allResults.map((r: any) => r.id));
-        for (const r of broadResults) {
-          if (!existingIds.has(r.id)) allResults.push(r);
+      const existingIds = new Set(allResults.map((r: any) => r.id));
+      for (const r of (tier3Results || [])) {
+        if (!existingIds.has(r.id) && r.similarity > 0.3) {
+          allResults.push(r);
+          existingIds.add(r.id);
         }
       }
+      console.log(`[CrossClaim] Tier 3 (broad): total ${allResults.length}`);
     }
 
-    // Filter by minimum similarity
-    allResults = allResults.filter((r: any) => r.similarity > 0.3);
+    // === STEP 2: Deny-list filtering — suppress procedural/weak chunks ===
+    const beforeFilter = allResults.length;
+    allResults = allResults.filter((r: any) => !isProceduralChunk(r.content));
+    if (beforeFilter !== allResults.length) {
+      console.log(`[CrossClaim] Deny-list suppressed ${beforeFilter - allResults.length} procedural chunks`);
+    }
+
+    // Sort by similarity descending
+    allResults.sort((a: any, b: any) => (b.similarity || 0) - (a.similarity || 0));
 
     // Deduplicate by claim (max 3 chunks per claim)
     const claimChunkCounts: Record<string, number> = {};
@@ -2845,7 +2961,7 @@ async function searchCrossClaimPrecedents(
     }
 
     if (diverseResults.length === 0) {
-      console.log('[CrossClaim] No relevant precedents found');
+      console.log('[CrossClaim] No relevant precedents found after filtering');
       return '';
     }
 
@@ -2874,13 +2990,13 @@ async function searchCrossClaimPrecedents(
       }
     }
 
-    console.log(`[CrossClaim] Found ${diverseResults.length} precedent chunks from ${claimIds.length} claims`);
+    console.log(`[CrossClaim] Returning ${diverseResults.length} precedent chunks from ${claimIds.length} claims`);
 
-    // Build context with evidence cards
+    // === BUILD ACTIONABLE EVIDENCE CARDS ===
     let context = '\n\n=== CROSS-CLAIM PRECEDENTS (INTERNAL DATABASE) ===\n';
-    context += 'The following are excerpts from OTHER claims in your database that are similar to the current question/scenario.\n';
-    context += 'When citing these, show EVIDENCE CARDS with: claim #, carrier, doc name, similarity score, and relevant excerpt.\n';
-    context += 'Use format: [PRECEDENT: Claim #XXX | Carrier: YYY | Doc: ZZZ | Similarity: XX%]\n\n';
+    context += 'The following are excerpts from OTHER claims in your database. Present each as an EVIDENCE CARD.\n';
+    context += 'IMPORTANT: For each card, include WHY it is relevant and WHAT WORKED (the tactic/evidence that flipped the outcome).\n';
+    context += 'Tag state mismatches when the precedent is from a different state than the current claim.\n\n';
 
     for (const r of diverseResults) {
       const claimInfo = claimMap[r.claim_id];
@@ -2888,21 +3004,25 @@ async function searchCrossClaimPrecedents(
       const claimNum = claimInfo?.claim_number || 'Unknown';
       const status = claimInfo?.is_closed ? 'CLOSED' : (claimInfo?.status || 'Unknown');
       const similarity = Math.round((r.similarity || 0) * 100);
+      const whyRelevant = buildRelevanceExplanation(r, claim);
+      const whatWorked = buildWhatWorked(r);
 
       context += `--- EVIDENCE CARD ---\n`;
       context += `Claim: ${claimNum} | Carrier: ${r.carrier_name || 'Unknown'} | Status: ${status}\n`;
-      context += `Document: ${fileName} | Type: ${r.evidence_type || 'unknown'} | Trade: ${r.trade || 'N/A'}\n`;
+      context += `Document: ${fileName} | Type: ${r.evidence_type || 'unknown'} | Trade: ${r.trade || 'N/A'} | State: ${r.state_code || 'N/A'}\n`;
       context += `Decision: ${r.decision_type || 'N/A'}`;
       if (r.outcome_paid_amount) context += ` | Paid: $${r.outcome_paid_amount.toLocaleString()}`;
       if (r.outcome_resolution_type) context += ` | Resolution: ${r.outcome_resolution_type}`;
       context += `\nSimilarity: ${similarity}%\n`;
+      context += `WHY RELEVANT: ${whyRelevant}\n`;
+      context += `WHAT WORKED: ${whatWorked}\n`;
       if (r.denial_rationale) context += `Denial Rationale: ${r.denial_rationale}\n`;
       context += `Excerpt: ${r.content.substring(0, 500)}\n`;
       context += `--- END CARD ---\n\n`;
     }
 
     context += '=== END CROSS-CLAIM PRECEDENTS ===\n';
-    context += 'INSTRUCTIONS: When using these precedents in your response, cite them as evidence cards. If a precedent shows a similar denial was overturned, highlight that. If outcome data is available, use it to inform confidence scoring.\n';
+    context += 'INSTRUCTIONS: Present the most relevant evidence cards to the user. For each card, explain WHY it matters and WHAT WORKED. If a precedent shows a similar denial was overturned, highlight the specific tactic. Tag any state mismatches. Use outcome data to inform confidence scoring.\n';
 
     return context;
   } catch (err) {
