@@ -169,7 +169,8 @@ async function userHasRole(supabase: any, userId: string, role: string): Promise
 function parseTaskFromSMS(text: string): { title: string; dueDate: string | null } {
   // Strip intent prefixes
   let cleaned = text
-    .replace(/^(task[:\s]+|create\s+task[:\s]*|add\s+task[:\s]*|remind\s+me\s+(to\s+)?|create\s+task\s+for\s+(this\s+claim[:\s]*)?)/i, '')
+    .replace(/^(hey\s+darwin[,\s]*|darwin[,\s]*)/i, '')
+    .replace(/^(can\s+you\s+)?(please\s+)?(task[:\s]+|create\s+task[:\s]*|add\s+task[:\s]*|remind\s+me\s+(to\s+)?|set\s+a?\s*reminder\s+(to\s+)?|follow\s*up\s+with\s+|reach\s+out\s+to\s+|create\s+task\s+for\s+(this\s+claim[:\s]*)?)/i, '')
     .trim();
 
   let dueDate: string | null = null;
