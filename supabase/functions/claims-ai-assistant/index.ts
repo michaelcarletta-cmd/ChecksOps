@@ -2785,13 +2785,140 @@ async function getStaffMembers(supabase: any): Promise<{ id: string; name: strin
   }
 }
 
+// === CROSS-CLAIM PRECEDENT SEARCH ===
+async function searchCrossClaimPrecedents(
+  supabase: any, question: string, currentClaimId: string, claim: any
+): Promise<string> {
+  try {
+    // Generate embedding for the question
+    const queryEmbedding = await getQueryEmbedding(question);
+    if (!queryEmbedding) {
+      console.log('[CrossClaim] No embedding generated, skipping');
+      return '';
+    }
+
+    // Build filters from claim context
+    const carrierName = claim?.insurance_company || null;
+    
+    // Search with carrier filter first for most relevant results
+    const { data: results, error } = await supabase.rpc('match_claim_document_chunks', {
+      query_embedding: queryEmbedding,
+      match_count: 15,
+      filter_carrier: carrierName,
+      exclude_claim_id: currentClaimId,
+    });
+
+    if (error) {
+      console.error('[CrossClaim] Search error:', error.message);
+      return '';
+    }
+
+    // If carrier-specific results are thin, do a broader search
+    let allResults = results || [];
+    if (allResults.length < 5) {
+      const { data: broadResults } = await supabase.rpc('match_claim_document_chunks', {
+        query_embedding: queryEmbedding,
+        match_count: 10,
+        exclude_claim_id: currentClaimId,
+      });
+      if (broadResults) {
+        const existingIds = new Set(allResults.map((r: any) => r.id));
+        for (const r of broadResults) {
+          if (!existingIds.has(r.id)) allResults.push(r);
+        }
+      }
+    }
+
+    // Filter by minimum similarity
+    allResults = allResults.filter((r: any) => r.similarity > 0.3);
+
+    // Deduplicate by claim (max 3 chunks per claim)
+    const claimChunkCounts: Record<string, number> = {};
+    const diverseResults: any[] = [];
+    for (const r of allResults) {
+      const count = claimChunkCounts[r.claim_id] || 0;
+      if (count < 3) {
+        diverseResults.push(r);
+        claimChunkCounts[r.claim_id] = count + 1;
+        if (diverseResults.length >= 10) break;
+      }
+    }
+
+    if (diverseResults.length === 0) {
+      console.log('[CrossClaim] No relevant precedents found');
+      return '';
+    }
+
+    // Get claim details for citations
+    const claimIds = [...new Set(diverseResults.map((r: any) => r.claim_id))];
+    const { data: claimDetails } = await supabase
+      .from('claims')
+      .select('id, claim_number, policyholder_name, status, is_closed')
+      .in('id', claimIds);
+
+    const claimMap: Record<string, any> = {};
+    for (const c of (claimDetails || [])) {
+      claimMap[c.id] = c;
+    }
+
+    // Get file names for citations
+    const fileIds = [...new Set(diverseResults.filter((r: any) => r.file_id).map((r: any) => r.file_id))];
+    let fileMap: Record<string, string> = {};
+    if (fileIds.length > 0) {
+      const { data: files } = await supabase
+        .from('claim_files')
+        .select('id, file_name')
+        .in('id', fileIds);
+      for (const f of (files || [])) {
+        fileMap[f.id] = f.file_name;
+      }
+    }
+
+    console.log(`[CrossClaim] Found ${diverseResults.length} precedent chunks from ${claimIds.length} claims`);
+
+    // Build context with evidence cards
+    let context = '\n\n=== CROSS-CLAIM PRECEDENTS (INTERNAL DATABASE) ===\n';
+    context += 'The following are excerpts from OTHER claims in your database that are similar to the current question/scenario.\n';
+    context += 'When citing these, show EVIDENCE CARDS with: claim #, carrier, doc name, similarity score, and relevant excerpt.\n';
+    context += 'Use format: [PRECEDENT: Claim #XXX | Carrier: YYY | Doc: ZZZ | Similarity: XX%]\n\n';
+
+    for (const r of diverseResults) {
+      const claimInfo = claimMap[r.claim_id];
+      const fileName = r.file_id ? (fileMap[r.file_id] || 'Unknown') : 'N/A';
+      const claimNum = claimInfo?.claim_number || 'Unknown';
+      const status = claimInfo?.is_closed ? 'CLOSED' : (claimInfo?.status || 'Unknown');
+      const similarity = Math.round((r.similarity || 0) * 100);
+
+      context += `--- EVIDENCE CARD ---\n`;
+      context += `Claim: ${claimNum} | Carrier: ${r.carrier_name || 'Unknown'} | Status: ${status}\n`;
+      context += `Document: ${fileName} | Type: ${r.evidence_type || 'unknown'} | Trade: ${r.trade || 'N/A'}\n`;
+      context += `Decision: ${r.decision_type || 'N/A'}`;
+      if (r.outcome_paid_amount) context += ` | Paid: $${r.outcome_paid_amount.toLocaleString()}`;
+      if (r.outcome_resolution_type) context += ` | Resolution: ${r.outcome_resolution_type}`;
+      context += `\nSimilarity: ${similarity}%\n`;
+      if (r.denial_rationale) context += `Denial Rationale: ${r.denial_rationale}\n`;
+      context += `Excerpt: ${r.content.substring(0, 500)}\n`;
+      context += `--- END CARD ---\n\n`;
+    }
+
+    context += '=== END CROSS-CLAIM PRECEDENTS ===\n';
+    context += 'INSTRUCTIONS: When using these precedents in your response, cite them as evidence cards. If a precedent shows a similar denial was overturned, highlight that. If outcome data is available, use it to inform confidence scoring.\n';
+
+    return context;
+  } catch (err) {
+    console.error('[CrossClaim] Error:', err);
+    return '';
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { claimId, question, messages, mode, reportType, documentContent, documentName, documentFilePath } = await req.json();
+    const body = await req.json();
+    const { claimId, question, messages, mode, reportType, documentContent, documentName, documentFilePath } = body;
     
     if (!question && !reportType) {
       return new Response(
@@ -3108,6 +3235,20 @@ If the document is ambiguous about the type of loss, ask the user to clarify rat
       knowledgeBaseContext = await searchKnowledgeBase(supabase, reportQuestion || question);
     } else {
       console.log('[KB Retrieval] Skipped — operational/task request detected');
+    }
+
+    // === CROSS-CLAIM RETRIEVAL: Search vectorized claim docs for precedents ===
+    let crossClaimContext = "";
+    const sourceMode = body.sourceMode || 'hybrid'; // 'internal_only' or 'hybrid'
+    
+    if (!isOperationalRequest && claimId) {
+      try {
+        crossClaimContext = await searchCrossClaimPrecedents(
+          supabase, question, claimId, claim
+        );
+      } catch (ccErr) {
+        console.error('[CrossClaim] Search error:', ccErr);
+      }
     }
     
     // Determine if web search is needed
@@ -3579,6 +3720,14 @@ Be relentlessly focused on advancing the claim toward a fair, full, and fast set
       conversationMessages.push({
         role: "assistant",
         content: knowledgeBaseContext,
+      });
+    }
+
+    // If we have cross-claim precedents, add them as context
+    if (crossClaimContext) {
+      conversationMessages.push({
+        role: "assistant",
+        content: crossClaimContext,
       });
     }
     
