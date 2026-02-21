@@ -1,115 +1,211 @@
 
 
-# Darwin Backfill: Catch Up on 934 Claims
+# Phase 1 Extension: Task Creation + Client Updates via SMS
 
-## The Problem
+## Overview
 
-Darwin's escalation engine currently only evaluates claims when you manually open them. Out of 934 claims (929 PA/NJ), only **1 claim** has regulatory deadlines populated, **zero** have carrier deadlines, and **zero** escalation actions exist. Darwin is blind to 933 claims.
-
-## What We'll Build
-
-A **one-click batch backfill** edge function + UI trigger that processes all existing claims in bulk:
-
-1. **Generate regulatory deadlines** for every claim that doesn't have them
-2. **Auto-mark overdue deadlines** based on today's date vs. deadline date
-3. **Evaluate escalation rules** against every open claim and surface a summary
-4. **Add a `state_code` column** to the claims table so state detection is reliable and doesn't need to be re-parsed every time
+Add three new Darwin SMS commands that let staff create tasks and send client updates (SMS/email) directly from text messages, with a draft-and-confirm safety flow.
 
 ---
 
-## Step 1: Add `state_code` Column to Claims
+## A. New SMS Intents
 
-Add a `state_code` (text, nullable) column to the `claims` table. This gives Darwin a structured field instead of re-parsing addresses constantly.
-
-The backfill function will populate this for all 934 claims using the robust regex-based state detection (word boundaries + ZIP patterns) already built in Phase 4.
-
-## Step 2: Edge Function — `darwin-backfill-claims`
-
-A new edge function that runs as a batch job (called manually via UI button or via cron). Secured with `x-cron-secret`.
-
-**Processing logic (per claim):**
-
-```text
-For each claim without deadlines:
-  1. Detect state from policyholder_address (regex)
-  2. Write state_code to claims table
-  3. Generate 4 regulatory deadlines:
-     - Acknowledgment (10 days from filed)
-     - Investigation (30 days from filed)
-     - Written Response (PA: 45 days, NJ: 40 days)
-     - Statute of Limitations (PA: 2yr, NJ: 6yr from loss date)
-  4. Auto-set status:
-     - If deadline_date < today --> "overdue"
-     - If deadline_date >= today --> "pending"
-```
-
-**Batching strategy:**
-- Process 50 claims per invocation to avoid edge function timeouts
-- Return cursor (last processed claim ID) so it can be called repeatedly
-- Frontend shows progress: "Processed 150 / 934 claims..."
-
-## Step 3: Frontend — Backfill Controls in Darwin Operations Center
-
-Add a "Darwin Catch-Up" card to the existing Darwin Operations page (`src/pages/DarwinOperations.tsx` or the Settings page) with:
-
-- **"Run Backfill" button** -- kicks off the batch process
-- **Progress bar** -- shows claims processed / total
-- **Auto-continues** -- after each batch of 50 completes, automatically calls the next batch until done
-- **Summary on completion**: "934 claims processed. 412 overdue deadlines detected. 230 open claims with active escalation triggers."
-
-## Step 4: Deadline Status Auto-Update
-
-As part of the backfill, deadlines created in the past that have already lapsed get marked `overdue` immediately. This means when you open any claim after the backfill, the Escalation Engine will already have the data it needs to fire rules like "missed acknowledgment deadline" or "no coverage determination after 30 days."
+| Intent | Example triggers | Behavior |
+|---|---|---|
+| `create_task` | "Task: call adjuster tomorrow", "Remind me Friday to submit supplement" | Creates task on active claim, replies with confirmation |
+| `send_client_sms` | "Text client: We're scheduled Tuesday at 9am" | Drafts SMS to policyholder, waits for SEND confirmation |
+| `send_client_email` | "Email client update: carrier approved the estimate" | Drafts email to policyholder, waits for SEND confirmation |
 
 ---
 
-## Technical Details
+## B. Safety and Approval Flow
 
-### New Files
-- `supabase/functions/darwin-backfill-claims/index.ts` -- batch processing edge function
+**Two modes** controlled by an org-level setting (`sms_command_mode` on the org or a new `darwin_sms_settings` table):
 
-### Modified Files
-- `supabase/migrations/[timestamp]_add_state_code_to_claims.sql` -- adds `state_code` column
-- `src/pages/DarwinOperations.tsx` -- add backfill UI controls
-- `supabase/config.toml` -- register new function with `verify_jwt = false`
+1. **Draft mode** (default): Darwin generates a preview and waits for `SEND` confirmation
+2. **Auto-send mode**: Admin-only; sends immediately but still logs everything
 
-### State Detection (reused from Phase 4)
+**Confirmation flow (draft mode):**
+
 ```text
-Priority order:
-  1. ZIP-code pattern: /\b(PA|NJ)\s+\d{5}\b/
-  2. Word-boundary abbreviation: /(^|[\s,])PA([\s,]|$)/i
-  3. Full name: /pennsylvania/i or /new jersey/i
-  4. Fallback: null (skip claim)
+User:  "Text client: We're scheduled Tuesday at 9am"
+Darwin: "Draft ready to send to Jane Doe (+1...1234):
+         'We're scheduled Tuesday at 9am'
+         Reply SEND to send, EDIT <new text> to modify, or CANCEL."
+User:  "SEND"
+Darwin: "Sent to Jane Doe."
 ```
 
-### Batch Processing Flow
+**Multi-recipient disambiguation:**
+If a claim has multiple contact numbers/emails, Darwin asks:
 ```text
-Frontend clicks "Run Backfill"
-       |
-       v
-Calls darwin-backfill-claims with { cursor: null }
-       |
-       v
-Function processes 50 claims:
-  - Detect state, write state_code
-  - Insert 4 deadlines per claim (skip if already exist)
-  - Mark past deadlines as overdue
-       |
-       v
-Returns { processed: 50, remaining: 884, cursor: "last-id" }
-       |
-       v
-Frontend auto-calls next batch with { cursor: "last-id" }
-       |
-       v
-Repeats until remaining = 0
-       |
-       v
-Shows summary: deadlines created, overdue count, claims by state
+"Multiple contacts found:
+ 1. Jane Doe (Policyholder) +1...1234
+ 2. John Smith (Adjuster) +1...5678
+ Reply 1 or 2 to select."
 ```
 
-### Safety
-- Idempotent: skips claims that already have deadlines (checks `claim_deadlines` before inserting)
-- Uses service role key (cron-secured, not user-facing)
-- Does NOT modify any claim statuses or existing data -- only adds missing deadlines and state_code
+**Pending drafts** are stored in `sms_conversation_state` as a JSON column (`pending_action`), which holds the draft details until the user replies SEND/EDIT/CANCEL or it expires with the conversation (2 hours).
+
+---
+
+## C. Data Model Changes
+
+### 1. Extend `darwin_sms_activity` (migration)
+
+Add columns to track action metadata:
+- `action_type TEXT` -- values: `task_create`, `client_sms`, `client_email`, `command`, `system`
+- `result_id TEXT` -- ID of created task / sent SMS record / email record
+- `needs_approval BOOLEAN DEFAULT false`
+- `approved_at TIMESTAMPTZ`
+- `approved_by UUID`
+
+### 2. Extend `sms_conversation_state` (migration)
+
+Add a column to hold pending draft actions:
+- `pending_action JSONB` -- stores `{ type, claimId, to, body, subject, recipientName, recipientIndex }`
+
+### 3. Create `darwin_sms_settings` table (migration)
+
+```text
+id           UUID PK
+org_id       UUID UNIQUE (references org via org_members pattern)
+send_mode    TEXT DEFAULT 'draft'  -- 'draft' | 'auto_send'
+auto_send_roles TEXT[] DEFAULT '{admin}'
+created_at   TIMESTAMPTZ
+updated_at   TIMESTAMPTZ
+```
+
+With RLS: org admins can read/write their own org's settings.
+
+### 4. Existing tables used (no changes needed)
+
+- `tasks` -- already has `claim_id`, `title`, `description`, `due_date`, `created_by`, `status`, `priority`
+- `sms_messages` -- existing outbound SMS log
+- `emails` -- existing outbound email log
+- `claims` -- has `policyholder_name`, `policyholder_phone`, `policyholder_email`
+
+---
+
+## D. Intent Parser Updates
+
+### `_shared/darwin-command-contracts.ts`
+
+Add new intents and update patterns:
+
+```text
+Intents to add:  "send_client_sms" | "send_client_email"
+
+New patterns:
+  send_client_sms:  /text\s+client|send\s+sms|sms\s+(client|update)/i
+  send_client_email: /email\s+client|send\s+email\s+(client|update)|email\s+update/i
+  create_task:  (existing) expand to match "task:", "remind me", "add task", "create task for"
+```
+
+Also update the existing `send_email` intent to specifically mean "send client email" for SMS context routing.
+
+---
+
+## E. Edge Function Changes
+
+### `telnyx-inbound-sms/index.ts` -- Major additions
+
+1. **SEND / EDIT / CANCEL handlers** (top of command routing, before intent parsing):
+   - Check `convState.pending_action` first
+   - If user replies `SEND` -- execute the pending action (send SMS via Telnyx / send email via `send-email` function / no-op for tasks)
+   - If user replies `EDIT <text>` -- update the draft body and re-display
+   - If user replies `CANCEL` -- clear `pending_action`, reply "Cancelled"
+   - If user replies a number (1, 2, 3) and `pending_action` has `recipientIndex: 'pending'` -- resolve recipient
+
+2. **`create_task` handler**:
+   - Parse title from message body (strip "Task:", "Remind me", etc.)
+   - Parse due date using simple NLP: "tomorrow", "Friday", "next Monday", specific dates
+   - Insert into `tasks` table with `claim_id`, `created_by`, `status: 'pending'`
+   - Reply immediately (no draft needed for tasks): "Task created: 'Call adjuster' due 2/22. Visible in CRM."
+   - Log to `darwin_sms_activity` with `action_type: 'task_create'`, `result_id: <task.id>`
+
+3. **`send_client_sms` handler**:
+   - Extract message body (strip "Text client:", "Send SMS:", etc.)
+   - Look up claim's `policyholder_phone` and `policyholder_name`
+   - If multiple contacts (policyholder + adjuster phone), ask disambiguation
+   - Check org's `send_mode`:
+     - Draft mode: store in `pending_action`, reply with preview
+     - Auto-send: send immediately via `sendReply()`, log to `sms_messages`
+   - On SEND confirmation: send via Telnyx, insert into `sms_messages`, log to `darwin_sms_activity`
+
+4. **`send_client_email` handler**:
+   - Extract subject/body (strip "Email client:", "Send email:", etc.)
+   - Look up claim's `policyholder_email` and `policyholder_name`
+   - Draft mode: store in `pending_action`, reply with preview
+   - On SEND: call existing `send-email` edge function with `{ to, subject, body, claimId }`
+   - Log to `darwin_sms_activity` with `action_type: 'client_email'`
+
+5. **Helper: `parseTaskFromSMS(text)`**:
+   - Strips intent prefix
+   - Extracts due date keywords (tomorrow, next Monday, Friday, MM/DD)
+   - Returns `{ title, dueDate }`
+
+6. **Helper: `getClaimContacts(supabase, claimId)`**:
+   - Returns array of `{ name, phone, email, role }` from claim fields + `claim_adjusters`
+   - Used for recipient resolution and disambiguation
+
+### `darwin-command/index.ts` -- Minor update
+
+Handle `create_task` and `send_email` intents that currently return "not yet implemented":
+- For `create_task`: create the task directly (for non-SMS callers like the web UI command bar)
+- For `send_email`: route to `send-email` function
+
+### `_shared/darwin-command-contracts.ts`
+
+- Add `send_client_sms` and `send_client_email` to `DarwinIntent` type
+- Add corresponding regex patterns
+- Update `HELP` text in `telnyx-inbound-sms` to list new commands
+
+---
+
+## F. Permission and Scoping Rules
+
+- All claim lookups remain org-scoped (existing `getUserOrgClaims` pattern)
+- Client SMS/email can only go to contacts attached to the claim (policyholder phone/email, adjusters on the claim)
+- `send_mode: 'auto_send'` requires the user to have an `admin` role (checked via `has_role` function)
+- Tasks are created with `created_by = userId` and scoped to the active claim
+
+---
+
+## G. UI Updates (Minimal)
+
+### `DarwinSMSActivityLog.tsx`
+- Display new `action_type` values with appropriate icons (task icon, email icon, SMS icon)
+- Show `needs_approval` / `approved_at` status badges
+
+### `PhoneVerificationSettings.tsx` or new section
+- Add a toggle for "Auto-send mode" (admin only) under Darwin SMS settings
+
+### `HELP` command response
+- Update to include: "Task: <description>", "Text client: <message>", "Email client: <message>"
+
+---
+
+## H. File Change Summary
+
+| File | Action |
+|---|---|
+| `supabase/migrations/[new].sql` | Add columns to `darwin_sms_activity`, `sms_conversation_state`; create `darwin_sms_settings` |
+| `supabase/functions/_shared/darwin-command-contracts.ts` | Add `send_client_sms`, `send_client_email` intents + patterns |
+| `supabase/functions/telnyx-inbound-sms/index.ts` | Add SEND/EDIT/CANCEL flow, task creation, client SMS/email handlers |
+| `supabase/functions/darwin-command/index.ts` | Handle `create_task` + `send_email` intents for web callers |
+| `src/components/inbox/DarwinSMSActivityLog.tsx` | Display action_type, approval badges |
+| `src/components/settings/PhoneVerificationSettings.tsx` | Add auto-send toggle for admins |
+
+---
+
+## I. Acceptance Tests
+
+After implementation, these should work from a verified phone:
+
+1. `Task: call adjuster tomorrow 10am` -- task created, visible in CRM claim tasks
+2. `Text client: We're scheduled Tuesday at 9am` -- draft shown, reply SEND, SMS sent + logged in `sms_messages`
+3. `Email client update: carrier approved estimate` -- draft shown, reply SEND, email sent via Resend + logged in `emails`
+4. All activity visible in Inbox Darwin SMS tab and Claim Detail Darwin tab
+5. Draft mode enforced by default; CANCEL clears pending action
 
