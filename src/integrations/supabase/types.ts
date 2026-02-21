@@ -4280,6 +4280,102 @@ export type Database = {
         }
         Relationships: []
       }
+      escalation_actions: {
+        Row: {
+          artifact_document_id: string | null
+          artifact_type: string
+          claim_id: string
+          created_at: string
+          created_by: string | null
+          draft_content: string | null
+          escalation_strength: string
+          fired_rule_ids: string[]
+          id: string
+          state_code: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          artifact_document_id?: string | null
+          artifact_type: string
+          claim_id: string
+          created_at?: string
+          created_by?: string | null
+          draft_content?: string | null
+          escalation_strength: string
+          fired_rule_ids?: string[]
+          id?: string
+          state_code: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          artifact_document_id?: string | null
+          artifact_type?: string
+          claim_id?: string
+          created_at?: string
+          created_by?: string | null
+          draft_content?: string | null
+          escalation_strength?: string
+          fired_rule_ids?: string[]
+          id?: string
+          state_code?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "escalation_actions_artifact_document_id_fkey"
+            columns: ["artifact_document_id"]
+            isOneToOne: false
+            referencedRelation: "claim_files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "escalation_actions_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      escalation_artifact_templates: {
+        Row: {
+          artifact_type: string
+          created_at: string
+          id: string
+          insert_block_type: string
+          is_active: boolean
+          state_code: string
+          template_body: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          artifact_type: string
+          created_at?: string
+          id?: string
+          insert_block_type: string
+          is_active?: boolean
+          state_code: string
+          template_body: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          artifact_type?: string
+          created_at?: string
+          id?: string
+          insert_block_type?: string
+          is_active?: boolean
+          state_code?: string
+          template_body?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
       escalation_trigger_rules: {
         Row: {
           condition_logic: Json

@@ -158,3 +158,6 @@ verify_jwt = false
 
 [functions.compute-playbooks]
 verify_jwt = false
+
+[functions.draft-escalation-artifact]
+verify_jwt = false
