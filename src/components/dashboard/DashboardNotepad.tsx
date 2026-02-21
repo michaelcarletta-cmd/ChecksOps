@@ -200,12 +200,15 @@ export const DashboardNotepad = () => {
               >
                 <span className="text-primary mt-0.5">•</span>
                 <span className="flex-1 text-sm">{item}</span>
-                <button
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => handleRemoveItem(index)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   <X className="h-4 w-4" />
-                </button>
+                </Button>
               </li>
             ))
           )}

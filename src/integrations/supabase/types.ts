@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -10,7 +10,32 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
+    PostgrestVersion: "14.1"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -1307,6 +1332,209 @@ export type Database = {
           },
         ]
       }
+      claim_disputes: {
+        Row: {
+          claim_id: string
+          closed_at: string | null
+          created_at: string
+          id: string
+          issue_type: string
+          opened_at: string
+          related_line_items_json: Json | null
+          status: string
+          summary: string | null
+          updated_at: string
+        }
+        Insert: {
+          claim_id: string
+          closed_at?: string | null
+          created_at?: string
+          id?: string
+          issue_type: string
+          opened_at?: string
+          related_line_items_json?: Json | null
+          status?: string
+          summary?: string | null
+          updated_at?: string
+        }
+        Update: {
+          claim_id?: string
+          closed_at?: string | null
+          created_at?: string
+          id?: string
+          issue_type?: string
+          opened_at?: string
+          related_line_items_json?: Json | null
+          status?: string
+          summary?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_disputes_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_embedding_chunks: {
+        Row: {
+          artifact_id: string | null
+          chunk_text: string
+          claim_id: string
+          created_at: string
+          embedding: string | null
+          id: string
+          metadata_json: Json | null
+        }
+        Insert: {
+          artifact_id?: string | null
+          chunk_text: string
+          claim_id: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          metadata_json?: Json | null
+        }
+        Update: {
+          artifact_id?: string | null
+          chunk_text?: string
+          claim_id?: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          metadata_json?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_embedding_chunks_artifact_id_fkey"
+            columns: ["artifact_id"]
+            isOneToOne: false
+            referencedRelation: "claim_files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_embedding_chunks_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_estimates: {
+        Row: {
+          claim_id: string
+          created_at: string
+          id: string
+          metadata_json: Json | null
+          source_extracted_document_id: string | null
+          total_acv: number | null
+          total_depr: number | null
+          total_rcv: number | null
+          updated_at: string
+          vendor: string | null
+          version: number
+        }
+        Insert: {
+          claim_id: string
+          created_at?: string
+          id?: string
+          metadata_json?: Json | null
+          source_extracted_document_id?: string | null
+          total_acv?: number | null
+          total_depr?: number | null
+          total_rcv?: number | null
+          updated_at?: string
+          vendor?: string | null
+          version?: number
+        }
+        Update: {
+          claim_id?: string
+          created_at?: string
+          id?: string
+          metadata_json?: Json | null
+          source_extracted_document_id?: string | null
+          total_acv?: number | null
+          total_depr?: number | null
+          total_rcv?: number | null
+          updated_at?: string
+          vendor?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_estimates_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_estimates_source_extracted_document_id_fkey"
+            columns: ["source_extracted_document_id"]
+            isOneToOne: false
+            referencedRelation: "extracted_document_data"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_events: {
+        Row: {
+          actor: string | null
+          claim_id: string
+          created_at: string
+          event_type: string
+          id: string
+          metadata_json: Json | null
+          occurred_at: string
+          source_artifact_id: string | null
+          source_artifact_type: string | null
+          summary: string | null
+        }
+        Insert: {
+          actor?: string | null
+          claim_id: string
+          created_at?: string
+          event_type: string
+          id?: string
+          metadata_json?: Json | null
+          occurred_at?: string
+          source_artifact_id?: string | null
+          source_artifact_type?: string | null
+          summary?: string | null
+        }
+        Update: {
+          actor?: string | null
+          claim_id?: string
+          created_at?: string
+          event_type?: string
+          id?: string
+          metadata_json?: Json | null
+          occurred_at?: string
+          source_artifact_id?: string | null
+          source_artifact_type?: string | null
+          summary?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_events_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_events_source_artifact_id_fkey"
+            columns: ["source_artifact_id"]
+            isOneToOne: false
+            referencedRelation: "claim_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_expenses: {
         Row: {
           amount: number
@@ -2025,45 +2253,57 @@ export type Database = {
           amount: number
           check_number: string | null
           claim_id: string
+          coverage_type: string | null
           created_at: string
           created_by: string | null
           direction: string | null
           id: string
           notes: string | null
+          payee: string | null
+          payer: string | null
           payment_date: string
           payment_method: string
           recipient_id: string | null
           recipient_type: string
+          reference: string | null
           updated_at: string
         }
         Insert: {
           amount: number
           check_number?: string | null
           claim_id: string
+          coverage_type?: string | null
           created_at?: string
           created_by?: string | null
           direction?: string | null
           id?: string
           notes?: string | null
+          payee?: string | null
+          payer?: string | null
           payment_date: string
           payment_method: string
           recipient_id?: string | null
           recipient_type: string
+          reference?: string | null
           updated_at?: string
         }
         Update: {
           amount?: number
           check_number?: string | null
           claim_id?: string
+          coverage_type?: string | null
           created_at?: string
           created_by?: string | null
           direction?: string | null
           id?: string
           notes?: string | null
+          payee?: string | null
+          payer?: string | null
           payment_date?: string
           payment_method?: string
           recipient_id?: string | null
           recipient_type?: string
+          reference?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -2233,9 +2473,6 @@ export type Database = {
           other_structures_non_recoverable_depreciation: number | null
           other_structures_rcv: number | null
           other_structures_recoverable_depreciation: number | null
-          personal_property_non_recoverable_depreciation: number | null
-          personal_property_rcv: number | null
-          personal_property_recoverable_depreciation: number | null
           prior_offer: number | null
           pwi_deductible: number | null
           pwi_non_recoverable_depreciation: number | null
@@ -2259,9 +2496,6 @@ export type Database = {
           other_structures_non_recoverable_depreciation?: number | null
           other_structures_rcv?: number | null
           other_structures_recoverable_depreciation?: number | null
-          personal_property_non_recoverable_depreciation?: number | null
-          personal_property_rcv?: number | null
-          personal_property_recoverable_depreciation?: number | null
           prior_offer?: number | null
           pwi_deductible?: number | null
           pwi_non_recoverable_depreciation?: number | null
@@ -2285,9 +2519,6 @@ export type Database = {
           other_structures_non_recoverable_depreciation?: number | null
           other_structures_rcv?: number | null
           other_structures_recoverable_depreciation?: number | null
-          personal_property_non_recoverable_depreciation?: number | null
-          personal_property_rcv?: number | null
-          personal_property_recoverable_depreciation?: number | null
           prior_offer?: number | null
           pwi_deductible?: number | null
           pwi_non_recoverable_depreciation?: number | null
@@ -2675,7 +2906,6 @@ export type Database = {
           fraud_flag_reason: string | null
           fraud_flagged_at: string | null
           fraud_flagged_by: string | null
-          geocoded_at: string | null
           id: string
           insurance_company: string | null
           insurance_company_id: string | null
@@ -2683,9 +2913,7 @@ export type Database = {
           insurance_phone: string | null
           is_closed: boolean
           jobnimbus_job_id: string | null
-          latitude: number | null
           loan_number: string | null
-          longitude: number | null
           loss_date: string | null
           loss_description: string | null
           loss_type: string | null
@@ -2738,7 +2966,6 @@ export type Database = {
           fraud_flag_reason?: string | null
           fraud_flagged_at?: string | null
           fraud_flagged_by?: string | null
-          geocoded_at?: string | null
           id?: string
           insurance_company?: string | null
           insurance_company_id?: string | null
@@ -2746,9 +2973,7 @@ export type Database = {
           insurance_phone?: string | null
           is_closed?: boolean
           jobnimbus_job_id?: string | null
-          latitude?: number | null
           loan_number?: string | null
-          longitude?: number | null
           loss_date?: string | null
           loss_description?: string | null
           loss_type?: string | null
@@ -2801,7 +3026,6 @@ export type Database = {
           fraud_flag_reason?: string | null
           fraud_flagged_at?: string | null
           fraud_flagged_by?: string | null
-          geocoded_at?: string | null
           id?: string
           insurance_company?: string | null
           insurance_company_id?: string | null
@@ -2809,9 +3033,7 @@ export type Database = {
           insurance_phone?: string | null
           is_closed?: boolean
           jobnimbus_job_id?: string | null
-          latitude?: number | null
           loan_number?: string | null
-          longitude?: number | null
           loss_date?: string | null
           loss_description?: string | null
           loss_type?: string | null
@@ -2879,80 +3101,6 @@ export type Database = {
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      clawdbot_config: {
-        Row: {
-          active: boolean | null
-          clawdbot_endpoint: string | null
-          created_at: string
-          id: string
-          notification_preferences: Json | null
-          updated_at: string
-          user_id: string
-          webhook_secret: string
-        }
-        Insert: {
-          active?: boolean | null
-          clawdbot_endpoint?: string | null
-          created_at?: string
-          id?: string
-          notification_preferences?: Json | null
-          updated_at?: string
-          user_id: string
-          webhook_secret: string
-        }
-        Update: {
-          active?: boolean | null
-          clawdbot_endpoint?: string | null
-          created_at?: string
-          id?: string
-          notification_preferences?: Json | null
-          updated_at?: string
-          user_id?: string
-          webhook_secret?: string
-        }
-        Relationships: []
-      }
-      clawdbot_message_log: {
-        Row: {
-          action_type: string | null
-          claim_id: string | null
-          created_at: string
-          direction: string
-          id: string
-          message_content: string
-          metadata: Json | null
-          user_id: string
-        }
-        Insert: {
-          action_type?: string | null
-          claim_id?: string | null
-          created_at?: string
-          direction: string
-          id?: string
-          message_content: string
-          metadata?: Json | null
-          user_id: string
-        }
-        Update: {
-          action_type?: string | null
-          claim_id?: string | null
-          created_at?: string
-          direction?: string
-          id?: string
-          message_content?: string
-          metadata?: Json | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "clawdbot_message_log_claim_id_fkey"
-            columns: ["claim_id"]
-            isOneToOne: false
-            referencedRelation: "claims"
             referencedColumns: ["id"]
           },
         ]
@@ -3568,6 +3716,77 @@ export type Database = {
         }
         Relationships: []
       }
+      estimate_line_items: {
+        Row: {
+          acv: number | null
+          category: string | null
+          code: string | null
+          coverage_type: string | null
+          created_at: string
+          depreciation: number | null
+          description: string | null
+          estimate_id: string
+          id: string
+          metadata_json: Json | null
+          overhead: number | null
+          profit: number | null
+          quantity: number | null
+          rcv: number | null
+          room: string | null
+          tax: number | null
+          unit: string | null
+          unit_price: number | null
+        }
+        Insert: {
+          acv?: number | null
+          category?: string | null
+          code?: string | null
+          coverage_type?: string | null
+          created_at?: string
+          depreciation?: number | null
+          description?: string | null
+          estimate_id: string
+          id?: string
+          metadata_json?: Json | null
+          overhead?: number | null
+          profit?: number | null
+          quantity?: number | null
+          rcv?: number | null
+          room?: string | null
+          tax?: number | null
+          unit?: string | null
+          unit_price?: number | null
+        }
+        Update: {
+          acv?: number | null
+          category?: string | null
+          code?: string | null
+          coverage_type?: string | null
+          created_at?: string
+          depreciation?: number | null
+          description?: string | null
+          estimate_id?: string
+          id?: string
+          metadata_json?: Json | null
+          overhead?: number | null
+          profit?: number | null
+          quantity?: number | null
+          rcv?: number | null
+          room?: string | null
+          tax?: number | null
+          unit?: string | null
+          unit_price?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_line_items_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "claim_estimates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       evidence_effectiveness: {
         Row: {
           carrier_response: string | null
@@ -3708,6 +3927,50 @@ export type Database = {
             columns: ["file_id"]
             isOneToOne: false
             referencedRelation: "claim_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      generated_assets: {
+        Row: {
+          asset_type: string
+          claim_id: string
+          content_md: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          metadata_json: Json | null
+          redacted: boolean
+          title: string
+        }
+        Insert: {
+          asset_type: string
+          claim_id: string
+          content_md?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metadata_json?: Json | null
+          redacted?: boolean
+          title: string
+        }
+        Update: {
+          asset_type?: string
+          claim_id?: string
+          content_md?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metadata_json?: Json | null
+          redacted?: boolean
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generated_assets_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
             referencedColumns: ["id"]
           },
         ]
@@ -4437,6 +4700,48 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      payment_applications: {
+        Row: {
+          applied_amount: number
+          applied_to_field: string
+          created_at: string
+          id: string
+          line_item_id: string
+          payment_id: string
+        }
+        Insert: {
+          applied_amount: number
+          applied_to_field?: string
+          created_at?: string
+          id?: string
+          line_item_id: string
+          payment_id: string
+        }
+        Update: {
+          applied_amount?: number
+          applied_to_field?: string
+          created_at?: string
+          id?: string
+          line_item_id?: string
+          payment_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_applications_line_item_id_fkey"
+            columns: ["line_item_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_line_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_applications_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "claim_payments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       photo_line_item_links: {
         Row: {
@@ -5564,7 +5869,6 @@ export type Database = {
           fraud_flag_reason: string | null
           fraud_flagged_at: string | null
           fraud_flagged_by: string | null
-          geocoded_at: string | null
           id: string
           insurance_company: string | null
           insurance_company_id: string | null
@@ -5572,9 +5876,7 @@ export type Database = {
           insurance_phone: string | null
           is_closed: boolean
           jobnimbus_job_id: string | null
-          latitude: number | null
           loan_number: string | null
-          longitude: number | null
           loss_date: string | null
           loss_description: string | null
           loss_type: string | null
@@ -5680,6 +5982,20 @@ export type Database = {
           p_record_type: string
         }
         Returns: string
+      }
+      match_claim_chunks: {
+        Args: {
+          match_count?: number
+          p_claim_id: string
+          query_embedding: string
+        }
+        Returns: {
+          artifact_id: string
+          chunk_text: string
+          id: string
+          metadata_json: Json
+          similarity: number
+        }[]
       }
       match_knowledge_chunks: {
         Args: {
@@ -5872,6 +6188,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       app_role: [

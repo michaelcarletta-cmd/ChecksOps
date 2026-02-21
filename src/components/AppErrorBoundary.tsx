@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 
 interface Props {
   children: ReactNode;
@@ -31,13 +32,13 @@ export class AppErrorBoundary extends Component<Props, State> {
           <pre className="text-left text-sm bg-muted p-4 rounded-md overflow-auto max-w-2xl max-h-48">
             {this.state.error.message}
           </pre>
-          <button
+          <Button
             type="button"
-            className="mt-6 px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
+            className="mt-6"
             onClick={() => this.setState({ hasError: false, error: null })}
           >
             Try again
-          </button>
+          </Button>
         </div>
       );
     }

@@ -689,12 +689,16 @@ export function PhotoDamageFindings({ claimId, photoCount, pagePhotoIds = [], cu
                 onOpenChange={() => togglePhoto(photo.photo_id)}
               >
                 <CollapsibleTrigger asChild>
-                  <button className="flex items-center w-full gap-2 text-left px-3 py-2 rounded-md hover:bg-muted/50 transition-colors text-sm">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="flex items-center w-full gap-2 text-left px-3 py-2 h-auto rounded-md hover:bg-muted/50 transition-colors text-sm justify-start"
+                  >
                     {expandedPhotos.has(photo.photo_id) ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
                     <span className="font-medium truncate">{photo.inferred_area}</span>
                     <span className="text-xs text-muted-foreground ml-auto shrink-0">{photo.items.length} items</span>
                     <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[120px]">{photo.photo_id.slice(0, 8)}…</span>
-                  </button>
+                  </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <div className="ml-6 mb-2 border rounded-md overflow-hidden">

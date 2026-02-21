@@ -559,16 +559,18 @@ export const EnhancedEstimateBuilder = ({ claimId, claim }: EnhancedEstimateBuil
 
                   return Object.entries(groupedByScope).map(([scope, items]) => (
                     <Card key={scope}>
-                      <button
+                      <Button
+                        type="button"
+                        variant="ghost"
                         onClick={() => toggleScope(scope)}
-                        className="w-full flex items-center justify-between p-3 hover:bg-muted/30 transition-colors"
+                        className="w-full flex items-center justify-between p-3 h-auto hover:bg-muted/30 transition-colors rounded-none"
                       >
                         <div className="flex items-center gap-2">
                           {expandedScopes.has(scope) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                           <span className="font-medium capitalize text-sm">{scope}</span>
                           <Badge variant="secondary" className="text-[10px]">{items.length} items</Badge>
                         </div>
-                      </button>
+                      </Button>
                       {expandedScopes.has(scope) && (
                         <CardContent className="pt-0">
                           <div className="space-y-1">
