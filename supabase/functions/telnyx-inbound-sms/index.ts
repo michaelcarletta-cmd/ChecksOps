@@ -107,7 +107,7 @@ async function getUserOrgClaims(supabase: any, userId: string, options: { search
   if (!orgMember?.org_id) return [];
   let query = supabase
     .from('claims')
-    .select('id, claim_number, policyholder_name, policyholder_phone, policyholder_email, status, updated_at')
+    .select('id, claim_number, policyholder_name, policyholder_phone, policyholder_email, policyholder_address, status, updated_at')
     .or(`org_id.eq.${orgMember.org_id},org_id.is.null`);
   if (openOnly) query = query.eq('is_closed', false);
   if (search) {
@@ -117,12 +117,12 @@ async function getUserOrgClaims(supabase: any, userId: string, options: { search
     if (words.length > 0) {
       // Build an OR filter: each word must appear in claim_number OR policyholder_name OR adjuster_name
       const orClauses = words.map((w: string) =>
-        `claim_number.ilike.%${w}%,policyholder_name.ilike.%${w}%,adjuster_name.ilike.%${w}%`
+        `claim_number.ilike.%${w}%,policyholder_name.ilike.%${w}%,adjuster_name.ilike.%${w}%,policyholder_address.ilike.%${w}%`
       ).join(',');
       query = query.or(orClauses);
     } else {
       // Fallback: use the full search string
-      query = query.or(`claim_number.ilike.%${search}%,policyholder_name.ilike.%${search}%`);
+      query = query.or(`claim_number.ilike.%${search}%,policyholder_name.ilike.%${search}%,policyholder_address.ilike.%${search}%`);
     }
   }
   query = query.order('updated_at', { ascending: false }).limit(limit);
@@ -396,7 +396,7 @@ serve(async (req) => {
 
     // ── 3. Handle HELP command ──
     if (messageBody.toUpperCase() === 'HELP') {
-      const helpText = `Darwin Commands:\n• "Analyze claim" - Run AI analysis\n• "Task: <description>" - Create a task\n• "Text client: <msg>" - Send SMS to client\n• "Email client: <msg>" - Send email to client\n• "Switch [claim #]" - Change active claim\n• "Claims" - List your recent claims\n• Financial questions like "What's been paid?"\n\nReply STOP to opt out.`;
+      const helpText = `Darwin SMS Commands:\n\n📋 INFO\n• HELP - This list\n• CLAIMS - List recent claims\n• SWITCH <claim# or name> - Set active claim\n• CONTEXT - Show active claim & status\n\n🔍 ANALYSIS\n• Analyze this claim\n• Operating manual\n• Case study / Marketing assets\n• Summarize - Recent activity recap\n\n✅ TASKS\n• Task: <description>\n• Remind me <when> to <task>\n• Follow up with <name> in <X> days\n\n💬 MESSAGING\n• Text client: <msg> → SEND/EDIT/CANCEL\n• Email client: <msg> → SEND/EDIT/CANCEL\n\n💰 FINANCIAL\n• What's been paid?\n• How much is outstanding?`;
       await sendReply(fromNumber, helpText);
       await supabase.from('darwin_sms_activity').insert({
         user_id: userId, phone_number: fromNumber,
@@ -421,7 +421,7 @@ serve(async (req) => {
       convState = newState;
     } else if (new Date(convState.expires_at) < new Date()) {
       await supabase.from('sms_conversation_state')
-        .update({ active_claim_id: null, pending_action: null, expires_at: new Date(Date.now() + 2 * 3600000).toISOString() })
+        .update({ active_claim_id: null, pending_action: null, expires_at: new Date(Date.now() + 7 * 24 * 3600000).toISOString() })
         .eq('id', convState.id);
       convState.active_claim_id = null;
       convState.pending_action = null;
@@ -460,7 +460,7 @@ serve(async (req) => {
             const taskClaimId = selected.id;
             // Set active claim for future messages
             await supabase.from('sms_conversation_state')
-              .update({ active_claim_id: taskClaimId, pending_action: null, expires_at: new Date(Date.now() + 2 * 3600000).toISOString() })
+              .update({ active_claim_id: taskClaimId, pending_action: null, expires_at: new Date(Date.now() + 7 * 24 * 3600000).toISOString() })
               .eq('id', convState!.id);
             // Create the task
             const { data: task, error: taskErr } = await supabase.from('tasks').insert({
@@ -595,7 +595,7 @@ serve(async (req) => {
       if (matchedClaims.length > 0) {
         const c = matchedClaims[0];
         await supabase.from('sms_conversation_state')
-          .update({ active_claim_id: c.id, pending_action: null, expires_at: new Date(Date.now() + 2 * 3600000).toISOString() })
+          .update({ active_claim_id: c.id, pending_action: null, expires_at: new Date(Date.now() + 7 * 24 * 3600000).toISOString() })
           .eq('id', convState!.id);
         const reply = `✅ Switched to: ${c.claim_number} — ${c.policyholder_name}`;
         await sendReply(fromNumber, reply);
@@ -620,7 +620,8 @@ serve(async (req) => {
     if (messageBody.toUpperCase() === 'CLAIMS') {
       const recentClaims = await getUserOrgClaims(supabase, userId, { limit: 5 });
       if (recentClaims.length > 0) {
-        const list = recentClaims.map((c: any, i: number) => `${i + 1}. ${c.claim_number} — ${c.policyholder_name} (${c.status})`).join('\n');
+        const activeMark = convState?.active_claim_id;
+        const list = recentClaims.map((c: any, i: number) => `${i + 1}. ${activeMark === c.id ? '▸ ' : ''}${c.claim_number} — ${c.policyholder_name} (${c.status})`).join('\n');
         const reply = `Recent claims:\n${list}\n\nReply "Switch [claim #]" to select one.`;
         await sendReply(fromNumber, reply);
       } else {
@@ -631,17 +632,37 @@ serve(async (req) => {
       });
     }
 
-    // ── 6. Resolve active claim context (org-scoped) ──
-    let activeClaimId = convState?.active_claim_id;
-    if (!activeClaimId) {
-      const recentOrgClaims = await getUserOrgClaims(supabase, userId, { limit: 1, openOnly: true });
-      if (recentOrgClaims.length > 0) {
-        activeClaimId = recentOrgClaims[0].id;
-        await supabase.from('sms_conversation_state')
-          .update({ active_claim_id: activeClaimId, expires_at: new Date(Date.now() + 2 * 3600000).toISOString() })
-          .eq('id', convState!.id);
+    // ── 5b. Handle CONTEXT / STATUS command ──
+    const upperBody = messageBody.toUpperCase().trim();
+    if (upperBody === 'CONTEXT' || upperBody === 'STATUS') {
+      let claimInfo = 'None';
+      if (convState?.active_claim_id) {
+        const { data: claimData } = await supabase.from('claims')
+          .select('claim_number, policyholder_name')
+          .eq('id', convState.active_claim_id).single();
+        if (claimData) claimInfo = `${claimData.claim_number} — ${claimData.policyholder_name}`;
       }
+      const expiresAt = convState?.expires_at ? new Date(convState.expires_at) : null;
+      const expiresInDays = expiresAt ? Math.max(0, Math.round((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : 0;
+      const pending = convState?.pending_action
+        ? `${(convState.pending_action as any).type?.replace(/_/g, ' ')} awaiting confirmation`
+        : 'None';
+      const { mode: ctxSendMode } = await getOrgSendMode(supabase, userId);
+      const ctxIsAdmin = await userHasRole(supabase, userId, 'admin');
+      const reply = `📋 Darwin Status:\n• Active claim: ${claimInfo}\n• Expires in: ${expiresInDays} day(s)\n• Pending action: ${pending}\n• Send mode: ${ctxSendMode === 'auto_send' && ctxIsAdmin ? 'Auto-send (admin)' : 'Draft'}`;
+      await sendReply(fromNumber, reply);
+      await supabase.from('darwin_sms_activity').insert({
+        user_id: userId, phone_number: fromNumber, claim_id: convState?.active_claim_id || null,
+        direction: 'inbound', message_text: messageBody,
+        parsed_intent: 'context', darwin_response: reply, status: 'completed', action_type: 'command',
+      });
+      return new Response(JSON.stringify({ success: true, action: 'context' }), {
+        status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
+
+    // ── 6. Resolve active claim context (no auto-pick — user must explicitly switch) ──
+    const activeClaimId = convState?.active_claim_id || null;
 
     // ── 7. Parse intent and route ──
     const intent = parseIntent(messageBody);
@@ -667,9 +688,10 @@ serve(async (req) => {
       });
     }
 
-    // Require active claim for most intents (create_task can resolve its own claim via name matching)
-    if (!activeClaimId && intent !== 'financial_qa' && intent !== 'create_task') {
-      const reply = 'No active claim. Reply "Switch [claim #]" or "Claims" to select one.';
+    // Require active claim for most intents (create_task can resolve its own or create personal, summary/financial_qa can work without)
+    const claimlessIntents = ['financial_qa', 'create_task', 'summary'];
+    if (!activeClaimId && !claimlessIntents.includes(intent)) {
+      const reply = 'No active claim. Reply "Switch [claim #]" or "Claims" to select one first.';
       await sendReply(fromNumber, reply);
       if (activityRow) {
         await supabase.from('darwin_sms_activity')
@@ -721,7 +743,7 @@ serve(async (req) => {
           // Exact match — create task immediately
           const taskClaimId = matchedClaims[0].id;
           await supabase.from('sms_conversation_state')
-            .update({ active_claim_id: taskClaimId, expires_at: new Date(Date.now() + 2 * 3600000).toISOString() })
+            .update({ active_claim_id: taskClaimId, expires_at: new Date(Date.now() + 7 * 24 * 3600000).toISOString() })
             .eq('id', convState!.id);
           const { data: task, error: taskErr } = await supabase.from('tasks').insert({
             claim_id: taskClaimId, title, due_date: dueDate, status: 'pending', created_by: userId,
@@ -787,11 +809,20 @@ serve(async (req) => {
         });
       }
 
-      // No hint and no active claim — ask which claim
-      const noClaimReply = 'Which claim is this task for? Reply CLAIMS to list, or "Switch <claim # / name>" to select one. You can also say "Task for Smith: call adjuster".';
-      await sendReply(fromNumber, noClaimReply);
-      if (activityRow) await supabase.from('darwin_sms_activity').update({ status: 'needs_context', darwin_response: noClaimReply }).eq('id', activityRow.id);
-      return new Response(JSON.stringify({ success: true, action: 'needs_claim' }), {
+      // No hint and no active claim — create as personal task (claim_id null)
+      const { data: pTask, error: pTaskErr } = await supabase.from('tasks').insert({
+        claim_id: null, title, due_date: dueDate, status: 'pending', created_by: userId,
+      }).select('id, title, due_date').single();
+      if (pTaskErr) {
+        const errReply = `⚠️ Could not create task: ${pTaskErr.message}`;
+        await sendReply(fromNumber, errReply);
+        if (activityRow) await supabase.from('darwin_sms_activity').update({ status: 'failed', error_message: pTaskErr.message, darwin_response: errReply }).eq('id', activityRow.id);
+      } else {
+        const reply = `✅ Personal task created: "${pTask.title}" due ${pTask.due_date}. No claim linked — visible in your task list.`;
+        await sendReply(fromNumber, reply);
+        if (activityRow) await supabase.from('darwin_sms_activity').update({ status: 'completed', darwin_response: reply, result_id: pTask.id, action_type: 'task_create' }).eq('id', activityRow.id);
+      }
+      return new Response(JSON.stringify({ success: true, action: 'task_created', taskId: pTask?.id, personal: true }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -908,7 +939,35 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, action: autoSend ? 'sent' : 'draft' }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // ── 11. Route remaining intents to darwin-command ──
+    // ── 11. SUMMARY ──
+    if (intent === 'summary') {
+      if (!activeClaimId) {
+        const reply = 'No active claim to summarize. Reply "Switch [claim #]" to select one.';
+        await sendReply(fromNumber, reply);
+        if (activityRow) await supabase.from('darwin_sms_activity').update({ status: 'needs_context', darwin_response: reply }).eq('id', activityRow.id);
+        return new Response(JSON.stringify({ success: true, action: 'needs_claim' }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600000).toISOString();
+      const [updatesRes, emailsRes, smsRes, tasksRes] = await Promise.all([
+        supabase.from('claim_updates').select('content, update_type, created_at').eq('claim_id', activeClaimId).gte('created_at', sevenDaysAgo).order('created_at', { ascending: false }).limit(10),
+        supabase.from('emails').select('subject, sender_name, received_at').eq('claim_id', activeClaimId).gte('received_at', sevenDaysAgo).order('received_at', { ascending: false }).limit(5),
+        supabase.from('sms_messages').select('message_body, direction, created_at').eq('claim_id', activeClaimId).gte('created_at', sevenDaysAgo).order('created_at', { ascending: false }).limit(5),
+        supabase.from('tasks').select('title, status, due_date').eq('claim_id', activeClaimId).order('created_at', { ascending: false }).limit(5),
+      ]);
+      const lines: string[] = [];
+      for (const u of (updatesRes.data || []).slice(0, 3)) lines.push(`📝 ${(u as any).content?.substring(0, 80)}`);
+      for (const e of (emailsRes.data || []).slice(0, 3)) lines.push(`📧 ${(e as any).subject} (from ${(e as any).sender_name || 'unknown'})`);
+      for (const s of (smsRes.data || []).slice(0, 2)) lines.push(`💬 ${(s as any).direction}: ${(s as any).message_body?.substring(0, 60)}`);
+      for (const t of (tasksRes.data || []).slice(0, 3)) lines.push(`✅ ${(t as any).title} (${(t as any).status}, due ${(t as any).due_date || 'N/A'})`);
+      const reply = lines.length > 0
+        ? `📊 Claim Summary (last 7 days):\n${lines.join('\n')}`
+        : 'No recent activity found for this claim in the last 7 days.';
+      await sendReply(fromNumber, reply);
+      if (activityRow) await supabase.from('darwin_sms_activity').update({ status: 'completed', darwin_response: reply }).eq('id', activityRow.id);
+      return new Response(JSON.stringify({ success: true, action: 'summary' }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // ── 12. Route remaining intents to darwin-command ──
     try {
       const cmdResp = await fetch(`${SUPABASE_URL}/functions/v1/darwin-command`, {
         method: 'POST',
@@ -917,9 +976,14 @@ serve(async (req) => {
       });
       const cmdResult = await cmdResp.json();
 
+      const isAnalysis = ['analyze', 'operating_manual', 'case_study', 'marketing'].includes(intent);
       let reply: string;
       if (cmdResult.error) {
         reply = `⚠️ ${cmdResult.error}`;
+      } else if (isAnalysis) {
+        // For analysis intents: short summary + point to app
+        const preview = (cmdResult.result || cmdResult.answer || '').substring(0, 300);
+        reply = `✅ ${intent.replace(/_/g, ' ')} complete.${cmdResult.assetId ? ' Saved to Knowledge Base.' : ''}\n\n${preview}${preview.length >= 300 ? '…' : ''}\n\nFull results: Claim → Darwin → Assets`;
       } else if (cmdResult.answer) {
         reply = cmdResult.answer.substring(0, 1500);
       } else if (cmdResult.result) {
@@ -931,12 +995,21 @@ serve(async (req) => {
       await sendReply(fromNumber, reply);
       if (activityRow) {
         await supabase.from('darwin_sms_activity')
-          .update({ status: 'completed', darwin_response: reply, claim_id: activeClaimId }).eq('id', activityRow.id);
+          .update({
+            status: 'completed',
+            darwin_response: reply,
+            claim_id: activeClaimId,
+            result_id: cmdResult.assetId || null,
+            action_type: isAnalysis ? 'analysis' : 'command',
+          }).eq('id', activityRow.id);
       }
+      // Log outbound reply
       await supabase.from('darwin_sms_activity').insert({
         user_id: userId, phone_number: fromNumber, claim_id: activeClaimId,
         direction: 'outbound', message_text: reply,
-        parsed_intent: intent, status: 'completed', action_type: 'command',
+        parsed_intent: intent, status: 'completed',
+        action_type: isAnalysis ? 'analysis' : 'command',
+        result_id: cmdResult.assetId || null,
       });
     } catch (cmdErr) {
       console.error('Darwin command routing error:', cmdErr);
