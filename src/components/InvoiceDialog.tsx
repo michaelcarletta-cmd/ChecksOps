@@ -193,23 +193,23 @@ export function InvoiceDialog({
         ? `<p style="margin: 24px 0;"><a href="${paymentLink}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Pay Online — $${calculateSubtotal().toFixed(2)}</a></p>`
         : "";
 
+      const emailBody = `<h2>Invoice ${formData.invoiceNumber}</h2>
+<p>Dear ${formData.recipientName},</p>
+<p>Please find your invoice details below.</p>
+<p><strong>Amount Due:</strong> $${calculateSubtotal().toFixed(2)}</p>
+<p><strong>Due Date:</strong> ${format(new Date(formData.dueDate), "MMMM d, yyyy")}</p>
+${formData.notes ? `<p><strong>Notes:</strong> ${formData.notes}</p>` : ""}
+${paymentButton}
+${!paymentLink ? "" : `<p style="font-size: 12px; color: #666;">Or copy this link: ${paymentLink}</p>`}
+<p>Thank you for your business.</p>`;
+
       const { error } = await supabase.functions.invoke("send-email", {
         body: {
           to: formData.recipientEmail,
+          recipientName: formData.recipientName,
           subject: `Invoice ${formData.invoiceNumber}${claimNumber ? ` - Claim ${claimNumber}` : ""}`,
-          html: `
-            <h2>Invoice ${formData.invoiceNumber}</h2>
-            <p>Dear ${formData.recipientName},</p>
-            <p>Please find your invoice details below.</p>
-            <p><strong>Amount Due:</strong> $${calculateSubtotal().toFixed(2)}</p>
-            <p><strong>Due Date:</strong> ${format(new Date(formData.dueDate), "MMMM d, yyyy")}</p>
-            ${formData.notes ? `<p><strong>Notes:</strong> ${formData.notes}</p>` : ""}
-            ${paymentButton}
-            ${!paymentLink ? "" : `<p style="font-size: 12px; color: #666;">Or copy this link: ${paymentLink}</p>`}
-            <p>Thank you for your business.</p>
-          `,
-          attachmentUrl: generatedPdfUrl || undefined,
-          attachmentName: generatedPdfUrl ? `Invoice-${formData.invoiceNumber}.pdf` : undefined,
+          body: emailBody,
+          claimId,
         },
       });
 
