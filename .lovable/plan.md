@@ -1,145 +1,115 @@
 
 
-# Personal Property Photo Pipeline for Home Inventory Builder
+# Darwin Backfill: Catch Up on 934 Claims
 
-## Overview
+## The Problem
 
-Add an AI-powered photo scanning pipeline to the existing Home Inventory Builder that lets users upload room photos, automatically detects items visible in the images, normalizes them into claim-grade inventory records, prices each item (RCV and ACV), and presents an editable "Items Found" UI with confidence indicators, user confirmation prompts, and bulk category filtering.
+Darwin's escalation engine currently only evaluates claims when you manually open them. Out of 934 claims (929 PA/NJ), only **1 claim** has regulatory deadlines populated, **zero** have carrier deadlines, and **zero** escalation actions exist. Darwin is blind to 933 claims.
 
-## What Changes
+## What We'll Build
 
-### 1. New Edge Function: `inventory-photo-pipeline`
+A **one-click batch backfill** edge function + UI trigger that processes all existing claims in bulk:
 
-A new backend function that runs a 3-stage AI pipeline on uploaded room photos:
+1. **Generate regulatory deadlines** for every claim that doesn't have them
+2. **Auto-mark overdue deadlines** based on today's date vs. deadline date
+3. **Evaluate escalation rules** against every open claim and surface a summary
+4. **Add a `state_code` column** to the claims table so state detection is reliable and doesn't need to be re-parsed every time
 
-- **Stage 1 -- Object Detection**: Sends the photo to Gemini 2.5 Flash with a structured prompt. Returns a JSON array of detected items, each with: `label`, `confidence` (0-1), `bounding_box` (x/y/w/h percentages), and `estimated_category`.
-- **Stage 2 -- Item Normalization**: Takes the raw detections and normalizes each into a claim-grade record: `category` (Electronics, Furniture, Appliances, Clothing, etc.), `brand` (if identifiable), `model` (if identifiable), `brand_confidence`, `model_confidence`, `attributes` (color, size, material), `condition_estimate`.
-- **Stage 3 -- Pricing**: For each normalized item, uses Gemini to perform retail price matching. Returns: `rcv` (replacement cost value), `acv` (actual cash value based on condition/age), `pricing_confidence`, `pricing_source` (e.g., "Amazon retail match", "Home Depot comparable", "industry average"), `pricing_rationale` (1-2 sentence explanation), and `comparable_url` if available.
+---
 
-**Confidence thresholds** (configurable):
-- Detection confidence below 0.6 = item flagged for review
-- Brand/model confidence below 0.7 = fields marked "unconfirmed" requiring user edit
-- Pricing confidence below 0.7 = price flagged with warning badge
+## Step 1: Add `state_code` Column to Claims
 
-### 2. Database Migration
+Add a `state_code` (text, nullable) column to the `claims` table. This gives Darwin a structured field instead of re-parsing addresses constantly.
 
-Add new columns to `claim_home_inventory`:
+The backfill function will populate this for all 934 claims using the robust regex-based state detection (word boundaries + ZIP patterns) already built in Phase 4.
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| `source` | text | "manual" or "ai_photo_scan" |
-| `ai_confidence` | numeric | Overall detection confidence |
-| `brand_confirmed` | boolean | User confirmed brand (default false) |
-| `model_confirmed` | boolean | User confirmed model (default false) |
-| `price_confirmed` | boolean | User confirmed pricing (default false) |
-| `pricing_source` | text | Where the price came from |
-| `pricing_rationale` | text | Why that price was chosen |
-| `comparable_url` | text | Link to comparable product |
-| `category` | text | Standardized category |
-| `attributes` | jsonb | Color, size, material, etc. |
-| `source_photo_id` | uuid | FK to claim_photos |
-| `needs_review` | boolean | Flagged for user confirmation |
-| `depreciation_rate` | numeric | Annual depreciation percentage |
-| `age_years` | numeric | Estimated or entered age |
+## Step 2: Edge Function — `darwin-backfill-claims`
 
-Add a new table `inventory_scan_runs`:
+A new edge function that runs as a batch job (called manually via UI button or via cron). Secured with `x-cron-secret`.
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| `id` | uuid PK | |
-| `claim_id` | uuid FK | |
-| `photo_ids` | uuid[] | Photos processed |
-| `status` | text | pending/processing/complete/error |
-| `detected_count` | int | Items found |
-| `confirmed_count` | int | Items user-confirmed |
-| `created_by` | uuid | |
-| `created_at` | timestamptz | |
+**Processing logic (per claim):**
 
-### 3. Frontend: Rebuilt `DarwinHomeInventoryBuilder.tsx`
+```text
+For each claim without deadlines:
+  1. Detect state from policyholder_address (regex)
+  2. Write state_code to claims table
+  3. Generate 4 regulatory deadlines:
+     - Acknowledgment (10 days from filed)
+     - Investigation (30 days from filed)
+     - Written Response (PA: 45 days, NJ: 40 days)
+     - Statute of Limitations (PA: 2yr, NJ: 6yr from loss date)
+  4. Auto-set status:
+     - If deadline_date < today --> "overdue"
+     - If deadline_date >= today --> "pending"
+```
 
-The component gets a new **tabbed layout** with three views:
+**Batching strategy:**
+- Process 50 claims per invocation to avoid edge function timeouts
+- Return cursor (last processed claim ID) so it can be called repeatedly
+- Frontend shows progress: "Processed 150 / 934 claims..."
 
-**Tab 1: Scan Photos** (new)
-- "Select Photos to Scan" button opens a photo picker showing claim photos grouped by room/category
-- Progress bar during pipeline execution (Stage 1/2/3)
-- After scan: shows a card grid of detected items with:
-  - Thumbnail crop from the photo (bounding box overlay)
-  - Item name, category, brand/model (editable inline)
-  - Confidence badges (green >= 0.7, yellow 0.5-0.7, red < 0.5)
-  - RCV / ACV columns
-  - Pricing source pill (e.g., "Amazon", "Industry Avg")
-  - Checkbox to accept/reject each item
-  - Items below confidence thresholds show amber "Needs Review" banner
-- **Bulk actions toolbar**:
-  - Category filter dropdown (Electronics, Furniture, Appliances, etc.)
-  - "Accept All Confirmed" (items above all thresholds)
-  - "Accept Selected" / "Reject Selected"
-  - Room assignment dropdown for bulk assignment
-- "Add to Inventory" moves accepted items into the inventory table
+## Step 3: Frontend — Backfill Controls in Darwin Operations Center
 
-**Tab 2: Inventory** (existing, enhanced)
-- Current table view, now with:
-  - `Source` column showing "Manual" or "AI Scan" badge
-  - `Confirmed` indicators (checkmarks for brand/model/price)
-  - ACV column alongside RCV
-  - Pricing source tooltip on hover
-  - Inline editing for any field
-  - Depreciation info (age, rate, calculated ACV)
+Add a "Darwin Catch-Up" card to the existing Darwin Operations page (`src/pages/DarwinOperations.tsx` or the Settings page) with:
 
-**Tab 3: Summary** (existing, enhanced)
-- Totals now show both RCV and ACV
-- Breakdown by category (not just room)
-- Export includes all new fields (source, pricing rationale, ACV)
+- **"Run Backfill" button** -- kicks off the batch process
+- **Progress bar** -- shows claims processed / total
+- **Auto-continues** -- after each batch of 50 completes, automatically calls the next batch until done
+- **Summary on completion**: "934 claims processed. 412 overdue deadlines detected. 230 open claims with active escalation triggers."
+
+## Step 4: Deadline Status Auto-Update
+
+As part of the backfill, deadlines created in the past that have already lapsed get marked `overdue` immediately. This means when you open any claim after the backfill, the Escalation Engine will already have the data it needs to fire rules like "missed acknowledgment deadline" or "no coverage determination after 30 days."
+
+---
 
 ## Technical Details
 
-### Edge Function Pipeline Flow
+### New Files
+- `supabase/functions/darwin-backfill-claims/index.ts` -- batch processing edge function
 
+### Modified Files
+- `supabase/migrations/[timestamp]_add_state_code_to_claims.sql` -- adds `state_code` column
+- `src/pages/DarwinOperations.tsx` -- add backfill UI controls
+- `supabase/config.toml` -- register new function with `verify_jwt = false`
+
+### State Detection (reused from Phase 4)
 ```text
-Photo URL(s)
-    |
-    v
-[Stage 1: Object Detection]
-  model: gemini-2.5-flash (vision)
-  input: photo + structured prompt
-  output: [{label, confidence, bounding_box, category}]
-    |
-    v
-[Stage 2: Normalization]
-  model: gemini-2.5-flash
-  input: detection results + photo context
-  output: [{category, brand, model, brand_confidence, 
-            model_confidence, attributes, condition}]
-    |
-    v
-[Stage 3: Pricing]
-  model: gemini-2.5-pro (for accuracy)
-  input: normalized items + "find current retail replacement"
-  output: [{rcv, acv, pricing_confidence, pricing_source, 
-            pricing_rationale, comparable_url}]
-    |
-    v
-Return merged results to frontend
+Priority order:
+  1. ZIP-code pattern: /\b(PA|NJ)\s+\d{5}\b/
+  2. Word-boundary abbreviation: /(^|[\s,])PA([\s,]|$)/i
+  3. Full name: /pennsylvania/i or /new jersey/i
+  4. Fallback: null (skip claim)
 ```
 
-### ACV Calculation
+### Batch Processing Flow
+```text
+Frontend clicks "Run Backfill"
+       |
+       v
+Calls darwin-backfill-claims with { cursor: null }
+       |
+       v
+Function processes 50 claims:
+  - Detect state, write state_code
+  - Insert 4 deadlines per claim (skip if already exist)
+  - Mark past deadlines as overdue
+       |
+       v
+Returns { processed: 50, remaining: 884, cursor: "last-id" }
+       |
+       v
+Frontend auto-calls next batch with { cursor: "last-id" }
+       |
+       v
+Repeats until remaining = 0
+       |
+       v
+Shows summary: deadlines created, overdue count, claims by state
+```
 
-`ACV = RCV * (1 - (depreciation_rate * age_years))`
-
-Default depreciation rates by category:
-- Electronics: 15%/yr
-- Furniture: 5%/yr  
-- Appliances: 10%/yr
-- Clothing: 25%/yr
-- Other: 10%/yr
-
-Users can override age and rate per item.
-
-### Files Created/Modified
-
-| File | Action |
-|------|--------|
-| `supabase/functions/inventory-photo-pipeline/index.ts` | Create |
-| `src/components/claim-detail/DarwinHomeInventoryBuilder.tsx` | Full rewrite |
-| Database migration (new columns + new table) | Create |
+### Safety
+- Idempotent: skips claims that already have deadlines (checks `claim_deadlines` before inserting)
+- Uses service role key (cron-secured, not user-facing)
+- Does NOT modify any claim statuses or existing data -- only adds missing deadlines and state_code
 

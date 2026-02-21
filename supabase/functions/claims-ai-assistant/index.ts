@@ -439,9 +439,8 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
       return "";
     }
 
-    let knowledgeContext = "\n\n=== CRITICAL: KNOWLEDGE BASE CONTENT (from your uploaded training materials) ===\n";
-    knowledgeContext += "YOU MUST prioritize and directly reference this information in your response.\n";
-    knowledgeContext += "When answering, explicitly mention that this comes from the user's uploaded training materials.\n\n";
+    let knowledgeContext = "\n\n=== KNOWLEDGE BASE REFERENCE MATERIAL ===\n";
+    knowledgeContext += "Use this information ONLY if it is directly relevant to the user's question. Do NOT cite or reference training materials for simple operational requests (creating tasks, updating statuses, bulk operations, etc.). Only reference this content when the user is asking analytical, strategic, or policy-related questions.\n\n";
     
     diverseChunks.forEach((chunk: any, i: number) => {
       const source = chunk.doc_file_name || "Unknown source";
@@ -967,8 +966,33 @@ const tools = [
   {
     type: "function",
     function: {
+      name: "add_claim_note",
+      description: "Add a note to a specific claim's Notes & Activity section. Use this when the user says 'add a note to the [name] claim', 'note on the claim', 'make a note', etc. This is the PRIMARY tool for adding notes to claims. Do NOT use add_notepad_item for this.",
+      parameters: {
+        type: "object",
+        properties: {
+          client_name: {
+            type: "string",
+            description: "The client/policyholder last name or full name to find the claim (e.g., 'Shelly', 'Vincent Shelly')"
+          },
+          claim_id: {
+            type: "string",
+            description: "Only use this if you have an actual UUID. Otherwise use client_name."
+          },
+          note: {
+            type: "string",
+            description: "The note content to add to the claim's Notes & Activity section"
+          }
+        },
+        required: ["note"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
       name: "add_notepad_item",
-      description: "Add an item to the user's personal notepad/quick notes on the dashboard. Use this when the user asks you to remind them of something, jot something down, add to their notes, or save a quick note for later.",
+      description: "Add an item to the user's personal DASHBOARD notepad/quick notes ONLY. Use this ONLY when the user explicitly says 'add to my notepad', 'add to my quick notes', or 'jot down for me'. Do NOT use this when the user says 'add a note to the claim' — that should go to claim_updates via other tools.",
       parameters: {
         type: "object",
         properties: {
@@ -1228,6 +1252,183 @@ const tools = [
           }
         },
         required: ["keywords"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_task",
+      description: "Update an existing task's details like title, description, due date, priority, or assigned staff. Use this when the user asks to change, edit, or modify a task.",
+      parameters: {
+        type: "object",
+        properties: {
+          task_id: {
+            type: "string",
+            description: "The UUID of the task to update"
+          },
+          task_title_search: {
+            type: "string",
+            description: "Search for the task by title keywords if task_id is not known"
+          },
+          title: {
+            type: "string",
+            description: "New title for the task"
+          },
+          description: {
+            type: "string",
+            description: "New description for the task"
+          },
+          due_date: {
+            type: "string",
+            description: "New due date in YYYY-MM-DD format"
+          },
+          priority: {
+            type: "string",
+            enum: ["low", "medium", "high"],
+            description: "New priority level"
+          },
+          assigned_to: {
+            type: "string",
+            description: "UUID of the staff member to assign the task to"
+          }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "complete_task",
+      description: "Mark a task as completed. Use this when the user says a task is done, finished, or completed.",
+      parameters: {
+        type: "object",
+        properties: {
+          task_id: {
+            type: "string",
+            description: "The UUID of the task to complete"
+          },
+          task_title_search: {
+            type: "string",
+            description: "Search for the task by title keywords if task_id is not known"
+          }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "reopen_task",
+      description: "Reopen a completed task back to pending. Use this when the user wants to undo a task completion or reopen a task.",
+      parameters: {
+        type: "object",
+        properties: {
+          task_id: {
+            type: "string",
+            description: "The UUID of the task to reopen"
+          },
+          task_title_search: {
+            type: "string",
+            description: "Search for the task by title keywords if task_id is not known"
+          }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_task",
+      description: "Delete a task permanently. Use this when the user asks to remove or delete a task.",
+      parameters: {
+        type: "object",
+        properties: {
+          task_id: {
+            type: "string",
+            description: "The UUID of the task to delete"
+          },
+          task_title_search: {
+            type: "string",
+            description: "Search for the task by title keywords if task_id is not known"
+          }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_claim_tasks",
+      description: "List all tasks for the current claim or a specific claim. Use this when the user asks to see tasks, show tasks, or wants a task overview.",
+      parameters: {
+        type: "object",
+        properties: {
+          status_filter: {
+            type: "string",
+            enum: ["pending", "completed", "all"],
+            description: "Filter by task status. Default is 'all'."
+          },
+          client_name: {
+            type: "string",
+            description: "Client/policyholder name to look up a different claim's tasks"
+          }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "bulk_process_tasks",
+      description: "Process tasks across multiple claims at once. Can add a CLAIM NOTE (to the claim's Notes & Activity section), mark tasks as completed, and/or create follow-up tasks. Use this when the user asks to update, clear, complete, or process tasks across multiple claims. IMPORTANT: When the user says 'add a note' in the context of claims/tasks, they mean a claim note in Notes & Activity — NOT the dashboard quick notepad.",
+      parameters: {
+        type: "object",
+        properties: {
+          client_names: {
+            type: "array",
+            items: { type: "string" },
+            description: "List of client/policyholder names to find claims for"
+          },
+          claim_ids: {
+            type: "array",
+            items: { type: "string" },
+            description: "List of claim UUIDs (if known)"
+          },
+          task_title_search: {
+            type: "string",
+            description: "Optional keyword to filter which tasks to process (e.g. 'follow-up', 'inspection'). If not provided, processes ALL pending tasks on the matched claims."
+          },
+          note: {
+            type: "string",
+            description: "Note to add to the CLAIM's Notes & Activity section (claim_updates table). This is NOT the dashboard quick notepad."
+          },
+          complete_tasks: {
+            type: "boolean",
+            description: "Whether to mark the matched tasks as completed. Default true."
+          },
+          create_follow_up: {
+            type: "boolean",
+            description: "Whether to create a new follow-up task on each claim after processing"
+          },
+          follow_up_title: {
+            type: "string",
+            description: "Title for the follow-up task"
+          },
+          follow_up_due_date: {
+            type: "string",
+            description: "Due date for follow-up task in YYYY-MM-DD format"
+          },
+          follow_up_priority: {
+            type: "string",
+            enum: ["low", "medium", "high"],
+            description: "Priority for follow-up task"
+          },
+          follow_up_description: {
+            type: "string",
+            description: "Description for the follow-up task"
+          }
+        }
       }
     }
   }
@@ -1664,7 +1865,49 @@ async function searchTasksByKeywords(
   }
 }
 
-// Helper function to get date range based on time period
+// Helper function to find a task by title search within a claim
+async function findTaskByTitle(supabase: any, titleSearch: string, claimId?: string): Promise<any | null> {
+  try {
+    let query = supabase
+      .from("tasks")
+      .select("id, title, description, status, priority, due_date, claim_id, assigned_to")
+      .ilike("title", `%${titleSearch}%`)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    
+    if (claimId) {
+      query = query.eq("claim_id", claimId);
+    }
+    
+    const { data, error } = await query;
+    if (error || !data || data.length === 0) return null;
+    return data[0];
+  } catch (err) {
+    console.error("Error finding task by title:", err);
+    return null;
+  }
+}
+
+// Helper function to resolve a task from either task_id or title search
+async function resolveTask(supabase: any, taskId?: string, titleSearch?: string, claimId?: string): Promise<{ task: any | null; error?: string }> {
+  if (taskId) {
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("id, title, description, status, priority, due_date, claim_id, assigned_to")
+      .eq("id", taskId)
+      .single();
+    if (error || !data) return { task: null, error: "Task not found with that ID" };
+    return { task: data };
+  }
+  if (titleSearch) {
+    const task = await findTaskByTitle(supabase, titleSearch, claimId);
+    if (!task) return { task: null, error: `No task found matching "${titleSearch}"` };
+    return { task };
+  }
+  return { task: null, error: "No task ID or search term provided" };
+}
+
+
 function getDateRange(timePeriod: string): { start: Date; end: Date } {
   const now = new Date();
   const end = new Date(now);
@@ -2542,13 +2785,519 @@ async function getStaffMembers(supabase: any): Promise<{ id: string; name: strin
   }
 }
 
+// === CROSS-CLAIM PRECEDENT SEARCH (2-STEP PIPELINE) ===
+
+// Deny-list: suppress procedural/low-value chunks even if similarity is high
+const PROCEDURAL_PATTERNS = [
+  /please send (photos|documents|info)/i,
+  /attached (please find|are the|is the)/i,
+  /thank you for (your|sending|providing)/i,
+  /we (received|acknowledge|have received) your/i,
+  /per our (conversation|phone call|discussion)/i,
+  /^(dear|to whom|hi |hello )/i,
+  /please (contact|call|reach out|let us know)/i,
+  /^(sincerely|regards|best|thank)/i,
+  /this (email|letter) (is to|confirms|serves)/i,
+];
+
+function isProceduralChunk(content: string): boolean {
+  const trimmed = content.trim();
+  // Very short chunks are often greetings/signatures
+  if (trimmed.length < 80) return true;
+  // Check procedural patterns
+  return PROCEDURAL_PATTERNS.some(p => p.test(trimmed));
+}
+
+// Determine relevance explanation for an evidence card
+function buildRelevanceExplanation(card: any, currentClaim: any): string {
+  const parts: string[] = [];
+  if (card.carrier_name && currentClaim?.insurance_company &&
+      card.carrier_name.toLowerCase() === currentClaim.insurance_company.toLowerCase()) {
+    parts.push('same carrier');
+  }
+  if (card.denial_rationale) parts.push(`denial rationale: "${card.denial_rationale}"`);
+  if (card.trade) parts.push(`trade: ${card.trade}`);
+  if (card.loss_type) parts.push(`peril: ${card.loss_type}`);
+  if (card.state_code) {
+    const claimState = extractState(currentClaim?.policyholder_address || '');
+    if (claimState && card.state_code === claimState) {
+      parts.push('same state');
+    } else if (claimState && card.state_code !== claimState) {
+      parts.push(`STATE MISMATCH (${card.state_code} vs ${claimState})`);
+    }
+  }
+  if (card.cited_policy_sections?.length) parts.push(`policy sections: ${card.cited_policy_sections.join(', ')}`);
+  return parts.length > 0 ? parts.join(' · ') : 'semantic similarity';
+}
+
+function extractState(address: string): string | null {
+  const m = (address || '').match(/\b([A-Z]{2})\b\s*\d{5}/);
+  return m ? m[1] : null;
+}
+
+// Determine "what worked" from outcome data
+function buildWhatWorked(card: any): string {
+  const tactics: string[] = [];
+  if (card.decision_type === 'accept' || card.outcome_resolution_type === 'settled') {
+    if (card.evidence_type === 'engineer_report') tactics.push('engineer rebuttal');
+    if (card.evidence_type === 'estimate') tactics.push('scope/estimate challenge');
+    if (card.evidence_type === 'denial_letter') tactics.push('denial rebuttal submitted');
+    if (card.outcome_supplement_won) tactics.push('supplement approved');
+    if (card.outcome_appraisal_invoked) tactics.push('appraisal invoked');
+    if (card.outcome_litigation) tactics.push('litigation filed');
+    if (card.outcome_reopened) tactics.push('claim reopened successfully');
+  }
+  if (card.outcome_paid_amount && card.outcome_paid_amount > 0) {
+    tactics.push(`paid $${card.outcome_paid_amount.toLocaleString()}`);
+  }
+  if (card.outcome_resolution_type) tactics.push(`resolution: ${card.outcome_resolution_type}`);
+  return tactics.length > 0 ? tactics.join(' | ') : 'outcome data not yet captured';
+}
+
+// === PHASE 4: Escalation Trigger Evaluation for PA/NJ ===
+// FIX #1: Robust state detection with word-boundary regex (avoids APARTMENT/PARK false positives)
+function detectStateCode(claim: any): string | null {
+  // Prefer structured field
+  const structured = (claim?.client_state || claim?.property_state || '').toUpperCase().trim();
+  if (structured === 'PA' || structured === 'PENNSYLVANIA') return 'PA';
+  if (structured === 'NJ' || structured === 'NEW JERSEY') return 'NJ';
+
+  const address = (claim?.policyholder_address || '');
+  if (!address) return null;
+
+  // ZIP-based detection (most reliable): "NJ 08050" or "PA 19103"
+  const zipMatch = address.toUpperCase().match(/\b([A-Z]{2})\s+\d{5}\b/);
+  if (zipMatch) {
+    if (zipMatch[1] === 'PA') return 'PA';
+    if (zipMatch[1] === 'NJ') return 'NJ';
+  }
+
+  // Word-boundary regex patterns (avoids APARTMENT, PARK, PATRICIA false positives)
+  if (/(^|[\s,])PA([\s,]|$)/i.test(address) || /\bPENNSYLVANIA\b/i.test(address)) return 'PA';
+  if (/(^|[\s,])NJ([\s,]|$)/i.test(address) || /\bNEW\s+JERSEY\b/i.test(address)) return 'NJ';
+
+  return null;
+}
+
+// FIX #6: Cap and bound constants for prompt injection guard
+const MAX_ESCALATION_RULES_INJECTED = 5;
+const MAX_ESCALATION_CONTEXT_CHARS = 3000;
+
+async function getEscalationContext(
+  supabase: any, claim: any, claimId: string
+): Promise<string> {
+  try {
+    const stateCode = detectStateCode(claim);
+    if (!stateCode) return '';
+
+    // Load rules for this state
+    const { data: rules } = await supabase
+      .from('escalation_trigger_rules')
+      .select('*')
+      .eq('state_code', stateCode)
+      .eq('is_active', true)
+      .order('priority_order');
+
+    if (!rules || rules.length === 0) return '';
+
+    // Load claim deadlines
+    const [deadlinesRes, carrierDeadlinesRes] = await Promise.all([
+      supabase.from('claim_deadlines').select('deadline_type, status').eq('claim_id', claimId),
+      supabase.from('claim_carrier_deadlines').select('deadline_type, status, days_overdue, bad_faith_potential').eq('claim_id', claimId),
+    ]);
+
+    const deadlines = deadlinesRes.data || [];
+    const carrierDeadlines = carrierDeadlinesRes.data || [];
+    const missedCount = carrierDeadlines.filter((d: any) => d.status === 'overdue' || d.status === 'missed').length;
+    const hasCoverageDetermination = carrierDeadlines.some((d: any) => d.deadline_type === 'coverage_determination' && d.status === 'met');
+    
+    const createdAt = claim?.created_at ? new Date(claim.created_at) : new Date();
+    const daysSinceFiled = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+    const coverageAccepted = claim?.status === 'Coverage Accepted' || claim?.status === 'Supplement Submitted';
+    const scopeDisputed = claim?.status === 'Supplement Submitted' || claim?.status === 'Under Review';
+
+    // Deterministic rule evaluation
+    const firedRules: any[] = [];
+    for (const rule of rules) {
+      const c = rule.condition_logic || {};
+      let fires = true;
+
+      if (c.days_since_claim_filed_gt && daysSinceFiled <= c.days_since_claim_filed_gt) fires = false;
+      if (c.no_coverage_determination && hasCoverageDetermination) fires = false;
+      if (c.coverage_accepted && !coverageAccepted) fires = false;
+      if (c.scope_disputed && !scopeDisputed) fires = false;
+      if (c.missed_deadlines_gt && missedCount <= c.missed_deadlines_gt) fires = false;
+
+      // FIX #3: deadline_status_not means "suppress rule if any deadline of this type HAS this status"
+      if (c.deadline_type && c.deadline_status_not) {
+        const allDl = [...deadlines, ...carrierDeadlines];
+        const matching = allDl.filter((d: any) => d.deadline_type === c.deadline_type);
+        if (matching.some((d: any) => d.status === c.deadline_status_not)) fires = false;
+      }
+
+      if (fires) firedRules.push(rule);
+    }
+
+    if (firedRules.length === 0) return '';
+
+    // Sort by strength priority
+    const strengthOrder: Record<string, number> = { regulatory_leverage: 0, formal_leverage: 1, soft_leverage: 2 };
+    firedRules.sort((a: any, b: any) => (strengthOrder[a.escalation_strength] ?? 3) - (strengthOrder[b.escalation_strength] ?? 3));
+
+    // FIX #6: Cap injected rules to prevent context overflow
+    const cappedRules = firedRules.slice(0, MAX_ESCALATION_RULES_INJECTED);
+
+    // Build structured context for injection
+    let context = '\n\n=== REGULATORY LEVERAGE CONTEXT (' + stateCode + ') ===\n';
+    context += 'ACTIVE TRIGGERS: ' + cappedRules.length + ' of ' + firedRules.length + ' total.\n';
+    context += 'AUTHORITY CITATION RULES:\n';
+    context += '- Cite statute short reference + plain-language summary.\n';
+    context += '- Recommend procedural next steps only — never threats, accusations, or legal advice.\n';
+    context += '- Label escalation strength (soft/formal/regulatory).\n';
+    context += '- Tone: Strategic and controlled.\n\n';
+
+    for (const rule of cappedRules) {
+      const entry = `[${rule.escalation_strength.toUpperCase().replace('_', ' ')}] ${rule.trigger_name}\n` +
+        `  Citation: ${rule.regulation_citation}\n` +
+        `  Summary: ${rule.regulation_summary}\n` +
+        `  Action: ${rule.recommended_action}\n` +
+        (rule.recommended_artifact ? `  Artifact: ${rule.recommended_artifact}\n` : '') + '\n';
+      
+      // FIX #6: Stop if we'd exceed max chars
+      if (context.length + entry.length > MAX_ESCALATION_CONTEXT_CHARS) break;
+      context += entry;
+    }
+
+    context += '=== END REGULATORY LEVERAGE CONTEXT ===\n';
+    console.log(`[Escalation] Injected ${cappedRules.length}/${firedRules.length} fired triggers for ${stateCode}`);
+    return context;
+  } catch (err) {
+    console.error('[Escalation] Evaluation error:', err);
+    return '';
+  }
+}
+
+
+async function getCarrierPlaybookContext(
+  supabase: any, claim: any
+): Promise<string> {
+  try {
+    const carrier = claim?.insurance_company;
+    if (!carrier) return '';
+
+    const stateMatch = (claim?.policyholder_address || '').match(/\b([A-Z]{2})\b\s*\d{5}/);
+    const state = stateMatch ? stateMatch[1] : (claim?.property_state || null);
+
+    // Tier 1: Exact carrier + state
+    let { data: playbooks } = await supabase
+      .from('carrier_scenario_playbooks')
+      .select('*')
+      .eq('carrier', carrier)
+      .order('sample_size_total', { ascending: false })
+      .limit(5);
+
+    if (!playbooks || playbooks.length === 0) {
+      // Tier 2: Fuzzy carrier match
+      const { data: fuzzy } = await supabase
+        .from('carrier_scenario_playbooks')
+        .select('*')
+        .ilike('carrier', `%${carrier.split(' ')[0]}%`)
+        .order('sample_size_total', { ascending: false })
+        .limit(3);
+      playbooks = fuzzy || [];
+    }
+
+    if (playbooks.length === 0) {
+      console.log('[Playbook] No playbook data for carrier:', carrier);
+      return '';
+    }
+
+    // Fetch tactics for top playbooks
+    const scenarioKeys = playbooks.map((p: any) => p.scenario_key);
+    const { data: allTactics } = await supabase
+      .from('carrier_scenario_tactics')
+      .select('*')
+      .in('scenario_key', scenarioKeys)
+      .order('recency_weighted_score', { ascending: false });
+
+    const tacticsByKey: Record<string, any[]> = {};
+    for (const t of (allTactics || [])) {
+      if (!tacticsByKey[t.scenario_key]) tacticsByKey[t.scenario_key] = [];
+      if (tacticsByKey[t.scenario_key].length < 5) {
+        tacticsByKey[t.scenario_key].push(t);
+      }
+    }
+
+    let context = '\n\n=== CARRIER × SCENARIO PLAYBOOK (DATA-DRIVEN) ===\n';
+    context += 'These are outcome-based playbook entries from historical closed claims. Use them to inform your recommendations.\n';
+    context += 'RULES:\n';
+    context += '- You MUST cite confidence + sample size when referencing playbook data.\n';
+    context += '- A tactic can only be called "proven" if support_count >= 5.\n';
+    context += '- If support_count < 5, label it as "hypothesis / low data".\n';
+    context += '- If the exact scenario match has low data, clearly state: "Exact match low data; broadened to [description]."\n\n';
+
+    for (const pb of playbooks) {
+      const isExactState = pb.state_code === state;
+      const matchTag = isExactState ? 'EXACT' : (pb.state_code ? `STATE MISMATCH (${pb.state_code} vs ${state})` : 'ANY STATE');
+
+      context += `--- PLAYBOOK ENTRY [${matchTag}] ---\n`;
+      context += `Carrier: ${pb.carrier} | State: ${pb.state_code || 'any'} | Trade: ${pb.trade || 'any'} | Loss: ${pb.loss_type || 'any'}\n`;
+      context += `Denial Rationale: ${pb.denial_rationale || 'any'} | Decision: ${pb.decision_type || 'any'}\n`;
+      context += `Win Rate: ${pb.win_rate}% | Avg Delta: $${pb.avg_indemnity_delta || 0} | Sample: ${pb.sample_size_total} (12mo: ${pb.sample_size_recent_12mo})\n`;
+      context += `Confidence: ${pb.confidence_label} (score ${pb.confidence_score})\n`;
+
+      const paths = pb.top_resolution_paths || [];
+      if (paths.length > 0) {
+        context += `Resolution Paths: ${paths.map((p: any) => `${p.path} ${p.pct}%`).join(', ')}\n`;
+      }
+
+      const tactics = tacticsByKey[pb.scenario_key] || [];
+      if (tactics.length > 0) {
+        context += 'Top Tactics:\n';
+        for (const t of tactics) {
+          const proven = t.support_count >= 5 ? 'PROVEN' : 'LOW DATA';
+          context += `  - ${t.tactic_name} (${t.tactic_type}) [${proven}, n=${t.support_count}] `;
+          if (t.success_lift) context += `lift: ${t.success_lift > 0 ? '+' : ''}${t.success_lift}% `;
+          if (t.median_delta_when_present) context += `median: $${t.median_delta_when_present} `;
+          context += '\n';
+        }
+      }
+      context += '--- END ENTRY ---\n\n';
+    }
+
+    context += '=== END PLAYBOOK ===\n';
+    context += 'INSTRUCTION: When recommending tactics, prioritize those with highest support_count and positive success_lift from the playbook. Always cite the confidence level and sample size.\n';
+
+    console.log(`[Playbook] Injected ${playbooks.length} playbook entries for ${carrier}`);
+    return context;
+  } catch (err) {
+    console.error('[Playbook] Retrieval error:', err);
+    return '';
+  }
+}
+
+async function searchCrossClaimPrecedents(
+  supabase: any, question: string, currentClaimId: string, claim: any
+): Promise<string> {
+  try {
+    // Generate embedding for the question
+    const queryEmbedding = await getQueryEmbedding(question);
+    if (!queryEmbedding) {
+      console.log('[CrossClaim] No embedding generated, skipping');
+      return '';
+    }
+
+    // === STEP 1: Structured taxonomy filter ===
+    // Build aggressive filters from claim context
+    const carrierName = claim?.insurance_company || null;
+    const claimLossType = claim?.loss_type ? claim.loss_type.toLowerCase() : null;
+    const claimState = extractState(claim?.policyholder_address || '');
+    
+    // Detect query-specific filters from the question text
+    const questionLower = (question || '').toLowerCase();
+    let queryTrade: string | null = null;
+    let queryDecision: string | null = null;
+    const tradeKeywords: Record<string, string> = {
+      'roof': 'roof', 'shingle': 'roof', 'siding': 'siding', 'gutter': 'gutters',
+      'window': 'windows', 'interior': 'interior', 'drywall': 'interior',
+      'hvac': 'hvac', 'plumbing': 'plumbing', 'fence': 'fence',
+    };
+    for (const [kw, trade] of Object.entries(tradeKeywords)) {
+      if (questionLower.includes(kw)) { queryTrade = trade; break; }
+    }
+    if (/denial|denied|deny/i.test(questionLower)) queryDecision = 'deny_full';
+    if (/partial/i.test(questionLower)) queryDecision = 'deny_partial';
+
+    // TIER 1: Narrow search — same carrier + same loss type + filters
+    const { data: tier1Results } = await supabase.rpc('match_claim_document_chunks', {
+      query_embedding: queryEmbedding,
+      match_count: 10,
+      filter_carrier: carrierName,
+      filter_loss_type: claimLossType,
+      filter_trade: queryTrade,
+      filter_decision: queryDecision,
+      filter_state: claimState,
+      exclude_claim_id: currentClaimId,
+    });
+
+    let allResults: any[] = (tier1Results || []).filter((r: any) => r.similarity > 0.25);
+    console.log(`[CrossClaim] Tier 1 (narrow): ${allResults.length} results`);
+
+    // TIER 2: Relax state + trade filters if thin
+    if (allResults.length < 5) {
+      const { data: tier2Results } = await supabase.rpc('match_claim_document_chunks', {
+        query_embedding: queryEmbedding,
+        match_count: 10,
+        filter_carrier: carrierName,
+        filter_loss_type: claimLossType,
+        filter_decision: queryDecision,
+        exclude_claim_id: currentClaimId,
+      });
+      const existingIds = new Set(allResults.map((r: any) => r.id));
+      for (const r of (tier2Results || [])) {
+        if (!existingIds.has(r.id) && r.similarity > 0.25) {
+          allResults.push(r);
+          existingIds.add(r.id);
+        }
+      }
+      console.log(`[CrossClaim] Tier 2 (carrier+loss): total ${allResults.length}`);
+    }
+
+    // TIER 3: Broad search (no carrier filter) if still thin
+    if (allResults.length < 5) {
+      const { data: tier3Results } = await supabase.rpc('match_claim_document_chunks', {
+        query_embedding: queryEmbedding,
+        match_count: 10,
+        exclude_claim_id: currentClaimId,
+      });
+      const existingIds = new Set(allResults.map((r: any) => r.id));
+      for (const r of (tier3Results || [])) {
+        if (!existingIds.has(r.id) && r.similarity > 0.3) {
+          allResults.push(r);
+          existingIds.add(r.id);
+        }
+      }
+      console.log(`[CrossClaim] Tier 3 (broad): total ${allResults.length}`);
+    }
+
+    // === STEP 2: Deny-list filtering — suppress procedural/weak chunks ===
+    const beforeFilter = allResults.length;
+    allResults = allResults.filter((r: any) => !isProceduralChunk(r.content));
+    if (beforeFilter !== allResults.length) {
+      console.log(`[CrossClaim] Deny-list suppressed ${beforeFilter - allResults.length} procedural chunks`);
+    }
+
+    // Sort by similarity descending
+    allResults.sort((a: any, b: any) => (b.similarity || 0) - (a.similarity || 0));
+
+    // Deduplicate by claim (max 3 chunks per claim)
+    const claimChunkCounts: Record<string, number> = {};
+    const diverseResults: any[] = [];
+    for (const r of allResults) {
+      const count = claimChunkCounts[r.claim_id] || 0;
+      if (count < 3) {
+        diverseResults.push(r);
+        claimChunkCounts[r.claim_id] = count + 1;
+        if (diverseResults.length >= 10) break;
+      }
+    }
+
+    if (diverseResults.length === 0) {
+      console.log('[CrossClaim] No relevant precedents found after filtering');
+      return '';
+    }
+
+    // Get claim details for citations
+    const claimIds = [...new Set(diverseResults.map((r: any) => r.claim_id))];
+    const { data: claimDetails } = await supabase
+      .from('claims')
+      .select('id, claim_number, policyholder_name, status, is_closed')
+      .in('id', claimIds);
+
+    const claimMap: Record<string, any> = {};
+    for (const c of (claimDetails || [])) {
+      claimMap[c.id] = c;
+    }
+
+    // Get file names for citations
+    const fileIds = [...new Set(diverseResults.filter((r: any) => r.file_id).map((r: any) => r.file_id))];
+    let fileMap: Record<string, string> = {};
+    if (fileIds.length > 0) {
+      const { data: files } = await supabase
+        .from('claim_files')
+        .select('id, file_name')
+        .in('id', fileIds);
+      for (const f of (files || [])) {
+        fileMap[f.id] = f.file_name;
+      }
+    }
+
+    console.log(`[CrossClaim] Returning ${diverseResults.length} precedent chunks from ${claimIds.length} claims`);
+
+    // === BUILD ACTIONABLE EVIDENCE CARDS ===
+    let context = '\n\n=== CROSS-CLAIM PRECEDENTS (INTERNAL DATABASE) ===\n';
+    context += 'The following are excerpts from OTHER claims in your database. Present each as an EVIDENCE CARD.\n';
+    context += 'IMPORTANT: For each card, include WHY it is relevant and WHAT WORKED (the tactic/evidence that flipped the outcome).\n';
+    context += 'Tag state mismatches when the precedent is from a different state than the current claim.\n\n';
+
+    for (const r of diverseResults) {
+      const claimInfo = claimMap[r.claim_id];
+      const fileName = r.file_id ? (fileMap[r.file_id] || 'Unknown') : 'N/A';
+      const claimNum = claimInfo?.claim_number || 'Unknown';
+      const status = claimInfo?.is_closed ? 'CLOSED' : (claimInfo?.status || 'Unknown');
+      const similarity = Math.round((r.similarity || 0) * 100);
+      const whyRelevant = buildRelevanceExplanation(r, claim);
+      const whatWorked = buildWhatWorked(r);
+
+      context += `--- EVIDENCE CARD ---\n`;
+      context += `Claim: ${claimNum} | Carrier: ${r.carrier_name || 'Unknown'} | Status: ${status}\n`;
+      context += `Document: ${fileName} | Type: ${r.evidence_type || 'unknown'} | Trade: ${r.trade || 'N/A'} | State: ${r.state_code || 'N/A'}\n`;
+      context += `Decision: ${r.decision_type || 'N/A'}`;
+      if (r.outcome_paid_amount) context += ` | Paid: $${r.outcome_paid_amount.toLocaleString()}`;
+      if (r.outcome_resolution_type) context += ` | Resolution: ${r.outcome_resolution_type}`;
+      context += `\nSimilarity: ${similarity}%\n`;
+      context += `WHY RELEVANT: ${whyRelevant}\n`;
+      context += `WHAT WORKED: ${whatWorked}\n`;
+      if (r.denial_rationale) context += `Denial Rationale: ${r.denial_rationale}\n`;
+      context += `Excerpt: ${r.content.substring(0, 500)}\n`;
+      context += `--- END CARD ---\n\n`;
+    }
+
+    context += '=== END CROSS-CLAIM PRECEDENTS ===\n';
+    context += 'INSTRUCTIONS: Present the most relevant evidence cards to the user. For each card, explain WHY it matters and WHAT WORKED. If a precedent shows a similar denial was overturned, highlight the specific tactic. Tag any state mismatches. Use outcome data to inform confidence scoring.\n';
+
+    return context;
+  } catch (err) {
+    console.error('[CrossClaim] Error:', err);
+    return '';
+  }
+}
+
+// === PHASE 2.5: Persist document analysis to document_analysis_results ===
+async function persistDocumentAnalysis(
+  supabase: any, claimId: string | null, documentName: string | undefined,
+  fullAnalysis: string, crossClaimContext: string, sourceMode: string, claim: any
+) {
+  try {
+    if (!claimId) return;
+    const docType = (() => { const f = fullAnalysis.substring(0,500).toLowerCase(); if(/denial|denied/.test(f)) return 'denial'; if(/estimate|xactimate|rcv/.test(f)) return 'estimate'; if(/engineer/.test(f)) return 'engineering_report'; if(/policy|declaration/.test(f)) return 'policy'; return 'correspondence'; })();
+    const carrierPos = (() => { const l = fullAnalysis.toLowerCase(); if(/carrier.*(deny|denial)/i.test(l)) return 'deny'; if(/carrier.*(limit)/i.test(l)) return 'limit'; if(/scope.*(reduc)/i.test(l)) return 'scope_reduce'; return null; })();
+    const rationales: string[] = [];
+    if(/no direct physical loss/i.test(fullAnalysis)) rationales.push('no direct physical loss');
+    if(/wear (and|&) tear|deterioration/i.test(fullAnalysis)) rationales.push('wear and tear / deterioration');
+    if(/repairable.*(not|rather).*(replac)/i.test(fullAnalysis)) rationales.push('repairable not replace');
+    if(/pre[- ]?existing/i.test(fullAnalysis)) rationales.push('pre-existing damage');
+    const packType = rationales.includes('no direct physical loss') ? 'no_direct_physical_loss' : rationales.includes('wear and tear / deterioration') ? 'wear_and_tear' : rationales.includes('repairable not replace') ? 'repairable_not_replace' : rationales.includes('pre-existing damage') ? 'pre_existing' : null;
+    const nextStepMatch = fullAnalysis.match(/➡\s*(?:NEXT STEP|RECOMMENDED NEXT STEP)[:\s]*\n?([\s\S]*?)(?:\n\n|$)/i);
+    const nextStep = nextStepMatch ? nextStepMatch[1].trim().substring(0,500) : null;
+    const covIdx = fullAnalysis.indexOf('⚖ COVERAGE-FIRST ANALYSIS');
+    const covImpact = covIdx > -1 ? fullAnalysis.substring(covIdx, covIdx + 1000).split('📊')[0].trim().substring(0,1000) : null;
+    const gaps: any[] = [];
+    const checkMatch = fullAnalysis.match(/🧾[\s\S]*?(?=➡|$)/);
+    if (checkMatch) { for (const line of checkMatch[0].split('\n')) { const u = line.match(/□\s*(.+)/); if(u) gaps.push({gap:u[1].trim(),evidence_needed:u[1].trim(),priority:/annotated photo|test square|storm report|moisture map/i.test(u[1])?'HIGH':'MEDIUM'}); }}
+    const precedents: any[] = [];
+    if (crossClaimContext) { for (const m of crossClaimContext.matchAll(/Claim: ([^\s|]+)\s*\|\s*Carrier: ([^\s|]+)/g)) { if(m[1]!=='Unknown') precedents.push({claim_number:m[1],carrier:m[2]}); }}
+    const stateMatch = (claim?.policyholder_address||'').match(/\b([A-Z]{2})\b\s*\d{5}/);
+    await supabase.from('document_analysis_results').insert({
+      claim_id: claimId, file_name: documentName||'Unknown', document_type: docType,
+      carrier_name: claim?.insurance_company||null, state_code: stateMatch?stateMatch[1]:null,
+      loss_type: claim?.loss_type||null, carrier_position: carrierPos, denial_rationales: rationales,
+      coverage_impact: covImpact, evidence_gaps: gaps, evidence_pack_type: packType,
+      next_step: nextStep, full_analysis: fullAnalysis, precedent_claim_ids: [],
+      precedent_summary: precedents, source_mode: sourceMode,
+    });
+    console.log(`[DocAnalysis] Saved analysis for "${documentName}" on claim ${claimId}`);
+  } catch (err) { console.error('[DocAnalysis] Error:', err); }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { claimId, question, messages, mode, reportType, documentContent, documentName, documentFilePath } = await req.json();
+    const body = await req.json();
+    const { claimId, question, messages, mode, reportType, documentContent, documentName, documentFilePath } = body;
     
     if (!question && !reportType) {
       return new Response(
@@ -2798,19 +3547,80 @@ GENERAL DOCUMENT ANALYSIS:
 - Identify the strongest arguments available to the policyholder
 - Flag any time-sensitive deadlines or requirements`;
 
+      const structuredInsightFormat = `
+
+YOU MUST RESPOND WITH THIS EXACT STRUCTURED FORMAT — NO EXCEPTIONS:
+
+📄 WHAT THIS DOCUMENT IS
+(Document type, sender/author, date issued, carrier, claim #, state, trade, loss type)
+
+🎯 CARRIER POSITION & CLAIM IMPACT
+(What is the carrier trying to do: deny / limit scope / reduce payment / delay? Quote the EXACT denial rationale(s) detected. If multiple, label each.)
+
+⚖ COVERAGE-FIRST ANALYSIS
+(Coverage basis to establish or attack — use POLICY LANGUAGE FIRST, then state regulations. Do NOT use manufacturer specs as coverage arguments. Manufacturer specs are only relevant as repair-method feasibility support.)
+
+📊 PRECEDENTS FROM OUR DATABASE
+(Present the top 3-7 evidence cards from cross-claim retrieval. Each card MUST show:
+ - Claim # | Carrier | Trade | State
+ - WHY RELEVANT: (same carrier, same denial rationale, same trade, same state or STATE MISMATCH tag)
+ - WHAT WORKED: (the specific tactic/evidence that flipped it: engineer rebuttal, matching packet, supplement, appraisal, etc.)
+ - OUTCOME: (first offer vs final, or resolution type)
+If no precedents found, say "No matching precedents in database — this may be a novel scenario.")
+
+🧾 EVIDENCE GAP CHECKLIST
+(The MINIMUM evidence pack needed to defeat this specific denial rationale. Use these templates:)
+
+For "No direct physical loss":
+ □ Annotated photos showing direct impact damage
+ □ Test square results with measurements
+ □ Brittleness/granule loss documentation
+ □ Lift/crease documentation with photos
+ □ Moisture map (if interior involvement)
+ □ Collateral damage indicators (gutters, AC units, soft metals)
+
+For "Wear & tear / deterioration":
+ □ Storm report with date-of-loss weather data
+ □ Collateral damage indicators proving storm causation
+ □ Creased/fractured shingle count with photos
+ □ Hail hit count per test square
+ □ Timeline showing damage post-storm, not pre-existing
+ □ Prior condition proof (Google Street View, MLS photos, underwriting photos)
+
+For "Repairable, not replace":
+ □ Repair feasibility analysis (why repair is not viable)
+ □ Uniformity/appearance argument (sealed system, continuous surface)
+ □ Manufacturer spec ONLY as feasibility support (not coverage trigger)
+ □ Cost comparison: repair vs replace with warranty implications
+
+For "Pre-existing damage":
+ □ Underwriting photos showing pre-loss condition
+ □ Prior inspection reports
+ □ MLS listing photos
+ □ Date-of-loss meteorological data
+ □ Affidavits from homeowner/neighbors
+ □ Google Street View timeline images
+
+(Check off items already present in the claim files. Mark missing items with priority: HIGH / MEDIUM / LOW)
+
+➡ NEXT STEP
+(ONE action, phrased like a colleague: "Do X today; I'll draft Y." — be specific and tactical)
+
+After the structured insight, apply the detailed analysis framework below:`;
+
       if (hasClaimContext) {
         docAnalysisInstructions = `CRITICAL: Base your ENTIRE analysis on the ACTUAL loss type: "${lossType}". Loss Description: "${lossDescription}". DO NOT default to roofing or hail damage assumptions. Your analysis must match the specific peril and damages described.
-
-Determine what type of document this is and apply the appropriate deep analysis:
+${structuredInsightFormat}
 ${deepAnalysisFramework}
 
 Tailor ALL missing items, supplement opportunities, and strategies specifically to the "${lossType}" peril.`;
       } else {
         docAnalysisInstructions = `CRITICAL: No specific claim is linked to this conversation. You MUST analyze the document based ONLY on what the document itself says. DO NOT assume any specific peril or damage type (especially NOT roofing/hail/wind by default). Read the document carefully to determine what type of loss, damage, or claim it pertains to.
 
-Step 1: IDENTIFY the document type (estimate, denial letter, engineer report, policy excerpt, inspection report, contractor bid, etc.)
-Step 2: IDENTIFY the loss type from the document content itself. State this clearly before proceeding.
-Step 3: Apply the appropriate deep analysis based on document type:
+Step 1: IDENTIFY the document type and loss type from the document content.
+Step 2: Provide the structured insight:
+${structuredInsightFormat}
+Step 3: Apply the appropriate deep analysis:
 ${deepAnalysisFramework}
 
 If the document is ambiguous about the type of loss, ask the user to clarify rather than assuming.`;
@@ -2836,8 +3646,41 @@ If the document is ambiguous about the type of loss, ask the user to clarify rat
       reportQuestion = reportPrompts[reportType] || question;
     }
 
-    // Search the knowledge base for relevant information
-    knowledgeBaseContext = await searchKnowledgeBase(supabase, reportQuestion || question);
+    // Search the knowledge base ONLY for analytical/strategic questions — NOT for simple operational tasks
+    const operationalPatterns = /^(create|add|make|mark|complete|delete|remove|update|change|set|assign|close|reopen|show|list|find tasks|bulk|share|remind|jot|note|what (tasks|claims|did I)|how many claims)/i;
+    const isOperationalRequest = operationalPatterns.test((question || '').trim());
+    
+    if (!isOperationalRequest) {
+      knowledgeBaseContext = await searchKnowledgeBase(supabase, reportQuestion || question);
+    } else {
+      console.log('[KB Retrieval] Skipped — operational/task request detected');
+    }
+
+    // === CROSS-CLAIM RETRIEVAL: Search vectorized claim docs for precedents ===
+    let crossClaimContext = "";
+    let playbookContext = "";
+    const sourceMode = body.sourceMode || 'hybrid'; // 'internal_only' or 'hybrid'
+    
+    // Fire cross-claim search for claim mode OR when a document is uploaded (even in general chat)
+    const hasUploadedDoc = !!(resolvedDocContent && resolvedDocContent.trim());
+    let escalationContext = "";
+    if (!isOperationalRequest && (claimId || hasUploadedDoc)) {
+      try {
+        const searchQuery = hasUploadedDoc 
+          ? `${question || ''} ${resolvedDocContent.substring(0, 2000)}`.trim()
+          : question;
+        const [ccResult, pbResult, escResult] = await Promise.all([
+          searchCrossClaimPrecedents(supabase, searchQuery, claimId || '', claim),
+          claim ? getCarrierPlaybookContext(supabase, claim) : Promise.resolve(''),
+          claim && claimId ? getEscalationContext(supabase, claim, claimId) : Promise.resolve(''),
+        ]);
+        crossClaimContext = ccResult;
+        playbookContext = pbResult;
+        escalationContext = escResult;
+      } catch (ccErr) {
+        console.error('[CrossClaim/Playbook/Escalation] Search error:', ccErr);
+      }
+    }
     
     // Determine if web search is needed
     let webSearchResults = "";
@@ -2929,10 +3772,11 @@ WORKSPACE SHARING: You can share claims to workspaces for partner collaboration!
 
 You can also specify claims by name using client_names array, or by ID using claim_ids array.
 
-NOTEPAD: You can add items to the user's personal notepad on their dashboard!
-- Use add_notepad_item when the user asks you to remind them of something, jot something down, add to their notes, or save a quick note
-- Examples: "remind me to call the adjuster tomorrow", "add to my notes: follow up on Smith claim", "jot down that I need to review the Johnson estimate"
-- The note will appear as a bullet point on their dashboard notepad
+NOTEPAD vs CLAIM NOTES — CRITICAL DISTINCTION:
+- add_claim_note → PRIMARY tool for adding notes to a claim's Notes & Activity section. Use when user says "add a note to the [name] claim", "make a note on the claim", "note on the claim". ALWAYS use this for claim notes.
+- add_notepad_item → ONLY for the user's personal DASHBOARD quick notepad. Use ONLY when user explicitly says "add to my notepad", "jot down for me", "remind me later"
+- When the user says "add a note" or "make a note" while discussing claims, they ALWAYS mean a CLAIM NOTE → use add_claim_note
+- NEVER use add_notepad_item for claim-related notes!
 
 *** SYSTEM-WIDE SEARCH CAPABILITIES ***
 
@@ -2985,7 +3829,31 @@ GET ADJUSTER INTERACTIONS (get_adjuster_interactions):
   - "what claims have supplement tasks" → search_tasks({ keywords: ["supplement"] })
   - "show completed inspection tasks" → search_tasks({ keywords: ["inspection"], status: "completed" })
 
-IMPORTANT: When the user asks about finding tasks with certain words or topics, ALWAYS use the search_tasks tool. The fuzzy matching will find related terms even if the user's wording doesn't exactly match the task titles.`;
+IMPORTANT: When the user asks about finding tasks with certain words or topics, ALWAYS use the search_tasks tool. The fuzzy matching will find related terms even if the user's wording doesn't exactly match the task titles.
+
+*** BULK TASK PROCESSING (bulk_process_tasks) - USE FOR MULTI-CLAIM TASK OPERATIONS! ***
+- Use this when the user asks to update/clear/complete tasks across MULTIPLE claims at once
+- Can find claims by client names (client_names array)
+- Can add a note to tasks, mark them completed, AND create follow-up tasks — all in one call
+- Examples:
+  - "update the tasks on these 5 claims with a note and clear them" → bulk_process_tasks({ client_names: ["Smith", "Jones", ...], note: "Contacted client", complete_tasks: true })
+  - "clear all tasks on the filtered claims and create follow-ups for next week" → bulk_process_tasks({ client_names: [...], complete_tasks: true, create_follow_up: true, follow_up_title: "Follow-up", follow_up_due_date: "2026-02-27" })
+  - "add a note to all tasks on these claims" → bulk_process_tasks({ client_names: [...], note: "Note text", complete_tasks: false })
+- IMPORTANT: When the user says "the claims on this page" or "filtered claims", ask them for the client names or use the claims list context to identify them.
+
+*** TASK MANAGEMENT (update_task, complete_task, reopen_task, delete_task, list_claim_tasks) ***
+- update_task: Change task title, description, due date, priority, or assignee. Can find tasks by title keywords.
+- complete_task: Mark a task as done. Can find by title keywords.
+- reopen_task: Reopen a completed task back to pending.
+- delete_task: Permanently remove a task.
+- list_claim_tasks: Show all tasks for the current claim or a specific claim.
+- All task tools support finding tasks by title search (task_title_search) — no need for exact task IDs.
+- Examples:
+  - "mark the follow-up task as done" → complete_task({ task_title_search: "follow-up" })
+  - "change the inspection task due date to next Friday" → update_task({ task_title_search: "inspection", due_date: "2026-02-27" })
+  - "delete the old estimate task" → delete_task({ task_title_search: "estimate" })
+  - "show me all tasks on this claim" → list_claim_tasks({})
+  - "reopen the supplement task" → reopen_task({ task_title_search: "supplement" })`;
 
     // Fetch available workspaces for context
     let workspacesContext = "";
@@ -3008,7 +3876,16 @@ IMPORTANT: When the user asks about finding tasks with certain words or topics, 
 
 FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.`
       : mode === "general" 
-      ? `You are Darwin, an elite public adjuster AI assistant with expert-level knowledge in property insurance claims. You think and operate like the best public adjusters in the industry.
+      ? `You are Darwin, an elite Claims Operations Assistant.
+
+=== RESPONSE DISCIPLINE ===
+RULE #1: Match your response to the request complexity.
+- For SIMPLE OPERATIONAL requests (create a task, update status, bulk operations, assign staff, list tasks, close claims): Execute the action immediately and confirm briefly. Do NOT reference training materials, knowledge base content, or provide unsolicited analysis.
+- For ANALYTICAL/STRATEGIC requests (denial analysis, coverage questions, rebuttal strategy, evidence evaluation): Provide thorough, structured analysis using all available context including knowledge base materials.
+- NEVER pad a simple request with irrelevant knowledge base citations or training material references.
+- If you have knowledge base content in your context but the question is operational, IGNORE the knowledge base content entirely.
+
+=== DARWIN CORE PHILOSOPHY (BRELLY-INSPIRED) ===
 
 === DARWIN CORE PHILOSOPHY (BRELLY-INSPIRED) ===
 
@@ -3097,7 +3974,6 @@ When you see "=== CRITICAL: KNOWLEDGE BASE CONTENT ===" in the context, you MUST
 FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting such as ** for bold, # for headers, or * for italics. Use normal capitalization and line breaks for emphasis instead.
 
 
-
 CRITICAL - LOSS TYPE AWARENESS (HIGHEST PRIORITY):
 You must NEVER default to roofing, hail, shingle, or wind damage assumptions unless the claim or document explicitly involves roofing. Every claim has a SPECIFIC loss type (water damage, fire, theft, vandalism, vehicle impact, plumbing failure, hurricane, tornado, mold, smoke, collapse, etc.). When analyzing ANY claim or document:
 1. READ the claim's actual loss type and description FIRST
@@ -3107,7 +3983,14 @@ You must NEVER default to roofing, hail, shingle, or wind damage assumptions unl
 5. Do NOT mention roofing terms (shingles, flashing, ridge caps, etc.) unless the claim is actually about roof damage
 
 You have access to the user's active claims and pending tasks. Provide practical, actionable advice focused on getting claims FILED RIGHT, MOVING FAST, and PAID FULLY. When asked to draft communications, write them professionally and ready to send. Be thorough and strategic.`
-      : `You are Darwin, an elite public adjuster AI consultant specializing in property damage claims. You think and operate like the best public adjusters in the industry, with a relentless focus on getting claims FILED RIGHT, MOVING FAST, and PAID FULLY.
+      : `You are Darwin, a Claims Operations Assistant — not a chatbot, not a compliance bot, not a contractor estimating tool. You are a document-aware, workflow-driven intelligence assistant embedded inside the claim file. You function as a senior claims consultant, a construction engineer, and a policy strategist combined.
+
+=== RESPONSE DISCIPLINE (HIGHEST PRIORITY) ===
+RULE #1: Match your response to the request complexity.
+- For SIMPLE OPERATIONAL requests (create a task, update status, bulk operations, assign staff, list tasks, close claims, send emails): Execute the action immediately and confirm briefly. Do NOT reference training materials, knowledge base content, or provide unsolicited analysis. Keep responses concise and action-focused.
+- For ANALYTICAL/STRATEGIC requests (denial analysis, coverage questions, rebuttal strategy, evidence evaluation, document analysis): Provide thorough, structured analysis using all available context.
+- NEVER pad a simple request with irrelevant knowledge base citations or training material references.
+- If you have knowledge base content in your context but the question is operational, IGNORE the knowledge base content entirely.
 
 === ABSOLUTE RULE: CURRENT CLAIM FOCUS ===
 You are currently embedded INSIDE a specific claim. ALL of your responses, tool calls, searches, and analysis MUST be about THIS claim and THIS claim ONLY.
@@ -3117,49 +4000,120 @@ You are currently embedded INSIDE a specific claim. ALL of your responses, tool 
 - If the user explicitly asks about a DIFFERENT claim by name, only then should you use get_full_claim_context to look it up.
 - Before responding, VERIFY that any claim number or policyholder name you mention matches the claim in your context. If it doesn't match, you have the WRONG claim — stop and correct yourself.
 
-=== DARWIN CORE PHILOSOPHY (BRELLY-INSPIRED) ===
+=== 1. DOCUMENT ANALYSIS BEHAVIOR (MANDATORY) ===
 
-FUNDAMENTAL TRUTH: At the end of the day, your insurance claim is your responsibility. The insurance company owes good faith handling, but they don't owe money until you've PROVEN your covered losses.
+When a document is uploaded or referenced, you MUST perform three steps:
 
-THE PROOF OF LOSS IS YOUR BEST FRIEND:
-- It puts the insurance company ON THE CLOCK (usually 30 days to respond)
-- Submit it proactively - don't wait for them to request it
-- Use qualifying statements: "based on information known as of this date"
-- It doesn't need to be perfect - courts require "substantial compliance"
-- This is your formal documentation that starts mandatory response timelines
+STEP 1 - READ & ANALYZE: Extract document type (estimate, denial, policy, inspection report, engineer report, invoice, etc.), carrier name, claim number, date, coverage references, damage descriptions, repair recommendations, regulatory references, and any denial or limitation language.
 
-BUILD YOUR "PROOF CASTLE" - Three pillars for every claim:
+STEP 2 - CLASSIFY & FILE: Identify the correct claim folder category: Coverage, Policy, Estimates, Carrier Correspondence, Insured Correspondence, Engineering, Photos/Evidence, Invoices, Supplements, Regulatory/DOI. If classification is unclear, ask ONE clarifying question.
+
+STEP 3 - PROVIDE STRUCTURED INSIGHT: Respond in this EXACT format:
+
+[Document Icon] WHAT THIS DOCUMENT IS
+(Type, sender, date, purpose)
+
+[Scales Icon] COVERAGE IMPACT
+(How does this affect coverage position? What policy provisions apply?)
+
+[Magnifying Glass Icon] GAPS / WEAKNESSES
+(What is wrong with this document? What logic fails? What is missing?)
+
+[Receipt Icon] EVIDENCE NEEDED (if any)
+(What specific evidence would strengthen the position against this document?)
+
+[Arrow Icon] RECOMMENDED NEXT STEP
+(ONE clear, tactical, actionable next step to advance this claim)
+
+NO generic summaries. Every analysis must connect to claim advancement.
+
+=== 2. CONVERSATIONAL MODE - COLLEAGUE / ENGINEER BEHAVIOR ===
+
+You behave like a knowledgeable peer — a senior claims consultant who has handled thousands of claims. Users will ask things like:
+- "Does this denial hold up?"
+- "What are they missing?"
+- "How do we rebut this?"
+- "What evidence do we need to force coverage?"
+- "Is this repair actually feasible?"
+- "Would matching apply here?"
+- "Is this direct physical loss?"
+
+You respond ANALYTICALLY — never generically. You:
+- Challenge weak carrier logic with specific technical counter-arguments
+- Identify policy leverage (specific provisions, endorsements, definitions)
+- Identify regulatory leverage (state-specific deadlines, bad faith indicators, DOI complaint triggers)
+- Identify technical flaws in carrier reasoning (methodology errors, unsupported conclusions, bias indicators)
+- Suggest specific evidence to strengthen the policyholder's position
+- Cite building codes, industry standards, and manufacturer specs when supporting SCOPE arguments (never to deny coverage)
+
+=== 3. COVERAGE-FIRST LOGIC (MANDATORY ORDER OF OPERATIONS) ===
+
+Every analysis MUST follow this sequence:
+1. COVERAGE DETERMINATION — Policy language + state regulations ONLY. Does coverage exist?
+2. PROOF OF DAMAGE — Direct physical loss evidence. Is the damage documented?
+3. SCOPE DISCUSSION — Repair vs. replace feasibility. What is the full extent?
+4. REPAIR EXECUTION — Contractor workflow, code compliance, O&P justification.
+
+STRICT PROHIBITIONS:
+- Do NOT use manufacturer specifications to deny scope or coverage
+- Do NOT use building codes to determine coverage (codes are for SCOPE only)
+- Do NOT move into repair workflow before coverage is established
+- Do NOT default to the ASTM wind rating fallacy
+- Do NOT use words like "deterioration", "rot", or "decay" — use "weathering" only for depreciation context
+- Do NOT accept "man-made damage" or "installation defect" accusations without forensic proof
+
+Authority hierarchy: Policy Language > State Regulations > Industry Standards > Building Codes > Manufacturer Specs (scope support only)
+
+=== 4. CLAIM ADVANCEMENT MINDSET ===
+
+Your purpose is to ADVANCE THE CLAIM. Every response MUST end with:
+
+[Arrow Icon] NEXT STEP: [One clear tactical action]
+
+Examples of proper next steps:
+- "Request moisture mapping from a certified water damage specialist"
+- "Obtain independent engineer rebuttal addressing methodology flaws on page 3"
+- "Cite loss settlement clause Section X and demand written coverage position within 15 days"
+- "Submit supplement with line-item justification for O&P, code upgrades, and hidden damage"
+- "File DOI complaint — carrier missed 30-day investigation deadline by 12 days"
+- "Draft demand letter citing bad faith indicators: delayed acknowledgment, inadequate investigation"
+
+NO passive responses. NO "consider consulting an expert." Be the expert.
+
+=== 5. TONE ===
+
+You communicate like:
+- A knowledgeable peer (direct, strategic, professional, analytical)
+- Someone who has seen this exact carrier tactic 50 times before
+- A strategist who knows exactly what leverage to apply and when
+
+You do NOT communicate like:
+- A generic AI assistant ("I'd be happy to help!")
+- A compliance chatbot ("Please consult your policy for details")
+- A contractor estimating bot (you analyze strategy, not just numbers)
+
+=== 6. DARWIN STRATEGIC FRAMEWORK ===
+
+THE PROOF CASTLE - Every claim needs three pillars:
 1. THE CAUSE - Weather reports, engineering opinions, incident documentation
-2. THE SCOPE - Contractor opinions, building code requirements, manufacturer specs
-3. THE COST - Detailed estimates, market pricing, proper line itemization
-
-CRITICAL ARGUMENT STRATEGY - REPAIRABILITY OVER MATCHING:
-- When applicable (e.g., exterior materials like roofing/siding), argue "repairability" rather than "matching"
-- PA and NJ DO NOT require matching; focus on why damaged materials CANNOT BE REPAIRED
-- For other loss types (water, fire, vehicle impact, theft, etc.), tailor your argument strategy to the specific damage — do NOT apply roofing logic to non-roofing claims
-- Always align your repair vs. replace arguments with the actual materials and damage involved
+2. THE SCOPE - Contractor opinions, building code requirements, proper line itemization
+3. THE COST - Detailed estimates, market pricing, O&P justification
 
 STATE DEADLINE ENFORCEMENT:
 - Know the deadlines: acknowledgment (10 days), investigation (30 days), decision (10-15 days), payment (10-15 days)
 - Calendar every deadline and follow up IN WRITING when missed
 - Missed deadlines = potential bad faith = leverage
 
-DOCUMENTATION BEST PRACTICES:
-- Keep a communications diary: date, time, names, employee IDs, substance
-- Communicate in WRITING whenever possible
-- Send critical documents electronically AND via certified mail
-- Preserve all damaged materials until claim is fully resolved
-- Photo/video EVERYTHING - before, during, and after
+CARRIER BEHAVIOR ANALYSIS:
+- Track response patterns, denial language, and adjuster tactics
+- Identify "moving goalposts" across multiple communications
+- Flag procedural violations as escalation leverage
 
-You have deep knowledge of:
-- Insurance policy interpretation and coverage analysis
-- Negotiation tactics with carrier adjusters
-- Documentation requirements and evidence building
-- State-specific insurance regulations and consumer rights
-- Depreciation calculations (ACV vs RCV)
-- Proper claim valuation and Xactimate methodologies
-- When and how to escalate claims or file regulatory complaints
-- Appraisal process strategy and umpire selection
+PROOF OF LOSS STRATEGY:
+- Submit proactively — puts the insurer ON THE CLOCK (usually 30 days)
+- Use qualifying statements: "based on information known as of this date"
+- Send electronically AND via certified mail for double documentation
+
 ${toolInstructions}
 
 You have detailed training materials in your knowledge base about ACV policies, depreciation, and ordinance and law/code upgrades. When asked about these topics, you MUST answer from that knowledge.
@@ -3172,26 +4126,17 @@ When you see "=== CRITICAL: KNOWLEDGE BASE CONTENT ===" in the context, you MUST
 4. Quote or paraphrase the relevant parts directly
 5. Only supplement with general knowledge if needed
 
-FORMATTING REQUIREMENT: Write in plain text only. No markdown formatting.
-
-Always provide:
-- Clear, actionable advice with specific next steps
-- Deadline tracking and urgency assessment
-- References to policy language or regulations when relevant
-- Warning about carrier tactics and how to counter them
-- Strategic recommendations for maximizing settlement
-- Follow-up actions to keep momentum
-
+FORMATTING REQUIREMENT: Write in plain text only. No markdown formatting like ** or # or *.
 
 CRITICAL - LOSS TYPE AWARENESS (HIGHEST PRIORITY):
-You must NEVER default to roofing, hail, shingle, or wind damage assumptions unless the claim or document explicitly involves roofing. Every claim has a SPECIFIC loss type (water damage, fire, theft, vandalism, vehicle impact, plumbing failure, hurricane, tornado, mold, smoke, collapse, etc.). When analyzing ANY claim or document:
+You must NEVER default to roofing, hail, shingle, or wind damage assumptions unless the claim explicitly involves roofing. Every claim has a SPECIFIC loss type. When analyzing ANY claim or document:
 1. READ the claim's actual loss type and description FIRST
-2. If no loss type is provided and no claim is linked, READ the uploaded document to determine the loss type
+2. If no loss type is provided, READ the uploaded document to determine the loss type
 3. If you still cannot determine the loss type, ASK the user — do NOT guess or default to roofing
 4. Tailor ALL analysis, recommendations, missing items, strategies, and terminology to THAT specific peril
-5. Do NOT mention roofing terms (shingles, flashing, ridge caps, etc.) unless the claim is actually about roof damage
+5. Do NOT mention roofing terms unless the claim is actually about roof damage
 
-Be professional, ethical, and relentlessly focused on getting the policyholder a fair, full, and fast settlement. Never suggest fraud.`;
+Be relentlessly focused on advancing the claim toward a fair, full, and fast settlement. Never suggest fraud.`;
 
     const conversationMessages = [];
     
@@ -3207,11 +4152,34 @@ Be professional, ethical, and relentlessly focused on getting the policyholder a
         content: knowledgeBaseContext,
       });
     }
-    
+
+    // If we have cross-claim precedents, add them as context
+    if (crossClaimContext) {
+      conversationMessages.push({
+        role: "assistant",
+        content: crossClaimContext,
+      });
+    }
+
+    // If we have playbook data, add it as context
+    if (playbookContext) {
+      conversationMessages.push({
+        role: "assistant",
+        content: playbookContext,
+      });
+    }
+
+    // If we have escalation context, add it
+    if (escalationContext) {
+      conversationMessages.push({
+        role: "assistant",
+        content: escalationContext,
+      });
+    }
+
     if (messages && messages.length > 0 && !reportType) {
       conversationMessages.push(...messages);
     }
-    
     conversationMessages.push({ 
       role: "user", 
       content: reportQuestion 
@@ -3221,7 +4189,7 @@ Be professional, ethical, and relentlessly focused on getting the policyholder a
     const requestBody: any = {
       model: "google/gemini-2.5-flash",
       messages: conversationMessages,
-      max_tokens: reportType ? 3000 : 1500,
+      max_tokens: reportType ? 3000 : 2500,
     };
 
     if (!reportType) {
@@ -3487,6 +4455,62 @@ Be professional, ethical, and relentlessly focused on getting the policyholder a
           } catch (parseErr) {
             console.error("Error in bulk_share_to_workspace:", parseErr);
             answer += `\n\n❌ **Error sharing to workspace:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "add_claim_note") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Adding claim note:", params);
+            
+            // Get user ID
+            const authHeader = req.headers.get("authorization");
+            if (!authHeader) {
+              answer += `\n\n❌ **Cannot add note:** Not authenticated`;
+              continue;
+            }
+            const { data: { user } } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+            if (!user) {
+              answer += `\n\n❌ **Cannot add note:** User not found`;
+              continue;
+            }
+            
+            // Resolve claim
+            let resolvedClaimId = params.claim_id;
+            let claimName = "";
+            if (!resolvedClaimId && params.client_name) {
+              const foundClaim = await findClaimByClientName(supabase, params.client_name);
+              if (foundClaim) {
+                resolvedClaimId = foundClaim.id;
+                claimName = foundClaim.policyholder_name;
+              }
+            }
+            // Also try from conversation context (claimId variable)
+            if (!resolvedClaimId && claimId) {
+              resolvedClaimId = claimId;
+            }
+            
+            if (!resolvedClaimId) {
+              answer += `\n\n❌ **Could not find claim** for "${params.client_name || 'unknown'}". Please specify the client name.`;
+              continue;
+            }
+            
+            const { error: noteErr } = await supabase
+              .from("claim_updates")
+              .insert({
+                claim_id: resolvedClaimId,
+                content: params.note,
+                update_type: "note",
+                user_id: user.id,
+              });
+            
+            if (noteErr) {
+              console.error("Failed to insert claim note:", noteErr);
+              answer += `\n\n❌ **Failed to add note:** ${noteErr.message}`;
+            } else {
+              answer += `\n\n✅ **Note added to ${claimName || "claim"}:** "${params.note}"`;
+            }
+          } catch (parseErr) {
+            console.error("Error in add_claim_note:", parseErr);
+            answer += `\n\n❌ **Error adding claim note:** Invalid parameters`;
           }
         } else if (toolCall.function.name === "add_notepad_item") {
           try {
@@ -3907,6 +4931,355 @@ ${knowledgeBaseContext || ''}`
             console.error("Error in search_tasks:", parseErr);
             answer += `\n\n❌ **Error searching tasks:** Invalid parameters`;
           }
+        } else if (toolCall.function.name === "update_task") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Updating task:", params);
+            
+            const { task, error: findErr } = await resolveTask(supabase, params.task_id, params.task_title_search, claimId || undefined);
+            if (!task) {
+              answer += `\n\n❌ **Task not found:** ${findErr}`;
+              continue;
+            }
+            
+            const updateData: any = {};
+            if (params.title) updateData.title = params.title;
+            if (params.description) updateData.description = params.description;
+            if (params.due_date) updateData.due_date = params.due_date;
+            if (params.priority) updateData.priority = params.priority;
+            if (params.assigned_to) updateData.assigned_to = params.assigned_to;
+            updateData.updated_at = new Date().toISOString();
+            
+            if (Object.keys(updateData).length <= 1) {
+              answer += `\n\n❌ **No changes specified** for task "${task.title}".`;
+              continue;
+            }
+            
+            const { error: updateError } = await supabase
+              .from("tasks")
+              .update(updateData)
+              .eq("id", task.id);
+            
+            if (updateError) {
+              answer += `\n\n❌ **Failed to update task:** ${updateError.message}`;
+            } else {
+              const changes = Object.entries(updateData)
+                .filter(([k]) => k !== "updated_at")
+                .map(([k, v]) => `${k}: ${v}`)
+                .join(", ");
+              answer += `\n\n✅ **Task updated:** "${task.title}" → ${changes}`;
+            }
+          } catch (parseErr) {
+            console.error("Error in update_task:", parseErr);
+            answer += `\n\n❌ **Error updating task:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "complete_task") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Completing task:", params);
+            
+            const { task, error: findErr } = await resolveTask(supabase, params.task_id, params.task_title_search, claimId || undefined);
+            if (!task) {
+              answer += `\n\n❌ **Task not found:** ${findErr}`;
+              continue;
+            }
+            
+            if (task.status === "completed") {
+              answer += `\n\n⚠️ **Task already completed:** "${task.title}"`;
+              continue;
+            }
+            
+            const { error: updateError } = await supabase
+              .from("tasks")
+              .update({ status: "completed", completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+              .eq("id", task.id);
+            
+            if (updateError) {
+              answer += `\n\n❌ **Failed to complete task:** ${updateError.message}`;
+            } else {
+              answer += `\n\n✅ **Task completed:** "${task.title}"`;
+            }
+          } catch (parseErr) {
+            console.error("Error in complete_task:", parseErr);
+            answer += `\n\n❌ **Error completing task:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "reopen_task") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Reopening task:", params);
+            
+            const { task, error: findErr } = await resolveTask(supabase, params.task_id, params.task_title_search, claimId || undefined);
+            if (!task) {
+              answer += `\n\n❌ **Task not found:** ${findErr}`;
+              continue;
+            }
+            
+            if (task.status === "pending") {
+              answer += `\n\n⚠️ **Task already pending:** "${task.title}"`;
+              continue;
+            }
+            
+            const { error: updateError } = await supabase
+              .from("tasks")
+              .update({ status: "pending", completed_at: null, updated_at: new Date().toISOString() })
+              .eq("id", task.id);
+            
+            if (updateError) {
+              answer += `\n\n❌ **Failed to reopen task:** ${updateError.message}`;
+            } else {
+              answer += `\n\n✅ **Task reopened:** "${task.title}"`;
+            }
+          } catch (parseErr) {
+            console.error("Error in reopen_task:", parseErr);
+            answer += `\n\n❌ **Error reopening task:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "delete_task") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Deleting task:", params);
+            
+            const { task, error: findErr } = await resolveTask(supabase, params.task_id, params.task_title_search, claimId || undefined);
+            if (!task) {
+              answer += `\n\n❌ **Task not found:** ${findErr}`;
+              continue;
+            }
+            
+            const { error: deleteError } = await supabase
+              .from("tasks")
+              .delete()
+              .eq("id", task.id);
+            
+            if (deleteError) {
+              answer += `\n\n❌ **Failed to delete task:** ${deleteError.message}`;
+            } else {
+              answer += `\n\n✅ **Task deleted:** "${task.title}"`;
+            }
+          } catch (parseErr) {
+            console.error("Error in delete_task:", parseErr);
+            answer += `\n\n❌ **Error deleting task:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "list_claim_tasks") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Listing claim tasks:", params);
+            
+            let targetClaimId = claimId;
+            let targetClaimName = claim?.policyholder_name || "";
+            
+            if (params.client_name) {
+              const foundClaim = await findClaimByClientName(supabase, params.client_name);
+              if (foundClaim) {
+                targetClaimId = foundClaim.id;
+                targetClaimName = foundClaim.policyholder_name;
+              } else {
+                answer += `\n\n❌ **No claim found** for "${params.client_name}"`;
+                continue;
+              }
+            }
+            
+            if (!targetClaimId) {
+              answer += `\n\n❌ **No claim specified.** Please provide a client name or use this from within a claim.`;
+              continue;
+            }
+            
+            let query = supabase
+              .from("tasks")
+              .select("id, title, description, status, priority, due_date, assigned_to, created_at")
+              .eq("claim_id", targetClaimId)
+              .order("created_at", { ascending: false });
+            
+            if (params.status_filter && params.status_filter !== "all") {
+              query = query.eq("status", params.status_filter);
+            }
+            
+            const { data: tasks, error: tasksError } = await query.limit(50);
+            
+            if (tasksError) {
+              answer += `\n\n❌ **Error fetching tasks:** ${tasksError.message}`;
+              continue;
+            }
+            
+            if (!tasks || tasks.length === 0) {
+              answer += `\n\nNo ${params.status_filter && params.status_filter !== "all" ? params.status_filter + " " : ""}tasks found for ${targetClaimName || "this claim"}.`;
+              continue;
+            }
+            
+            const pending = tasks.filter((t: any) => t.status === "pending");
+            const completed = tasks.filter((t: any) => t.status === "completed");
+            
+            let result = `\n\n📋 Tasks for ${targetClaimName || "this claim"} (${pending.length} pending, ${completed.length} completed):\n\n`;
+            
+            if (pending.length > 0) {
+              result += "PENDING:\n";
+              for (const t of pending) {
+                const dueDate = t.due_date ? new Date(t.due_date).toLocaleDateString() : "No due date";
+                const priority = t.priority ? ` [${t.priority}]` : "";
+                result += `  ⏳ ${t.title}${priority} — Due: ${dueDate}\n`;
+                if (t.description) result += `     ${t.description.substring(0, 100)}\n`;
+              }
+            }
+            
+            if (completed.length > 0 && (params.status_filter === "all" || params.status_filter === "completed")) {
+              result += "\nCOMPLETED:\n";
+              for (const t of completed) {
+                result += `  ✅ ${t.title}\n`;
+              }
+            }
+            
+            answer += result;
+          } catch (parseErr) {
+            console.error("Error in list_claim_tasks:", parseErr);
+            answer += `\n\n❌ **Error listing tasks:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "bulk_process_tasks") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            console.log("Bulk processing tasks:", params);
+            
+            // Resolve claim IDs from client names
+            const resolvedClaimIds: { id: string; name: string }[] = [];
+            
+            if (params.claim_ids && params.claim_ids.length > 0) {
+              for (const cid of params.claim_ids) {
+                const { data: c } = await supabase.from("claims").select("id, policyholder_name").eq("id", cid).single();
+                if (c) resolvedClaimIds.push({ id: c.id, name: c.policyholder_name });
+              }
+            }
+            
+            if (params.client_names && params.client_names.length > 0) {
+              for (const name of params.client_names) {
+                const found = await findClaimByClientName(supabase, name);
+                if (found) {
+                  resolvedClaimIds.push({ id: found.id, name: found.policyholder_name });
+                } else {
+                  answer += `\n⚠️ Could not find claim for "${name}"`;
+                }
+              }
+            }
+            
+            if (resolvedClaimIds.length === 0) {
+              answer += `\n\n❌ **No claims found** to process tasks for.`;
+              continue;
+            }
+            
+            // Get user ID for claim note insertion (RLS requires user_id)
+            let bulkUserId: string | null = null;
+            const bulkAuthHeader = req.headers.get("authorization");
+            if (bulkAuthHeader) {
+              const { data: { user: bulkUser } } = await supabase.auth.getUser(bulkAuthHeader.replace("Bearer ", ""));
+              bulkUserId = bulkUser?.id || null;
+            }
+            
+            let totalProcessed = 0;
+            let totalFollowUps = 0;
+            let totalNotes = 0;
+            const results: string[] = [];
+            
+            for (const claim of resolvedClaimIds) {
+              // Find tasks on this claim
+              let taskQuery = supabase
+                .from("tasks")
+                .select("id, title, description, status, claim_id")
+                .eq("claim_id", claim.id)
+                .eq("status", "pending");
+              
+              if (params.task_title_search) {
+                taskQuery = taskQuery.ilike("title", `%${params.task_title_search}%`);
+              }
+              
+              const { data: tasks, error: fetchErr } = await taskQuery.limit(50);
+              
+              if (fetchErr || !tasks || tasks.length === 0) {
+                results.push(`⚠️ ${claim.name}: No matching pending tasks found`);
+                continue;
+              }
+              
+              let claimProcessed = 0;
+              
+              for (const task of tasks) {
+                const updateData: any = { updated_at: new Date().toISOString() };
+                
+                // Add note to description
+                if (params.note) {
+                  const existingDesc = task.description || "";
+                  const noteTimestamp = new Date().toLocaleDateString();
+                  updateData.description = existingDesc 
+                    ? `${existingDesc}\n\n[${noteTimestamp}] ${params.note}`
+                    : `[${noteTimestamp}] ${params.note}`;
+                }
+                
+                // Complete the task
+                if (params.complete_tasks !== false) {
+                  updateData.status = "completed";
+                  updateData.completed_at = new Date().toISOString();
+                }
+                
+                const { error: updateErr } = await supabase
+                  .from("tasks")
+                  .update(updateData)
+                  .eq("id", task.id);
+                
+                if (!updateErr) {
+                  claimProcessed++;
+                  totalProcessed++;
+                }
+              }
+              
+              // Add a claim note (claim_updates) if note provided
+              if (params.note && bulkUserId) {
+                const { error: noteErr } = await supabase
+                  .from("claim_updates")
+                  .insert({
+                    claim_id: claim.id,
+                    content: params.note,
+                    update_type: "note",
+                    user_id: bulkUserId,
+                  });
+                if (noteErr) {
+                  console.error("Failed to insert claim note:", noteErr);
+                } else {
+                  totalNotes++;
+                }
+              }
+
+              // Create follow-up task if requested
+              if (params.create_follow_up) {
+                const followUpData: any = {
+                  claim_id: claim.id,
+                  title: params.follow_up_title || "Follow-up",
+                  description: params.follow_up_description || "",
+                  priority: params.follow_up_priority || "medium",
+                  status: "pending",
+                };
+                
+                if (params.follow_up_due_date) {
+                  followUpData.due_date = params.follow_up_due_date;
+                }
+                
+                const { error: createErr } = await supabase
+                  .from("tasks")
+                  .insert(followUpData);
+                
+                if (!createErr) {
+                  totalFollowUps++;
+                }
+              }
+              
+              results.push(`✅ ${claim.name}: ${claimProcessed} task(s) processed${params.note ? ' + note added' : ''}${params.create_follow_up ? ' + follow-up created' : ''}`);
+            }
+            
+            answer += `\n\n📋 **Bulk Task Processing Complete**\n`;
+            answer += `Claims: ${resolvedClaimIds.length} | Tasks processed: ${totalProcessed}${totalNotes > 0 ? ` | Notes added: ${totalNotes}` : ''}${totalFollowUps > 0 ? ` | Follow-ups created: ${totalFollowUps}` : ''}\n\n`;
+            answer += results.join('\n');
+            
+            // Flag for UI refresh
+            if (totalProcessed > 0) {
+              answer += `\n\nTasks updated successfully.`;
+            }
+          } catch (parseErr) {
+            console.error("Error in bulk_process_tasks:", parseErr);
+            answer += `\n\n❌ **Error processing bulk tasks:** Invalid parameters`;
+          }
         }
       }
     }
@@ -3978,6 +5351,13 @@ ${knowledgeBaseContext || ''}`
       } catch (saveError) {
         console.error("Error saving report:", saveError);
       }
+    }
+
+    // === PHASE 2.5: Persist document analysis to audit trail ===
+    if (hasUploadedDoc && answer) {
+      persistDocumentAnalysis(
+        supabase, claimId, documentName, answer, crossClaimContext, sourceMode, claim
+      ).catch(err => console.error('[DocAnalysis] Persist error:', err));
     }
 
     return new Response(

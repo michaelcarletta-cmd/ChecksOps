@@ -61,7 +61,11 @@ const DarwinDeclaredPosition = lazy(() => import("@/components/claim-detail/Darw
 const ClaimWarRoom = lazy(() => import("@/components/claim-detail/ClaimWarRoom").then(m => ({ default: m.ClaimWarRoom })));
 const CarrierPlaybookDialog = lazy(() => import("@/components/claim-detail/CarrierPlaybookDialog").then(m => ({ default: m.CarrierPlaybookDialog })));
 const DarwinSecondBrain = lazy(() => import("@/components/claim-detail/DarwinSecondBrain").then(m => ({ default: m.DarwinSecondBrain })));
+carle-outlook-sync-fix
 const DarwinCommandBar = lazy(() => import("@/components/claim-detail/DarwinCommandBar").then(m => ({ default: m.DarwinCommandBar })));
+const CarrierScenarioPlaybook = lazy(() => import("@/components/claim-detail/CarrierScenarioPlaybook").then(m => ({ default: m.CarrierScenarioPlaybook })));
+const DarwinEscalationEngine = lazy(() => import("@/components/claim-detail/DarwinEscalationEngine"));
+
 
 interface DarwinTabProps {
   claimId: string;
@@ -441,6 +445,8 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
         return (
           <>
             <DarwinInsightsPanel claimId={claimId} claim={claim} />
+            <DarwinEscalationEngine claimId={claimId} claim={claim} />
+            <CarrierScenarioPlaybook claimId={claimId} claim={claim} />
             <DarwinSecondBrain claimId={claimId} claim={claim} />
             <div className="grid gap-4 lg:grid-cols-2">
               <DarwinClaimBriefing claimId={claimId} claim={claim} />

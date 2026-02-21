@@ -429,8 +429,75 @@ serve(async (req) => {
       : null;
     
     const totalChecksReceived = checks.reduce((sum, c) => sum + (c.amount || 0), 0);
-    const estimateAmount = settlement?.estimate_amount || claim.claim_amount || 0;
+    const carrierEstimate = settlement?.estimate_amount || 0;
     const totalSettlement = settlement?.total_settlement || 0;
+
+    // PA/Freedom Estimate: explicit field first, then fallback to file-based extraction
+    let paEstimate = Number(settlement?.pa_estimate_amount) || 0;
+    
+    if (!paEstimate) {
+      // Fetch folders to identify PA vs carrier folders
+      const { data: folders } = await supabase
+        .from('claim_folders')
+        .select('id, name')
+        .eq('claim_id', claimId);
+      
+      const paFolderIds = new Set(
+        (folders || [])
+          .filter(f => {
+            const name = (f.name || '').toLowerCase();
+            return name.includes('freedom') || name.includes('supporting evidence') || name.includes('estimates');
+          })
+          .map(f => f.id)
+      );
+      
+      // Find estimate files in PA/Freedom folders
+      const paEstimateFiles = files.filter(f => {
+        const cls = (f.document_classification || '').toLowerCase();
+        const fileName = (f.file_name || '').toLowerCase();
+        const isEstimate = cls === 'estimate' || fileName.includes('estimate') || 
+                          fileName.includes('xactimate') || fileName.includes('scope') ||
+                          cls === 'contractor';
+        const isInPaFolder = f.folder_id && paFolderIds.has(f.folder_id);
+        return isEstimate && isInPaFolder;
+      });
+      
+      // If no folder-filtered results, try all estimate files not in carrier folders
+      const carrierFolderIds = new Set(
+        (folders || [])
+          .filter(f => (f.name || '').toLowerCase().includes('carrier'))
+          .map(f => f.id)
+      );
+      
+      const fallbackEstimateFiles = paEstimateFiles.length > 0 ? paEstimateFiles : files.filter(f => {
+        const cls = (f.document_classification || '').toLowerCase();
+        const fileName = (f.file_name || '').toLowerCase();
+        const isEstimate = cls === 'estimate' || fileName.includes('estimate') || fileName.includes('xactimate');
+        const isNotCarrier = !f.folder_id || !carrierFolderIds.has(f.folder_id);
+        return isEstimate && isNotCarrier;
+      });
+      
+      // Extract highest amount from classification_metadata
+      for (const file of fallbackEstimateFiles) {
+        const meta = file.classification_metadata;
+        if (meta && typeof meta === 'object') {
+          const amounts = (meta as any).amounts;
+          if (Array.isArray(amounts)) {
+            for (const a of amounts) {
+              const val = Number(a.amount || a.value || 0);
+              if (val > paEstimate) paEstimate = val;
+            }
+          }
+          // Also check for total_rcv or gross_total in metadata
+          const totalRcv = Number((meta as any).total_rcv || (meta as any).gross_total || 0);
+          if (totalRcv > paEstimate) paEstimate = totalRcv;
+        }
+      }
+    }
+    
+    // Use PA estimate as the primary "estimate" if available, otherwise fall back to carrier or claim amount
+    const estimateAmount = paEstimate || carrierEstimate || claim.claim_amount || 0;
+    const estimateDifference = paEstimate && carrierEstimate ? paEstimate - carrierEstimate : 0;
 
     // Helper function to get actual document date with validation
     // Prefers extracted date from document content, falls back to upload date
@@ -702,12 +769,15 @@ CLAIM OVERVIEW:
 - Policy Number: ${claim.policy_number || 'Not specified'}
 
 FINANCIAL SNAPSHOT:
-- Estimate Amount: $${estimateAmount?.toLocaleString() || '0'}
+- Carrier Estimate (what carrier offered): $${carrierEstimate?.toLocaleString() || '0'}
+- PA/Freedom Estimate (our demand): $${paEstimate ? paEstimate.toLocaleString() : 'Not set'}
+- Estimate Difference (Gap): $${estimateDifference > 0 ? estimateDifference.toLocaleString() : 'N/A'}
 - Total Settlement: $${totalSettlement?.toLocaleString() || '0'}
 - Checks Received: $${totalChecksReceived?.toLocaleString() || '0'} (${checks.length} checks)
 - Deductible: $${settlement?.deductible?.toLocaleString() || claim.deductible?.toLocaleString() || 'Unknown'}
 - Recoverable Depreciation: $${settlement?.recoverable_depreciation?.toLocaleString() || '0'}
 - Coverage Limits: Dwelling $${claim.dwelling_limit?.toLocaleString() || 'Unknown'}, ALE $${claim.ale_limit?.toLocaleString() || 'Unknown'}
+NOTE: The "PA/Freedom Estimate" is the policyholder's actual demand. Use THIS as the claim value for all strategic calculations, NOT the carrier estimate.
 
 EVIDENCE INVENTORY:
 - Total Files: ${files.length}
@@ -793,6 +863,7 @@ CRITICAL RULES:
 
     let userPrompt = '';
     let responseFormat = '';
+    let carrierIntelContext = '';
 
     if (analysisType === 'full_strategic_analysis') {
       userPrompt = `Analyze this claim and provide a comprehensive strategic assessment:
@@ -853,6 +924,198 @@ Generate a COMPLETE strategic analysis. You MUST return ONLY valid JSON matching
 CRITICAL: Return ONLY the JSON object. No explanation, no markdown formatting, no code blocks.`;
 
       responseFormat = 'strategic_analysis';
+    } else if (analysisType === 'war_room_2') {
+      // --- WAR ROOM 2.0: Expanded strategic intelligence ---
+      // Fetch carrier behavior analytics for global intelligence context
+      carrierIntelContext = '';
+      if (claim.insurance_company) {
+        const { data: carrierAnalytics } = await supabase
+          .from('carrier_behavior_analytics')
+          .select('*')
+          .ilike('carrier_name', `%${claim.insurance_company.split(' ')[0]}%`)
+          .limit(1)
+          .maybeSingle();
+
+        if (carrierAnalytics) {
+          carrierIntelContext = `
+GLOBAL CARRIER INTELLIGENCE (${carrierAnalytics.carrier_name}):
+- Total Claims Analyzed: ${carrierAnalytics.total_claims_analyzed || 0}
+- Avg Days to Deny: ${carrierAnalytics.avg_days_to_deny ?? 'N/A'}
+- Avg Days to Pay: ${carrierAnalytics.avg_days_to_pay ?? 'N/A'}
+- Initial Denial Rate: ${carrierAnalytics.initial_denial_rate ? (carrierAnalytics.initial_denial_rate * 100).toFixed(0) + '%' : 'N/A'}
+- Reversal Rate After Engineer Report: ${carrierAnalytics.reversal_rate_after_engineer ? (carrierAnalytics.reversal_rate_after_engineer * 100).toFixed(0) + '%' : 'N/A'}
+- Reversal Rate After Supplement: ${carrierAnalytics.reversal_rate_after_supplement ? (carrierAnalytics.reversal_rate_after_supplement * 100).toFixed(0) + '%' : 'N/A'}
+- Litigation Frequency: ${carrierAnalytics.litigation_frequency ? (carrierAnalytics.litigation_frequency * 100).toFixed(0) + '%' : 'N/A'}
+- Avg First Offer vs Final: ${carrierAnalytics.avg_first_offer_vs_final ? (carrierAnalytics.avg_first_offer_vs_final * 100).toFixed(0) + '%' : 'N/A'}
+`;
+        }
+      }
+
+      userPrompt = `Perform a WAR ROOM 2.0 comprehensive strategic analysis of this claim:
+
+${claimContext}
+${carrierIntelContext}
+
+You MUST return ONLY valid JSON matching this EXACT structure (no markdown, no code blocks, just raw JSON):
+
+{
+  "wsi": {
+    "total": 72,
+    "components": {
+      "coverage_strength": { "score": 75, "weight": 25, "explanation": "Why this score" },
+      "evidence_quality": { "score": 60, "weight": 25, "explanation": "Why this score" },
+      "negotiation_leverage": { "score": 80, "weight": 20, "explanation": "Why this score" },
+      "procedural_compliance": { "score": 70, "weight": 15, "explanation": "Why this score" },
+      "carrier_conduct_risk": { "score": 65, "weight": 15, "explanation": "Why this score" }
+    }
+  },
+  "litigation_readiness": {
+    "score": 55,
+    "factors": {
+      "expert_reports_present": { "met": false, "detail": "No engineer report on file" },
+      "damages_quantified": { "met": true, "detail": "Estimate of $X on file" },
+      "causation_documented": { "met": true, "detail": "Photos and timeline support causation" },
+      "statutory_violations_logged": { "met": false, "detail": "No violations tracked yet" },
+      "pre_suit_demand_drafted": { "met": false, "detail": "No demand letter sent" },
+      "evidence_gaps_remaining": { "met": false, "detail": "Missing engineer report and code analysis" }
+    }
+  },
+  "pressure_index": {
+    "score": 65,
+    "level": "moderate",
+    "factors": {
+      "statutory_violations": { "present": true, "detail": "Carrier exceeded 15-day response" },
+      "missed_deadlines": { "present": false, "detail": "No missed deadlines" },
+      "bad_faith_indicators": { "present": true, "detail": "Unreasonable delay pattern" },
+      "complaint_exposure": { "present": false, "detail": "No DOI complaint filed" },
+      "litigation_cost_risk": { "present": false, "detail": "Low complexity case" }
+    }
+  },
+  "predicted_carrier_move": {
+    "prediction": "Carrier will likely issue partial denial citing wear and tear within 14 days",
+    "confidence": 72,
+    "timeline": "within 14 days",
+    "basis": ["Carrier pattern shows 62% initial denial for roof claims", "No engineer report yet"]
+  },
+  "strategic_memo": {
+    "executive_summary": "Brief strategic overview of claim posture",
+    "strongest_leverage": "What gives us the most negotiation power",
+    "greatest_vulnerability": "Biggest weakness in the claim",
+    "immediate_action": "What to do RIGHT NOW",
+    "thirty_day_plan": "Step-by-step tactical plan for next 30 days",
+    "escalation_trigger": "What condition would trigger escalation (NOI, complaint, litigation)",
+    "settlement_range": "Estimated settlement range with reasoning",
+    "bad_faith_viability": "Assessment of bad faith claim viability"
+  },
+  "scenario_simulations": [
+    {
+      "action": "obtain_engineer_report",
+      "label": "What if we obtain an engineer report?",
+      "result_wsi_delta": 12,
+      "result_litigation_delta": 20,
+      "result_pressure_delta": 5,
+      "win_probability_range": "65-80%",
+      "explanation": "Engineer report would strengthen evidence and causation documentation"
+    },
+    {
+      "action": "send_noi",
+      "label": "What if we send Notice of Intent?",
+      "result_wsi_delta": 5,
+      "result_litigation_delta": 15,
+      "result_pressure_delta": 25,
+      "win_probability_range": "60-75%",
+      "explanation": "NOI creates statutory pressure and formal escalation path"
+    },
+    {
+      "action": "escalate_supervisor",
+      "label": "What if we escalate to supervisor?",
+      "result_wsi_delta": 3,
+      "result_litigation_delta": 0,
+      "result_pressure_delta": 10,
+      "win_probability_range": "55-70%",
+      "explanation": "Supervisor escalation may expedite decision"
+    },
+    {
+      "action": "file_doi_complaint",
+      "label": "What if we file DOI complaint?",
+      "result_wsi_delta": 2,
+      "result_litigation_delta": 10,
+      "result_pressure_delta": 30,
+      "win_probability_range": "60-80%",
+      "explanation": "DOI complaint creates regulatory pressure"
+    }
+  ],
+  "warnings": [
+    {
+      "type": "deadline_risk|evidence_gap|coverage_opportunity|carrier_violation|documentation_issue|strategy_alert",
+      "severity": "critical|high|medium|low",
+      "title": "Brief warning title",
+      "message": "Detailed explanation",
+      "suggested_action": "What to do"
+    }
+  ],
+  "leverage_opportunities": [
+    {
+      "title": "Leverage point name",
+      "description": "Why this creates pressure",
+      "how_to_use": "Specific action to take"
+    }
+  ],
+  "coverage_trigger_analysis": [
+    {
+      "trigger": "What condition exists",
+      "coverage_opportunity": "What coverage this unlocks",
+      "reasoning": "Why this applies",
+      "confidence": "high|medium|low",
+      "action_required": "What to do"
+    }
+  ],
+  "evidence_assessment": {
+    "strong_evidence": ["List of strong evidence items"],
+    "weak_missing_evidence": ["List of gaps or weak evidence"],
+    "recommendations": ["Specific recommendations"],
+    "required_by_loss_type": ["Evidence items required for this specific loss type"],
+    "missing_evidence_risk_score": 35,
+    "per_denial_defensive_evidence": [
+      {
+        "denial_reason": "Wear and tear",
+        "required_evidence": ["Engineer report", "Material age documentation"],
+        "have": ["Photos showing hail damage"],
+        "missing": ["Engineer report"]
+      }
+    ]
+  },
+  "recommended_next_moves": [
+    {
+      "priority": 1,
+      "action": "What to do",
+      "timeline": "immediately|this_week|can_wait",
+      "rationale": "Why this matters"
+    }
+  ],
+  "counter_tactics": [
+    {
+      "trigger_condition": "IF carrier delays beyond 15 days",
+      "recommended_action": "Send 10-day demand letter citing statute",
+      "escalation_if_no_response": "File DOI complaint",
+      "letter_type": "10_day_demand",
+      "success_rate_estimate": 72
+    }
+  ],
+  "senior_pa_opinion": "A 2-3 sentence opinion of what a senior PA would focus on."
+}
+
+CRITICAL RULES:
+- Return ONLY the JSON object. No explanation, no markdown formatting, no code blocks.
+- All scores are 0-100.
+- scenario_simulations deltas are how much each score INCREASES if that action is taken. Deltas must be proportionate: small actions (escalate to supervisor) should yield small deltas (2-8), large actions (file complaint, obtain engineer report) yield larger deltas (10-25). No single action should delta more than 30.
+- Pressure index level thresholds: "low" = score 0-39 (no strong carrier violations, compliance is acceptable), "moderate" = score 40-69 (some missed deadlines or procedural concerns), "high" = score 70-100 (multiple statutory violations, clear bad faith indicators, missed deadlines). Do NOT assign "high" unless at least 2 strong triggering factors exist.
+- Do NOT cite case law. Reference statutes and admin codes only.
+- Frame everything as strategic suggestions, not legal advice.
+- TONE CALIBRATION: In the strategic_memo, NEVER use absolute language like "will win", "carrier is acting in bad faith", "guaranteed". Use hedged strategic language: "strategic exposure suggests...", "risk indicators show...", "likely carrier posture may include...", "evidence supports a strong position for...". You are a strategic advisor, not litigation counsel.
+- Each WSI component explanation must reference specific evidence or facts from the claim context (e.g., "Policy on file shows Coverage A limits" not just "Coverage appears adequate").`;
+
+      responseFormat = 'war_room_2';
     } else if (analysisType === 'quick_warnings') {
       userPrompt = `Quickly scan this claim for any critical warnings or issues that need immediate attention:
 
@@ -1181,6 +1444,249 @@ Give me:
           shown_in_context: 'insights_panel'
         }));
 
+        await supabase.from('claim_warnings_log').insert(warningsToInsert);
+      }
+    }
+
+    // Store WAR ROOM 2.0 insights
+    if (analysisType === 'war_room_2' && typeof parsedResult === 'object' && parsedResult.wsi) {
+      const wsi = parsedResult.wsi || {};
+      const litReadiness = parsedResult.litigation_readiness || {};
+      const pressure = parsedResult.pressure_index || {};
+      const warnings = parsedResult.warnings || [];
+      const leveragePoints = parsedResult.leverage_opportunities || [];
+      const coverageTriggers = parsedResult.coverage_trigger_analysis || [];
+      const evidenceGaps = parsedResult.evidence_assessment?.weak_missing_evidence || [];
+      const nextMoves = parsedResult.recommended_next_moves || [];
+      const seniorPaOpinion = parsedResult.senior_pa_opinion || '';
+
+      // Fetch current weight version
+      const { data: weightVersion } = await supabase
+        .from('strategic_weight_versions')
+        .select('version_name')
+        .order('effective_date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const currentWeightVersion = weightVersion?.version_name || 'v1';
+
+      // Build confidence scores from rule-based assessment
+      const carrierDataCount = carrierIntelContext ? 1 : 0;
+      const evidenceCount = files.length + photos.length;
+      const dataPoints = evidenceCount + emails.length + diary.length + deadlines.length + checks.length;
+      const confidenceLevel = dataPoints >= 20 ? 'high' : dataPoints >= 8 ? 'medium' : 'low';
+      const confidenceScores = {
+        overall: confidenceLevel,
+        data_basis_count: dataPoints,
+        carrier_pattern_match: carrierDataCount > 0,
+        evidence_volume: evidenceCount,
+        wsi: { level: confidenceLevel, basis: `${evidenceCount} evidence items, ${emails.length} emails` },
+        predicted_move: { level: carrierDataCount > 0 && dataPoints >= 10 ? 'medium' : 'low', basis: carrierDataCount > 0 ? 'Carrier pattern data available' : 'No carrier history' },
+        pressure_index: { level: deadlines.length > 0 ? 'high' : 'medium', basis: `${deadlines.length} deadlines tracked` },
+        scenarios: { level: dataPoints >= 15 ? 'medium' : 'low', basis: `${dataPoints} total data points` },
+      };
+
+      // Build raw inputs snapshot for reconstructability
+      const rawInputs = {
+        files_count: files.length,
+        photos_count: photos.length,
+        emails_count: emails.length,
+        checks_count: checks.length,
+        deadlines_count: deadlines.length,
+        diary_count: diary.length,
+        inspections_count: inspections.length,
+        has_estimate: hasEstimate,
+        has_denial: hasDenialLetter,
+        has_engineer: hasEngineerReport,
+        has_policy: hasPolicy,
+        days_open: daysOpen,
+        days_since_loss: daysSinceLoss,
+        estimate_amount: estimateAmount,
+        total_settlement: totalSettlement,
+        state_code: stateCode,
+        carrier: claim.insurance_company,
+        loss_type: claim.loss_type,
+      };
+
+      // Fetch matching carrier playbooks
+      let matchedPlaybooks: any[] = [];
+      if (claim.insurance_company) {
+        const { data: playbooks } = await supabase
+          .from('carrier_playbooks')
+          .select('*')
+          .eq('is_active', true)
+          .ilike('carrier_name', `%${claim.insurance_company.split(' ')[0]}%`)
+          .order('priority', { ascending: true })
+          .limit(10);
+        
+        if (playbooks && playbooks.length > 0) {
+          const claimAge = daysOpen || 0;
+          matchedPlaybooks = playbooks.filter((pb: any) => {
+            const trigger = pb.trigger_condition;
+            if (!trigger || typeof trigger !== 'object') return true;
+            if (trigger.delay_days?.gte && claimAge >= trigger.delay_days.gte) return true;
+            if (trigger.first_denial && hasDenialLetter) return true;
+            if (trigger.engineer_report_received && hasEngineerReport) return true;
+            return false;
+          }).slice(0, 5);
+        }
+      }
+
+      // Upsert strategic insights with War Room 2.0 fields + confidence & raw inputs
+      const { error: upsertError } = await supabase
+        .from('claim_strategic_insights')
+        .upsert({
+          claim_id: claimId,
+          // Legacy fields (backward compat)
+          coverage_strength_score: wsi.components?.coverage_strength?.score ?? null,
+          evidence_quality_score: wsi.components?.evidence_quality?.score ?? null,
+          leverage_score: wsi.components?.negotiation_leverage?.score ?? null,
+          timeline_risk_score: null,
+          overall_health_score: wsi.total ?? null,
+          // War Room 2.0 fields
+          wsi_score: wsi.total ?? null,
+          wsi_components: wsi.components ?? null,
+          procedural_compliance_score: wsi.components?.procedural_compliance?.score ?? null,
+          carrier_conduct_risk_score: wsi.components?.carrier_conduct_risk?.score ?? null,
+          litigation_readiness_score: litReadiness.score ?? null,
+          litigation_readiness_factors: litReadiness.factors ?? null,
+          pressure_index_score: pressure.score ?? null,
+          pressure_index_level: pressure.level ?? null,
+          pressure_index_factors: pressure.factors ?? null,
+          strategic_memo: parsedResult.strategic_memo ?? null,
+          predicted_carrier_move: parsedResult.predicted_carrier_move ?? null,
+          scenario_simulations: parsedResult.scenario_simulations ?? null,
+          // War Room 2.0 hardening fields
+          confidence_scores: confidenceScores,
+          raw_inputs: rawInputs,
+          weight_version: currentWeightVersion,
+          model_type: 'hybrid',
+          // Shared fields
+          warnings: warnings,
+          leverage_points: leveragePoints,
+          coverage_triggers_detected: coverageTriggers,
+          evidence_gaps: evidenceGaps,
+          recommended_next_moves: nextMoves,
+          counter_strategies: parsedResult.counter_tactics ?? null,
+          matched_playbooks: matchedPlaybooks,
+          senior_pa_opinion: typeof seniorPaOpinion === 'string' ? seniorPaOpinion : JSON.stringify(seniorPaOpinion),
+          last_analyzed_at: new Date().toISOString(),
+          analysis_version: '2.0'
+        }, {
+          onConflict: 'claim_id'
+        });
+
+      if (upsertError) {
+        console.error('Error saving War Room 2.0 insights:', upsertError);
+      } else {
+        console.log('War Room 2.0 insights saved for claim', claimId);
+      }
+
+      // === STRATEGIC SNAPSHOT (every run) ===
+      // Detect strategic drift by comparing to previous snapshot
+      let driftFlag = false;
+      let driftReason: string | null = null;
+      const { data: prevSnapshots } = await supabase
+        .from('claim_strategic_snapshots')
+        .select('wsi, pressure_index, litigation_readiness, created_at')
+        .eq('claim_id', claimId)
+        .order('created_at', { ascending: false })
+        .limit(2);
+
+      if (prevSnapshots && prevSnapshots.length >= 2) {
+        const [prev1, prev2] = prevSnapshots;
+        const currentWsi = wsi.total ?? 0;
+        // WSI declined 2 runs in a row
+        if (prev1.wsi !== null && prev2.wsi !== null && currentWsi < prev1.wsi && prev1.wsi < prev2.wsi) {
+          driftFlag = true;
+          driftReason = `WSI declined 3 consecutive runs: ${prev2.wsi} → ${prev1.wsi} → ${currentWsi}`;
+        }
+        // Pressure Index decreased after it was previously higher (potential escalation failure)
+        if (prev1.pressure_index !== null && (pressure.score ?? 0) < prev1.pressure_index) {
+          // Only flag if we had high pressure before
+          if (prev1.pressure_index >= 65) {
+            driftFlag = true;
+            driftReason = (driftReason ? driftReason + '. ' : '') + `Pressure Index dropped from ${prev1.pressure_index} to ${pressure.score ?? 0} — review escalation effectiveness`;
+          }
+        }
+      } else if (prevSnapshots && prevSnapshots.length === 1) {
+        const prev = prevSnapshots[0];
+        const currentWsi = wsi.total ?? 0;
+        if (prev.wsi !== null && currentWsi < prev.wsi) {
+          // Single decline — note but don't flag yet
+          console.log(`WSI declined: ${prev.wsi} → ${currentWsi} (1 run, not flagging yet)`);
+        }
+      }
+
+      await supabase.from('claim_strategic_snapshots').insert({
+        claim_id: claimId,
+        wsi: wsi.total ?? null,
+        pressure_index: pressure.score ?? null,
+        pressure_level: pressure.level ?? null,
+        litigation_readiness: litReadiness.score ?? null,
+        predicted_move: parsedResult.predicted_carrier_move ?? null,
+        confidence_scores: confidenceScores,
+        raw_inputs: rawInputs,
+        weight_version: currentWeightVersion,
+        strategic_drift_flag: driftFlag,
+        drift_reason: driftReason,
+      });
+
+      console.log(`Strategic snapshot saved for claim ${claimId}${driftFlag ? ' [DRIFT DETECTED]' : ''}`);
+
+      // Store predictive analysis
+      if (parsedResult.predicted_carrier_move) {
+        const pred = parsedResult.predicted_carrier_move;
+        await supabase.from('claim_predictive_analysis').insert({
+          claim_id: claimId,
+          prediction_type: 'carrier_next_move',
+          prediction: pred.prediction,
+          confidence: pred.confidence,
+          basis: pred.basis,
+          predicted_timeline: pred.timeline,
+          data_basis_count: dataPoints,
+          model_type: 'hybrid',
+        });
+      }
+
+      // Store scenario simulations
+      if (Array.isArray(parsedResult.scenario_simulations)) {
+        // Clear old simulations for this claim
+        await supabase.from('claim_scenario_simulations').delete().eq('claim_id', claimId);
+        
+        const simRows = parsedResult.scenario_simulations.map((s: any) => ({
+          claim_id: claimId,
+          scenario_action: s.action,
+          scenario_label: s.label,
+          result_wsi: (wsi.total ?? 0) + (s.result_wsi_delta ?? 0),
+          result_litigation_readiness: (litReadiness.score ?? 0) + (s.result_litigation_delta ?? 0),
+          result_pressure_index: (pressure.score ?? 0) + (s.result_pressure_delta ?? 0),
+          result_win_probability_range: s.win_probability_range,
+          result_explanation: s.explanation,
+          projected_wsi_delta: s.result_wsi_delta ?? 0,
+          projected_litigation_delta: s.result_litigation_delta ?? 0,
+          projected_pressure_delta: s.result_pressure_delta ?? 0,
+          confidence_score: confidenceScores.scenarios?.level === 'high' ? 80 : confidenceScores.scenarios?.level === 'medium' ? 55 : 30,
+          data_basis_count: dataPoints,
+          model_type: 'hybrid',
+        }));
+        
+        if (simRows.length > 0) {
+          await supabase.from('claim_scenario_simulations').insert(simRows);
+        }
+      }
+
+      // Log warnings
+      if (Array.isArray(warnings) && warnings.length > 0) {
+        const warningsToInsert = warnings.map((w: any) => ({
+          claim_id: claimId,
+          warning_type: w.type || 'strategy_alert',
+          severity: w.severity || 'medium',
+          title: w.title || 'Warning',
+          message: w.message || w.description || '',
+          suggested_action: w.suggested_action || w.action || '',
+          context: w.context ? JSON.stringify(w.context) : null,
+          shown_in_context: 'war_room_2'
+        }));
         await supabase.from('claim_warnings_log').insert(warningsToInsert);
       }
     }

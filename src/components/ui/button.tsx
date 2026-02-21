@@ -4,20 +4,29 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
-const gradientButtonStyles =
-  "!border !border-primary/20 !bg-[linear-gradient(135deg,#ffffff_0%,#f8fbff_35%,#e7f0ff_72%,#d7e6ff_100%)] !text-[hsl(var(--sidebar-background))] shadow-sm hover:!bg-[linear-gradient(135deg,#ffffff_0%,#edf4ff_45%,#d5e5ff_100%)] hover:!text-[hsl(var(--sidebar-background))] hover:shadow-md";
+const defaultButtonStyles =
+  "!border !border-[hsl(var(--button-light-border))] !bg-[hsl(var(--button-light-bg))] !text-[hsl(var(--button-light-foreground))] hover:!bg-[hsl(var(--button-light-hover))] hover:!text-[hsl(var(--button-light-foreground))] shadow-sm hover:shadow";
+
+const darkButtonStyles =
+  "!border !border-[hsl(var(--button-dark-border))] !bg-[hsl(var(--button-dark-bg))] !text-[hsl(var(--button-dark-foreground))] hover:!bg-[hsl(var(--button-dark-hover))] hover:!text-[hsl(var(--button-dark-foreground))]";
+
+const ghostButtonStyles =
+  "!border !border-transparent !bg-transparent !text-foreground hover:!bg-[hsl(var(--button-dark-hover))] hover:!text-foreground";
+
+const destructiveButtonStyles =
+  "!border !border-[hsl(var(--destructive))] !bg-[hsl(var(--destructive))] !text-[hsl(var(--destructive-foreground))] hover:opacity-90";
 
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: gradientButtonStyles,
-        destructive: gradientButtonStyles,
-        outline: gradientButtonStyles,
-        secondary: gradientButtonStyles,
-        ghost: gradientButtonStyles,
-        link: `${gradientButtonStyles} underline-offset-4 hover:underline`,
+        default: defaultButtonStyles,
+        destructive: destructiveButtonStyles,
+        outline: darkButtonStyles,
+        secondary: darkButtonStyles,
+        ghost: ghostButtonStyles,
+        link: "!border-transparent !bg-transparent !text-primary underline-offset-4 hover:underline",
       },
       size: {
         default: "h-10 px-4 py-2",

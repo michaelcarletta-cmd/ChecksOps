@@ -18,6 +18,85 @@ const corsHeaders = {
 // Size threshold for using native extraction vs AI multimodal (8MB base64 ~ 6MB file)
 const AI_EXTRACTION_LIMIT = 8 * 1024 * 1024;
 
+// ============================================================================
+// MANDATORY ORDER OF OPERATIONS FRAMEWORK
+// Injected into all strategic analysis types (denial_rebuttal, auto_draft_rebuttal,
+// systematic_dismantling, supplement, engineer_report_rebuttal, demand_package, etc.)
+// ============================================================================
+const MANDATORY_ORDER_OF_OPERATIONS = `
+=== MANDATORY ORDER OF OPERATIONS (ENFORCED — NO DEVIATIONS) ===
+
+You MUST follow this exact 4-step sequence. Do NOT skip steps or reorder them.
+
+STEP 1: COVERAGE DETERMINATION (Policy + Regulation ONLY)
+Establish coverage using ONLY:
+- Policy language (Coverage, Exclusions, Exceptions, Conditions, Endorsements)
+- State insurance regulations / DOI standards
+Coverage is triggered by:
+- Direct physical loss
+- Covered cause of loss
+- Insurable interest
+- Compliance with policy conditions
+
+DO NOT USE for coverage determination:
+- Manufacturer specifications
+- Building codes
+- Installation guidelines
+- Carrier internal preferences
+Manufacturer specs and building codes are NOT coverage triggers.
+
+STEP 2: PROOF OF DAMAGE
+After identifying the applicable coverage section:
+- Request/document evidence of direct physical loss
+- Identify measurable/observable damage
+- Connect damage to covered peril
+If damage evidence is insufficient, STOP and request documentation before proceeding.
+
+STEP 3: SCOPE DISCUSSION (Repair vs Replace)
+ONLY after coverage is supported:
+- Discuss feasibility of repair vs replacement
+- Apply policy loss settlement terms (RCV/ACV)
+- Consider matching, uniform appearance, and reasonable repair standards
+- Use regulations governing proper claim handling
+- Manufacturer specs may ONLY support method feasibility — they CANNOT deny coverage
+
+STEP 4: REPAIR PROCESS (Only After Steps 1-3 Are Complete)
+ONLY after coverage basis established, damage proven, and scope agreed/discussed:
+- Discuss contractor workflow, supplements, depreciation, scheduling, etc.
+
+=== AUTHORITY HIERARCHY (MUST BE ENFORCED) ===
+All arguments MUST follow this hierarchy (highest to lowest):
+1. Policy language (SUPREME authority)
+2. State insurance regulations and statutes
+3. Case law (if applicable — but NEVER cite case law in outputs)
+4. Industry estimating standards
+5. Building code (ONLY for Ordinance & Law if endorsed)
+6. Manufacturer specifications (method support ONLY)
+
+The AI MUST NOT elevate items 5 or 6 above items 1 or 2.
+
+=== HARD GUARDRAILS ===
+- NEVER deny or limit replacement solely because damage does not meet manufacturer specs
+- NEVER use code compliance as a reason to deny coverage unless Ordinance & Law coverage applies
+- NEVER move into repair execution (Step 4) without confirming coverage (Step 1)
+- Manufacturer specs CANNOT override policy language or state regulations
+
+=== REQUIRED OUTPUT STRUCTURE ===
+Every claim response MUST include these sections in order:
+1. Coverage Basis — what policy provision affords coverage
+2. Damage Evidence — what proves the loss occurred
+3. Scope Analysis — repair vs replace with justification
+4. Next Action Step — what to do next
+No deviations from this structure.
+
+=== END MANDATORY ORDER OF OPERATIONS ===
+`;
+
+// Helper to get the framework for injection into prompts
+function getMandatoryFramework(): string {
+  return MANDATORY_ORDER_OF_OPERATIONS;
+}
+
 const STRUCTURED_DARWIN_ANALYSIS_TYPES = new Set<string>([
   'denial_rebuttal',
   'next_steps',
@@ -705,14 +784,27 @@ serve(async (req) => {
       .eq('claim_id', claimId);
     context.inspections = inspections || [];
 
-    // Get recent emails
-    const { data: emails } = await supabase
-      .from('emails')
-      .select('*')
-      .eq('claim_id', claimId)
-      .order('created_at', { ascending: false })
-      .limit(10);
-    context.emails = emails || [];
+    // Get ALL emails - paginate to bypass 1000-row default limit
+    const allEmails: any[] = [];
+    let emailOffset = 0;
+    const emailBatchSize = 1000;
+    let hasMoreEmails = true;
+    while (hasMoreEmails) {
+      const { data: emailBatch } = await supabase
+        .from('emails')
+        .select('*')
+        .eq('claim_id', claimId)
+        .order('created_at', { ascending: false })
+        .range(emailOffset, emailOffset + emailBatchSize - 1);
+      if (emailBatch && emailBatch.length > 0) {
+        allEmails.push(...emailBatch);
+        emailOffset += emailBatchSize;
+        hasMoreEmails = emailBatch.length === emailBatchSize;
+      } else {
+        hasMoreEmails = false;
+      }
+    }
+    context.emails = allEmails;
 
     // Get files with folder info
     const { data: files } = await supabase
@@ -780,7 +872,13 @@ serve(async (req) => {
       lines.push(`meta: claimId=${m.claimId} state=${m.state ?? 'n/a'} carrier=${m.carrier ?? 'n/a'} audience=${m.audience ?? 'carrier'} lossType=${m.lossType ?? 'n/a'}`);
       lines.push('documents: ' + (claimFactsPack.documents?.slice(0, 30).map((d) => `${d.docId}:${d.docName}(${d.category ?? '?'}/${d.folderKey})`).join('; ') || 'none'));
       if (claimFactsPack.policy) {
-        lines.push('policy: ' + (claimFactsPack.policy.policyNumber ?? 'n/a') + (claimFactsPack.policy.coverages?.length ? ` coverages=${claimFactsPack.policy.coverages.map((c) => c.name + (c.evidence?.length ? `@${c.evidence.map((e) => e.docName).join(',')}` : '')).join('; ') : ''));
+        const coveragesStr = claimFactsPack.policy.coverages?.length
+          ? ` coverages=${claimFactsPack.policy.coverages.map((cov: any) => {
+              const refs = cov.evidence?.length ? '@' + cov.evidence.map((ev: any) => ev.docName).join(',') : '';
+              return cov.name + refs;
+            }).join('; ')}`
+          : '';
+        lines.push('policy: ' + (claimFactsPack.policy.policyNumber ?? 'n/a') + coveragesStr);
         if (claimFactsPack.policy.missingDocs?.length) lines.push('policy.missingDocs: ' + claimFactsPack.policy.missingDocs.join(', '));
       }
       if (claimFactsPack.estimate) {
@@ -1034,6 +1132,8 @@ Use this content to cite specific findings, data, and evidence from the uploaded
         const combinedKnowledge = [acvKbDenial, denialTacticsKb, buildingCodesKb].filter(Boolean).join('\n');
 
         systemPrompt = `You are Darwin, an elite public adjuster AI and the most formidable claims advocate in the industry. You don't just rebut denials—you DISMANTLE them with surgical precision and overwhelming evidence. Your mission: expose every flaw, every misrepresentation, and every weak argument in the carrier's position, leaving them no room to defend their denial.
+
+${getMandatoryFramework()}
 
 === YOUR MISSION: OVERTURN THIS DENIAL ===
 The carrier has denied coverage. Your job is to use EVERY piece of evidence available—photos, documents, building codes, manufacturer specifications, state regulations—to prove they are WRONG and that coverage MUST be afforded. Leave them no room to defend their position.
@@ -1297,6 +1397,8 @@ Be specific and actionable. Reference ${stateInfo.stateName} deadlines and regul
         console.log(`Estimate Builder: Found ${claimPhotos?.length || 0} photos for claim ${claimId}`);
 
         systemPrompt = `You are Darwin, an expert public adjuster AI specializing in generating COMPLETE, DETAILED Xactimate-format estimates for property damage claims. Your estimates must be comprehensive and include ALL standard line items required for the scope of work.
+
+${getMandatoryFramework()}
 
 === CRITICAL: COMPLETE ESTIMATE REQUIREMENTS ===
 You must generate a FULL estimate with ALL applicable line items. A typical roof replacement estimate includes 40-60+ line items. DO NOT abbreviate or summarize. Include EVERY line item needed.
@@ -1791,6 +1893,8 @@ Be specific, professional, and provide communications that are ready to copy and
 
       case 'engineer_report_rebuttal':
         systemPrompt = `You are Darwin, the most formidable engineering report analyst in the public adjusting industry. Carrier-hired engineers produce flawed, biased, and methodologically deficient reports with alarming regularity—and your job is to EXPOSE every single flaw with devastating technical precision. You are SMARTER than their engineer. You know MORE about building science. You understand exactly where their analysis fails.
+
+${getMandatoryFramework()}
 
 === YOUR MISSION: MAKE THE ENGINEER UNDERSTAND THEY ARE WRONG ===
 When a carrier-hired engineer concludes damage is "wear and tear" or "not storm-related," they are often reaching predetermined conclusions to support denial. Your rebuttal must be so technically overwhelming that:
@@ -2362,6 +2466,8 @@ Create a professional, complete document ready for carrier submission.`;
           : '';
 
         systemPrompt = `You are Darwin, an expert public adjuster AI specializing in creating comprehensive demand packages for insurance claims. You operate with the strategic intelligence of the industry's top adjusters, applying the Brelly "Proof Castle" framework.
+
+${getMandatoryFramework()}
 
 IMPORTANT: This claim is located in ${stateInfo.stateName}. Apply ${stateInfo.stateName} law and regulations.
 
@@ -3361,7 +3467,7 @@ When discussing damage, ALWAYS reference the specific photos that document it.`;
 REQUESTED COMPONENTS: ${components.join(', ')}
 ${photoDocumentation}
 ${additionalContext?.includeDocuments ? `\nDOCUMENTS ON FILE: ${context.files?.filter((f: any) => !f.file_type?.startsWith('image/'))?.length || 0} documents available` : ''}
-${additionalContext?.includeCommunications ? `\nCOMMUNICATIONS: ${context.emails?.length || 0} emails on file` : ''}
+${additionalContext?.includeCommunications && context.emails?.length > 0 ? `\nCOMMUNICATIONS TIMELINE (${context.emails.length} emails):\n${context.emails.map((e: any) => `--- EMAIL ${e.direction === 'outbound' ? 'SENT' : 'RECEIVED'} (${new Date(e.sent_at || e.created_at).toLocaleDateString()}) ---\nFrom: ${e.from_address || e.sent_by || 'Unknown'}\nTo: ${e.to_address || e.recipient_email || 'Unknown'}\nSubject: ${e.subject || 'No Subject'}\n${e.body ? e.body.substring(0, 2000) : 'No body'}\n`).join('\n')}` : ''}
 ${additionalContext?.includeInspections ? `\nINSPECTIONS:\n${context.inspections?.map((i: any) => `- ${i.inspection_type}: ${i.inspection_date} (${i.status})`).join('\n') || 'None scheduled'}` : ''}
 ${darwinAnalysesSection}
 
@@ -3752,6 +3858,8 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
         }
 
         systemPrompt = `You are Darwin, an elite public adjuster AI generating a COMPREHENSIVE STRATEGIC REBUTTAL to OVERTURN the carrier's denial and secure coverage. You have access to ALL claim intelligence, strategic analyses, carrier behavior data, previous Darwin analyses, and the complete evidence file for this claim.
+
+${getMandatoryFramework()}
 
 === YOUR MISSION ===
 The carrier has denied or undervalued this claim. Your job is to compile an OVERWHELMING case using every piece of available evidence to prove they are WRONG and coverage MUST be afforded. Leave them no defensible position.
@@ -4561,6 +4669,8 @@ Return ONLY the single JSON object (DismantlerResult). No other text.
         const combinedKnowledge = [denialKb, tacticsKb, regulationsKb].filter(Boolean).join('\n');
 
         systemPrompt = `You are Darwin, operating in SYSTEMATIC DISMANTLING MODE. You are the most rigorous, methodical, and devastating insurance claims analyst in existence. Your mission is to systematically dismantle every carrier assertion until their position is logically, legally, and evidentiary INDEFENSIBLE.
+
+${getMandatoryFramework()}
 
 === CORE OPERATING PRINCIPLE ===
 CARRIER DETERMINATIONS ARE PRESUMED UNSUPPORTED UNTIL PROVEN OTHERWISE.

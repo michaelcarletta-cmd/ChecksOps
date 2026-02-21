@@ -48,8 +48,6 @@ function cleanEmailText(text: string): string {
     .replace(/^[^\x20-\x7E\n]*[\x00-\x1F\x7F-\xFF]{10,}[^\x20-\x7E\n]*$/gm, '')
     // Remove gibberish sequences (20+ non-ASCII chars in a row)
     .replace(/[^\x20-\x7E\n\r\t]{20,}/g, '')
-    // Remove email reply/thread content (everything after "From:" header in replies)
-    .replace(/\n\nFrom:[\s\S]*$/m, '')
     // Remove image placeholders like [A computer and phone with a screen...]
     .replace(/\[[^\]]*Description automatically generated\][^\n]*/g, '')
     // Remove CID image references
@@ -201,13 +199,27 @@ export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
   const { data: emails, isLoading } = useQuery({
     queryKey: ["emails", claimId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("emails")
-        .select("*")
-        .eq("claim_id", claimId)
-        .order("sent_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      const allEmails: any[] = [];
+      let offset = 0;
+      const batchSize = 1000;
+      let hasMore = true;
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from("emails")
+          .select("*")
+          .eq("claim_id", claimId)
+          .order("sent_at", { ascending: false })
+          .range(offset, offset + batchSize - 1);
+        if (error) throw error;
+        if (data && data.length > 0) {
+          allEmails.push(...data);
+          offset += batchSize;
+          hasMore = data.length === batchSize;
+        } else {
+          hasMore = false;
+        }
+      }
+      return allEmails;
     },
   });
 
@@ -239,13 +251,40 @@ export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
     return map;
   }, [emailAttachments]);
 
-  // Decode email bodies that may be incorrectly stored as base64
+  // Decode email bodies and deduplicate (prefer outlook_sync with full body over truncated inbound)
   const decodedEmails = useMemo(() => {
     if (!emails) return [];
-    return emails.map(email => ({
-      ...email,
-      decodedBody: decodeEmailBody(email.body)
-    }));
+    
+    // Normalize subject for comparison (strip Re:/Fwd:/RE:/FW: prefixes and non-alphanumeric)
+    const normalizeSubject = (s: string) => 
+      (s || '').replace(/^(re|fwd|fw|forward):\s*/gi, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+    
+    // Enrich truncated inbound emails with fuller body from outlook_sync when available
+    // Only enrich if the outlook_sync version actually contains the inbound body (same email, just fuller)
+    return emails.map((email: any) => {
+      let body = email.body;
+      
+      // If this is a short inbound email, look for a fuller outlook_sync version that contains the same content
+      if (email.recipient_type === 'inbound' && body && body.length < 300) {
+        const inboundSubjectNorm = normalizeSubject(email.subject);
+        const bodyStart = body.substring(0, Math.min(40, body.length)).trim();
+        const fullerVersion = emails.find((other: any) => {
+          if (other.id === email.id || other.recipient_type !== 'outlook_sync') return false;
+          const otherSubjectNorm = normalizeSubject(other.subject);
+          const subjectMatch = inboundSubjectNorm.includes(otherSubjectNorm) || otherSubjectNorm.includes(inboundSubjectNorm);
+          // The fuller version must contain the beginning of the inbound body to be the same email
+          return subjectMatch && other.body && other.body.length > body.length && other.body.includes(bodyStart);
+        });
+        if (fullerVersion) {
+          body = fullerVersion.body;
+        }
+      }
+      
+      return {
+        ...email,
+        decodedBody: decodeEmailBody(body)
+      };
+    });
   }, [emails]);
 
   const handleDownloadAttachment = async (filePath: string, fileName: string) => {

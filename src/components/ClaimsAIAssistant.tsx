@@ -4,11 +4,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Bot, Send, Loader2, Sparkles, Brain } from "lucide-react";
+import { Bot, Send, Loader2, Sparkles, Brain, Globe, Database } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQueryClient } from "@tanstack/react-query";
+import { Toggle } from "@/components/ui/toggle";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
+type SourceMode = "internal_only" | "hybrid";
 
 interface AiMessage {
   role: "user" | "assistant";
@@ -27,6 +31,7 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
   const [aiQuestion, setAiQuestion] = useState("");
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
+  const [sourceMode, setSourceMode] = useState<SourceMode>("hybrid");
   const queryClient = useQueryClient();
 
   // Clear messages when switching between claims
@@ -61,6 +66,7 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
           messages: conversationHistory,
           mode: isClaimContext ? "claim" : "general",
           claimId: claimId || undefined,
+          sourceMode,
         },
       });
 
@@ -74,6 +80,24 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
         if (claimId) {
           queryClient.invalidateQueries({ queryKey: ["claim-tasks", claimId] });
         }
+      }
+
+      // Check for task management operations in the response
+      const hasTaskOps = data.answer && (
+        data.answer.includes("Task updated:") ||
+        data.answer.includes("Task completed:") ||
+        data.answer.includes("Task reopened:") ||
+        data.answer.includes("Task deleted:") ||
+        data.answer.includes("Tasks for") ||
+        data.answer.includes("Bulk Task Processing Complete") ||
+        data.answer.includes("task(s) processed")
+      );
+      if (hasTaskOps) {
+        if (claimId) {
+          queryClient.invalidateQueries({ queryKey: ["claim-tasks", claimId] });
+        }
+        queryClient.invalidateQueries({ queryKey: ["claim-tasks"] });
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
       }
 
       // Check if bulk operations were performed (detect by response content)
@@ -124,9 +148,9 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
 
   const getTitle = () => {
     if (isClaimContext) {
-      return "Darwin AI";
+      return "Darwin — Claims Operations";
     }
-    return "Claims AI Assistant";
+    return "Darwin AI";
   };
 
   const getIcon = () => {
@@ -142,17 +166,18 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
         <Card className="p-6 bg-primary/5 border-primary/20 max-w-sm">
           <div className="text-center space-y-3">
             <Brain className="h-12 w-12 text-primary mx-auto" />
-            <h3 className="font-semibold">Darwin - Your Claim Copilot</h3>
+            <h3 className="font-semibold">Darwin — Claims Operations Assistant</h3>
             <p className="text-sm text-muted-foreground">
-              I have full context on <strong>{policyholderName || claimNumber}</strong>
+              Document-aware intelligence for <strong>{policyholderName || claimNumber}</strong>
             </p>
             <ul className="text-sm text-muted-foreground space-y-1 text-left">
-              <li>• Summarize this claim's status</li>
-              <li>• Draft carrier communications</li>
-              <li>• Analyze settlement details</li>
-              <li>• Suggest next steps</li>
-              <li>• Create tasks for this claim</li>
-              <li>• Answer insurance questions</li>
+              <li>• Upload a document for structured analysis</li>
+              <li>• "Does this denial hold up?"</li>
+              <li>• "What evidence do we need?"</li>
+              <li>• "How do we rebut this?"</li>
+              <li>• "Is this repair feasible?"</li>
+              <li>• Coverage-first strategic guidance</li>
+              <li>• Every response ends with a next step</li>
             </ul>
           </div>
         </Card>
@@ -163,18 +188,17 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
       <Card className="p-6 bg-primary/5 border-primary/20 max-w-sm">
         <div className="text-center space-y-3">
           <Bot className="h-12 w-12 text-primary mx-auto" />
-          <h3 className="font-semibold">Your Claims Assistant</h3>
+          <h3 className="font-semibold">Darwin AI</h3>
           <p className="text-sm text-muted-foreground">
-            I can help you with:
+            Claims operations & workflow assistant
           </p>
           <ul className="text-sm text-muted-foreground space-y-1 text-left">
-            <li>• Draft follow-up communications</li>
-            <li>• Summarize claim statuses</li>
-            <li>• <strong>Create tasks with due dates</strong></li>
-            <li>• <strong>Bulk update statuses</strong></li>
-            <li>• <strong>Bulk close/reopen claims</strong></li>
-            <li>• <strong>Bulk assign staff</strong></li>
-            <li>• Explain insurance terms & regulations</li>
+            <li>• Analyze documents & carrier positions</li>
+            <li>• Create tasks with due dates</li>
+            <li>• Bulk update statuses & assign staff</li>
+            <li>• Search communications & history</li>
+            <li>• Find leads by storm activity</li>
+            <li>• Draft carrier communications</li>
           </ul>
         </div>
       </Card>
@@ -203,11 +227,37 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
                 </span>
               )}
             </DialogTitle>
-            {aiMessages.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={clearChat}>
-                Clear Chat
-              </Button>
-            )}
+            <div className="flex items-center gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Toggle
+                    size="sm"
+                    pressed={sourceMode === "hybrid"}
+                    onPressedChange={(pressed) => setSourceMode(pressed ? "hybrid" : "internal_only")}
+                    className="h-7 px-2 data-[state=on]:bg-primary/10"
+                  >
+                    {sourceMode === "hybrid" ? (
+                      <Globe className="h-3.5 w-3.5 mr-1" />
+                    ) : (
+                      <Database className="h-3.5 w-3.5 mr-1" />
+                    )}
+                    <span className="text-[10px]">{sourceMode === "hybrid" ? "Hybrid" : "Internal"}</span>
+                  </Toggle>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p className="text-xs max-w-[200px]">
+                    {sourceMode === "hybrid"
+                      ? "Using internal claim docs + external knowledge base + web sources"
+                      : "Using ONLY internal claim documents and database — no external sources"}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+              {aiMessages.length > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearChat}>
+                  Clear
+                </Button>
+              )}
+            </div>
           </div>
         </DialogHeader>
 

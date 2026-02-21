@@ -90,7 +90,7 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+    <Sidebar className="border-r border-white/20 text-white" style={{ background: 'linear-gradient(180deg, hsl(220, 60%, 55%) 0%, hsl(220, 80%, 85%) 50%, #ffffff 100%)' }}>
       <SidebarContent>
         <div className="px-4 py-4 flex items-center">
           <img src={logo} alt="Freedom Claims" className="h-10 w-auto" />
@@ -104,11 +104,11 @@ export function AppSidebar() {
               {mainItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild tooltip={item.title}>
-                    <NavLink 
+                     <NavLink 
                       to={item.url} 
                       end={item.url === "/"}
-                      className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors relative"
-                      activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
+                      className="text-white hover:bg-white/20 hover:shadow-sm transition-all relative rounded-md"
+                      activeClassName="bg-white/30 text-white font-medium shadow-sm border border-white/40"
                     >
                       <item.icon className="h-5 w-5" />
                       <span>{item.title}</span>
@@ -129,11 +129,11 @@ export function AppSidebar() {
         </SidebarGroup>
 
         {/* Logout button at bottom */}
-        <div className="mt-auto p-4 border-t border-sidebar-border">
+        <div className="mt-auto p-4 border-t border-blue-200/50">
           {user && (
             <div className="mb-3">
               {open && (
-                <p className="text-xs text-muted-foreground truncate">
+                <p className="text-xs text-white/80 truncate">
                   {user.email}
                 </p>
               )}
@@ -142,7 +142,7 @@ export function AppSidebar() {
           <Button
             onClick={handleSignOut}
             variant="ghost"
-            className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            className="w-full justify-start text-white hover:bg-white/20"
           >
             <LogOut className="h-5 w-5" />
             {open && <span className="ml-2">Log Out</span>}

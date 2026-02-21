@@ -155,3 +155,12 @@ verify_jwt = false
 
 [functions.outlook-oauth-callback]
 verify_jwt = false
+
+[functions.compute-playbooks]
+verify_jwt = false
+
+[functions.draft-escalation-artifact]
+verify_jwt = false
+
+[functions.darwin-backfill-claims]
+verify_jwt = false

@@ -202,7 +202,7 @@ export const DarwinSecondBrain = ({ claimId, claim, currentContext = 'general' }
 
       {/* Content */}
       {isExpanded && (
-        <ScrollArea className="max-h-80">
+        <ScrollArea className="h-80 overflow-auto">
           <div className="p-2 space-y-2">
             {visibleNudges.map(nudge => (
               <div

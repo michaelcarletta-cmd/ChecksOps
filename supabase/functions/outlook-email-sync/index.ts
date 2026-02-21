@@ -6,12 +6,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-// Refresh Microsoft OAuth tokens
+/** Single helper – every response is HTTP 200 + JSON (or 204 for OPTIONS). */
+function json(body: Record<string, unknown>, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+// --------------- Token helpers ---------------
+
 async function refreshTokens(refreshToken: string): Promise<{ access_token: string; refresh_token: string; expires_at: string }> {
   const MS_CLIENT_ID = Deno.env.get('MS_CLIENT_ID');
   const MS_CLIENT_SECRET = Deno.env.get('MS_CLIENT_SECRET');
 
   if (!MS_CLIENT_ID || !MS_CLIENT_SECRET) {
+carle-outlook-sync-fix
     throw new Error('Microsoft OAuth is not configured (MS_CLIENT_ID / MS_CLIENT_SECRET). Please reconnect Outlook after the app is configured.');
 
 
@@ -23,6 +33,9 @@ async function refreshTokens(refreshToken: string): Promise<{ access_token: stri
     throw new Error('Microsoft OAuth is not configured (MS_CLIENT_ID / MS_CLIENT_SECRET). Please reconnect Outlook after the app is configured.');
 (Outlook email sync: claim/subject matching, cleanup, 200 responses)
  (Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
+=======
+    throw new Error('Microsoft OAuth is not configured (MS_CLIENT_ID / MS_CLIENT_SECRET missing).');
+main
   }
 
   const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
@@ -38,6 +51,7 @@ async function refreshTokens(refreshToken: string): Promise<{ access_token: stri
   });
 
   if (!response.ok) {
+carle-outlook-sync-fix
 
     const errText = await response.text();
     let userMessage = 'Token refresh failed.';
@@ -57,11 +71,21 @@ async function refreshTokens(refreshToken: string): Promise<{ access_token: stri
 
     throw new Error(userMessage);
 
+
+    let detail = '';
+    try {
+      const errBody = await response.json();
+      detail = errBody?.error_description || errBody?.error || '';
+    } catch {
+      detail = await response.text().catch(() => '');
+    }
+main
     const lower = detail.toLowerCase();
     if (lower.includes('expired') || lower.includes('revoked') || lower.includes('invalid_grant') || response.status === 401) {
       throw new Error('Your Outlook connection expired or was revoked. Please reconnect your account in Settings.');
     }
     throw new Error(`Token refresh failed: ${detail || response.status}`);
+carle-outlook-sync-fix
 
     const errText = await response.text();
     let userMessage = 'Token refresh failed.';
@@ -78,6 +102,8 @@ async function refreshTokens(refreshToken: string): Promise<{ access_token: stri
     throw new Error(userMessage);
 (Outlook email sync: claim/subject matching, cleanup, 200 responses)
 (Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
+
+    main
   }
 
   const tokens = await response.json();
@@ -88,7 +114,6 @@ async function refreshTokens(refreshToken: string): Promise<{ access_token: stri
   };
 }
 
-// Get a valid access token, refreshing if needed
 async function getAccessToken(connection: any, supabase: any): Promise<string> {
   let tokenData: any;
   try {
@@ -102,10 +127,7 @@ async function getAccessToken(connection: any, supabase: any): Promise<string> {
     const newTokens = await refreshTokens(tokenData.refresh_token);
     await supabase
       .from('email_connections')
-      .update({
-        encrypted_password: JSON.stringify(newTokens),
-        last_sync_error: null,
-      })
+      .update({ encrypted_password: JSON.stringify(newTokens), last_sync_error: null })
       .eq('id', connection.id);
     return newTokens.access_token;
   }
@@ -113,13 +135,16 @@ async function getAccessToken(connection: any, supabase: any): Promise<string> {
   return tokenData.access_token;
 }
 
-// Fetch emails from Microsoft Graph API
-async function fetchGraphEmails(accessToken: string): Promise<any[]> {
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+// --------------- Graph API ---------------
 
-  const response = await fetch(
+async function fetchGraphEmails(accessToken: string, maxPages = 10): Promise<any[]> {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const allEmails: any[] = [];
+
+  let url: string | null =
     `https://graph.microsoft.com/v1.0/me/messages?` +
     `$filter=receivedDateTime ge ${thirtyDaysAgo}` +
+carle-outlook-sync-fix
 
     `&$select=from,toRecipients,subject,receivedDateTime,bodyPreview,internetMessageId` +
     `&$top=100&$orderby=receivedDateTime desc`,
@@ -208,19 +233,80 @@ async function fetchGraphEmails(accessToken: string): Promise<any[]> {
     throw new Error(userMessage);
   
 
-  const data = await response.json();
-  return (data.value || []).map((msg: any) => ({
-    from: msg.from?.emailAddress?.address || 'Unknown',
-    from_name: msg.from?.emailAddress?.name || '',
-    to: msg.toRecipients?.[0]?.emailAddress?.address || 'Unknown',
-    to_name: msg.toRecipients?.[0]?.emailAddress?.name || '',
-    subject: msg.subject || '(No Subject)',
-    date: msg.receivedDateTime,
-    body_preview: msg.bodyPreview || '',
-    message_id: msg.internetMessageId || '',
-  }));
+    `&$select=from,toRecipients,subject,receivedDateTime,body,bodyPreview,internetMessageId` +
+    `&$top=250&$orderby=receivedDateTime desc&$count=false`;
+
+  let page = 0;
+  while (url && page < maxPages) {
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!response.ok) {
+      let detail = '';
+      try {
+        const errBody = await response.json();
+        detail = errBody?.error?.message || errBody?.error_description || '';
+      } catch {
+        detail = await response.text().catch(() => '');
+      }
+      if (response.status === 401) {
+        throw new Error('Your Outlook connection expired or was revoked. Please reconnect your account in Settings.');
+      }
+      throw new Error(`Graph API error: ${detail || response.status}`);
+    }
+
+    const data = await response.json();
+    const emails = (data.value || []).map((msg: any) => {
+      // Extract full body text – prefer plain text, strip HTML tags if HTML
+      let fullBody = '';
+      if (msg.body?.content) {
+        if (msg.body.contentType === 'text') {
+          fullBody = msg.body.content;
+        } else {
+          // Strip HTML tags to get plain text
+          fullBody = msg.body.content
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<\/p>/gi, '\n\n')
+            .replace(/<\/div>/gi, '\n')
+            .replace(/<\/li>/gi, '\n')
+            .replace(/<[^>]+>/g, '')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+        }
+      }
+      return {
+        from: msg.from?.emailAddress?.address || 'Unknown',
+        from_name: msg.from?.emailAddress?.name || '',
+        to: msg.toRecipients?.[0]?.emailAddress?.address || 'Unknown',
+        to_name: msg.toRecipients?.[0]?.emailAddress?.name || '',
+        subject: msg.subject || '(No Subject)',
+        date: msg.receivedDateTime,
+        full_body: fullBody || msg.bodyPreview || '',
+        body_preview: msg.bodyPreview || '',
+        message_id: msg.internetMessageId || '',
+      };
+    });
+
+    allEmails.push(...emails);
+    url = data['@odata.nextLink'] || null;
+    page++;
+  }
+main
+
+  console.log(`Fetched ${allEmails.length} emails across ${page} page(s)`);
+  return allEmails;
 }
 
+carle-outlook-sync-fix
 
 // Build match terms from claim number (and variations) + policyholder last name. Subject must contain at least one.
 function buildClaimMatchTerms(claimNumber: string | null | undefined, policyholderName: string | null | undefined): string[] {
@@ -233,6 +319,11 @@ function buildClaimNumberTerms(claimNumber: string | null | undefined): string[]
 function buildClaimMatchTerms(claimNumber: string | null | undefined, policyholderName: string | null | undefined): string[] {
 (Outlook email sync: claim/subject matching, cleanup, 200 responses)
 (Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
+
+// --------------- Claim matching ---------------
+
+function buildClaimNumberTerms(claimNumber: string | null | undefined): string[] {
+main
   const terms: string[] = [];
   if (claimNumber?.trim()) {
     const normalized = claimNumber.trim().toLowerCase();
@@ -245,8 +336,6 @@ function buildClaimMatchTerms(claimNumber: string | null | undefined, policyhold
       if (cn.length >= 8) terms.push(`${cn.substring(0, 2)}-${cn.substring(2, 6)}-${cn.substring(6)}`);
     }
   }
-  const lastName = getPolicyholderLastName(policyholderName);
-  if (lastName) terms.push(lastName);
   return [...new Set(terms)];
 }
 
@@ -257,14 +346,42 @@ function getPolicyholderLastName(name: string | null | undefined): string | null
   return last && last.length >= 2 ? last.toLowerCase() : null;
 }
 
-// Email is related to this claim only if SUBJECT contains claim number or policyholder last name
-function subjectMatchesClaim(subject: string, matchTerms: string[]): boolean {
-  if (matchTerms.length === 0) return false;
-  const subjectLower = (subject || '').toLowerCase();
-  return matchTerms.some(term => subjectLower.includes(term));
+/**
+ * Strict matching: an email matches a claim ONLY if the subject contains the claim number.
+ * Last name alone is NOT sufficient — it caused false positives with common surnames.
+ * Last name is used only as a secondary confirmation when claim number is also present,
+ * or when the email is from/to a known adjuster/carrier email for that claim.
+ */
+function emailMatchesClaim(
+  email: { subject: string; from: string; to: string },
+  claim: { claim_number: string | null; policyholder_name: string | null; insurance_email: string | null },
+  adjusterEmails: string[]
+): boolean {
+  const subjectLower = (email.subject || '').toLowerCase();
+  const claimTerms = buildClaimNumberTerms(claim.claim_number);
+
+  // Primary match: claim number appears in the subject — high confidence
+  if (claimTerms.length > 0 && claimTerms.some(term => subjectLower.includes(term))) {
+    return true;
+  }
+
+  // Secondary match: last name in subject AND email is from/to a known adjuster or carrier
+  const lastName = getPolicyholderLastName(claim.policyholder_name);
+  if (lastName && subjectLower.includes(lastName)) {
+    const fromLower = (email.from || '').toLowerCase();
+    const toLower = (email.to || '').toLowerCase();
+    const knownEmails = [...adjusterEmails];
+    if (claim.insurance_email) knownEmails.push(claim.insurance_email.toLowerCase());
+    if (knownEmails.some(known => fromLower === known || toLower === known)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
-// Run full Outlook sync for all connections (used by sync_all_claims and cleanup_and_resync)
+// --------------- Bulk sync ---------------
+
 async function runBulkSync(supabase: any, allConnections: any[]): Promise<{ totalImported: number; claimsSynced: number; errors: string[] }> {
   let totalImported = 0;
   let claimsSynced = 0;
@@ -297,19 +414,28 @@ async function runBulkSync(supabase: any, allConnections: any[]): Promise<{ tota
     if (!openClaims || openClaims.length === 0) continue;
 
     for (const claim of openClaims) {
-      const matchTerms = buildClaimMatchTerms(claim.claim_number, claim.policyholder_name);
-      const matchingEmails = emails.filter((email: any) => subjectMatchesClaim(email.subject, matchTerms));
+      // Fetch adjuster emails for this claim
+      const { data: adjusterRows } = await supabase
+        .from('claim_adjusters')
+        .select('adjuster_email')
+        .eq('claim_id', claim.id);
+      const adjusterEmails = (adjusterRows || [])
+        .map((a: any) => a.adjuster_email?.toLowerCase())
+        .filter(Boolean);
 
+      const matchingEmails = emails.filter((email: any) => emailMatchesClaim(email, claim, adjusterEmails));
       if (matchingEmails.length === 0) continue;
 
       const { data: existingEmails } = await supabase
         .from('emails')
-        .select('subject, sent_at')
+        .select('id, subject, sent_at, body, recipient_type')
         .eq('claim_id', claim.id);
 
-      const existingKeys = new Set(
-        existingEmails?.map((e: any) => `${e.subject}|${new Date(e.sent_at).toISOString().substring(0, 16)}`) || []
-      );
+      const existingBodyMap = new Map<string, { id: string; body_length: number }>();
+      existingEmails?.forEach((e: any) => {
+        const key = `${e.subject}|${new Date(e.sent_at).toISOString().substring(0, 16)}`;
+        existingBodyMap.set(key, { id: e.id, body_length: (e.body || '').length });
+      });
 
       let claimImported = 0;
       for (const email of matchingEmails) {
@@ -317,7 +443,15 @@ async function runBulkSync(supabase: any, allConnections: any[]): Promise<{ tota
         try { sentAt = new Date(email.date).toISOString(); } catch { sentAt = new Date().toISOString(); }
 
         const key = `${email.subject}|${sentAt.substring(0, 16)}`;
-        if (existingKeys.has(key)) continue;
+        const existing = existingBodyMap.get(key);
+        
+        if (existing) {
+          // Update truncated inbound emails with fuller outlook body
+          if (existing.body_length < 500 && email.full_body.length > existing.body_length) {
+            await supabase.from('emails').update({ body: email.full_body }).eq('id', existing.id);
+          }
+          continue;
+        }
 
         const isInbound = email.to.toLowerCase() === conn.email_address.toLowerCase() ||
                           email.from.toLowerCase() !== conn.email_address.toLowerCase();
@@ -325,16 +459,16 @@ async function runBulkSync(supabase: any, allConnections: any[]): Promise<{ tota
         const { error: insertError } = await supabase.from('emails').insert({
           claim_id: claim.id,
           subject: email.subject,
-          body: email.body_preview,
+          body: email.full_body,
           recipient_email: isInbound ? email.from : email.to,
           recipient_name: isInbound ? email.from_name : email.to_name,
-          recipient_type: isInbound ? 'inbound' : 'outlook_sync',
+          recipient_type: 'outlook_sync',
           sent_at: sentAt,
         });
 
         if (!insertError) {
           claimImported++;
-          existingKeys.add(key);
+          existingBodyMap.set(key, { id: '', body_length: email.full_body.length });
         }
       }
 
@@ -350,6 +484,7 @@ async function runBulkSync(supabase: any, allConnections: any[]): Promise<{ tota
   return { totalImported, claimsSynced, errors };
 }
 
+carle-outlook-sync-fix
 
 const json = (body: object, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -731,16 +866,52 @@ async function handleOutlookSync(req: Request): Promise<Response> {
         } else {
           throw new Error('Not authorized');
         }
-      }
-    } else {
-      const authHeader = req.headers.get('Authorization');
-      if (!authHeader) throw new Error('Not authenticated');
-      const token = authHeader.replace('Bearer ', '');
-      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token);
-      if (authError || !authUser) throw new Error('Not authenticated');
-      user = authUser;
-    }
+=======
+// --------------- Main handler ---------------
 
+async function handleOutlookSync(req: Request): Promise<Response> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+  let body: { action?: string; claim_id?: string; connection_id?: string } = {};
+  try {
+    body = await req.json();
+  } catch {
+    return json({ success: false, error: 'Invalid or missing JSON body' });
+  }
+  const { action, claim_id, connection_id } = body;
+
+  // ---------- Auth ----------
+  let user: any = null;
+  if (action === 'sync_all_claims' || action === 'cleanup_wrong_emails' || action === 'cleanup_and_resync') {
+    const cronSecret = req.headers.get('x-cron-secret');
+    const expectedSecret = Deno.env.get('CRON_SECRET');
+    const authHeader = req.headers.get('Authorization');
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    const isCronCall = (cronSecret && cronSecret === expectedSecret) ||
+                       (authHeader && authHeader === `Bearer ${anonKey}`);
+    if (!isCronCall) {
+      if (authHeader) {
+        const token = authHeader.replace('Bearer ', '');
+        const { data: { user: authUser } } = await supabase.auth.getUser(token);
+        if (!authUser) return json({ success: false, error: 'Not authenticated' });
+        user = authUser;
+      } else {
+        return json({ success: false, error: 'Not authorized' });
+main
+      }
+    }
+  } else {
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) return json({ success: false, error: 'Not authenticated' });
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !authUser) return json({ success: false, error: 'Not authenticated' });
+    user = authUser;
+  }
+
+carle-outlook-sync-fix
     if (action === 'get_auth_url') {
       const MS_CLIENT_ID = Deno.env.get('MS_CLIENT_ID');
       if (!MS_CLIENT_ID) throw new Error('Microsoft OAuth not configured');
@@ -877,6 +1048,291 @@ async function handleOutlookSync(req: Request): Promise<Response> {
     return json({ success: false, error: `Unknown action: ${action}` });
 (Outlook email sync: claim/subject matching, cleanup, 200 responses)
 (Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
+
+  // ---------- get_auth_url ----------
+  if (action === 'get_auth_url') {
+    const MS_CLIENT_ID = Deno.env.get('MS_CLIENT_ID');
+    if (!MS_CLIENT_ID) return json({ success: false, error: 'Microsoft OAuth not configured' });
+
+    const redirectUri = `${supabaseUrl}/functions/v1/outlook-oauth-callback`;
+    const origin = req.headers.get('origin') || req.headers.get('referer') || '';
+    const state = btoa(JSON.stringify({
+      userId: user.id,
+      redirectUrl: origin.replace(/\/$/, '') + '/settings',
+    }));
+
+    const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?` +
+      `client_id=${MS_CLIENT_ID}` +
+      `&response_type=code` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&scope=${encodeURIComponent('https://graph.microsoft.com/Mail.Read offline_access User.Read')}` +
+      `&state=${state}` +
+      `&response_mode=query` +
+      `&prompt=select_account`;
+
+    return json({ success: true, authUrl });
+  }
+
+  // ---------- sync_emails ----------
+  if (action === 'sync_emails') {
+    if (!claim_id) return json({ success: false, error: 'claim_id is required' });
+
+    let query = supabase
+      .from('email_connections')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('is_active', true);
+
+    if (connection_id) query = query.eq('id', connection_id);
+
+    const { data: connection, error: connError } = await query.limit(1).maybeSingle();
+    if (connError) return json({ success: false, error: connError.message });
+    if (!connection) return json({ success: false, error: 'No active email connection found. Please connect your Outlook account in Settings.' });
+
+    const { data: claim } = await supabase
+      .from('claims')
+      .select('claim_number, policyholder_email, policyholder_name, insurance_company, insurance_email')
+      .eq('id', claim_id)
+      .single();
+
+    if (!claim) return json({ success: false, error: 'Claim not found' });
+
+    let accessToken: string;
+    try {
+      accessToken = await getAccessToken(connection, supabase);
+    } catch (tokenErr: any) {
+      await supabase.from('email_connections').update({ last_sync_error: tokenErr.message }).eq('id', connection.id);
+      return json({ success: false, error: `Authentication failed: ${tokenErr.message}. Please reconnect your Outlook account.` });
+    }
+
+    let emails: any[];
+    try {
+      emails = await fetchGraphEmails(accessToken);
+    } catch (graphErr: any) {
+      await supabase.from('email_connections').update({ last_sync_error: graphErr.message }).eq('id', connection.id);
+      return json({ success: false, error: `Email fetch failed: ${graphErr.message}` });
+    }
+
+    // Fetch adjuster emails for this claim
+    const { data: adjusterRows } = await supabase
+      .from('claim_adjusters')
+      .select('adjuster_email')
+      .eq('claim_id', claim_id);
+    const adjusterEmails = (adjusterRows || [])
+      .map((a: any) => a.adjuster_email?.toLowerCase())
+      .filter(Boolean);
+
+    const matchingEmails = emails.filter(email => emailMatchesClaim(email, claim, adjusterEmails));
+
+    const { data: existingEmails } = await supabase
+      .from('emails')
+      .select('id, subject, sent_at, body, recipient_type')
+      .eq('claim_id', claim_id);
+
+    // Build a map of existing emails keyed by subject|sentAt for dedup + truncation detection
+    const existingBodyMap = new Map<string, { id: string; body_length: number; recipient_type: string }>();
+    existingEmails?.forEach((e: any) => {
+      const key = `${e.subject}|${new Date(e.sent_at).toISOString().substring(0, 16)}`;
+      existingBodyMap.set(key, { id: e.id, body_length: (e.body || '').length, recipient_type: e.recipient_type || '' });
+    });
+
+    let importedCount = 0;
+    let updatedCount = 0;
+    let firstInsertError: string | null = null;
+
+    for (const email of matchingEmails) {
+      let sentAt: string;
+      try { sentAt = new Date(email.date).toISOString(); } catch { sentAt = new Date().toISOString(); }
+
+      const key = `${email.subject}|${sentAt.substring(0, 16)}`;
+      const existing = existingBodyMap.get(key);
+      
+      if (existing) {
+        // If the existing record is truncated (short body, typically from inbound webhook)
+        // and the outlook version has more content, update the body
+        if (existing.body_length < 500 && email.full_body.length > existing.body_length) {
+          await supabase.from('emails').update({ body: email.full_body }).eq('id', existing.id);
+          updatedCount++;
+        }
+        continue;
+      }
+
+      const isInbound = email.to.toLowerCase() === connection.email_address.toLowerCase() ||
+                        email.from.toLowerCase() !== connection.email_address.toLowerCase();
+
+      const { error: insertError } = await supabase.from('emails').insert({
+        claim_id,
+        subject: email.subject,
+        body: email.full_body,
+        recipient_email: isInbound ? email.from : email.to,
+        recipient_name: isInbound ? email.from_name : email.to_name,
+        recipient_type: 'outlook_sync',
+        sent_at: sentAt,
+      });
+
+      if (insertError) {
+        if (!firstInsertError) firstInsertError = insertError.message;
+      } else {
+        importedCount++;
+        existingBodyMap.set(key, { id: '', body_length: email.full_body.length, recipient_type: 'outlook_sync' });
+      }
+    }
+
+    // Update last sync; store firstInsertError if applicable
+    await supabase
+      .from('email_connections')
+      .update({
+        last_sync_at: new Date().toISOString(),
+        last_sync_error: firstInsertError || null,
+      })
+      .eq('id', connection.id);
+
+    const result: Record<string, unknown> = {
+      success: true,
+      total_fetched: emails.length,
+      matching: matchingEmails.length,
+      imported: importedCount,
+      updated_truncated: updatedCount,
+    };
+    if (firstInsertError) {
+      result.warning = `Some emails could not be saved: ${firstInsertError}`;
+    }
+
+    return json(result);
+  }
+
+  // ---------- delete_connection ----------
+  if (action === 'delete_connection') {
+    const { error } = await supabase
+      .from('email_connections')
+      .delete()
+      .eq('id', connection_id)
+      .eq('user_id', user.id);
+
+    if (error) return json({ success: false, error: error.message });
+    return json({ success: true });
+  }
+
+  // ---------- cleanup_wrong_emails ----------
+  if (action === 'cleanup_wrong_emails') {
+    const { data: outlookEmails, error: listErr } = await supabase
+      .from('emails')
+      .select('id, claim_id, subject')
+      .eq('recipient_type', 'outlook_sync');
+
+    if (listErr) return json({ success: false, error: listErr.message });
+
+    let deleted = 0;
+    for (const row of outlookEmails || []) {
+      const { data: claim } = await supabase
+        .from('claims')
+        .select('claim_number, policyholder_name')
+        .eq('id', row.claim_id)
+        .single();
+
+      const matchTerms = buildClaimMatchTerms(claim?.claim_number, claim?.policyholder_name);
+      if (!subjectMatchesClaim(row.subject, matchTerms)) {
+        const { error: delErr } = await supabase.from('emails').delete().eq('id', row.id);
+        if (!delErr) deleted++;
+      }
+    }
+
+    console.log(`Cleanup: removed ${deleted} wrongly-attached outlook_sync emails`);
+    return json({ success: true, deleted });
+  }
+
+  // ---------- cleanup_and_resync ----------
+  if (action === 'cleanup_and_resync') {
+    // Delete ALL outlook_sync emails so they get re-imported with full body content
+    let deleted = 0;
+    let deleteOffset = 0;
+    const deleteBatch = 500;
+    let hasMoreToDelete = true;
+    while (hasMoreToDelete) {
+      const { data: batch, error: listErr } = await supabase
+        .from('emails')
+        .select('id')
+        .eq('recipient_type', 'outlook_sync')
+        .range(0, deleteBatch - 1);
+
+      if (listErr || !batch || batch.length === 0) {
+        hasMoreToDelete = false;
+        break;
+      }
+
+      const ids = batch.map((r: any) => r.id);
+      const { error: delErr } = await supabase.from('emails').delete().in('id', ids);
+      if (delErr) {
+        console.warn('Batch delete error:', delErr.message);
+        hasMoreToDelete = false;
+      } else {
+        deleted += ids.length;
+        if (batch.length < deleteBatch) hasMoreToDelete = false;
+      }
+    }
+
+    console.log(`Cleanup: removed ${deleted} outlook_sync emails for full re-import`);
+
+    const { data: allConnections, error: connErr } = await supabase
+      .from('email_connections')
+      .select('*')
+      .eq('is_active', true);
+
+    if (connErr || !allConnections || allConnections.length === 0) {
+      return json({
+        success: true,
+        deleted,
+        message: 'No active connections; cleanup done, no resync.',
+        total_imported: 0,
+        claims_synced: 0,
+      });
+    }
+
+    const { totalImported, claimsSynced, errors } = await runBulkSync(supabase, allConnections);
+    console.log(`Cleanup and resync: removed ${deleted} wrong emails; imported ${totalImported} across ${claimsSynced} claims`);
+    return json({
+      success: true,
+      deleted,
+      total_imported: totalImported,
+      claims_synced: claimsSynced,
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  }
+
+  // ---------- sync_all_claims ----------
+  if (action === 'sync_all_claims') {
+    const { data: allConnections, error: connErr } = await supabase
+      .from('email_connections')
+      .select('*')
+      .eq('is_active', true);
+
+    if (connErr || !allConnections || allConnections.length === 0) {
+      return json({ success: true, message: 'No active connections', synced: 0 });
+    }
+
+    const { totalImported, claimsSynced, errors } = await runBulkSync(supabase, allConnections);
+    console.log(`Bulk sync complete: ${totalImported} emails imported across ${claimsSynced} claims`);
+    return json({
+      success: true,
+      total_imported: totalImported,
+      claims_synced: claimsSynced,
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  }
+
+  return json({ success: false, error: `Unknown action: ${action}` });
+}
+
+// --------------- Entry point ---------------
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+
+  try {
+    return await handleOutlookSync(req);
+main
   } catch (error: any) {
     const message = error?.message || String(error);
     console.error('Outlook sync error:', message, error);

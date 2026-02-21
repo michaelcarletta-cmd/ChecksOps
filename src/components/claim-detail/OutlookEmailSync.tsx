@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Mail, RefreshCw, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { RefreshCw, Loader2, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -46,6 +46,7 @@ export function OutlookEmailSync({ claimId }: OutlookEmailSyncProps) {
 
       // Handle JSON body errors
       if (data?.success === false) throw new Error(data.error || "Sync failed");
+carle-outlook-sync-fix
 (Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
 
       setLastResult({ imported: data.imported, matching: data.matching });
@@ -54,6 +55,13 @@ export function OutlookEmailSync({ claimId }: OutlookEmailSyncProps) {
         toast({ title: "Sync completed with warning", description: data.warning, variant: "destructive" });
       }
       if (data.imported > 0) {
+
+
+      setLastResult({ imported: data.imported, matching: data.matching });
+
+      // Show warning if some emails couldn't be saved
+      if (data.warning) {
+main
         toast({
           title: "Sync completed with warnings",
           description: data.warning,
@@ -61,6 +69,7 @@ export function OutlookEmailSync({ claimId }: OutlookEmailSyncProps) {
         });
         queryClient.invalidateQueries({ queryKey: ["emails", claimId] });
       } else if (data.imported > 0) {
+ carle-outlook-sync-fix
       const bodyError = data && typeof data === "object" && "error" in data ? (data as { error?: string }).error : undefined;
       const failed = data && typeof data === "object" && "success" in data ? (data as { success?: boolean }).success === false : false;
       const errMsg = bodyError ?? error?.message ?? (error ? String(error) : undefined);
@@ -74,6 +83,8 @@ export function OutlookEmailSync({ claimId }: OutlookEmailSyncProps) {
       if (data.imported > 0) {
 (Outlook email sync: claim/subject matching, cleanup, 200 responses)
 (Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
+
+main
         toast({
           title: "Emails synced!",
           description: `Imported ${data.imported} new email${data.imported > 1 ? "s" : ""} from Outlook.`,
