@@ -233,6 +233,7 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
         recoverable_depreciation: settlement?.recoverable_depreciation || 0,
         deductible: settlement?.deductible || 0,
         estimate_amount: settlement?.estimate_amount || 0,
+        pa_estimate_amount: settlement?.pa_estimate_amount || 0,
         prior_offer: settlement?.prior_offer || 0,
         notes: settlement?.notes || "",
       };
@@ -315,6 +316,7 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
           recoverable_depreciation: formData.recoverable_depreciation,
           deductible: formData.deductible,
           estimate_amount: (formData as any).estimate_amount || 0,
+          pa_estimate_amount: (formData as any).pa_estimate_amount || 0,
           prior_offer: (formData as any).prior_offer || 0,
           notes: (formData as any).notes || "",
         };
@@ -412,8 +414,14 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
           </div>
           {type === "dwelling" && estimateAmount !== undefined && (
             <div>
-              <p className="text-sm text-muted-foreground">Estimate Amount</p>
+              <p className="text-sm text-muted-foreground">Carrier Estimate</p>
               <p className="text-lg font-semibold">${estimateAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+            </div>
+          )}
+          {type === "dwelling" && (settlement as any)?.pa_estimate_amount > 0 && (
+            <div>
+              <p className="text-sm text-muted-foreground">PA/Freedom Estimate</p>
+              <p className="text-lg font-semibold text-primary">${Number((settlement as any)?.pa_estimate_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
             </div>
           )}
           {type === "dwelling" && priorOffer !== undefined && priorOffer > 0 && (
@@ -618,13 +626,24 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
                 {editingType === "dwelling" && (
                   <>
                     <div>
-                      <Label>Estimate Amount</Label>
+                      <Label>Carrier Estimate</Label>
                       <Input
                         type="number"
                         step="0.01"
                         value={(formData as any).estimate_amount || 0}
                         onChange={(e) => setFormData({ ...formData, estimate_amount: parseFloat(e.target.value) || 0 } as any)}
                       />
+                      <p className="text-xs text-muted-foreground mt-1">What the carrier offered/estimated</p>
+                    </div>
+                    <div>
+                      <Label>PA/Freedom Estimate</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={(formData as any).pa_estimate_amount || 0}
+                        onChange={(e) => setFormData({ ...formData, pa_estimate_amount: parseFloat(e.target.value) || 0 } as any)}
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">Your estimate/demand amount — used by Darwin for strategic analysis</p>
                     </div>
                     <div className="col-span-2">
                       <Label>Prior Offer (Before Involvement - No Fees Collected)</Label>

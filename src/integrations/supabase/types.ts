@@ -2432,6 +2432,7 @@ export type Database = {
           other_structures_non_recoverable_depreciation: number | null
           other_structures_rcv: number | null
           other_structures_recoverable_depreciation: number | null
+          pa_estimate_amount: number | null
           personal_property_non_recoverable_depreciation: number | null
           personal_property_rcv: number | null
           personal_property_recoverable_depreciation: number | null
@@ -2458,6 +2459,7 @@ export type Database = {
           other_structures_non_recoverable_depreciation?: number | null
           other_structures_rcv?: number | null
           other_structures_recoverable_depreciation?: number | null
+          pa_estimate_amount?: number | null
           personal_property_non_recoverable_depreciation?: number | null
           personal_property_rcv?: number | null
           personal_property_recoverable_depreciation?: number | null
@@ -2484,6 +2486,7 @@ export type Database = {
           other_structures_non_recoverable_depreciation?: number | null
           other_structures_rcv?: number | null
           other_structures_recoverable_depreciation?: number | null
+          pa_estimate_amount?: number | null
           personal_property_non_recoverable_depreciation?: number | null
           personal_property_rcv?: number | null
           personal_property_recoverable_depreciation?: number | null
