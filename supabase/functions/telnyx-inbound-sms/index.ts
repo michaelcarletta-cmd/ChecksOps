@@ -627,8 +627,22 @@ serve(async (req) => {
     // ── 8. CREATE TASK ──
     if (intent === 'create_task') {
       const { title, dueDate } = parseTaskFromSMS(messageBody);
+
+      // Smart claim resolution: if the task text mentions a client name,
+      // try to find that client's claim instead of using active context.
+      let taskClaimId = activeClaimId;
+      const nameHints = title.match(/(?:for|regarding|about|re:?)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/);
+      if (nameHints) {
+        const mentionedName = nameHints[1].trim();
+        const matchedClaims = await getUserOrgClaims(supabase, userId, { search: mentionedName, limit: 1 });
+        if (matchedClaims.length > 0) {
+          taskClaimId = matchedClaims[0].id;
+          console.log(`Smart claim resolve: "${mentionedName}" → ${matchedClaims[0].claim_number} (${matchedClaims[0].policyholder_name})`);
+        }
+      }
+
       const { data: task, error: taskErr } = await supabase.from('tasks').insert({
-        claim_id: activeClaimId,
+        claim_id: taskClaimId,
         title,
         due_date: dueDate,
         status: 'pending',
@@ -651,7 +665,7 @@ serve(async (req) => {
         }
         // Log to claim activity
         await supabase.from('claim_updates').insert({
-          claim_id: activeClaimId,
+          claim_id: taskClaimId,
           content: `Task created via SMS: "${task.title}" due ${task.due_date}`,
           update_type: 'task_created',
           created_by: userId,
