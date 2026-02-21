@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { parseIntent } from "../_shared/darwin-command-contracts.ts";
+import { parseIntent, type DarwinIntent } from "../_shared/darwin-command-contracts.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -262,6 +262,48 @@ function maskPhone(phone: string): string {
   return `...${digits.slice(-4)}`;
 }
 
+/** Classify intent using OpenAI when regex fails */
+async function classifyIntentWithLLM(text: string): Promise<DarwinIntent> {
+  const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+  if (!OPENAI_API_KEY) return 'unknown';
+  try {
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        temperature: 0,
+        max_tokens: 20,
+        messages: [
+          {
+            role: 'system',
+            content: `Classify this SMS message into exactly one intent. Reply with ONLY the intent keyword, nothing else.
+Intents: analyze, operating_manual, case_study, marketing, financial_qa, create_task, send_client_sms, send_client_email, summary, unknown
+- analyze: user wants to analyze/review a claim
+- create_task: user wants to create a task, reminder, or follow-up
+- send_client_sms: user wants to text/message a client
+- send_client_email: user wants to email a client
+- summary: user wants a recap/status/what happened
+- financial_qa: user asks about payments, amounts, depreciation
+- operating_manual: user wants an operating manual
+- case_study: user wants a case study
+- marketing: user wants marketing content
+- unknown: none of the above`,
+          },
+          { role: 'user', content: text },
+        ],
+      }),
+    });
+    const data = await resp.json();
+    const raw = (data.choices?.[0]?.message?.content || '').trim().toLowerCase();
+    const valid: DarwinIntent[] = ['analyze', 'operating_manual', 'case_study', 'marketing', 'financial_qa', 'create_task', 'send_client_sms', 'send_client_email', 'summary'];
+    return valid.includes(raw as DarwinIntent) ? (raw as DarwinIntent) : 'unknown';
+  } catch (err) {
+    console.error('LLM intent classification error:', err);
+    return 'unknown';
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -493,6 +535,54 @@ serve(async (req) => {
             });
           }
 
+          // ── Claim selection resume: user picked a claim, now re-run original intent ──
+          if (pendingAction.type === 'claim_selection_resume') {
+            const selectedClaimId = selected.id;
+            // Set active claim and clear pending action
+            await supabase.from('sms_conversation_state')
+              .update({ active_claim_id: selectedClaimId, pending_action: null, expires_at: new Date(Date.now() + 7 * 24 * 3600000).toISOString() })
+              .eq('id', convState!.id);
+            const switchReply = `✅ Switched to ${selected.claim_number} — ${selected.policyholder_name}. Processing your command...`;
+            await sendReply(fromNumber, switchReply);
+            // Re-invoke this function with the original message to process the intent now that claim is set
+            const SUPABASE_URL_INNER = Deno.env.get('SUPABASE_URL')!;
+            const SUPABASE_SERVICE_ROLE_KEY_INNER = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+            // Build a synthetic inbound webhook payload to re-process the original message
+            // We call darwin-command directly since we know the intent and claim
+            const originalIntent = pendingAction.originalIntent;
+            const originalMessage = pendingAction.originalMessage;
+            const cmdResp = await fetch(`${SUPABASE_URL_INNER}/functions/v1/darwin-command`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY_INNER}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ commandText: originalMessage, claimId: selectedClaimId, route: 'sms', createdBy: userId }),
+            });
+            const cmdResult = await cmdResp.json();
+            const isAnalysis = ['analyze', 'operating_manual', 'case_study', 'marketing'].includes(originalIntent);
+            let reply: string;
+            if (cmdResult.error) {
+              reply = `⚠️ ${cmdResult.error}`;
+            } else if (isAnalysis) {
+              const preview = (cmdResult.result || cmdResult.answer || '').substring(0, 300);
+              reply = `✅ ${originalIntent.replace(/_/g, ' ')} complete.${cmdResult.assetId ? ' Saved to Knowledge Base.' : ''}\n\n${preview}${preview.length >= 300 ? '…' : ''}\n\nFull results: Claim → Darwin → Assets`;
+            } else if (cmdResult.answer) {
+              reply = cmdResult.answer.substring(0, 1500);
+            } else if (cmdResult.result) {
+              reply = cmdResult.result.substring(0, 1500);
+            } else {
+              reply = `✅ ${originalIntent.replace(/_/g, ' ')} complete. Check the app for full results.`;
+            }
+            await sendReply(fromNumber, reply);
+            await supabase.from('darwin_sms_activity').insert({
+              user_id: userId, phone_number: fromNumber, claim_id: selectedClaimId,
+              direction: 'outbound', message_text: reply, parsed_intent: originalIntent,
+              status: 'completed', action_type: isAnalysis ? 'analysis' : 'command',
+              result_id: cmdResult.assetId || null,
+            });
+            return new Response(JSON.stringify({ success: true, action: 'claim_selected_and_resumed', claimId: selectedClaimId }), {
+              status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+
           // ── Recipient disambiguation for SMS/email ──
           if (pendingAction.recipientPending) {
             const updatedAction = {
@@ -664,8 +754,13 @@ serve(async (req) => {
     // ── 6. Resolve active claim context (no auto-pick — user must explicitly switch) ──
     const activeClaimId = convState?.active_claim_id || null;
 
-    // ── 7. Parse intent and route ──
-    const intent = parseIntent(messageBody);
+    // ── 7. Parse intent and route (regex first, then LLM fallback) ──
+    let intent = parseIntent(messageBody);
+
+    if (intent === 'unknown') {
+      intent = await classifyIntentWithLLM(messageBody);
+      console.log(`LLM fallback classified intent: ${intent}`);
+    }
 
     const { data: activityRow } = await supabase.from('darwin_sms_activity').insert({
       user_id: userId, phone_number: fromNumber, claim_id: activeClaimId || null,
@@ -691,11 +786,31 @@ serve(async (req) => {
     // Require active claim for most intents (create_task can resolve its own or create personal, summary/financial_qa can work without)
     const claimlessIntents = ['financial_qa', 'create_task', 'summary'];
     if (!activeClaimId && !claimlessIntents.includes(intent)) {
-      const reply = 'No active claim. Reply "Switch [claim #]" or "Claims" to select one first.';
-      await sendReply(fromNumber, reply);
-      if (activityRow) {
-        await supabase.from('darwin_sms_activity')
-          .update({ status: 'needs_context', darwin_response: reply }).eq('id', activityRow.id);
+      // Store pending intent so we can auto-resume after claim selection
+      const recentClaims = await getUserOrgClaims(supabase, userId, { limit: 5 });
+      if (recentClaims.length > 0) {
+        const list = recentClaims.map((c: any, i: number) => `${i + 1}. ${c.claim_number} — ${c.policyholder_name}`).join('\n');
+        const reply = `This command needs an active claim. Pick one:\n${list}\n\nReply with a number (1-${recentClaims.length}).`;
+        await supabase.from('sms_conversation_state').update({
+          pending_action: {
+            type: 'claim_selection_resume',
+            originalIntent: intent,
+            originalMessage: messageBody,
+            candidates: recentClaims.map((c: any) => ({ id: c.id, claim_number: c.claim_number, policyholder_name: c.policyholder_name })),
+          },
+        }).eq('id', convState!.id);
+        await sendReply(fromNumber, reply);
+        if (activityRow) {
+          await supabase.from('darwin_sms_activity')
+            .update({ status: 'needs_context', darwin_response: reply }).eq('id', activityRow.id);
+        }
+      } else {
+        const reply = 'No active claim and no claims found. Reply "Switch [claim #]" to select one.';
+        await sendReply(fromNumber, reply);
+        if (activityRow) {
+          await supabase.from('darwin_sms_activity')
+            .update({ status: 'needs_context', darwin_response: reply }).eq('id', activityRow.id);
+        }
       }
       return new Response(JSON.stringify({ success: true, action: 'needs_claim' }), {
         status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
