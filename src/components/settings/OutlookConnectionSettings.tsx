@@ -126,9 +126,19 @@ export function OutlookConnectionSettings({ embedded }: { embedded?: boolean }) 
       const hint = message.includes("Unknown action") || message.includes("cleanup_and_resync")
         ? " Deploy the Outlook sync function from the project root: npm run deploy:outlook-sync (or: supabase functions deploy outlook-email-sync). Then try again."
         : "";
+(Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
+      const isNon2xx = /non-2xx|non-2xx code/i.test(message);
+      const isUnknownAction = message.includes("Unknown action") || message.includes("cleanup_and_resync");
+      const deployHint =
+        " Deploy the Outlook sync function from the project root: npm run deploy:outlook-sync (or: supabase functions deploy outlook-email-sync). Then try again.";
+      const hint = isNon2xx || isUnknownAction ? deployHint : "";
+
+ (Outlook email sync: claim/subject matching, cleanup, 200 responses)
+ (Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
       toast({
         title: "Cleanup and resync failed",
-        description: message + hint,
+        description:
+          (isNon2xx ? "The sync function needs to be redeployed so it returns errors correctly. " : "") + message + hint,
         variant: "destructive",
         duration: 12000,
       });
