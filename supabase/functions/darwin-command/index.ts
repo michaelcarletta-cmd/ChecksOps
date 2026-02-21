@@ -168,9 +168,37 @@ serve(async (req) => {
     });
 
     const analysisJson = await analysisResp.json().catch(() => ({}));
-    const rawResult = analysisJson.result ?? analysisJson.analysis ?? "";
 
-    let contentToStore = typeof rawResult === "string" ? rawResult : JSON.stringify(rawResult, null, 2);
+    // --- Robust extraction: try many common response shapes ---
+    const extractContent = (json: any): string => {
+      const paths = [
+        json?.result,
+        json?.analysis,
+        json?.output,
+        json?.data?.result,
+        json?.data?.analysis,
+        json?.content,
+        json?.text,
+      ];
+      for (const val of paths) {
+        if (val == null) continue;
+        const s = typeof val === "string" ? val : JSON.stringify(val, null, 2);
+        if (s.trim()) return s;
+      }
+      // Last resort: if json itself has meaningful keys beyond meta, stringify it
+      const keys = Object.keys(json || {}).filter(k => !["success", "analysisType", "claimId", "suggestedActions", "carrierDismantler", "claimFactsPack", "error"].includes(k));
+      if (keys.length > 0) {
+        const subset: Record<string, any> = {};
+        for (const k of keys) subset[k] = json[k];
+        const s = JSON.stringify(subset, null, 2);
+        if (s.length > 10) return s;
+      }
+      return "";
+    };
+
+    console.log("darwin-command analysisJson keys:", Object.keys(analysisJson), "result length:", String(analysisJson.result ?? "").length, "analysis length:", String(analysisJson.analysis ?? "").length);
+
+    let contentToStore = extractContent(analysisJson);
     let redacted = false;
     let redactionNotes = "";
 
@@ -180,6 +208,19 @@ serve(async (req) => {
       redacted = report.redacted;
       redactionNotes = report.notes;
       contentToStore = redactedContent;
+    }
+
+    // Guard: do not insert empty rows
+    if (!contentToStore.trim()) {
+      console.error("darwin-command: extracted content is empty, skipping generated_assets insert. analysisJson keys:", Object.keys(analysisJson));
+      return new Response(
+        JSON.stringify({
+          intent,
+          error: "Analysis completed but returned empty content. Please try again or check that the claim has sufficient data.",
+          analysisKeys: Object.keys(analysisJson),
+        }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const userId = createdBy ?? null;
