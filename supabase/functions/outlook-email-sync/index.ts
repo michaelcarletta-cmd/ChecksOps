@@ -29,12 +29,6 @@ async function refreshTokens(refreshToken: string): Promise<{ access_token: stri
 
   if (!MS_CLIENT_ID || !MS_CLIENT_SECRET) {
     throw new Error('Microsoft OAuth is not configured (MS_CLIENT_ID / MS_CLIENT_SECRET missing).');
-
-  if (!MS_CLIENT_ID || !MS_CLIENT_SECRET) {
-    throw new Error('Microsoft OAuth is not configured (MS_CLIENT_ID / MS_CLIENT_SECRET). Please reconnect Outlook after the app is configured.');
-(Outlook email sync: claim/subject matching, cleanup, 200 responses)
-(Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
-(Darwin Claim Intelligence: DB schema, financials, command engine, pipelines, timeline, UI command bar)
   }
 
   const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
