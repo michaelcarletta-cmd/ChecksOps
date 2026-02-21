@@ -322,6 +322,8 @@ serve(async (req) => {
             recipient_type: recipient.type,
             subject: subject,
             body: body,
+            provider_message_id: emailResponse.id || null,
+            send_status: 'sent',
           });
 
         if (dbError) {

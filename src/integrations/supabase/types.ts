@@ -3310,6 +3310,7 @@ export type Database = {
           mortgage_portal_password: string | null
           mortgage_portal_site: string | null
           mortgage_portal_username: string | null
+          org_id: string | null
           other_structures_limit: number | null
           partner_assigned_user_email: string | null
           partner_assigned_user_id: string | null
@@ -3374,6 +3375,7 @@ export type Database = {
           mortgage_portal_password?: string | null
           mortgage_portal_site?: string | null
           mortgage_portal_username?: string | null
+          org_id?: string | null
           other_structures_limit?: number | null
           partner_assigned_user_email?: string | null
           partner_assigned_user_id?: string | null
@@ -3438,6 +3440,7 @@ export type Database = {
           mortgage_portal_password?: string | null
           mortgage_portal_site?: string | null
           mortgage_portal_username?: string | null
+          org_id?: string | null
           other_structures_limit?: number | null
           partner_assigned_user_email?: string | null
           partner_assigned_user_id?: string | null
@@ -4310,9 +4313,11 @@ export type Database = {
           claim_id: string
           created_at: string | null
           id: string
+          provider_message_id: string | null
           recipient_email: string
           recipient_name: string | null
           recipient_type: string | null
+          send_status: string | null
           sent_at: string | null
           sent_by: string | null
           subject: string
@@ -4322,9 +4327,11 @@ export type Database = {
           claim_id: string
           created_at?: string | null
           id?: string
+          provider_message_id?: string | null
           recipient_email: string
           recipient_name?: string | null
           recipient_type?: string | null
+          send_status?: string | null
           sent_at?: string | null
           sent_by?: string | null
           subject: string
@@ -4334,9 +4341,11 @@ export type Database = {
           claim_id?: string
           created_at?: string | null
           id?: string
+          provider_message_id?: string | null
           recipient_email?: string
           recipient_name?: string | null
           recipient_type?: string | null
+          send_status?: string | null
           sent_at?: string | null
           sent_by?: string | null
           subject?: string
@@ -6797,6 +6806,7 @@ export type Database = {
           mortgage_portal_password: string | null
           mortgage_portal_site: string | null
           mortgage_portal_username: string | null
+          org_id: string | null
           other_structures_limit: number | null
           partner_assigned_user_email: string | null
           partner_assigned_user_id: string | null

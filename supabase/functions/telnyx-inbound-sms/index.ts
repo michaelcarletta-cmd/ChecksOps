@@ -85,20 +85,16 @@ async function sendClientSMS(supabase: any, to: string, body: string, claimId: s
   return { telnyxId };
 }
 
-/** Get claims scoped to user's org */
+/** Get claims scoped to user's org (uses claims.org_id for reliable scoping) */
 async function getUserOrgClaims(supabase: any, userId: string, options: { search?: string; limit?: number; openOnly?: boolean } = {}) {
   const { search, limit = 5, openOnly = false } = options;
   const { data: orgMember } = await supabase
     .from('org_members').select('org_id').eq('user_id', userId).limit(1).single();
   if (!orgMember?.org_id) return [];
-  const { data: orgMembers } = await supabase
-    .from('org_members').select('user_id').eq('org_id', orgMember.org_id);
-  const orgUserIds = (orgMembers || []).map((m: any) => m.user_id);
-  if (orgUserIds.length === 0) return [];
   let query = supabase
     .from('claims')
     .select('id, claim_number, policyholder_name, policyholder_phone, policyholder_email, status, updated_at')
-    .in('created_by', orgUserIds);
+    .eq('org_id', orgMember.org_id);
   if (openOnly) query = query.eq('is_closed', false);
   if (search) query = query.or(`claim_number.ilike.%${search}%,policyholder_name.ilike.%${search}%`);
   query = query.order('updated_at', { ascending: false }).limit(limit);
