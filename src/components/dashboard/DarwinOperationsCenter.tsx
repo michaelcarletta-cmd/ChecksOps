@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
+import { toast } from "sonner";
 import { 
   Bot, 
   Zap, 
@@ -21,7 +23,9 @@ import {
   ExternalLink,
   Pause,
   Play,
-  FileText
+  FileText,
+  RefreshCw,
+  Activity
 } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "react-router-dom";
@@ -60,6 +64,9 @@ interface ActionStats {
 
 export const DarwinOperationsCenter = () => {
   const [activeTab, setActiveTab] = useState("overview");
+
+  const [bulkSyncRunning, setBulkSyncRunning] = useState(false);
+  const [bulkSyncProgress, setBulkSyncProgress] = useState({ current: 0, total: 0, healthy: 0, attention: 0, errors: 0 });
 
   // Fetch autonomous claims
   const { data: autonomousClaims, isLoading: claimsLoading } = useQuery({
@@ -213,6 +220,62 @@ export const DarwinOperationsCenter = () => {
     }
   };
 
+  const runBulkHealthChecks = useCallback(async () => {
+    setBulkSyncRunning(true);
+    setBulkSyncProgress({ current: 0, total: 0, healthy: 0, attention: 0, errors: 0 });
+
+    try {
+      // Fetch all claim IDs
+      const { data: allClaims, error: fetchErr } = await supabase
+        .from("claims")
+        .select("id, claim_number")
+        .eq("is_closed", false)
+        .order("created_at", { ascending: false });
+
+      if (fetchErr) throw fetchErr;
+      if (!allClaims || allClaims.length === 0) {
+        toast.info("No open claims to process");
+        setBulkSyncRunning(false);
+        return;
+      }
+
+      const total = allClaims.length;
+      setBulkSyncProgress(p => ({ ...p, total }));
+      toast.info(`Starting health checks on ${total} claims...`);
+
+      let healthy = 0;
+      let attention = 0;
+      let errors = 0;
+
+      for (let i = 0; i < allClaims.length; i++) {
+        const claim = allClaims[i];
+        try {
+          const { data, error } = await supabase.functions.invoke("darwin-health-check", {
+            body: { claimId: claim.id },
+          });
+          if (error) {
+            errors++;
+            console.error(`Health check failed for ${claim.claim_number}:`, error);
+          } else if (data?.status === "Healthy") {
+            healthy++;
+          } else {
+            attention++;
+          }
+        } catch {
+          errors++;
+        }
+        setBulkSyncProgress({ current: i + 1, total, healthy, attention, errors });
+      }
+
+      toast.success(`Bulk sync complete: ${healthy} healthy, ${attention} need attention, ${errors} errors`);
+    } catch (err) {
+      console.error("Bulk sync error:", err);
+      toast.error("Bulk sync failed");
+    } finally {
+      setBulkSyncRunning(false);
+    }
+  }, []);
+
   if (claimsLoading || logsLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -223,6 +286,55 @@ export const DarwinOperationsCenter = () => {
 
   return (
     <div className="space-y-6">
+      {/* Bulk Sync Card */}
+      <Card className="bg-card border-border">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-primary" />
+              <CardTitle className="text-lg">Bulk Health Check Sync</CardTitle>
+            </div>
+            <Button
+              onClick={runBulkHealthChecks}
+              disabled={bulkSyncRunning}
+              size="sm"
+            >
+              {bulkSyncRunning ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              {bulkSyncRunning ? "Running..." : "Sync All Claims"}
+            </Button>
+          </div>
+          <CardDescription>Run health checks on all open claims to refresh expert detection, timeline, and denial analysis</CardDescription>
+        </CardHeader>
+        {(bulkSyncRunning || bulkSyncProgress.total > 0) && (
+          <CardContent className="pt-0">
+            <Progress
+              value={bulkSyncProgress.total > 0 ? (bulkSyncProgress.current / bulkSyncProgress.total) * 100 : 0}
+              className="h-2 mb-2"
+            />
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>{bulkSyncProgress.current} / {bulkSyncProgress.total} claims processed</span>
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1">
+                  <CheckCircle className="h-3 w-3 text-green-500" /> {bulkSyncProgress.healthy}
+                </span>
+                <span className="flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3 text-amber-500" /> {bulkSyncProgress.attention}
+                </span>
+                {bulkSyncProgress.errors > 0 && (
+                  <span className="flex items-center gap-1">
+                    <XCircle className="h-3 w-3 text-red-500" /> {bulkSyncProgress.errors}
+                  </span>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-card border-border">
