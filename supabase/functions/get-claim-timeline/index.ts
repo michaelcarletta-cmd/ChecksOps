@@ -41,7 +41,7 @@ serve(async (req) => {
 
     const { data: claimEvents, error: evErr } = await supabase
       .from("claim_events")
-      .select("id, event_type, occurred_at, summary, actor, source_artifact_id, source_artifact_type, metadata_json")
+      .select("id, event_type, occurred_at, summary, actor, source_artifact_id, source_artifact_type, metadata_json, date_source, date_confidence, date_evidence, doc_type")
       .eq("claim_id", claimId)
       .order("occurred_at", { ascending: false });
 
@@ -55,7 +55,13 @@ serve(async (req) => {
           actor: e.actor ?? null,
           source_artifact_id: e.source_artifact_id ?? null,
           source_artifact_type: e.source_artifact_type ?? null,
-          metadata_json: (e.metadata_json as Record<string, unknown>) ?? {},
+          metadata_json: {
+            ...(e.metadata_json as Record<string, unknown>) ?? {},
+            date_source: e.date_source,
+            date_confidence: e.date_confidence,
+            date_evidence: e.date_evidence,
+            doc_type: e.doc_type,
+          },
         }))
       );
     }

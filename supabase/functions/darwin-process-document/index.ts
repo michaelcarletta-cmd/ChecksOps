@@ -182,6 +182,14 @@ serve(async (req) => {
         trigger_source: 'darwin_process_document',
       });
 
+    // === DOCUMENT-DRIVEN TIMELINE: Extract dates → claim_events ===
+    if (targetClaimId && classificationResult.confidence >= 0.6) {
+      extractDatesToClaimEvents(
+        supabase, targetClaimId, fileId, fileName || file?.file_name || '',
+        classificationResult
+      ).catch(err => console.error('Date extraction to claim_events error:', err));
+    }
+
     // === CROSS-CLAIM VECTOR INDEX: Chunk + Embed for retrieval ===
     if (textContent && textContent.length >= 100 && targetClaimId) {
       indexDocumentForRetrieval(
@@ -1093,4 +1101,146 @@ Freedom Claims Team`;
   });
 
   console.log(`Drafted client update email for claim ${claim.claim_number} - status: ${newStatus}`);
+}
+
+// =========================================================================
+// DOCUMENT-DRIVEN TIMELINE: Extract dates from classification → claim_events
+// =========================================================================
+async function extractDatesToClaimEvents(
+  supabase: any,
+  claimId: string,
+  fileId: string,
+  fileName: string,
+  classificationResult: ClassificationResult
+) {
+  const metadata = classificationResult.metadata as any;
+  const docType = classificationResult.classification;
+
+  // Collect all date entries to insert
+  const events: Array<{
+    claim_id: string;
+    event_type: string;
+    occurred_at: string;
+    summary: string;
+    source_artifact_id: string | null;
+    source_artifact_type: string;
+    date_source: string;
+    date_confidence: number;
+    date_evidence: string | null;
+    doc_type: string;
+    metadata_json: Record<string, unknown>;
+  }> = [];
+
+  // 1) Document issuance date
+  const documentDate = metadata.document_date || metadata.date_mentioned;
+  if (documentDate) {
+    const validation = validateExtractedDate(documentDate);
+    if (validation.isValid && validation.correctedDate) {
+      events.push({
+        claim_id: claimId,
+        event_type: `${docType}_issued`,
+        occurred_at: new Date(validation.correctedDate).toISOString(),
+        summary: `${docType.replace(/_/g, ' ')} issued: ${fileName}`,
+        source_artifact_id: fileId || null,
+        source_artifact_type: 'claim_file',
+        date_source: 'document_extracted',
+        date_confidence: metadata.date_confidence ?? classificationResult.confidence,
+        date_evidence: `Document date extracted from ${fileName}`,
+        doc_type: docType,
+        metadata_json: { file_name: fileName, extraction_method: 'ai_classification' },
+      });
+    }
+  }
+
+  // 2) All dates_found entries (loss_date, deadline, claim_date, etc.)
+  const datesFound = metadata.dates_found;
+  if (Array.isArray(datesFound)) {
+    for (const df of datesFound) {
+      if (!df?.date || df.type === 'letter_date') continue; // letter_date already handled above
+      const validation = validateExtractedDate(df.date);
+      if (!validation.isValid || !validation.correctedDate) continue;
+
+      const eventTypeMap: Record<string, string> = {
+        loss_date: 'loss_event',
+        claim_date: 'claim_filed',
+        policy_date: 'policy_period',
+        deadline: 'deadline',
+        inspection_date: 'inspection',
+        payment_date: 'payment',
+      };
+      const eventType = eventTypeMap[df.type] || df.type || 'date_mentioned';
+
+      events.push({
+        claim_id: claimId,
+        event_type: eventType,
+        occurred_at: new Date(validation.correctedDate).toISOString(),
+        summary: df.context || `${df.type}: ${df.date}`,
+        source_artifact_id: fileId || null,
+        source_artifact_type: 'claim_file',
+        date_source: 'document_extracted',
+        date_confidence: metadata.date_confidence ?? 0.8,
+        date_evidence: df.context || null,
+        doc_type: docType,
+        metadata_json: { file_name: fileName, date_type: df.type, extraction_method: 'ai_classification' },
+      });
+    }
+  }
+
+  // 3) Deadline date
+  if (metadata.deadline_mentioned) {
+    const validation = validateExtractedDate(metadata.deadline_mentioned);
+    if (validation.isValid && validation.correctedDate) {
+      events.push({
+        claim_id: claimId,
+        event_type: 'deadline',
+        occurred_at: new Date(validation.correctedDate).toISOString(),
+        summary: `Deadline mentioned in ${fileName}`,
+        source_artifact_id: fileId || null,
+        source_artifact_type: 'claim_file',
+        date_source: 'document_extracted',
+        date_confidence: metadata.date_confidence ?? 0.7,
+        date_evidence: `Deadline extracted from ${fileName}`,
+        doc_type: docType,
+        metadata_json: { file_name: fileName, extraction_method: 'ai_classification' },
+      });
+    }
+  }
+
+  // 4) If NO dates extracted at all, create a system_upload event
+  if (events.length === 0) {
+    events.push({
+      claim_id: claimId,
+      event_type: 'file_uploaded',
+      occurred_at: new Date().toISOString(),
+      summary: `File uploaded: ${fileName}`,
+      source_artifact_id: fileId || null,
+      source_artifact_type: 'claim_file',
+      date_source: 'system_upload',
+      date_confidence: 1.0,
+      date_evidence: null,
+      doc_type: docType,
+      metadata_json: { file_name: fileName, extraction_method: 'upload_timestamp' },
+    });
+  }
+
+  // Deduplicate: don't insert if same claim + event_type + occurred_at + source_artifact_id exists
+  for (const evt of events) {
+    const { data: existing } = await supabase
+      .from('claim_events')
+      .select('id')
+      .eq('claim_id', evt.claim_id)
+      .eq('event_type', evt.event_type)
+      .eq('occurred_at', evt.occurred_at)
+      .eq('source_artifact_id', evt.source_artifact_id)
+      .limit(1);
+
+    if (!existing || existing.length === 0) {
+      const { error } = await supabase.from('claim_events').insert(evt);
+      if (error) {
+        console.error(`Failed to insert claim_event: ${error.message}`, evt);
+      } else {
+        console.log(`claim_event inserted: ${evt.event_type} @ ${evt.occurred_at} from ${fileName}`);
+      }
+    }
+  }
 }

@@ -5047,91 +5047,93 @@ POLICY PROVISIONS SUPPORTING OUR POSITION
         const documents = additionalContext?.documents || [];
         const emails = additionalContext?.emails || [];
 
-        systemPrompt = `You are Darwin, an expert public adjuster AI. Your task is to read through ALL provided documents and emails and extract EVERY date mentioned in them to build a comprehensive chronological timeline of the claim.
+        // Pull structured claim_events for document-driven timeline
+        const { data: claimEvents } = await supabase
+          .from('claim_events')
+          .select('id, event_type, occurred_at, summary, actor, source_artifact_id, source_artifact_type, date_source, date_confidence, date_evidence, doc_type, metadata_json')
+          .eq('claim_id', claimId)
+          .order('occurred_at', { ascending: true });
 
-FORMATTING: Plain text only. NO markdown.
+        const eventsBlock = (claimEvents && claimEvents.length > 0)
+          ? claimEvents.map((e: any, i: number) =>
+            `${i + 1}. [${e.occurred_at?.split('T')[0] || 'Unknown'}] ${e.event_type}: ${e.summary || '—'}\n   Source: ${e.doc_type || e.source_artifact_type || '—'} | Confidence: ${Math.round((e.date_confidence || 1) * 100)}% | Date source: ${e.date_source || '—'}${e.date_evidence ? `\n   Evidence: "${e.date_evidence}"` : ''}`
+          ).join('\n')
+          : 'No claim_events found yet. Rely on document text excerpts below.';
 
-For each timeline entry, include:
-1. DATE (formatted as MM/DD/YYYY)
-2. EVENT DESCRIPTION (what happened on that date)
-3. SOURCE DOCUMENT (which file or email contained this date)
-4. SIGNIFICANCE (why this date matters to the claim)
-5. Any DEADLINES triggered by this event
+        const lossDate = claim?.loss_date || 'Unknown';
 
-Look for dates in:
-- Letters (date of correspondence, referenced dates within text)
-- Estimates (date prepared, inspection date)
-- Denial letters (date issued, appeal deadlines)
-- Engineering reports (inspection date, report date)
-- Policy documents (policy period, renewal dates)
-- Emails (sent date, referenced dates)
-- Inspection reports (inspection date, follow-up dates)
-- Payment records and check dates
-- Any deadline references or statutory timeframes
+        systemPrompt = `You are Darwin, an expert public adjuster AI building a document-driven claim timeline.
+
+CRITICAL: Use the claim_events table as the PRIMARY source of truth for the timeline. These events have dates EXTRACTED FROM INSIDE the documents (not upload timestamps). Only fall back to document text excerpts if claim_events are sparse.
+
+The claim's LOSS DATE (${lossDate}) is the timeline anchor. All events should be placed relative to this date.
+
+FORMATTING: Return ONLY valid JSON matching this schema:
+{
+  "timeline": [
+    {
+      "date": "YYYY-MM-DD",
+      "event": "What happened",
+      "source_document": "filename or source",
+      "significance": "Why it matters",
+      "date_source": "document_extracted|system_upload|inferred",
+      "confidence": 0.0-1.0,
+      "deadline_triggered": "description or null"
+    }
+  ],
+  "timing_risk_flags": [
+    {
+      "flag_type": "prompt_notice|sol|carrier_delay|bad_faith|gap",
+      "description": "What the risk is",
+      "severity": "high|medium|low",
+      "relevant_dates": ["YYYY-MM-DD"],
+      "regulation": "Applicable statute or regulation"
+    }
+  ],
+  "missing_date_evidence": [
+    {
+      "needed": "What date/document is missing",
+      "why_critical": "Why this matters for the timeline",
+      "priority": "high|medium|low"
+    }
+  ],
+  "deadline_compliance": {
+    "summary": "Overall assessment of carrier deadline compliance",
+    "violations": ["List of specific violations"]
+  },
+  "gap_analysis": {
+    "inactive_periods": [{"start": "YYYY-MM-DD", "end": "YYYY-MM-DD", "days": 0, "concern": "description"}]
+  }
+}
 
 State: ${stateInfo.stateName}
-Applicable Deadlines: ${stateInfo.adminCode}
-
-After building the timeline, add:
-1. DEADLINE ANALYSIS: What regulatory deadlines were triggered and whether the carrier met them
-2. GAP ANALYSIS: Periods with no activity that may indicate carrier delay
-3. BAD FAITH INDICATORS: Any timeline patterns suggesting bad faith (excessive delays, missed deadlines)`;
+Applicable Deadlines: ${stateInfo.adminCode}`;
 
         userPrompt = `${claimSummary}
 
-Build a comprehensive chronological timeline from the following sources:
+=== LOSS DATE (TIMELINE ANCHOR) ===
+${lossDate}
 
-=== DOCUMENTS (${documents.length} files with extracted text) ===
+=== CLAIM EVENTS (${claimEvents?.length || 0} events from document date extraction) ===
+${eventsBlock}
+
+=== DOCUMENTS (${documents.length} files with text excerpts — use for supplemental date extraction) ===
 ${documents.map((d: any, i: number) => `
-DOCUMENT ${i + 1}: ${d.file_name}
-Classification: ${d.classification}
-Folder: ${d.folder}
+DOC ${i + 1}: ${d.file_name}
+Classification: ${d.classification} | Folder: ${d.folder}
 Uploaded: ${d.uploaded_at || 'Unknown'}
---- Text Excerpt ---
+--- Excerpt ---
 ${d.text_excerpt}
---- End Excerpt ---
+---
 `).join('\n')}
 
 === EMAILS (${emails.length} messages) ===
 ${emails.map((e: any, i: number) => `
-EMAIL ${i + 1}: ${e.subject}
-Recipient: ${e.recipient || 'Unknown'}
-Date: ${e.date}
---- Body Excerpt ---
+EMAIL ${i + 1}: ${e.subject} (${e.date})
 ${e.body_excerpt}
---- End Excerpt ---
 `).join('\n')}
 
-=== KNOWN CLAIM DATES ===
-- Loss Date: ${claim.loss_date || 'Unknown'}
-- Claim Filed: ${claim.created_at || 'Unknown'}
-
-=== OUTPUT FORMAT ===
-
-COMPREHENSIVE CLAIM TIMELINE
-===============================
-
-[DATE] - [EVENT]
-  Source: [Document/Email name]
-  Significance: [Why it matters]
-  ${'{'}Deadline: [If this triggers any regulatory deadline]{'}'}
-
-[Continue chronologically...]
-
-===============================
-DEADLINE COMPLIANCE ANALYSIS
-===============================
-[Analysis of carrier's compliance with ${stateInfo.stateName} regulatory deadlines]
-
-===============================
-GAP ANALYSIS
-===============================
-[Periods of inactivity and potential delay tactics]
-
-===============================
-BAD FAITH TIMELINE INDICATORS
-===============================
-[Any patterns suggesting carrier bad faith]`;
+Build the comprehensive timeline, identify timing risk flags, and list missing date evidence.`;
         break;
       }
 
