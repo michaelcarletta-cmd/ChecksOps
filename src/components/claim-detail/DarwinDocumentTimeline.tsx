@@ -121,6 +121,50 @@ export const DarwinDocumentTimeline = ({ claimId, claim }: DarwinDocumentTimelin
     setRawText(result);
   };
 
+  const rebuildTimeline = async () => {
+    setLoading(true);
+    try {
+      // 1) Wipe all existing claim_events for this claim
+      await supabase.from('claim_events').delete().eq('claim_id', claimId);
+      console.log('[RebuildTimeline] Wiped all claim_events for claim', claimId);
+
+      // 2) Reset all files to unprocessed so darwin-process-document re-extracts
+      await supabase.from('claim_files')
+        .update({ processed_by_darwin: false })
+        .eq('claim_id', claimId);
+
+      // 3) Get all files and re-trigger processing
+      const { data: files } = await supabase
+        .from('claim_files')
+        .select('id, file_name')
+        .eq('claim_id', claimId);
+
+      let processed = 0;
+      for (const f of (files || [])) {
+        try {
+          await supabase.functions.invoke('darwin-process-document', {
+            body: { fileId: f.id, claimId }
+          });
+          processed++;
+        } catch (err) {
+          console.error(`[RebuildTimeline] Failed to process file ${f.file_name}:`, err);
+        }
+      }
+
+      // 4) Reload events and regenerate AI timeline
+      await loadClaimEvents();
+      toast.success(`Timeline rebuilt: ${processed} files reprocessed`);
+
+      // 5) Now generate the AI-driven timeline summary
+      await generateTimeline();
+    } catch (err: any) {
+      console.error('Rebuild timeline error:', err);
+      toast.error(err.message || 'Failed to rebuild timeline');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const generateTimeline = async () => {
     setLoading(true);
     try {
@@ -238,7 +282,7 @@ export const DarwinDocumentTimeline = ({ claimId, claim }: DarwinDocumentTimelin
           </div>
           {hasContent && (
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={generateTimeline} disabled={loading}>
+              <Button variant="outline" size="sm" onClick={rebuildTimeline} disabled={loading}>
                 <RefreshCw className={cn("h-4 w-4 mr-1", loading && "animate-spin")} />
                 Rebuild
               </Button>
