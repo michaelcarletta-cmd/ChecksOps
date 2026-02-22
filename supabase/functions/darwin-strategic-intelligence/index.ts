@@ -431,8 +431,21 @@ serve(async (req) => {
       ? Math.floor((Date.now() - new Date(claim.created_at).getTime()) / (1000 * 60 * 60 * 24))
       : null;
 
-    // Calculate earliest documented activity from claim_events (excluding system events)
-    const documentSourcedEvents = claimEvents.filter((e: any) => 
+    // === ANCHOR EVENT TYPES ONLY ===
+    // Filter claim_events to only anchor types (ignore date_mentioned/file_uploaded)
+    const ANCHOR_EVENT_TYPES = new Set([
+      'denial_issued', 'acknowledgement_issued', 'ror_issued', 'fnol_received',
+      'inspection', 'payment', 'estimate_issued', 'engineer_report_issued',
+      'loss_event', 'deadline', 'policy_issued', 'invoice_issued',
+      'correspondence_issued', 'claim_filed',
+    ]);
+    
+    const anchorEvents = claimEvents.filter((e: any) => ANCHOR_EVENT_TYPES.has(e.event_type));
+    const nonAnchorCount = claimEvents.length - anchorEvents.length;
+    console.log(`[Strategic] Anchor events: ${anchorEvents.length}/${claimEvents.length} (filtered ${nonAnchorCount} non-anchor like date_mentioned/file_uploaded)`);
+
+    // Calculate earliest documented activity from anchor events only
+    const documentSourcedEvents = anchorEvents.filter((e: any) => 
       e.date_source !== 'system_upload' && e.event_type !== 'claim_created'
     );
     const earliestDocEvent = documentSourcedEvents.length > 0 ? documentSourcedEvents[0] : null;
@@ -441,15 +454,19 @@ serve(async (req) => {
       ? Math.floor((firstDocumentDate.getTime() - new Date(claim.loss_date).getTime()) / (1000 * 60 * 60 * 24))
       : null;
 
-    // Build claim events timeline context for AI
-    const claimEventsContext = claimEvents.length > 0
-      ? claimEvents.slice(0, 20).map((e: any) => {
+    // Build claim events timeline context for AI — anchor events only, with citations
+    const claimEventsContext = anchorEvents.length > 0
+      ? anchorEvents.slice(0, 25).map((e: any) => {
           const dateStr = e.occurred_at ? new Date(e.occurred_at).toLocaleDateString() : 'Unknown';
           const source = e.date_source === 'document_extracted' ? '(from document)' : 
+                         e.date_source === 'document_text_regex' ? '(regex from doc)' :
                          e.date_source === 'crm_field' ? '(from CRM)' : '(system)';
-          return `  - [${e.event_type}] ${e.summary} | ${dateStr} ${source}`;
+          const fileName = e.metadata_json?.file_name || '';
+          const snippet = (e.date_evidence || '').substring(0, 100);
+          const citation = fileName ? ` [Source: ${fileName}${snippet ? ` — "${snippet}"` : ''}]` : '';
+          return `  - [${e.event_type}] ${e.summary} | ${dateStr} ${source}${citation}`;
         }).join('\n')
-      : '  No claim events recorded';
+      : '  No anchor claim events recorded (only file_uploaded/date_mentioned events exist — insufficient for strategic analysis)';
     
     const totalChecksReceived = checks.reduce((sum, c) => sum + (c.amount || 0), 0);
     const carrierEstimate = settlement?.estimate_amount || 0;
@@ -890,7 +907,10 @@ CRITICAL RULES:
 - Focus on facts, regulations, building codes, and industry standards
 - Be direct and opinionated - tell them what you think, not just what you see
 - Prioritize by impact - what matters most right now
-- Think like you're protecting a real family's financial recovery`;
+- Think like you're protecting a real family's financial recovery
+- TIMELINE & BAD FAITH ANALYSIS: Use ONLY anchor event types (denial_issued, acknowledgement_issued, ror_issued, fnol_received, inspection, payment, estimate_issued, engineer_report_issued) for deadline calculations and carrier delay analysis. IGNORE date_mentioned and file_uploaded events — they are not evidence-based.
+- CITATION REQUIREMENT: Every warning about carrier delays, bad faith, or statutory violations MUST cite the specific source file name and evidence snippet. If you cannot cite a specific document, downgrade the warning severity to "low" and append "(Needs Review — no source citation available)" to the title.
+- When generating warnings, include a "citation" field with {"file_name": "...", "snippet": "..."} for each warning that references a document. Warnings without citations must have severity "low" and title suffixed with "(Needs Review)".`;
 
     let userPrompt = '';
     let responseFormat = '';
@@ -914,10 +934,11 @@ Generate a COMPLETE strategic analysis. You MUST return ONLY valid JSON matching
   "warnings": [
     {
       "type": "deadline_risk|evidence_gap|coverage_opportunity|carrier_violation|documentation_issue|strategy_alert",
-      "severity": "critical|high|medium|low",
-      "title": "Brief warning title",
+      "severity": "critical|high|medium|low (MUST be 'low' if no citation available)",
+      "title": "Brief warning title (append '(Needs Review)' if no citation)",
       "message": "Detailed explanation",
-      "suggested_action": "What to do"
+      "suggested_action": "What to do",
+      "citation": {"file_name": "source document name or null", "snippet": "evidence text or null"}
     }
   ],
   "leverage_opportunities": [
@@ -1079,10 +1100,11 @@ You MUST return ONLY valid JSON matching this EXACT structure (no markdown, no c
   "warnings": [
     {
       "type": "deadline_risk|evidence_gap|coverage_opportunity|carrier_violation|documentation_issue|strategy_alert",
-      "severity": "critical|high|medium|low",
-      "title": "Brief warning title",
+      "severity": "critical|high|medium|low (MUST be 'low' if no citation available)",
+      "title": "Brief warning title (append '(Needs Review)' if no citation)",
       "message": "Detailed explanation",
-      "suggested_action": "What to do"
+      "suggested_action": "What to do",
+      "citation": {"file_name": "source document name or null", "snippet": "evidence text or null"}
     }
   ],
   "leverage_opportunities": [
