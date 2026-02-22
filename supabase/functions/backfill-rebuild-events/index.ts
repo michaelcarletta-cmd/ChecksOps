@@ -6,7 +6,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const BATCH_SIZE = 10; // claims per invocation
+const BATCH_SIZE = 10;
+const JOB_TYPE = "backfill_rebuild_events";
+const TTL_SECONDS = 120;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -22,42 +24,48 @@ serve(async (req) => {
     const cursor = body.cursor || null;
     const release = body.release || false;
 
-    const JOB_TYPE = "backfill_rebuild_events";
-
     // Force-release lock
     if (release) {
-      await supabase.from("darwin_jobs").update({ status: "idle", completed_at: new Date().toISOString() }).eq("job_type", JOB_TYPE);
+      await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });
       return new Response(JSON.stringify({ success: true, message: "Lock released" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Also check that Step 1 is not running
-    const { data: step1Job } = await supabase.from("darwin_jobs").select("status").eq("job_type", "backfill_extracted_text").single();
-    if (step1Job?.status === "running") {
+    // Check that Step 1 is not running (heartbeat-aware)
+    const { data: step1Row } = await supabase.from("darwin_jobs").select("status, heartbeat_at, ttl_seconds").eq("job_type", "backfill_extracted_text").single();
+    if (step1Row?.status === "running") {
+      // Only block if heartbeat is fresh
+      const heartbeatAge = step1Row.heartbeat_at
+        ? (Date.now() - new Date(step1Row.heartbeat_at).getTime()) / 1000
+        : Infinity;
+      if (heartbeatAge < (step1Row.ttl_seconds || 120)) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Step 1 (text extraction) is still running. Wait for it to finish." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // Atomic acquire via RPC (handles TTL-based steal)
+    const { data: lockResult, error: lockErr } = await supabase.rpc("acquire_darwin_job", {
+      p_job_type: JOB_TYPE,
+      p_claimed_by: "backfill-rebuild-events",
+      p_ttl_seconds: TTL_SECONDS,
+    });
+
+    if (lockErr) {
+      return new Response(JSON.stringify({ success: false, error: `Lock RPC error: ${lockErr.message}` }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!lockResult?.acquired) {
       return new Response(
-        JSON.stringify({ success: false, error: "Step 1 (text extraction) is still running. Wait for it to finish." }),
+        JSON.stringify({ success: false, error: "Job already running", job: lockResult }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Acquire lock
-    const { data: lockRow, error: lockErr } = await supabase
-      .from("darwin_jobs")
-      .update({ status: "running", started_at: new Date().toISOString(), claimed_by: "backfill-rebuild-events", error_message: null })
-      .eq("job_type", JOB_TYPE)
-      .eq("status", "idle")
-      .select()
-      .maybeSingle();
-
-    if (lockErr || !lockRow) {
-      const { data: existing } = await supabase.from("darwin_jobs").select("status, started_at, claimed_by").eq("job_type", JOB_TYPE).single();
-      return new Response(
-        JSON.stringify({ success: false, error: "Job already running", job: existing }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Find claims that have files with extracted_text but need event rebuild
-    // We pick claims where at least one file has text and processed_by_darwin = false
+    // Find claims to process
     let query = supabase
       .from("claims")
       .select("id, claim_number")
@@ -72,12 +80,14 @@ serve(async (req) => {
     const { data: claims, error: claimError } = await query;
 
     if (claimError) {
+      await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE, p_error_message: claimError.message });
       return new Response(JSON.stringify({ success: false, error: claimError.message }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (!claims || claims.length === 0) {
+      await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });
       return new Response(
         JSON.stringify({ success: true, processed: 0, remaining: 0, cursor: null }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -94,7 +104,6 @@ serve(async (req) => {
 
     for (const claim of claims) {
       try {
-        // 1. Delete ONLY derived claim_events (from document parsing), preserve manual/CRM events
         const derivedSources = ["document_extracted", "document_text_regex", "system_upload"];
         const { count: deletedEvents } = await supabase
           .from("claim_events")
@@ -102,13 +111,11 @@ serve(async (req) => {
           .eq("claim_id", claim.id)
           .in("date_source", derivedSources);
 
-        // 2. Mark all files as unprocessed so darwin-process-document will re-run
         await supabase
           .from("claim_files")
           .update({ processed_by_darwin: false })
           .eq("claim_id", claim.id);
 
-        // 3. Get files with extracted_text to reprocess
         const { data: files } = await supabase
           .from("claim_files")
           .select("id, file_name, file_path")
@@ -118,7 +125,6 @@ serve(async (req) => {
         let reprocessed = 0;
         const fileCount = files?.length || 0;
 
-        // 4. Invoke darwin-process-document for each file
         if (files && files.length > 0) {
           for (const file of files) {
             try {
@@ -153,9 +159,12 @@ serve(async (req) => {
     const lastId = claims[claims.length - 1].id;
     const remaining = Math.max(0, (totalRemaining || 0) - (cursor ? 0 : claims.length));
 
-    // Release lock if done
     if (remaining <= 0) {
-      await supabase.from("darwin_jobs").update({ status: "idle", completed_at: new Date().toISOString() }).eq("job_type", "backfill_rebuild_events");
+      // Done — release lock
+      await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });
+    } else {
+      // More work — heartbeat
+      await supabase.rpc("heartbeat_darwin_job", { p_job_type: JOB_TYPE, p_claimed_by: "backfill-rebuild-events" });
     }
 
     return new Response(
@@ -174,7 +183,7 @@ serve(async (req) => {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const sb = createClient(supabaseUrl, serviceKey);
-      await sb.from("darwin_jobs").update({ status: "idle", completed_at: new Date().toISOString(), error_message: e instanceof Error ? e.message : "Unknown error" }).eq("job_type", "backfill_rebuild_events");
+      await sb.rpc("release_darwin_job", { p_job_type: JOB_TYPE, p_error_message: e instanceof Error ? e.message : "Unknown error" });
     } catch { /* best effort */ }
     return new Response(
       JSON.stringify({ success: false, error: e instanceof Error ? e.message : "Unknown error" }),

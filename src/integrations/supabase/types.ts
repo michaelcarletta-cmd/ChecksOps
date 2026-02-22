@@ -4096,10 +4096,12 @@ export type Database = {
           completed_at: string | null
           created_at: string
           error_message: string | null
+          heartbeat_at: string | null
           id: string
           job_type: string
           started_at: string | null
           status: string
+          ttl_seconds: number
           updated_at: string
         }
         Insert: {
@@ -4107,10 +4109,12 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           error_message?: string | null
+          heartbeat_at?: string | null
           id?: string
           job_type: string
           started_at?: string | null
           status?: string
+          ttl_seconds?: number
           updated_at?: string
         }
         Update: {
@@ -4118,10 +4122,12 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           error_message?: string | null
+          heartbeat_at?: string | null
           id?: string
           job_type?: string
           started_at?: string | null
           status?: string
+          ttl_seconds?: number
           updated_at?: string
         }
         Relationships: []
@@ -6947,6 +6953,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      acquire_darwin_job: {
+        Args: {
+          p_claimed_by: string
+          p_job_type: string
+          p_ttl_seconds?: number
+        }
+        Returns: Json
+      }
       can_manage_roles: { Args: { _user_id: string }; Returns: boolean }
       create_claim_for_staff: {
         Args: {
@@ -7089,6 +7103,10 @@ export type Database = {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean
       }
+      heartbeat_darwin_job: {
+        Args: { p_claimed_by: string; p_job_type: string }
+        Returns: boolean
+      }
       invalidate_all_sessions: { Args: { p_user_id?: string }; Returns: number }
       invalidate_session: {
         Args: { p_session_token: string }
@@ -7166,6 +7184,10 @@ export type Database = {
           p_session_token: string
         }
         Returns: string
+      }
+      release_darwin_job: {
+        Args: { p_error_message?: string; p_job_type: string }
+        Returns: boolean
       }
       search_claims_by_proximity: {
         Args: {

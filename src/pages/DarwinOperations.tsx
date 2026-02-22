@@ -110,15 +110,25 @@ const DarwinOperations = () => {
 
   const step2Disabled = (textCoverage !== null && textCoverage < 30) || textBackfill.status === "running";
 
-  // Fetch server-side job locks on mount to detect jobs started by other sessions
+  // Fetch server-side job locks on mount (heartbeat-aware)
   const [serverJobs, setServerJobs] = useState<Record<string, string>>({});
   const fetchServerJobs = useCallback(async () => {
     const { data } = await supabase
       .from("darwin_jobs")
-      .select("job_type, status");
+      .select("job_type, status, heartbeat_at, ttl_seconds");
     if (data) {
       const map: Record<string, string> = {};
-      data.forEach((j: any) => { map[j.job_type] = j.status; });
+      data.forEach((j: any) => {
+        // Treat as idle if heartbeat expired
+        if (j.status === "running" && j.heartbeat_at) {
+          const age = (Date.now() - new Date(j.heartbeat_at).getTime()) / 1000;
+          if (age > (j.ttl_seconds || 120)) {
+            map[j.job_type] = "idle"; // stale lock
+            return;
+          }
+        }
+        map[j.job_type] = j.status;
+      });
       setServerJobs(map);
     }
   }, []);
