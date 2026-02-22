@@ -384,7 +384,8 @@ serve(async (req) => {
       deadlinesResult,
       adjustersResult,
       diaryResult,
-      notesResult
+      notesResult,
+      claimEventsResult
     ] = await Promise.all([
       supabase.from('claims').select('*, clients(*)').eq('id', claimId).single(),
       supabase.from('claim_files').select('*').eq('claim_id', claimId),
@@ -397,7 +398,8 @@ serve(async (req) => {
       supabase.from('claim_carrier_deadlines').select('*').eq('claim_id', claimId),
       supabase.from('claim_adjusters').select('*').eq('claim_id', claimId),
       supabase.from('claim_communications_diary').select('*').eq('claim_id', claimId).order('communication_date', { ascending: false }),
-      supabase.from('notes').select('*').eq('claim_id', claimId).order('created_at', { ascending: false })
+      supabase.from('notes').select('*').eq('claim_id', claimId).order('created_at', { ascending: false }),
+      supabase.from('claim_events').select('*').eq('claim_id', claimId).order('occurred_at', { ascending: true })
     ]);
 
     if (claimResult.error || !claimResult.data) {
@@ -416,6 +418,7 @@ serve(async (req) => {
     const adjusters = adjustersResult.data || [];
     const diary = diaryResult.data || [];
     const notes = notesResult.data || [];
+    const claimEvents = claimEventsResult.data || [];
 
     // State code will be determined after property address parsing - placeholder
     let stateCode = 'PA'; // Default, will be updated after address parsing
@@ -427,6 +430,26 @@ serve(async (req) => {
     const daysOpen = claim.created_at
       ? Math.floor((Date.now() - new Date(claim.created_at).getTime()) / (1000 * 60 * 60 * 24))
       : null;
+
+    // Calculate earliest documented activity from claim_events (excluding system events)
+    const documentSourcedEvents = claimEvents.filter((e: any) => 
+      e.date_source !== 'system_upload' && e.event_type !== 'claim_created'
+    );
+    const earliestDocEvent = documentSourcedEvents.length > 0 ? documentSourcedEvents[0] : null;
+    const firstDocumentDate = earliestDocEvent?.occurred_at ? new Date(earliestDocEvent.occurred_at) : null;
+    const daysBetweenLossAndFirstDoc = (claim.loss_date && firstDocumentDate)
+      ? Math.floor((firstDocumentDate.getTime() - new Date(claim.loss_date).getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+
+    // Build claim events timeline context for AI
+    const claimEventsContext = claimEvents.length > 0
+      ? claimEvents.slice(0, 20).map((e: any) => {
+          const dateStr = e.occurred_at ? new Date(e.occurred_at).toLocaleDateString() : 'Unknown';
+          const source = e.date_source === 'document_extracted' ? '(from document)' : 
+                         e.date_source === 'crm_field' ? '(from CRM)' : '(system)';
+          return `  - [${e.event_type}] ${e.summary} | ${dateStr} ${source}`;
+        }).join('\n')
+      : '  No claim events recorded';
     
     const totalChecksReceived = checks.reduce((sum, c) => sum + (c.amount || 0), 0);
     const carrierEstimate = settlement?.estimate_amount || 0;
@@ -764,9 +787,13 @@ CLAIM OVERVIEW:
 - Loss Type: ${claim.loss_type || 'Not specified'}
 - Loss Date: ${claim.loss_date || 'Not specified'}
 - Days Since Loss: ${daysSinceLoss ?? 'Unknown'}
-- Days Open: ${daysOpen ?? 'Unknown'}
+- CRM Record Opened: ${claim.created_at ? new Date(claim.created_at).toLocaleDateString() : 'Unknown'}
+- Days Open (CRM): ${daysOpen ?? 'Unknown'}
+- First Documented Activity: ${firstDocumentDate ? firstDocumentDate.toLocaleDateString() : 'Same as CRM open date'}
+- Days Between Loss and First Document: ${daysBetweenLossAndFirstDoc ?? 'Unknown'}
 - Insurance Company: ${claim.insurance_company || 'Not specified'}
 - Policy Number: ${claim.policy_number || 'Not specified'}
+IMPORTANT REPORTING DELAY NOTE: "Days Since Loss" counts from the loss_date to TODAY, NOT from loss_date to claim open. To assess reporting delay, compare loss_date to the earliest document or claim creation date. If documents show earlier activity than the CRM record, use document dates as the true claim start.
 
 FINANCIAL SNAPSHOT:
 - Carrier Estimate (what carrier offered): $${carrierEstimate?.toLocaleString() || '0'}
@@ -793,6 +820,10 @@ EVIDENCE INVENTORY:
 DOCUMENT TIMELINE (based on ACTUAL document dates, not upload dates):
 NOTE: These dates are extracted from the documents themselves. Use these for timeline analysis, deadline calculations, and carrier response tracking - NOT the upload dates.
 ${documentTimelineContext}
+
+CLAIM EVENTS TIMELINE (chronological events with source attribution):
+NOTE: Use this timeline to understand the TRUE sequence of events. Document-extracted dates are more reliable than system dates. For reporting delay analysis, look at the gap between loss_date and the EARLIEST documented event here, not just the CRM creation date.
+${claimEventsContext}
 
 DARWIN AI PHOTO ANALYSIS (CRITICAL EVIDENCE):
 - AI-Analyzed Photos: ${aiAnalyzedPhotos.length} of ${photoCount}
