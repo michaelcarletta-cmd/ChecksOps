@@ -184,10 +184,24 @@ serve(async (req) => {
 
     // === DOCUMENT-DRIVEN TIMELINE: Extract dates → claim_events ===
     if (targetClaimId && classificationResult.confidence >= 0.6) {
-      extractDatesToClaimEvents(
-        supabase, targetClaimId, fileId, fileName || file?.file_name || '',
-        classificationResult
-      ).catch(err => console.error('Date extraction to claim_events error:', err));
+      // Log classification metadata for debugging date extraction
+      console.log(`[DateExtract] classificationResult.metadata for ${fileName || file?.file_name}:`, JSON.stringify({
+        document_date: (classificationResult.metadata as any).document_date,
+        date_mentioned: classificationResult.metadata.date_mentioned,
+        dates_found: (classificationResult.metadata as any).dates_found,
+        deadline_mentioned: classificationResult.metadata.deadline_mentioned,
+        date_confidence: (classificationResult.metadata as any).date_confidence,
+      }));
+
+      try {
+        const insertedCount = await extractDatesToClaimEvents(
+          supabase, targetClaimId, fileId, fileName || file?.file_name || '',
+          classificationResult
+        );
+        console.log(`[DateExtract] Inserted ${insertedCount} claim_events for file ${fileId}`);
+      } catch (err) {
+        console.error('[DateExtract] FAILED for file', fileId, err);
+      }
     }
 
     // === CROSS-CLAIM VECTOR INDEX: Chunk + Embed for retrieval ===
@@ -1112,7 +1126,7 @@ async function extractDatesToClaimEvents(
   fileId: string,
   fileName: string,
   classificationResult: ClassificationResult
-) {
+): Promise<number> {
   const metadata = classificationResult.metadata as any;
   const docType = classificationResult.classification;
 
@@ -1224,6 +1238,7 @@ async function extractDatesToClaimEvents(
   }
 
   // Deduplicate: don't insert if same claim + event_type + occurred_at + source_artifact_id exists
+  let insertedCount = 0;
   for (const evt of events) {
     const { data: existing } = await supabase
       .from('claim_events')
@@ -1237,10 +1252,16 @@ async function extractDatesToClaimEvents(
     if (!existing || existing.length === 0) {
       const { error } = await supabase.from('claim_events').insert(evt);
       if (error) {
-        console.error(`Failed to insert claim_event: ${error.message}`, evt);
+        console.error(`[DateExtract] Failed to insert claim_event: ${error.message}`, JSON.stringify(evt));
       } else {
-        console.log(`claim_event inserted: ${evt.event_type} @ ${evt.occurred_at} from ${fileName}`);
+        insertedCount++;
+        console.log(`[DateExtract] claim_event inserted: ${evt.event_type} @ ${evt.occurred_at} from ${fileName}`);
       }
+    } else {
+      console.log(`[DateExtract] Skipped duplicate: ${evt.event_type} @ ${evt.occurred_at} from ${fileName}`);
     }
   }
+
+  console.log(`[DateExtract] Summary for ${fileName}: ${events.length} candidates, ${insertedCount} inserted`);
+  return insertedCount;
 }
