@@ -468,7 +468,7 @@ serve(async (req) => {
 
     // ── 3. Handle HELP command ──
     if (messageBody.toUpperCase() === 'HELP') {
-      const helpText = `Darwin SMS Commands:\n\n📋 INFO\n• HELP - This list\n• CLAIMS - List recent claims\n• SWITCH <claim# or name> - Set active claim\n• CONTEXT - Show active claim & status\n\n🔍 ANALYSIS\n• Analyze this claim\n• Operating manual\n• Case study / Marketing assets\n• Summarize - Recent activity recap\n\n✅ TASKS\n• Task: <description>\n• Remind me <when> to <task>\n• Follow up with <name> in <X> days\n\n💬 MESSAGING\n• Text client: <msg> → SEND/EDIT/CANCEL\n• Email client: <msg> → SEND/EDIT/CANCEL\n\n💰 FINANCIAL\n• What's been paid?\n• How much is outstanding?`;
+      const helpText = `Darwin SMS Commands:\n\n📋 INFO\n• HELP - This list\n• CLAIMS - List recent claims\n• SWITCH <claim# or name> - Set active claim\n• CONTEXT - Active claim, expiry, pending draft, send mode\n\n🔍 ANALYSIS\n• Analyze <claim name or #>\n• Analyze this claim (uses active claim)\n• Operating manual / Case study / Marketing assets\n• Summarize - Recent activity recap\n\n✅ TASKS\n• Task: <description>\n• Task for <name>: <description>\n• Remind me <when> to <task>\n\n💬 MESSAGING\n• Text client: <msg> → SEND/EDIT/CANCEL\n• Email client: <msg> → SEND/EDIT/CANCEL\n\n💰 FINANCIAL\n• What's been paid?\n• How much is outstanding?`;
       await sendReply(fromNumber, helpText);
       await supabase.from('darwin_sms_activity').insert({
         user_id: userId, phone_number: fromNumber,
@@ -592,8 +592,10 @@ serve(async (req) => {
             if (cmdResult.error) {
               reply = `⚠️ ${cmdResult.error}`;
             } else if (isAnalysis) {
-              const preview = (cmdResult.result || cmdResult.answer || '').substring(0, 300);
-              reply = `✅ ${originalIntent.replace(/_/g, ' ')} complete.${cmdResult.assetId ? ' Saved to Knowledge Base.' : ''}\n\n${preview}${preview.length >= 300 ? '…' : ''}\n\nFull results: Claim → Darwin → Assets`;
+              const raw = cmdResult.result || cmdResult.answer || '';
+              const maxLen = 800;
+              const preview = raw.substring(0, maxLen);
+              reply = `✅ ${originalIntent.replace(/_/g, ' ')} complete.\n\n${preview}${raw.length > maxLen ? '…' : ''}\n\nSaved in app: Claim → Darwin → Assets`;
             } else if (cmdResult.answer) {
               reply = cmdResult.answer.substring(0, 1500);
             } else if (cmdResult.result) {
@@ -817,14 +819,100 @@ serve(async (req) => {
       });
     }
 
+    // ── Claim hint extraction for analysis intents ──
+    // e.g. "Analyze Michael Carletta (Test)" → extract "Michael Carletta (Test)" and search
+    const analysisIntents = ['analyze', 'operating_manual', 'case_study', 'marketing'];
+    if (!activeClaimId && analysisIntents.includes(intent)) {
+      // Try to extract a claim hint from the message
+      let claimHintForAnalysis: string | null = null;
+      const analysisHintMatch = messageBody.match(
+        /(?:analy[sz]e|review|run\s+(?:an?\s+)?analysis\s+(?:on|for)?|case\s+study\s+(?:for|on)?|operating\s+manual\s+(?:for|on)?|marketing\s+(?:for|on)?)\s+(.+)/i
+      );
+      if (analysisHintMatch) {
+        const hint = analysisHintMatch[1].replace(/^(the\s+|this\s+|claim\s+)/i, '').trim();
+        // Only treat as hint if it's more than just "this claim" / "the claim"
+        if (hint && !/^(claim|this|file)$/i.test(hint)) {
+          claimHintForAnalysis = hint;
+        }
+      }
+
+      if (claimHintForAnalysis) {
+        // Search for matching claims
+        const matchedClaims = await getUserOrgClaims(supabase, userId, { search: claimHintForAnalysis, limit: 5 });
+        if (matchedClaims.length === 1) {
+          // Exact match — set active claim and proceed
+          const c = matchedClaims[0];
+          await supabase.from('sms_conversation_state')
+            .update({ active_claim_id: c.id, pending_action: null, expires_at: new Date(Date.now() + 7 * 24 * 3600000).toISOString() })
+            .eq('id', convState!.id);
+          const switchReply = `✅ Switched to ${c.claim_number} — ${c.policyholder_name}. Running ${intent.replace(/_/g, ' ')}...`;
+          await sendReply(fromNumber, switchReply);
+          // Call darwin-command with the matched claim
+          const cmdResp = await fetch(`${SUPABASE_URL}/functions/v1/darwin-command`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ commandText: messageBody, claimId: c.id, route: 'sms', createdBy: userId }),
+          });
+          const cmdResult = await cmdResp.json();
+          let reply: string;
+          if (cmdResult.error) {
+            reply = `⚠️ ${cmdResult.error}`;
+          } else {
+            const raw = cmdResult.result || cmdResult.answer || '';
+            const maxLen = 800;
+            const preview = raw.substring(0, maxLen);
+            reply = `✅ ${intent.replace(/_/g, ' ')} complete.\n\n${preview}${raw.length > maxLen ? '…' : ''}\n\nSaved in app: Claim → Darwin → Assets`;
+          }
+          await sendReply(fromNumber, reply);
+          if (activityRow) {
+            await supabase.from('darwin_sms_activity')
+              .update({ status: 'completed', darwin_response: reply, claim_id: c.id, result_id: cmdResult.assetId || null, action_type: 'analysis' }).eq('id', activityRow.id);
+          }
+          return new Response(JSON.stringify({ success: true, action: 'analysis_with_hint', claimId: c.id }), {
+            status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } else if (matchedClaims.length > 1) {
+          // Multiple matches — show list and wait for selection
+          const list = matchedClaims.map((c: any, i: number) => `${i + 1}. ${c.claim_number} — ${c.policyholder_name}`).join('\n');
+          const reply = `Multiple claims match "${claimHintForAnalysis}":\n${list}\n\nReply with a number (1-${matchedClaims.length}).`;
+          await supabase.from('sms_conversation_state').update({
+            pending_action: {
+              type: 'claim_selection_resume',
+              originalIntent: intent,
+              originalMessage: messageBody,
+              candidates: matchedClaims.map((c: any) => ({ id: c.id, claim_number: c.claim_number, policyholder_name: c.policyholder_name })),
+            },
+          }).eq('id', convState!.id);
+          await sendReply(fromNumber, reply);
+          if (activityRow) {
+            await supabase.from('darwin_sms_activity')
+              .update({ status: 'needs_context', darwin_response: reply }).eq('id', activityRow.id);
+          }
+          return new Response(JSON.stringify({ success: true, action: 'disambiguate_analysis' }), {
+            status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } else {
+          const reply = `No claim found matching "${claimHintForAnalysis}". Reply CLAIMS to list your claims, or "Switch [claim #]" to select one.`;
+          await sendReply(fromNumber, reply);
+          if (activityRow) {
+            await supabase.from('darwin_sms_activity')
+              .update({ status: 'needs_context', darwin_response: reply }).eq('id', activityRow.id);
+          }
+          return new Response(JSON.stringify({ success: true, action: 'no_match' }), {
+            status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      }
+    }
+
     // Require active claim for most intents (create_task can resolve its own or create personal, summary/financial_qa can work without)
     const claimlessIntents = ['financial_qa', 'create_task', 'summary'];
     if (!activeClaimId && !claimlessIntents.includes(intent)) {
-      // Store pending intent so we can auto-resume after claim selection
+      // No hint found — show top 5 claims and require selection
       const recentClaims = await getUserOrgClaims(supabase, userId, { limit: 5 });
       if (recentClaims.length > 0) {
         const list = recentClaims.map((c: any, i: number) => `${i + 1}. ${c.claim_number} — ${c.policyholder_name}`).join('\n');
-        const reply = `This command needs an active claim. Pick one:\n${list}\n\nReply with a number (1-${recentClaims.length}).`;
+        const reply = `No active claim. Pick one:\n${list}\n\nReply with a number (1-${recentClaims.length}).`;
         await supabase.from('sms_conversation_state').update({
           pending_action: {
             type: 'claim_selection_resume',
@@ -1130,9 +1218,11 @@ serve(async (req) => {
       if (cmdResult.error) {
         reply = `⚠️ ${cmdResult.error}`;
       } else if (isAnalysis) {
-        // For analysis intents: short summary + point to app
-        const preview = (cmdResult.result || cmdResult.answer || '').substring(0, 300);
-        reply = `✅ ${intent.replace(/_/g, ' ')} complete.${cmdResult.assetId ? ' Saved to Knowledge Base.' : ''}\n\n${preview}${preview.length >= 300 ? '…' : ''}\n\nFull results: Claim → Darwin → Assets`;
+        // For analysis intents: short summary (~700-900 chars) + point to app
+        const raw = cmdResult.result || cmdResult.answer || '';
+        const maxLen = 800;
+        const preview = raw.substring(0, maxLen);
+        reply = `✅ ${intent.replace(/_/g, ' ')} complete.\n\n${preview}${raw.length > maxLen ? '…' : ''}\n\nSaved in app: Claim → Darwin → Assets`;
       } else if (cmdResult.answer) {
         reply = cmdResult.answer.substring(0, 1500);
       } else if (cmdResult.result) {
