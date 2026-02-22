@@ -491,6 +491,18 @@ Return ONLY valid JSON with this structure:
     "document_date": "YYYY-MM-DD or null - the date this document was ISSUED/WRITTEN",
     "date_confidence": 0.0-1.0,
     "date_mentioned": "YYYY-MM-DD or null - DEPRECATED, same as document_date for backwards compatibility",
+    "labeled_dates": {
+      "letter_date": {"date": "YYYY-MM-DD or null", "snippet": "exact sentence/phrase containing this date"},
+      "fnol_date": {"date": "YYYY-MM-DD or null", "snippet": "exact text with labels like 'Date Reported', 'Reported to us', 'Notice of loss received', 'Date of Claim'"},
+      "ack_date": {"date": "YYYY-MM-DD or null", "snippet": "acknowledgement letter date text"},
+      "ror_date": {"date": "YYYY-MM-DD or null", "snippet": "reservation of rights date text"},
+      "denial_date": {"date": "YYYY-MM-DD or null", "snippet": "denial/decline date text"},
+      "inspection_date": {"date": "YYYY-MM-DD or null", "snippet": "inspection/site visit date text"},
+      "payment_issue_date": {"date": "YYYY-MM-DD or null", "snippet": "check/EFT/payment issued date text"},
+      "received_date": {"date": "YYYY-MM-DD or null", "snippet": "date received text if explicitly stated"},
+      "loss_date": {"date": "YYYY-MM-DD or null", "snippet": "ONLY when explicitly labeled 'Date of Loss', 'DOL', or 'Loss Date'"},
+      "estimate_date": {"date": "YYYY-MM-DD or null", "snippet": "estimate/scope prepared date text"}
+    },
     "dates_found": [{"type": "letter_date|loss_date|claim_date|policy_date|deadline", "date": "YYYY-MM-DD", "context": "brief context"}],
     "deadline_mentioned": "YYYY-MM-DD or null",
     "amounts": [{"description": "...", "amount": 0.00}],
@@ -501,6 +513,20 @@ Return ONLY valid JSON with this structure:
     "summary": "One sentence summary of the document"
   }
 }
+
+LABELED DATE EXTRACTION RULES:
+- letter_date: The printed date on the letter/document header
+- fnol_date: Look for labels like "Date Reported", "Reported to us on", "Notice of Loss received", "Date of Claim", "Claim reported"
+- ack_date: Date on acknowledgement letters
+- ror_date: Date on reservation of rights letters
+- denial_date: Date denial was issued
+- inspection_date: "Inspection Date", "Site visit on", "Inspected on"
+- payment_issue_date: "Check date", "Payment date", "EFT date", "Draft date"
+- received_date: "Received on", "Date received"
+- loss_date: ONLY when explicitly labeled "Date of Loss", "DOL", or "Loss Date" - do NOT guess
+- estimate_date: "Estimate date", "Prepared on", "Scope date"
+- For each, include the exact text snippet (up to ~100 chars) surrounding the date as evidence
+- Set null for any date type not found in the document
 
 For DENIALS, also include:
 - "denial_reason": Main reason given
@@ -1315,13 +1341,55 @@ async function extractDatesToClaimEvents(
     'correspondence': 'correspondence_issued',
   };
 
-  // 1) Document issuance date → use anchor event_type
+  // === LABELED DATES → ANCHOR CLAIM_EVENTS ===
+  const LABELED_DATE_TO_EVENT: Record<string, string> = {
+    letter_date: DOC_TYPE_TO_ANCHOR_EVENT[docType] || `${docType}_issued`,
+    fnol_date: 'fnol_received',
+    ack_date: 'acknowledgement_issued',
+    ror_date: 'ror_issued',
+    denial_date: 'denial_issued',
+    inspection_date: 'inspection',
+    payment_issue_date: 'payment_issued',
+    received_date: 'document_received',
+    loss_date: 'loss_event',
+    estimate_date: 'estimate_issued',
+  };
+
+  // 1) Process labeled_dates from AI classification (primary source)
+  const labeledDates = metadata.labeled_dates;
+  if (labeledDates && typeof labeledDates === 'object') {
+    for (const [labelKey, entry] of Object.entries(labeledDates)) {
+      const dateEntry = entry as { date?: string; snippet?: string } | null;
+      if (!dateEntry?.date) continue;
+      const validation = validateExtractedDate(dateEntry.date);
+      if (!validation.isValid || !validation.correctedDate) continue;
+
+      const eventType = LABELED_DATE_TO_EVENT[labelKey] || labelKey;
+      const snippet = dateEntry.snippet || null;
+
+      events.push({
+        claim_id: claimId,
+        event_type: eventType,
+        occurred_at: new Date(validation.correctedDate).toISOString(),
+        summary: `${eventType.replace(/_/g, ' ')}: ${fileName}`,
+        source_artifact_id: fileId || null,
+        source_artifact_type: 'claim_file',
+        date_source: 'document_extracted',
+        date_confidence: metadata.date_confidence ?? classificationResult.confidence,
+        date_evidence: snippet || `${labelKey} extracted from ${fileName}`,
+        doc_type: docType,
+        metadata_json: { file_name: fileName, extraction_method: 'ai_labeled_date', label: labelKey, evidence_snippet: snippet },
+      });
+    }
+  }
+
+  // 2) Fallback: document_date as letter_date anchor (if labeled_dates didn't produce it)
   const documentDate = metadata.document_date || metadata.date_mentioned;
-  const anchorEventType = DOC_TYPE_TO_ANCHOR_EVENT[docType] || `${docType}_issued`;
-  if (documentDate) {
+  const hasLetterDate = events.some(e => e.event_type === (DOC_TYPE_TO_ANCHOR_EVENT[docType] || `${docType}_issued`));
+  if (documentDate && !hasLetterDate) {
     const validation = validateExtractedDate(documentDate);
     if (validation.isValid && validation.correctedDate) {
-      // Extract evidence snippet from text content
+      const anchorEventType = DOC_TYPE_TO_ANCHOR_EVENT[docType] || `${docType}_issued`;
       const evidenceSnippet = extractEvidenceSnippet(textContent || '', docType);
       events.push({
         claim_id: claimId,
@@ -1334,29 +1402,32 @@ async function extractDatesToClaimEvents(
         date_confidence: metadata.date_confidence ?? classificationResult.confidence,
         date_evidence: evidenceSnippet || `Document date extracted from ${fileName}`,
         doc_type: docType,
-        metadata_json: { file_name: fileName, extraction_method: 'ai_classification', evidence_snippet: evidenceSnippet },
+        metadata_json: { file_name: fileName, extraction_method: 'ai_classification_fallback', evidence_snippet: evidenceSnippet },
       });
     }
   }
 
-  // 2) All dates_found entries (loss_date, deadline, claim_date, etc.)
+  // 3) Legacy dates_found entries (map to anchor types, skip generic)
   const datesFound = metadata.dates_found;
   if (Array.isArray(datesFound)) {
     for (const df of datesFound) {
-      if (!df?.date || df.type === 'letter_date') continue; // letter_date already handled above
+      if (!df?.date || df.type === 'letter_date') continue;
       const validation = validateExtractedDate(df.date);
       if (!validation.isValid || !validation.correctedDate) continue;
 
       const eventTypeMap: Record<string, string> = {
         loss_date: 'loss_event',
         claim_date: 'fnol_received',
-        policy_date: 'policy_period',
-        deadline: 'deadline',
         inspection_date: 'inspection',
-        payment_date: 'payment',
+        payment_date: 'payment_issued',
         acknowledgment_date: 'acknowledgement_issued',
+        deadline: 'deadline',
       };
-      const eventType = eventTypeMap[df.type] || df.type || 'date_mentioned';
+      const eventType = eventTypeMap[df.type];
+      if (!eventType) continue; // Skip unmapped/generic types
+
+      // Skip if we already have this event type from labeled_dates
+      if (events.some(e => e.event_type === eventType)) continue;
 
       events.push({
         claim_id: claimId,
@@ -1369,12 +1440,12 @@ async function extractDatesToClaimEvents(
         date_confidence: metadata.date_confidence ?? 0.8,
         date_evidence: df.context || null,
         doc_type: docType,
-        metadata_json: { file_name: fileName, date_type: df.type, extraction_method: 'ai_classification' },
+        metadata_json: { file_name: fileName, date_type: df.type, extraction_method: 'ai_dates_found_legacy' },
       });
     }
   }
 
-  // 3) Deadline date
+  // 4) Deadline date
   if (metadata.deadline_mentioned) {
     const validation = validateExtractedDate(metadata.deadline_mentioned);
     if (validation.isValid && validation.correctedDate) {
@@ -1551,11 +1622,26 @@ function extractDatesFromTextRegex(
   const events: ClaimEventRow[] = [];
 
   const labelPatterns: Array<{ regex: RegExp; eventType: string; confidence: number }> = [
+    // Loss date - only explicitly labeled
     { regex: new RegExp(`(?:date\\s+of\\s+loss|DOL|loss\\s+date)\\s*[:\\-]\\s*${DATE_CAPTURE}`, 'gi'), eventType: 'loss_event', confidence: 0.9 },
-    { regex: new RegExp(`(?:inspection\\s+date)\\s*[:\\-]\\s*${DATE_CAPTURE}`, 'gi'), eventType: 'inspection', confidence: 0.85 },
-    { regex: new RegExp(`(?:estimate\\s+date)\\s*[:\\-]\\s*${DATE_CAPTURE}`, 'gi'), eventType: 'estimate_issued', confidence: 0.85 },
-    { regex: new RegExp(`(?:payment\\s+date)\\s*[:\\-]\\s*${DATE_CAPTURE}`, 'gi'), eventType: 'payment', confidence: 0.85 },
-    { regex: new RegExp(`(?:issued|dated)\\s*[:\\-]\\s*${DATE_CAPTURE}`, 'gi'), eventType: `${docType}_issued`, confidence: 0.75 },
+    // FNOL / Date Reported
+    { regex: new RegExp(`(?:date\\s+reported|reported\\s+to\\s+us|notice\\s+of\\s+loss\\s+received|date\\s+of\\s+claim|claim\\s+reported)\\s*[:\\-]?\\s*${DATE_CAPTURE}`, 'gi'), eventType: 'fnol_received', confidence: 0.9 },
+    // Acknowledgement
+    { regex: new RegExp(`(?:acknowledgement|acknowledgment|acknowledge)\\s*(?:date|letter)?\\s*[:\\-]?\\s*${DATE_CAPTURE}`, 'gi'), eventType: 'acknowledgement_issued', confidence: 0.85 },
+    // Reservation of Rights
+    { regex: new RegExp(`(?:reservation\\s+of\\s+rights|ROR)\\s*(?:date|letter)?\\s*[:\\-]?\\s*${DATE_CAPTURE}`, 'gi'), eventType: 'ror_issued', confidence: 0.9 },
+    // Denial date
+    { regex: new RegExp(`(?:denial\\s+date|date\\s+(?:of\\s+)?denial|denied\\s+on|decline\\s+date)\\s*[:\\-]?\\s*${DATE_CAPTURE}`, 'gi'), eventType: 'denial_issued', confidence: 0.9 },
+    // Inspection date
+    { regex: new RegExp(`(?:inspection\\s+date|inspected\\s+on|site\\s+visit\\s+(?:on|date))\\s*[:\\-]?\\s*${DATE_CAPTURE}`, 'gi'), eventType: 'inspection', confidence: 0.85 },
+    // Payment / Check date
+    { regex: new RegExp(`(?:check\\s+date|payment\\s+date|EFT\\s+date|draft\\s+date|payment\\s+issued)\\s*[:\\-]?\\s*${DATE_CAPTURE}`, 'gi'), eventType: 'payment_issued', confidence: 0.85 },
+    // Received date
+    { regex: new RegExp(`(?:received\\s+on|date\\s+received)\\s*[:\\-]?\\s*${DATE_CAPTURE}`, 'gi'), eventType: 'document_received', confidence: 0.8 },
+    // Estimate date
+    { regex: new RegExp(`(?:estimate\\s+date|prepared\\s+on|scope\\s+date)\\s*[:\\-]?\\s*${DATE_CAPTURE}`, 'gi'), eventType: 'estimate_issued', confidence: 0.85 },
+    // Generic issued/dated (lowest priority)
+    { regex: new RegExp(`(?:issued|dated)\\s*[:\\-]\\s*${DATE_CAPTURE}`, 'gi'), eventType: `${docType}_issued`, confidence: 0.7 },
   ];
 
   const standalonePatterns = [
