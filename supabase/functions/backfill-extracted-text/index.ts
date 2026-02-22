@@ -6,8 +6,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const BATCH_SIZE = 20; // files per invocation
+const BATCH_SIZE = 20;
 const MAX_TEXT_LENGTH = 100000;
+const MIN_TEXT_THRESHOLD = 50; // files with fewer chars are treated as "missing"
 
 // === PDF TEXT EXTRACTION (raw byte parsing) ===
 function extractPdfText(bytes: Uint8Array): string {
@@ -42,7 +43,10 @@ function extractPdfText(bytes: Uint8Array): string {
 // === OCR VIA VISION AI ===
 async function ocrViaVision(bytes: Uint8Array, fileName: string): Promise<string | null> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) return null;
+  if (!LOVABLE_API_KEY) {
+    console.error("[OCR] LOVABLE_API_KEY not set");
+    return null;
+  }
 
   try {
     const chunks: string[] = [];
@@ -61,6 +65,8 @@ async function ocrViaVision(bytes: Uint8Array, fileName: string): Promise<string
       : fileName.toLowerCase().match(/\.(webp)$/)
       ? "image/webp"
       : "image/jpeg";
+
+    console.log(`[OCR] Sending ${fileName} (${bytes.length} bytes, mime=${mimeType}) to vision API`);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -89,16 +95,137 @@ async function ocrViaVision(bytes: Uint8Array, fileName: string): Promise<string
     });
 
     if (!response.ok) {
-      console.error(`[OCR] Vision API error: ${response.status}`);
+      const errBody = await response.text();
+      console.error(`[OCR] Vision API error: ${response.status} - ${errBody.substring(0, 200)}`);
       return null;
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content || null;
+    const text = data.choices?.[0]?.message?.content || null;
+    console.log(`[OCR] Vision returned ${text ? text.length : 0} chars for ${fileName}`);
+    return text;
   } catch (error) {
     console.error("[OCR] Error:", error);
     return null;
   }
+}
+
+// === Process a single file ===
+async function processFile(
+  supabase: any,
+  file: { id: string; file_name: string; file_path: string; file_type: string | null; extracted_text: string | null }
+): Promise<Record<string, any>> {
+  const entry: Record<string, any> = {
+    file_id: file.id,
+    file_name: file.file_name,
+    file_type: file.file_type || "unknown",
+    file_path: file.file_path,
+    existing_text_length: file.extracted_text?.length || 0,
+    download_ok: false,
+    bytes: 0,
+    method: "none",
+    chars: 0,
+    success: false,
+    reason: "",
+  };
+
+  try {
+    // Download file from storage
+    console.log(`[Process] Downloading ${file.file_name} from path: ${file.file_path}`);
+    const { data: blob, error: dlErr } = await supabase.storage
+      .from("claim-files")
+      .download(file.file_path);
+
+    if (dlErr || !blob) {
+      entry.reason = `download_failed: ${dlErr?.message || "no blob returned"}`;
+      console.error(`[Process] ${entry.reason} for ${file.file_name}`);
+      return entry;
+    }
+
+    entry.download_ok = true;
+    const arrayBuffer = await blob.arrayBuffer();
+    entry.bytes = arrayBuffer.byteLength;
+    console.log(`[Process] Downloaded ${file.file_name}: ${entry.bytes} bytes`);
+
+    const fileType = file.file_type || "";
+    const fileName = file.file_name || "";
+    let textContent = "";
+
+    // Text files
+    if (fileType.includes("text") || fileName.endsWith(".txt")) {
+      textContent = await blob.text();
+      entry.method = "plain_text";
+      console.log(`[Process] Plain text extraction: ${textContent.length} chars`);
+    }
+    // PDF files
+    else if (fileType.includes("pdf") || fileName.toLowerCase().endsWith(".pdf")) {
+      const pdfBytes = new Uint8Array(arrayBuffer);
+      textContent = extractPdfText(pdfBytes);
+      entry.method = "pdf_text";
+      console.log(`[Process] PDF text extraction: ${textContent.length} chars`);
+
+      // If PDF text extraction yields < 300 chars, try OCR
+      if (textContent.length < 300) {
+        console.log(`[Process] PDF text < 300 chars, falling back to OCR for ${fileName}`);
+        const ocrText = await ocrViaVision(pdfBytes, fileName);
+        if (ocrText && ocrText.length > textContent.length) {
+          textContent = ocrText;
+          entry.method = "ocr";
+          console.log(`[Process] OCR improved to ${textContent.length} chars`);
+        }
+      }
+    }
+    // Image files
+    else if (/\.(png|jpg|jpeg|webp|gif|bmp|tiff?)$/i.test(fileName)) {
+      const imgBytes = new Uint8Array(arrayBuffer);
+      console.log(`[Process] Image file, running OCR for ${fileName}`);
+      const ocrText = await ocrViaVision(imgBytes, fileName);
+      if (ocrText) {
+        textContent = ocrText;
+        entry.method = "image_ocr";
+        console.log(`[Process] Image OCR: ${textContent.length} chars`);
+      } else {
+        entry.reason = "ocr_returned_null";
+      }
+    }
+    // Unknown file types
+    else {
+      entry.reason = `unsupported_type: ${fileType} / ${fileName}`;
+      console.log(`[Process] Skipping unsupported: ${entry.reason}`);
+      return entry;
+    }
+
+    // Save extracted text
+    if (textContent && textContent.length > 10) {
+      // Sanitize: remove null bytes and invalid Unicode escape sequences that Postgres rejects
+      let sanitized = textContent
+        .replace(/\0/g, "")
+        .replace(/\\u[0-9a-fA-F]{0,3}(?![0-9a-fA-F])/g, "") // incomplete unicode escapes
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ""); // control chars except \t \n \r
+      const capped = sanitized.substring(0, MAX_TEXT_LENGTH);
+      const { error: updateErr } = await supabase
+        .from("claim_files")
+        .update({ extracted_text: capped, ocr_processed_at: new Date().toISOString() })
+        .eq("id", file.id);
+
+      if (updateErr) {
+        entry.reason = `update_failed: ${updateErr.message}`;
+        console.error(`[Process] DB update failed for ${file.id}: ${updateErr.message}`);
+      } else {
+        entry.chars = capped.length;
+        entry.success = true;
+        console.log(`[Process] ✅ Saved ${capped.length} chars for ${file.file_name}`);
+      }
+    } else {
+      entry.reason = `extraction_yielded_${textContent?.length || 0}_chars`;
+      console.log(`[Process] ❌ Insufficient text for ${file.file_name}: ${textContent?.length || 0} chars`);
+    }
+  } catch (err) {
+    entry.reason = `error: ${err instanceof Error ? err.message : String(err)}`;
+    console.error(`[Process] Exception for ${file.file_name}: ${entry.reason}`);
+  }
+
+  return entry;
 }
 
 serve(async (req) => {
@@ -112,156 +239,134 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceKey);
 
     const body = await req.json().catch(() => ({}));
-    const cursor = body.cursor || null; // last processed file_id for pagination
+    const fileId = body.fileId || null; // single-file debug mode
+    const cursor = body.cursor || null;
     const dryRun = body.dryRun || false;
 
-    // Find files that need text extraction
-    let query = supabase
+    // === SINGLE FILE DEBUG MODE ===
+    if (fileId) {
+      console.log(`[Debug] Single-file mode for fileId: ${fileId}`);
+      const { data: file, error: fileErr } = await supabase
+        .from("claim_files")
+        .select("id, file_name, file_path, file_type, extracted_text")
+        .eq("id", fileId)
+        .single();
+
+      if (fileErr || !file) {
+        return new Response(
+          JSON.stringify({ success: false, error: `File not found: ${fileErr?.message || "no result"}` }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (dryRun) {
+        return new Response(
+          JSON.stringify({ success: true, mode: "debug_dry_run", file: { id: file.id, file_name: file.file_name, file_path: file.file_path, file_type: file.file_type, existing_text_length: file.extracted_text?.length || 0 } }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const result = await processFile(supabase, file);
+      return new Response(
+        JSON.stringify({ success: result.success, mode: "debug_single_file", log: [result] }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // === BATCH MODE ===
+    // Find files needing text: NULL, empty string, or short text (< threshold)
+    // PostgREST doesn't support length() easily, so we fetch null/empty first,
+    // then separately fetch short-text files
+    console.log(`[Batch] Starting batch mode, cursor=${cursor}, dryRun=${dryRun}`);
+
+    let candidates: any[] = [];
+
+    // Group 1: null or empty extracted_text
+    let q1 = supabase
       .from("claim_files")
       .select("id, file_name, file_path, file_type, extracted_text")
       .or("extracted_text.is.null,extracted_text.eq.")
       .order("id", { ascending: true })
       .limit(BATCH_SIZE);
-
-    if (cursor) {
-      query = query.gt("id", cursor);
-    }
-
-    const { data: files, error: fetchError } = await query;
-
-    if (fetchError) {
-      return new Response(JSON.stringify({ success: false, error: fetchError.message }), {
+    if (cursor) q1 = q1.gt("id", cursor);
+    const { data: nullFiles, error: e1 } = await q1;
+    if (e1) {
+      return new Response(JSON.stringify({ success: false, error: e1.message }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    if (nullFiles) candidates.push(...nullFiles);
 
-    if (!files || files.length === 0) {
-      // Check how many still need processing (might have short text)
-      const { count: shortTextCount } = await supabase
+    // Group 2: short text (has text but < threshold) — only if we have room in batch
+    if (candidates.length < BATCH_SIZE) {
+      const remaining = BATCH_SIZE - candidates.length;
+      const existingIds = candidates.map((c: any) => c.id);
+      let q2 = supabase
         .from("claim_files")
-        .select("id", { count: "exact", head: true })
+        .select("id, file_name, file_path, file_type, extracted_text")
         .not("extracted_text", "is", null)
-        .neq("extracted_text", "");
+        .neq("extracted_text", "")
+        .order("id", { ascending: true })
+        .limit(remaining * 3); // over-fetch to filter in code
+      if (cursor) q2 = q2.gt("id", cursor);
+      const { data: shortFiles } = await q2;
+      if (shortFiles) {
+        const shortOnes = shortFiles
+          .filter((f: any) => !existingIds.includes(f.id) && (f.extracted_text?.length || 0) < MIN_TEXT_THRESHOLD)
+          .slice(0, remaining);
+        candidates.push(...shortOnes);
+      }
+    }
 
+    // Sort by id for consistent cursor
+    candidates.sort((a: any, b: any) => a.id.localeCompare(b.id));
+    candidates = candidates.slice(0, BATCH_SIZE);
+
+    console.log(`[Batch] Found ${candidates.length} files to process`);
+
+    if (candidates.length === 0) {
       return new Response(
-        JSON.stringify({
-          success: true,
-          processed: 0,
-          remaining: 0,
-          message: "No more files to process",
-          cursor: null,
-        }),
+        JSON.stringify({ success: true, processed: 0, remaining: 0, message: "No more files to process", cursor: null }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Count remaining
-    const { count: totalRemaining } = await supabase
+    // Count total remaining (null + empty)
+    const { count: nullCount } = await supabase
       .from("claim_files")
       .select("id", { count: "exact", head: true })
       .or("extracted_text.is.null,extracted_text.eq.");
 
     const log: any[] = [];
 
-    for (const file of files) {
-      const entry: any = {
-        file_id: file.id,
-        file_name: file.file_name,
-        chars: 0,
-        method: "none",
-        success: false,
-        reason: "",
-      };
-
-      try {
-        if (dryRun) {
-          entry.reason = "dry_run";
-          log.push(entry);
-          continue;
-        }
-
-        // Download file from storage
-        const { data: blob, error: dlErr } = await supabase.storage
-          .from("claim-files")
-          .download(file.file_path);
-
-        if (dlErr || !blob) {
-          entry.reason = `download_failed: ${dlErr?.message || "no blob"}`;
-          log.push(entry);
-          continue;
-        }
-
-        const fileType = file.file_type || "";
-        const fileName = file.file_name || "";
-        let textContent = "";
-
-        // Text files
-        if (fileType.includes("text") || fileName.endsWith(".txt")) {
-          textContent = await blob.text();
-          entry.method = "plain_text";
-        }
-        // PDF files
-        else if (fileType.includes("pdf") || fileName.toLowerCase().endsWith(".pdf")) {
-          const pdfBytes = new Uint8Array(await blob.arrayBuffer());
-          textContent = extractPdfText(pdfBytes);
-          entry.method = "pdf_text";
-
-          // If PDF text extraction yields < 300 chars, try OCR
-          if (textContent.length < 300) {
-            console.log(`[Backfill] PDF text < 300 chars for ${fileName}, trying OCR...`);
-            const ocrText = await ocrViaVision(pdfBytes, fileName);
-            if (ocrText && ocrText.length > textContent.length) {
-              textContent = ocrText;
-              entry.method = "ocr";
-            }
-          }
-        }
-        // Image files
-        else if (/\.(png|jpg|jpeg|webp|gif|bmp|tiff?)$/i.test(fileName)) {
-          const imgBytes = new Uint8Array(await blob.arrayBuffer());
-          const ocrText = await ocrViaVision(imgBytes, fileName);
-          if (ocrText) {
-            textContent = ocrText;
-            entry.method = "ocr";
-          }
-        }
-        // Unknown file types — skip
-        else {
-          entry.reason = `unsupported_type: ${fileType}`;
-          log.push(entry);
-          continue;
-        }
-
-        // Save extracted text
-        if (textContent && textContent.length > 10) {
-          const capped = textContent.substring(0, MAX_TEXT_LENGTH);
-          await supabase
-            .from("claim_files")
-            .update({ extracted_text: capped, ocr_processed_at: new Date().toISOString() })
-            .eq("id", file.id);
-          entry.chars = capped.length;
-          entry.success = true;
-        } else {
-          entry.reason = "extraction_yielded_no_text";
-        }
-      } catch (err) {
-        entry.reason = `error: ${err instanceof Error ? err.message : String(err)}`;
+    for (const file of candidates) {
+      if (dryRun) {
+        log.push({
+          file_id: file.id,
+          file_name: file.file_name,
+          file_type: file.file_type,
+          existing_text_length: file.extracted_text?.length || 0,
+          reason: "dry_run",
+          success: false,
+        });
+        continue;
       }
 
-      log.push(entry);
+      const result = await processFile(supabase, file);
+      log.push(result);
     }
 
-    const lastId = files[files.length - 1].id;
-    const successCount = log.filter((l) => l.success).length;
-    const remaining = (totalRemaining || 0) - files.length;
+    const lastId = candidates[candidates.length - 1].id;
+    const successCount = log.filter((l: any) => l.success).length;
+    const totalRemaining = (nullCount || 0) - candidates.filter((c: any) => !c.extracted_text || c.extracted_text === "").length;
 
     return new Response(
       JSON.stringify({
         success: true,
-        processed: files.length,
+        processed: candidates.length,
         extracted: successCount,
-        failed: files.length - successCount,
-        remaining: Math.max(0, remaining),
+        failed: candidates.length - successCount,
+        remaining: Math.max(0, totalRemaining),
         cursor: lastId,
         log,
       }),
