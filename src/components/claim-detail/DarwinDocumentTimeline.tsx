@@ -77,6 +77,7 @@ export const DarwinDocumentTimeline = ({ claimId, claim }: DarwinDocumentTimelin
     'fnol_received', 'acknowledgement_issued', 'ror_issued', 'denial_issued',
     'inspection', 'payment_issued', 'estimate_issued', 'loss_event',
     'document_received', 'engineer_report_issued', 'deadline',
+    'prior_loss_mentioned',
   ];
 
   const loadClaimEvents = async () => {

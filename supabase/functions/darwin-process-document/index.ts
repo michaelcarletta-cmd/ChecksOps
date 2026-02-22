@@ -506,9 +506,12 @@ Return ONLY valid JSON with this structure:
       "inspection_date": {"date": "YYYY-MM-DD or null", "snippet": "inspection/site visit date text"},
       "payment_issue_date": {"date": "YYYY-MM-DD or null", "snippet": "check/EFT/payment issued date text"},
       "received_date": {"date": "YYYY-MM-DD or null", "snippet": "date received text if explicitly stated"},
-      "loss_date": {"date": "YYYY-MM-DD or null", "snippet": "ONLY when explicitly labeled 'Date of Loss', 'DOL', or 'Loss Date'"},
-      "estimate_date": {"date": "YYYY-MM-DD or null", "snippet": "estimate/scope prepared date text"}
+      "loss_date": {"date": "YYYY-MM-DD or null", "snippet": "ONLY when explicitly labeled 'Date of Loss', 'DOL', 'Loss Date', or 'Loss occurred on' within 50 characters of the date. NEVER extract a date as loss_date if it appears in a prior/previous claim narrative or history section."},
+      "estimate_date": {"date": "YYYY-MM-DD or null", "snippet": "estimate/scope prepared date text"},
+      "prior_loss_dates": [{"date": "YYYY-MM-DD", "snippet": "text mentioning prior/previous/past loss or prior claim"}]
     },
+    "claim_numbers_found": ["list of all claim/policy numbers found in the document"],
+    "multi_claim_doc": false,
     "dates_found": [{"type": "letter_date|loss_date|claim_date|policy_date|deadline", "date": "YYYY-MM-DD", "context": "brief context"}],
     "deadline_mentioned": "YYYY-MM-DD or null",
     "amounts": [{"description": "...", "amount": 0.00}],
@@ -529,10 +532,16 @@ LABELED DATE EXTRACTION RULES:
 - inspection_date: "Inspection Date", "Site visit on", "Inspected on"
 - payment_issue_date: "Check date", "Payment date", "EFT date", "Draft date"
 - received_date: "Received on", "Date received"
-- loss_date: ONLY when explicitly labeled "Date of Loss", "DOL", or "Loss Date" - do NOT guess
+- loss_date: ONLY extract when an explicit label ("Date of Loss", "DOL", "Loss Date", "Loss occurred on") appears within 50 characters of the date value. Do NOT guess. Do NOT extract dates from narrative history as loss dates.
 - estimate_date: "Estimate date", "Prepared on", "Scope date"
+- prior_loss_dates: If the document mentions prior/previous/past/history losses or prior claims, extract those dates here (array). If text near a date says "prior loss", "previous claim", "history of claims", "past claim", etc., put it in prior_loss_dates, NOT loss_date.
 - For each, include the exact text snippet (up to ~100 chars) surrounding the date as evidence
 - Set null for any date type not found in the document
+
+CLAIM NUMBER EXTRACTION RULES:
+- Extract ALL claim numbers and policy numbers found in the document into "claim_numbers_found" array
+- If more than one DISTINCT claim number appears, set "multi_claim_doc": true
+- In multi-claim documents, dates from other claims' narratives should NOT be treated as events for the current claim
 
 For DENIALS, also include:
 - "denial_reason": Main reason given
@@ -1363,15 +1372,46 @@ async function extractDatesToClaimEvents(
 
   // 1) Process labeled_dates from AI classification (primary source)
   const labeledDates = metadata.labeled_dates;
+  const isMultiClaimDoc = !!metadata.multi_claim_doc;
+  const claimNumbersFound: string[] = Array.isArray(metadata.claim_numbers_found) ? metadata.claim_numbers_found : [];
+
+  if (isMultiClaimDoc) {
+    console.log(`[DateExtract] Multi-claim doc detected for ${fileName}, claim_numbers: ${claimNumbersFound.join(', ')}`);
+  }
+
   if (labeledDates && typeof labeledDates === 'object') {
     for (const [labelKey, entry] of Object.entries(labeledDates)) {
+      if (labelKey === 'prior_loss_dates') continue; // handled separately below
       const dateEntry = entry as { date?: string; snippet?: string } | null;
       if (!dateEntry?.date) continue;
       const validation = validateExtractedDate(dateEntry.date);
       if (!validation.isValid || !validation.correctedDate) continue;
 
-      const eventType = LABELED_DATE_TO_EVENT[labelKey] || labelKey;
+      let eventType = LABELED_DATE_TO_EVENT[labelKey] || labelKey;
       const snippet = dateEntry.snippet || null;
+
+      // === STRICT loss_event PROXIMITY CHECK ===
+      // Only allow loss_event if snippet contains an explicit label within ~50 chars
+      if (eventType === 'loss_event' && snippet) {
+        const lossLabelPattern = /\b(date\s+of\s+loss|DOL|loss\s+date|loss\s+occurred\s+on)\b/i;
+        const priorPattern = /\b(prior|previous|history|past|prior\s+claim|previous\s+claim)\b/i;
+        if (priorPattern.test(snippet)) {
+          eventType = 'prior_loss_mentioned';
+          console.log(`[DateExtract] Reclassified loss_date → prior_loss_mentioned due to prior/history context: "${snippet}"`);
+        } else if (!lossLabelPattern.test(snippet)) {
+          eventType = 'date_mentioned';
+          console.log(`[DateExtract] Reclassified loss_date → date_mentioned (no explicit label within snippet): "${snippet}"`);
+        }
+      } else if (eventType === 'loss_event' && !snippet) {
+        eventType = 'date_mentioned';
+        console.log(`[DateExtract] Reclassified loss_date → date_mentioned (no snippet provided)`);
+      }
+
+      // Skip non-anchor events from multi-claim docs (unless they match current claim)
+      if (isMultiClaimDoc && eventType !== 'loss_event' && eventType !== 'prior_loss_mentioned' && eventType !== 'date_mentioned') {
+        // Allow if we can't verify claim numbers, but log warning
+        console.log(`[DateExtract] Multi-claim doc event ${eventType} from ${fileName} — may belong to different claim`);
+      }
 
       events.push({
         claim_id: claimId,
@@ -1384,8 +1424,40 @@ async function extractDatesToClaimEvents(
         date_confidence: metadata.date_confidence ?? classificationResult.confidence,
         date_evidence: snippet || `${labelKey} extracted from ${fileName}`,
         doc_type: docType,
-        metadata_json: { file_name: fileName, extraction_method: 'ai_labeled_date', label: labelKey, evidence_snippet: snippet },
+        metadata_json: {
+          file_name: fileName,
+          extraction_method: 'ai_labeled_date',
+          label: labelKey,
+          evidence_snippet: snippet,
+          multi_claim_doc: isMultiClaimDoc || undefined,
+          claim_numbers_found: claimNumbersFound.length > 0 ? claimNumbersFound : undefined,
+        },
       });
+    }
+
+    // 1b) Process prior_loss_dates array
+    const priorLossDates = labeledDates.prior_loss_dates;
+    if (Array.isArray(priorLossDates)) {
+      for (const pl of priorLossDates) {
+        const plEntry = pl as { date?: string; snippet?: string } | null;
+        if (!plEntry?.date) continue;
+        const validation = validateExtractedDate(plEntry.date);
+        if (!validation.isValid || !validation.correctedDate) continue;
+
+        events.push({
+          claim_id: claimId,
+          event_type: 'prior_loss_mentioned',
+          occurred_at: new Date(validation.correctedDate).toISOString(),
+          summary: `Prior loss mentioned: ${fileName}`,
+          source_artifact_id: fileId || null,
+          source_artifact_type: 'claim_file',
+          date_source: 'document_extracted',
+          date_confidence: (metadata.date_confidence ?? 0.7) * 0.8,
+          date_evidence: plEntry.snippet || `Prior loss date from ${fileName}`,
+          doc_type: docType,
+          metadata_json: { file_name: fileName, extraction_method: 'ai_labeled_date', label: 'prior_loss_date', evidence_snippet: plEntry.snippet },
+        });
+      }
     }
   }
 
@@ -1627,9 +1699,13 @@ function extractDatesFromTextRegex(
 ): ClaimEventRow[] {
   const events: ClaimEventRow[] = [];
 
+  const PRIOR_LOSS_CONTEXT = /\b(prior|previous|history|past|prior\s+claim|previous\s+claim|prior\s+loss|previous\s+loss)\b/i;
+
   const labelPatterns: Array<{ regex: RegExp; eventType: string; confidence: number }> = [
-    // Loss date - only explicitly labeled
-    { regex: new RegExp(`(?:date\\s+of\\s+loss|DOL|loss\\s+date)\\s*[:\\-]\\s*${DATE_CAPTURE}`, 'gi'), eventType: 'loss_event', confidence: 0.9 },
+    // Loss date - only explicitly labeled (will be further validated below)
+    { regex: new RegExp(`(?:date\\s+of\\s+loss|DOL|loss\\s+date|loss\\s+occurred\\s+on)\\s*[:\\-]?\\s*${DATE_CAPTURE}`, 'gi'), eventType: 'loss_event', confidence: 0.9 },
+    // Prior loss detection (must come before generic patterns)
+    { regex: new RegExp(`(?:prior\\s+loss|previous\\s+loss|past\\s+loss|prior\\s+claim|previous\\s+claim)\\s*[:\\-]?\\s*${DATE_CAPTURE}`, 'gi'), eventType: 'prior_loss_mentioned', confidence: 0.85 },
     // FNOL / Date Reported
     { regex: new RegExp(`(?:date\\s+reported|reported\\s+to\\s+us|notice\\s+of\\s+loss\\s+received|date\\s+of\\s+claim|claim\\s+reported)\\s*[:\\-]?\\s*${DATE_CAPTURE}`, 'gi'), eventType: 'fnol_received', confidence: 0.9 },
     // Acknowledgement
@@ -1674,23 +1750,36 @@ function extractDatesFromTextRegex(
       const rawDate = match[1];
       const occurredAt = parseDateStrict(rawDate);
       if (!occurredAt) continue;
-      const key = `${lp.eventType}|${occurredAt}|${fileId}`;
+
+      let effectiveEventType = lp.eventType;
+      const snippet = getSnippet(match.index);
+
+      // For loss_event, check if surrounding 50 chars contain prior/previous/history context
+      if (effectiveEventType === 'loss_event') {
+        const contextWindow = text.substring(Math.max(0, match.index - 50), Math.min(text.length, match.index + match[0].length + 50));
+        if (PRIOR_LOSS_CONTEXT.test(contextWindow)) {
+          effectiveEventType = 'prior_loss_mentioned';
+          console.log(`[DateExtract][Regex] Reclassified loss_event → prior_loss_mentioned: "${snippet}"`);
+        }
+      }
+
+      const key = `${effectiveEventType}|${occurredAt}|${fileId}`;
       if (seen.has(key)) continue;
       seen.add(key);
       labeledFound++;
 
       events.push({
         claim_id: claimId,
-        event_type: lp.eventType,
+        event_type: effectiveEventType,
         occurred_at: occurredAt,
-        summary: `${lp.eventType.replace(/_/g, ' ')}: ${rawDate} (regex from ${fileName})`,
+        summary: `${effectiveEventType.replace(/_/g, ' ')}: ${rawDate} (regex from ${fileName})`,
         source_artifact_id: fileId || null,
         source_artifact_type: 'claim_file',
         date_source: 'document_text_regex',
         date_confidence: lp.confidence,
-        date_evidence: getSnippet(match.index),
+        date_evidence: snippet,
         doc_type: docType,
-        metadata_json: { file_name: fileName, extraction_method: 'text_regex_labeled', label: lp.eventType },
+        metadata_json: { file_name: fileName, extraction_method: 'text_regex_labeled', label: effectiveEventType },
       });
     }
   }
