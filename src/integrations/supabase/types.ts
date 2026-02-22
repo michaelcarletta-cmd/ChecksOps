@@ -1594,6 +1594,68 @@ export type Database = {
           },
         ]
       }
+      claim_events: {
+        Row: {
+          actor: string | null
+          claim_id: string
+          created_at: string
+          date_confidence: number | null
+          date_evidence: string | null
+          date_source: string
+          doc_type: string | null
+          event_type: string
+          id: string
+          metadata_json: Json
+          occurred_at: string
+          source_artifact_id: string | null
+          source_artifact_type: string | null
+          summary: string | null
+          updated_at: string
+        }
+        Insert: {
+          actor?: string | null
+          claim_id: string
+          created_at?: string
+          date_confidence?: number | null
+          date_evidence?: string | null
+          date_source?: string
+          doc_type?: string | null
+          event_type: string
+          id?: string
+          metadata_json?: Json
+          occurred_at: string
+          source_artifact_id?: string | null
+          source_artifact_type?: string | null
+          summary?: string | null
+          updated_at?: string
+        }
+        Update: {
+          actor?: string | null
+          claim_id?: string
+          created_at?: string
+          date_confidence?: number | null
+          date_evidence?: string | null
+          date_source?: string
+          doc_type?: string | null
+          event_type?: string
+          id?: string
+          metadata_json?: Json
+          occurred_at?: string
+          source_artifact_id?: string | null
+          source_artifact_type?: string | null
+          summary?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_events_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_expenses: {
         Row: {
           amount: number
@@ -4593,47 +4655,71 @@ export type Database = {
       extracted_document_data: {
         Row: {
           acv_total: number | null
+          check_issue_date: string | null
           claim_id: string
           created_at: string
           created_by: string | null
+          date_confidence: number | null
+          date_evidence: string | null
           deductible: number | null
           depreciation: number | null
+          document_date: string | null
           document_type: string
           extracted_data: Json
           extraction_confidence: number | null
           id: string
           line_items: Json | null
+          loss_date: string | null
           rcv_total: number | null
+          received_date: string | null
+          service_period_end: string | null
+          service_period_start: string | null
           source_file_name: string | null
         }
         Insert: {
           acv_total?: number | null
+          check_issue_date?: string | null
           claim_id: string
           created_at?: string
           created_by?: string | null
+          date_confidence?: number | null
+          date_evidence?: string | null
           deductible?: number | null
           depreciation?: number | null
+          document_date?: string | null
           document_type: string
           extracted_data?: Json
           extraction_confidence?: number | null
           id?: string
           line_items?: Json | null
+          loss_date?: string | null
           rcv_total?: number | null
+          received_date?: string | null
+          service_period_end?: string | null
+          service_period_start?: string | null
           source_file_name?: string | null
         }
         Update: {
           acv_total?: number | null
+          check_issue_date?: string | null
           claim_id?: string
           created_at?: string
           created_by?: string | null
+          date_confidence?: number | null
+          date_evidence?: string | null
           deductible?: number | null
           depreciation?: number | null
+          document_date?: string | null
           document_type?: string
           extracted_data?: Json
           extraction_confidence?: number | null
           id?: string
           line_items?: Json | null
+          loss_date?: string | null
           rcv_total?: number | null
+          received_date?: string | null
+          service_period_end?: string | null
+          service_period_start?: string | null
           source_file_name?: string | null
         }
         Relationships: [
