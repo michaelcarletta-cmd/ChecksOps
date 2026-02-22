@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { DarwinOperationsCenter } from "@/components/dashboard/DarwinOperationsCenter";
-import { Bot, Play, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
+import { Bot, Play, CheckCircle2, AlertTriangle, Loader2, FileText, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -23,6 +23,24 @@ interface BackfillState {
   errorMessage?: string;
 }
 
+interface TextBackfillState {
+  status: "idle" | "running" | "complete" | "error";
+  processed: number;
+  extracted: number;
+  failed: number;
+  remaining: number;
+  cursor: string | null;
+  errorMessage?: string;
+}
+
+interface RebuildEventsState {
+  status: "idle" | "running" | "complete" | "error";
+  processed: number;
+  remaining: number;
+  cursor: string | null;
+  errorMessage?: string;
+}
+
 const INITIAL_STATS: BatchStats = {
   deadlines_created: 0,
   overdue_detected: 0,
@@ -40,6 +58,27 @@ const DarwinOperations = () => {
   });
   const abortRef = useRef(false);
 
+  // Text extraction backfill state
+  const [textBackfill, setTextBackfill] = useState<TextBackfillState>({
+    status: "idle",
+    processed: 0,
+    extracted: 0,
+    failed: 0,
+    remaining: 0,
+    cursor: null,
+  });
+  const textAbortRef = useRef(false);
+
+  // Rebuild events state
+  const [rebuildEvents, setRebuildEvents] = useState<RebuildEventsState>({
+    status: "idle",
+    processed: 0,
+    remaining: 0,
+    cursor: null,
+  });
+  const rebuildAbortRef = useRef(false);
+
+  // === DEADLINE BACKFILL ===
   const runBatch = useCallback(async (cursor: string | null, prev: BackfillState) => {
     if (abortRef.current) return;
 
@@ -82,7 +121,6 @@ const DarwinOperations = () => {
     setBackfill(next);
 
     if (remaining > 0 && !abortRef.current) {
-      // Small delay to let UI update
       setTimeout(() => runBatch(data.cursor, next), 200);
     } else if (remaining === 0) {
       toast({
@@ -105,6 +143,106 @@ const DarwinOperations = () => {
     runBatch(null, initial);
   };
 
+  // === TEXT EXTRACTION BACKFILL ===
+  const runTextBatch = useCallback(async (cursor: string | null, prev: TextBackfillState) => {
+    if (textAbortRef.current) return;
+
+    const { data, error } = await supabase.functions.invoke("backfill-extracted-text", {
+      body: { cursor },
+    });
+
+    if (error || !data?.success) {
+      setTextBackfill((s) => ({
+        ...s,
+        status: "error",
+        errorMessage: error?.message || data?.error || "Unknown error",
+      }));
+      return;
+    }
+
+    const next: TextBackfillState = {
+      status: (data.remaining || 0) > 0 ? "running" : "complete",
+      processed: prev.processed + (data.processed || 0),
+      extracted: prev.extracted + (data.extracted || 0),
+      failed: prev.failed + (data.failed || 0),
+      remaining: data.remaining || 0,
+      cursor: data.cursor,
+    };
+
+    setTextBackfill(next);
+
+    if ((data.remaining || 0) > 0 && !textAbortRef.current) {
+      setTimeout(() => runTextBatch(data.cursor, next), 500);
+    } else if ((data.remaining || 0) === 0) {
+      toast({
+        title: "Text Extraction Complete",
+        description: `${next.processed} files processed. ${next.extracted} texts extracted. ${next.failed} failed.`,
+      });
+    }
+  }, []);
+
+  const startTextBackfill = () => {
+    textAbortRef.current = false;
+    const initial: TextBackfillState = {
+      status: "running",
+      processed: 0,
+      extracted: 0,
+      failed: 0,
+      remaining: 0,
+      cursor: null,
+    };
+    setTextBackfill(initial);
+    runTextBatch(null, initial);
+  };
+
+  // === REBUILD EVENTS ===
+  const runRebuildBatch = useCallback(async (cursor: string | null, prev: RebuildEventsState) => {
+    if (rebuildAbortRef.current) return;
+
+    const { data, error } = await supabase.functions.invoke("backfill-rebuild-events", {
+      body: { cursor },
+    });
+
+    if (error || !data?.success) {
+      setRebuildEvents((s) => ({
+        ...s,
+        status: "error",
+        errorMessage: error?.message || data?.error || "Unknown error",
+      }));
+      return;
+    }
+
+    const next: RebuildEventsState = {
+      status: (data.remaining || 0) > 0 ? "running" : "complete",
+      processed: prev.processed + (data.processed || 0),
+      remaining: data.remaining || 0,
+      cursor: data.cursor,
+    };
+
+    setRebuildEvents(next);
+
+    if ((data.remaining || 0) > 0 && !rebuildAbortRef.current) {
+      setTimeout(() => runRebuildBatch(data.cursor, next), 500);
+    } else if ((data.remaining || 0) === 0) {
+      toast({
+        title: "Event Rebuild Complete",
+        description: `${next.processed} claims reprocessed. Timeline events regenerated.`,
+      });
+    }
+  }, []);
+
+  const startRebuildEvents = () => {
+    rebuildAbortRef.current = false;
+    const initial: RebuildEventsState = {
+      status: "running",
+      processed: 0,
+      remaining: 0,
+      cursor: null,
+    };
+    setRebuildEvents(initial);
+    runRebuildBatch(null, initial);
+  };
+
   const pct = backfill.total > 0 ? Math.round((backfill.processed / backfill.total) * 100) : 0;
   const stats = backfill.cumulativeStats;
 
@@ -122,10 +260,138 @@ const DarwinOperations = () => {
         </div>
       </div>
 
-      {/* ── Backfill Card ─────────────────────────────────────────────── */}
+      {/* ── Step 1: Text Extraction Backfill ─────────────────────────── */}
+      <Card className="border-2 border-primary/30">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Step 1: Backfill Extracted Text</CardTitle>
+          </div>
+          <CardDescription>
+            Downloads every claim file from storage and extracts text (PDF parsing → OCR fallback). 
+            This is required before timeline or analysis features can work. Processes 20 files per batch.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {textBackfill.status === "idle" && (
+            <Button onClick={startTextBackfill} className="gap-2">
+              <Play className="h-4 w-4" />
+              Run Text Extraction
+            </Button>
+          )}
+          {textBackfill.status === "running" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Extracting text… {textBackfill.processed} files processed ({textBackfill.remaining} remaining)
+              </div>
+              <Progress 
+                value={textBackfill.remaining > 0 
+                  ? (textBackfill.processed / (textBackfill.processed + textBackfill.remaining)) * 100 
+                  : 100
+                } 
+                className="h-3" 
+              />
+              <div className="grid grid-cols-3 gap-3">
+                <SummaryCard label="Extracted" value={textBackfill.extracted} />
+                <SummaryCard label="Failed" value={textBackfill.failed} variant={textBackfill.failed > 0 ? "warning" : undefined} />
+                <SummaryCard label="Remaining" value={textBackfill.remaining} />
+              </div>
+            </div>
+          )}
+          {textBackfill.status === "complete" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-green-600">
+                <CheckCircle2 className="h-4 w-4" />
+                Text extraction complete
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <SummaryCard label="Files Processed" value={textBackfill.processed} />
+                <SummaryCard label="Text Extracted" value={textBackfill.extracted} />
+                <SummaryCard label="Failed" value={textBackfill.failed} variant={textBackfill.failed > 0 ? "warning" : undefined} />
+              </div>
+              <Button variant="outline" size="sm" onClick={startTextBackfill}>
+                Run Again
+              </Button>
+            </div>
+          )}
+          {textBackfill.status === "error" && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-destructive">
+                <AlertTriangle className="h-4 w-4" />
+                {textBackfill.errorMessage}
+              </div>
+              <Button variant="outline" size="sm" onClick={startTextBackfill}>
+                Retry
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Step 2: Rebuild Events ────────────────────────────────────── */}
+      <Card className="border-2 border-primary/30">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <RefreshCw className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Step 2: Rebuild Timeline Events</CardTitle>
+          </div>
+          <CardDescription>
+            Deletes all derived claim_events and re-runs document processing to regenerate the timeline 
+            from extracted text. Run this after text extraction is complete.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {rebuildEvents.status === "idle" && (
+            <Button onClick={startRebuildEvents} className="gap-2" variant="secondary">
+              <Play className="h-4 w-4" />
+              Rebuild All Events
+            </Button>
+          )}
+          {rebuildEvents.status === "running" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Rebuilding events… {rebuildEvents.processed} claims processed ({rebuildEvents.remaining} remaining)
+              </div>
+              <Progress 
+                value={rebuildEvents.remaining > 0 
+                  ? (rebuildEvents.processed / (rebuildEvents.processed + rebuildEvents.remaining)) * 100 
+                  : 100
+                } 
+                className="h-3" 
+              />
+            </div>
+          )}
+          {rebuildEvents.status === "complete" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-green-600">
+                <CheckCircle2 className="h-4 w-4" />
+                Event rebuild complete — {rebuildEvents.processed} claims reprocessed
+              </div>
+              <Button variant="outline" size="sm" onClick={startRebuildEvents}>
+                Run Again
+              </Button>
+            </div>
+          )}
+          {rebuildEvents.status === "error" && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-destructive">
+                <AlertTriangle className="h-4 w-4" />
+                {rebuildEvents.errorMessage}
+              </div>
+              <Button variant="outline" size="sm" onClick={startRebuildEvents}>
+                Retry
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Deadline Backfill Card ────────────────────────────────────── */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Darwin Catch-Up</CardTitle>
+          <CardTitle className="text-lg">Step 3: Darwin Catch-Up (Deadlines)</CardTitle>
           <CardDescription>
             Backfill regulatory deadlines and state codes for all existing claims. Safe to run multiple times — skips claims that already have deadlines.
           </CardDescription>
