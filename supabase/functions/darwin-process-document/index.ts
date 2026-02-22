@@ -1220,7 +1220,34 @@ async function extractDatesToClaimEvents(
     }
   }
 
-  // 4) If NO dates extracted at all, create a system_upload event
+  // 4) FALLBACK: If no structured dates from classifier, regex-extract from document text
+  if (events.length === 0) {
+    console.log(`[DateExtract] No structured dates from classifier for ${fileName}, attempting text regex fallback...`);
+
+    // Try to get extracted_text from the file record
+    let extractedText: string | null = null;
+    if (fileId) {
+      const { data: fileRecord } = await supabase
+        .from('claim_files')
+        .select('extracted_text')
+        .eq('id', fileId)
+        .single();
+      extractedText = fileRecord?.extracted_text || null;
+    }
+
+    if (extractedText && extractedText.length > 10) {
+      const regexDates = extractDatesFromTextRegex(extractedText, claimId, fileId, fileName, docType);
+      console.log(`[DateExtract][Regex] Found ${regexDates.length} dates in text of ${fileName}`);
+      for (const rd of regexDates.slice(0, 5)) {
+        console.log(`[DateExtract][Regex] Sample: ${rd.event_type} @ ${rd.occurred_at} | evidence: "${(rd.date_evidence || '').substring(0, 80)}"`);
+      }
+      events.push(...regexDates);
+    } else {
+      console.log(`[DateExtract] No extracted_text available for ${fileName} (fileId: ${fileId})`);
+    }
+  }
+
+  // 5) If STILL no dates extracted at all, create a system_upload event
   if (events.length === 0) {
     events.push({
       claim_id: claimId,
@@ -1256,7 +1283,147 @@ async function extractDatesToClaimEvents(
       } else {
         insertedCount++;
         console.log(`[DateExtract] claim_event inserted: ${evt.event_type} @ ${evt.occurred_at} from ${fileName}`);
+}
+
+// === REGEX FALLBACK DATE EXTRACTOR ===
+function extractDatesFromTextRegex(
+  text: string,
+  claimId: string,
+  fileId: string | null,
+  fileName: string,
+  docType: string,
+): Array<{
+  claim_id: string;
+  event_type: string;
+  occurred_at: string;
+  summary: string;
+  source_artifact_id: string | null;
+  source_artifact_type: string;
+  date_source: string;
+  date_confidence: number;
+  date_evidence: string | null;
+  doc_type: string;
+  metadata_json: Record<string, unknown>;
+}> {
+  const events: Array<{
+    claim_id: string;
+    event_type: string;
+    occurred_at: string;
+    summary: string;
+    source_artifact_id: string | null;
+    source_artifact_type: string;
+    date_source: string;
+    date_confidence: number;
+    date_evidence: string | null;
+    doc_type: string;
+    metadata_json: Record<string, unknown>;
+  }> = [];
+
+  // Label patterns → event_type mapping with confidence boost
+  const labelPatterns: Array<{ regex: RegExp; eventType: string; confidence: number }> = [
+    { regex: /(?:date\s+of\s+loss|DOL|loss\s+date)[:\s]*(\S+)/gi, eventType: 'loss_event', confidence: 0.9 },
+    { regex: /(?:inspection\s+date)[:\s]*(\S+)/gi, eventType: 'inspection', confidence: 0.85 },
+    { regex: /(?:estimate\s+date)[:\s]*(\S+)/gi, eventType: 'estimate_issued', confidence: 0.85 },
+    { regex: /(?:payment\s+date)[:\s]*(\S+)/gi, eventType: 'payment', confidence: 0.85 },
+    { regex: /(?:issued|dated)[:\s]*(\S+)/gi, eventType: `${docType}_issued`, confidence: 0.75 },
+  ];
+
+  // Date regex patterns
+  const datePatterns = [
+    /(\d{1,2}\/\d{1,2}\/\d{2,4})/g,                    // MM/DD/YYYY or M/D/YY
+    /(\d{4}-\d{2}-\d{2})/g,                              // YYYY-MM-DD
+    /((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})/gi, // Month DD, YYYY
+    /((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s+\d{1,2},?\s+\d{4})/gi, // Mon DD, YYYY
+  ];
+
+  const seen = new Set<string>();
+  const now = new Date();
+  const tenYearsAgo = new Date();
+  tenYearsAgo.setFullYear(tenYearsAgo.getFullYear() - 10);
+
+  // Helper: get surrounding snippet
+  function getSnippet(fullText: string, matchIndex: number): string {
+    const start = Math.max(0, matchIndex - 40);
+    const end = Math.min(fullText.length, matchIndex + 60);
+    return fullText.substring(start, end).replace(/\n/g, ' ').trim();
+  }
+
+  // Helper: parse date string safely
+  function tryParseDate(raw: string): Date | null {
+    try {
+      const d = new Date(raw);
+      if (isNaN(d.getTime())) return null;
+      if (d > now || d < tenYearsAgo) return null;
+      return d;
+    } catch { return null; }
+  }
+
+  // Pass 1: labeled dates (higher confidence)
+  for (const lp of labelPatterns) {
+    let match: RegExpExecArray | null;
+    const regex = new RegExp(lp.regex.source, lp.regex.flags);
+    while ((match = regex.exec(text)) !== null) {
+      const rawDate = match[1];
+      const parsed = tryParseDate(rawDate);
+      if (!parsed) continue;
+      const iso = parsed.toISOString();
+      const key = `${lp.eventType}|${iso}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      events.push({
+        claim_id: claimId,
+        event_type: lp.eventType,
+        occurred_at: iso,
+        summary: `${lp.eventType.replace(/_/g, ' ')}: ${rawDate} (regex from ${fileName})`,
+        source_artifact_id: fileId || null,
+        source_artifact_type: 'claim_file',
+        date_source: 'document_text_regex',
+        date_confidence: lp.confidence,
+        date_evidence: getSnippet(text, match.index),
+        doc_type: docType,
+        metadata_json: { file_name: fileName, extraction_method: 'text_regex_labeled', label: lp.eventType },
+      });
+    }
+  }
+
+  // Pass 2: unlabeled standalone dates (lower confidence, only if few labeled found)
+  if (events.length < 3) {
+    for (const dp of datePatterns) {
+      let match: RegExpExecArray | null;
+      const regex = new RegExp(dp.source, dp.flags);
+      while ((match = regex.exec(text)) !== null) {
+        const rawDate = match[1];
+        const parsed = tryParseDate(rawDate);
+        if (!parsed) continue;
+        const iso = parsed.toISOString();
+        const key = `date_mentioned|${iso}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        events.push({
+          claim_id: claimId,
+          event_type: 'date_mentioned',
+          occurred_at: iso,
+          summary: `Date found in ${fileName}: ${rawDate}`,
+          source_artifact_id: fileId || null,
+          source_artifact_type: 'claim_file',
+          date_source: 'document_text_regex',
+          date_confidence: 0.6,
+          date_evidence: getSnippet(text, match.index),
+          doc_type: docType,
+          metadata_json: { file_name: fileName, extraction_method: 'text_regex_unlabeled' },
+        });
+
+        // Cap unlabeled dates at 10
+        if (events.length >= 15) break;
       }
+      if (events.length >= 15) break;
+    }
+  }
+
+  return events;
+}
     } else {
       console.log(`[DateExtract] Skipped duplicate: ${evt.event_type} @ ${evt.occurred_at} from ${fileName}`);
     }
