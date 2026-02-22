@@ -217,15 +217,15 @@ serve(async (req) => {
     // - no_expert_report is informational, not a problem
     // - comms warning only if claim is older than 7 days with no comms
     const issues: string[] = [];
-    const textCoverageRatio = allFiles.length > 0 ? filesWithText.length / allFiles.length : 1;
-    if (allFiles.length > 0 && textCoverageRatio < 0.5) issues.push("files_missing_text");
     
-    const criticalMissingAnchors = missingAnchors.filter(a => a === "fnol_received");
-    if (criticalMissingAnchors.length > 0 && allEvents.length > 0) issues.push("missing_fnol");
-    
+    // Only flag denial duplicates as an actual issue — everything else is informational
     if (denialMergeLog.length > 0) issues.push("denial_duplicates_merged");
 
     const overallStatus = issues.length === 0 ? "Healthy" : "Needs Attention";
+    
+    // Track informational notes (not counted as issues)
+    const textCoverageRatio = allFiles.length > 0 ? filesWithText.length / allFiles.length : 1;
+    const criticalMissingAnchors = missingAnchors.filter(a => a === "fnol_received");
 
     const result = {
       status: overallStatus,
