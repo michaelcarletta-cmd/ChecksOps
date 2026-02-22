@@ -107,12 +107,20 @@ export const DarwinAutoSummary = ({ claimId, claim }: DarwinAutoSummaryProps) =>
     },
   });
 
-  // Auto-refresh effect - check for new uploads
+  // Auto-refresh effect - listen for new files, emails, notes, communications
   useEffect(() => {
     if (!autoRefresh) return;
 
+    const triggerRefresh = (source: string) => {
+      toast({
+        title: `New ${source} detected`,
+        description: "Updating claim summary...",
+      });
+      generateSummary.mutate();
+    };
+
     const channel = supabase
-      .channel(`claim-files-${claimId}`)
+      .channel(`claim-auto-refresh-${claimId}`)
       .on(
         "postgres_changes",
         {
@@ -121,14 +129,57 @@ export const DarwinAutoSummary = ({ claimId, claim }: DarwinAutoSummaryProps) =>
           table: "claim_files",
           filter: `claim_id=eq.${claimId}`,
         },
-        () => {
-          // New file uploaded, trigger summary regeneration
-          toast({
-            title: "New document detected",
-            description: "Updating claim summary...",
-          });
-          generateSummary.mutate();
-        }
+        () => triggerRefresh("document")
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "emails",
+          filter: `claim_id=eq.${claimId}`,
+        },
+        () => triggerRefresh("email")
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "claim_notes",
+          filter: `claim_id=eq.${claimId}`,
+        },
+        () => triggerRefresh("note")
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "claim_communications_diary",
+          filter: `claim_id=eq.${claimId}`,
+        },
+        () => triggerRefresh("communication")
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "sms_messages",
+          filter: `claim_id=eq.${claimId}`,
+        },
+        () => triggerRefresh("SMS")
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "claim_updates",
+          filter: `claim_id=eq.${claimId}`,
+        },
+        () => triggerRefresh("activity")
       )
       .subscribe();
 
@@ -161,7 +212,7 @@ export const DarwinAutoSummary = ({ claimId, claim }: DarwinAutoSummaryProps) =>
                 onCheckedChange={setAutoRefresh}
               />
               <Label htmlFor="auto-refresh" className="text-sm">
-                Auto-refresh on upload
+                Auto-refresh on updates
               </Label>
             </div>
           </div>
