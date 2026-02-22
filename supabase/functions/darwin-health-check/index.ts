@@ -106,9 +106,10 @@ serve(async (req) => {
     const expertFilesByClassification = allFiles.filter(f =>
       f.document_classification === "engineering_report"
     );
+    const EXPERT_NAME_MARKERS = ["engineer", "engineering", "p.e.", "sealed"];
     const expertFilesByName = allFiles.filter(f => {
       const name = f.file_name?.toLowerCase() || "";
-      return EXPERT_TEXT_MARKERS.some(m => name.includes(m));
+      return EXPERT_NAME_MARKERS.some(m => name.includes(m));
     });
     const expertEventsByType = allEvents.filter(e =>
       e.event_type === "engineer_report_issued" || e.doc_type === "engineering_report"
@@ -134,44 +135,62 @@ serve(async (req) => {
     };
 
     // === DENIAL DE-DUP / AMENDMENT MERGE ===
+    // Group denials by claim_number first, then merge within each group
     const denialEvents = allEvents.filter(e => e.event_type === "denial_issued");
     const mergedDenials: any[] = [];
     const denialMergeLog: any[] = [];
 
     if (denialEvents.length > 1) {
-      // Group by source artifact (file)
-      const processed = new Set<string>();
-      for (let i = 0; i < denialEvents.length; i++) {
-        if (processed.has(denialEvents[i].id)) continue;
-        let merged = { ...denialEvents[i], denial_versions: [denialEvents[i].source_artifact_id], amended_by: [] as string[] };
-        
-        for (let j = i + 1; j < denialEvents.length; j++) {
-          if (processed.has(denialEvents[j].id)) continue;
-          
-          // Check amendment language in the associated file
-          const file2 = allFiles.find(f => f.id === denialEvents[j].source_artifact_id);
-          const file1 = allFiles.find(f => f.id === denialEvents[i].source_artifact_id);
-          const text2 = (file2?.extracted_text || "").toLowerCase();
-          const hasAmendmentLang = AMENDMENT_MARKERS.some(m => text2.includes(m));
-          
-          // Check text overlap
-          const text1Decision = (file1?.extracted_text || "").substring(0, 3000);
-          const text2Decision = (file2?.extracted_text || "").substring(0, 3000);
-          const overlap = textOverlap(text1Decision, text2Decision);
-          
-          if (hasAmendmentLang || overlap >= 0.7) {
-            processed.add(denialEvents[j].id);
-            merged.amended_by.push(denialEvents[j].source_artifact_id || denialEvents[j].id);
-            merged.denial_versions.push(denialEvents[j].source_artifact_id);
-            denialMergeLog.push({
-              merged_event: denialEvents[j].id,
-              reason: hasAmendmentLang ? "amendment_language" : `text_overlap_${(overlap * 100).toFixed(0)}%`,
-              into: denialEvents[i].id,
-            });
-          }
+      // Extract claim_number from metadata or use the claim's own number
+      const getClaimNum = (e: any): string => {
+        const meta = e.metadata_json as Record<string, any> | null;
+        return meta?.claim_number || claim?.claim_number || "unknown";
+      };
+
+      // Group by claim_number
+      const groups = new Map<string, typeof denialEvents>();
+      for (const e of denialEvents) {
+        const cn = getClaimNum(e);
+        if (!groups.has(cn)) groups.set(cn, []);
+        groups.get(cn)!.push(e);
+      }
+
+      for (const [_cn, group] of groups) {
+        if (group.length <= 1) {
+          mergedDenials.push(...group);
+          continue;
         }
-        processed.add(denialEvents[i].id);
-        mergedDenials.push(merged);
+        const processed = new Set<string>();
+        for (let i = 0; i < group.length; i++) {
+          if (processed.has(group[i].id)) continue;
+          const merged = { ...group[i], denial_versions: [group[i].source_artifact_id], amended_by: [] as string[] };
+
+          for (let j = i + 1; j < group.length; j++) {
+            if (processed.has(group[j].id)) continue;
+
+            const file1 = allFiles.find(f => f.id === group[i].source_artifact_id);
+            const file2 = allFiles.find(f => f.id === group[j].source_artifact_id);
+            const text2 = (file2?.extracted_text || "").toLowerCase();
+            const hasAmendmentLang = AMENDMENT_MARKERS.some(m => text2.includes(m));
+
+            const text1Decision = (file1?.extracted_text || "").substring(0, 3000);
+            const text2Decision = (file2?.extracted_text || "").substring(0, 3000);
+            const overlap = textOverlap(text1Decision, text2Decision);
+
+            if (hasAmendmentLang || overlap >= 0.7) {
+              processed.add(group[j].id);
+              merged.amended_by.push(group[j].source_artifact_id || group[j].id);
+              merged.denial_versions.push(group[j].source_artifact_id);
+              denialMergeLog.push({
+                merged_event: group[j].id,
+                reason: hasAmendmentLang ? "amendment_language" : `text_overlap_${(overlap * 100).toFixed(0)}%`,
+                into: group[i].id,
+              });
+            }
+          }
+          processed.add(group[i].id);
+          mergedDenials.push(merged);
+        }
       }
     } else {
       mergedDenials.push(...denialEvents);
@@ -253,11 +272,15 @@ serve(async (req) => {
       issues,
     };
 
-    // Store in DB
+    // Store in DB — resolve user via anon client to avoid service-role getUser()
     const authHeader = req.headers.get("authorization");
     let userId: string | null = null;
     if (authHeader) {
-      const { data: { user } } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const anonClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user } } = await anonClient.auth.getUser();
       userId = user?.id || null;
     }
 
