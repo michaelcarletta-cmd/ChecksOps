@@ -17,7 +17,7 @@ export const INTENT_PATTERNS: Array<{ intent: DarwinIntent; pattern: RegExp }> =
   { intent: "operating_manual", pattern: /operating\s+manual|scenarios\s*\+\s*mini\s+trainings|turn\s+into\s+(an?\s+)?(operating\s+)?manual/i },
   { intent: "case_study", pattern: /case\s+study|write\s+a\s+case\s+study|redact|remove\s+identifying/i },
   { intent: "marketing", pattern: /blog|facebook|instagram|tiktok|marketing\s+assets|turn\s+(the\s+)?case\s+study\s+into/i },
-  { intent: "financial_qa", pattern: /what'?s\s+been\s+paid|depreciation|line\s+item|contents\s+vs\s+ale|dwelling\s+coverage|how\s+much\s+(is\s+)?(paid|outstanding)/i },
+  { intent: "financial_qa", pattern: /what'?s\s+been\s+paid|what\s+was\s+paid|what\s+is\s+paid|paid\s+for\s+(this\s+)?claim|payment\s+status|payments?\s+(for|on)\s+(this\s+)?claim|depreciation|line\s+item|contents\s+vs\s+ale|dwelling\s+coverage|how\s+much\s+(is\s+)?(paid|outstanding)|total\s+paid|outstanding|financial\s+summary|claim\s+financial/i },
   { intent: "create_task", pattern: /create\s+task|add\s+task|remind\s+me/i },
   { intent: "send_email", pattern: /send\s+email|draft\s+email/i },
 ];

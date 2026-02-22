@@ -1,8 +1,67 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { parseIntent, type DarwinIntent } from "../_shared/darwin-command-contracts.ts";
+import { parseIntent } from "../_shared/darwin-command-contracts.ts";
 import { redactForPublic, redactionReport } from "../_shared/darwin-redact.ts";
+
+async function getClaimFinancialSummary(supabase: any, claimId: string): Promise<string> {
+  try {
+    const { data: settlement } = await supabase
+      .from("claim_settlements")
+      .select("*")
+      .eq("claim_id", claimId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { data: payments } = await supabase
+      .from("claim_payments")
+      .select("amount, payment_date, payment_method")
+      .eq("claim_id", claimId);
+
+    const { data: checks } = await supabase
+      .from("claim_checks")
+      .select("amount, check_type, check_date")
+      .eq("claim_id", claimId);
+
+    let totalPaid = 0;
+    if (payments?.length) {
+      totalPaid += payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+    }
+    if (checks?.length) {
+      totalPaid += checks.reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
+    }
+
+    const rcv = settlement?.replacement_cost_value != null ? Number(settlement.replacement_cost_value) : 0;
+    const recDep = settlement?.recoverable_depreciation != null ? Number(settlement.recoverable_depreciation) : 0;
+    const nonRecDep = settlement?.non_recoverable_depreciation != null ? Number(settlement.non_recoverable_depreciation) : 0;
+    const deductible = settlement?.deductible != null ? Number(settlement.deductible) : 0;
+    const totalOutstanding = Math.max(0, rcv - totalPaid);
+
+    const lines: string[] = [];
+    lines.push("Total paid: $" + totalPaid.toLocaleString("en-US", { minimumFractionDigits: 2 }));
+    lines.push("Total outstanding: $" + totalOutstanding.toLocaleString("en-US", { minimumFractionDigits: 2 }));
+    if (recDep > 0 || nonRecDep > 0) {
+      lines.push("Recoverable depreciation: $" + recDep.toLocaleString("en-US", { minimumFractionDigits: 2 }));
+      lines.push("Non-recoverable depreciation: $" + nonRecDep.toLocaleString("en-US", { minimumFractionDigits: 2 }));
+    }
+    if (deductible > 0) {
+      lines.push("Deductible: $" + deductible.toLocaleString("en-US", { minimumFractionDigits: 2 }));
+    }
+    if (settlement?.other_structures_rcv > 0 || settlement?.personal_property_rcv > 0 || settlement?.pwi_rcv > 0) {
+      lines.push("");
+      lines.push("By coverage (RCV):");
+      if (rcv > 0) lines.push("  Dwelling: $" + rcv.toLocaleString("en-US", { minimumFractionDigits: 2 }));
+      if (settlement?.other_structures_rcv > 0) lines.push("  Other structures: $" + Number(settlement.other_structures_rcv).toLocaleString("en-US", { minimumFractionDigits: 2 }));
+      if (settlement?.personal_property_rcv > 0) lines.push("  Contents: $" + Number(settlement.personal_property_rcv).toLocaleString("en-US", { minimumFractionDigits: 2 }));
+      if (settlement?.pwi_rcv > 0) lines.push("  PWI / Ordinance: $" + Number(settlement.pwi_rcv).toLocaleString("en-US", { minimumFractionDigits: 2 }));
+    }
+    return lines.join("\n");
+  } catch (e) {
+    console.error("getClaimFinancialSummary error:", e);
+    return "Unable to load financial summary for this claim.";
+  }
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -32,31 +91,22 @@ serve(async (req) => {
     const intent = parseIntent(text);
 
     if (intent === "financial_qa") {
-      const finResp = await fetch(`${supabaseUrl}/functions/v1/darwin-financials`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${supabaseServiceKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          action: "answerFinancialQuestion",
-          claimId: claimId || null,
-          questionText: text,
-        }),
-      });
-      const finData = await finResp.json().catch(() => ({}));
-      if (!finResp.ok) {
+      if (!claimId) {
         return new Response(
-          JSON.stringify({ intent: "financial_qa", error: finData.error || "Financial service error" }),
-          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            intent: "financial_qa",
+            error: "This command requires a claim context. Open a claim and try again.",
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+      const answer = await getClaimFinancialSummary(supabase, claimId);
       return new Response(
         JSON.stringify({
           intent: "financial_qa",
-          answer: finData.answer,
-          dataComplete: finData.dataComplete,
-          source: finData.source,
+          answer,
+          dataComplete: true,
+          source: "claim_settlements, claim_payments, claim_checks",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
