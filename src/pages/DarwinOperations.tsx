@@ -380,28 +380,50 @@ const DarwinOperations = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           {rebuildEvents.status === "idle" && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-block">
-                    <Button
-                      onClick={startRebuildEvents}
-                      className="gap-2"
-                      variant="secondary"
-                      disabled={step2Disabled}
+            <div className="space-y-3">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-block">
+                      <Button
+                        onClick={startRebuildEvents}
+                        className="gap-2"
+                        variant="secondary"
+                        disabled={step2Disabled}
+                      >
+                        <Play className="h-4 w-4" />
+                        Rebuild All Events
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {step2Disabled && (
+                    <TooltipContent>
+                      <p>Run Step 1 first — not enough documents have extracted text.</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
+              {step2Disabled ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                  <span>
+                    Text coverage is {textCoverage}% (need ≥30%).{" "}
+                    <button
+                      type="button"
+                      className="underline font-medium text-primary hover:text-primary/80"
+                      onClick={startTextBackfill}
                     >
-                      <Play className="h-4 w-4" />
-                      Rebuild All Events
-                    </Button>
+                      Run Step 1 now
+                    </button>
                   </span>
-                </TooltipTrigger>
-                {step2Disabled && (
-                  <TooltipContent>
-                    <p>Run Step 1 first — not enough documents have extracted text.</p>
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-green-600">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  Text coverage is sufficient — you can rebuild events now.
+                </div>
+              )}
+            </div>
           )}
           {rebuildEvents.status === "running" && (
             <div className="space-y-3">
