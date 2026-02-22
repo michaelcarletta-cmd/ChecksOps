@@ -87,25 +87,54 @@ serve(async (req) => {
         );
       }
 
-      // Use extracted text if available (from OCR)
-      if (file.extracted_text) {
+      // GUARANTEE extracted_text is populated before any analysis
+      if (file.extracted_text && file.extracted_text.length > 50) {
         textContent = file.extracted_text;
+        console.log(`[TextExtract] Using existing extracted_text (${textContent.length} chars) for ${file.file_name}`);
       } else {
-        // Try to download and extract text from file
+        // Download file and extract text
         const { data: fileBlob, error: downloadError } = await supabase.storage
           .from('claim-files')
           .download(file.file_path);
 
         if (!downloadError && fileBlob) {
-          // For PDFs and text files, we can attempt to extract text
           const fileType = file.file_type || '';
           if (fileType.includes('text') || file.file_name.endsWith('.txt')) {
             textContent = await fileBlob.text();
           } else if (fileType.includes('pdf')) {
-            // For PDFs, we need to extract text or mark for AI processing
-            // Note: We can't easily extract PDF text without a library, so we mark it
-            textContent = `[PDF Document for analysis, filename: ${file.file_name}]`;
+            // Attempt PDF text extraction via raw bytes
+            const pdfBytes = new Uint8Array(await fileBlob.arrayBuffer());
+            textContent = extractPdfText(pdfBytes);
+            console.log(`[TextExtract] PDF raw text extraction: ${textContent.length} chars for ${file.file_name}`);
+
+            // If PDF text extraction yields < 300 chars, use OCR via vision AI
+            if (textContent.length < 300) {
+              console.log(`[TextExtract] PDF text < 300 chars, attempting OCR via vision for ${file.file_name}`);
+              const ocrText = await ocrViaVision(pdfBytes, file.file_name);
+              if (ocrText && ocrText.length > textContent.length) {
+                textContent = ocrText;
+                console.log(`[TextExtract] OCR yielded ${textContent.length} chars for ${file.file_name}`);
+              }
+            }
+          } else if (/\.(png|jpg|jpeg|webp|gif|bmp|tiff?)$/i.test(file.file_name)) {
+            // Image files: OCR via vision
+            console.log(`[TextExtract] Image file, attempting OCR via vision for ${file.file_name}`);
+            const imgBytes = new Uint8Array(await fileBlob.arrayBuffer());
+            const ocrText = await ocrViaVision(imgBytes, file.file_name);
+            if (ocrText) {
+              textContent = ocrText;
+              console.log(`[TextExtract] OCR yielded ${textContent.length} chars for ${file.file_name}`);
+            }
           }
+        }
+
+        // Persist extracted_text to claim_files so it's always available
+        if (textContent && textContent.length > 50 && !textContent.startsWith('[PDF Document')) {
+          await supabase
+            .from('claim_files')
+            .update({ extracted_text: textContent.substring(0, 100000) })
+            .eq('id', fileId);
+          console.log(`[TextExtract] Stored extracted_text (${Math.min(textContent.length, 100000)} chars) for file ${fileId}`);
         }
       }
     } else if (fileContent) {
@@ -267,6 +296,91 @@ serve(async (req) => {
   }
 });
 
+// === PDF TEXT EXTRACTION (raw byte parsing) ===
+function extractPdfText(bytes: Uint8Array): string {
+  const rawText = new TextDecoder("latin1").decode(bytes);
+  const textParts: string[] = [];
+  
+  // PDF BT/ET text extraction
+  const btEtRegex = /BT\s([\s\S]*?)ET/g;
+  let match;
+  while ((match = btEtRegex.exec(rawText)) !== null) {
+    const block = match[1];
+    const strRegex = /\(([^)]*)\)/g;
+    let strMatch;
+    while ((strMatch = strRegex.exec(block)) !== null) {
+      const decoded = strMatch[1]
+        .replace(/\\n/g, '\n').replace(/\\r/g, '\r')
+        .replace(/\\\(/g, '(').replace(/\\\)/g, ')').replace(/\\\\/g, '\\');
+      if (decoded.trim()) textParts.push(decoded);
+    }
+  }
+  
+  // If BT/ET yielded very little, try ASCII extraction
+  if (textParts.length < 5) {
+    const asciiRegex = /[A-Za-z0-9][A-Za-z0-9 ,.\-\/#:@$%&()]{4,}/g;
+    let asciiMatch;
+    while ((asciiMatch = asciiRegex.exec(rawText)) !== null) {
+      textParts.push(asciiMatch[0].trim());
+    }
+  }
+  
+  return textParts.join(' ');
+}
+
+// === OCR VIA VISION AI (for scanned PDFs/images) ===
+async function ocrViaVision(bytes: Uint8Array, fileName: string): Promise<string | null> {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) return null;
+
+  try {
+    // Convert to base64
+    const chunks: string[] = [];
+    const chunkSize = 32768;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      chunks.push(String.fromCharCode(...chunk));
+    }
+    const base64 = btoa(chunks.join(''));
+    
+    const isPdf = fileName.toLowerCase().endsWith('.pdf');
+    const mimeType = isPdf ? 'application/pdf' : 
+      fileName.toLowerCase().match(/\.(png)$/) ? 'image/png' :
+      fileName.toLowerCase().match(/\.(webp)$/) ? 'image/webp' :
+      'image/jpeg';
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          { role: 'system', content: 'Extract ALL text content from this document image. Return the raw text exactly as it appears, preserving dates, numbers, names, and addresses. Do not summarize or interpret.' },
+          { role: 'user', content: [
+            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+            { type: 'text', text: 'Extract all text from this document. Return only the raw text content.' }
+          ]}
+        ],
+        temperature: 0.1,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[OCR] Vision API error: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || null;
+  } catch (error) {
+    console.error('[OCR] Error:', error);
+    return null;
+  }
+}
+
 function classifyByFilename(filename: string): DocumentClassification {
   const lower = filename.toLowerCase();
   
@@ -276,7 +390,7 @@ function classifyByFilename(filename: string): DocumentClassification {
   if (/rfi|request.*info|additional.*info/i.test(lower)) return 'rfi';
   if (/engineer|structural|report/i.test(lower)) return 'engineering_report';
   
-  // Policy detection: keywords OR policy number patterns (H0132PK..., HO-3, DP-1, etc.)
+  // Policy detection
   const isPolicyKeyword = /policy|coverage|dec.*page|declaration/i.test(lower);
   const isPolicyNumberFormat = /^h[o0][-]?\d/i.test(lower) || /^dp[-]?\d/i.test(lower) || /^[a-z]{1,4}\d{4,}/i.test(lower);
   if (isPolicyKeyword || isPolicyNumberFormat) return 'policy';
@@ -1122,6 +1236,43 @@ Freedom Claims Team`;
   console.log(`Drafted client update email for claim ${claim.claim_number} - status: ${newStatus}`);
 }
 
+// === EVIDENCE SNIPPET EXTRACTOR ===
+// Extracts a relevant text snippet from document content based on doc type
+function extractEvidenceSnippet(text: string, docType: string): string | null {
+  if (!text || text.length < 20) return null;
+  
+  const snippetPatterns: Record<string, RegExp[]> = {
+    'denial': [
+      /(?:deny|denied|denial|decline|declined)[^.]{0,200}\./gi,
+      /(?:not covered|excluded|exclusion|does not apply)[^.]{0,150}\./gi,
+    ],
+    'approval': [
+      /(?:approved|approval|payment|enclosed|settlement)[^.]{0,200}\./gi,
+    ],
+    'estimate': [
+      /(?:total|grand total|rcv|acv|replacement cost)[^.]{0,150}\./gi,
+    ],
+    'rfi': [
+      /(?:request|require|provide|submit|needed)[^.]{0,200}\./gi,
+    ],
+    'engineering_report': [
+      /(?:opinion|conclusion|finding|determined|assessment)[^.]{0,200}\./gi,
+    ],
+  };
+
+  const patterns = snippetPatterns[docType] || [];
+  for (const pattern of patterns) {
+    const match = pattern.exec(text);
+    if (match) {
+      return match[0].substring(0, 250).trim();
+    }
+  }
+
+  // Fallback: first meaningful 200 chars
+  const firstContent = text.replace(/\s+/g, ' ').trim().substring(0, 200);
+  return firstContent.length > 20 ? firstContent : null;
+}
+
 // =========================================================================
 // DOCUMENT-DRIVEN TIMELINE: Extract dates from classification → claim_events
 // =========================================================================
@@ -1151,23 +1302,39 @@ async function extractDatesToClaimEvents(
     metadata_json: Record<string, unknown>;
   }> = [];
 
-  // 1) Document issuance date
+  // === ANCHOR EVENT_TYPE MAPPING ===
+  // Map document classification to specific anchor event_types
+  const DOC_TYPE_TO_ANCHOR_EVENT: Record<string, string> = {
+    'denial': 'denial_issued',
+    'approval': 'payment',
+    'estimate': 'estimate_issued',
+    'engineering_report': 'engineer_report_issued',
+    'rfi': 'ror_issued',
+    'policy': 'policy_issued',
+    'invoice': 'invoice_issued',
+    'correspondence': 'correspondence_issued',
+  };
+
+  // 1) Document issuance date → use anchor event_type
   const documentDate = metadata.document_date || metadata.date_mentioned;
+  const anchorEventType = DOC_TYPE_TO_ANCHOR_EVENT[docType] || `${docType}_issued`;
   if (documentDate) {
     const validation = validateExtractedDate(documentDate);
     if (validation.isValid && validation.correctedDate) {
+      // Extract evidence snippet from text content
+      const evidenceSnippet = extractEvidenceSnippet(textContent || '', docType);
       events.push({
         claim_id: claimId,
-        event_type: `${docType}_issued`,
+        event_type: anchorEventType,
         occurred_at: new Date(validation.correctedDate).toISOString(),
         summary: `${docType.replace(/_/g, ' ')} issued: ${fileName}`,
         source_artifact_id: fileId || null,
         source_artifact_type: 'claim_file',
         date_source: 'document_extracted',
         date_confidence: metadata.date_confidence ?? classificationResult.confidence,
-        date_evidence: `Document date extracted from ${fileName}`,
+        date_evidence: evidenceSnippet || `Document date extracted from ${fileName}`,
         doc_type: docType,
-        metadata_json: { file_name: fileName, extraction_method: 'ai_classification' },
+        metadata_json: { file_name: fileName, extraction_method: 'ai_classification', evidence_snippet: evidenceSnippet },
       });
     }
   }
@@ -1182,11 +1349,12 @@ async function extractDatesToClaimEvents(
 
       const eventTypeMap: Record<string, string> = {
         loss_date: 'loss_event',
-        claim_date: 'claim_filed',
+        claim_date: 'fnol_received',
         policy_date: 'policy_period',
         deadline: 'deadline',
         inspection_date: 'inspection',
         payment_date: 'payment',
+        acknowledgment_date: 'acknowledgement_issued',
       };
       const eventType = eventTypeMap[df.type] || df.type || 'date_mentioned';
 
