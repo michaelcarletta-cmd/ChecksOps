@@ -31,7 +31,14 @@ interface ClaimSummary {
 export const DarwinAutoSummary = ({ claimId, claim }: DarwinAutoSummaryProps) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(() => {
+    const saved = localStorage.getItem(`darwin-auto-refresh-${claimId}`);
+    return saved === "true";
+  });
+
+  useEffect(() => {
+    localStorage.setItem(`darwin-auto-refresh-${claimId}`, String(autoRefresh));
+  }, [autoRefresh, claimId]);
 
   // Fetch existing summary
   const { data: existingSummary, isLoading: isLoadingSummary } = useQuery({
