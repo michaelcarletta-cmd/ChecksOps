@@ -640,11 +640,32 @@ serve(async (req) => {
              (classification === 'invoice' && (fileName.includes('contractor') || fileName.includes('repair')));
     });
     const hasDenialLetter = files.some(f => f.document_classification === 'denial' || f.file_name?.toLowerCase().includes('denial'));
-    // Check files AND claim_events for engineer/expert reports
-    const engineerFileCount = files.filter(f => f.document_classification === 'engineering_report' || f.file_name?.toLowerCase().includes('engineer')).length;
-    const engineerEventCount = claimEvents.filter((e: any) => e.event_type === 'engineer_report_issued' || e.doc_type === 'engineering_report').length;
-    const hasEngineerReport = engineerFileCount > 0 || engineerEventCount > 0;
-    console.log(`[Strategic] Engineer report detection: ${engineerFileCount} file(s), ${engineerEventCount} event(s), hasEngineerReport=${hasEngineerReport}`);
+    // Multi-signal expert/engineer report detection
+    const expertMarkers = ["p.e.", "professional engineer", "engineer", "engineering report", "cause of loss", "findings", "opinion", "seal", "license"];
+    const expertByClassification = files.filter(f => f.document_classification === 'engineering_report');
+    const expertByName = files.filter(f => {
+      const name = f.file_name?.toLowerCase() || '';
+      return expertMarkers.some(m => name.includes(m));
+    });
+    const expertByText = files.filter(f => {
+      const text = (f.extracted_text || '').toLowerCase().substring(0, 2000);
+      return expertMarkers.filter(m => text.includes(m)).length >= 2;
+    });
+    const expertByEvents = claimEvents.filter((e: any) => e.event_type === 'engineer_report_issued' || e.doc_type === 'engineering_report');
+    const allExpertFileNames = [...new Set([
+      ...expertByClassification.map(f => f.file_name),
+      ...expertByName.map(f => f.file_name),
+      ...expertByText.map(f => f.file_name),
+    ])];
+    const hasEngineerReport = allExpertFileNames.length > 0 || expertByEvents.length > 0;
+    const expertReportDebug = {
+      files_by_classification: expertByClassification.map(f => f.file_name),
+      files_by_name: expertByName.map(f => f.file_name),
+      files_by_text_markers: expertByText.map(f => f.file_name),
+      events_matched: expertByEvents.length,
+      rule_result: hasEngineerReport,
+    };
+    console.log(`[Strategic] Expert report multi-signal detection:`, JSON.stringify(expertReportDebug));
     const hasPolicy = files.some(f => f.document_classification === 'policy' || f.file_name?.toLowerCase().includes('policy') || f.file_name?.toLowerCase().includes('declaration'));
     const hasProofOfLoss = files.some(f => f.file_name?.toLowerCase().includes('proof of loss') || f.file_name?.toLowerCase().includes('pol'));
     const hasContractorInvoice = files.some(f => f.document_classification === 'invoice' || f.file_name?.toLowerCase().includes('invoice'));
@@ -841,11 +862,14 @@ EVIDENCE INVENTORY:
 - Photos: ${photoCount} (${categorizedPhotos.length} categorized, ${annotatedPhotos.length} annotated)
 - Has Estimate: ${hasEstimate ? 'Yes' : 'NO - MISSING'}
 - Has Denial Letter: ${hasDenialLetter ? 'Yes' : 'No'}
-- Has Engineer Report: ${hasEngineerReport ? 'Yes' : 'No'}
+- Has Engineer Report: ${hasEngineerReport ? 'Yes — detected in: ' + allExpertFileNames.join(', ') : 'No'}
 - Has Policy: ${hasPolicy ? 'Yes' : 'NO - RECOMMEND OBTAINING'}
 - Has Proof of Loss: ${hasProofOfLoss ? 'Yes' : 'No'}
 - Has Contractor Invoice: ${hasContractorInvoice ? 'Yes' : 'No'}
 - Has Ordinance/Code Info: ${hasOrdinanceInfo ? 'Yes' : 'No'}
+EXPERT REPORT DETECTION DEBUG: ${JSON.stringify(expertReportDebug)}
+NOTE: If "Has Engineer Report" is Yes, do NOT generate a "No Expert Report" warning. Instead generate: "Expert report present — summarize findings + how it rebuts denial" with the file name(s).
+
 
 DOCUMENT TIMELINE (based on ACTUAL document dates, not upload dates):
 NOTE: These dates are extracted from the documents themselves. Use these for timeline analysis, deadline calculations, and carrier response tracking - NOT the upload dates.
@@ -951,7 +975,8 @@ Generate a COMPLETE strategic analysis. You MUST return ONLY valid JSON matching
       "title": "Brief warning title (append '(Needs Review)' if no citation)",
       "message": "Detailed explanation",
       "suggested_action": "What to do",
-      "citation": {"file_name": "source document name or null", "snippet": "evidence text or null"}
+      "citation": {"file_name": "source document name or null", "snippet": "evidence text or null"},
+      "why": {"files_matched": ["filenames that triggered this"], "events_matched": ["event IDs/types"], "text_triggers": ["keywords found"], "rule_result": "explain how rule fired"}
     }
   ],
   "leverage_opportunities": [

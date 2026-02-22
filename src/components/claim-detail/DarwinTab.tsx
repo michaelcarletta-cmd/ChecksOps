@@ -66,6 +66,7 @@ const DarwinCommandBar = lazy(() => import("@/components/claim-detail/DarwinComm
 const DarwinGeneratedAssets = lazy(() => import("@/components/claim-detail/DarwinGeneratedAssets").then(m => ({ default: m.DarwinGeneratedAssets })));
 const CarrierScenarioPlaybook = lazy(() => import("@/components/claim-detail/CarrierScenarioPlaybook").then(m => ({ default: m.CarrierScenarioPlaybook })));
 const DarwinEscalationEngine = lazy(() => import("@/components/claim-detail/DarwinEscalationEngine"));
+const DarwinHealthCheck = lazy(() => import("@/components/claim-detail/DarwinHealthCheck"));
 
 
 interface DarwinTabProps {
@@ -518,6 +519,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
       case "timeline-history":
         return (
           <>
+            <DarwinHealthCheck claimId={claimId} claim={claim} />
             <DarwinDocumentTimeline claimId={claimId} claim={claim} />
             <VisualClaimTimeline claimId={claimId} claim={claim} />
             <ClaimTimeline claimId={claimId} claim={claim} />
