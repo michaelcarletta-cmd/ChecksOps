@@ -8,7 +8,9 @@ const corsHeaders = {
 
 const BATCH_SIZE = 20;
 const MAX_TEXT_LENGTH = 100000;
-const MIN_TEXT_THRESHOLD = 50; // files with fewer chars are treated as "missing"
+const MIN_TEXT_THRESHOLD = 50;
+const JOB_TYPE = "backfill_extracted_text";
+const TTL_SECONDS = 120;
 
 // === PDF TEXT EXTRACTION (raw byte parsing) ===
 function extractPdfText(bytes: Uint8Array): string {
@@ -130,7 +132,6 @@ async function processFile(
   };
 
   try {
-    // Download file from storage
     console.log(`[Process] Downloading ${file.file_name} from path: ${file.file_path}`);
     const { data: blob, error: dlErr } = await supabase.storage
       .from("claim-files")
@@ -151,57 +152,39 @@ async function processFile(
     const fileName = file.file_name || "";
     let textContent = "";
 
-    // Text files
     if (fileType.includes("text") || fileName.endsWith(".txt")) {
       textContent = await blob.text();
       entry.method = "plain_text";
-      console.log(`[Process] Plain text extraction: ${textContent.length} chars`);
-    }
-    // PDF files
-    else if (fileType.includes("pdf") || fileName.toLowerCase().endsWith(".pdf")) {
+    } else if (fileType.includes("pdf") || fileName.toLowerCase().endsWith(".pdf")) {
       const pdfBytes = new Uint8Array(arrayBuffer);
       textContent = extractPdfText(pdfBytes);
       entry.method = "pdf_text";
-      console.log(`[Process] PDF text extraction: ${textContent.length} chars`);
-
-      // If PDF text extraction yields < 300 chars, try OCR
       if (textContent.length < 300) {
-        console.log(`[Process] PDF text < 300 chars, falling back to OCR for ${fileName}`);
         const ocrText = await ocrViaVision(pdfBytes, fileName);
         if (ocrText && ocrText.length > textContent.length) {
           textContent = ocrText;
           entry.method = "ocr";
-          console.log(`[Process] OCR improved to ${textContent.length} chars`);
         }
       }
-    }
-    // Image files
-    else if (/\.(png|jpg|jpeg|webp|gif|bmp|tiff?)$/i.test(fileName)) {
+    } else if (/\.(png|jpg|jpeg|webp|gif|bmp|tiff?)$/i.test(fileName)) {
       const imgBytes = new Uint8Array(arrayBuffer);
-      console.log(`[Process] Image file, running OCR for ${fileName}`);
       const ocrText = await ocrViaVision(imgBytes, fileName);
       if (ocrText) {
         textContent = ocrText;
         entry.method = "image_ocr";
-        console.log(`[Process] Image OCR: ${textContent.length} chars`);
       } else {
         entry.reason = "ocr_returned_null";
       }
-    }
-    // Unknown file types
-    else {
+    } else {
       entry.reason = `unsupported_type: ${fileType} / ${fileName}`;
-      console.log(`[Process] Skipping unsupported: ${entry.reason}`);
       return entry;
     }
 
-    // Save extracted text
     if (textContent && textContent.length > 10) {
-      // Sanitize: remove null bytes and invalid Unicode escape sequences that Postgres rejects
       let sanitized = textContent
         .replace(/\0/g, "")
-        .replace(/\\u[0-9a-fA-F]{0,3}(?![0-9a-fA-F])/g, "") // incomplete unicode escapes
-        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ""); // control chars except \t \n \r
+        .replace(/\\u[0-9a-fA-F]{0,3}(?![0-9a-fA-F])/g, "")
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
       const capped = sanitized.substring(0, MAX_TEXT_LENGTH);
       const { error: updateErr } = await supabase
         .from("claim_files")
@@ -210,19 +193,15 @@ async function processFile(
 
       if (updateErr) {
         entry.reason = `update_failed: ${updateErr.message}`;
-        console.error(`[Process] DB update failed for ${file.id}: ${updateErr.message}`);
       } else {
         entry.chars = capped.length;
         entry.success = true;
-        console.log(`[Process] ✅ Saved ${capped.length} chars for ${file.file_name}`);
       }
     } else {
       entry.reason = `extraction_yielded_${textContent?.length || 0}_chars`;
-      console.log(`[Process] ❌ Insufficient text for ${file.file_name}: ${textContent?.length || 0} chars`);
     }
   } catch (err) {
     entry.reason = `error: ${err instanceof Error ? err.message : String(err)}`;
-    console.error(`[Process] Exception for ${file.file_name}: ${entry.reason}`);
   }
 
   return entry;
@@ -239,35 +218,35 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceKey);
 
     const body = await req.json().catch(() => ({}));
-    const fileId = body.fileId || null; // single-file debug mode
+    const fileId = body.fileId || null;
     const cursor = body.cursor || null;
     const dryRun = body.dryRun || false;
-    const release = body.release || false; // force-release a stuck lock
-
-    const JOB_TYPE = "backfill_extracted_text";
+    const release = body.release || false;
 
     // Force-release lock if requested
     if (release) {
-      await supabase.from("darwin_jobs").update({ status: "idle", completed_at: new Date().toISOString() }).eq("job_type", JOB_TYPE);
+      await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });
       return new Response(JSON.stringify({ success: true, message: "Lock released" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Skip lock for single-file debug mode
     if (!fileId) {
-      // Acquire lock — only if status is 'idle'
-      const { data: lockRow, error: lockErr } = await supabase
-        .from("darwin_jobs")
-        .update({ status: "running", started_at: new Date().toISOString(), claimed_by: "backfill-extracted-text", error_message: null })
-        .eq("job_type", JOB_TYPE)
-        .eq("status", "idle")
-        .select()
-        .maybeSingle();
+      // Atomic acquire via RPC (handles TTL-based steal)
+      const { data: lockResult, error: lockErr } = await supabase.rpc("acquire_darwin_job", {
+        p_job_type: JOB_TYPE,
+        p_claimed_by: "backfill-extracted-text",
+        p_ttl_seconds: TTL_SECONDS,
+      });
 
-      if (lockErr || !lockRow) {
-        // Check if already running
-        const { data: existing } = await supabase.from("darwin_jobs").select("status, started_at, claimed_by").eq("job_type", JOB_TYPE).single();
+      if (lockErr) {
+        return new Response(JSON.stringify({ success: false, error: `Lock RPC error: ${lockErr.message}` }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (!lockResult?.acquired) {
         return new Response(
-          JSON.stringify({ success: false, error: "Job already running", job: existing }),
+          JSON.stringify({ success: false, error: "Job already running", job: lockResult }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -275,7 +254,6 @@ serve(async (req) => {
 
     // === SINGLE FILE DEBUG MODE ===
     if (fileId) {
-      console.log(`[Debug] Single-file mode for fileId: ${fileId}`);
       const { data: file, error: fileErr } = await supabase
         .from("claim_files")
         .select("id, file_name, file_path, file_type, extracted_text")
@@ -304,14 +282,10 @@ serve(async (req) => {
     }
 
     // === BATCH MODE ===
-    // Find files needing text: NULL, empty string, or short text (< threshold)
-    // PostgREST doesn't support length() easily, so we fetch null/empty first,
-    // then separately fetch short-text files
     console.log(`[Batch] Starting batch mode, cursor=${cursor}, dryRun=${dryRun}`);
 
     let candidates: any[] = [];
 
-    // Group 1: null or empty extracted_text
     let q1 = supabase
       .from("claim_files")
       .select("id, file_name, file_path, file_type, extracted_text")
@@ -321,13 +295,13 @@ serve(async (req) => {
     if (cursor) q1 = q1.gt("id", cursor);
     const { data: nullFiles, error: e1 } = await q1;
     if (e1) {
+      await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE, p_error_message: e1.message });
       return new Response(JSON.stringify({ success: false, error: e1.message }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
     if (nullFiles) candidates.push(...nullFiles);
 
-    // Group 2: short text (has text but < threshold) — only if we have room in batch
     if (candidates.length < BATCH_SIZE) {
       const remaining = BATCH_SIZE - candidates.length;
       const existingIds = candidates.map((c: any) => c.id);
@@ -337,7 +311,7 @@ serve(async (req) => {
         .not("extracted_text", "is", null)
         .neq("extracted_text", "")
         .order("id", { ascending: true })
-        .limit(remaining * 3); // over-fetch to filter in code
+        .limit(remaining * 3);
       if (cursor) q2 = q2.gt("id", cursor);
       const { data: shortFiles } = await q2;
       if (shortFiles) {
@@ -348,20 +322,20 @@ serve(async (req) => {
       }
     }
 
-    // Sort by id for consistent cursor
     candidates.sort((a: any, b: any) => a.id.localeCompare(b.id));
     candidates = candidates.slice(0, BATCH_SIZE);
 
     console.log(`[Batch] Found ${candidates.length} files to process`);
 
     if (candidates.length === 0) {
+      // Done — release lock
+      await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });
       return new Response(
         JSON.stringify({ success: true, processed: 0, remaining: 0, message: "No more files to process", cursor: null }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Count total remaining (null + empty)
     const { count: nullCount } = await supabase
       .from("claim_files")
       .select("id", { count: "exact", head: true })
@@ -390,9 +364,12 @@ serve(async (req) => {
     const successCount = log.filter((l: any) => l.success).length;
     const totalRemaining = (nullCount || 0) - candidates.filter((c: any) => !c.extracted_text || c.extracted_text === "").length;
 
-    // Release lock if no more remaining
-    if (Math.max(0, totalRemaining) === 0 && !fileId) {
-      await supabase.from("darwin_jobs").update({ status: "idle", completed_at: new Date().toISOString() }).eq("job_type", "backfill_extracted_text");
+    if (Math.max(0, totalRemaining) === 0) {
+      // All done — release lock
+      await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });
+    } else {
+      // Still more work — send heartbeat
+      await supabase.rpc("heartbeat_darwin_job", { p_job_type: JOB_TYPE, p_claimed_by: "backfill-extracted-text" });
     }
 
     return new Response(
@@ -409,12 +386,11 @@ serve(async (req) => {
     );
   } catch (e) {
     console.error("backfill-extracted-text error:", e);
-    // Release lock on error
     try {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const sb = createClient(supabaseUrl, serviceKey);
-      await sb.from("darwin_jobs").update({ status: "idle", completed_at: new Date().toISOString(), error_message: e instanceof Error ? e.message : "Unknown error" }).eq("job_type", "backfill_extracted_text");
+      await sb.rpc("release_darwin_job", { p_job_type: JOB_TYPE, p_error_message: e instanceof Error ? e.message : "Unknown error" });
     } catch { /* best effort */ }
     return new Response(
       JSON.stringify({ success: false, error: e instanceof Error ? e.message : "Unknown error" }),
