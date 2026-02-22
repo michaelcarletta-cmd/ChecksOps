@@ -211,10 +211,18 @@ serve(async (req) => {
     });
 
     // === OVERALL STATUS ===
+    // Use relaxed thresholds so normal claims aren't flagged:
+    // - files_missing_text only if majority of files lack text
+    // - missing_anchors only if FNOL is missing (the one anchor every claim should have)
+    // - no_expert_report is informational, not a problem
+    // - comms warning only if claim is older than 7 days with no comms
     const issues: string[] = [];
-    if (missingTextFiles.length > 0) issues.push("files_missing_text");
-    if (missingAnchors.length > 3) issues.push("many_missing_anchors");
-    if (!hasExpertReport) issues.push("no_expert_report");
+    const textCoverageRatio = allFiles.length > 0 ? filesWithText.length / allFiles.length : 1;
+    if (allFiles.length > 0 && textCoverageRatio < 0.5) issues.push("files_missing_text");
+    
+    const criticalMissingAnchors = missingAnchors.filter(a => a === "fnol_received");
+    if (criticalMissingAnchors.length > 0 && allEvents.length > 0) issues.push("missing_fnol");
+    
     if (denialMergeLog.length > 0) issues.push("denial_duplicates_merged");
 
     const overallStatus = issues.length === 0 ? "Healthy" : "Needs Attention";
@@ -227,14 +235,15 @@ serve(async (req) => {
         total_files: allFiles.length,
         files_with_text: filesWithText.length,
         missing_text_filenames: missingTextFiles,
-        status: missingTextFiles.length === 0 ? "ok" : "warning",
+        text_coverage_pct: allFiles.length > 0 ? Math.round((filesWithText.length / allFiles.length) * 100) : 100,
+        status: (allFiles.length === 0 || textCoverageRatio >= 0.5) ? "ok" : "warning",
       },
       timeline: {
         total_anchor_events: anchorEvents.length,
         present_anchors: presentAnchors,
         missing_anchors: missingAnchors,
         total_events: allEvents.length,
-        status: missingAnchors.length <= 2 ? "ok" : "warning",
+        status: criticalMissingAnchors.length === 0 ? "ok" : "warning",
       },
       expert_reports: {
         detected: hasExpertReport,
