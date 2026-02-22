@@ -8,6 +8,7 @@ import { Archive, ChevronDown, ChevronRight, Copy, Trash2, FileText, Loader2 } f
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
+// Define the structure for asset types and their labels
 interface GeneratedAsset {
   id: string;
   asset_type: string;
@@ -137,7 +138,7 @@ export const DarwinGeneratedAssets = ({ claimId }: DarwinGeneratedAssetsProps) =
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <div className="ml-7 mt-1 mb-2 space-y-2">
-                  <div className="h-64 max-h-[min(50vh,360px)] min-h-0 overflow-y-auto rounded border border-border/50 p-2">
+                  <div className="max-h-64 overflow-y-auto rounded border border-border/50 p-2">
                     <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-sans">
                       {asset.content_md?.slice(0, 5000) ?? "No content"}
                       {(asset.content_md?.length ?? 0) > 5000 && "\n\n… (truncated)"}
