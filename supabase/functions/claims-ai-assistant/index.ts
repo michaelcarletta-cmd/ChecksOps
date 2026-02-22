@@ -1431,6 +1431,52 @@ const tools = [
         }
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "run_darwin_analysis",
+      description: "Run a Darwin analysis or content generation on the current claim. Use when the user asks to 'run an analysis', 'analyze this claim', 'write a case study', 'create an operating manual', or 'generate marketing assets'. Requires claim context (claim_id or use from within a claim).",
+      parameters: {
+        type: "object",
+        properties: {
+          analysis_type: {
+            type: "string",
+            enum: ["claim_analysis", "case_study", "operating_manual", "marketing_assets"],
+            description: "claim_analysis = full claim analysis; case_study = redacted case study; operating_manual = scenarios and training; marketing_assets = blog and social posts"
+          },
+          claim_id: {
+            type: "string",
+            description: "Claim UUID. Use when available from context; otherwise omit and the system uses the current claim."
+          },
+          client_name: {
+            type: "string",
+            description: "Client/policyholder name to look up claim if claim_id not provided"
+          }
+        },
+        required: ["analysis_type"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_claim_financial_summary",
+      description: "Get paid vs outstanding, depreciation, deductible, and coverage breakdown for a claim. Use when the user asks 'what has been paid', 'what is outstanding', 'depreciation', 'what is tied up in depreciation', 'contents vs ALE vs dwelling', 'how much paid per line item', or any financial/payment question about the claim.",
+      parameters: {
+        type: "object",
+        properties: {
+          claim_id: {
+            type: "string",
+            description: "Claim UUID. Omit to use current claim context."
+          },
+          client_name: {
+            type: "string",
+            description: "Client/policyholder name to look up claim if claim_id not provided"
+          }
+        }
+      }
+    }
   }
 ];
 // Helper function to get full Darwin-level claim context
@@ -2785,6 +2831,66 @@ async function getStaffMembers(supabase: any): Promise<{ id: string; name: strin
   }
 }
 
+// Helper: get claim financial summary (paid, outstanding, depreciation, by coverage) from DB
+async function getClaimFinancialSummary(supabase: any, claimId: string): Promise<string> {
+  try {
+    const { data: settlement } = await supabase
+      .from("claim_settlements")
+      .select("*")
+      .eq("claim_id", claimId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { data: payments } = await supabase
+      .from("claim_payments")
+      .select("amount, payment_date, payment_method")
+      .eq("claim_id", claimId);
+
+    const { data: checks } = await supabase
+      .from("claim_checks")
+      .select("amount, check_type, check_date")
+      .eq("claim_id", claimId);
+
+    let totalPaid = 0;
+    if (payments?.length) {
+      totalPaid += payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+    }
+    if (checks?.length) {
+      totalPaid += checks.reduce((s: number, c: any) => s + Number(c.amount || 0), 0);
+    }
+
+    const rcv = settlement?.replacement_cost_value != null ? Number(settlement.replacement_cost_value) : 0;
+    const recDep = settlement?.recoverable_depreciation != null ? Number(settlement.recoverable_depreciation) : 0;
+    const nonRecDep = settlement?.non_recoverable_depreciation != null ? Number(settlement.non_recoverable_depreciation) : 0;
+    const deductible = settlement?.deductible != null ? Number(settlement.deductible) : 0;
+    const totalOutstanding = Math.max(0, rcv - totalPaid);
+
+    const lines: string[] = [];
+    lines.push("Total paid: $" + totalPaid.toLocaleString("en-US", { minimumFractionDigits: 2 }));
+    lines.push("Total outstanding: $" + totalOutstanding.toLocaleString("en-US", { minimumFractionDigits: 2 }));
+    if (recDep > 0 || nonRecDep > 0) {
+      lines.push("Recoverable depreciation: $" + recDep.toLocaleString("en-US", { minimumFractionDigits: 2 }));
+      lines.push("Non-recoverable depreciation: $" + nonRecDep.toLocaleString("en-US", { minimumFractionDigits: 2 }));
+    }
+    if (deductible > 0) {
+      lines.push("Deductible: $" + deductible.toLocaleString("en-US", { minimumFractionDigits: 2 }));
+    }
+    if (settlement?.other_structures_rcv > 0 || settlement?.personal_property_rcv > 0 || settlement?.pwi_rcv > 0) {
+      lines.push("");
+      lines.push("By coverage (RCV):");
+      if (rcv > 0) lines.push("  Dwelling: $" + rcv.toLocaleString("en-US", { minimumFractionDigits: 2 }));
+      if (settlement?.other_structures_rcv > 0) lines.push("  Other structures: $" + Number(settlement.other_structures_rcv).toLocaleString("en-US", { minimumFractionDigits: 2 }));
+      if (settlement?.personal_property_rcv > 0) lines.push("  Contents: $" + Number(settlement.personal_property_rcv).toLocaleString("en-US", { minimumFractionDigits: 2 }));
+      if (settlement?.pwi_rcv > 0) lines.push("  PWI / Ordinance: $" + Number(settlement.pwi_rcv).toLocaleString("en-US", { minimumFractionDigits: 2 }));
+    }
+    return lines.join("\n");
+  } catch (e) {
+    console.error("getClaimFinancialSummary error:", e);
+    return "Unable to load financial summary for this claim.";
+  }
+}
+
 // === CROSS-CLAIM PRECEDENT SEARCH (2-STEP PIPELINE) ===
 
 // Deny-list: suppress procedural/low-value chunks even if similarity is high
@@ -3853,7 +3959,11 @@ IMPORTANT: When the user asks about finding tasks with certain words or topics, 
   - "change the inspection task due date to next Friday" → update_task({ task_title_search: "inspection", due_date: "2026-02-27" })
   - "delete the old estimate task" → delete_task({ task_title_search: "estimate" })
   - "show me all tasks on this claim" → list_claim_tasks({})
-  - "reopen the supplement task" → reopen_task({ task_title_search: "supplement" })`;
+  - "reopen the supplement task" → reopen_task({ task_title_search: "supplement" })
+
+*** DARWIN ANALYSIS & FINANCIAL SUMMARY (USE FOR THIS CLAIM!) ***
+- run_darwin_analysis: When the user asks to "run an analysis", "analyze this claim", "write a case study", "create an operating manual", or "turn this into marketing assets" → call run_darwin_analysis({ analysis_type: "claim_analysis" | "case_study" | "operating_manual" | "marketing_assets" }). Use claim_id from context when in claim view.
+- get_claim_financial_summary: When the user asks "what has been paid", "what is outstanding", "depreciation", "what is tied up in depreciation", "contents vs ALE vs dwelling", "how much paid per line item", or any payment/financial question → call get_claim_financial_summary({}). Do NOT say you cannot do this or that it is coming soon.`;
 
     // Fetch available workspaces for context
     let workspacesContext = "";
@@ -5130,6 +5240,56 @@ ${knowledgeBaseContext || ''}`
           } catch (parseErr) {
             console.error("Error in list_claim_tasks:", parseErr);
             answer += `\n\n❌ **Error listing tasks:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "run_darwin_analysis") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            let targetClaimId = claimId;
+            if (params.claim_id) targetClaimId = params.claim_id;
+            if (!targetClaimId && params.client_name) {
+              const found = await findClaimByClientName(supabase, params.client_name);
+              if (found) targetClaimId = found.id;
+            }
+            if (!targetClaimId) {
+              answer += "\n\nNo claim specified. Open a claim or provide a client name.";
+              continue;
+            }
+            const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+            const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+            const res = await fetch(`${supabaseUrl}/functions/v1/darwin-ai-analysis`, {
+              method: "POST",
+              headers: { "Authorization": `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ claimId: targetClaimId, analysisType: params.analysis_type }),
+            });
+            const json = await res.json().catch(() => ({}));
+            const resultText = json.result || json.analysis || (typeof json === "string" ? json : "");
+            if (resultText) {
+              answer = resultText.length > 8000 ? resultText.substring(0, 8000) + "\n\n[Output truncated.]" : resultText;
+            } else {
+              answer += "\n\nAnalysis completed. If you don't see the full output here, check the Darwin tab for saved results.";
+            }
+          } catch (parseErr) {
+            console.error("Error in run_darwin_analysis:", parseErr);
+            answer += "\n\nFailed to run Darwin analysis. Please try again from the Darwin tab.";
+          }
+        } else if (toolCall.function.name === "get_claim_financial_summary") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments);
+            let targetClaimId = claimId;
+            if (params.claim_id) targetClaimId = params.claim_id;
+            if (!targetClaimId && params.client_name) {
+              const found = await findClaimByClientName(supabase, params.client_name);
+              if (found) targetClaimId = found.id;
+            }
+            if (!targetClaimId) {
+              answer += "\n\nNo claim specified. Open a claim or provide a client name.";
+              continue;
+            }
+            const summary = await getClaimFinancialSummary(supabase, targetClaimId);
+            answer = summary;
+          } catch (parseErr) {
+            console.error("Error in get_claim_financial_summary:", parseErr);
+            answer += "\n\nFailed to load financial summary.";
           }
         } else if (toolCall.function.name === "bulk_process_tasks") {
           try {
