@@ -103,17 +103,20 @@ export function DarwinCommandBar({
             )}
             {state === "success" && displayText && (
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-primary">
+                <div className="flex items-center gap-2 text-primary shrink-0">
                   <CheckCircle className="h-4 w-4 shrink-0" />
                   {response?.intent && (
                     <span className="font-medium capitalize">{response.intent.replace(/_/g, " ")}</span>
                   )}
                 </div>
-                <div className="text-muted-foreground whitespace-pre-wrap break-words">
+                <div
+                  className="text-muted-foreground whitespace-pre-wrap break-words font-sans text-sm max-h-[min(60vh,320px)] overflow-y-auto overscroll-contain pr-1"
+                  style={{ fontFamily: "var(--font-sans), system-ui, sans-serif" }}
+                >
                   {displayText}
                 </div>
                 {response?.assetId && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground shrink-0">
                     Saved to Knowledge Base. Asset ID: {response.assetId}
                   </p>
                 )}

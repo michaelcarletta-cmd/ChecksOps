@@ -35,8 +35,8 @@ export const INTENT_PATTERNS: Array<{ intent: DarwinIntent; pattern: RegExp }> =
   { intent: "case_study", pattern: /case\s+study|write\s+a\s+case\s+study|redact|remove\s+identifying/i },
   // ── Marketing ──
   { intent: "marketing", pattern: /blog|facebook|instagram|tiktok|marketing\s+assets?|turn\s+(the\s+)?case\s+study\s+into/i },
-  // ── Financial QA ──
-  { intent: "financial_qa", pattern: /what['']?s\s+been\s+paid|depreciation|line\s+item|contents\s+vs\s+ale|dwelling\s+coverage|how\s+much\s+(is\s+)?(paid|outstanding|owed|left|remaining)|total\s+(paid|payments|settlement)/i },
+  // ── Financial QA (broad: what was paid, payment status, etc.) ──
+  { intent: "financial_qa", pattern: /what['']?s\s+been\s+paid|what\s+was\s+paid|what\s+is\s+paid|paid\s+for\s+(this\s+)?claim|payment\s+status|payments?\s+(for|on)\s+(this\s+)?claim|depreciation|line\s+item|contents\s+vs\s+ale|dwelling\s+coverage|how\s+much\s+(is\s+)?(paid|outstanding|owed|left|remaining)|total\s+(paid|payments|settlement)|outstanding|financial\s+summary|claim\s+financial/i },
   // ── Summary ──
   { intent: "summary", pattern: /\bsummar(ize|y)\b|what\s+happened|latest\s+activity|what['']?s\s+new|recap|catch\s+me\s+up|bring\s+me\s+up\s+to\s+(speed|date)|what\s+did\s+i\s+miss|status\s+update/i },
   // ── Create task (broadened) ──
