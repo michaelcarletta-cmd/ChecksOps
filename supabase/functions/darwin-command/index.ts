@@ -485,6 +485,16 @@ serve(async (req) => {
       console.error("generated_assets insert error:", insertErr);
     }
 
+    // Log success to claim_updates for CRM timeline visibility
+    if (inserted?.id && claimId) {
+      await supabase.from("claim_updates").insert({
+        claim_id: claimId,
+        update_type: "ai_analysis",
+        content: `Darwin ${(titleMap[analysisType] ?? analysisType).toLowerCase()} generated (assetId=${inserted.id})`,
+        user_id: userId || null,
+      });
+    }
+
     return new Response(
       JSON.stringify({
         intent,
