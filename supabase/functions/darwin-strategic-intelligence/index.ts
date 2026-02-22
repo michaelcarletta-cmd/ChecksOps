@@ -640,7 +640,11 @@ serve(async (req) => {
              (classification === 'invoice' && (fileName.includes('contractor') || fileName.includes('repair')));
     });
     const hasDenialLetter = files.some(f => f.document_classification === 'denial' || f.file_name?.toLowerCase().includes('denial'));
-    const hasEngineerReport = files.some(f => f.document_classification === 'engineering_report' || f.file_name?.toLowerCase().includes('engineer'));
+    // Check files AND claim_events for engineer/expert reports
+    const engineerFileCount = files.filter(f => f.document_classification === 'engineering_report' || f.file_name?.toLowerCase().includes('engineer')).length;
+    const engineerEventCount = claimEvents.filter((e: any) => e.event_type === 'engineer_report_issued' || e.doc_type === 'engineering_report').length;
+    const hasEngineerReport = engineerFileCount > 0 || engineerEventCount > 0;
+    console.log(`[Strategic] Engineer report detection: ${engineerFileCount} file(s), ${engineerEventCount} event(s), hasEngineerReport=${hasEngineerReport}`);
     const hasPolicy = files.some(f => f.document_classification === 'policy' || f.file_name?.toLowerCase().includes('policy') || f.file_name?.toLowerCase().includes('declaration'));
     const hasProofOfLoss = files.some(f => f.file_name?.toLowerCase().includes('proof of loss') || f.file_name?.toLowerCase().includes('pol'));
     const hasContractorInvoice = files.some(f => f.document_classification === 'invoice' || f.file_name?.toLowerCase().includes('invoice'));
