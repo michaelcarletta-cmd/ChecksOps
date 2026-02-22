@@ -66,11 +66,30 @@ export const DarwinDocumentTimeline = ({ claimId, claim }: DarwinDocumentTimelin
   const [rawText, setRawText] = useState<string | null>(null);
   const [lastGenerated, setLastGenerated] = useState<Date | null>(null);
   const [claimEvents, setClaimEvents] = useState<ClaimEvent[]>([]);
+  const [textCoverage, setTextCoverage] = useState<{ total: number; withText: number } | null>(null);
 
   useEffect(() => {
     loadPreviousTimeline();
     loadClaimEvents();
+    checkTextCoverage();
   }, [claimId]);
+
+  const checkTextCoverage = async () => {
+    const { data: files } = await supabase
+      .from('claim_files')
+      .select('id, extracted_text')
+      .eq('claim_id', claimId);
+    if (files) {
+      const total = files.length;
+      const withText = files.filter(f => f.extracted_text && f.extracted_text.length > 50).length;
+      setTextCoverage({ total, withText });
+    }
+  };
+
+  const coveragePct = textCoverage && textCoverage.total > 0 
+    ? Math.round((textCoverage.withText / textCoverage.total) * 100) 
+    : (textCoverage?.total === 0 ? 100 : null);
+  const hasInsufficientText = coveragePct !== null && coveragePct < 30;
 
   // Anchor event types - only these are used for timeline and strategic analysis
   const ANCHOR_EVENT_TYPES = [
@@ -261,6 +280,18 @@ export const DarwinDocumentTimeline = ({ claimId, claim }: DarwinDocumentTimelin
 
   return (
     <Card>
+      {hasInsufficientText && (
+        <div className="mx-4 mt-4 p-3 rounded-md bg-destructive/10 border border-destructive/30 flex items-start gap-2">
+          <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium text-sm text-destructive">Cannot build timeline: documents have no OCR text yet</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Only {textCoverage?.withText || 0} of {textCoverage?.total || 0} files ({coveragePct}%) have extracted text. 
+              Go to <span className="font-medium">Darwin Operations → Step 1: Backfill Extracted Text</span> to fix this.
+            </p>
+          </div>
+        </div>
+      )}
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>

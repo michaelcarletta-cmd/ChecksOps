@@ -176,3 +176,9 @@ verify_jwt = false
 
 [functions.darwin-health-check]
 verify_jwt = true
+
+[functions.backfill-extracted-text]
+verify_jwt = false
+
+[functions.backfill-rebuild-events]
+verify_jwt = false
