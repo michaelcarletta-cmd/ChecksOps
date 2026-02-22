@@ -173,3 +173,6 @@ verify_jwt = false
 
 [functions.darwin-command]
 verify_jwt = false
+
+[functions.darwin-health-check]
+verify_jwt = true
