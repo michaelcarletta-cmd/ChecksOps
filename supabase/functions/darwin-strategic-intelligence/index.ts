@@ -355,7 +355,16 @@ serve(async (req) => {
   }
 
   try {
-    const { claimId, analysisType } = await req.json();
+    let body: any;
+    try {
+      body = await req.json();
+    } catch (_parseErr) {
+      return new Response(JSON.stringify({ success: false, error: 'Invalid or empty request body' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const { claimId, analysisType } = body;
 
     if (!claimId) {
       throw new Error('Claim ID is required');
@@ -1370,7 +1379,13 @@ Give me:
       throw new Error(`AI API error: ${response.status}`);
     }
 
-    const aiData = await response.json();
+    let aiData: any;
+    try {
+      aiData = await response.json();
+    } catch (_jsonErr) {
+      console.error('Failed to parse AI response as JSON');
+      throw new Error('AI returned an unparseable response');
+    }
     const result = aiData.choices?.[0]?.message?.content;
 
     if (!result) {
