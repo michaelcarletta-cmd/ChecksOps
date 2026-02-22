@@ -150,17 +150,22 @@ serve(async (req) => {
     // Call AI for classification
     const classificationResult = await classifyDocument(textContent, fileName || file?.file_name || '');
 
-    // Update file record with classification
+    // Update file record with classification + store extracted text
     if (file) {
+      const updatePayload: Record<string, unknown> = {
+        document_classification: classificationResult.classification,
+        classification_confidence: classificationResult.confidence,
+        classification_metadata: classificationResult.metadata,
+        processed_by_darwin: true,
+        darwin_processed_at: new Date().toISOString(),
+      };
+      // Store extracted text for regex fallback and future analysis
+      if (textContent && textContent.length > 50 && !textContent.startsWith('[PDF Document')) {
+        updatePayload.extracted_text = textContent.substring(0, 100000); // cap at 100k chars
+      }
       await supabase
         .from('claim_files')
-        .update({
-          document_classification: classificationResult.classification,
-          classification_confidence: classificationResult.confidence,
-          classification_metadata: classificationResult.metadata,
-          processed_by_darwin: true,
-          darwin_processed_at: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq('id', fileId);
     }
 
@@ -196,7 +201,7 @@ serve(async (req) => {
       try {
         const insertedCount = await extractDatesToClaimEvents(
           supabase, targetClaimId, fileId, fileName || file?.file_name || '',
-          classificationResult
+          classificationResult, textContent
         );
         console.log(`[DateExtract] Inserted ${insertedCount} claim_events for file ${fileId}`);
       } catch (err) {
@@ -1125,7 +1130,8 @@ async function extractDatesToClaimEvents(
   claimId: string,
   fileId: string,
   fileName: string,
-  classificationResult: ClassificationResult
+  classificationResult: ClassificationResult,
+  textContent?: string | null,
 ): Promise<number> {
   const metadata = classificationResult.metadata as any;
   const docType = classificationResult.classification;
@@ -1226,8 +1232,11 @@ async function extractDatesToClaimEvents(
   if (events.length === 0 || (!hasDocDate && !hasDatesFound)) {
     console.log(`[DateExtract] No structured dates from classifier for ${fileName} (hasDocDate=${hasDocDate}, hasDatesFound=${hasDatesFound}), attempting text regex fallback...`);
 
+    // Prefer passed-in textContent, then fall back to DB
     let extractedText: string | null = null;
-    if (fileId) {
+    if (textContent && textContent.length > 50 && !textContent.startsWith('[PDF Document')) {
+      extractedText = textContent;
+    } else if (fileId) {
       const { data: fileRecord } = await supabase
         .from('claim_files')
         .select('extracted_text')
