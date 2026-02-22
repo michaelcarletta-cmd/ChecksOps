@@ -288,13 +288,30 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
                       </AvatarFallback>
                     </Avatar>
                     <div
-                      className={`flex-1 p-3 rounded-lg text-sm ${
+                      className={`flex-1 p-4 rounded-lg text-sm ${
                         message.role === "user"
                           ? "bg-primary text-primary-foreground ml-8"
-                          : "bg-muted mr-8"
+                          : "bg-muted mr-8 font-sans leading-relaxed"
                       }`}
                     >
-                      <p className="whitespace-pre-wrap">{message.content}</p>
+                      {message.role === "user" ? (
+                        <p className="whitespace-pre-wrap">{message.content}</p>
+                      ) : (
+                        <div className="space-y-3 text-[15px] text-foreground/95 font-normal">
+                          {message.content.trim()
+                            ? message.content
+                                .split(/\n\n+/)
+                                .filter((p) => p.trim())
+                                .map((para, i) => (
+                                  <p key={i} className="whitespace-pre-wrap mb-0 indent-0 first:mt-0 last:mb-0">
+                                    {para.replace(/\*\*([^*]+)\*\*/g, "$1").trim()}
+                                  </p>
+                                ))
+                            : ["No response."].map((t, i) => (
+                                <p key={i} className="mb-0">{t}</p>
+                              ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

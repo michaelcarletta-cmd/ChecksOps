@@ -3536,72 +3536,30 @@ Return ONLY valid JSON.`;
       }
 
       case 'claim_analysis': {
-        systemPrompt = `You are Darwin, an expert public adjuster AI. Produce a structured CLAIM ANALYSIS for this claim.
+        systemPrompt = `You are Darwin, an expert public adjuster AI. Produce a clear, structured claim analysis. Write in plain prose: no markdown symbols, no bullet asterisks, no hash headers. Use normal paragraphs and clear section breaks.
 
-Return ONLY valid JSON with this exact structure:
-{
-  "executive_summary": "2-3 paragraph overview",
-  "timeline_key_events": ["event 1", "event 2", ...],
-  "strengths": ["strength 1", ...],
-  "issues": ["issue 1", ...],
-  "root_causes": ["cause 1", ...],
-  "missed_opportunities": ["opportunity 1", ...],
-  "recommended_process_changes": ["change 1", ...],
-  "metrics_to_track": ["metric 1", ...]
-}`;
-        userPrompt = `${claimSummary}\n\n${claimFactsPackContext}\n\nGenerate the claim analysis JSON. Base everything on the claim data and evidence index above.`;
+Include: executive summary, timeline of key events, strengths, issues, root causes, missed opportunities, recommended process changes, and metrics to track. Write in a clean, professional tone.`;
+        userPrompt = `${claimSummary}\n\n${claimFactsPackContext}\n\nGenerate the claim analysis in plain paragraphs.`;
         break;
       }
 
       case 'operating_manual': {
-        systemPrompt = `You are Darwin. Turn this claim's handling into an OPERATING MANUAL with scenarios and mini trainings.
+        systemPrompt = `You are Darwin. Turn this claim's handling into an operating manual with scenarios and mini trainings. Write in plain prose: no markdown symbols, no bullet asterisks. Use normal paragraphs.
 
-Return ONLY valid JSON with this structure:
-{
-  "overview": "Brief overview of the manual",
-  "scenarios": [
-    {
-      "trigger_signals": ["signal 1", ...],
-      "goals": ["goal 1", ...],
-      "step_by_step": ["step 1", ...],
-      "communication_scripts": ["script or template 1", ...],
-      "escalation_rules": ["rule 1", ...],
-      "mini_training": "Short training narrative"
-    }
-  ]
-}`;
-        userPrompt = `${claimSummary}\n\n${claimFactsPackContext}\n\nGenerate the operating manual JSON from this claim's flow and decisions.`;
+Include: overview, then for each scenario: trigger signals, goals, step-by-step actions, communication scripts, escalation rules, and a short mini-training. Write in a clean, professional tone.`;
+        userPrompt = `${claimSummary}\n\n${claimFactsPackContext}\n\nGenerate the operating manual in plain paragraphs.`;
         break;
       }
 
       case 'case_study': {
-        systemPrompt = `You are Darwin. Write a CASE STUDY from this claim. Use generic terms only: do NOT include real names, addresses, emails, phone numbers, claim numbers, or policy numbers. Use placeholders like "the policyholder", "the carrier", "the adjuster", "Claimant Co.", "the insured property".
-
-Return ONLY valid JSON:
-{
-  "situation": "Background (no PII)",
-  "challenges": ["challenge 1", ...],
-  "actions_taken": ["action 1", ...],
-  "results": "Outcome summary",
-  "lessons": ["lesson 1", ...],
-  "redaction_report": "Note: all identifying details omitted"
-}`;
-        userPrompt = `${claimSummary}\n\n${claimFactsPackContext}\n\nGenerate the case study JSON. Do not include any identifying information.`;
+        systemPrompt = `You are Darwin. Write a case study from this claim. Use generic terms only: do NOT include real names, addresses, emails, phone numbers, claim numbers, or policy numbers. Use "the policyholder", "the carrier", "the adjuster". Write in plain prose: no markdown symbols. Use normal paragraphs.`;
+        userPrompt = `${claimSummary}\n\n${claimFactsPackContext}\n\nGenerate the case study in plain paragraphs. Omit all identifying details.`;
         break;
       }
 
       case 'marketing_assets': {
-        systemPrompt = `You are Darwin. Turn the given case study or claim summary into MARKETING ASSETS. No PII.
-
-Return ONLY valid JSON:
-{
-  "blog_title": "Catchy title",
-  "blog_body": "Full blog post markdown (no PII)",
-  "facebook_post": "Short FB post text",
-  "instagram_caption": "IG caption with hashtags",
-  "tiktok_script": "Short script for TikTok (15-60 sec)"
-}`;
-        userPrompt = `${claimSummary}\n\n${claimFactsPackContext}\n\nGenerate marketing assets JSON. Keep all content free of identifying details.`;
+        systemPrompt = `You are Darwin. Turn the claim summary into marketing assets: blog title and body, Facebook post, Instagram caption, TikTok script. No PII. Write in plain prose with clear section labels; no markdown symbols.`;
+        userPrompt = `${claimSummary}\n\n${claimFactsPackContext}\n\nGenerate marketing assets in plain text. No identifying details.`;
         break;
       }
 
