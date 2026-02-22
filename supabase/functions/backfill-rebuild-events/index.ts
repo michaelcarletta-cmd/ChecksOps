@@ -59,11 +59,13 @@ serve(async (req) => {
 
     for (const claim of claims) {
       try {
-        // 1. Delete all existing derived claim_events for this claim
+        // 1. Delete ONLY derived claim_events (from document parsing), preserve manual/CRM events
+        const derivedSources = ["document_extracted", "document_text_regex", "system_upload"];
         const { count: deletedEvents } = await supabase
           .from("claim_events")
           .delete({ count: "exact" })
-          .eq("claim_id", claim.id);
+          .eq("claim_id", claim.id)
+          .in("date_source", derivedSources);
 
         // 2. Mark all files as unprocessed so darwin-process-document will re-run
         await supabase
