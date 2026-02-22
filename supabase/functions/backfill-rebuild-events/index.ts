@@ -20,6 +20,41 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const cursor = body.cursor || null;
+    const release = body.release || false;
+
+    const JOB_TYPE = "backfill_rebuild_events";
+
+    // Force-release lock
+    if (release) {
+      await supabase.from("darwin_jobs").update({ status: "idle", completed_at: new Date().toISOString() }).eq("job_type", JOB_TYPE);
+      return new Response(JSON.stringify({ success: true, message: "Lock released" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // Also check that Step 1 is not running
+    const { data: step1Job } = await supabase.from("darwin_jobs").select("status").eq("job_type", "backfill_extracted_text").single();
+    if (step1Job?.status === "running") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Step 1 (text extraction) is still running. Wait for it to finish." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Acquire lock
+    const { data: lockRow, error: lockErr } = await supabase
+      .from("darwin_jobs")
+      .update({ status: "running", started_at: new Date().toISOString(), claimed_by: "backfill-rebuild-events", error_message: null })
+      .eq("job_type", JOB_TYPE)
+      .eq("status", "idle")
+      .select()
+      .maybeSingle();
+
+    if (lockErr || !lockRow) {
+      const { data: existing } = await supabase.from("darwin_jobs").select("status, started_at, claimed_by").eq("job_type", JOB_TYPE).single();
+      return new Response(
+        JSON.stringify({ success: false, error: "Job already running", job: existing }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Find claims that have files with extracted_text but need event rebuild
     // We pick claims where at least one file has text and processed_by_darwin = false
@@ -118,6 +153,11 @@ serve(async (req) => {
     const lastId = claims[claims.length - 1].id;
     const remaining = Math.max(0, (totalRemaining || 0) - (cursor ? 0 : claims.length));
 
+    // Release lock if done
+    if (remaining <= 0) {
+      await supabase.from("darwin_jobs").update({ status: "idle", completed_at: new Date().toISOString() }).eq("job_type", "backfill_rebuild_events");
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -130,6 +170,12 @@ serve(async (req) => {
     );
   } catch (e) {
     console.error("backfill-rebuild-events error:", e);
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const sb = createClient(supabaseUrl, serviceKey);
+      await sb.from("darwin_jobs").update({ status: "idle", completed_at: new Date().toISOString(), error_message: e instanceof Error ? e.message : "Unknown error" }).eq("job_type", "backfill_rebuild_events");
+    } catch { /* best effort */ }
     return new Response(
       JSON.stringify({ success: false, error: e instanceof Error ? e.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

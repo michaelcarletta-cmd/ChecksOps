@@ -108,7 +108,26 @@ const DarwinOperations = () => {
     }
   }, [textBackfill.status, textBackfill.processed, fetchTextCoverage]);
 
-  const step2Disabled = textCoverage !== null && textCoverage < 30;
+  const step2Disabled = (textCoverage !== null && textCoverage < 30) || textBackfill.status === "running";
+
+  // Fetch server-side job locks on mount to detect jobs started by other sessions
+  const [serverJobs, setServerJobs] = useState<Record<string, string>>({});
+  const fetchServerJobs = useCallback(async () => {
+    const { data } = await supabase
+      .from("darwin_jobs")
+      .select("job_type, status");
+    if (data) {
+      const map: Record<string, string> = {};
+      data.forEach((j: any) => { map[j.job_type] = j.status; });
+      setServerJobs(map);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchServerJobs();
+    const interval = setInterval(fetchServerJobs, 5000);
+    return () => clearInterval(interval);
+  }, [fetchServerJobs]);
 
   // === DEADLINE BACKFILL ===
   const runBatch = useCallback(async (cursor: string | null, prev: BackfillState) => {
@@ -306,7 +325,11 @@ const DarwinOperations = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           {textBackfill.status === "idle" && (
-            <Button onClick={startTextBackfill} className="gap-2">
+            <Button 
+              onClick={startTextBackfill} 
+              className="gap-2"
+              disabled={rebuildEvents.status === "running" || serverJobs.backfill_extracted_text === "running"}
+            >
               <Play className="h-4 w-4" />
               Run Text Extraction
             </Button>

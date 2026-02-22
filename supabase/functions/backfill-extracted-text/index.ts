@@ -242,6 +242,36 @@ serve(async (req) => {
     const fileId = body.fileId || null; // single-file debug mode
     const cursor = body.cursor || null;
     const dryRun = body.dryRun || false;
+    const release = body.release || false; // force-release a stuck lock
+
+    const JOB_TYPE = "backfill_extracted_text";
+
+    // Force-release lock if requested
+    if (release) {
+      await supabase.from("darwin_jobs").update({ status: "idle", completed_at: new Date().toISOString() }).eq("job_type", JOB_TYPE);
+      return new Response(JSON.stringify({ success: true, message: "Lock released" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // Skip lock for single-file debug mode
+    if (!fileId) {
+      // Acquire lock — only if status is 'idle'
+      const { data: lockRow, error: lockErr } = await supabase
+        .from("darwin_jobs")
+        .update({ status: "running", started_at: new Date().toISOString(), claimed_by: "backfill-extracted-text", error_message: null })
+        .eq("job_type", JOB_TYPE)
+        .eq("status", "idle")
+        .select()
+        .maybeSingle();
+
+      if (lockErr || !lockRow) {
+        // Check if already running
+        const { data: existing } = await supabase.from("darwin_jobs").select("status, started_at, claimed_by").eq("job_type", JOB_TYPE).single();
+        return new Response(
+          JSON.stringify({ success: false, error: "Job already running", job: existing }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
 
     // === SINGLE FILE DEBUG MODE ===
     if (fileId) {
@@ -360,6 +390,11 @@ serve(async (req) => {
     const successCount = log.filter((l: any) => l.success).length;
     const totalRemaining = (nullCount || 0) - candidates.filter((c: any) => !c.extracted_text || c.extracted_text === "").length;
 
+    // Release lock if no more remaining
+    if (Math.max(0, totalRemaining) === 0 && !fileId) {
+      await supabase.from("darwin_jobs").update({ status: "idle", completed_at: new Date().toISOString() }).eq("job_type", "backfill_extracted_text");
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -374,6 +409,13 @@ serve(async (req) => {
     );
   } catch (e) {
     console.error("backfill-extracted-text error:", e);
+    // Release lock on error
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const sb = createClient(supabaseUrl, serviceKey);
+      await sb.from("darwin_jobs").update({ status: "idle", completed_at: new Date().toISOString(), error_message: e instanceof Error ? e.message : "Unknown error" }).eq("job_type", "backfill_extracted_text");
+    } catch { /* best effort */ }
     return new Response(
       JSON.stringify({ success: false, error: e instanceof Error ? e.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

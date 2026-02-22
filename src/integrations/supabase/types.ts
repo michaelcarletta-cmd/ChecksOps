@@ -4090,6 +4090,42 @@ export type Database = {
           },
         ]
       }
+      darwin_jobs: {
+        Row: {
+          claimed_by: string | null
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          job_type: string
+          started_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          claimed_by?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          job_type: string
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          claimed_by?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          job_type?: string
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       darwin_sms_activity: {
         Row: {
           action_type: string | null
