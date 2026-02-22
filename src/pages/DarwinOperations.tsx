@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { DarwinOperationsCenter } from "@/components/dashboard/DarwinOperationsCenter";
 import { Bot, Play, CheckCircle2, AlertTriangle, Loader2, FileText, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface BatchStats {
   deadlines_created: number;
@@ -77,6 +78,37 @@ const DarwinOperations = () => {
     cursor: null,
   });
   const rebuildAbortRef = useRef(false);
+
+  // Text coverage percentage for gating Step 2
+  const [textCoverage, setTextCoverage] = useState<number | null>(null);
+
+  const fetchTextCoverage = useCallback(async () => {
+    const { count: total } = await supabase
+      .from("claim_files")
+      .select("id", { count: "exact", head: true });
+    const { count: withText } = await supabase
+      .from("claim_files")
+      .select("id", { count: "exact", head: true })
+      .not("extracted_text", "is", null)
+      .neq("extracted_text", "");
+    if (total && total > 0) {
+      setTextCoverage(Math.round(((withText || 0) / total) * 100));
+    } else {
+      setTextCoverage(100);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTextCoverage();
+  }, [fetchTextCoverage]);
+
+  useEffect(() => {
+    if (textBackfill.status === "complete" || textBackfill.status === "running") {
+      fetchTextCoverage();
+    }
+  }, [textBackfill.status, textBackfill.processed, fetchTextCoverage]);
+
+  const step2Disabled = textCoverage !== null && textCoverage < 30;
 
   // === DEADLINE BACKFILL ===
   const runBatch = useCallback(async (cursor: string | null, prev: BackfillState) => {
@@ -337,16 +369,39 @@ const DarwinOperations = () => {
             <CardTitle className="text-lg">Step 2: Rebuild Timeline Events</CardTitle>
           </div>
           <CardDescription>
-            Deletes all derived claim_events and re-runs document processing to regenerate the timeline 
+            Deletes derived claim_events and re-runs document processing to regenerate the timeline 
             from extracted text. Run this after text extraction is complete.
+            {textCoverage !== null && (
+              <span className="ml-1 font-medium">
+                (Current text coverage: {textCoverage}%)
+              </span>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {rebuildEvents.status === "idle" && (
-            <Button onClick={startRebuildEvents} className="gap-2" variant="secondary">
-              <Play className="h-4 w-4" />
-              Rebuild All Events
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-block">
+                    <Button
+                      onClick={startRebuildEvents}
+                      className="gap-2"
+                      variant="secondary"
+                      disabled={step2Disabled}
+                    >
+                      <Play className="h-4 w-4" />
+                      Rebuild All Events
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {step2Disabled && (
+                  <TooltipContent>
+                    <p>Run Step 1 first — not enough documents have extracted text.</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
           )}
           {rebuildEvents.status === "running" && (
             <div className="space-y-3">
