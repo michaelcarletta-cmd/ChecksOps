@@ -125,8 +125,10 @@ export const DarwinDocumentTimeline = ({ claimId, claim }: DarwinDocumentTimelin
   const rebuildTimeline = async () => {
     setLoading(true);
     try {
-      // 1) Wipe all existing claim_events for this claim
-      await supabase.from('claim_events').delete().eq('claim_id', claimId);
+      // 1) Wipe only document-extracted claim_events (preserve manual/CRM entries)
+      await supabase.from('claim_events').delete()
+        .eq('claim_id', claimId)
+        .in('date_source', ['document_extracted', 'document_text_regex', 'system_upload']);
       console.log('[RebuildTimeline] Wiped all claim_events for claim', claimId);
 
       // 2) Reset all files to unprocessed so darwin-process-document re-extracts
