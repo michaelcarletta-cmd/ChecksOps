@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Archive, ChevronDown, ChevronRight, Copy, Trash2, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -138,12 +137,12 @@ export const DarwinGeneratedAssets = ({ claimId }: DarwinGeneratedAssetsProps) =
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <div className="ml-7 mt-1 mb-2 space-y-2">
-                  <ScrollArea className="max-h-64 rounded border border-border/50 p-2">
+                  <div className="h-64 max-h-[min(50vh,360px)] min-h-0 overflow-y-auto rounded border border-border/50 p-2">
                     <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-sans">
                       {asset.content_md?.slice(0, 5000) ?? "No content"}
                       {(asset.content_md?.length ?? 0) > 5000 && "\n\n… (truncated)"}
                     </pre>
-                  </ScrollArea>
+                  </div>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] gap-1" onClick={() => handleCopy(asset.content_md ?? "")}>
                       <Copy className="h-3 w-3" /> Copy

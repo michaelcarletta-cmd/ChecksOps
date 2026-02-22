@@ -272,15 +272,32 @@ serve(async (req) => {
         );
       }
 
-      // Extract message body
-      const emailBody = text
+      // Strip command prefix and generic phrases so we get the real message or trigger draft
+      const stripped = text
         .replace(/^(email\s+(the\s+)?client[:\s]*|send\s+(an?\s+)?email\s+(to\s+)?(the\s+)?client[:\s]*|draft\s+(an?\s+)?email\s+(to\s+)?(the\s+)?client[:\s]*)/i, '')
+        .replace(/^(update\s+(the\s+)?client\s*(on\s+claim\s+)?(via\s+)?email[:\s]*|update\s+client\s+via\s+email[:\s]*|email\s+client\s+with\s+(an?\s+)?update[:\s]*|send\s+client\s+(an?\s+)?email\s+with\s+(an?\s+)?update[:\s]*)/i, '')
         .trim();
-      if (!emailBody) {
-        return new Response(
-          JSON.stringify({ intent, error: "Please include a message after the command. Example: Email client: carrier approved your estimate" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      const isGenericUpdate = !stripped || /^(update\s+(the\s+)?client|with\s+(an?\s+)?update|(with\s+)?(a\s+)?status\s+update|about\s+the\s+claim|on\s+claim\s+via\s+email|recent\s+status|claim\s+update)$/i.test(stripped);
+      let emailBody: string;
+      if (isGenericUpdate) {
+        const draftResp = await fetch(`${supabaseUrl}/functions/v1/draft-client-update`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${supabaseServiceKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ claimId }),
+        });
+        const draftData = await draftResp.json().catch(() => ({}));
+        if (!draftResp.ok || !draftData.body) {
+          return new Response(
+            JSON.stringify({ intent, error: draftData.error || "Could not generate update. Try: Email client: [your message]." }),
+            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        emailBody = draftData.body;
+      } else {
+        emailBody = stripped;
       }
 
       // Look up claim email

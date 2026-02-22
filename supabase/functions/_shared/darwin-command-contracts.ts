@@ -35,8 +35,8 @@ export const INTENT_PATTERNS: Array<{ intent: DarwinIntent; pattern: RegExp }> =
   { intent: "case_study", pattern: /case\s+study|write\s+a\s+case\s+study|redact|remove\s+identifying/i },
   // ── Marketing ──
   { intent: "marketing", pattern: /blog|facebook|instagram|tiktok|marketing\s+assets?|turn\s+(the\s+)?case\s+study\s+into/i },
-  // ── Financial QA (broad: what was paid, payment status, etc.) ──
-  { intent: "financial_qa", pattern: /what['']?s\s+been\s+paid|what\s+was\s+paid|what\s+is\s+paid|paid\s+for\s+(this\s+)?claim|payment\s+status|payments?\s+(for|on)\s+(this\s+)?claim|depreciation|line\s+item|contents\s+vs\s+ale|dwelling\s+coverage|how\s+much\s+(is\s+)?(paid|outstanding|owed|left|remaining)|total\s+(paid|payments|settlement)|outstanding|financial\s+summary|claim\s+financial/i },
+  // ── Financial QA (broad: what was/has been paid, payment status, etc.) ──
+  { intent: "financial_qa", pattern: /what['']?s\s+been\s+paid|what\s+has\s+been\s+paid|what\s+have\s+been\s+paid|what\s+was\s+paid|what\s+is\s+paid|(anything\s+)?(that'?s\s+)?been\s+paid|amount(s)?\s+paid|paid\s+for\s+(this\s+)?claim|payment\s+status|payments?\s+(for|on)\s+(this\s+)?claim|depreciation|line\s+item|contents\s+vs\s+ale|dwelling\s+coverage|how\s+much\s+(is\s+)?(paid|outstanding|owed|left|remaining)|total\s+(paid|payments|settlement)|outstanding|financial\s+summary|claim\s+financial/i },
   // ── Summary ──
   { intent: "summary", pattern: /\bsummar(ize|y)\b|what\s+happened|latest\s+activity|what['']?s\s+new|recap|catch\s+me\s+up|bring\s+me\s+up\s+to\s+(speed|date)|what\s+did\s+i\s+miss|status\s+update/i },
   // ── Create task (broadened) ──
@@ -44,7 +44,7 @@ export const INTENT_PATTERNS: Array<{ intent: DarwinIntent; pattern: RegExp }> =
   // ── Send client SMS (broadened) ──
   { intent: "send_client_sms", pattern: /text\s+\w|send\s+(a\s+)?sms|sms\s+\w|message\s+(the\s+)?\w|shoot\s+\w.*\btext\b|send\s+(a\s+)?(text|message)\s+(to\s+)?|text\s+(the\s+)?client|sms\s+(the\s+)?client/i },
   // ── Send client email (broadened) ──
-  { intent: "send_client_email", pattern: /email\s+(the\s+)?\w|send\s+(an?\s+)?email|draft\s+(an?\s+)?email|email\s+\w+\s+(an?\s+)?update/i },
+  { intent: "send_client_email", pattern: /email\s+(the\s+)?\w|send\s+(an?\s+)?email|draft\s+(an?\s+)?email|email\s+\w+\s+(an?\s+)?update|update\s+(the\s+)?client\s+(on\s+claim\s+)?(via\s+)?email|send\s+client\s+(an?\s+)?email\s+with\s+(an?\s+)?update|email\s+client\s+(with\s+)?(an?\s+)?update|update\s+client\s+via\s+email/i },
 ];
 
 export function parseIntent(text: string): DarwinIntent {
