@@ -410,7 +410,7 @@ export const DarwinOperationsCenter = () => {
 
       {/* Main Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="bg-muted/50 w-full justify-start">
+        <TabsList className="bg-muted/50 w-full justify-start flex-row">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="claims">Managed Claims</TabsTrigger>
           <TabsTrigger value="actions">Action Log</TabsTrigger>
