@@ -228,6 +228,12 @@ serve(async (req) => {
       }));
 
       try {
+        // Wipe stale events for THIS file before re-extracting
+        await supabase.from('claim_events').delete()
+          .eq('claim_id', targetClaimId)
+          .eq('source_artifact_id', fileId);
+        console.log(`[DateExtract] Wiped old claim_events for file ${fileId}`);
+
         const insertedCount = await extractDatesToClaimEvents(
           supabase, targetClaimId, fileId, fileName || file?.file_name || '',
           classificationResult, textContent
