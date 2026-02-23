@@ -11,6 +11,7 @@ const JOB_TYPE = "bulk_darwin_process_document";
 const TTL_SECONDS = 120;
 const BATCH_MAX_RUNTIME_MS = 55_000; // Safe exit before edge timeout
 const PER_FILE_TIMEOUT_MS = 45_000; // Prevent single-file hangs from blocking the batch
+const MIN_FILE_BUDGET_MS = 3_000; // Leave enough budget to return/release lock
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -133,15 +134,21 @@ serve(async (req) => {
     const processUrl = `${supabaseUrl}/functions/v1/darwin-process-document`;
 
     for (const file of files) {
-      if (Date.now() - batchStart > BATCH_MAX_RUNTIME_MS) {
+      const elapsedMs = Date.now() - batchStart;
+      const remainingBudgetMs = BATCH_MAX_RUNTIME_MS - elapsedMs;
+      if (remainingBudgetMs <= MIN_FILE_BUDGET_MS) {
         console.warn(
           `[BulkDarwin] Approaching timeout after ${attemptedCount} attempted files — exiting with cursor`
         );
         break;
       }
 
+      const thisFileTimeoutMs = Math.min(
+        PER_FILE_TIMEOUT_MS,
+        Math.max(remainingBudgetMs - 1_000, MIN_FILE_BUDGET_MS)
+      );
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), PER_FILE_TIMEOUT_MS);
+      const timeoutId = setTimeout(() => controller.abort(), thisFileTimeoutMs);
 
       try {
         const res = await fetch(processUrl, {
@@ -179,7 +186,7 @@ serve(async (req) => {
           file_id: file.id,
           file_name: file.file_name,
           success: false,
-          error: isTimeout ? `Timeout after ${PER_FILE_TIMEOUT_MS}ms` : err instanceof Error ? err.message : String(err),
+          error: isTimeout ? `Timeout after ${thisFileTimeoutMs}ms` : err instanceof Error ? err.message : String(err),
         });
         console.error(`[BulkDarwin] Error processing ${file.file_name}:`, err);
       } finally {
