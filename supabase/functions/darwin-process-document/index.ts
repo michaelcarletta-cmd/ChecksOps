@@ -52,7 +52,14 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { fileId, claimId, fileName, fileContent } = await req.json();
+    const {
+      fileId,
+      claimId,
+      fileName,
+      fileContent,
+      awaitIndexing = false,
+      awaitDeepAnalysisTrigger = false,
+    } = await req.json();
 
     console.log("Darwin Document Processing starting...", { fileId, claimId, fileName });
 
@@ -245,11 +252,21 @@ serve(async (req) => {
     }
 
     // === CROSS-CLAIM VECTOR INDEX: Chunk + Embed for retrieval ===
+    let indexing: null | { chunks_inserted: number; embeddings_generated: number; embeddings_skipped: boolean } = null;
     if (textContent && textContent.length >= 100 && targetClaimId) {
-      indexDocumentForRetrieval(
-        supabase, targetClaimId, fileId, textContent,
-        classificationResult, file
-      ).catch(err => console.error('Cross-claim indexing error:', err));
+      const indexingPromise = indexDocumentForRetrieval(
+        supabase,
+        targetClaimId,
+        fileId,
+        textContent,
+        classificationResult,
+        file
+      );
+      if (awaitIndexing) {
+        indexing = await indexingPromise;
+      } else {
+        indexingPromise.catch((err) => console.error("Cross-claim indexing error:", err));
+      }
     }
 
     // Check if claim has autonomy enabled and take actions
@@ -261,15 +278,21 @@ serve(async (req) => {
       .single();
 
     // Trigger deep analysis for key document types (high confidence only)
+    let deep_analysis_triggered = false;
     if (classificationResult.confidence >= 0.8) {
-      // Fire and forget - don't wait for deep analysis to complete
-      triggerDeepAnalysis(
+      const deepPromise = triggerDeepAnalysis(
         supabase,
         targetClaimId,
         classificationResult.classification,
         fileId,
         file?.file_path
-      ).catch(err => console.error('Deep analysis trigger error:', err));
+      );
+      if (awaitDeepAnalysisTrigger) {
+        deep_analysis_triggered = await deepPromise;
+      } else {
+        deep_analysis_triggered = true; // attempted async trigger
+        deepPromise.catch((err) => console.error("Deep analysis trigger error:", err));
+      }
     }
 
     // Process automation actions if enabled
@@ -289,6 +312,8 @@ serve(async (req) => {
         classification: classificationResult.classification,
         confidence: classificationResult.confidence,
         metadata: classificationResult.metadata,
+        indexing,
+        deep_analysis_triggered,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -633,7 +658,7 @@ async function triggerDeepAnalysis(
   classification: DocumentClassification,
   fileId: string,
   filePath: string | undefined
-) {
+) : Promise<boolean> {
   // Map classification to analysis type
   const analysisMap: Record<string, string> = {
     'denial': 'denial_rebuttal',
@@ -642,7 +667,7 @@ async function triggerDeepAnalysis(
   };
 
   const analysisType = analysisMap[classification];
-  if (!analysisType || !filePath) return; // No deep analysis for this type
+  if (!analysisType || !filePath) return false; // No deep analysis for this type
 
   console.log(`Triggering deep analysis: ${analysisType} for file ${fileId}`);
 
@@ -658,7 +683,7 @@ async function triggerDeepAnalysis(
 
     if (recentAnalysis && recentAnalysis.length > 0) {
       console.log(`Skipping ${analysisType} - already analyzed recently`);
-      return;
+      return false;
     }
 
     // Download file for analysis
@@ -668,7 +693,7 @@ async function triggerDeepAnalysis(
 
     if (downloadError || !fileBlob) {
       console.error('Could not download file for deep analysis:', downloadError);
-      return;
+      return false;
     }
 
     // Convert to base64
@@ -720,9 +745,11 @@ async function triggerDeepAnalysis(
     });
 
     console.log(`Deep analysis ${analysisType} triggered successfully for file ${fileId}`);
+    return true;
   } catch (error) {
     console.error('triggerDeepAnalysis error:', error);
     // Don't throw - deep analysis failure shouldn't affect classification
+    return false;
   }
 }
 
@@ -808,7 +835,7 @@ async function indexDocumentForRetrieval(
   textContent: string,
   classificationResult: ClassificationResult,
   file: any
-) {
+) : Promise<{ chunks_inserted: number; embeddings_generated: number; embeddings_skipped: boolean }> {
   try {
     console.log(`[CrossClaim Index] Starting indexing for file ${fileId} on claim ${claimId}`);
     
@@ -837,7 +864,7 @@ async function indexDocumentForRetrieval(
     const chunks = chunkText(textContent);
     console.log(`[CrossClaim Index] Created ${chunks.length} chunks for file ${fileId}`);
 
-    if (chunks.length === 0) return;
+    if (chunks.length === 0) return { chunks_inserted: 0, embeddings_generated: 0, embeddings_skipped: true };
 
     // Delete existing chunks for this file (in case of reprocess)
     await supabase.from('claim_document_chunks').delete().eq('file_id', fileId);
@@ -866,7 +893,7 @@ async function indexDocumentForRetrieval(
 
     if (insertError) {
       console.error('[CrossClaim Index] Insert error:', insertError.message);
-      return;
+      return { chunks_inserted: 0, embeddings_generated: 0, embeddings_skipped: true };
     }
 
     console.log(`[CrossClaim Index] Inserted ${insertedChunks.length} chunks, generating embeddings...`);
@@ -882,11 +909,12 @@ async function indexDocumentForRetrieval(
     const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
     if (!OPENAI_API_KEY) {
       console.log('[CrossClaim Index] No OPENAI_API_KEY, skipping embeddings');
-      return;
+      return { chunks_inserted: insertedChunks.length, embeddings_generated: 0, embeddings_skipped: true };
     }
 
     // Generate embeddings in batches of 50
     const BATCH_SIZE = 50;
+    let embeddingsGenerated = 0;
     for (let i = 0; i < texts.length; i += BATCH_SIZE) {
       const batchTexts = texts.slice(i, i + BATCH_SIZE);
       const batchIds = chunkIds.slice(i, i + BATCH_SIZE);
@@ -911,17 +939,22 @@ async function indexDocumentForRetrieval(
       const embData = await embResponse.json();
       const embeddings = embData.data.map((item: any) => item.embedding);
 
-      for (let j = 0; j < batchIds.length; j++) {
-        await supabase
-          .from('claim_document_chunks')
-          .update({ embedding: embeddings[j] })
-          .eq('id', batchIds[j]);
+      const updates = batchIds.map((id: string, j: number) => ({ id, embedding: embeddings[j] }));
+      const { error: updErr } = await supabase
+        .from("claim_document_chunks")
+        .upsert(updates, { onConflict: "id" });
+      if (updErr) {
+        console.error("[CrossClaim Index] Embedding update error:", updErr.message);
+      } else {
+        embeddingsGenerated += updates.length;
       }
     }
 
     console.log(`[CrossClaim Index] Successfully indexed ${chunks.length} chunks with embeddings for file ${fileId}`);
+    return { chunks_inserted: insertedChunks.length, embeddings_generated: embeddingsGenerated, embeddings_skipped: false };
   } catch (error) {
     console.error('[CrossClaim Index] Error:', error);
+    return { chunks_inserted: 0, embeddings_generated: 0, embeddings_skipped: true };
   }
 }
 
