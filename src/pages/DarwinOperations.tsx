@@ -668,6 +668,10 @@ const DarwinOperations = () => {
     displayBulkRemaining > 0
       ? (displayBulkProcessed / (displayBulkProcessed + displayBulkRemaining)) * 100
       : 100;
+  const sessionBulkProgressPct =
+    bulkDarwin.remaining > 0
+      ? (bulkDarwin.processed / (bulkDarwin.processed + bulkDarwin.remaining)) * 100
+      : 100;
 
   useEffect(() => {
     if (bulkDarwin.status !== "running" && !step4ServerRunning) return;
@@ -1064,17 +1068,28 @@ const DarwinOperations = () => {
                 <Loader2 className="h-4 w-4 animate-spin" />
                 {bulkDarwinWaitingForLock
                   ? "Step 4 is already running in another session… waiting for lock."
-                  : `Processing… ${displayBulkProcessed} files processed (${displayBulkRemaining} remaining)`}
+                  : `Processing… ${bulkDarwin.processed} files attempted this run (${bulkDarwin.remaining} remaining in this pass)`}
               </div>
               <Progress
-                value={displayBulkProgressPct}
+                value={bulkDarwinWaitingForLock ? displayBulkProgressPct : sessionBulkProgressPct}
                 className="h-3"
               />
               <div className="grid grid-cols-3 gap-3">
-                <SummaryCard label="Processed (live)" value={displayBulkProcessed} />
+                <SummaryCard
+                  label={bulkDarwinWaitingForLock ? "Processed (live)" : "Attempted (this run)"}
+                  value={bulkDarwinWaitingForLock ? displayBulkProcessed : bulkDarwin.processed}
+                />
                 <SummaryCard label="Failed" value={bulkDarwin.failed} variant={bulkDarwin.failed > 0 ? "warning" : undefined} />
-                <SummaryCard label="Remaining" value={displayBulkRemaining} />
+                <SummaryCard
+                  label={bulkDarwinWaitingForLock ? "Remaining (live)" : "Remaining (this pass)"}
+                  value={bulkDarwinWaitingForLock ? displayBulkRemaining : bulkDarwin.remaining}
+                />
               </div>
+              {!bulkDarwinWaitingForLock && (
+                <p className="text-xs text-muted-foreground">
+                  Live total fully processed by Darwin: {displayBulkProcessed} ({displayBulkRemaining} still unprocessed overall).
+                </p>
+              )}
             </div>
           )}
           {bulkDarwin.status === "complete" && (
