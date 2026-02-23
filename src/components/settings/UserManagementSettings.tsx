@@ -340,7 +340,7 @@ export function UserManagementSettings() {
       setResettingUserId(userId);
 
       const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
-        redirectTo: `${window.location.origin}/auth`,
+        redirectTo: `${window.location.origin}/auth?reset=1`,
       });
 
       if (error) throw error;

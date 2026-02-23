@@ -20,13 +20,18 @@ export default function Auth() {
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [pendingApproval, setPendingApproval] = useState(false);
   const [resetMode, setResetMode] = useState(() =>
-    window.location.hash.includes("type=recovery")
+    window.location.hash.includes("type=recovery") ||
+    new URLSearchParams(window.location.search).get("type") === "recovery" ||
+    new URLSearchParams(window.location.search).get("reset") === "1"
   );
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
-    const inRecoveryFlow = window.location.hash.includes("type=recovery");
+    const inRecoveryFlow =
+      window.location.hash.includes("type=recovery") ||
+      new URLSearchParams(window.location.search).get("type") === "recovery" ||
+      new URLSearchParams(window.location.search).get("reset") === "1";
     if (inRecoveryFlow) {
       setResetMode(true);
     }
@@ -39,7 +44,10 @@ export default function Auth() {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      const recoveryInUrl = window.location.hash.includes("type=recovery");
+      const recoveryInUrl =
+        window.location.hash.includes("type=recovery") ||
+        new URLSearchParams(window.location.search).get("type") === "recovery" ||
+        new URLSearchParams(window.location.search).get("reset") === "1";
       if (event === "PASSWORD_RECOVERY" || recoveryInUrl) {
         setResetMode(true);
         return;
@@ -173,7 +181,7 @@ export default function Auth() {
 
     setForgotPasswordLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/auth`,
+      redirectTo: `${window.location.origin}/auth?reset=1`,
     });
 
     if (error) {

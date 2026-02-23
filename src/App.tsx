@@ -60,6 +60,10 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
 function AppRoutes() {
   const { user, userRole, loading, sessionExpiredReason, clearSessionExpiredReason } = useAuth();
   const { toast } = useToast();
+  const inPasswordRecoveryFlow =
+    window.location.hash.includes("type=recovery") ||
+    new URLSearchParams(window.location.search).get("type") === "recovery" ||
+    new URLSearchParams(window.location.search).get("reset") === "1";
 
   // Show session expired toast
   useEffect(() => {
@@ -80,7 +84,14 @@ function AppRoutes() {
   // Public routes that don't require authentication
   const publicRoutes = (
     <>
-      <Route path="/auth" element={user ? <Navigate to="/" replace /> : <Suspense fallback={<PageLoader />}><Auth /></Suspense>} />
+      <Route
+        path="/auth"
+        element={
+          user && !inPasswordRecoveryFlow
+            ? <Navigate to="/" replace />
+            : <Suspense fallback={<PageLoader />}><Auth /></Suspense>
+        }
+      />
       <Route path="/sign" element={<Suspense fallback={<PageLoader />}><Sign /></Suspense>} />
     </>
   );
