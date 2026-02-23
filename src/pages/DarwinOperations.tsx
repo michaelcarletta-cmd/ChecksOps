@@ -190,7 +190,8 @@ const DarwinOperations = () => {
   }, [bulkDarwin.status, bulkDarwin.processed, fetchDocIntelStats]);
 
   const step2Disabled = (textCoverage !== null && textCoverage < 30) || textBackfill.status === "running";
-  const step4Disabled = (textCoverage !== null && textCoverage < 30) || textBackfill.status === "running";
+  const step4Disabled =
+    (textCoverage !== null && textCoverage < 30) || textBackfill.status === "running" || rebuildEvents.status === "running";
 
   // Server-side job locks (heartbeat-aware)
   const [serverJobs, setServerJobs] = useState<Record<string, string>>({});
@@ -458,7 +459,7 @@ const DarwinOperations = () => {
         </div>
       </div>
 
-      {/* ── Step 1: Text Extraction Backfill ─────────────────────────── */}
+      {/* Step 1 */}
       <Card className="border-2 border-primary/30">
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -466,8 +467,7 @@ const DarwinOperations = () => {
             <CardTitle className="text-lg">Step 1: Backfill Extracted Text</CardTitle>
           </div>
           <CardDescription>
-            Downloads every claim file from storage and extracts text (PDF parsing → OCR fallback). This is required
-            before timeline or analysis features can work. Processes 20 files per batch.
+            Downloads every claim file from storage and extracts text (PDF parsing → OCR fallback). Processes 20 files per batch.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -479,7 +479,7 @@ const DarwinOperations = () => {
               </div>
               {textCoverage !== null && <Progress value={textCoverage} className="h-3" />}
               <p className="text-xs text-muted-foreground">
-                Coverage: {textCoverage?.toFixed(1)}% — this page polls every 5s. The job will finish on its own.
+                Coverage: {textCoverage?.toFixed(1)}% — this page polls every 5s.
               </p>
             </div>
           )}
@@ -588,7 +588,7 @@ const DarwinOperations = () => {
         </CardContent>
       </Card>
 
-      {/* ── Step 2: Rebuild Events ────────────────────────────────────── */}
+      {/* Step 2 */}
       <Card className="border-2 border-primary/30">
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -597,9 +597,7 @@ const DarwinOperations = () => {
           </div>
           <CardDescription>
             Deletes derived claim_events and regenerates the timeline from extracted text.
-            {textCoverage !== null && (
-              <span className="ml-1 font-medium">(Current text coverage: {textCoverage}%)</span>
-            )}
+            {textCoverage !== null && <span className="ml-1 font-medium">(Current text coverage: {textCoverage}%)</span>}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -622,27 +620,6 @@ const DarwinOperations = () => {
                   )}
                 </Tooltip>
               </TooltipProvider>
-
-              {step2Disabled ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-                  <span>
-                    Text coverage is {textCoverage}% (need ≥30%).{" "}
-                    <button
-                      type="button"
-                      className="underline font-medium text-primary hover:text-primary/80"
-                      onClick={startTextBackfill}
-                    >
-                      Run Step 1 now
-                    </button>
-                  </span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-sm text-green-600">
-                  <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  Text coverage is sufficient — you can rebuild events now.
-                </div>
-              )}
             </div>
           )}
 
@@ -689,13 +666,12 @@ const DarwinOperations = () => {
         </CardContent>
       </Card>
 
-      {/* ── Step 3: Darwin Catch-Up (Deadlines) ───────────────────────── */}
+      {/* Step 3 */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Step 3: Darwin Catch-Up (Deadlines)</CardTitle>
           <CardDescription>
-            Backfill regulatory deadlines and state codes for all existing claims. Safe to run multiple times — skips
-            claims that already have deadlines.
+            Backfill regulatory deadlines and state codes for all existing claims. Safe to run multiple times.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -729,11 +705,6 @@ const DarwinOperations = () => {
                 <SummaryCard label="Overdue Detected" value={stats.overdue_detected} variant="warning" />
                 <SummaryCard label="No State Found" value={stats.skipped_no_state} />
               </div>
-              {Object.keys(stats.states_detected).length > 0 && (
-                <div className="text-xs text-muted-foreground">
-                  By state: {Object.entries(stats.states_detected).map(([s, c]) => `${s}: ${c}`).join(" · ")}
-                </div>
-              )}
               <Button variant="outline" size="sm" onClick={startBackfill}>
                 Run Again
               </Button>
@@ -754,7 +725,7 @@ const DarwinOperations = () => {
         </CardContent>
       </Card>
 
-      {/* ── Step 4: Bulk Document Intelligence ────────────────────────── */}
+      {/* Step 4 */}
       <Card className="border-2 border-primary/30">
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -763,7 +734,6 @@ const DarwinOperations = () => {
           </div>
           <CardDescription>
             Runs Darwin processing across unprocessed files with extracted text (classification + chunking + embeddings + downstream triggers).
-            Processes 5 files per batch (AI-heavy).
           </CardDescription>
         </CardHeader>
 
@@ -830,7 +800,7 @@ const DarwinOperations = () => {
                   </TooltipTrigger>
                   {step4Disabled && (
                     <TooltipContent>
-                      <p>Run Step 1 first — not enough documents have extracted text.</p>
+                      <p>Finish Step 1 (and Step 2 if running) before running bulk intelligence.</p>
                     </TooltipContent>
                   )}
                 </Tooltip>
@@ -840,13 +810,13 @@ const DarwinOperations = () => {
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
                   <span>
-                    Text coverage is {textCoverage}% (need ≥30%).{" "}
+                    Text coverage is {textCoverage}% (need ≥30%).
                     <button
                       type="button"
-                      className="underline font-medium text-primary hover:text-primary/80"
+                      className="ml-2 underline font-medium text-primary hover:text-primary/80"
                       onClick={startTextBackfill}
                     >
-                      Run Step 1 now
+                      Run Step 1
                     </button>
                   </span>
                 </div>
