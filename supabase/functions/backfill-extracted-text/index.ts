@@ -11,6 +11,7 @@ const MAX_TEXT_LENGTH = 100000;
 const MIN_TEXT_THRESHOLD = 50;
 const JOB_TYPE = "backfill_extracted_text";
 const TTL_SECONDS = 120;
+const BATCH_MAX_RUNTIME_MS = 50_000; // 50s safe exit — well under Supabase's 60s edge timeout
 
 // === PDF TEXT EXTRACTION (raw byte parsing) ===
 function extractPdfText(bytes: Uint8Array): string {
@@ -381,8 +382,17 @@ serve(async (req) => {
       .or("extracted_text.is.null,extracted_text.eq.");
 
     const log: any[] = [];
+    const batchStart = Date.now();
+    let earlyExit = false;
 
     for (const file of candidates) {
+      // Check if we're approaching the edge function timeout
+      if (Date.now() - batchStart > BATCH_MAX_RUNTIME_MS) {
+        console.warn(`[Batch] Approaching edge timeout after ${((Date.now() - batchStart) / 1000).toFixed(1)}s — exiting safely with ${log.length} files processed`);
+        earlyExit = true;
+        break;
+      }
+
       if (dryRun) {
         log.push({
           file_id: file.id,
@@ -400,28 +410,29 @@ serve(async (req) => {
 
       // Heartbeat + cursor after EACH file so progress is never lost
       await supabase.rpc("heartbeat_darwin_job", { p_job_type: JOB_TYPE, p_claimed_by: "backfill-extracted-text" });
-      console.log(`[Batch] Completed file ${file.id} (${result.success ? 'OK' : result.reason}), heartbeat sent`);
+      console.log(`[Batch] Completed file ${file.id} (${result.success ? 'OK' : result.reason}), heartbeat sent, elapsed=${((Date.now() - batchStart) / 1000).toFixed(1)}s`);
     }
 
-    const lastId = candidates[candidates.length - 1].id;
+    const lastProcessedId = log.length > 0 ? candidates[log.length - 1].id : (cursor || null);
     const successCount = log.filter((l: any) => l.success).length;
-    const totalRemaining = (nullCount || 0) - candidates.filter((c: any) => !c.extracted_text || c.extracted_text === "").length;
+    const totalRemaining = (nullCount || 0) - candidates.filter((c: any, i: number) => i < log.length && (!c.extracted_text || c.extracted_text === "")).length;
 
-    if (Math.max(0, totalRemaining) === 0) {
+    if (Math.max(0, totalRemaining) === 0 && !earlyExit) {
       await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });
     } else {
-      // Final heartbeat already sent per-file, just release if done
       await supabase.rpc("heartbeat_darwin_job", { p_job_type: JOB_TYPE, p_claimed_by: "backfill-extracted-text" });
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        processed: candidates.length,
+        processed: log.length,
         extracted: successCount,
-        failed: candidates.length - successCount,
+        failed: log.length - successCount,
         remaining: Math.max(0, totalRemaining),
-        cursor: lastId,
+        cursor: lastProcessedId,
+        early_exit: earlyExit,
+        elapsed_ms: Date.now() - batchStart,
         log,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
