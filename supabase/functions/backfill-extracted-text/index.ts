@@ -180,6 +180,8 @@ async function processFile(
     if (dlErr || !blob) {
       entry.reason = `download_failed: ${dlErr?.message || "no blob returned"}`;
       console.error(`[Process] ${entry.reason} for ${file.file_name}`);
+      // File can't be downloaded — stop retrying
+      await supabase.from("claim_files").update({ needs_text_backfill: false }).eq("id", file.id);
       return entry;
     }
 
@@ -214,9 +216,13 @@ async function processFile(
         entry.method = "image_ocr";
       } else {
         entry.reason = "ocr_returned_null";
+        // Image with no extractable text — stop retrying
+        await supabase.from("claim_files").update({ needs_text_backfill: false }).eq("id", file.id);
       }
     } else {
       entry.reason = `unsupported_type: ${fileType} / ${fileName}`;
+      // Mark as done so it won't be retried forever
+      await supabase.from("claim_files").update({ needs_text_backfill: false }).eq("id", file.id);
       return entry;
     }
 
@@ -244,6 +250,8 @@ async function processFile(
       }
     } else {
       entry.reason = `extraction_yielded_${textContent?.length || 0}_chars`;
+      // Not enough text to be useful — stop retrying
+      await supabase.from("claim_files").update({ needs_text_backfill: false }).eq("id", file.id);
     }
   } catch (err) {
     entry.reason = `error: ${err instanceof Error ? err.message : String(err)}`;
