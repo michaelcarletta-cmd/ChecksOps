@@ -60,12 +60,19 @@ interface BulkDarwinState {
   remaining: number;
   cursor: string | null;
   errorMessage?: string;
+  failedFiles: BulkDarwinFailureEntry[];
 }
 
 interface BulkDarwinLiveStats {
   withText: number;
   processedByDarwin: number;
   remaining: number;
+}
+
+interface BulkDarwinFailureEntry {
+  file_id: string;
+  file_name: string;
+  reason: string;
 }
 
 interface BulkDarwinCandidate {
@@ -125,6 +132,7 @@ const DarwinOperations = () => {
     failed: 0,
     remaining: 0,
     cursor: null,
+    failedFiles: [],
   });
   const bulkDarwinAbortRef = useRef(false);
   const [bulkDarwinLiveStats, setBulkDarwinLiveStats] = useState<BulkDarwinLiveStats | null>(null);
@@ -133,6 +141,7 @@ const DarwinOperations = () => {
 
   // Text coverage percentage for gating Step 2
   const [showFailedFiles, setShowFailedFiles] = useState(false);
+  const [showBulkDarwinFailedFiles, setShowBulkDarwinFailedFiles] = useState(false);
   const [textCoverage, setTextCoverage] = useState<number | null>(null);
 
   const fetchTextCoverage = useCallback(async () => {
@@ -421,6 +430,17 @@ const DarwinOperations = () => {
     setBulkDarwinLiveStats(stats);
     return stats;
   }, []);
+
+  const mergeBulkDarwinFailures = useCallback(
+    (existing: BulkDarwinFailureEntry[], incoming: BulkDarwinFailureEntry[]) => {
+      if (incoming.length === 0) return existing;
+      const merged = [...existing, ...incoming];
+      // Keep recent diagnostics and avoid unbounded UI growth.
+      return merged.slice(-100);
+    },
+    []
+  );
+
   const runBulkDarwinClientFallback = useCallback(async (cursor: string | null) => {
     let query = supabase
       .from("claim_files")
@@ -449,11 +469,13 @@ const DarwinOperations = () => {
         failed: 0,
         remaining: 0,
         cursor: null,
+        log: [],
       };
     }
 
     let succeeded = 0;
     let failed = 0;
+    const log: Array<{ file_id: string; file_name: string; success: boolean; error?: string }> = [];
     for (const file of files) {
       const { data, error } = await supabase.functions.invoke("darwin-process-document", {
         body: {
@@ -462,8 +484,22 @@ const DarwinOperations = () => {
           fileName: file.file_name,
         },
       });
-      if (error || data?.success === false) failed++;
-      else succeeded++;
+      if (error || data?.success === false) {
+        failed++;
+        log.push({
+          file_id: file.id,
+          file_name: file.file_name,
+          success: false,
+          error: data?.error || error?.message || "Unknown processing error",
+        });
+      } else {
+        succeeded++;
+        log.push({
+          file_id: file.id,
+          file_name: file.file_name,
+          success: true,
+        });
+      }
     }
 
     const lastId = files[files.length - 1]?.id || cursor;
@@ -485,6 +521,7 @@ const DarwinOperations = () => {
       failed,
       remaining: Math.max(0, remainingCount || 0),
       cursor: lastId,
+      log,
     };
   }, []);
 
@@ -524,6 +561,7 @@ const DarwinOperations = () => {
         failed: prev.failed,
         remaining: liveStats ? liveStats.remaining : prev.remaining > 0 ? prev.remaining : 1,
         cursor: prev.cursor ?? cursor,
+        failedFiles: prev.failedFiles,
       };
       setBulkDarwin(waitingState);
       if (!bulkDarwinAbortRef.current) {
@@ -544,6 +582,16 @@ const DarwinOperations = () => {
       return;
     }
 
+    const batchFailedFiles: BulkDarwinFailureEntry[] = Array.isArray(data?.log)
+      ? (data.log as Array<{ file_id?: string; file_name?: string; success?: boolean; error?: string }>)
+          .filter((entry) => entry?.success === false)
+          .map((entry) => ({
+            file_id: entry.file_id || "unknown",
+            file_name: entry.file_name || "Unknown file",
+            reason: entry.error || "Unknown processing error",
+          }))
+      : [];
+
     const next: BulkDarwinState = {
       status: (data.remaining || 0) > 0 ? "running" : "complete",
       processed: prev.processed + (data.processed || 0),
@@ -551,6 +599,7 @@ const DarwinOperations = () => {
       failed: prev.failed + (data.failed || 0),
       remaining: data.remaining || 0,
       cursor: data.cursor,
+      failedFiles: mergeBulkDarwinFailures(prev.failedFiles, batchFailedFiles),
     };
 
     setBulkDarwinWaitingForLock(false);
@@ -565,7 +614,7 @@ const DarwinOperations = () => {
         description: `${next.processed} files processed. ${next.succeeded} classified/chunked/embedded. ${next.failed} failed.`,
       });
     }
-  }, [fetchBulkDarwinLiveStats, runBulkDarwinClientFallback]);
+  }, [fetchBulkDarwinLiveStats, mergeBulkDarwinFailures, runBulkDarwinClientFallback]);
 
   const startBulkDarwin = () => {
     bulkDarwinAbortRef.current = false;
@@ -576,7 +625,9 @@ const DarwinOperations = () => {
       failed: 0,
       remaining: 1,
       cursor: null,
+      failedFiles: [],
     };
+    setShowBulkDarwinFailedFiles(false);
     setBulkDarwinWaitingForLock(false);
     setBulkDarwinLiveStats(null);
     setBulkDarwin(initial);
@@ -1117,6 +1168,47 @@ const DarwinOperations = () => {
               <Button variant="outline" size="sm" onClick={startBulkDarwin}>
                 Retry
               </Button>
+            </div>
+          )}
+          {bulkDarwin.failedFiles.length > 0 && (
+            <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 text-sm font-medium text-destructive hover:underline"
+                onClick={() => setShowBulkDarwinFailedFiles(!showBulkDarwinFailedFiles)}
+              >
+                <XCircle className="h-4 w-4" />
+                {bulkDarwin.failedFiles.length} failed file diagnostic{bulkDarwin.failedFiles.length !== 1 ? "s" : ""}
+                {showBulkDarwinFailedFiles ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              </button>
+              {showBulkDarwinFailedFiles && (
+                <div className="max-h-64 overflow-y-auto rounded-md border bg-background">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-muted">
+                      <tr>
+                        <th className="px-3 py-1.5 text-left font-medium">File Name</th>
+                        <th className="px-3 py-1.5 text-left font-medium">Reason</th>
+                        <th className="px-3 py-1.5 text-left font-medium">File ID</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {bulkDarwin.failedFiles.map((f, i) => (
+                        <tr key={`${f.file_id}-${i}`}>
+                          <td className="px-3 py-1.5 max-w-[220px] truncate" title={f.file_name}>
+                            {f.file_name}
+                          </td>
+                          <td className="px-3 py-1.5 max-w-[360px] truncate text-muted-foreground" title={f.reason}>
+                            {f.reason}
+                          </td>
+                          <td className="px-3 py-1.5 font-mono text-[11px] text-muted-foreground max-w-[220px] truncate" title={f.file_id}>
+                            {f.file_id}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
           {(step4ServerRunning || bulkDarwin.status === "running") && (
