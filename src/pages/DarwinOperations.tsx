@@ -82,12 +82,20 @@ interface BulkDarwinState {
   errorMessage?: string;
 }
 
+interface BulkDarwinCandidate {
+  id: string;
+  claim_id: string;
+  file_name: string;
+}
+
 const INITIAL_STATS: BatchStats = {
   deadlines_created: 0,
   overdue_detected: 0,
   states_detected: {},
   skipped_no_state: 0,
 };
+
+const BULK_DARWIN_FALLBACK_BATCH_SIZE = 5;
 
 const DarwinOperations = () => {
   const [backfill, setBackfill] = useState<BackfillState>({
@@ -399,13 +407,105 @@ const DarwinOperations = () => {
   };
 
   // === STEP 4: BULK DOCUMENT INTELLIGENCE ===
+  const runBulkDarwinClientFallback = useCallback(async (cursor: string | null) => {
+    let query = supabase
+      .from("claim_files")
+      .select("id, claim_id, file_name")
+      .not("extracted_text", "is", null)
+      .neq("extracted_text", "")
+      .or("processed_by_darwin.is.null,processed_by_darwin.eq.false")
+      .order("id", { ascending: true })
+      .limit(BULK_DARWIN_FALLBACK_BATCH_SIZE);
+
+    if (cursor) {
+      query = query.gt("id", cursor);
+    }
+
+    const { data: candidates, error: queryError } = await query;
+    if (queryError) {
+      return { success: false, error: queryError.message };
+    }
+
+    const files = (candidates || []) as BulkDarwinCandidate[];
+    if (files.length === 0) {
+      return {
+        success: true,
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+        remaining: 0,
+        cursor: null,
+      };
+    }
+
+    let succeeded = 0;
+    let failed = 0;
+    for (const file of files) {
+      const { data, error } = await supabase.functions.invoke("darwin-process-document", {
+        body: {
+          fileId: file.id,
+          claimId: file.claim_id,
+          fileName: file.file_name,
+        },
+      });
+      if (error || data?.success === false) failed++;
+      else succeeded++;
+    }
+
+    const lastId = files[files.length - 1]?.id || cursor;
+    let remainingQuery = supabase
+      .from("claim_files")
+      .select("id", { count: "exact", head: true })
+      .not("extracted_text", "is", null)
+      .neq("extracted_text", "")
+      .or("processed_by_darwin.is.null,processed_by_darwin.eq.false");
+    if (lastId) {
+      remainingQuery = remainingQuery.gt("id", lastId);
+    }
+    const { count: remainingCount } = await remainingQuery;
+
+    return {
+      success: true,
+      processed: files.length,
+      succeeded,
+      failed,
+      remaining: Math.max(0, remainingCount || 0),
+      cursor: lastId,
+    };
+  }, []);
+
   const runBulkDarwinBatch = useCallback(async (cursor: string | null, prev: BulkDarwinState) => {
     if (bulkDarwinAbortRef.current) return;
 
-    const { data, error } = await supabase.functions.invoke("bulk-darwin-process-document", { body: { cursor } });
+    let data: any = null;
+    let error: any = null;
+    const candidateFunctions = ["bulk-darwin-process-document", "backfill-document-intelligence"];
+
+    for (const fnName of candidateFunctions) {
+      const result = await supabase.functions.invoke(fnName, { body: { cursor } });
+      data = result.data;
+      error = result.error;
+      if (!error) break;
+    }
+
+    // Endpoint not reachable: fallback to direct darwin-process-document batches.
+    if (error) {
+      const fallbackResult = await runBulkDarwinClientFallback(cursor);
+      if (fallbackResult.success) {
+        data = fallbackResult;
+        error = null;
+      }
+    }
 
     if (error || !data?.success) {
-      setBulkDarwin((s) => ({ ...s, status: "error", errorMessage: error?.message || data?.error || "Unknown error" }));
+      setBulkDarwin((s) => ({
+        ...s,
+        status: "error",
+        errorMessage:
+          data?.error ||
+          error?.message ||
+          "Failed to reach Step 4 edge function. Deploy bulk-darwin-process-document (or backfill-document-intelligence), then retry.",
+      }));
       return;
     }
 
@@ -428,7 +528,7 @@ const DarwinOperations = () => {
         description: `${next.processed} files processed. ${next.succeeded} classified/chunked/embedded. ${next.failed} failed.`,
       });
     }
-  }, []);
+  }, [runBulkDarwinClientFallback]);
 
   const startBulkDarwin = () => {
     bulkDarwinAbortRef.current = false;
@@ -446,6 +546,9 @@ const DarwinOperations = () => {
 
   const pct = backfill.total > 0 ? Math.round((backfill.processed / backfill.total) * 100) : 0;
   const stats = backfill.cumulativeStats;
+  const step4ServerRunning =
+    serverJobs.bulk_darwin_process_document === "running" ||
+    serverJobs.backfill_document_intelligence === "running";
 
   return (
     <div className="space-y-6">
@@ -775,14 +878,14 @@ const DarwinOperations = () => {
             </div>
           )}
 
-          {bulkDarwin.status === "idle" && serverJobs.bulk_darwin_process_document === "running" && (
+          {bulkDarwin.status === "idle" && step4ServerRunning && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
               Bulk document intelligence is running in the background… (started from a previous session)
             </div>
           )}
 
-          {bulkDarwin.status === "idle" && serverJobs.bulk_darwin_process_document !== "running" && (
+          {bulkDarwin.status === "idle" && !step4ServerRunning && (
             <div className="space-y-3">
               <TooltipProvider>
                 <Tooltip>
