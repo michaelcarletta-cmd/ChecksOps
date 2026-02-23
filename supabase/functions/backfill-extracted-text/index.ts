@@ -9,9 +9,10 @@ const corsHeaders = {
 const BATCH_SIZE = 20;
 const MAX_TEXT_LENGTH = 100000;
 const MIN_TEXT_THRESHOLD = 50;
+const MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024; // 8 MB — skip files larger than this to avoid OOM
 const JOB_TYPE = "backfill_extracted_text";
 const TTL_SECONDS = 120;
-const BATCH_MAX_RUNTIME_MS = 50_000; // 50s safe exit — well under Supabase's 60s edge timeout
+const BATCH_MAX_RUNTIME_MS = 50_000;
 
 // === PDF TEXT EXTRACTION (raw byte parsing) ===
 function extractPdfText(bytes: Uint8Array): string {
@@ -178,6 +179,22 @@ async function processFile(
   };
 
   try {
+    // Pre-flight size check to avoid downloading huge files that blow memory
+    const { data: fileList, error: listErr } = await supabase.storage
+      .from("claim-files")
+      .list(file.file_path.substring(0, file.file_path.lastIndexOf("/")), {
+        search: file.file_path.substring(file.file_path.lastIndexOf("/") + 1),
+        limit: 1,
+      });
+
+    const fileMeta = fileList?.[0];
+    if (fileMeta?.metadata?.size && fileMeta.metadata.size > MAX_DOWNLOAD_BYTES) {
+      entry.reason = `file_too_large: ${(fileMeta.metadata.size / 1024 / 1024).toFixed(1)} MB exceeds ${MAX_DOWNLOAD_BYTES / 1024 / 1024} MB limit`;
+      console.warn(`[Process] ${entry.reason} for ${file.file_name}`);
+      await supabase.from("claim_files").update({ needs_text_backfill: false }).eq("id", file.id);
+      return entry;
+    }
+
     console.log(`[Process] Downloading ${file.file_name} from path: ${file.file_path}`);
     const { data: blob, error: dlErr } = await supabase.storage
       .from("claim-files")
@@ -186,7 +203,6 @@ async function processFile(
     if (dlErr || !blob) {
       entry.reason = `download_failed: ${dlErr?.message || "no blob returned"}`;
       console.error(`[Process] ${entry.reason} for ${file.file_name}`);
-      // File can't be downloaded — stop retrying
       await supabase.from("claim_files").update({ needs_text_backfill: false }).eq("id", file.id);
       return entry;
     }
@@ -194,6 +210,15 @@ async function processFile(
     entry.download_ok = true;
     const arrayBuffer = await blob.arrayBuffer();
     entry.bytes = arrayBuffer.byteLength;
+
+    // Double-check after download in case metadata was unavailable
+    if (entry.bytes > MAX_DOWNLOAD_BYTES) {
+      entry.reason = `file_too_large_post_download: ${(entry.bytes / 1024 / 1024).toFixed(1)} MB`;
+      console.warn(`[Process] ${entry.reason} for ${file.file_name}`);
+      await supabase.from("claim_files").update({ needs_text_backfill: false }).eq("id", file.id);
+      return entry;
+    }
+
     console.log(`[Process] Downloaded ${file.file_name}: ${entry.bytes} bytes`);
 
     const fileType = file.file_type || "";
