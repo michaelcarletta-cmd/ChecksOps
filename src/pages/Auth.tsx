@@ -13,20 +13,38 @@ export default function Auth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+  const [updatingPassword, setUpdatingPassword] = useState(false);
   const [pendingApproval, setPendingApproval] = useState(false);
+  const [resetMode, setResetMode] = useState(() =>
+    window.location.hash.includes("type=recovery")
+  );
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
+    const inRecoveryFlow = window.location.hash.includes("type=recovery");
+    if (inRecoveryFlow) {
+      setResetMode(true);
+    }
+
     // Check if user is already logged in
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
+      if (session && !inRecoveryFlow) {
         checkApprovalAndNavigate(session.user.id);
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const recoveryInUrl = window.location.hash.includes("type=recovery");
+      if (event === "PASSWORD_RECOVERY" || recoveryInUrl) {
+        setResetMode(true);
+        return;
+      }
+
       if (session) {
         checkApprovalAndNavigate(session.user.id);
       }
@@ -143,6 +161,82 @@ export default function Auth() {
     setLoading(false);
   };
 
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      toast({
+        title: "Enter your email",
+        description: "Please enter your email address first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setForgotPasswordLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/auth`,
+    });
+
+    if (error) {
+      toast({
+        title: "Unable to send reset email",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Password reset sent",
+        description: "Check your inbox for a password reset link.",
+      });
+    }
+    setForgotPasswordLoading(false);
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (newPassword.length < 6) {
+      toast({
+        title: "Password too short",
+        description: "Password must be at least 6 characters long.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      toast({
+        title: "Passwords do not match",
+        description: "Please make sure both password fields match.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUpdatingPassword(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+    if (error) {
+      toast({
+        title: "Unable to update password",
+        description: error.message,
+        variant: "destructive",
+      });
+      setUpdatingPassword(false);
+      return;
+    }
+
+    await supabase.auth.signOut();
+    window.history.replaceState({}, document.title, "/auth");
+    setResetMode(false);
+    setNewPassword("");
+    setConfirmNewPassword("");
+    toast({
+      title: "Password updated",
+      description: "Your password has been reset. Please sign in.",
+    });
+    setUpdatingPassword(false);
+  };
+
   if (pendingApproval) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -164,6 +258,50 @@ export default function Auth() {
             >
               Back to Sign In
             </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (resetMode) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Reset Your Password</CardTitle>
+            <CardDescription>
+              Enter a new password for your account.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleUpdatePassword} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-password">New Password</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  minLength={6}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Confirm Password</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  value={confirmNewPassword}
+                  onChange={(e) => setConfirmNewPassword(e.target.value)}
+                  required
+                  minLength={6}
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={updatingPassword}>
+                {updatingPassword ? "Updating password..." : "Update Password"}
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </div>
@@ -206,6 +344,16 @@ export default function Auth() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                   />
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className="text-xs text-primary underline-offset-4 hover:underline disabled:opacity-60"
+                    disabled={forgotPasswordLoading}
+                    onClick={handleForgotPassword}
+                  >
+                    {forgotPasswordLoading ? "Sending reset..." : "Forgot password?"}
+                  </button>
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? "Signing in..." : "Sign In"}

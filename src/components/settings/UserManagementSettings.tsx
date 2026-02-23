@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UserPlus, Trash2, Shield, UserX, CheckCircle, XCircle, Clock } from "lucide-react";
+import { UserPlus, Trash2, Shield, UserX, CheckCircle, XCircle, Clock, KeyRound, Loader2 } from "lucide-react";
 
 interface Profile {
   id: string;
@@ -49,6 +49,7 @@ export function UserManagementSettings() {
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<Record<string, string | undefined>>({});
+  const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -332,6 +333,34 @@ export function UserManagementSettings() {
     }
   };
 
+  const sendPasswordResetEmail = async (userId: string, userEmail: string, userName: string) => {
+    if (!confirm(`Send password reset email to ${userName}?`)) return;
+
+    try {
+      setResettingUserId(userId);
+
+      const { error } = await supabase.auth.resetPasswordForEmail(userEmail, {
+        redirectTo: `${window.location.origin}/auth`,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Reset email sent",
+        description: `${userName} has been sent a password reset link.`,
+      });
+    } catch (error: any) {
+      console.error("Failed to send password reset email", error);
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to send password reset email",
+        variant: "destructive",
+      });
+    } finally {
+      setResettingUserId(null);
+    }
+  };
+
   if (loading) {
     return <div className="text-center py-8 text-muted-foreground">Loading users...</div>;
   }
@@ -363,6 +392,19 @@ export function UserManagementSettings() {
                   <p className="text-sm text-muted-foreground">{user.email}</p>
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => sendPasswordResetEmail(user.id, user.email, user.full_name || user.email)}
+                    disabled={resettingUserId === user.id}
+                  >
+                    {resettingUserId === user.id ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <KeyRound className="h-4 w-4 mr-1" />
+                    )}
+                    Reset Password
+                  </Button>
                   <Button
                     variant="default"
                     size="sm"
@@ -435,6 +477,19 @@ export function UserManagementSettings() {
               </div>
 
               <div className="ml-4 flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => sendPasswordResetEmail(user.id, user.email, user.full_name || user.email)}
+                  disabled={resettingUserId === user.id}
+                  title="Send password reset email"
+                >
+                  {resettingUserId === user.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <KeyRound className="h-4 w-4" />
+                  )}
+                </Button>
                 <Select
                   value={selectedRoles[user.id]}
                   onValueChange={(role) => {
