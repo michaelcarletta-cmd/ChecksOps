@@ -42,8 +42,10 @@ function extractPdfText(bytes: Uint8Array): string {
   return textParts.join(" ");
 }
 
+const FILE_TIMEOUT_MS = 90_000; // 90 seconds per file
+
 // === OCR VIA VISION AI ===
-async function ocrViaVision(bytes: Uint8Array, fileName: string): Promise<string | null> {
+async function ocrViaVision(bytes: Uint8Array, fileName: string, signal?: AbortSignal): Promise<string | null> {
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
     console.error("[OCR] LOVABLE_API_KEY not set");
@@ -76,6 +78,7 @@ async function ocrViaVision(bytes: Uint8Array, fileName: string): Promise<string
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
+      signal,
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
@@ -107,15 +110,51 @@ async function ocrViaVision(bytes: Uint8Array, fileName: string): Promise<string
     console.log(`[OCR] Vision returned ${text ? text.length : 0} chars for ${fileName}`);
     return text;
   } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      console.error(`[OCR] Aborted (timeout) for ${fileName}`);
+      return null;
+    }
     console.error("[OCR] Error:", error);
     return null;
+  }
+}
+
+// === Wrap processFile with a hard timeout ===
+async function processFileWithTimeout(
+  supabase: any,
+  file: { id: string; file_name: string; file_path: string; file_type: string | null; extracted_text: string | null }
+): Promise<Record<string, any>> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FILE_TIMEOUT_MS);
+
+  try {
+    const result = await processFile(supabase, file, controller.signal);
+    return result;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      console.warn(`[Timeout] File ${file.file_name} (${file.id}) exceeded ${FILE_TIMEOUT_MS / 1000}s — skipping`);
+      return {
+        file_id: file.id, file_name: file.file_name, file_type: file.file_type || "unknown",
+        file_path: file.file_path, existing_text_length: file.extracted_text?.length || 0,
+        download_ok: false, bytes: 0, method: "none", chars: 0, success: false, reason: "timeout",
+      };
+    }
+    return {
+      file_id: file.id, file_name: file.file_name, file_type: file.file_type || "unknown",
+      file_path: file.file_path, existing_text_length: file.extracted_text?.length || 0,
+      download_ok: false, bytes: 0, method: "none", chars: 0, success: false,
+      reason: `error: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 // === Process a single file ===
 async function processFile(
   supabase: any,
-  file: { id: string; file_name: string; file_path: string; file_type: string | null; extracted_text: string | null }
+  file: { id: string; file_name: string; file_path: string; file_type: string | null; extracted_text: string | null },
+  signal?: AbortSignal
 ): Promise<Record<string, any>> {
   const entry: Record<string, any> = {
     file_id: file.id,
@@ -160,7 +199,7 @@ async function processFile(
       textContent = extractPdfText(pdfBytes);
       entry.method = "pdf_text";
       if (textContent.length < 300) {
-        const ocrText = await ocrViaVision(pdfBytes, fileName);
+      const ocrText = await ocrViaVision(pdfBytes, fileName, signal);
         if (ocrText && ocrText.length > textContent.length) {
           textContent = ocrText;
           entry.method = "ocr";
@@ -168,7 +207,7 @@ async function processFile(
       }
     } else if (/\.(png|jpg|jpeg|webp|gif|bmp|tiff?)$/i.test(fileName)) {
       const imgBytes = new Uint8Array(arrayBuffer);
-      const ocrText = await ocrViaVision(imgBytes, fileName);
+      const ocrText = await ocrViaVision(imgBytes, fileName, signal);
       if (ocrText) {
         textContent = ocrText;
         entry.method = "image_ocr";
@@ -274,7 +313,7 @@ serve(async (req) => {
         );
       }
 
-      const result = await processFile(supabase, file);
+      const result = await processFileWithTimeout(supabase, file);
       return new Response(
         JSON.stringify({ success: result.success, mode: "debug_single_file", log: [result] }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -356,8 +395,12 @@ serve(async (req) => {
         continue;
       }
 
-      const result = await processFile(supabase, file);
+      const result = await processFileWithTimeout(supabase, file);
       log.push(result);
+
+      // Heartbeat + cursor after EACH file so progress is never lost
+      await supabase.rpc("heartbeat_darwin_job", { p_job_type: JOB_TYPE, p_claimed_by: "backfill-extracted-text" });
+      console.log(`[Batch] Completed file ${file.id} (${result.success ? 'OK' : result.reason}), heartbeat sent`);
     }
 
     const lastId = candidates[candidates.length - 1].id;
@@ -365,10 +408,9 @@ serve(async (req) => {
     const totalRemaining = (nullCount || 0) - candidates.filter((c: any) => !c.extracted_text || c.extracted_text === "").length;
 
     if (Math.max(0, totalRemaining) === 0) {
-      // All done — release lock
       await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });
     } else {
-      // Still more work — send heartbeat
+      // Final heartbeat already sent per-file, just release if done
       await supabase.rpc("heartbeat_darwin_job", { p_job_type: JOB_TYPE, p_claimed_by: "backfill-extracted-text" });
     }
 
