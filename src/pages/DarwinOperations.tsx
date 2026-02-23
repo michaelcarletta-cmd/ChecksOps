@@ -32,6 +32,8 @@ interface TextBackfillState {
   remaining: number;
   cursor: string | null;
   errorMessage?: string;
+  earlyExits: number;
+  lastElapsedMs: number | null;
 }
 
 interface RebuildEventsState {
@@ -67,6 +69,8 @@ const DarwinOperations = () => {
     failed: 0,
     remaining: 0,
     cursor: null,
+    earlyExits: 0,
+    lastElapsedMs: null,
   });
   const textAbortRef = useRef(false);
 
@@ -221,6 +225,7 @@ const DarwinOperations = () => {
       return;
     }
 
+    const isEarlyExit = !!data.early_exit;
     const next: TextBackfillState = {
       status: (data.remaining || 0) > 0 ? "running" : "complete",
       processed: prev.processed + (data.processed || 0),
@@ -228,12 +233,16 @@ const DarwinOperations = () => {
       failed: prev.failed + (data.failed || 0),
       remaining: data.remaining || 0,
       cursor: data.cursor,
+      earlyExits: prev.earlyExits + (isEarlyExit ? 1 : 0),
+      lastElapsedMs: data.elapsed_ms || null,
     };
 
     setTextBackfill(next);
 
     if ((data.remaining || 0) > 0 && !textAbortRef.current) {
-      setTimeout(() => runTextBatch(data.cursor, next), 500);
+      // Auto-chain immediately on early_exit, short delay otherwise
+      const delay = isEarlyExit ? 0 : 500;
+      setTimeout(() => runTextBatch(data.cursor, next), delay);
     } else if ((data.remaining || 0) === 0) {
       toast({
         title: "Text Extraction Complete",
@@ -251,6 +260,8 @@ const DarwinOperations = () => {
       failed: 0,
       remaining: 0,
       cursor: null,
+      earlyExits: 0,
+      lastElapsedMs: null,
     };
     setTextBackfill(initial);
     runTextBatch(null, initial);
@@ -348,7 +359,7 @@ const DarwinOperations = () => {
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Extracting text… {textBackfill.processed} files processed ({textBackfill.remaining} remaining)
+                Extracting text… {textBackfill.processed} files processed ({textBackfill.remaining} remaining){textBackfill.earlyExits > 0 && ` · ${textBackfill.earlyExits} batch chains`}{textBackfill.lastElapsedMs != null && ` · last batch ${(textBackfill.lastElapsedMs / 1000).toFixed(1)}s`}
               </div>
               <Progress 
                 value={textBackfill.remaining > 0 
