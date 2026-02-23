@@ -154,6 +154,7 @@ const DarwinOperations = () => {
   const bulkDarwinAbortRef = useRef(false);
   const [bulkDarwinLiveStats, setBulkDarwinLiveStats] = useState<BulkDarwinLiveStats | null>(null);
   const [bulkDarwinWaitingForLock, setBulkDarwinWaitingForLock] = useState(false);
+  const [bulkDarwinLockHint, setBulkDarwinLockHint] = useState<DarwinJobInfo | null>(null);
   const [unlockingStep4, setUnlockingStep4] = useState(false);
   const [bulkDarwinDiagnostics, setBulkDarwinDiagnostics] = useState<BulkDarwinDiagnostics>({
     phase: "idle",
@@ -477,6 +478,29 @@ const DarwinOperations = () => {
     []
   );
 
+  const parseDarwinJobInfo = useCallback((raw: unknown): DarwinJobInfo | null => {
+    if (!raw || typeof raw !== "object") return null;
+    const job = raw as Record<string, unknown>;
+    const statusRaw = typeof job.status === "string" ? job.status : null;
+    const heartbeat_at = typeof job.heartbeat_at === "string" ? job.heartbeat_at : null;
+    const claimed_by = typeof job.claimed_by === "string" ? job.claimed_by : null;
+    const started_at = typeof job.started_at === "string" ? job.started_at : null;
+    const ttl_seconds = typeof job.ttl_seconds === "number" && Number.isFinite(job.ttl_seconds) ? job.ttl_seconds : 120;
+    const error_message = typeof job.error_message === "string" ? job.error_message : null;
+
+    // If nothing is populated, treat as missing lock metadata.
+    if (!heartbeat_at && !claimed_by && !started_at && !statusRaw) return null;
+
+    return {
+      status: statusRaw || "running",
+      heartbeat_at,
+      ttl_seconds,
+      claimed_by,
+      started_at,
+      error_message,
+    };
+  }, []);
+
   const invokeFunctionWithTimeout = useCallback(
     async (fnName: string, body: Record<string, unknown>, timeoutMs = 65000) => {
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -628,32 +652,78 @@ const DarwinOperations = () => {
     }
 
     const lockBusyReason = String(data?.error || error?.message || "").toLowerCase();
-    const isJobAlreadyRunning = lockBusyReason.includes("job already running");
+    const lockErrorCode = String(data?.error_code || "").toUpperCase();
+    const isJobAlreadyRunning =
+      lockBusyReason.includes("job already running") || lockErrorCode === "JOB_ALREADY_RUNNING";
+    const isLockMetadataMissing =
+      lockBusyReason.includes("lock metadata missing") || lockErrorCode === "JOB_LOCK_METADATA_MISSING";
+    const lockReportedBusy = isJobAlreadyRunning || isLockMetadataMissing;
+    const lockInfoFromResponse = parseDarwinJobInfo(data?.job);
+    if (lockInfoFromResponse) {
+      setBulkDarwinLockHint(lockInfoFromResponse);
+    }
 
-    if (isJobAlreadyRunning) {
-      const liveStats = await fetchBulkDarwinLiveStats();
-      setBulkDarwinWaitingForLock(true);
-      setBulkDarwinDiagnostics((d) => ({
-        ...d,
-        phase: "waiting_lock",
-        lastResponseAt: Date.now(),
-        lastMessage: "Another Step 4 worker currently holds the lock.",
-      }));
-      // Another session holds the lock. Keep a running state and poll until available.
-      const waitingState: BulkDarwinState = {
-        status: "running",
-        processed: liveStats?.processedByDarwin ?? prev.processed,
-        succeeded: liveStats?.processedByDarwin ?? prev.succeeded,
-        failed: prev.failed,
-        remaining: liveStats ? liveStats.remaining : prev.remaining > 0 ? prev.remaining : 1,
-        cursor: prev.cursor ?? cursor,
-        failedFiles: prev.failedFiles,
-      };
-      setBulkDarwin(waitingState);
-      if (!bulkDarwinAbortRef.current) {
-        setTimeout(() => runBulkDarwinBatch(cursor, waitingState), 2000);
+    if (lockReportedBusy) {
+      const appearsRunningOnServer =
+        serverJobs.bulk_darwin_process_document === "running" ||
+        serverJobs.backfill_document_intelligence === "running";
+      const lockMetadataMissing = isLockMetadataMissing || !lockInfoFromResponse;
+
+      // If lock is reported but no metadata is available anywhere, keep progress moving via client fallback.
+      if (lockMetadataMissing && !appearsRunningOnServer) {
+        setBulkDarwinWaitingForLock(false);
+        setBulkDarwinDiagnostics((d) => ({
+          ...d,
+          phase: "processing",
+          lastResponseAt: Date.now(),
+          lastMessage: "Lock reported without metadata; running client fallback batch to continue processing.",
+        }));
+        const fallbackResult = await runBulkDarwinClientFallback(cursor);
+        if (fallbackResult.success) {
+          data = fallbackResult;
+          error = null;
+          setBulkDarwinLockHint(null);
+        } else {
+          setBulkDarwinDiagnostics((d) => ({
+            ...d,
+            phase: "error",
+            lastResponseAt: Date.now(),
+            lastMessage: fallbackResult.error || "Fallback batch failed after lock metadata was missing.",
+          }));
+          setBulkDarwin((s) => ({
+            ...s,
+            status: "error",
+            errorMessage: fallbackResult.error || "Step 4 lock reported without metadata, and fallback batch failed.",
+          }));
+          return;
+        }
+      } else {
+        const liveStats = await fetchBulkDarwinLiveStats();
+        setBulkDarwinWaitingForLock(true);
+        setBulkDarwinDiagnostics((d) => ({
+          ...d,
+          phase: "waiting_lock",
+          lastResponseAt: Date.now(),
+          lastMessage: lockInfoFromResponse?.claimed_by
+            ? `Another Step 4 worker currently holds the lock (${lockInfoFromResponse.claimed_by}).`
+            : "Another Step 4 worker currently holds the lock.",
+        }));
+        // Another session holds the lock. Keep a running state and poll until available.
+        const waitingState: BulkDarwinState = {
+          status: "running",
+          processed: liveStats?.processedByDarwin ?? prev.processed,
+          succeeded: liveStats?.processedByDarwin ?? prev.succeeded,
+          failed: prev.failed,
+          remaining: liveStats ? liveStats.remaining : prev.remaining > 0 ? prev.remaining : 1,
+          cursor: prev.cursor ?? cursor,
+          failedFiles: prev.failedFiles,
+        };
+        setBulkDarwin(waitingState);
+        if (!bulkDarwinAbortRef.current) {
+          setTimeout(() => runBulkDarwinBatch(cursor, waitingState), 2000);
+        }
+        return;
       }
-      return;
     }
     if (error || !data?.success) {
       setBulkDarwinWaitingForLock(false);
@@ -695,6 +765,7 @@ const DarwinOperations = () => {
     };
 
     setBulkDarwinWaitingForLock(false);
+    setBulkDarwinLockHint(null);
     setBulkDarwinDiagnostics((d) => ({
       ...d,
       phase: (data.remaining || 0) > 0 ? "processing" : "idle",
@@ -713,7 +784,7 @@ const DarwinOperations = () => {
         description: `${next.processed} files processed. ${next.succeeded} classified/chunked/embedded. ${next.failed} failed.`,
       });
     }
-  }, [fetchBulkDarwinLiveStats, invokeFunctionWithTimeout, mergeBulkDarwinFailures, runBulkDarwinClientFallback]);
+  }, [fetchBulkDarwinLiveStats, invokeFunctionWithTimeout, mergeBulkDarwinFailures, parseDarwinJobInfo, runBulkDarwinClientFallback, serverJobs]);
 
   const startBulkDarwin = () => {
     bulkDarwinAbortRef.current = false;
@@ -728,6 +799,7 @@ const DarwinOperations = () => {
     };
     setShowBulkDarwinFailedFiles(false);
     setBulkDarwinWaitingForLock(false);
+    setBulkDarwinLockHint(null);
     setBulkDarwinLiveStats(null);
     setBulkDarwinDiagnostics({
       phase: "invoking",
@@ -785,6 +857,7 @@ const DarwinOperations = () => {
 
     if (released) {
       setBulkDarwinWaitingForLock(false);
+      setBulkDarwinLockHint(null);
       setBulkDarwin((prev) => ({
         ...prev,
         status: "idle",
@@ -830,7 +903,8 @@ const DarwinOperations = () => {
   const stats = backfill.cumulativeStats;
   const step4ServerRunning =
     serverJobs.bulk_darwin_process_document === "running" ||
-    serverJobs.backfill_document_intelligence === "running";
+    serverJobs.backfill_document_intelligence === "running" ||
+    (bulkDarwinWaitingForLock && bulkDarwinLockHint?.status === "running");
   const step4PrimaryJob = serverJobDetails.bulk_darwin_process_document;
   const step4LegacyJob = serverJobDetails.backfill_document_intelligence;
   const step4JobDetail =
@@ -838,6 +912,7 @@ const DarwinOperations = () => {
     (step4LegacyJob?.status === "running" ? step4LegacyJob : null) ||
     step4PrimaryJob ||
     step4LegacyJob ||
+    bulkDarwinLockHint ||
     null;
   const displayBulkProcessed = bulkDarwinLiveStats?.processedByDarwin ?? bulkDarwin.processed;
   const displayBulkRemaining = bulkDarwinLiveStats?.remaining ?? bulkDarwin.remaining;
@@ -881,6 +956,9 @@ const DarwinOperations = () => {
     secondsSinceLastStep4Response > 90;
   const step4HoldUpReason = (() => {
     if (bulkDarwinWaitingForLock) {
+      if (!step4JobDetail?.claimed_by && !step4JobDetail?.heartbeat_at && !step4JobDetail?.started_at) {
+        return "Hold-up: lock reported without metadata; UI is attempting fallback batches.";
+      }
       if (step4HeartbeatStale) {
         return "Hold-up: lock heartbeat is stale; worker may be orphaned.";
       }

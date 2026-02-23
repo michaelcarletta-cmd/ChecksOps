@@ -56,6 +56,25 @@ serve(async (req) => {
       }
     }
 
+    // Ensure lock row exists. If a migration was skipped, acquire_darwin_job can otherwise
+    // return "already running" with empty metadata forever.
+    const { data: existingJobRow, error: existingJobErr } = await supabase
+      .from("darwin_jobs")
+      .select("job_type")
+      .eq("job_type", JOB_TYPE)
+      .maybeSingle();
+    if (existingJobErr) {
+      console.warn(`[BulkDarwin] Unable to verify lock row before acquire: ${existingJobErr.message}`);
+    }
+    if (!existingJobRow) {
+      const { error: seedErr } = await supabase
+        .from("darwin_jobs")
+        .insert({ job_type: JOB_TYPE, status: "idle" });
+      if (seedErr && seedErr.code !== "23505") {
+        console.warn(`[BulkDarwin] Failed to seed lock row for ${JOB_TYPE}: ${seedErr.message}`);
+      }
+    }
+
     // Atomic acquire via RPC
     const { data: lockResult, error: lockErr } = await supabase.rpc("acquire_darwin_job", {
       p_job_type: JOB_TYPE,
@@ -70,8 +89,20 @@ serve(async (req) => {
     }
 
     if (!lockResult?.acquired) {
+      const hasLockMetadata =
+        !!lockResult?.claimed_by ||
+        !!lockResult?.heartbeat_at ||
+        !!lockResult?.started_at ||
+        !!lockResult?.status;
       return new Response(
-        JSON.stringify({ success: false, error: "Job already running", job: lockResult }),
+        JSON.stringify({
+          success: false,
+          error: hasLockMetadata
+            ? "Job already running"
+            : "Job lock metadata missing; fallback mode recommended",
+          error_code: hasLockMetadata ? "JOB_ALREADY_RUNNING" : "JOB_LOCK_METADATA_MISSING",
+          job: lockResult || null,
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
