@@ -481,7 +481,7 @@ const DarwinOperations = () => {
         docIntelInFlightRef.current = false;
       }
     })();
-  }, [docIntel.status, docIntel.remaining, docIntel.cursor, runDocIntelBatch]);
+  }, [docIntel, docIntel.status, docIntel.remaining, docIntel.cursor, runDocIntelBatch]);
 
   const startDocIntelBackfill = () => {
     docIntelAbortRef.current = false;
