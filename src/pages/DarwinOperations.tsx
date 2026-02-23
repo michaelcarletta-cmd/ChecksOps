@@ -477,6 +477,26 @@ const DarwinOperations = () => {
       }
     }
 
+    const lockBusyReason = String(data?.error || error?.message || "").toLowerCase();
+    const isJobAlreadyRunning = lockBusyReason.includes("job already running");
+
+    if (isJobAlreadyRunning) {
+      // Another session holds the lock. Keep a running state and poll until available.
+      const waitingState: BulkDarwinState = {
+        status: "running",
+        processed: prev.processed,
+        succeeded: prev.succeeded,
+        failed: prev.failed,
+        remaining: prev.remaining > 0 ? prev.remaining : 1,
+        cursor: prev.cursor ?? cursor,
+      };
+      setBulkDarwin(waitingState);
+      if (!bulkDarwinAbortRef.current) {
+        setTimeout(() => runBulkDarwinBatch(cursor, waitingState), 2000);
+      }
+      return;
+    }
+
     if (error || !data?.success) {
       setBulkDarwin((s) => ({
         ...s,
@@ -911,7 +931,9 @@ const DarwinOperations = () => {
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Processing… {bulkDarwin.processed} files processed ({bulkDarwin.remaining} remaining)
+                {step4ServerRunning && bulkDarwin.processed === 0
+                  ? "Step 4 is already running in another session… waiting for lock."
+                  : `Processing… ${bulkDarwin.processed} files processed (${bulkDarwin.remaining} remaining)`}
               </div>
               <Progress
                 value={
