@@ -62,12 +62,20 @@ interface DocumentIntelligenceState {
   errorMessage?: string;
 }
 
+interface DocumentIntelligenceCandidate {
+  id: string;
+  claim_id: string;
+  file_name: string;
+}
+
 const INITIAL_STATS: BatchStats = {
   deadlines_created: 0,
   overdue_detected: 0,
   states_detected: {},
   skipped_no_state: 0,
 };
+
+const DOCUMENT_INTELLIGENCE_CLIENT_BATCH_SIZE = 5;
 
 const DarwinOperations = () => {
   const [backfill, setBackfill] = useState<BackfillState>({
@@ -378,19 +386,122 @@ const DarwinOperations = () => {
     runRebuildBatch(null, initial);
   };
 
+  // Client-side fallback when Step 4 edge function is unavailable.
+  const runDocumentIntelligenceClientFallback = useCallback(async (cursor: string | null) => {
+    let query = supabase
+      .from("claim_files")
+      .select("id, claim_id, file_name")
+      .not("extracted_text", "is", null)
+      .neq("extracted_text", "")
+      .or("processed_by_darwin.is.null,processed_by_darwin.eq.false")
+      .order("id", { ascending: true })
+      .limit(DOCUMENT_INTELLIGENCE_CLIENT_BATCH_SIZE);
+
+    if (cursor) {
+      query = query.gt("id", cursor);
+    }
+
+    const { data: candidates, error: queryError } = await query;
+    if (queryError) {
+      return { success: false, error: queryError.message };
+    }
+
+    const files = (candidates || []) as DocumentIntelligenceCandidate[];
+    if (files.length === 0) {
+      return {
+        success: true,
+        processed: 0,
+        enriched: 0,
+        failed: 0,
+        remaining: 0,
+        cursor: null,
+      };
+    }
+
+    const log: Array<{ file_id: string; file_name: string; success: boolean; reason?: string }> = [];
+
+    for (const file of files) {
+      const { data, error } = await supabase.functions.invoke("darwin-process-document", {
+        body: {
+          fileId: file.id,
+          claimId: file.claim_id,
+          fileName: file.file_name,
+        },
+      });
+
+      if (error || data?.success === false) {
+        log.push({
+          file_id: file.id,
+          file_name: file.file_name,
+          success: false,
+          reason: error?.message || data?.error || "Failed to process file",
+        });
+      } else {
+        log.push({
+          file_id: file.id,
+          file_name: file.file_name,
+          success: true,
+        });
+      }
+    }
+
+    const lastId = files[files.length - 1]?.id || cursor;
+    let remainingQuery = supabase
+      .from("claim_files")
+      .select("id", { count: "exact", head: true })
+      .not("extracted_text", "is", null)
+      .neq("extracted_text", "")
+      .or("processed_by_darwin.is.null,processed_by_darwin.eq.false");
+    if (lastId) {
+      remainingQuery = remainingQuery.gt("id", lastId);
+    }
+    const { count: remainingCount } = await remainingQuery;
+
+    const successCount = log.filter((entry) => entry.success).length;
+
+    return {
+      success: true,
+      processed: log.length,
+      enriched: successCount,
+      failed: log.length - successCount,
+      remaining: Math.max(0, remainingCount || 0),
+      cursor: lastId,
+    };
+  }, []);
+
   // === DOCUMENT INTELLIGENCE BACKFILL ===
   const runDocumentIntelligenceBatch = useCallback(async (cursor: string | null, prev: DocumentIntelligenceState) => {
     if (documentIntelligenceAbortRef.current) return;
 
-    const { data, error } = await supabase.functions.invoke("backfill-document-intelligence", {
-      body: { cursor },
-    });
+    let data: any = null;
+    let error: any = null;
+    const candidateFunctions = ["bulk-darwin-process-document", "backfill-document-intelligence"];
+
+    for (const fnName of candidateFunctions) {
+      const result = await supabase.functions.invoke(fnName, { body: { cursor } });
+      data = result.data;
+      error = result.error;
+      // Reached a function endpoint (success or logical error response)
+      if (!error) break;
+    }
+
+    // If both function names are unreachable, run client-side fallback.
+    if (error) {
+      const fallbackResult = await runDocumentIntelligenceClientFallback(cursor);
+      if (fallbackResult.success) {
+        data = fallbackResult;
+        error = null;
+      }
+    }
 
     if (error || !data?.success) {
       setDocumentIntelligence((s) => ({
         ...s,
         status: "error",
-        errorMessage: error?.message || data?.error || "Unknown error",
+        errorMessage:
+          data?.error ||
+          error?.message ||
+          "Step 4 backend is unavailable. Deploy bulk-darwin-process-document (or backfill-document-intelligence), then retry.",
       }));
       return;
     }
@@ -414,7 +525,7 @@ const DarwinOperations = () => {
         description: `${next.enriched} files classified/chunked from ${next.processed} processed files.`,
       });
     }
-  }, []);
+  }, [runDocumentIntelligenceClientFallback]);
 
   const startDocumentIntelligence = () => {
     documentIntelligenceAbortRef.current = false;
@@ -432,6 +543,9 @@ const DarwinOperations = () => {
 
   const pct = backfill.total > 0 ? Math.round((backfill.processed / backfill.total) * 100) : 0;
   const stats = backfill.cumulativeStats;
+  const step4ServerRunning =
+    serverJobs.bulk_darwin_process_document === "running" ||
+    serverJobs.backfill_document_intelligence === "running";
 
   return (
     <div className="space-y-6">
@@ -752,7 +866,7 @@ const DarwinOperations = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {documentIntelligence.status === "idle" && serverJobs.backfill_document_intelligence === "running" && (
+          {documentIntelligence.status === "idle" && step4ServerRunning && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -761,7 +875,7 @@ const DarwinOperations = () => {
             </div>
           )}
 
-          {documentIntelligence.status === "idle" && serverJobs.backfill_document_intelligence !== "running" && (
+          {documentIntelligence.status === "idle" && !step4ServerRunning && (
             <div className="space-y-3">
               <TooltipProvider>
                 <Tooltip>
