@@ -446,11 +446,9 @@ serve(async (req) => {
     const { count: finalRemaining } = await finalRq;
     const totalRemaining = Math.max(0, finalRemaining || 0);
 
-    if (Math.max(0, totalRemaining) === 0 && !earlyExit) {
-      await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });
-    } else {
-      await supabase.rpc("heartbeat_darwin_job", { p_job_type: JOB_TYPE, p_claimed_by: "backfill-extracted-text" });
-    }
+    // Always release the lock at end of batch — the UI loop handles chaining
+    await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });
+
 
     return new Response(
       JSON.stringify({
