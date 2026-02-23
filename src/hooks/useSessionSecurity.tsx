@@ -132,22 +132,38 @@ export function useSessionSecurity(options: SessionSecurityOptions = {}) {
     onSessionInvalid?.(reason);
   }, [invalidateSession, onSessionInvalid, toast]);
 
-  // Set up activity tracking
+  // Set up activity tracking + visibility-change session recovery
   useEffect(() => {
     const events = ['mousedown', 'keydown', 'touchstart', 'scroll'];
     
     const handleActivity = () => {
       updateActivity();
     };
+
+    // When phone/tab wakes up, refresh the auth session and reset activity
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible') {
+        // Reset activity so the inactivity check doesn't fire immediately
+        updateActivity();
+        // Proactively refresh the Supabase JWT so edge-function calls succeed
+        try {
+          await supabase.auth.refreshSession();
+        } catch (e) {
+          console.warn('Session refresh on wake failed:', e);
+        }
+      }
+    };
     
     events.forEach(event => {
       document.addEventListener(event, handleActivity, { passive: true });
     });
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     
     return () => {
       events.forEach(event => {
         document.removeEventListener(event, handleActivity);
       });
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [updateActivity]);
 
