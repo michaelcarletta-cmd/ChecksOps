@@ -129,6 +129,7 @@ const DarwinOperations = () => {
   const bulkDarwinAbortRef = useRef(false);
   const [bulkDarwinLiveStats, setBulkDarwinLiveStats] = useState<BulkDarwinLiveStats | null>(null);
   const [bulkDarwinWaitingForLock, setBulkDarwinWaitingForLock] = useState(false);
+  const [unlockingStep4, setUnlockingStep4] = useState(false);
 
   // Text coverage percentage for gating Step 2
   const [showFailedFiles, setShowFailedFiles] = useState(false);
@@ -582,6 +583,80 @@ const DarwinOperations = () => {
     runBulkDarwinBatch(null, initial);
   };
 
+  const forceUnlockStep4 = useCallback(async () => {
+    if (unlockingStep4) return;
+
+    setUnlockingStep4(true);
+    // Stop local polling loops while unlocking.
+    bulkDarwinAbortRef.current = true;
+
+    const candidateFunctions = ["bulk-darwin-process-document", "backfill-document-intelligence"];
+    let released = false;
+    let lastError: string | undefined;
+
+    for (const fnName of candidateFunctions) {
+      const { data, error } = await supabase.functions.invoke(fnName, { body: { release: true } });
+      if (!error && data?.success !== false) {
+        released = true;
+      } else {
+        lastError = data?.error || error?.message || lastError;
+      }
+    }
+
+    // Final fallback: release directly via RPC in case function endpoints are unavailable.
+    if (!released) {
+      const [{ error: primaryReleaseError }, { error: legacyReleaseError }] = await Promise.all([
+        supabase.rpc("release_darwin_job", {
+          p_job_type: "bulk_darwin_process_document",
+          p_error_message: "Manual unlock from Darwin Operations UI",
+        }),
+        supabase.rpc("release_darwin_job", {
+          p_job_type: "backfill_document_intelligence",
+          p_error_message: "Manual unlock from Darwin Operations UI",
+        }),
+      ]);
+
+      if (!primaryReleaseError || !legacyReleaseError) {
+        released = true;
+      } else {
+        lastError = primaryReleaseError.message || legacyReleaseError.message || lastError;
+      }
+    }
+
+    await fetchServerJobs();
+    const liveStats = await fetchBulkDarwinLiveStats();
+
+    if (released) {
+      setBulkDarwinWaitingForLock(false);
+      setBulkDarwin((prev) => ({
+        ...prev,
+        status: "idle",
+        processed: liveStats?.processedByDarwin ?? prev.processed,
+        succeeded: liveStats?.processedByDarwin ?? prev.succeeded,
+        remaining: liveStats?.remaining ?? prev.remaining,
+        cursor: null,
+        errorMessage: undefined,
+      }));
+      toast({
+        title: "Step 4 lock released",
+        description: "You can run Bulk Document Intelligence again now.",
+      });
+    } else {
+      setBulkDarwin((prev) => ({
+        ...prev,
+        status: "error",
+        errorMessage: lastError || "Failed to force unlock Step 4 lock.",
+      }));
+      toast({
+        title: "Unable to release Step 4 lock",
+        description: lastError || "Try releasing the lock from SQL editor and retry.",
+      });
+    }
+
+    bulkDarwinAbortRef.current = false;
+    setUnlockingStep4(false);
+  }, [fetchBulkDarwinLiveStats, fetchServerJobs, unlockingStep4]);
+
   const pct = backfill.total > 0 ? Math.round((backfill.processed / backfill.total) * 100) : 0;
   const stats = backfill.cumulativeStats;
   const step4ServerRunning =
@@ -1027,6 +1102,27 @@ const DarwinOperations = () => {
               <Button variant="outline" size="sm" onClick={startBulkDarwin}>
                 Retry
               </Button>
+            </div>
+          )}
+          {(step4ServerRunning || bulkDarwin.status === "running") && (
+            <div className="space-y-2 pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 border-destructive/40 text-destructive hover:bg-destructive/10"
+                onClick={forceUnlockStep4}
+                disabled={unlockingStep4}
+              >
+                {unlockingStep4 ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4" />
+                )}
+                {unlockingStep4 ? "Unlocking Step 4…" : "Force Unlock Step 4"}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Use only if Step 4 appears stuck with no progress for several minutes.
+              </p>
             </div>
           )}
         </CardContent>
