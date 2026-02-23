@@ -62,6 +62,12 @@ interface BulkDarwinState {
   errorMessage?: string;
 }
 
+interface BulkDarwinLiveStats {
+  withText: number;
+  processedByDarwin: number;
+  remaining: number;
+}
+
 interface BulkDarwinCandidate {
   id: string;
   claim_id: string;
@@ -121,6 +127,8 @@ const DarwinOperations = () => {
     cursor: null,
   });
   const bulkDarwinAbortRef = useRef(false);
+  const [bulkDarwinLiveStats, setBulkDarwinLiveStats] = useState<BulkDarwinLiveStats | null>(null);
+  const [bulkDarwinWaitingForLock, setBulkDarwinWaitingForLock] = useState(false);
 
   // Text coverage percentage for gating Step 2
   const [showFailedFiles, setShowFailedFiles] = useState(false);
@@ -388,6 +396,30 @@ const DarwinOperations = () => {
   // === STEP 4: BULK DARWIN DOCUMENT INTELLIGENCE ===
   const step4Disabled = (textCoverage !== null && textCoverage < 30) || textBackfill.status === "running";
 
+  // === STEP 4: BULK DOCUMENT INTELLIGENCE ===
+  const fetchBulkDarwinLiveStats = useCallback(async (): Promise<BulkDarwinLiveStats | null> => {
+    const [{ count: withText }, { count: processedByDarwin }] = await Promise.all([
+      supabase
+        .from("claim_files")
+        .select("id", { count: "exact", head: true })
+        .not("extracted_text", "is", null)
+        .neq("extracted_text", ""),
+      supabase
+        .from("claim_files")
+        .select("id", { count: "exact", head: true })
+        .not("extracted_text", "is", null)
+        .neq("extracted_text", "")
+        .eq("processed_by_darwin", true),
+    ]);
+
+    const stats: BulkDarwinLiveStats = {
+      withText: withText || 0,
+      processedByDarwin: processedByDarwin || 0,
+      remaining: Math.max((withText || 0) - (processedByDarwin || 0), 0),
+    };
+    setBulkDarwinLiveStats(stats);
+    return stats;
+  }, []);
   const runBulkDarwinClientFallback = useCallback(async (cursor: string | null) => {
     let query = supabase
       .from("claim_files")
@@ -481,13 +513,15 @@ const DarwinOperations = () => {
     const isJobAlreadyRunning = lockBusyReason.includes("job already running");
 
     if (isJobAlreadyRunning) {
+      const liveStats = await fetchBulkDarwinLiveStats();
+      setBulkDarwinWaitingForLock(true);
       // Another session holds the lock. Keep a running state and poll until available.
       const waitingState: BulkDarwinState = {
         status: "running",
-        processed: prev.processed,
-        succeeded: prev.succeeded,
+        processed: liveStats?.processedByDarwin ?? prev.processed,
+        succeeded: liveStats?.processedByDarwin ?? prev.succeeded,
         failed: prev.failed,
-        remaining: prev.remaining > 0 ? prev.remaining : 1,
+        remaining: liveStats ? liveStats.remaining : prev.remaining > 0 ? prev.remaining : 1,
         cursor: prev.cursor ?? cursor,
       };
       setBulkDarwin(waitingState);
@@ -496,8 +530,8 @@ const DarwinOperations = () => {
       }
       return;
     }
-
     if (error || !data?.success) {
+      setBulkDarwinWaitingForLock(false);
       setBulkDarwin((s) => ({
         ...s,
         status: "error",
@@ -518,6 +552,8 @@ const DarwinOperations = () => {
       cursor: data.cursor,
     };
 
+    setBulkDarwinWaitingForLock(false);
+    await fetchBulkDarwinLiveStats();
     setBulkDarwin(next);
 
     if ((data.remaining || 0) > 0 && !bulkDarwinAbortRef.current) {
@@ -528,7 +564,7 @@ const DarwinOperations = () => {
         description: `${next.processed} files processed. ${next.succeeded} classified/chunked/embedded. ${next.failed} failed.`,
       });
     }
-  }, [runBulkDarwinClientFallback]);
+  }, [fetchBulkDarwinLiveStats, runBulkDarwinClientFallback]);
 
   const startBulkDarwin = () => {
     bulkDarwinAbortRef.current = false;
@@ -540,6 +576,8 @@ const DarwinOperations = () => {
       remaining: 1,
       cursor: null,
     };
+    setBulkDarwinWaitingForLock(false);
+    setBulkDarwinLiveStats(null);
     setBulkDarwin(initial);
     runBulkDarwinBatch(null, initial);
   };
@@ -549,6 +587,20 @@ const DarwinOperations = () => {
   const step4ServerRunning =
     serverJobs.bulk_darwin_process_document === "running" ||
     serverJobs.backfill_document_intelligence === "running";
+  const displayBulkProcessed = bulkDarwinLiveStats?.processedByDarwin ?? bulkDarwin.processed;
+  const displayBulkRemaining = bulkDarwinLiveStats?.remaining ?? bulkDarwin.remaining;
+  const displayBulkProgressPct =
+    displayBulkRemaining > 0
+      ? (displayBulkProcessed / (displayBulkProcessed + displayBulkRemaining)) * 100
+      : 100;
+
+  useEffect(() => {
+    if (bulkDarwin.status !== "running" && !step4ServerRunning) return;
+
+    fetchBulkDarwinLiveStats();
+    const interval = setInterval(fetchBulkDarwinLiveStats, 5000);
+    return () => clearInterval(interval);
+  }, [bulkDarwin.status, fetchBulkDarwinLiveStats, step4ServerRunning]);
 
   return (
     <div className="space-y-6">
@@ -879,6 +931,10 @@ const DarwinOperations = () => {
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Bulk document intelligence is running in the background…
               </div>
+              <Progress value={displayBulkProgressPct} className="h-3" />
+              <p className="text-xs text-muted-foreground">
+                Live progress: {displayBulkProcessed} processed ({displayBulkRemaining} remaining). Updates every 5s.
+              </p>
             </div>
           )}
           {bulkDarwin.status === "idle" && !step4ServerRunning && (
@@ -931,22 +987,18 @@ const DarwinOperations = () => {
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                {step4ServerRunning && bulkDarwin.processed === 0
+                {bulkDarwinWaitingForLock
                   ? "Step 4 is already running in another session… waiting for lock."
-                  : `Processing… ${bulkDarwin.processed} files processed (${bulkDarwin.remaining} remaining)`}
+                  : `Processing… ${displayBulkProcessed} files processed (${displayBulkRemaining} remaining)`}
               </div>
               <Progress
-                value={
-                  bulkDarwin.remaining > 0
-                    ? (bulkDarwin.processed / (bulkDarwin.processed + bulkDarwin.remaining)) * 100
-                    : 100
-                }
+                value={displayBulkProgressPct}
                 className="h-3"
               />
               <div className="grid grid-cols-3 gap-3">
-                <SummaryCard label="Succeeded" value={bulkDarwin.succeeded} />
+                <SummaryCard label="Processed (live)" value={displayBulkProcessed} />
                 <SummaryCard label="Failed" value={bulkDarwin.failed} variant={bulkDarwin.failed > 0 ? "warning" : undefined} />
-                <SummaryCard label="Remaining" value={bulkDarwin.remaining} />
+                <SummaryCard label="Remaining" value={displayBulkRemaining} />
               </div>
             </div>
           )}
