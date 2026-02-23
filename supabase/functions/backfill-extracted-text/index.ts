@@ -226,9 +226,14 @@ async function processFile(
         .replace(/\\u[0-9a-fA-F]{0,3}(?![0-9a-fA-F])/g, "")
         .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
       const capped = sanitized.substring(0, MAX_TEXT_LENGTH);
+      const needsBackfill = capped.length < MIN_TEXT_THRESHOLD;
       const { error: updateErr } = await supabase
         .from("claim_files")
-        .update({ extracted_text: capped, ocr_processed_at: new Date().toISOString() })
+        .update({
+          extracted_text: capped,
+          ocr_processed_at: new Date().toISOString(),
+          needs_text_backfill: needsBackfill,
+        })
         .eq("id", file.id);
 
       if (updateErr) {
@@ -324,50 +329,24 @@ serve(async (req) => {
     // === BATCH MODE ===
     console.log(`[Batch] Starting batch mode, cursor=${cursor}, dryRun=${dryRun}`);
 
-    let candidates: any[] = [];
-
-    let q1 = supabase
+    let q = supabase
       .from("claim_files")
       .select("id, file_name, file_path, file_type, extracted_text")
-      .or("extracted_text.is.null,extracted_text.eq.")
+      .eq("needs_text_backfill", true)
       .order("id", { ascending: true })
       .limit(BATCH_SIZE);
-    if (cursor) q1 = q1.gt("id", cursor);
-    const { data: nullFiles, error: e1 } = await q1;
+    if (cursor) q = q.gt("id", cursor);
+    const { data: candidates, error: e1 } = await q;
     if (e1) {
       await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE, p_error_message: e1.message });
       return new Response(JSON.stringify({ success: false, error: e1.message }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (nullFiles) candidates.push(...nullFiles);
 
-    if (candidates.length < BATCH_SIZE) {
-      const remaining = BATCH_SIZE - candidates.length;
-      const existingIds = candidates.map((c: any) => c.id);
-      let q2 = supabase
-        .from("claim_files")
-        .select("id, file_name, file_path, file_type, extracted_text")
-        .not("extracted_text", "is", null)
-        .neq("extracted_text", "")
-        .order("id", { ascending: true })
-        .limit(remaining * 3);
-      if (cursor) q2 = q2.gt("id", cursor);
-      const { data: shortFiles } = await q2;
-      if (shortFiles) {
-        const shortOnes = shortFiles
-          .filter((f: any) => !existingIds.includes(f.id) && (f.extracted_text?.length || 0) < MIN_TEXT_THRESHOLD)
-          .slice(0, remaining);
-        candidates.push(...shortOnes);
-      }
-    }
+    console.log(`[Batch] Found ${candidates?.length || 0} files to process`);
 
-    candidates.sort((a: any, b: any) => a.id.localeCompare(b.id));
-    candidates = candidates.slice(0, BATCH_SIZE);
-
-    console.log(`[Batch] Found ${candidates.length} files to process`);
-
-    if (candidates.length === 0) {
+    if (!candidates || candidates.length === 0) {
       // Done — release lock
       await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });
       return new Response(
@@ -376,25 +355,13 @@ serve(async (req) => {
       );
     }
 
-    // Count remaining using the same selection logic as candidates:
-    // 1) NULL or empty extracted_text
-    const { count: nullCount } = await supabase
+    // Remaining = exact same predicate, same cursor
+    let rq = supabase
       .from("claim_files")
       .select("id", { count: "exact", head: true })
-      .or("extracted_text.is.null,extracted_text.eq.");
-
-    // 2) Non-null but shorter than MIN_TEXT_THRESHOLD
-    // PostgREST doesn't support length filters, so we fetch ids and count client-side
-    const { data: shortCandidates } = await supabase
-      .from("claim_files")
-      .select("id, extracted_text")
-      .not("extracted_text", "is", null)
-      .neq("extracted_text", "");
-    const shortCount = shortCandidates
-      ? shortCandidates.filter((f: any) => (f.extracted_text?.length || 0) < MIN_TEXT_THRESHOLD).length
-      : 0;
-
-    const totalRemainingCount = (nullCount || 0) + shortCount;
+      .eq("needs_text_backfill", true);
+    if (cursor) rq = rq.gt("id", cursor);
+    const { count: totalRemainingCount } = await rq;
 
     const log: any[] = [];
     const batchStart = Date.now();
@@ -461,7 +428,15 @@ serve(async (req) => {
       ? candidates[Math.min(log.length, candidates.length) - 1].id
       : (cursor || null);
     const successCount = log.filter((l: any) => l.success).length;
-    const totalRemaining = Math.max(0, totalRemainingCount - successCount);
+
+    // Re-count remaining using the same predicate + advanced cursor
+    let finalRq = supabase
+      .from("claim_files")
+      .select("id", { count: "exact", head: true })
+      .eq("needs_text_backfill", true);
+    if (lastProcessedId) finalRq = finalRq.gt("id", lastProcessedId);
+    const { count: finalRemaining } = await finalRq;
+    const totalRemaining = Math.max(0, finalRemaining || 0);
 
     if (Math.max(0, totalRemaining) === 0 && !earlyExit) {
       await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });

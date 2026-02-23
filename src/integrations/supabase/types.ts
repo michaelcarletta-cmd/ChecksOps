@@ -1784,6 +1784,7 @@ export type Database = {
           folder_id: string | null
           id: string
           is_latest_version: boolean | null
+          needs_text_backfill: boolean
           ocr_processed_at: string | null
           parent_file_id: string | null
           processed_by_darwin: boolean | null
@@ -1808,6 +1809,7 @@ export type Database = {
           folder_id?: string | null
           id?: string
           is_latest_version?: boolean | null
+          needs_text_backfill?: boolean
           ocr_processed_at?: string | null
           parent_file_id?: string | null
           processed_by_darwin?: boolean | null
@@ -1832,6 +1834,7 @@ export type Database = {
           folder_id?: string | null
           id?: string
           is_latest_version?: boolean | null
+          needs_text_backfill?: boolean
           ocr_processed_at?: string | null
           parent_file_id?: string | null
           processed_by_darwin?: boolean | null
