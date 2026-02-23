@@ -868,6 +868,9 @@ const DarwinOperations = () => {
     : null;
   const step4HeartbeatStale =
     step4HeartbeatAgeSeconds !== null && step4HeartbeatAgeSeconds > (step4JobDetail?.ttl_seconds || 120);
+  const secondsSinceLastStep4Attempt = bulkDarwinDiagnostics.lastAttemptAt
+    ? Math.max(0, Math.floor((Date.now() - bulkDarwinDiagnostics.lastAttemptAt) / 1000))
+    : null;
   const secondsSinceLastStep4Response = bulkDarwinDiagnostics.lastResponseAt
     ? Math.max(0, Math.floor((Date.now() - bulkDarwinDiagnostics.lastResponseAt) / 1000))
     : null;
@@ -876,6 +879,27 @@ const DarwinOperations = () => {
     !bulkDarwinWaitingForLock &&
     secondsSinceLastStep4Response !== null &&
     secondsSinceLastStep4Response > 90;
+  const step4HoldUpReason = (() => {
+    if (bulkDarwinWaitingForLock) {
+      if (step4HeartbeatStale) {
+        return "Hold-up: lock heartbeat is stale; worker may be orphaned.";
+      }
+      return `Hold-up: another worker holds the lock${step4JobDetail?.claimed_by ? ` (${step4JobDetail.claimed_by})` : ""}.`;
+    }
+    if (step4LikelyStalled) {
+      if (step4ServerRunning && !step4HeartbeatStale) {
+        return "Hold-up: worker heartbeat is alive, but no batch response yet (likely a long/hung file).";
+      }
+      return "Hold-up: no active worker heartbeat; this run may be orphaned.";
+    }
+    if (bulkDarwin.status === "running" && secondsSinceLastStep4Attempt !== null && secondsSinceLastStep4Attempt > 30) {
+      return "Hold-up: waiting on Step 4 edge function response.";
+    }
+    if (step4ServerRunning) {
+      return "Hold-up visibility: worker heartbeat is active.";
+    }
+    return "Hold-up visibility: awaiting next batch update.";
+  })();
 
   useEffect(() => {
     if (bulkDarwin.status !== "running" && !step4ServerRunning) return;
@@ -1214,9 +1238,13 @@ const DarwinOperations = () => {
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Bulk document intelligence is running in the background…
               </div>
+              <p className="text-xs font-medium text-amber-700">{step4HoldUpReason}</p>
               <Progress value={displayBulkProgressPct} className="h-3" />
               <p className="text-xs text-muted-foreground">
                 Live progress: {displayBulkProcessed} processed ({displayBulkRemaining} remaining). Updates every 5s.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Last request: {formatAgeFromMs(bulkDarwinDiagnostics.lastAttemptAt)} · Last response: {formatAgeFromMs(bulkDarwinDiagnostics.lastResponseAt)}
               </p>
               <p className="text-xs text-muted-foreground">
                 Lock holder: {step4JobDetail?.claimed_by || "unknown"} · last heartbeat {formatAgeFromIso(step4JobDetail?.heartbeat_at || null)}
@@ -1283,6 +1311,7 @@ const DarwinOperations = () => {
                   ? "Step 4 is already running in another session… waiting for lock."
                   : `Processing… ${bulkDarwin.processed} files attempted this run (${bulkDarwin.remaining} remaining in this pass)`}
               </div>
+              <p className="text-xs font-medium text-amber-700">{step4HoldUpReason}</p>
               <Progress
                 value={bulkDarwinWaitingForLock ? displayBulkProgressPct : sessionBulkProgressPct}
                 className="h-3"
