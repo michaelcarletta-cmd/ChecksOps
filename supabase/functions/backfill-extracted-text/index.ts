@@ -53,14 +53,20 @@ async function ocrViaVision(bytes: Uint8Array, fileName: string, signal?: AbortS
     return null;
   }
 
+  const MAX_OCR_BYTES = 4 * 1024 * 1024; // 4 MB cap to stay within memory limits
+
   try {
-    const chunks: string[] = [];
-    const chunkSize = 32768;
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      const chunk = bytes.subarray(i, i + chunkSize);
-      chunks.push(String.fromCharCode(...chunk));
+    if (bytes.length > MAX_OCR_BYTES) {
+      console.warn(`[OCR] Skipping ${fileName} — ${(bytes.length / 1024 / 1024).toFixed(1)} MB exceeds ${MAX_OCR_BYTES / 1024 / 1024} MB OCR limit`);
+      return null;
     }
-    const base64 = btoa(chunks.join(""));
+
+    // Memory-efficient base64 encoding: build string char-by-char instead of spread
+    let binaryStr = "";
+    for (let i = 0; i < bytes.length; i++) {
+      binaryStr += String.fromCharCode(bytes[i]);
+    }
+    const base64 = btoa(binaryStr);
 
     const isPdf = fileName.toLowerCase().endsWith(".pdf");
     const mimeType = isPdf
