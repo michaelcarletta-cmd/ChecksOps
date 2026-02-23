@@ -75,6 +75,23 @@ interface BulkDarwinFailureEntry {
   reason: string;
 }
 
+interface DarwinJobInfo {
+  status: string;
+  heartbeat_at: string | null;
+  ttl_seconds: number;
+  claimed_by: string | null;
+  started_at: string | null;
+  error_message: string | null;
+}
+
+interface BulkDarwinDiagnostics {
+  phase: "idle" | "invoking" | "waiting_lock" | "processing" | "error";
+  lastAttemptAt: number | null;
+  lastResponseAt: number | null;
+  lastBatchElapsedMs: number | null;
+  lastMessage: string | null;
+}
+
 interface BulkDarwinCandidate {
   id: string;
   claim_id: string;
@@ -138,6 +155,13 @@ const DarwinOperations = () => {
   const [bulkDarwinLiveStats, setBulkDarwinLiveStats] = useState<BulkDarwinLiveStats | null>(null);
   const [bulkDarwinWaitingForLock, setBulkDarwinWaitingForLock] = useState(false);
   const [unlockingStep4, setUnlockingStep4] = useState(false);
+  const [bulkDarwinDiagnostics, setBulkDarwinDiagnostics] = useState<BulkDarwinDiagnostics>({
+    phase: "idle",
+    lastAttemptAt: null,
+    lastResponseAt: null,
+    lastBatchElapsedMs: null,
+    lastMessage: null,
+  });
 
   // Text coverage percentage for gating Step 2
   const [showFailedFiles, setShowFailedFiles] = useState(false);
@@ -174,24 +198,36 @@ const DarwinOperations = () => {
 
   // Fetch server-side job locks on mount (heartbeat-aware)
   const [serverJobs, setServerJobs] = useState<Record<string, string>>({});
+  const [serverJobDetails, setServerJobDetails] = useState<Record<string, DarwinJobInfo>>({});
   const fetchServerJobs = useCallback(async () => {
     const { data } = await supabase
       .from("darwin_jobs")
-      .select("job_type, status, heartbeat_at, ttl_seconds");
+      .select("job_type, status, heartbeat_at, ttl_seconds, claimed_by, started_at, error_message");
     if (data) {
       const map: Record<string, string> = {};
+      const details: Record<string, DarwinJobInfo> = {};
       data.forEach((j: any) => {
+        const ttlSeconds = j.ttl_seconds || 120;
+        let status = j.status;
         // Treat as idle if heartbeat expired
         if (j.status === "running" && j.heartbeat_at) {
           const age = (Date.now() - new Date(j.heartbeat_at).getTime()) / 1000;
-          if (age > (j.ttl_seconds || 120)) {
-            map[j.job_type] = "idle"; // stale lock
-            return;
+          if (age > ttlSeconds) {
+            status = "idle"; // stale lock
           }
         }
-        map[j.job_type] = j.status;
+        map[j.job_type] = status;
+        details[j.job_type] = {
+          status,
+          heartbeat_at: j.heartbeat_at ?? null,
+          ttl_seconds: ttlSeconds,
+          claimed_by: j.claimed_by ?? null,
+          started_at: j.started_at ?? null,
+          error_message: j.error_message ?? null,
+        };
       });
       setServerJobs(map);
+      setServerJobDetails(details);
     }
   }, []);
 
@@ -441,6 +477,34 @@ const DarwinOperations = () => {
     []
   );
 
+  const invokeFunctionWithTimeout = useCallback(
+    async (fnName: string, body: Record<string, unknown>, timeoutMs = 65000) => {
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      const timeoutPromise = new Promise<{ data: any; error: { message: string } }>((resolve) => {
+        timeoutId = setTimeout(() => {
+          resolve({
+            data: {
+              success: false,
+              error: `Timed out after ${Math.round(timeoutMs / 1000)}s calling ${fnName}`,
+            },
+            error: { message: `Timed out after ${Math.round(timeoutMs / 1000)}s calling ${fnName}` },
+          });
+        }, timeoutMs);
+      });
+
+      try {
+        const result = await Promise.race([
+          supabase.functions.invoke(fnName, { body }),
+          timeoutPromise,
+        ]);
+        return result as { data: any; error: any };
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+      }
+    },
+    []
+  );
+
   const runBulkDarwinClientFallback = useCallback(async (cursor: string | null) => {
     let query = supabase
       .from("claim_files")
@@ -527,19 +591,35 @@ const DarwinOperations = () => {
 
   const runBulkDarwinBatch = useCallback(async (cursor: string | null, prev: BulkDarwinState) => {
     if (bulkDarwinAbortRef.current) return;
+    setBulkDarwinDiagnostics((d) => ({
+      ...d,
+      phase: "invoking",
+      lastAttemptAt: Date.now(),
+      lastMessage: "Contacting Step 4 edge function...",
+    }));
 
     let data: any = null;
     let error: any = null;
     const candidateFunctions = ["bulk-darwin-process-document", "backfill-document-intelligence"];
 
     for (const fnName of candidateFunctions) {
-      const result = await supabase.functions.invoke(fnName, { body: { cursor } });
+      setBulkDarwinDiagnostics((d) => ({
+        ...d,
+        phase: "invoking",
+        lastMessage: `Trying ${fnName}...`,
+      }));
+      const result = await invokeFunctionWithTimeout(fnName, { cursor }, 70000);
       data = result.data;
       error = result.error;
       if (!error) break;
     }
 
     if (error) {
+      setBulkDarwinDiagnostics((d) => ({
+        ...d,
+        phase: "processing",
+        lastMessage: "Edge function unavailable, using client fallback...",
+      }));
       const fallbackResult = await runBulkDarwinClientFallback(cursor);
       if (fallbackResult.success) {
         data = fallbackResult;
@@ -553,6 +633,12 @@ const DarwinOperations = () => {
     if (isJobAlreadyRunning) {
       const liveStats = await fetchBulkDarwinLiveStats();
       setBulkDarwinWaitingForLock(true);
+      setBulkDarwinDiagnostics((d) => ({
+        ...d,
+        phase: "waiting_lock",
+        lastResponseAt: Date.now(),
+        lastMessage: "Another Step 4 worker currently holds the lock.",
+      }));
       // Another session holds the lock. Keep a running state and poll until available.
       const waitingState: BulkDarwinState = {
         status: "running",
@@ -571,6 +657,12 @@ const DarwinOperations = () => {
     }
     if (error || !data?.success) {
       setBulkDarwinWaitingForLock(false);
+      setBulkDarwinDiagnostics((d) => ({
+        ...d,
+        phase: "error",
+        lastResponseAt: Date.now(),
+        lastMessage: data?.error || error?.message || "Step 4 request failed.",
+      }));
       setBulkDarwin((s) => ({
         ...s,
         status: "error",
@@ -603,6 +695,13 @@ const DarwinOperations = () => {
     };
 
     setBulkDarwinWaitingForLock(false);
+    setBulkDarwinDiagnostics((d) => ({
+      ...d,
+      phase: (data.remaining || 0) > 0 ? "processing" : "idle",
+      lastResponseAt: Date.now(),
+      lastBatchElapsedMs: typeof data?.elapsed_ms === "number" ? data.elapsed_ms : d.lastBatchElapsedMs,
+      lastMessage: `Batch result: ${data.processed || 0} attempted, ${data.succeeded || 0} succeeded, ${data.failed || 0} failed.`,
+    }));
     await fetchBulkDarwinLiveStats();
     setBulkDarwin(next);
 
@@ -614,7 +713,7 @@ const DarwinOperations = () => {
         description: `${next.processed} files processed. ${next.succeeded} classified/chunked/embedded. ${next.failed} failed.`,
       });
     }
-  }, [fetchBulkDarwinLiveStats, mergeBulkDarwinFailures, runBulkDarwinClientFallback]);
+  }, [fetchBulkDarwinLiveStats, invokeFunctionWithTimeout, mergeBulkDarwinFailures, runBulkDarwinClientFallback]);
 
   const startBulkDarwin = () => {
     bulkDarwinAbortRef.current = false;
@@ -630,6 +729,13 @@ const DarwinOperations = () => {
     setShowBulkDarwinFailedFiles(false);
     setBulkDarwinWaitingForLock(false);
     setBulkDarwinLiveStats(null);
+    setBulkDarwinDiagnostics({
+      phase: "invoking",
+      lastAttemptAt: Date.now(),
+      lastResponseAt: null,
+      lastBatchElapsedMs: null,
+      lastMessage: "Starting Step 4 run...",
+    });
     setBulkDarwin(initial);
     runBulkDarwinBatch(null, initial);
   };
@@ -692,6 +798,12 @@ const DarwinOperations = () => {
         title: "Step 4 lock released",
         description: "You can run Bulk Document Intelligence again now.",
       });
+      setBulkDarwinDiagnostics((d) => ({
+        ...d,
+        phase: "idle",
+        lastResponseAt: Date.now(),
+        lastMessage: "Lock released from UI.",
+      }));
     } else {
       setBulkDarwin((prev) => ({
         ...prev,
@@ -702,6 +814,12 @@ const DarwinOperations = () => {
         title: "Unable to release Step 4 lock",
         description: lastError || "Try releasing the lock from SQL editor and retry.",
       });
+      setBulkDarwinDiagnostics((d) => ({
+        ...d,
+        phase: "error",
+        lastResponseAt: Date.now(),
+        lastMessage: lastError || "Failed to release Step 4 lock.",
+      }));
     }
 
     bulkDarwinAbortRef.current = false;
@@ -713,6 +831,14 @@ const DarwinOperations = () => {
   const step4ServerRunning =
     serverJobs.bulk_darwin_process_document === "running" ||
     serverJobs.backfill_document_intelligence === "running";
+  const step4PrimaryJob = serverJobDetails.bulk_darwin_process_document;
+  const step4LegacyJob = serverJobDetails.backfill_document_intelligence;
+  const step4JobDetail =
+    (step4PrimaryJob?.status === "running" ? step4PrimaryJob : null) ||
+    (step4LegacyJob?.status === "running" ? step4LegacyJob : null) ||
+    step4PrimaryJob ||
+    step4LegacyJob ||
+    null;
   const displayBulkProcessed = bulkDarwinLiveStats?.processedByDarwin ?? bulkDarwin.processed;
   const displayBulkRemaining = bulkDarwinLiveStats?.remaining ?? bulkDarwin.remaining;
   const displayBulkProgressPct =
@@ -723,6 +849,33 @@ const DarwinOperations = () => {
     bulkDarwin.remaining > 0
       ? (bulkDarwin.processed / (bulkDarwin.processed + bulkDarwin.remaining)) * 100
       : 100;
+  const formatAgeFromIso = (iso: string | null) => {
+    if (!iso) return "n/a";
+    const seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes}m ${seconds % 60}s ago`;
+  };
+  const formatAgeFromMs = (ms: number | null) => {
+    if (!ms) return "n/a";
+    const seconds = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes}m ${seconds % 60}s ago`;
+  };
+  const step4HeartbeatAgeSeconds = step4JobDetail?.heartbeat_at
+    ? Math.max(0, Math.floor((Date.now() - new Date(step4JobDetail.heartbeat_at).getTime()) / 1000))
+    : null;
+  const step4HeartbeatStale =
+    step4HeartbeatAgeSeconds !== null && step4HeartbeatAgeSeconds > (step4JobDetail?.ttl_seconds || 120);
+  const secondsSinceLastStep4Response = bulkDarwinDiagnostics.lastResponseAt
+    ? Math.max(0, Math.floor((Date.now() - bulkDarwinDiagnostics.lastResponseAt) / 1000))
+    : null;
+  const step4LikelyStalled =
+    bulkDarwin.status === "running" &&
+    !bulkDarwinWaitingForLock &&
+    secondsSinceLastStep4Response !== null &&
+    secondsSinceLastStep4Response > 90;
 
   useEffect(() => {
     if (bulkDarwin.status !== "running" && !step4ServerRunning) return;
@@ -1065,6 +1218,15 @@ const DarwinOperations = () => {
               <p className="text-xs text-muted-foreground">
                 Live progress: {displayBulkProcessed} processed ({displayBulkRemaining} remaining). Updates every 5s.
               </p>
+              <p className="text-xs text-muted-foreground">
+                Lock holder: {step4JobDetail?.claimed_by || "unknown"} · last heartbeat {formatAgeFromIso(step4JobDetail?.heartbeat_at || null)}
+                {step4JobDetail?.ttl_seconds ? ` (TTL ${step4JobDetail.ttl_seconds}s)` : ""}
+              </p>
+              {step4HeartbeatStale && (
+                <p className="text-xs text-amber-600">
+                  Heartbeat appears stale. Use Force Unlock if this does not recover.
+                </p>
+              )}
             </div>
           )}
           {bulkDarwin.status === "idle" && !step4ServerRunning && (
@@ -1139,6 +1301,29 @@ const DarwinOperations = () => {
               {!bulkDarwinWaitingForLock && (
                 <p className="text-xs text-muted-foreground">
                   Live total fully processed by Darwin: {displayBulkProcessed} ({displayBulkRemaining} still unprocessed overall).
+                </p>
+              )}
+              <div className="rounded-md border bg-muted/20 p-2 text-xs text-muted-foreground space-y-1">
+                <p>
+                  Phase: {bulkDarwinDiagnostics.phase}
+                  {step4LikelyStalled ? " · possible stall detected" : ""}
+                </p>
+                <p>
+                  Last request: {formatAgeFromMs(bulkDarwinDiagnostics.lastAttemptAt)} · Last response: {formatAgeFromMs(bulkDarwinDiagnostics.lastResponseAt)}
+                </p>
+                <p>
+                  Last batch runtime: {bulkDarwinDiagnostics.lastBatchElapsedMs != null
+                    ? `${(bulkDarwinDiagnostics.lastBatchElapsedMs / 1000).toFixed(1)}s`
+                    : "n/a"}
+                </p>
+                <p>
+                  Lock holder: {step4JobDetail?.claimed_by || "unknown"} · heartbeat {formatAgeFromIso(step4JobDetail?.heartbeat_at || null)}
+                </p>
+                {bulkDarwinDiagnostics.lastMessage && <p>Last note: {bulkDarwinDiagnostics.lastMessage}</p>}
+              </div>
+              {step4LikelyStalled && (
+                <p className="text-xs text-amber-600">
+                  No response for {secondsSinceLastStep4Response}s. If this persists, use Force Unlock and retry.
                 </p>
               )}
             </div>
