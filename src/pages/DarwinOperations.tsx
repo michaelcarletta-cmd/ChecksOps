@@ -73,6 +73,7 @@ const DarwinOperations = () => {
     lastElapsedMs: null,
   });
   const textAbortRef = useRef(false);
+  const textInFlightRef = useRef(false);
 
   // Rebuild events state
   const [rebuildEvents, setRebuildEvents] = useState<RebuildEventsState>({
@@ -209,7 +210,7 @@ const DarwinOperations = () => {
   };
 
   // === TEXT EXTRACTION BACKFILL ===
-  const runTextBatch = useCallback(async (cursor: string | null) => {
+  const runTextBatch = useCallback(async (cursor: string | null, prev: TextBackfillState) => {
     if (textAbortRef.current) return;
 
     const { data, error } = await supabase.functions.invoke("backfill-extracted-text", {
@@ -226,7 +227,7 @@ const DarwinOperations = () => {
     }
 
     const isEarlyExit = !!data.early_exit;
-    setTextBackfill((prev) => ({
+    const next: TextBackfillState = {
       status: (data.remaining || 0) > 0 ? "running" : "complete",
       processed: prev.processed + (data.processed || 0),
       extracted: prev.extracted + (data.extracted || 0),
@@ -235,27 +236,32 @@ const DarwinOperations = () => {
       cursor: data.cursor,
       earlyExits: prev.earlyExits + (isEarlyExit ? 1 : 0),
       lastElapsedMs: data.elapsed_ms || null,
-    }));
+    };
+
+    setTextBackfill(next);
 
     if ((data.remaining || 0) === 0) {
-      setTextBackfill((prev) => {
-        toast({
-          title: "Text Extraction Complete",
-          description: `${prev.processed} files processed. ${prev.extracted} texts extracted. ${prev.failed} failed.`,
-        });
-        return prev;
+      toast({
+        title: "Text Extraction Complete",
+        description: `${next.processed} files processed. ${next.extracted} texts extracted. ${next.failed} failed.`,
       });
     }
   }, []);
 
-  // useEffect-driven loop: keeps chaining batches as long as status=running & remaining>0
+  // useEffect-driven loop with inFlight guard
   useEffect(() => {
-    if (textBackfill.status === "running" && textBackfill.remaining > 0) {
-      const id = setTimeout(() => {
-        runTextBatch(textBackfill.cursor);
-      }, 0);
-      return () => clearTimeout(id);
-    }
+    if (textBackfill.status !== "running") return;
+    if ((textBackfill.remaining ?? 0) <= 0) return;
+    if (textInFlightRef.current) return;
+
+    textInFlightRef.current = true;
+    (async () => {
+      try {
+        await runTextBatch(textBackfill.cursor, textBackfill);
+      } finally {
+        textInFlightRef.current = false;
+      }
+    })();
   }, [textBackfill.status, textBackfill.remaining, textBackfill.cursor, runTextBatch]);
 
   const startTextBackfill = () => {
