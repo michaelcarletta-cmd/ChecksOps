@@ -398,9 +398,8 @@ serve(async (req) => {
     const lastId = claims[processedCount > 0 ? processedCount - 1 : 0].id;
     const remaining = Math.max(0, (totalRemaining || 0) - (cursor ? 0 : processedCount));
 
-    if (remaining <= 0 || processedCount === 0) {
-      await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });
-    }
+    // Always release the lock after each batch so the UI can immediately re-invoke
+    await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });
 
     return new Response(
       JSON.stringify({
