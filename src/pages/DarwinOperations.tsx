@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { DarwinOperationsCenter } from "@/components/dashboard/DarwinOperationsCenter";
-import { Bot, Play, CheckCircle2, AlertTriangle, Loader2, FileText, RefreshCw, XCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { Bot, Play, CheckCircle2, AlertTriangle, Loader2, FileText, RefreshCw, XCircle, ChevronDown, ChevronUp, Layers } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -52,6 +52,26 @@ interface RebuildEventsState {
   errorMessage?: string;
 }
 
+interface DocIntelStats {
+  totalFiles: number;
+  filesWithExtractedText: number;
+  filesProcessedByDarwin: number;
+  documentChunks: number;
+  deepAnalysisResults: number;
+}
+
+interface DocIntelBackfillState {
+  status: "idle" | "running" | "complete" | "error";
+  processed: number;
+  succeeded: number;
+  failed: number;
+  remaining: number;
+  cursor: string | null;
+  earlyExits: number;
+  lastElapsedMs: number | null;
+  errorMessage?: string;
+}
+
 const INITIAL_STATS: BatchStats = {
   deadlines_created: 0,
   overdue_detected: 0,
@@ -93,6 +113,21 @@ const DarwinOperations = () => {
   });
   const rebuildAbortRef = useRef(false);
 
+  // Step 4: Bulk document intelligence pass state
+  const [docIntelStats, setDocIntelStats] = useState<DocIntelStats | null>(null);
+  const [docIntel, setDocIntel] = useState<DocIntelBackfillState>({
+    status: "idle",
+    processed: 0,
+    succeeded: 0,
+    failed: 0,
+    remaining: 0,
+    cursor: null,
+    earlyExits: 0,
+    lastElapsedMs: null,
+  });
+  const docIntelAbortRef = useRef(false);
+  const docIntelInFlightRef = useRef(false);
+
   // Text coverage percentage for gating Step 2
   const [showFailedFiles, setShowFailedFiles] = useState(false);
   const [textCoverage, setTextCoverage] = useState<number | null>(null);
@@ -113,15 +148,53 @@ const DarwinOperations = () => {
     }
   }, []);
 
+  const fetchDocIntelStats = useCallback(async () => {
+    const [
+      totalRes,
+      withTextRes,
+      processedRes,
+      chunksRes,
+      analysisRes,
+    ] = await Promise.all([
+      supabase.from("claim_files").select("id", { count: "exact", head: true }),
+      supabase
+        .from("claim_files")
+        .select("id", { count: "exact", head: true })
+        .not("extracted_text", "is", null)
+        .neq("extracted_text", ""),
+      supabase.from("claim_files").select("id", { count: "exact", head: true }).eq("processed_by_darwin", true),
+      supabase.from("claim_document_chunks").select("id", { count: "exact", head: true }),
+      supabase.from("darwin_analysis_results").select("id", { count: "exact", head: true }),
+    ]);
+
+    setDocIntelStats({
+      totalFiles: totalRes.count || 0,
+      filesWithExtractedText: withTextRes.count || 0,
+      filesProcessedByDarwin: processedRes.count || 0,
+      documentChunks: chunksRes.count || 0,
+      deepAnalysisResults: analysisRes.count || 0,
+    });
+  }, []);
+
   useEffect(() => {
     fetchTextCoverage();
   }, [fetchTextCoverage]);
+
+  useEffect(() => {
+    fetchDocIntelStats();
+  }, [fetchDocIntelStats]);
 
   useEffect(() => {
     if (textBackfill.status === "complete" || textBackfill.status === "running") {
       fetchTextCoverage();
     }
   }, [textBackfill.status, textBackfill.processed, fetchTextCoverage]);
+
+  useEffect(() => {
+    if (docIntel.status === "complete" || docIntel.status === "running") {
+      fetchDocIntelStats();
+    }
+  }, [docIntel.status, docIntel.processed, fetchDocIntelStats]);
 
   const step2Disabled = (textCoverage !== null && textCoverage < 30) || textBackfill.status === "running";
 
@@ -354,6 +427,75 @@ const DarwinOperations = () => {
     };
     setRebuildEvents(initial);
     runRebuildBatch(null, initial);
+  };
+
+  // === STEP 4: BULK DOCUMENT INTELLIGENCE PASS ===
+  const runDocIntelBatch = useCallback(async (cursor: string | null, prev: DocIntelBackfillState) => {
+    if (docIntelAbortRef.current) return;
+
+    const { data, error } = await supabase.functions.invoke("backfill-document-intelligence", {
+      body: { cursor, awaitIndexing: true, awaitDeepAnalysisTrigger: false },
+    });
+
+    if (error || !data?.success) {
+      setDocIntel((s) => ({
+        ...s,
+        status: "error",
+        errorMessage: error?.message || data?.error || "Unknown error",
+      }));
+      return;
+    }
+
+    const isEarlyExit = !!data.early_exit;
+    const next: DocIntelBackfillState = {
+      status: (data.remaining || 0) > 0 ? "running" : "complete",
+      processed: prev.processed + (data.processed || 0),
+      succeeded: prev.succeeded + (data.succeeded || 0),
+      failed: prev.failed + (data.failed || 0),
+      remaining: data.remaining || 0,
+      cursor: data.cursor,
+      earlyExits: prev.earlyExits + (isEarlyExit ? 1 : 0),
+      lastElapsedMs: data.elapsed_ms || null,
+    };
+
+    setDocIntel(next);
+
+    if ((data.remaining || 0) === 0) {
+      toast({
+        title: "Bulk Document Intelligence Complete",
+        description: `${next.processed} files processed. ${next.succeeded} succeeded. ${next.failed} failed.`,
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (docIntel.status !== "running") return;
+    if ((docIntel.remaining ?? 0) <= 0) return;
+    if (docIntelInFlightRef.current) return;
+
+    docIntelInFlightRef.current = true;
+    (async () => {
+      try {
+        await runDocIntelBatch(docIntel.cursor, docIntel);
+      } finally {
+        docIntelInFlightRef.current = false;
+      }
+    })();
+  }, [docIntel.status, docIntel.remaining, docIntel.cursor, runDocIntelBatch]);
+
+  const startDocIntelBackfill = () => {
+    docIntelAbortRef.current = false;
+    const initial: DocIntelBackfillState = {
+      status: "running",
+      processed: 0,
+      succeeded: 0,
+      failed: 0,
+      remaining: 1,
+      cursor: null,
+      earlyExits: 0,
+      lastElapsedMs: null,
+    };
+    setDocIntel(initial);
   };
 
   const pct = backfill.total > 0 ? Math.round((backfill.processed / backfill.total) * 100) : 0;
@@ -659,6 +801,130 @@ const DarwinOperations = () => {
                 {backfill.errorMessage}
               </div>
               <Button variant="outline" size="sm" onClick={startBackfill}>
+                Retry
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Step 4: Bulk Document Intelligence Pass ───────────────────── */}
+      <Card className="border-2 border-primary/30">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Layers className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Step 4: Bulk Document Intelligence Pass</CardTitle>
+          </div>
+          <CardDescription>
+            Runs <code>darwin-process-document</code> across all unprocessed files with extracted text (classification + chunking + embeddings).
+            This is what powers cross-claim semantic search and gives the Denial Analyzer/Dismantler rich context.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {docIntelStats && (
+            <div className="rounded-md border bg-muted/20 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">What</th>
+                    <th className="px-3 py-2 text-left font-medium">Count</th>
+                    <th className="px-3 py-2 text-left font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  <tr>
+                    <td className="px-3 py-2">Total files</td>
+                    <td className="px-3 py-2 font-medium">{docIntelStats.totalFiles}</td>
+                    <td className="px-3 py-2 text-muted-foreground">—</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2">Files with extracted text</td>
+                    <td className="px-3 py-2 font-medium">{docIntelStats.filesWithExtractedText}</td>
+                    <td className="px-3 py-2 text-muted-foreground">Step 1</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2">Files processed by Darwin (classified)</td>
+                    <td className="px-3 py-2 font-medium">{docIntelStats.filesProcessedByDarwin}</td>
+                    <td className="px-3 py-2 text-muted-foreground">Step 4</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2">Document chunks (for semantic search)</td>
+                    <td className="px-3 py-2 font-medium">{docIntelStats.documentChunks}</td>
+                    <td className="px-3 py-2 text-muted-foreground">From processed files</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2">Deep analysis results</td>
+                    <td className="px-3 py-2 font-medium">{docIntelStats.deepAnalysisResults}</td>
+                    <td className="px-3 py-2 text-muted-foreground">Auto-triggered for key docs</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {docIntel.status === "idle" && serverJobs.backfill_document_intelligence === "running" && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Bulk document intelligence is running in the background… (started from a previous session)
+            </div>
+          )}
+
+          {docIntel.status === "idle" && serverJobs.backfill_document_intelligence !== "running" && (
+            <Button
+              onClick={startDocIntelBackfill}
+              className="gap-2"
+              disabled={textBackfill.status === "running" || (textCoverage !== null && textCoverage < 30)}
+            >
+              <Play className="h-4 w-4" />
+              Run Bulk Document Intelligence
+            </Button>
+          )}
+
+          {docIntel.status === "running" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Processing… {docIntel.processed} files processed ({docIntel.remaining} remaining)
+                {docIntel.earlyExits > 0 && ` · ${docIntel.earlyExits} batch chains`}
+                {docIntel.lastElapsedMs != null && ` · last batch ${(docIntel.lastElapsedMs / 1000).toFixed(1)}s`}
+              </div>
+              <Progress
+                value={docIntel.remaining > 0 ? (docIntel.processed / (docIntel.processed + docIntel.remaining)) * 100 : 100}
+                className="h-3"
+              />
+              <div className="grid grid-cols-4 gap-3">
+                <SummaryCard label="Processed" value={docIntel.processed} />
+                <SummaryCard label="Succeeded" value={docIntel.succeeded} />
+                <SummaryCard label="Failed" value={docIntel.failed} variant={docIntel.failed > 0 ? "warning" : undefined} />
+                <SummaryCard label="Remaining" value={docIntel.remaining} />
+              </div>
+            </div>
+          )}
+
+          {docIntel.status === "complete" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-green-600">
+                <CheckCircle2 className="h-4 w-4" />
+                Bulk document intelligence complete
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <SummaryCard label="Files Processed" value={docIntel.processed} />
+                <SummaryCard label="Succeeded" value={docIntel.succeeded} />
+                <SummaryCard label="Failed" value={docIntel.failed} variant={docIntel.failed > 0 ? "warning" : undefined} />
+              </div>
+              <Button variant="outline" size="sm" onClick={startDocIntelBackfill}>
+                Run Again
+              </Button>
+            </div>
+          )}
+
+          {docIntel.status === "error" && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-destructive">
+                <AlertTriangle className="h-4 w-4" />
+                {docIntel.errorMessage}
+              </div>
+              <Button variant="outline" size="sm" onClick={startDocIntelBackfill}>
                 Retry
               </Button>
             </div>

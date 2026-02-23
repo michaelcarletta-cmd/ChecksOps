@@ -182,3 +182,6 @@ verify_jwt = false
 
 [functions.backfill-rebuild-events]
 verify_jwt = false
+
+[functions.backfill-document-intelligence]
+verify_jwt = false
