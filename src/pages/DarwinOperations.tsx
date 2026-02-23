@@ -1,9 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { DarwinOperationsCenter } from "@/components/dashboard/DarwinOperationsCenter";
-import { Bot, Play, CheckCircle2, AlertTriangle, Loader2, FileText, RefreshCw, XCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { Bot, Play, CheckCircle2, AlertTriangle, Loader2, FileText, RefreshCw, XCircle, ChevronDown, ChevronUp, Brain, Zap } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -52,12 +53,30 @@ interface RebuildEventsState {
   errorMessage?: string;
 }
 
+interface BulkIntelState {
+  status: "idle" | "running" | "complete" | "error";
+  processed: number;
+  classified: number;
+  failed: number;
+  remaining: number;
+  cursor: string | null;
+  totalChunks: number;
+  totalEvents: number;
+  deepAnalysisTriggered: number;
+  classificationBreakdown: Record<string, number>;
+  earlyExits: number;
+  lastElapsedMs: number | null;
+  errorMessage?: string;
+}
+
 const INITIAL_STATS: BatchStats = {
   deadlines_created: 0,
   overdue_detected: 0,
   states_detected: {},
   skipped_no_state: 0,
 };
+
+const BATCH_SIZE_LABEL = 5;
 
 const DarwinOperations = () => {
   const [backfill, setBackfill] = useState<BackfillState>({
@@ -93,6 +112,27 @@ const DarwinOperations = () => {
   });
   const rebuildAbortRef = useRef(false);
 
+  // Bulk document intelligence state (Step 4)
+  const [bulkIntel, setBulkIntel] = useState<BulkIntelState>({
+    status: "idle",
+    processed: 0,
+    classified: 0,
+    failed: 0,
+    remaining: 0,
+    cursor: null,
+    totalChunks: 0,
+    totalEvents: 0,
+    deepAnalysisTriggered: 0,
+    classificationBreakdown: {},
+    earlyExits: 0,
+    lastElapsedMs: null,
+  });
+  const bulkIntelAbortRef = useRef(false);
+  const bulkIntelInFlightRef = useRef(false);
+
+  // Darwin processing coverage for gating Step 4
+  const [darwinCoverage, setDarwinCoverage] = useState<{ processed: number; total: number; pct: number } | null>(null);
+
   // Text coverage percentage for gating Step 2
   const [showFailedFiles, setShowFailedFiles] = useState(false);
   const [textCoverage, setTextCoverage] = useState<number | null>(null);
@@ -113,9 +153,24 @@ const DarwinOperations = () => {
     }
   }, []);
 
+  const fetchDarwinCoverage = useCallback(async () => {
+    const { count: total } = await supabase
+      .from("claim_files")
+      .select("id", { count: "exact", head: true })
+      .not("extracted_text", "is", null);
+    const { count: processed } = await supabase
+      .from("claim_files")
+      .select("id", { count: "exact", head: true })
+      .eq("processed_by_darwin", true);
+    const t = total || 0;
+    const p = processed || 0;
+    setDarwinCoverage({ processed: p, total: t, pct: t > 0 ? Math.round((p / t) * 100) : 100 });
+  }, []);
+
   useEffect(() => {
     fetchTextCoverage();
-  }, [fetchTextCoverage]);
+    fetchDarwinCoverage();
+  }, [fetchTextCoverage, fetchDarwinCoverage]);
 
   useEffect(() => {
     if (textBackfill.status === "complete" || textBackfill.status === "running") {
@@ -123,7 +178,14 @@ const DarwinOperations = () => {
     }
   }, [textBackfill.status, textBackfill.processed, fetchTextCoverage]);
 
+  useEffect(() => {
+    if (bulkIntel.status === "complete" || bulkIntel.status === "running") {
+      fetchDarwinCoverage();
+    }
+  }, [bulkIntel.status, bulkIntel.processed, fetchDarwinCoverage]);
+
   const step2Disabled = (textCoverage !== null && textCoverage < 30) || textBackfill.status === "running";
+  const step4Disabled = (textCoverage !== null && textCoverage < 30) || textBackfill.status === "running" || rebuildEvents.status === "running";
 
   // Fetch server-side job locks on mount (heartbeat-aware)
   const [serverJobs, setServerJobs] = useState<Record<string, string>>({});
@@ -354,6 +416,96 @@ const DarwinOperations = () => {
     };
     setRebuildEvents(initial);
     runRebuildBatch(null, initial);
+  };
+
+  // === BULK DOCUMENT INTELLIGENCE (Step 4) ===
+  const runBulkIntelBatch = useCallback(async (cursor: string | null, prev: BulkIntelState) => {
+    if (bulkIntelAbortRef.current) return;
+
+    const { data, error } = await supabase.functions.invoke("bulk-document-intelligence", {
+      body: { cursor },
+    });
+
+    if (error || !data?.success) {
+      setBulkIntel((s) => ({
+        ...s,
+        status: "error",
+        errorMessage: error?.message || data?.error || "Unknown error",
+      }));
+      return;
+    }
+
+    const isEarlyExit = !!data.early_exit;
+    const newCursor = data.cursor;
+    const cursorAdvanced = newCursor && newCursor !== prev.cursor;
+    const effectiveCursor = (data.remaining || 0) > 0 && !cursorAdvanced
+      ? (newCursor || prev.cursor || "0")
+      : newCursor;
+
+    const mergedBreakdown: Record<string, number> = { ...prev.classificationBreakdown };
+    if (data.classification_breakdown) {
+      for (const [cls, cnt] of Object.entries(data.classification_breakdown)) {
+        mergedBreakdown[cls] = (mergedBreakdown[cls] || 0) + (cnt as number);
+      }
+    }
+
+    const next: BulkIntelState = {
+      status: (data.remaining || 0) > 0 ? "running" : "complete",
+      processed: prev.processed + (data.processed || 0),
+      classified: prev.classified + (data.classified || 0),
+      failed: prev.failed + (data.failed || 0),
+      remaining: data.remaining || 0,
+      cursor: effectiveCursor,
+      totalChunks: prev.totalChunks + (data.total_chunks_created || 0),
+      totalEvents: prev.totalEvents + (data.total_events_created || 0),
+      deepAnalysisTriggered: prev.deepAnalysisTriggered + (data.deep_analysis_triggered || 0),
+      classificationBreakdown: mergedBreakdown,
+      earlyExits: prev.earlyExits + (isEarlyExit ? 1 : 0),
+      lastElapsedMs: data.elapsed_ms || null,
+    };
+
+    setBulkIntel(next);
+
+    if ((data.remaining || 0) === 0) {
+      toast({
+        title: "Bulk Document Intelligence Complete",
+        description: `${next.processed} files processed. ${next.totalChunks} chunks created. ${next.deepAnalysisTriggered} deep analyses triggered.`,
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (bulkIntel.status !== "running") return;
+    if ((bulkIntel.remaining ?? 0) <= 0) return;
+    if (bulkIntelInFlightRef.current) return;
+
+    bulkIntelInFlightRef.current = true;
+    (async () => {
+      try {
+        await runBulkIntelBatch(bulkIntel.cursor, bulkIntel);
+      } finally {
+        bulkIntelInFlightRef.current = false;
+      }
+    })();
+  }, [bulkIntel.status, bulkIntel.remaining, bulkIntel.cursor, runBulkIntelBatch]);
+
+  const startBulkIntel = () => {
+    bulkIntelAbortRef.current = false;
+    const initial: BulkIntelState = {
+      status: "running",
+      processed: 0,
+      classified: 0,
+      failed: 0,
+      remaining: 1,
+      cursor: null,
+      totalChunks: 0,
+      totalEvents: 0,
+      deepAnalysisTriggered: 0,
+      classificationBreakdown: {},
+      earlyExits: 0,
+      lastElapsedMs: null,
+    };
+    setBulkIntel(initial);
   };
 
   const pct = backfill.total > 0 ? Math.round((backfill.processed / backfill.total) * 100) : 0;
@@ -659,6 +811,159 @@ const DarwinOperations = () => {
                 {backfill.errorMessage}
               </div>
               <Button variant="outline" size="sm" onClick={startBackfill}>
+                Retry
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Step 4: Bulk Document Intelligence ────────────────────────── */}
+      <Card className="border-2 border-primary/30">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Brain className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Step 4: Bulk Document Intelligence</CardTitle>
+            {darwinCoverage && (
+              <Badge variant={darwinCoverage.pct >= 90 ? "default" : darwinCoverage.pct >= 50 ? "secondary" : "destructive"} className="ml-auto text-xs">
+                {darwinCoverage.processed} / {darwinCoverage.total} files processed ({darwinCoverage.pct}%)
+              </Badge>
+            )}
+          </div>
+          <CardDescription>
+            Runs <code className="text-xs bg-muted px-1 rounded">darwin-process-document</code> logic across all unprocessed files:
+            classifies documents (denial, estimate, engineering report, etc.), chunks text and generates embeddings
+            for cross-claim semantic search, extracts dates to the timeline, and triggers deep AI analysis
+            (denial rebuttals, estimate gap analysis) for key document types. Processes {BATCH_SIZE_LABEL} files per batch.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {bulkIntel.status === "idle" && serverJobs.bulk_document_intelligence === "running" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Bulk intelligence is running in the background (started from a previous session)
+              </div>
+              {darwinCoverage && (
+                <Progress value={darwinCoverage.pct} className="h-3" />
+              )}
+            </div>
+          )}
+          {bulkIntel.status === "idle" && serverJobs.bulk_document_intelligence !== "running" && (
+            <div className="space-y-3">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-block">
+                      <Button
+                        onClick={startBulkIntel}
+                        className="gap-2"
+                        disabled={step4Disabled}
+                      >
+                        <Zap className="h-4 w-4" />
+                        Run Document Intelligence
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {step4Disabled && (
+                    <TooltipContent>
+                      <p>Complete Steps 1-2 first — text extraction or event rebuild is still in progress.</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
+              {darwinCoverage && darwinCoverage.pct < 100 && darwinCoverage.total > 0 && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                  <span>
+                    {darwinCoverage.total - darwinCoverage.processed} files with text have not been classified, chunked, or analyzed yet.
+                  </span>
+                </div>
+              )}
+              {darwinCoverage && darwinCoverage.pct >= 100 && (
+                <div className="flex items-center gap-2 text-sm text-green-600">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  All files with extracted text have been processed by Darwin.
+                </div>
+              )}
+            </div>
+          )}
+          {bulkIntel.status === "running" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Processing documents… {bulkIntel.processed} files classified ({bulkIntel.remaining} remaining)
+                {bulkIntel.earlyExits > 0 && ` · ${bulkIntel.earlyExits} batch chains`}
+                {bulkIntel.lastElapsedMs != null && ` · last batch ${(bulkIntel.lastElapsedMs / 1000).toFixed(1)}s`}
+              </div>
+              <Progress
+                value={bulkIntel.remaining > 0
+                  ? (bulkIntel.processed / (bulkIntel.processed + bulkIntel.remaining)) * 100
+                  : 100
+                }
+                className="h-3"
+              />
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <SummaryCard label="Classified" value={bulkIntel.classified} />
+                <SummaryCard label="Chunks Created" value={bulkIntel.totalChunks} />
+                <SummaryCard label="Timeline Events" value={bulkIntel.totalEvents} />
+                <SummaryCard label="Deep Analyses" value={bulkIntel.deepAnalysisTriggered} />
+              </div>
+              {Object.keys(bulkIntel.classificationBreakdown).length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(bulkIntel.classificationBreakdown)
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([cls, count]) => (
+                      <Badge key={cls} variant="outline" className="text-xs capitalize">
+                        {cls.replace(/_/g, " ")}: {count}
+                      </Badge>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+          {bulkIntel.status === "complete" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-green-600">
+                <CheckCircle2 className="h-4 w-4" />
+                Document intelligence complete
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <SummaryCard label="Files Processed" value={bulkIntel.processed} />
+                <SummaryCard label="Classified" value={bulkIntel.classified} />
+                <SummaryCard label="Chunks Created" value={bulkIntel.totalChunks} />
+                <SummaryCard label="Timeline Events" value={bulkIntel.totalEvents} />
+                <SummaryCard label="Deep Analyses" value={bulkIntel.deepAnalysisTriggered} />
+              </div>
+              {bulkIntel.failed > 0 && (
+                <SummaryCard label="Failed" value={bulkIntel.failed} variant="warning" />
+              )}
+              {Object.keys(bulkIntel.classificationBreakdown).length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-muted-foreground">Classification Breakdown</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {Object.entries(bulkIntel.classificationBreakdown)
+                      .sort(([, a], [, b]) => b - a)
+                      .map(([cls, count]) => (
+                        <Badge key={cls} variant="outline" className="text-xs capitalize">
+                          {cls.replace(/_/g, " ")}: {count}
+                        </Badge>
+                      ))}
+                  </div>
+                </div>
+              )}
+              <Button variant="outline" size="sm" onClick={startBulkIntel}>
+                Run Again
+              </Button>
+            </div>
+          )}
+          {bulkIntel.status === "error" && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-destructive">
+                <AlertTriangle className="h-4 w-4" />
+                {bulkIntel.errorMessage}
+              </div>
+              <Button variant="outline" size="sm" onClick={startBulkIntel}>
                 Retry
               </Button>
             </div>
