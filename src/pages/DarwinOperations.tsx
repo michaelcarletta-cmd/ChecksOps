@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { DarwinOperationsCenter } from "@/components/dashboard/DarwinOperationsCenter";
-import { Bot, Play, CheckCircle2, AlertTriangle, Loader2, FileText, RefreshCw, XCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { Bot, Play, CheckCircle2, AlertTriangle, Loader2, FileText, RefreshCw, XCircle, ChevronDown, ChevronUp, Brain } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -52,6 +52,16 @@ interface RebuildEventsState {
   errorMessage?: string;
 }
 
+interface BulkDarwinState {
+  status: "idle" | "running" | "complete" | "error";
+  processed: number;
+  succeeded: number;
+  failed: number;
+  remaining: number;
+  cursor: string | null;
+  errorMessage?: string;
+}
+
 const INITIAL_STATS: BatchStats = {
   deadlines_created: 0,
   overdue_detected: 0,
@@ -92,6 +102,17 @@ const DarwinOperations = () => {
     cursor: null,
   });
   const rebuildAbortRef = useRef(false);
+
+  // Step 4: Bulk Darwin Document Intelligence
+  const [bulkDarwin, setBulkDarwin] = useState<BulkDarwinState>({
+    status: "idle",
+    processed: 0,
+    succeeded: 0,
+    failed: 0,
+    remaining: 0,
+    cursor: null,
+  });
+  const bulkDarwinAbortRef = useRef(false);
 
   // Text coverage percentage for gating Step 2
   const [showFailedFiles, setShowFailedFiles] = useState(false);
@@ -356,6 +377,60 @@ const DarwinOperations = () => {
     runRebuildBatch(null, initial);
   };
 
+  // === STEP 4: BULK DARWIN DOCUMENT INTELLIGENCE ===
+  const step4Disabled = (textCoverage !== null && textCoverage < 30) || textBackfill.status === "running";
+
+  const runBulkDarwinBatch = useCallback(async (cursor: string | null, prev: BulkDarwinState) => {
+    if (bulkDarwinAbortRef.current) return;
+
+    const { data, error } = await supabase.functions.invoke("bulk-darwin-process-document", {
+      body: { cursor },
+    });
+
+    if (error || !data?.success) {
+      setBulkDarwin((s) => ({
+        ...s,
+        status: "error",
+        errorMessage: error?.message || data?.error || "Unknown error",
+      }));
+      return;
+    }
+
+    const next: BulkDarwinState = {
+      status: (data.remaining || 0) > 0 ? "running" : "complete",
+      processed: prev.processed + (data.processed || 0),
+      succeeded: prev.succeeded + (data.succeeded || 0),
+      failed: prev.failed + (data.failed || 0),
+      remaining: data.remaining || 0,
+      cursor: data.cursor,
+    };
+
+    setBulkDarwin(next);
+
+    if ((data.remaining || 0) > 0 && !bulkDarwinAbortRef.current) {
+      setTimeout(() => runBulkDarwinBatch(data.cursor, next), 500);
+    } else if ((data.remaining || 0) === 0) {
+      toast({
+        title: "Bulk Document Intelligence Complete",
+        description: `${next.processed} files processed. ${next.succeeded} classified/chunked/embedded. ${next.failed} failed.`,
+      });
+    }
+  }, []);
+
+  const startBulkDarwin = () => {
+    bulkDarwinAbortRef.current = false;
+    const initial: BulkDarwinState = {
+      status: "running",
+      processed: 0,
+      succeeded: 0,
+      failed: 0,
+      remaining: 1,
+      cursor: null,
+    };
+    setBulkDarwin(initial);
+    runBulkDarwinBatch(null, initial);
+  };
+
   const pct = backfill.total > 0 ? Math.round((backfill.processed / backfill.total) * 100) : 0;
   const stats = backfill.cumulativeStats;
 
@@ -599,7 +674,128 @@ const DarwinOperations = () => {
         </CardContent>
       </Card>
 
-      {/* ── Deadline Backfill Card ────────────────────────────────────── */}
+      {/* ── Step 4: Bulk Document Intelligence ────────────────────────── */}
+      <Card className="border-2 border-primary/30">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Brain className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Step 4: Bulk Document Intelligence</CardTitle>
+          </div>
+          <CardDescription>
+            Runs darwin-process-document on all files that have extracted text but haven&apos;t been fully processed.
+            This classifies documents, chunks text, generates embeddings for cross-claim semantic search,
+            extracts dates to timeline events, and triggers deep analysis (denial rebuttals, estimate gaps, etc.).
+            Required for Denial Analyzer, Dismantler, and Rebuttal Drafter to have rich context.
+            Processes 5 files per batch (AI-heavy).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {bulkDarwin.status === "idle" && serverJobs.bulk_darwin_process_document === "running" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Bulk document intelligence is running in the background…
+              </div>
+            </div>
+          )}
+          {bulkDarwin.status === "idle" && serverJobs.bulk_darwin_process_document !== "running" && (
+            <div className="space-y-3">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-block">
+                      <Button
+                        onClick={startBulkDarwin}
+                        className="gap-2"
+                        variant="secondary"
+                        disabled={step4Disabled}
+                      >
+                        <Play className="h-4 w-4" />
+                        Run Bulk Document Intelligence
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {step4Disabled && (
+                    <TooltipContent>
+                      <p>Run Step 1 first — not enough documents have extracted text.</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
+              {step4Disabled ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                  <span>
+                    Text coverage is {textCoverage}% (need ≥30%).{" "}
+                    <button
+                      type="button"
+                      className="underline font-medium text-primary hover:text-primary/80"
+                      onClick={startTextBackfill}
+                    >
+                      Run Step 1 now
+                    </button>
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-green-600">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  Ready — run to process unprocessed files with extracted text.
+                </div>
+              )}
+            </div>
+          )}
+          {bulkDarwin.status === "running" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Processing… {bulkDarwin.processed} files processed ({bulkDarwin.remaining} remaining)
+              </div>
+              <Progress
+                value={
+                  bulkDarwin.remaining > 0
+                    ? (bulkDarwin.processed / (bulkDarwin.processed + bulkDarwin.remaining)) * 100
+                    : 100
+                }
+                className="h-3"
+              />
+              <div className="grid grid-cols-3 gap-3">
+                <SummaryCard label="Succeeded" value={bulkDarwin.succeeded} />
+                <SummaryCard label="Failed" value={bulkDarwin.failed} variant={bulkDarwin.failed > 0 ? "warning" : undefined} />
+                <SummaryCard label="Remaining" value={bulkDarwin.remaining} />
+              </div>
+            </div>
+          )}
+          {bulkDarwin.status === "complete" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-green-600">
+                <CheckCircle2 className="h-4 w-4" />
+                Bulk document intelligence complete
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <SummaryCard label="Files Processed" value={bulkDarwin.processed} />
+                <SummaryCard label="Succeeded" value={bulkDarwin.succeeded} />
+                <SummaryCard label="Failed" value={bulkDarwin.failed} variant={bulkDarwin.failed > 0 ? "warning" : undefined} />
+              </div>
+              <Button variant="outline" size="sm" onClick={startBulkDarwin}>
+                Run Again
+              </Button>
+            </div>
+          )}
+          {bulkDarwin.status === "error" && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-destructive">
+                <AlertTriangle className="h-4 w-4" />
+                {bulkDarwin.errorMessage}
+              </div>
+              <Button variant="outline" size="sm" onClick={startBulkDarwin}>
+                Retry
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Step 3: Darwin Catch-Up (Deadlines) ───────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Step 3: Darwin Catch-Up (Deadlines)</CardTitle>
