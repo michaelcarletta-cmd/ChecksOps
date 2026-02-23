@@ -183,9 +183,5 @@ verify_jwt = false
 [functions.backfill-rebuild-events]
 verify_jwt = false
 
-[functions.backfill-document-intelligence]
-verify_jwt = false
-
 [functions.bulk-darwin-process-document]
-verify_jwt = false
 verify_jwt = false
