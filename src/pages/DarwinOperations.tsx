@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { DarwinOperationsCenter } from "@/components/dashboard/DarwinOperationsCenter";
-import { Bot, Play, CheckCircle2, AlertTriangle, Loader2, FileText, RefreshCw } from "lucide-react";
+import { Bot, Play, CheckCircle2, AlertTriangle, Loader2, FileText, RefreshCw, XCircle, ChevronDown, ChevronUp } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -24,6 +24,13 @@ interface BackfillState {
   errorMessage?: string;
 }
 
+interface FailedFileEntry {
+  file_id: string;
+  file_name: string;
+  file_type: string;
+  reason: string;
+}
+
 interface TextBackfillState {
   status: "idle" | "running" | "complete" | "error";
   processed: number;
@@ -34,6 +41,7 @@ interface TextBackfillState {
   errorMessage?: string;
   earlyExits: number;
   lastElapsedMs: number | null;
+  failedFiles: FailedFileEntry[];
 }
 
 interface RebuildEventsState {
@@ -71,6 +79,7 @@ const DarwinOperations = () => {
     cursor: null,
     earlyExits: 0,
     lastElapsedMs: null,
+    failedFiles: [],
   });
   const textAbortRef = useRef(false);
   const textInFlightRef = useRef(false);
@@ -85,6 +94,7 @@ const DarwinOperations = () => {
   const rebuildAbortRef = useRef(false);
 
   // Text coverage percentage for gating Step 2
+  const [showFailedFiles, setShowFailedFiles] = useState(false);
   const [textCoverage, setTextCoverage] = useState<number | null>(null);
 
   const fetchTextCoverage = useCallback(async () => {
@@ -234,6 +244,16 @@ const DarwinOperations = () => {
       ? (newCursor || prev.cursor || "0")
       : newCursor;
 
+    // Collect failed files from this batch's log
+    const batchFailedFiles: FailedFileEntry[] = (data.log || [])
+      .filter((entry: any) => !entry.success && entry.file_name)
+      .map((entry: any) => ({
+        file_id: entry.file_id,
+        file_name: entry.file_name,
+        file_type: entry.file_type || "unknown",
+        reason: entry.reason || "unknown",
+      }));
+
     const next: TextBackfillState = {
       status: (data.remaining || 0) > 0 ? "running" : "complete",
       processed: prev.processed + (data.processed || 0),
@@ -243,6 +263,7 @@ const DarwinOperations = () => {
       cursor: effectiveCursor,
       earlyExits: prev.earlyExits + (isEarlyExit ? 1 : 0),
       lastElapsedMs: data.elapsed_ms || null,
+      failedFiles: [...prev.failedFiles, ...batchFailedFiles],
     };
 
     setTextBackfill(next);
@@ -278,10 +299,11 @@ const DarwinOperations = () => {
       processed: 0,
       extracted: 0,
       failed: 0,
-      remaining: 1, // seed with >0 so the useEffect fires the first batch
+      remaining: 1,
       cursor: null,
       earlyExits: 0,
       lastElapsedMs: null,
+      failedFiles: [],
     };
     setTextBackfill(initial);
   };
@@ -417,8 +439,43 @@ const DarwinOperations = () => {
               <div className="grid grid-cols-3 gap-3">
                 <SummaryCard label="Files Processed" value={textBackfill.processed} />
                 <SummaryCard label="Text Extracted" value={textBackfill.extracted} />
-                <SummaryCard label="Failed" value={textBackfill.failed} variant={textBackfill.failed > 0 ? "warning" : undefined} />
+               <SummaryCard label="Failed" value={textBackfill.failed} variant={textBackfill.failed > 0 ? "warning" : undefined} />
               </div>
+              {textBackfill.failedFiles.length > 0 && (
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 text-sm font-medium text-destructive hover:underline"
+                    onClick={() => setShowFailedFiles(!showFailedFiles)}
+                  >
+                    <XCircle className="h-4 w-4" />
+                    {textBackfill.failedFiles.length} file{textBackfill.failedFiles.length !== 1 ? "s" : ""} failed
+                    {showFailedFiles ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  </button>
+                  {showFailedFiles && (
+                    <div className="max-h-64 overflow-y-auto rounded-md border bg-muted/30">
+                      <table className="w-full text-xs">
+                        <thead className="sticky top-0 bg-muted">
+                          <tr>
+                            <th className="px-3 py-1.5 text-left font-medium">File Name</th>
+                            <th className="px-3 py-1.5 text-left font-medium">Type</th>
+                            <th className="px-3 py-1.5 text-left font-medium">Reason</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {textBackfill.failedFiles.map((f, i) => (
+                            <tr key={`${f.file_id}-${i}`}>
+                              <td className="px-3 py-1.5 max-w-[200px] truncate" title={f.file_name}>{f.file_name}</td>
+                              <td className="px-3 py-1.5 text-muted-foreground">{f.file_type}</td>
+                              <td className="px-3 py-1.5 text-muted-foreground max-w-[250px] truncate" title={f.reason}>{f.reason}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
               <Button variant="outline" size="sm" onClick={startTextBackfill}>
                 Run Again
               </Button>
