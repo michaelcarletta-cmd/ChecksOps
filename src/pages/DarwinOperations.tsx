@@ -135,7 +135,7 @@ const DarwinOperations = () => {
   });
   const bulkDarwinAbortRef = useRef(false);
 
-  // Coverage + UI toggles
+  // UI toggles
   const [showFailedFiles, setShowFailedFiles] = useState(false);
   const [textCoverage, setTextCoverage] = useState<number | null>(null);
 
@@ -478,9 +478,7 @@ const DarwinOperations = () => {
                 Text extraction is running in the background… (started from a previous session)
               </div>
               {textCoverage !== null && <Progress value={textCoverage} className="h-3" />}
-              <p className="text-xs text-muted-foreground">
-                Coverage: {textCoverage?.toFixed(1)}% — this page polls every 5s.
-              </p>
+              <p className="text-xs text-muted-foreground">Coverage: {textCoverage?.toFixed(1)}% — polls every 5s.</p>
             </div>
           )}
 
@@ -670,9 +668,7 @@ const DarwinOperations = () => {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Step 3: Darwin Catch-Up (Deadlines)</CardTitle>
-          <CardDescription>
-            Backfill regulatory deadlines and state codes for all existing claims. Safe to run multiple times.
-          </CardDescription>
+          <CardDescription>Backfill regulatory deadlines and state codes for all existing claims. Safe to run multiple times.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {backfill.status === "idle" && (

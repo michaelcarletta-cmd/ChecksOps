@@ -26,9 +26,8 @@ async function requireStaffOrAdmin(supabase: any, req: Request) {
   if (expectedSecret && cronSecret === expectedSecret) return;
 
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    throw new Error("Unauthorized");
-  }
+  if (!authHeader?.startsWith("Bearer ")) throw new Error("Unauthorized");
+
   const token = authHeader.replace("Bearer ", "");
   const { data: userRes, error: userErr } = await supabase.auth.getUser(token);
   if (userErr || !userRes?.user?.id) throw new Error("Unauthorized");
@@ -53,6 +52,7 @@ async function callDarwinProcessDocument(
 ) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PER_FILE_TIMEOUT_MS);
+
   try {
     const res = await fetch(`${supabaseUrl}/functions/v1/darwin-process-document`, {
       method: "POST",
@@ -76,9 +76,7 @@ async function callDarwinProcessDocument(
       json = { raw: text };
     }
 
-    if (!res.ok) {
-      return { ok: false, status: res.status, body: json };
-    }
+    if (!res.ok) return { ok: false, status: res.status, body: json };
     return { ok: true, status: res.status, body: json };
   } finally {
     clearTimeout(timer);
@@ -147,6 +145,7 @@ serve(async (req) => {
         awaitIndexing,
         awaitDeepAnalysisTrigger,
       });
+
       return new Response(JSON.stringify({ success: result.ok, mode: "debug_single_file", result }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -160,6 +159,7 @@ serve(async (req) => {
       .eq("needs_text_backfill", false)
       .order("id", { ascending: true })
       .limit(batchSize);
+
     if (cursor) q = q.gt("id", cursor);
     if (claimId) q = q.eq("claim_id", claimId);
 
@@ -234,8 +234,10 @@ serve(async (req) => {
       .select("id", { count: "exact", head: true })
       .or("processed_by_darwin.is.null,processed_by_darwin.eq.false")
       .eq("needs_text_backfill", false);
+
     if (claimId) rq = rq.eq("claim_id", claimId);
     if (lastProcessedId) rq = rq.gt("id", lastProcessedId);
+
     const { count: remainingCount } = await rq;
 
     await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });
@@ -267,4 +269,3 @@ serve(async (req) => {
     });
   }
 });
-
