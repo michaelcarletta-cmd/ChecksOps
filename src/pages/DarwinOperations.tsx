@@ -345,11 +345,25 @@ const DarwinOperations = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {textBackfill.status === "idle" && (
+          {textBackfill.status === "idle" && serverJobs.backfill_extracted_text === "running" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Text extraction is running in the background… (started from a previous session)
+              </div>
+              {textCoverage !== null && (
+                <Progress value={textCoverage} className="h-3" />
+              )}
+              <p className="text-xs text-muted-foreground">
+                Coverage: {textCoverage?.toFixed(1)}% — this page polls every 5s. The job will finish on its own.
+              </p>
+            </div>
+          )}
+          {textBackfill.status === "idle" && serverJobs.backfill_extracted_text !== "running" && (
             <Button 
               onClick={startTextBackfill} 
               className="gap-2"
-              disabled={rebuildEvents.status === "running" || serverJobs.backfill_extracted_text === "running"}
+              disabled={rebuildEvents.status === "running"}
             >
               <Play className="h-4 w-4" />
               Run Text Extraction
