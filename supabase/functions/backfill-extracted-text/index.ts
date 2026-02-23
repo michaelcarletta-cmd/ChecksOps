@@ -456,7 +456,10 @@ serve(async (req) => {
       console.log(`[Batch] Completed file ${file.id} (${result.success ? 'OK' : result.reason}), heartbeat sent, elapsed=${((Date.now() - batchStart) / 1000).toFixed(1)}s`);
     }
 
-    const lastProcessedId = log.length > 0 ? candidates[log.length - 1].id : (cursor || null);
+    // Guarantee cursor always advances when we had candidates
+    const lastProcessedId = candidates.length > 0
+      ? candidates[Math.min(log.length, candidates.length) - 1].id
+      : (cursor || null);
     const successCount = log.filter((l: any) => l.success).length;
     const totalRemaining = Math.max(0, totalRemainingCount - successCount);
 

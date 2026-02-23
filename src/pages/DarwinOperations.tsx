@@ -227,13 +227,20 @@ const DarwinOperations = () => {
     }
 
     const isEarlyExit = !!data.early_exit;
+    const newCursor = data.cursor;
+    // If remaining > 0 but cursor didn't advance, force it forward to avoid infinite loop
+    const cursorAdvanced = newCursor && newCursor !== prev.cursor;
+    const effectiveCursor = (data.remaining || 0) > 0 && !cursorAdvanced
+      ? (newCursor || prev.cursor || "0")
+      : newCursor;
+
     const next: TextBackfillState = {
       status: (data.remaining || 0) > 0 ? "running" : "complete",
       processed: prev.processed + (data.processed || 0),
       extracted: prev.extracted + (data.extracted || 0),
       failed: prev.failed + (data.failed || 0),
       remaining: data.remaining || 0,
-      cursor: data.cursor,
+      cursor: effectiveCursor,
       earlyExits: prev.earlyExits + (isEarlyExit ? 1 : 0),
       lastElapsedMs: data.elapsed_ms || null,
     };
