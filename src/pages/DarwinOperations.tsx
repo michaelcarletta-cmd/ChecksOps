@@ -209,7 +209,7 @@ const DarwinOperations = () => {
   };
 
   // === TEXT EXTRACTION BACKFILL ===
-  const runTextBatch = useCallback(async (cursor: string | null, prev: TextBackfillState) => {
+  const runTextBatch = useCallback(async (cursor: string | null) => {
     if (textAbortRef.current) return;
 
     const { data, error } = await supabase.functions.invoke("backfill-extracted-text", {
@@ -226,7 +226,7 @@ const DarwinOperations = () => {
     }
 
     const isEarlyExit = !!data.early_exit;
-    const next: TextBackfillState = {
+    setTextBackfill((prev) => ({
       status: (data.remaining || 0) > 0 ? "running" : "complete",
       processed: prev.processed + (data.processed || 0),
       extracted: prev.extracted + (data.extracted || 0),
@@ -235,21 +235,28 @@ const DarwinOperations = () => {
       cursor: data.cursor,
       earlyExits: prev.earlyExits + (isEarlyExit ? 1 : 0),
       lastElapsedMs: data.elapsed_ms || null,
-    };
+    }));
 
-    setTextBackfill(next);
-
-    if ((data.remaining || 0) > 0 && !textAbortRef.current) {
-      // Auto-chain immediately on early_exit, short delay otherwise
-      const delay = isEarlyExit ? 0 : 500;
-      setTimeout(() => runTextBatch(data.cursor, next), delay);
-    } else if ((data.remaining || 0) === 0) {
-      toast({
-        title: "Text Extraction Complete",
-        description: `${next.processed} files processed. ${next.extracted} texts extracted. ${next.failed} failed.`,
+    if ((data.remaining || 0) === 0) {
+      setTextBackfill((prev) => {
+        toast({
+          title: "Text Extraction Complete",
+          description: `${prev.processed} files processed. ${prev.extracted} texts extracted. ${prev.failed} failed.`,
+        });
+        return prev;
       });
     }
   }, []);
+
+  // useEffect-driven loop: keeps chaining batches as long as status=running & remaining>0
+  useEffect(() => {
+    if (textBackfill.status === "running" && textBackfill.remaining > 0) {
+      const id = setTimeout(() => {
+        runTextBatch(textBackfill.cursor);
+      }, 0);
+      return () => clearTimeout(id);
+    }
+  }, [textBackfill.status, textBackfill.remaining, textBackfill.cursor, runTextBatch]);
 
   const startTextBackfill = () => {
     textAbortRef.current = false;
@@ -258,13 +265,12 @@ const DarwinOperations = () => {
       processed: 0,
       extracted: 0,
       failed: 0,
-      remaining: 0,
+      remaining: 1, // seed with >0 so the useEffect fires the first batch
       cursor: null,
       earlyExits: 0,
       lastElapsedMs: null,
     };
     setTextBackfill(initial);
-    runTextBatch(null, initial);
   };
 
   // === REBUILD EVENTS ===
