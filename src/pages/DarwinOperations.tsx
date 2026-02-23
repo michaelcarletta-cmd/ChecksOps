@@ -52,6 +52,16 @@ interface RebuildEventsState {
   errorMessage?: string;
 }
 
+interface DocumentIntelligenceState {
+  status: "idle" | "running" | "complete" | "error";
+  processed: number;
+  enriched: number;
+  failed: number;
+  remaining: number;
+  cursor: string | null;
+  errorMessage?: string;
+}
+
 const INITIAL_STATS: BatchStats = {
   deadlines_created: 0,
   overdue_detected: 0,
@@ -93,6 +103,17 @@ const DarwinOperations = () => {
   });
   const rebuildAbortRef = useRef(false);
 
+  // Step 4 document intelligence state
+  const [documentIntelligence, setDocumentIntelligence] = useState<DocumentIntelligenceState>({
+    status: "idle",
+    processed: 0,
+    enriched: 0,
+    failed: 0,
+    remaining: 0,
+    cursor: null,
+  });
+  const documentIntelligenceAbortRef = useRef(false);
+
   // Text coverage percentage for gating Step 2
   const [showFailedFiles, setShowFailedFiles] = useState(false);
   const [textCoverage, setTextCoverage] = useState<number | null>(null);
@@ -124,6 +145,7 @@ const DarwinOperations = () => {
   }, [textBackfill.status, textBackfill.processed, fetchTextCoverage]);
 
   const step2Disabled = (textCoverage !== null && textCoverage < 30) || textBackfill.status === "running";
+  const step4Disabled = (textCoverage !== null && textCoverage < 30) || textBackfill.status === "running";
 
   // Fetch server-side job locks on mount (heartbeat-aware)
   const [serverJobs, setServerJobs] = useState<Record<string, string>>({});
@@ -354,6 +376,58 @@ const DarwinOperations = () => {
     };
     setRebuildEvents(initial);
     runRebuildBatch(null, initial);
+  };
+
+  // === DOCUMENT INTELLIGENCE BACKFILL ===
+  const runDocumentIntelligenceBatch = useCallback(async (cursor: string | null, prev: DocumentIntelligenceState) => {
+    if (documentIntelligenceAbortRef.current) return;
+
+    const { data, error } = await supabase.functions.invoke("backfill-document-intelligence", {
+      body: { cursor },
+    });
+
+    if (error || !data?.success) {
+      setDocumentIntelligence((s) => ({
+        ...s,
+        status: "error",
+        errorMessage: error?.message || data?.error || "Unknown error",
+      }));
+      return;
+    }
+
+    const next: DocumentIntelligenceState = {
+      status: (data.remaining || 0) > 0 ? "running" : "complete",
+      processed: prev.processed + (data.processed || 0),
+      enriched: prev.enriched + (data.enriched || 0),
+      failed: prev.failed + (data.failed || 0),
+      remaining: data.remaining || 0,
+      cursor: data.cursor,
+    };
+
+    setDocumentIntelligence(next);
+
+    if ((data.remaining || 0) > 0 && !documentIntelligenceAbortRef.current) {
+      setTimeout(() => runDocumentIntelligenceBatch(data.cursor, next), 600);
+    } else if ((data.remaining || 0) === 0) {
+      toast({
+        title: "Document Intelligence Complete",
+        description: `${next.enriched} files classified/chunked from ${next.processed} processed files.`,
+      });
+    }
+  }, []);
+
+  const startDocumentIntelligence = () => {
+    documentIntelligenceAbortRef.current = false;
+    const initial: DocumentIntelligenceState = {
+      status: "running",
+      processed: 0,
+      enriched: 0,
+      failed: 0,
+      remaining: 1,
+      cursor: null,
+    };
+    setDocumentIntelligence(initial);
+    runDocumentIntelligenceBatch(null, initial);
   };
 
   const pct = backfill.total > 0 ? Math.round((backfill.processed / backfill.total) * 100) : 0;
@@ -659,6 +733,135 @@ const DarwinOperations = () => {
                 {backfill.errorMessage}
               </div>
               <Button variant="outline" size="sm" onClick={startBackfill}>
+                Retry
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Step 4: Document Intelligence Pass ─────────────────────────── */}
+      <Card className="border-2 border-primary/30">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Bot className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Step 4: Bulk Document Intelligence Pass</CardTitle>
+          </div>
+          <CardDescription>
+            Runs <code>darwin-process-document</code> over all files with extracted text that are not yet processed by Darwin. This applies classification, timeline extraction, chunking + embeddings, and deep-analysis triggers.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {documentIntelligence.status === "idle" && serverJobs.backfill_document_intelligence === "running" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Bulk document intelligence is running in the background… (started from a previous session)
+              </div>
+            </div>
+          )}
+
+          {documentIntelligence.status === "idle" && serverJobs.backfill_document_intelligence !== "running" && (
+            <div className="space-y-3">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-block">
+                      <Button
+                        onClick={startDocumentIntelligence}
+                        className="gap-2"
+                        disabled={step4Disabled || rebuildEvents.status === "running"}
+                      >
+                        <Play className="h-4 w-4" />
+                        Run Document Intelligence
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  {(step4Disabled || rebuildEvents.status === "running") && (
+                    <TooltipContent>
+                      <p>
+                        {rebuildEvents.status === "running"
+                          ? "Wait for Step 2 to finish before starting Step 4."
+                          : "Run Step 1 first — not enough documents have extracted text."}
+                      </p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
+
+              {rebuildEvents.status === "running" ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Step 2 is running — Step 4 will unlock when event rebuild completes.
+                </div>
+              ) : step4Disabled ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                  <span>
+                    Text coverage is {textCoverage}% (need ≥30%).{" "}
+                    <button
+                      type="button"
+                      className="underline font-medium text-primary hover:text-primary/80"
+                      onClick={startTextBackfill}
+                    >
+                      Run Step 1 now
+                    </button>
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-green-600">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  Ready to enrich all remaining documents with Darwin intelligence.
+                </div>
+              )}
+            </div>
+          )}
+
+          {documentIntelligence.status === "running" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Processing documents… {documentIntelligence.processed} files processed ({documentIntelligence.remaining} remaining)
+              </div>
+              <Progress
+                value={documentIntelligence.remaining > 0
+                  ? (documentIntelligence.processed / (documentIntelligence.processed + documentIntelligence.remaining)) * 100
+                  : 100
+                }
+                className="h-3"
+              />
+              <div className="grid grid-cols-3 gap-3">
+                <SummaryCard label="Processed" value={documentIntelligence.processed} />
+                <SummaryCard label="Enriched" value={documentIntelligence.enriched} />
+                <SummaryCard label="Failed" value={documentIntelligence.failed} variant={documentIntelligence.failed > 0 ? "warning" : undefined} />
+              </div>
+            </div>
+          )}
+
+          {documentIntelligence.status === "complete" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-green-600">
+                <CheckCircle2 className="h-4 w-4" />
+                Document intelligence complete
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <SummaryCard label="Processed" value={documentIntelligence.processed} />
+                <SummaryCard label="Enriched" value={documentIntelligence.enriched} />
+                <SummaryCard label="Failed" value={documentIntelligence.failed} variant={documentIntelligence.failed > 0 ? "warning" : undefined} />
+              </div>
+              <Button variant="outline" size="sm" onClick={startDocumentIntelligence}>
+                Run Again
+              </Button>
+            </div>
+          )}
+
+          {documentIntelligence.status === "error" && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-destructive">
+                <AlertTriangle className="h-4 w-4" />
+                {documentIntelligence.errorMessage}
+              </div>
+              <Button variant="outline" size="sm" onClick={startDocumentIntelligence}>
                 Retry
               </Button>
             </div>
