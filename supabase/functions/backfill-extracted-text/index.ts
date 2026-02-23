@@ -376,10 +376,25 @@ serve(async (req) => {
       );
     }
 
+    // Count remaining using the same selection logic as candidates:
+    // 1) NULL or empty extracted_text
     const { count: nullCount } = await supabase
       .from("claim_files")
       .select("id", { count: "exact", head: true })
       .or("extracted_text.is.null,extracted_text.eq.");
+
+    // 2) Non-null but shorter than MIN_TEXT_THRESHOLD
+    // PostgREST doesn't support length filters, so we fetch ids and count client-side
+    const { data: shortCandidates } = await supabase
+      .from("claim_files")
+      .select("id, extracted_text")
+      .not("extracted_text", "is", null)
+      .neq("extracted_text", "");
+    const shortCount = shortCandidates
+      ? shortCandidates.filter((f: any) => (f.extracted_text?.length || 0) < MIN_TEXT_THRESHOLD).length
+      : 0;
+
+    const totalRemainingCount = (nullCount || 0) + shortCount;
 
     const log: any[] = [];
     const batchStart = Date.now();
@@ -443,7 +458,7 @@ serve(async (req) => {
 
     const lastProcessedId = log.length > 0 ? candidates[log.length - 1].id : (cursor || null);
     const successCount = log.filter((l: any) => l.success).length;
-    const totalRemaining = (nullCount || 0) - candidates.filter((c: any, i: number) => i < log.length && (!c.extracted_text || c.extracted_text === "")).length;
+    const totalRemaining = Math.max(0, totalRemainingCount - successCount);
 
     if (Math.max(0, totalRemaining) === 0 && !earlyExit) {
       await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });
