@@ -1,6 +1,18 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { DarwinOperationsCenter } from "@/components/dashboard/DarwinOperationsCenter";
-import { Bot, Play, CheckCircle2, AlertTriangle, Loader2, FileText, RefreshCw, XCircle, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Bot,
+  Play,
+  CheckCircle2,
+  AlertTriangle,
+  Loader2,
+  FileText,
+  RefreshCw,
+  XCircle,
+  ChevronDown,
+  ChevronUp,
+  Layers,
+} from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -52,20 +64,22 @@ interface RebuildEventsState {
   errorMessage?: string;
 }
 
-interface DocumentIntelligenceState {
+interface DocIntelStats {
+  totalFiles: number;
+  filesWithExtractedText: number;
+  filesProcessedByDarwin: number;
+  documentChunks: number;
+  deepAnalysisResults: number;
+}
+
+interface BulkDarwinState {
   status: "idle" | "running" | "complete" | "error";
   processed: number;
-  enriched: number;
+  succeeded: number;
   failed: number;
   remaining: number;
   cursor: string | null;
   errorMessage?: string;
-}
-
-interface DocumentIntelligenceCandidate {
-  id: string;
-  claim_id: string;
-  file_name: string;
 }
 
 const INITIAL_STATS: BatchStats = {
@@ -74,8 +88,6 @@ const INITIAL_STATS: BatchStats = {
   states_detected: {},
   skipped_no_state: 0,
 };
-
-const DOCUMENT_INTELLIGENCE_CLIENT_BATCH_SIZE = 5;
 
 const DarwinOperations = () => {
   const [backfill, setBackfill] = useState<BackfillState>({
@@ -87,7 +99,7 @@ const DarwinOperations = () => {
   });
   const abortRef = useRef(false);
 
-  // Text extraction backfill state
+  // Step 1: Text extraction backfill
   const [textBackfill, setTextBackfill] = useState<TextBackfillState>({
     status: "idle",
     processed: 0,
@@ -102,7 +114,7 @@ const DarwinOperations = () => {
   const textAbortRef = useRef(false);
   const textInFlightRef = useRef(false);
 
-  // Rebuild events state
+  // Step 2: Rebuild events
   const [rebuildEvents, setRebuildEvents] = useState<RebuildEventsState>({
     status: "idle",
     processed: 0,
@@ -111,35 +123,54 @@ const DarwinOperations = () => {
   });
   const rebuildAbortRef = useRef(false);
 
-  // Step 4 document intelligence state
-  const [documentIntelligence, setDocumentIntelligence] = useState<DocumentIntelligenceState>({
+  // Step 4: Bulk Document Intelligence
+  const [docIntelStats, setDocIntelStats] = useState<DocIntelStats | null>(null);
+  const [bulkDarwin, setBulkDarwin] = useState<BulkDarwinState>({
     status: "idle",
     processed: 0,
-    enriched: 0,
+    succeeded: 0,
     failed: 0,
     remaining: 0,
     cursor: null,
   });
-  const documentIntelligenceAbortRef = useRef(false);
+  const bulkDarwinAbortRef = useRef(false);
 
-  // Text coverage percentage for gating Step 2
+  // UI toggles
   const [showFailedFiles, setShowFailedFiles] = useState(false);
   const [textCoverage, setTextCoverage] = useState<number | null>(null);
 
   const fetchTextCoverage = useCallback(async () => {
-    const { count: total } = await supabase
-      .from("claim_files")
-      .select("id", { count: "exact", head: true });
+    const { count: total } = await supabase.from("claim_files").select("id", { count: "exact", head: true });
     const { count: withText } = await supabase
       .from("claim_files")
       .select("id", { count: "exact", head: true })
       .not("extracted_text", "is", null)
       .neq("extracted_text", "");
-    if (total && total > 0) {
-      setTextCoverage(Math.round(((withText || 0) / total) * 100));
-    } else {
-      setTextCoverage(100);
-    }
+
+    if (total && total > 0) setTextCoverage(Math.round(((withText || 0) / total) * 100));
+    else setTextCoverage(100);
+  }, []);
+
+  const fetchDocIntelStats = useCallback(async () => {
+    const [totalRes, withTextRes, processedRes, chunksRes, analysisRes] = await Promise.all([
+      supabase.from("claim_files").select("id", { count: "exact", head: true }),
+      supabase
+        .from("claim_files")
+        .select("id", { count: "exact", head: true })
+        .not("extracted_text", "is", null)
+        .neq("extracted_text", ""),
+      supabase.from("claim_files").select("id", { count: "exact", head: true }).eq("processed_by_darwin", true),
+      supabase.from("claim_document_chunks").select("id", { count: "exact", head: true }),
+      supabase.from("darwin_analysis_results").select("id", { count: "exact", head: true }),
+    ]);
+
+    setDocIntelStats({
+      totalFiles: totalRes.count || 0,
+      filesWithExtractedText: withTextRes.count || 0,
+      filesProcessedByDarwin: processedRes.count || 0,
+      documentChunks: chunksRes.count || 0,
+      deepAnalysisResults: analysisRes.count || 0,
+    });
   }, []);
 
   useEffect(() => {
@@ -147,35 +178,40 @@ const DarwinOperations = () => {
   }, [fetchTextCoverage]);
 
   useEffect(() => {
-    if (textBackfill.status === "complete" || textBackfill.status === "running") {
-      fetchTextCoverage();
-    }
+    fetchDocIntelStats();
+  }, [fetchDocIntelStats]);
+
+  useEffect(() => {
+    if (textBackfill.status === "complete" || textBackfill.status === "running") fetchTextCoverage();
   }, [textBackfill.status, textBackfill.processed, fetchTextCoverage]);
 
-  const step2Disabled = (textCoverage !== null && textCoverage < 30) || textBackfill.status === "running";
-  const step4Disabled = (textCoverage !== null && textCoverage < 30) || textBackfill.status === "running";
+  useEffect(() => {
+    if (bulkDarwin.status === "complete" || bulkDarwin.status === "running") fetchDocIntelStats();
+  }, [bulkDarwin.status, bulkDarwin.processed, fetchDocIntelStats]);
 
-  // Fetch server-side job locks on mount (heartbeat-aware)
+  const step2Disabled = (textCoverage !== null && textCoverage < 30) || textBackfill.status === "running";
+  const step4Disabled =
+    (textCoverage !== null && textCoverage < 30) || textBackfill.status === "running" || rebuildEvents.status === "running";
+
+  // Server-side job locks (heartbeat-aware)
   const [serverJobs, setServerJobs] = useState<Record<string, string>>({});
   const fetchServerJobs = useCallback(async () => {
-    const { data } = await supabase
-      .from("darwin_jobs")
-      .select("job_type, status, heartbeat_at, ttl_seconds");
-    if (data) {
-      const map: Record<string, string> = {};
-      data.forEach((j: any) => {
-        // Treat as idle if heartbeat expired
-        if (j.status === "running" && j.heartbeat_at) {
-          const age = (Date.now() - new Date(j.heartbeat_at).getTime()) / 1000;
-          if (age > (j.ttl_seconds || 120)) {
-            map[j.job_type] = "idle"; // stale lock
-            return;
-          }
+    const { data } = await supabase.from("darwin_jobs").select("job_type, status, heartbeat_at, ttl_seconds");
+    if (!data) return;
+
+    const map: Record<string, string> = {};
+    data.forEach((j: any) => {
+      if (j.status === "running" && j.heartbeat_at) {
+        const age = (Date.now() - new Date(j.heartbeat_at).getTime()) / 1000;
+        if (age > (j.ttl_seconds || 120)) {
+          map[j.job_type] = "idle";
+          return;
         }
-        map[j.job_type] = j.status;
-      });
-      setServerJobs(map);
-    }
+      }
+      map[j.job_type] = j.status;
+    });
+
+    setServerJobs(map);
   }, []);
 
   useEffect(() => {
@@ -184,30 +220,26 @@ const DarwinOperations = () => {
     return () => clearInterval(interval);
   }, [fetchServerJobs]);
 
-  // === DEADLINE BACKFILL ===
+  // === STEP 3: DEADLINE BACKFILL ===
   const runBatch = useCallback(async (cursor: string | null, prev: BackfillState) => {
     if (abortRef.current) return;
 
-    const { data, error } = await supabase.functions.invoke("darwin-backfill-claims", {
-      body: { cursor },
-    });
+    const { data, error } = await supabase.functions.invoke("darwin-backfill-claims", { body: { cursor } });
 
     if (error || !data?.success) {
-      setBackfill((s) => ({
-        ...s,
-        status: "error",
-        errorMessage: error?.message || data?.error || "Unknown error",
-      }));
+      setBackfill((s) => ({ ...s, status: "error", errorMessage: error?.message || data?.error || "Unknown error" }));
       return;
     }
 
     const batch: BatchStats = data.batch_stats || INITIAL_STATS;
+
     const cumulative: BatchStats = {
       deadlines_created: prev.cumulativeStats.deadlines_created + batch.deadlines_created,
       overdue_detected: prev.cumulativeStats.overdue_detected + batch.overdue_detected,
       skipped_no_state: prev.cumulativeStats.skipped_no_state + batch.skipped_no_state,
       states_detected: { ...prev.cumulativeStats.states_detected },
     };
+
     for (const [st, cnt] of Object.entries(batch.states_detected)) {
       cumulative.states_detected[st] = (cumulative.states_detected[st] || 0) + (cnt as number);
     }
@@ -249,32 +281,25 @@ const DarwinOperations = () => {
     runBatch(null, initial);
   };
 
-  // === TEXT EXTRACTION BACKFILL ===
+  // === STEP 1: TEXT EXTRACTION BACKFILL ===
   const runTextBatch = useCallback(async (cursor: string | null, prev: TextBackfillState) => {
     if (textAbortRef.current) return;
 
-    const { data, error } = await supabase.functions.invoke("backfill-extracted-text", {
-      body: { cursor },
-    });
+    const { data, error } = await supabase.functions.invoke("backfill-extracted-text", { body: { cursor } });
 
     if (error || !data?.success) {
-      setTextBackfill((s) => ({
-        ...s,
-        status: "error",
-        errorMessage: error?.message || data?.error || "Unknown error",
-      }));
+      setTextBackfill((s) => ({ ...s, status: "error", errorMessage: error?.message || data?.error || "Unknown error" }));
       return;
     }
 
     const isEarlyExit = !!data.early_exit;
     const newCursor = data.cursor;
-    // If remaining > 0 but cursor didn't advance, force it forward to avoid infinite loop
-    const cursorAdvanced = newCursor && newCursor !== prev.cursor;
-    const effectiveCursor = (data.remaining || 0) > 0 && !cursorAdvanced
-      ? (newCursor || prev.cursor || "0")
-      : newCursor;
 
-    // Collect failed files from this batch's log
+    // Guard against cursor not moving while remaining > 0 (infinite loop risk)
+    const cursorAdvanced = newCursor && newCursor !== prev.cursor;
+    const effectiveCursor =
+      (data.remaining || 0) > 0 && !cursorAdvanced ? newCursor || prev.cursor || "0" : newCursor;
+
     const batchFailedFiles: FailedFileEntry[] = (data.log || [])
       .filter((entry: any) => !entry.success && entry.file_name)
       .map((entry: any) => ({
@@ -306,7 +331,6 @@ const DarwinOperations = () => {
     }
   }, []);
 
-  // useEffect-driven loop with inFlight guard
   useEffect(() => {
     if (textBackfill.status !== "running") return;
     if ((textBackfill.remaining ?? 0) <= 0) return;
@@ -324,7 +348,7 @@ const DarwinOperations = () => {
 
   const startTextBackfill = () => {
     textAbortRef.current = false;
-    const initial: TextBackfillState = {
+    setTextBackfill({
       status: "running",
       processed: 0,
       extracted: 0,
@@ -334,24 +358,17 @@ const DarwinOperations = () => {
       earlyExits: 0,
       lastElapsedMs: null,
       failedFiles: [],
-    };
-    setTextBackfill(initial);
+    });
   };
 
-  // === REBUILD EVENTS ===
+  // === STEP 2: REBUILD EVENTS ===
   const runRebuildBatch = useCallback(async (cursor: string | null, prev: RebuildEventsState) => {
     if (rebuildAbortRef.current) return;
 
-    const { data, error } = await supabase.functions.invoke("backfill-rebuild-events", {
-      body: { cursor },
-    });
+    const { data, error } = await supabase.functions.invoke("backfill-rebuild-events", { body: { cursor } });
 
     if (error || !data?.success) {
-      setRebuildEvents((s) => ({
-        ...s,
-        status: "error",
-        errorMessage: error?.message || data?.error || "Unknown error",
-      }));
+      setRebuildEvents((s) => ({ ...s, status: "error", errorMessage: error?.message || data?.error || "Unknown error" }));
       return;
     }
 
@@ -376,176 +393,59 @@ const DarwinOperations = () => {
 
   const startRebuildEvents = () => {
     rebuildAbortRef.current = false;
-    const initial: RebuildEventsState = {
-      status: "running",
-      processed: 0,
-      remaining: 0,
-      cursor: null,
-    };
+    const initial: RebuildEventsState = { status: "running", processed: 0, remaining: 0, cursor: null };
     setRebuildEvents(initial);
     runRebuildBatch(null, initial);
   };
 
-  // Client-side fallback when Step 4 edge function is unavailable.
-  const runDocumentIntelligenceClientFallback = useCallback(async (cursor: string | null) => {
-    let query = supabase
-      .from("claim_files")
-      .select("id, claim_id, file_name")
-      .not("extracted_text", "is", null)
-      .neq("extracted_text", "")
-      .or("processed_by_darwin.is.null,processed_by_darwin.eq.false")
-      .order("id", { ascending: true })
-      .limit(DOCUMENT_INTELLIGENCE_CLIENT_BATCH_SIZE);
+  // === STEP 4: BULK DOCUMENT INTELLIGENCE ===
+  const runBulkDarwinBatch = useCallback(async (cursor: string | null, prev: BulkDarwinState) => {
+    if (bulkDarwinAbortRef.current) return;
 
-    if (cursor) {
-      query = query.gt("id", cursor);
-    }
-
-    const { data: candidates, error: queryError } = await query;
-    if (queryError) {
-      return { success: false, error: queryError.message };
-    }
-
-    const files = (candidates || []) as DocumentIntelligenceCandidate[];
-    if (files.length === 0) {
-      return {
-        success: true,
-        processed: 0,
-        enriched: 0,
-        failed: 0,
-        remaining: 0,
-        cursor: null,
-      };
-    }
-
-    const log: Array<{ file_id: string; file_name: string; success: boolean; reason?: string }> = [];
-
-    for (const file of files) {
-      const { data, error } = await supabase.functions.invoke("darwin-process-document", {
-        body: {
-          fileId: file.id,
-          claimId: file.claim_id,
-          fileName: file.file_name,
-        },
-      });
-
-      if (error || data?.success === false) {
-        log.push({
-          file_id: file.id,
-          file_name: file.file_name,
-          success: false,
-          reason: error?.message || data?.error || "Failed to process file",
-        });
-      } else {
-        log.push({
-          file_id: file.id,
-          file_name: file.file_name,
-          success: true,
-        });
-      }
-    }
-
-    const lastId = files[files.length - 1]?.id || cursor;
-    let remainingQuery = supabase
-      .from("claim_files")
-      .select("id", { count: "exact", head: true })
-      .not("extracted_text", "is", null)
-      .neq("extracted_text", "")
-      .or("processed_by_darwin.is.null,processed_by_darwin.eq.false");
-    if (lastId) {
-      remainingQuery = remainingQuery.gt("id", lastId);
-    }
-    const { count: remainingCount } = await remainingQuery;
-
-    const successCount = log.filter((entry) => entry.success).length;
-
-    return {
-      success: true,
-      processed: log.length,
-      enriched: successCount,
-      failed: log.length - successCount,
-      remaining: Math.max(0, remainingCount || 0),
-      cursor: lastId,
-    };
-  }, []);
-
-  // === DOCUMENT INTELLIGENCE BACKFILL ===
-  const runDocumentIntelligenceBatch = useCallback(async (cursor: string | null, prev: DocumentIntelligenceState) => {
-    if (documentIntelligenceAbortRef.current) return;
-
-    let data: any = null;
-    let error: any = null;
-    const candidateFunctions = ["bulk-darwin-process-document", "backfill-document-intelligence"];
-
-    for (const fnName of candidateFunctions) {
-      const result = await supabase.functions.invoke(fnName, { body: { cursor } });
-      data = result.data;
-      error = result.error;
-      // Reached a function endpoint (success or logical error response)
-      if (!error) break;
-    }
-
-    // If both function names are unreachable, run client-side fallback.
-    if (error) {
-      const fallbackResult = await runDocumentIntelligenceClientFallback(cursor);
-      if (fallbackResult.success) {
-        data = fallbackResult;
-        error = null;
-      }
-    }
+    const { data, error } = await supabase.functions.invoke("bulk-darwin-process-document", { body: { cursor } });
 
     if (error || !data?.success) {
-      setDocumentIntelligence((s) => ({
-        ...s,
-        status: "error",
-        errorMessage:
-          data?.error ||
-          error?.message ||
-          "Step 4 backend is unavailable. Deploy bulk-darwin-process-document (or backfill-document-intelligence), then retry.",
-      }));
+      setBulkDarwin((s) => ({ ...s, status: "error", errorMessage: error?.message || data?.error || "Unknown error" }));
       return;
     }
 
-    const next: DocumentIntelligenceState = {
+    const next: BulkDarwinState = {
       status: (data.remaining || 0) > 0 ? "running" : "complete",
       processed: prev.processed + (data.processed || 0),
-      enriched: prev.enriched + (data.enriched || 0),
+      succeeded: prev.succeeded + (data.succeeded || 0),
       failed: prev.failed + (data.failed || 0),
       remaining: data.remaining || 0,
       cursor: data.cursor,
     };
 
-    setDocumentIntelligence(next);
+    setBulkDarwin(next);
 
-    if ((data.remaining || 0) > 0 && !documentIntelligenceAbortRef.current) {
-      setTimeout(() => runDocumentIntelligenceBatch(data.cursor, next), 600);
+    if ((data.remaining || 0) > 0 && !bulkDarwinAbortRef.current) {
+      setTimeout(() => runBulkDarwinBatch(data.cursor, next), 500);
     } else if ((data.remaining || 0) === 0) {
       toast({
-        title: "Document Intelligence Complete",
-        description: `${next.enriched} files classified/chunked from ${next.processed} processed files.`,
+        title: "Bulk Document Intelligence Complete",
+        description: `${next.processed} files processed. ${next.succeeded} classified/chunked/embedded. ${next.failed} failed.`,
       });
     }
-  }, [runDocumentIntelligenceClientFallback]);
+  }, []);
 
-  const startDocumentIntelligence = () => {
-    documentIntelligenceAbortRef.current = false;
-    const initial: DocumentIntelligenceState = {
+  const startBulkDarwin = () => {
+    bulkDarwinAbortRef.current = false;
+    const initial: BulkDarwinState = {
       status: "running",
       processed: 0,
-      enriched: 0,
+      succeeded: 0,
       failed: 0,
       remaining: 1,
       cursor: null,
     };
-    setDocumentIntelligence(initial);
-    runDocumentIntelligenceBatch(null, initial);
+    setBulkDarwin(initial);
+    runBulkDarwinBatch(null, initial);
   };
 
   const pct = backfill.total > 0 ? Math.round((backfill.processed / backfill.total) * 100) : 0;
   const stats = backfill.cumulativeStats;
-  const step4ServerRunning =
-    serverJobs.bulk_darwin_process_document === "running" ||
-    serverJobs.backfill_document_intelligence === "running";
 
   return (
     <div className="space-y-6">
@@ -555,13 +455,11 @@ const DarwinOperations = () => {
         </div>
         <div>
           <h1 className="text-2xl font-bold">Darwin Operations Center</h1>
-          <p className="text-muted-foreground">
-            Monitor and control Darwin's autonomous claim management
-          </p>
+          <p className="text-muted-foreground">Monitor and control Darwin&apos;s autonomous claim management</p>
         </div>
       </div>
 
-      {/* ── Step 1: Text Extraction Backfill ─────────────────────────── */}
+      {/* Step 1 */}
       <Card className="border-2 border-primary/30">
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -569,8 +467,7 @@ const DarwinOperations = () => {
             <CardTitle className="text-lg">Step 1: Backfill Extracted Text</CardTitle>
           </div>
           <CardDescription>
-            Downloads every claim file from storage and extracts text (PDF parsing → OCR fallback). 
-            This is required before timeline or analysis features can work. Processes 20 files per batch.
+            Downloads every claim file from storage and extracts text (PDF parsing → OCR fallback). Processes 20 files per batch.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -580,36 +477,33 @@ const DarwinOperations = () => {
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Text extraction is running in the background… (started from a previous session)
               </div>
-              {textCoverage !== null && (
-                <Progress value={textCoverage} className="h-3" />
-              )}
-              <p className="text-xs text-muted-foreground">
-                Coverage: {textCoverage?.toFixed(1)}% — this page polls every 5s. The job will finish on its own.
-              </p>
+              {textCoverage !== null && <Progress value={textCoverage} className="h-3" />}
+              <p className="text-xs text-muted-foreground">Coverage: {textCoverage?.toFixed(1)}% — polls every 5s.</p>
             </div>
           )}
+
           {textBackfill.status === "idle" && serverJobs.backfill_extracted_text !== "running" && (
-            <Button 
-              onClick={startTextBackfill} 
-              className="gap-2"
-              disabled={rebuildEvents.status === "running"}
-            >
+            <Button onClick={startTextBackfill} className="gap-2" disabled={rebuildEvents.status === "running"}>
               <Play className="h-4 w-4" />
               Run Text Extraction
             </Button>
           )}
+
           {textBackfill.status === "running" && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Extracting text… {textBackfill.processed} files processed ({textBackfill.remaining} remaining){textBackfill.earlyExits > 0 && ` · ${textBackfill.earlyExits} batch chains`}{textBackfill.lastElapsedMs != null && ` · last batch ${(textBackfill.lastElapsedMs / 1000).toFixed(1)}s`}
+                Extracting text… {textBackfill.processed} files processed ({textBackfill.remaining} remaining)
+                {textBackfill.earlyExits > 0 && ` · ${textBackfill.earlyExits} batch chains`}
+                {textBackfill.lastElapsedMs != null && ` · last batch ${(textBackfill.lastElapsedMs / 1000).toFixed(1)}s`}
               </div>
-              <Progress 
-                value={textBackfill.remaining > 0 
-                  ? (textBackfill.processed / (textBackfill.processed + textBackfill.remaining)) * 100 
-                  : 100
-                } 
-                className="h-3" 
+              <Progress
+                value={
+                  textBackfill.remaining > 0
+                    ? (textBackfill.processed / (textBackfill.processed + textBackfill.remaining)) * 100
+                    : 100
+                }
+                className="h-3"
               />
               <div className="grid grid-cols-3 gap-3">
                 <SummaryCard label="Extracted" value={textBackfill.extracted} />
@@ -618,6 +512,7 @@ const DarwinOperations = () => {
               </div>
             </div>
           )}
+
           {textBackfill.status === "complete" && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm font-medium text-green-600">
@@ -627,8 +522,9 @@ const DarwinOperations = () => {
               <div className="grid grid-cols-3 gap-3">
                 <SummaryCard label="Files Processed" value={textBackfill.processed} />
                 <SummaryCard label="Text Extracted" value={textBackfill.extracted} />
-               <SummaryCard label="Failed" value={textBackfill.failed} variant={textBackfill.failed > 0 ? "warning" : undefined} />
+                <SummaryCard label="Failed" value={textBackfill.failed} variant={textBackfill.failed > 0 ? "warning" : undefined} />
               </div>
+
               {textBackfill.failedFiles.length > 0 && (
                 <div className="space-y-2">
                   <button
@@ -640,6 +536,7 @@ const DarwinOperations = () => {
                     {textBackfill.failedFiles.length} file{textBackfill.failedFiles.length !== 1 ? "s" : ""} failed
                     {showFailedFiles ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                   </button>
+
                   {showFailedFiles && (
                     <div className="max-h-64 overflow-y-auto rounded-md border bg-muted/30">
                       <table className="w-full text-xs">
@@ -653,9 +550,13 @@ const DarwinOperations = () => {
                         <tbody className="divide-y divide-border">
                           {textBackfill.failedFiles.map((f, i) => (
                             <tr key={`${f.file_id}-${i}`}>
-                              <td className="px-3 py-1.5 max-w-[200px] truncate" title={f.file_name}>{f.file_name}</td>
+                              <td className="px-3 py-1.5 max-w-[200px] truncate" title={f.file_name}>
+                                {f.file_name}
+                              </td>
                               <td className="px-3 py-1.5 text-muted-foreground">{f.file_type}</td>
-                              <td className="px-3 py-1.5 text-muted-foreground max-w-[250px] truncate" title={f.reason}>{f.reason}</td>
+                              <td className="px-3 py-1.5 text-muted-foreground max-w-[250px] truncate" title={f.reason}>
+                                {f.reason}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -664,11 +565,13 @@ const DarwinOperations = () => {
                   )}
                 </div>
               )}
+
               <Button variant="outline" size="sm" onClick={startTextBackfill}>
                 Run Again
               </Button>
             </div>
           )}
+
           {textBackfill.status === "error" && (
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm text-destructive">
@@ -683,7 +586,7 @@ const DarwinOperations = () => {
         </CardContent>
       </Card>
 
-      {/* ── Step 2: Rebuild Events ────────────────────────────────────── */}
+      {/* Step 2 */}
       <Card className="border-2 border-primary/30">
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -691,13 +594,8 @@ const DarwinOperations = () => {
             <CardTitle className="text-lg">Step 2: Rebuild Timeline Events</CardTitle>
           </div>
           <CardDescription>
-            Deletes derived claim_events and re-runs document processing to regenerate the timeline 
-            from extracted text. Run this after text extraction is complete.
-            {textCoverage !== null && (
-              <span className="ml-1 font-medium">
-                (Current text coverage: {textCoverage}%)
-              </span>
-            )}
+            Deletes derived claim_events and regenerates the timeline from extracted text.
+            {textCoverage !== null && <span className="ml-1 font-medium">(Current text coverage: {textCoverage}%)</span>}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -707,12 +605,7 @@ const DarwinOperations = () => {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="inline-block">
-                      <Button
-                        onClick={startRebuildEvents}
-                        className="gap-2"
-                        variant="secondary"
-                        disabled={step2Disabled}
-                      >
+                      <Button onClick={startRebuildEvents} className="gap-2" variant="secondary" disabled={step2Disabled}>
                         <Play className="h-4 w-4" />
                         Rebuild All Events
                       </Button>
@@ -725,43 +618,26 @@ const DarwinOperations = () => {
                   )}
                 </Tooltip>
               </TooltipProvider>
-              {step2Disabled ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-                  <span>
-                    Text coverage is {textCoverage}% (need ≥30%).{" "}
-                    <button
-                      type="button"
-                      className="underline font-medium text-primary hover:text-primary/80"
-                      onClick={startTextBackfill}
-                    >
-                      Run Step 1 now
-                    </button>
-                  </span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-sm text-green-600">
-                  <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  Text coverage is sufficient — you can rebuild events now.
-                </div>
-              )}
             </div>
           )}
+
           {rebuildEvents.status === "running" && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Rebuilding events… {rebuildEvents.processed} claims processed ({rebuildEvents.remaining} remaining)
               </div>
-              <Progress 
-                value={rebuildEvents.remaining > 0 
-                  ? (rebuildEvents.processed / (rebuildEvents.processed + rebuildEvents.remaining)) * 100 
-                  : 100
-                } 
-                className="h-3" 
+              <Progress
+                value={
+                  rebuildEvents.remaining > 0
+                    ? (rebuildEvents.processed / (rebuildEvents.processed + rebuildEvents.remaining)) * 100
+                    : 100
+                }
+                className="h-3"
               />
             </div>
           )}
+
           {rebuildEvents.status === "complete" && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm font-medium text-green-600">
@@ -773,6 +649,7 @@ const DarwinOperations = () => {
               </Button>
             </div>
           )}
+
           {rebuildEvents.status === "error" && (
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm text-destructive">
@@ -787,13 +664,11 @@ const DarwinOperations = () => {
         </CardContent>
       </Card>
 
-      {/* ── Deadline Backfill Card ────────────────────────────────────── */}
+      {/* Step 3 */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Step 3: Darwin Catch-Up (Deadlines)</CardTitle>
-          <CardDescription>
-            Backfill regulatory deadlines and state codes for all existing claims. Safe to run multiple times — skips claims that already have deadlines.
-          </CardDescription>
+          <CardDescription>Backfill regulatory deadlines and state codes for all existing claims. Safe to run multiple times.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {backfill.status === "idle" && (
@@ -826,14 +701,6 @@ const DarwinOperations = () => {
                 <SummaryCard label="Overdue Detected" value={stats.overdue_detected} variant="warning" />
                 <SummaryCard label="No State Found" value={stats.skipped_no_state} />
               </div>
-              {Object.keys(stats.states_detected).length > 0 && (
-                <div className="text-xs text-muted-foreground">
-                  By state:{" "}
-                  {Object.entries(stats.states_detected)
-                    .map(([s, c]) => `${s}: ${c}`)
-                    .join(" · ")}
-                </div>
-              )}
               <Button variant="outline" size="sm" onClick={startBackfill}>
                 Run Again
               </Button>
@@ -854,128 +721,156 @@ const DarwinOperations = () => {
         </CardContent>
       </Card>
 
-      {/* ── Step 4: Document Intelligence Pass ─────────────────────────── */}
+      {/* Step 4 */}
       <Card className="border-2 border-primary/30">
         <CardHeader>
           <div className="flex items-center gap-2">
-            <Bot className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg">Step 4: Bulk Document Intelligence Pass</CardTitle>
+            <Layers className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Step 4: Bulk Document Intelligence</CardTitle>
           </div>
           <CardDescription>
-            Runs <code>darwin-process-document</code> over all files with extracted text that are not yet processed by Darwin. This applies classification, timeline extraction, chunking + embeddings, and deep-analysis triggers.
+            Runs Darwin processing across unprocessed files with extracted text (classification + chunking + embeddings + downstream triggers).
           </CardDescription>
         </CardHeader>
+
         <CardContent className="space-y-4">
-          {documentIntelligence.status === "idle" && step4ServerRunning && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Bulk document intelligence is running in the background… (started from a previous session)
-              </div>
+          {docIntelStats && (
+            <div className="rounded-md border bg-muted/20 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">What</th>
+                    <th className="px-3 py-2 text-left font-medium">Count</th>
+                    <th className="px-3 py-2 text-left font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  <tr>
+                    <td className="px-3 py-2">Total files</td>
+                    <td className="px-3 py-2 font-medium">{docIntelStats.totalFiles}</td>
+                    <td className="px-3 py-2 text-muted-foreground">—</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2">Files with extracted text</td>
+                    <td className="px-3 py-2 font-medium">{docIntelStats.filesWithExtractedText}</td>
+                    <td className="px-3 py-2 text-muted-foreground">Step 1</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2">Files processed by Darwin</td>
+                    <td className="px-3 py-2 font-medium">{docIntelStats.filesProcessedByDarwin}</td>
+                    <td className="px-3 py-2 text-muted-foreground">Step 4</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2">Document chunks</td>
+                    <td className="px-3 py-2 font-medium">{docIntelStats.documentChunks}</td>
+                    <td className="px-3 py-2 text-muted-foreground">From processed files</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2">Deep analysis results</td>
+                    <td className="px-3 py-2 font-medium">{docIntelStats.deepAnalysisResults}</td>
+                    <td className="px-3 py-2 text-muted-foreground">Auto-triggered</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           )}
 
-          {documentIntelligence.status === "idle" && !step4ServerRunning && (
+          {bulkDarwin.status === "idle" && serverJobs.bulk_darwin_process_document === "running" && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Bulk document intelligence is running in the background… (started from a previous session)
+            </div>
+          )}
+
+          {bulkDarwin.status === "idle" && serverJobs.bulk_darwin_process_document !== "running" && (
             <div className="space-y-3">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="inline-block">
-                      <Button
-                        onClick={startDocumentIntelligence}
-                        className="gap-2"
-                        disabled={step4Disabled || rebuildEvents.status === "running"}
-                      >
+                      <Button onClick={startBulkDarwin} className="gap-2" variant="secondary" disabled={step4Disabled}>
                         <Play className="h-4 w-4" />
-                        Run Document Intelligence
+                        Run Bulk Document Intelligence
                       </Button>
                     </span>
                   </TooltipTrigger>
-                  {(step4Disabled || rebuildEvents.status === "running") && (
+                  {step4Disabled && (
                     <TooltipContent>
-                      <p>
-                        {rebuildEvents.status === "running"
-                          ? "Wait for Step 2 to finish before starting Step 4."
-                          : "Run Step 1 first — not enough documents have extracted text."}
-                      </p>
+                      <p>Finish Step 1 (and Step 2 if running) before running bulk intelligence.</p>
                     </TooltipContent>
                   )}
                 </Tooltip>
               </TooltipProvider>
 
-              {rebuildEvents.status === "running" ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Step 2 is running — Step 4 will unlock when event rebuild completes.
-                </div>
-              ) : step4Disabled ? (
+              {step4Disabled ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
                   <span>
-                    Text coverage is {textCoverage}% (need ≥30%).{" "}
+                    Text coverage is {textCoverage}% (need ≥30%).
                     <button
                       type="button"
-                      className="underline font-medium text-primary hover:text-primary/80"
+                      className="ml-2 underline font-medium text-primary hover:text-primary/80"
                       onClick={startTextBackfill}
                     >
-                      Run Step 1 now
+                      Run Step 1
                     </button>
                   </span>
                 </div>
               ) : (
                 <div className="flex items-center gap-2 text-sm text-green-600">
                   <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  Ready to enrich all remaining documents with Darwin intelligence.
+                  Ready — run to process unprocessed files with extracted text.
                 </div>
               )}
             </div>
           )}
 
-          {documentIntelligence.status === "running" && (
+          {bulkDarwin.status === "running" && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Processing documents… {documentIntelligence.processed} files processed ({documentIntelligence.remaining} remaining)
+                Processing… {bulkDarwin.processed} files processed ({bulkDarwin.remaining} remaining)
               </div>
               <Progress
-                value={documentIntelligence.remaining > 0
-                  ? (documentIntelligence.processed / (documentIntelligence.processed + documentIntelligence.remaining)) * 100
-                  : 100
+                value={
+                  bulkDarwin.remaining > 0
+                    ? (bulkDarwin.processed / (bulkDarwin.processed + bulkDarwin.remaining)) * 100
+                    : 100
                 }
                 className="h-3"
               />
               <div className="grid grid-cols-3 gap-3">
-                <SummaryCard label="Processed" value={documentIntelligence.processed} />
-                <SummaryCard label="Enriched" value={documentIntelligence.enriched} />
-                <SummaryCard label="Failed" value={documentIntelligence.failed} variant={documentIntelligence.failed > 0 ? "warning" : undefined} />
+                <SummaryCard label="Succeeded" value={bulkDarwin.succeeded} />
+                <SummaryCard label="Failed" value={bulkDarwin.failed} variant={bulkDarwin.failed > 0 ? "warning" : undefined} />
+                <SummaryCard label="Remaining" value={bulkDarwin.remaining} />
               </div>
             </div>
           )}
 
-          {documentIntelligence.status === "complete" && (
+          {bulkDarwin.status === "complete" && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm font-medium text-green-600">
                 <CheckCircle2 className="h-4 w-4" />
-                Document intelligence complete
+                Bulk document intelligence complete
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <SummaryCard label="Processed" value={documentIntelligence.processed} />
-                <SummaryCard label="Enriched" value={documentIntelligence.enriched} />
-                <SummaryCard label="Failed" value={documentIntelligence.failed} variant={documentIntelligence.failed > 0 ? "warning" : undefined} />
+                <SummaryCard label="Files Processed" value={bulkDarwin.processed} />
+                <SummaryCard label="Succeeded" value={bulkDarwin.succeeded} />
+                <SummaryCard label="Failed" value={bulkDarwin.failed} variant={bulkDarwin.failed > 0 ? "warning" : undefined} />
               </div>
-              <Button variant="outline" size="sm" onClick={startDocumentIntelligence}>
+              <Button variant="outline" size="sm" onClick={startBulkDarwin}>
                 Run Again
               </Button>
             </div>
           )}
 
-          {documentIntelligence.status === "error" && (
+          {bulkDarwin.status === "error" && (
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm text-destructive">
                 <AlertTriangle className="h-4 w-4" />
-                {documentIntelligence.errorMessage}
+                {bulkDarwin.errorMessage}
               </div>
-              <Button variant="outline" size="sm" onClick={startDocumentIntelligence}>
+              <Button variant="outline" size="sm" onClick={startBulkDarwin}>
                 Retry
               </Button>
             </div>

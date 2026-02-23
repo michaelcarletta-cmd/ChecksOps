@@ -3,112 +3,83 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
 
-const BATCH_SIZE = 5;
 const JOB_TYPE = "backfill_document_intelligence";
-const CLAIMED_BY = "backfill-document-intelligence";
 const TTL_SECONDS = 120;
 const BATCH_MAX_RUNTIME_MS = 50_000;
-const FILE_TIMEOUT_MS = 45_000;
+const DEFAULT_BATCH_SIZE = 5;
+const PER_FILE_TIMEOUT_MS = 45_000;
 
 type CandidateFile = {
   id: string;
   claim_id: string;
   file_name: string;
+  processed_by_darwin: boolean | null;
+  needs_text_backfill: boolean;
 };
 
-type ProcessLogEntry = {
-  file_id: string;
-  claim_id: string;
-  file_name: string;
-  success: boolean;
-  classification?: string | null;
-  confidence?: number | null;
-  reason?: string;
-};
+async function requireStaffOrAdmin(supabase: any, req: Request) {
+  const cronSecret = req.headers.get("x-cron-secret");
+  const expectedSecret = Deno.env.get("CRON_SECRET");
+  if (expectedSecret && cronSecret === expectedSecret) return;
 
-async function processViaDarwin(
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) throw new Error("Unauthorized");
+
+  const token = authHeader.replace("Bearer ", "");
+  const { data: userRes, error: userErr } = await supabase.auth.getUser(token);
+  if (userErr || !userRes?.user?.id) throw new Error("Unauthorized");
+
+  const userId = userRes.user.id;
+  const { data: roleRows, error: roleErr } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .in("role", ["admin", "staff"])
+    .limit(1);
+
+  if (roleErr) throw new Error("Unauthorized");
+  if (!roleRows || roleRows.length === 0) throw new Error("Forbidden");
+}
+
+async function callDarwinProcessDocument(
   supabaseUrl: string,
-  serviceRoleKey: string,
-  file: CandidateFile,
-): Promise<ProcessLogEntry> {
+  serviceKey: string,
+  fileId: string,
+  opts: { awaitIndexing?: boolean; awaitDeepAnalysisTrigger?: boolean },
+) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FILE_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), PER_FILE_TIMEOUT_MS);
 
   try {
-    const response = await fetch(`${supabaseUrl}/functions/v1/darwin-process-document`, {
+    const res = await fetch(`${supabaseUrl}/functions/v1/darwin-process-document`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${serviceRoleKey}`,
+        Authorization: `Bearer ${serviceKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ fileId: file.id }),
       signal: controller.signal,
+      body: JSON.stringify({
+        fileId,
+        awaitIndexing: !!opts.awaitIndexing,
+        awaitDeepAnalysisTrigger: !!opts.awaitDeepAnalysisTrigger,
+      }),
     });
 
-    const rawBody = await response.text();
-    let parsedBody: any = null;
-    if (rawBody) {
-      try {
-        parsedBody = JSON.parse(rawBody);
-      } catch {
-        // Non-JSON body; keep raw snippet in reason below.
-      }
+    const text = await res.text();
+    let json: any = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = { raw: text };
     }
 
-    if (!response.ok) {
-      const reason =
-        parsedBody?.error ||
-        `darwin_process_document_http_${response.status}: ${rawBody.slice(0, 200)}`;
-      return {
-        file_id: file.id,
-        claim_id: file.claim_id,
-        file_name: file.file_name,
-        success: false,
-        reason,
-      };
-    }
-
-    if (!parsedBody?.success) {
-      return {
-        file_id: file.id,
-        claim_id: file.claim_id,
-        file_name: file.file_name,
-        success: false,
-        reason: parsedBody?.error || "darwin_process_document_returned_unsuccessful",
-      };
-    }
-
-    return {
-      file_id: file.id,
-      claim_id: file.claim_id,
-      file_name: file.file_name,
-      success: true,
-      classification: parsedBody?.classification ?? null,
-      confidence: parsedBody?.confidence ?? null,
-    };
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      return {
-        file_id: file.id,
-        claim_id: file.claim_id,
-        file_name: file.file_name,
-        success: false,
-        reason: "timeout",
-      };
-    }
-
-    return {
-      file_id: file.id,
-      claim_id: file.claim_id,
-      file_name: file.file_name,
-      success: false,
-      reason: error instanceof Error ? error.message : "unknown_error",
-    };
+    if (!res.ok) return { ok: false, status: res.status, body: json };
+    return { ok: true, status: res.status, body: json };
   } finally {
-    clearTimeout(timeout);
+    clearTimeout(timer);
   }
 }
 
@@ -117,14 +88,23 @@ serve(async (req) => {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
+  const batchStart = Date.now();
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabase = createClient(supabaseUrl, serviceKey);
 
+  try {
     const body = await req.json().catch(() => ({}));
     const cursor = body.cursor || null;
-    const release = body.release || false;
+    const dryRun = !!body.dryRun;
+    const release = !!body.release;
+    const fileId = body.fileId || null;
+    const claimId = body.claimId || null;
+    const batchSize = Math.max(1, Math.min(Number(body.batchSize || DEFAULT_BATCH_SIZE), 20));
+    const awaitIndexing = body.awaitIndexing !== false; // default true
+    const awaitDeepAnalysisTrigger = !!body.awaitDeepAnalysisTrigger; // default false (expensive)
+
+    await requireStaffOrAdmin(supabase, req);
 
     if (release) {
       await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });
@@ -133,123 +113,132 @@ serve(async (req) => {
       });
     }
 
-    // Avoid running while Step 1 is actively extracting text.
-    const { data: step1Job } = await supabase
-      .from("darwin_jobs")
-      .select("status, heartbeat_at, ttl_seconds")
-      .eq("job_type", "backfill_extracted_text")
-      .maybeSingle();
+    // Skip lock for single-file debug
+    if (!fileId) {
+      const { data: lockResult, error: lockErr } = await supabase.rpc("acquire_darwin_job", {
+        p_job_type: JOB_TYPE,
+        p_claimed_by: "backfill-document-intelligence",
+        p_ttl_seconds: TTL_SECONDS,
+      });
 
-    if (step1Job?.status === "running") {
-      const heartbeatAgeSeconds = step1Job.heartbeat_at
-        ? (Date.now() - new Date(step1Job.heartbeat_at).getTime()) / 1000
-        : Infinity;
-      if (heartbeatAgeSeconds < (step1Job.ttl_seconds || 120)) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: "Step 1 (text extraction) is still running. Wait for it to finish.",
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
+      if (lockErr) {
+        return new Response(JSON.stringify({ success: false, error: `Lock RPC error: ${lockErr.message}` }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!lockResult?.acquired) {
+        return new Response(JSON.stringify({ success: false, error: "Job already running", job: lockResult }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
     }
 
-    const { data: lockResult, error: lockError } = await supabase.rpc("acquire_darwin_job", {
-      p_job_type: JOB_TYPE,
-      p_claimed_by: CLAIMED_BY,
-      p_ttl_seconds: TTL_SECONDS,
-    });
+    // === SINGLE FILE MODE ===
+    if (fileId) {
+      if (dryRun) {
+        return new Response(JSON.stringify({ success: true, mode: "debug_dry_run", fileId }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
-    if (lockError) {
-      return new Response(
-        JSON.stringify({ success: false, error: `Lock RPC error: ${lockError.message}` }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
-
-    if (!lockResult?.acquired) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Job already running", job: lockResult }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
-
-    let candidatesQuery = supabase
-      .from("claim_files")
-      .select("id, claim_id, file_name")
-      .or("processed_by_darwin.is.false,processed_by_darwin.is.null")
-      .not("extracted_text", "is", null)
-      .neq("extracted_text", "")
-      .order("id", { ascending: true })
-      .limit(BATCH_SIZE);
-
-    if (cursor) {
-      candidatesQuery = candidatesQuery.gt("id", cursor);
-    }
-
-    const { data: candidates, error: candidatesError } = await candidatesQuery;
-    if (candidatesError) {
-      await supabase.rpc("release_darwin_job", {
-        p_job_type: JOB_TYPE,
-        p_error_message: candidatesError.message,
+      const result = await callDarwinProcessDocument(supabaseUrl, serviceKey, fileId, {
+        awaitIndexing,
+        awaitDeepAnalysisTrigger,
       });
-      return new Response(JSON.stringify({ success: false, error: candidatesError.message }), {
+
+      return new Response(JSON.stringify({ success: result.ok, mode: "debug_single_file", result }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // === BATCH MODE ===
+    let q = supabase
+      .from("claim_files")
+      .select("id, claim_id, file_name, processed_by_darwin, needs_text_backfill")
+      .or("processed_by_darwin.is.null,processed_by_darwin.eq.false")
+      .eq("needs_text_backfill", false)
+      .order("id", { ascending: true })
+      .limit(batchSize);
+
+    if (cursor) q = q.gt("id", cursor);
+    if (claimId) q = q.eq("claim_id", claimId);
+
+    const { data: candidates, error: candErr } = await q;
+    if (candErr) {
+      await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE, p_error_message: candErr.message });
+      return new Response(JSON.stringify({ success: false, error: candErr.message }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (!candidates || candidates.length === 0) {
       await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });
-      return new Response(
-        JSON.stringify({
-          success: true,
-          processed: 0,
-          enriched: 0,
-          failed: 0,
-          remaining: 0,
-          cursor: null,
-          message: "No unprocessed files with extracted text",
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ success: true, processed: 0, succeeded: 0, failed: 0, remaining: 0, cursor: null }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const batchStart = Date.now();
-    const log: ProcessLogEntry[] = [];
+    const log: any[] = [];
+    let succeeded = 0;
+    let failed = 0;
     let earlyExit = false;
 
-    for (const file of candidates as CandidateFile[]) {
+    for (const f of candidates as CandidateFile[]) {
       if (Date.now() - batchStart > BATCH_MAX_RUNTIME_MS) {
         earlyExit = true;
         break;
       }
 
-      const result = await processViaDarwin(supabaseUrl, serviceRoleKey, file);
-      log.push(result);
+      if (dryRun) {
+        log.push({ file_id: f.id, claim_id: f.claim_id, file_name: f.file_name, success: false, reason: "dry_run" });
+        continue;
+      }
 
-      await supabase.rpc("heartbeat_darwin_job", {
-        p_job_type: JOB_TYPE,
-        p_claimed_by: CLAIMED_BY,
+      const res = await callDarwinProcessDocument(supabaseUrl, serviceKey, f.id, {
+        awaitIndexing,
+        awaitDeepAnalysisTrigger,
       });
+
+      if (res.ok && res.body?.success) {
+        succeeded++;
+        log.push({
+          file_id: f.id,
+          claim_id: f.claim_id,
+          file_name: f.file_name,
+          success: true,
+          classification: res.body.classification,
+          confidence: res.body.confidence,
+          indexing: res.body.indexing ?? null,
+          deep_analysis_triggered: res.body.deep_analysis_triggered ?? false,
+        });
+      } else {
+        failed++;
+        log.push({
+          file_id: f.id,
+          claim_id: f.claim_id,
+          file_name: f.file_name,
+          success: false,
+          status: res.status,
+          error: res.body?.error || res.body || "unknown_error",
+        });
+      }
+
+      await supabase.rpc("heartbeat_darwin_job", { p_job_type: JOB_TYPE, p_claimed_by: "backfill-document-intelligence" });
     }
 
-    const lastProcessedId = log.length > 0
-      ? candidates[Math.min(log.length, candidates.length) - 1].id
-      : cursor;
+    const lastProcessedId = candidates[Math.min(log.length, candidates.length) - 1].id;
 
-    let remainingQuery = supabase
+    // Remaining count using same predicate + advanced cursor
+    let rq = supabase
       .from("claim_files")
       .select("id", { count: "exact", head: true })
-      .or("processed_by_darwin.is.false,processed_by_darwin.is.null")
-      .not("extracted_text", "is", null)
-      .neq("extracted_text", "");
-    if (lastProcessedId) {
-      remainingQuery = remainingQuery.gt("id", lastProcessedId);
-    }
-    const { count: remainingCount } = await remainingQuery;
+      .or("processed_by_darwin.is.null,processed_by_darwin.eq.false")
+      .eq("needs_text_backfill", false);
 
-    const enriched = log.filter((entry) => entry.success).length;
+    if (claimId) rq = rq.eq("claim_id", claimId);
+    if (lastProcessedId) rq = rq.gt("id", lastProcessedId);
+
+    const { count: remainingCount } = await rq;
 
     await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE });
 
@@ -257,8 +246,8 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         processed: log.length,
-        enriched,
-        failed: log.length - enriched,
+        succeeded,
+        failed,
         remaining: Math.max(0, remainingCount || 0),
         cursor: lastProcessedId,
         early_exit: earlyExit,
@@ -267,26 +256,16 @@ serve(async (req) => {
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
-  } catch (error) {
-    console.error("backfill-document-intelligence error:", error);
+  } catch (e) {
+    console.error("backfill-document-intelligence error:", e);
     try {
-      const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-      const supabase = createClient(supabaseUrl, serviceRoleKey);
-      await supabase.rpc("release_darwin_job", {
-        p_job_type: JOB_TYPE,
-        p_error_message: error instanceof Error ? error.message : "Unknown error",
-      });
+      await supabase.rpc("release_darwin_job", { p_job_type: JOB_TYPE, p_error_message: e instanceof Error ? e.message : "Unknown error" });
     } catch {
-      // Best effort lock release.
+      // best effort
     }
-
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return new Response(JSON.stringify({ success: false, error: e instanceof Error ? e.message : "Unknown error" }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
