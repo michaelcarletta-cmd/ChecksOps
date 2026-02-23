@@ -384,6 +384,8 @@ serve(async (req) => {
     const log: any[] = [];
     const batchStart = Date.now();
     let earlyExit = false;
+    let consecutiveFailures = 0;
+    const RETRY_PATTERN = /timeout|429|rate|503/i;
 
     for (const file of candidates) {
       // Check if we're approaching the edge function timeout
@@ -405,7 +407,33 @@ serve(async (req) => {
         continue;
       }
 
-      const result = await processFileWithTimeout(supabase, file);
+      let result = await processFileWithTimeout(supabase, file);
+
+      // If ≥3 recent failures match timeout/rate-limit pattern, back off and retry once
+      if (!result.success && RETRY_PATTERN.test(result.reason || "")) {
+        consecutiveFailures++;
+        if (consecutiveFailures >= 3) {
+          const delayMs = Math.min(5000, 1000 * consecutiveFailures);
+          console.warn(`[Batch] ${consecutiveFailures} consecutive retryable failures — backing off ${delayMs}ms before retry for ${file.file_name}`);
+          await new Promise((r) => setTimeout(r, delayMs));
+
+          // Check we still have time after the delay
+          if (Date.now() - batchStart > BATCH_MAX_RUNTIME_MS) {
+            log.push(result);
+            earlyExit = true;
+            break;
+          }
+
+          const retryResult = await processFileWithTimeout(supabase, file);
+          if (retryResult.success || (retryResult.reason && !RETRY_PATTERN.test(retryResult.reason))) {
+            consecutiveFailures = 0; // reset on non-retryable outcome
+          }
+          result = retryResult;
+        }
+      } else if (result.success) {
+        consecutiveFailures = 0;
+      }
+
       log.push(result);
 
       // Heartbeat + cursor after EACH file so progress is never lost
