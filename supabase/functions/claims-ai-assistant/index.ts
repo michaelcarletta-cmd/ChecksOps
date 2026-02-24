@@ -2311,6 +2311,18 @@ function isCarrierFacingEmailRecipients(recipients: ResolvedEmailRecipient[]): b
   });
 }
 
+function shouldInjectPhotoEvidenceForEmail(
+  question: string,
+  bodyText: string,
+  carrierFacing: boolean,
+): boolean {
+  if (shouldUsePhotoDamageEvidenceForCommunication(question, bodyText)) return true;
+  if (!carrierFacing) return false;
+
+  const combined = `${question || ""}\n${bodyText || ""}`.toLowerCase();
+  return /\b(estimate|scope|damage|damages|repair|replace|supplement|underpaid|payment|loss|property)\b/i.test(combined);
+}
+
 function buildClaimMailboxEmail(claimData: any, claimId: string): string {
   const sanitizedPolicyNumber = claimData?.policy_number
     ? String(claimData.policy_number).replace(/[^a-zA-Z0-9]/g, "").toLowerCase()
@@ -7312,9 +7324,10 @@ ${knowledgeBaseContext || ''}`
               claimResolution.claim,
               dedupedRecipients[0]?.name,
             );
-            const shouldInjectPhotoEvidence = shouldUsePhotoDamageEvidenceForCommunication(
+            const shouldInjectPhotoEvidence = shouldInjectPhotoEvidenceForEmail(
               String(question || ""),
               bodyText,
+              carrierFacing,
             );
             let evidenceAwareBodyText = polishedBodyText;
             let evidenceContextUsed = false;
@@ -7456,9 +7469,10 @@ ${knowledgeBaseContext || ''}`
               claimResolution.claim,
               dedupedRecipients[0]?.name,
             );
-            const shouldInjectPhotoEvidence = shouldUsePhotoDamageEvidenceForCommunication(
+            const shouldInjectPhotoEvidence = shouldInjectPhotoEvidenceForEmail(
               String(question || ""),
               bodyText,
+              carrierFacing,
             );
             let evidenceAwareBodyText = polishedBodyText;
             if (shouldInjectPhotoEvidence) {
