@@ -1992,7 +1992,30 @@ TECHNICAL FAILURES:
 14. Ignoring seal strip degradation and material aging
 15. Failure to consider storm-specific conditions—wind speed, direction, duration, debris
 16. Mischaracterizing damage mechanisms—conflating impact damage with wear
-17. Reliance on visual inspection when destructive testing was warranted`;
+17. Reliance on visual inspection when destructive testing was warranted
+
+=== EVIDENTIARY SUFFICIENCY AUDIT (MANDATORY) ===
+Before finalizing the rebuttal letter, run a section-by-section evidentiary sufficiency audit for the engineer's major conclusions.
+For EACH material conclusion, explicitly identify:
+1. The exact statement being evaluated
+2. Whether quantifiable support is present (measurements, counts, test values, slope-by-slope observations, weather correlation)
+3. What quantifiable data is missing
+4. Any assumption leap between observation and conclusion
+5. Contradictory evidence from the same report, photos, or other claim evidence
+6. Whether wind damage mechanisms were independently evaluated (not just hail)
+7. Whether all relevant roof elevations/components were inspected or omitted
+8. Whether photos/data were misinterpreted to favor denial
+9. Whether recent physical damage consistent with the loss event was acknowledged or dismissed without objective basis
+
+Use a support rating for every conclusion: Unsupported, Weakly Supported, Partially Supported, or Supported.
+If quantifiable support is missing, say so directly and explain why the conclusion is unreliable.
+Never invent measurements, tests, or observations that are not in evidence.`;
+
+        const engineerUserContext = String(
+          typeof additionalContext === 'string'
+            ? additionalContext
+            : (additionalContext?.userContext || additionalContext?.customPrompt || '')
+        ).trim();
 
         userPrompt = `${claimSummary}
 
@@ -2002,7 +2025,7 @@ APPLICABLE LAW: ${stateInfo.insuranceCode}
 ${pdfContent ? `A PDF of the engineer report has been provided for analysis.` : `ENGINEER REPORT CONTENT:
 ${content || 'No engineer report content provided'}`}
 
-${additionalContext ? `ADDITIONAL CONTEXT/OBSERVATIONS:\n${additionalContext}` : ''}
+${engineerUserContext ? `ADDITIONAL CONTEXT/OBSERVATIONS:\n${engineerUserContext}` : ''}
 
 === CRITICAL OUTPUT REQUIREMENT ===
 You must generate a FORMAL REBUTTAL LETTER that is ready to send to the insurance company. This is NOT an internal analysis—this IS the document we submit to the carrier.
@@ -2024,6 +2047,20 @@ Date of Loss: ${claim.loss_date || '[Date of Loss]'}
 [OPENING - 1-2 paragraphs]
 State that we have reviewed the engineering report dated [DATE], prepared by [ENGINEER NAME/FIRM]. Summarize that the report is fundamentally flawed and cannot be relied upon to support a coverage determination.
 
+[EVIDENTIARY SUFFICIENCY AUDIT - REQUIRED FIRST BODY SECTION]
+Create a section titled: "Evidentiary Sufficiency Audit of Engineer Conclusions."
+For EACH major conclusion in the engineer report, provide:
+- Engineer statement (exact quote)
+- Data actually provided by engineer (measurements/tests/inspection scope)
+- Missing quantifiable data needed to support the conclusion
+- Assumption leap (what they assumed but did not prove)
+- Contradictory evidence from report/photos/weather/other inspections
+- Wind mechanism review status (state whether uplift/creasing/seal tab/fastener analysis was actually done)
+- Inspection scope gap (areas/slopes/components not inspected)
+- Photo/data interpretation error (if the evidence was documented but misinterpreted)
+- Support rating: Unsupported / Weakly Supported / Partially Supported / Supported
+If the engineer states "no wind damage," explicitly analyze whether they performed a separate wind-causation evaluation instead of only hail-focused reasoning.
+
 [METHODOLOGY FAILURES - Full section]
 Explain in detail why the engineer's inspection and methodology were inadequate:
 - Time on site inadequate for comprehensive inspection
@@ -2043,6 +2080,8 @@ This conclusion is [incorrect/unsupported/misleading] for the following reasons:
 [Provide 2-4 paragraphs of detailed technical rebuttal including:]
 - Why their conclusion is wrong factually
 - What evidence contradicts their conclusion
+- Whether the statement is vague/sweeping and lacks quantifiable support
+- Whether they used generalized observation where slope-by-slope or section-by-section analysis was required
 - What building codes, ASTM standards, or manufacturer specifications they violated or ignored
 - What they should have concluded based on the actual evidence
 
@@ -2070,8 +2109,13 @@ Detail the indicators of bias in the report:
 - Carrier-friendly language and framing
 - Conclusions that don't match documented observations
 - Evidence photographed but then dismissed or ignored in conclusions
+- Use of photos/data in a way that selectively favors denial over objective interpretation
 - Predetermined conclusions obvious from report structure
 - Failure to acknowledge ANY storm-related damage (statistically improbable)
+
+[UNADDRESSED RECENT PHYSICAL DAMAGE - Full section]
+Identify any recent physical damage indicators (for example: displaced materials, uplift, fresh fractures, torn tabs, impact-consistent deformation, newly exposed substrate) that were present but not properly analyzed.
+Explain why dismissing these indicators without objective testing is assumption-driven and unreliable.
 
 [REGULATORY VIOLATIONS - Full section]
 Cite ${stateInfo.stateName} regulations the carrier may be violating by relying on this deficient report:
