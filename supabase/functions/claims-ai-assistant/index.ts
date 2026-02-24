@@ -1527,7 +1527,7 @@ const tools = [
           },
           body: {
             type: "string",
-            description: "Email body text to send."
+            description: "Professional, ready-to-send email body. Include greeting, claim context, clear ask, and courteous closing."
           },
           recipients: {
             type: "array",
@@ -2167,6 +2167,54 @@ function buildClaimNumberSubject(claimData: any, claimId: string): string {
   const claimNumber = String(claimData?.claim_number || "").trim();
   if (claimNumber) return claimNumber;
   return claimId;
+}
+
+function buildProfessionalEmailBody(
+  rawBody: string,
+  claimData: any,
+  recipientName?: string,
+): string {
+  const trimmed = String(rawBody || "").trim();
+  if (!trimmed) return "";
+
+  const lines = trimmed
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const greetingLine = lines[0] || "";
+  const hasGreeting = /^(hi|hello|dear)\b/i.test(greetingLine);
+  const hasClosing = /(thank you|thanks|sincerely|regards|best)/i.test(trimmed);
+  const hasClaimReference = /claim\s*#?\s*[a-z0-9-]+/i.test(trimmed);
+  const looksDetailed = trimmed.length >= 180 || lines.length >= 5;
+
+  if (hasGreeting && hasClosing && (hasClaimReference || looksDetailed)) {
+    return trimmed;
+  }
+
+  const claimNumber = String(claimData?.claim_number || "").trim();
+  const claimReference = claimNumber ? `claim ${claimNumber}` : "this claim";
+  const policyholderName = String(claimData?.policyholder_name || "the insured").trim();
+
+  const normalizedRecipient = String(recipientName || "").trim();
+  const safeRecipient =
+    normalizedRecipient && !normalizedRecipient.includes("@")
+      ? normalizedRecipient
+      : "there";
+
+  const normalizedRequest = /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+
+  return [
+    `Hello ${safeRecipient},`,
+    "",
+    `I hope you're doing well. I'm writing regarding ${claimReference} for ${policyholderName}.`,
+    "",
+    normalizedRequest,
+    "",
+    "Please confirm receipt and provide your response at your earliest convenience.",
+    "",
+    "Thank you,",
+  ].join("\n");
 }
 
 async function resolveCommunicationClaim(
@@ -5285,6 +5333,7 @@ FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting
 === RESPONSE DISCIPLINE ===
 RULE #1: Match your response to the request complexity.
 - For SIMPLE OPERATIONAL requests (create a task, update status, bulk operations, assign staff, list tasks, close claims): Execute the action immediately and confirm briefly. Do NOT reference training materials, knowledge base content, or provide unsolicited analysis.
+- For COMMUNICATION DRAFTING requests (email/text/letter/portal drafts): deliver polished, professional, ready-to-send copy. These are deliverables, not one-line confirmations.
 - For ANALYTICAL/STRATEGIC requests (denial analysis, coverage questions, rebuttal strategy, evidence evaluation): Provide thorough, structured analysis using all available context including knowledge base materials.
 - NEVER pad a simple request with irrelevant knowledge base citations or training material references.
 - If you have knowledge base content in your context but the question is operational, IGNORE the knowledge base content entirely.
@@ -5391,7 +5440,8 @@ You have access to the user's active claims and pending tasks. Provide practical
 
 === RESPONSE DISCIPLINE (HIGHEST PRIORITY) ===
 RULE #1: Match your response to the request complexity.
-- For SIMPLE OPERATIONAL requests (create a task, update status, bulk operations, assign staff, list tasks, close claims, send emails): Execute the action immediately and confirm briefly. Do NOT reference training materials, knowledge base content, or provide unsolicited analysis. Keep responses concise and action-focused.
+- For SIMPLE OPERATIONAL requests (create a task, update status, bulk operations, assign staff, list tasks, close claims): Execute the action immediately and confirm briefly. Do NOT reference training materials, knowledge base content, or provide unsolicited analysis. Keep responses concise and action-focused.
+- For COMMUNICATION DRAFTING/SENDING requests (emails, texts, letters, portal updates): produce polished professional content first, then execute send actions. Do not use shorthand or casual one-line drafts.
 - For ANALYTICAL/STRATEGIC requests (denial analysis, coverage questions, rebuttal strategy, evidence evaluation, document analysis): Provide thorough, structured analysis using all available context.
 - NEVER pad a simple request with irrelevant knowledge base citations or training material references.
 - If you have knowledge base content in your context but the question is operational, IGNORE the knowledge base content entirely.
@@ -5522,13 +5572,15 @@ PROOF OF LOSS STRATEGY:
 
 When the user asks to "send a text/email", "text the client", "email the adjuster", or "draft and send":
 1. FIRST use claim context/history to make the communication accurate.
-2. DRAFT clear, professional message content in plain language.
-3. If user explicitly asked to SEND, call send_email or send_sms immediately (do not stop at draft-only).
-4. If the user asks for portal notifications, call send_portal_notification.
-5. If the user asks for a letter, call create_claim_letter (and send it if requested).
-6. If the user asks to schedule a call, call schedule_claim_call.
-7. If recipient/channel are missing or ambiguous, ask ONE concise clarification; otherwise execute.
-8. Confirm exactly what action was completed after the tool succeeds.
+2. DRAFT polished, professional message content in plain language (no slang/shorthand).
+3. For EMAIL drafts, include: greeting, claim reference, concise context, specific request/action, and courteous closing.
+4. If user asks for DRAFT ONLY, provide the draft and do not send.
+5. If user explicitly asked to SEND, call send_email or send_sms immediately using the professional draft body (do not stop at draft-only).
+6. If the user asks for portal notifications, call send_portal_notification.
+7. If the user asks for a letter, call create_claim_letter (and send it if requested).
+8. If the user asks to schedule a call, call schedule_claim_call.
+9. If recipient/channel are missing or ambiguous, ask ONE concise clarification; otherwise execute.
+10. Confirm exactly what action was completed after the tool succeeds.
 NEVER tell the user to copy/paste and send manually when they asked you to send it.
 
 You are the smartest person in the room: analyze first, then deliver. When the user asks for help communicating with the client or battling the carrier, synthesize status and notes and produce the deliverable (draft, strategy, next step). No hedging, no "I'd be happy to help" — just the analysis and the draft or action.
@@ -6624,6 +6676,15 @@ ${knowledgeBaseContext || ''}`
               continue;
             }
 
+            const polishedBodyText = buildProfessionalEmailBody(
+              bodyText,
+              claimResolution.claim,
+              dedupedRecipients[0]?.name,
+            );
+            if (polishedBodyText !== bodyText) {
+              console.log("Auto-polished outbound email body for professional tone");
+            }
+
             const claimEmailCc = params.cc_claim_mailbox === false
               ? undefined
               : buildClaimMailboxEmail(claimResolution.claim, claimResolution.claimId);
@@ -6638,7 +6699,7 @@ ${knowledgeBaseContext || ''}`
                   type: r.type,
                 })),
                 subject,
-                body: bodyText,
+                body: polishedBodyText,
                 claimId: claimResolution.claimId,
                 claimEmailCc,
               },
