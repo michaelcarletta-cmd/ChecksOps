@@ -37,6 +37,30 @@ const ACCEPTED_FILE_TYPES = ".pdf,.doc,.docx,.ppt,.pptx,.mp4,.mov,.avi,.mkv,.mp3
 
 type UploadTab = "files" | "url" | "text";
 
+interface KnowledgeValidationIssue {
+  documentId: string;
+  fileName: string;
+  fileType: string;
+  filePath: string;
+  status: string;
+  issueType: "failed" | "stuck_processing" | "stuck_pending" | "missing_chunks" | "missing_embeddings";
+  detail: string;
+}
+
+interface KnowledgeValidationData {
+  summary: {
+    totalDocs: number;
+    completedDocs: number;
+    failedDocs: number;
+    processingDocs: number;
+    pendingDocs: number;
+    docsMissingChunks: number;
+    docsMissingEmbeddings: number;
+    healthyDocs: number;
+  };
+  issues: KnowledgeValidationIssue[];
+}
+
 export const AIKnowledgeBaseSettings = () => {
   const queryClient = useQueryClient();
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -70,6 +94,214 @@ export const AIKnowledgeBaseSettings = () => {
       if (error) throw error;
       return data;
     },
+    refetchInterval: 15000,
+  });
+
+  const {
+    data: knowledgeValidation,
+    isLoading: validationLoading,
+    refetch: refetchKnowledgeValidation,
+  } = useQuery<KnowledgeValidationData>({
+    queryKey: ["ai-knowledge-validation"],
+    queryFn: async () => {
+      const { data: docs, error: docsError } = await supabase
+        .from("ai_knowledge_documents")
+        .select("id, file_name, file_path, file_type, status, error_message, updated_at")
+        .order("created_at", { ascending: false });
+
+      if (docsError) throw docsError;
+      const documentsList = docs || [];
+      const documentIds = documentsList.map((d) => d.id);
+
+      let chunkRows: Array<{ document_id: string; embedding: string | null }> = [];
+      if (documentIds.length > 0) {
+        const { data: chunks, error: chunksError } = await supabase
+          .from("ai_knowledge_chunks")
+          .select("document_id, embedding")
+          .in("document_id", documentIds);
+        if (chunksError) throw chunksError;
+        chunkRows = (chunks || []) as Array<{ document_id: string; embedding: string | null }>;
+      }
+
+      const perDocStats = new Map<string, { chunkCount: number; embeddedCount: number }>();
+      for (const chunk of chunkRows) {
+        const current = perDocStats.get(chunk.document_id) || { chunkCount: 0, embeddedCount: 0 };
+        current.chunkCount += 1;
+        if (chunk.embedding) current.embeddedCount += 1;
+        perDocStats.set(chunk.document_id, current);
+      }
+
+      const issues: KnowledgeValidationIssue[] = [];
+      const now = Date.now();
+      const processingStaleMs = 15 * 60 * 1000;
+      const pendingStaleMs = 5 * 60 * 1000;
+
+      let completedDocs = 0;
+      let failedDocs = 0;
+      let processingDocs = 0;
+      let pendingDocs = 0;
+      let docsMissingChunks = 0;
+      let docsMissingEmbeddings = 0;
+      let healthyDocs = 0;
+
+      for (const doc of documentsList) {
+        const stats = perDocStats.get(doc.id) || { chunkCount: 0, embeddedCount: 0 };
+        const ageMs = now - new Date(doc.updated_at).getTime();
+
+        if (doc.status === "completed") completedDocs += 1;
+        if (doc.status === "failed") failedDocs += 1;
+        if (doc.status === "processing") processingDocs += 1;
+        if (doc.status === "pending") pendingDocs += 1;
+
+        if (doc.status === "failed") {
+          issues.push({
+            documentId: doc.id,
+            fileName: doc.file_name,
+            fileType: doc.file_type,
+            filePath: doc.file_path,
+            status: doc.status,
+            issueType: "failed",
+            detail: doc.error_message || "Document processing failed.",
+          });
+          continue;
+        }
+
+        if (doc.status === "processing" && ageMs > processingStaleMs) {
+          issues.push({
+            documentId: doc.id,
+            fileName: doc.file_name,
+            fileType: doc.file_type,
+            filePath: doc.file_path,
+            status: doc.status,
+            issueType: "stuck_processing",
+            detail: "Document has stayed in processing too long.",
+          });
+          continue;
+        }
+
+        if (doc.status === "pending" && ageMs > pendingStaleMs) {
+          issues.push({
+            documentId: doc.id,
+            fileName: doc.file_name,
+            fileType: doc.file_type,
+            filePath: doc.file_path,
+            status: doc.status,
+            issueType: "stuck_pending",
+            detail: "Document stayed pending and never started processing.",
+          });
+          continue;
+        }
+
+        if (doc.status === "completed" && stats.chunkCount === 0) {
+          docsMissingChunks += 1;
+          issues.push({
+            documentId: doc.id,
+            fileName: doc.file_name,
+            fileType: doc.file_type,
+            filePath: doc.file_path,
+            status: doc.status,
+            issueType: "missing_chunks",
+            detail: "Marked completed but has zero knowledge chunks.",
+          });
+          continue;
+        }
+
+        if (doc.status === "completed" && stats.chunkCount > 0 && stats.embeddedCount < stats.chunkCount) {
+          docsMissingEmbeddings += 1;
+          issues.push({
+            documentId: doc.id,
+            fileName: doc.file_name,
+            fileType: doc.file_type,
+            filePath: doc.file_path,
+            status: doc.status,
+            issueType: "missing_embeddings",
+            detail: `Only ${stats.embeddedCount}/${stats.chunkCount} chunks have embeddings.`,
+          });
+          continue;
+        }
+
+        if (doc.status === "completed") healthyDocs += 1;
+      }
+
+      return {
+        summary: {
+          totalDocs: documentsList.length,
+          completedDocs,
+          failedDocs,
+          processingDocs,
+          pendingDocs,
+          docsMissingChunks,
+          docsMissingEmbeddings,
+          healthyDocs,
+        },
+        issues,
+      };
+    },
+    refetchInterval: 15000,
+  });
+
+  const repairValidationMutation = useMutation({
+    mutationFn: async () => {
+      if (!knowledgeValidation) {
+        return { attempted: 0, repaired: 0, manual: 0, failed: 0 };
+      }
+
+      const issues = knowledgeValidation.issues.slice(0, 50);
+      let repaired = 0;
+      let manual = 0;
+      let failed = 0;
+
+      for (const issue of issues) {
+        try {
+          if (issue.issueType === "missing_embeddings") {
+            await supabase.functions.invoke("generate-embeddings", {
+              body: { documentId: issue.documentId },
+            });
+            repaired += 1;
+            continue;
+          }
+
+          if (issue.fileType === "text") {
+            // Text uploads are not reconstructable without original content payload.
+            manual += 1;
+            continue;
+          }
+
+          await supabase
+            .from("ai_knowledge_documents")
+            .update({ status: "pending", error_message: null })
+            .eq("id", issue.documentId);
+
+          if (issue.fileType === "url") {
+            await supabase.functions.invoke("process-knowledge-url", {
+              body: { documentId: issue.documentId, url: issue.filePath },
+            });
+          } else {
+            await supabase.functions.invoke("process-knowledge-document", {
+              body: { documentId: issue.documentId },
+            });
+          }
+          repaired += 1;
+        } catch (error) {
+          console.error("Validation repair error:", issue.documentId, error);
+          failed += 1;
+        }
+      }
+
+      return { attempted: issues.length, repaired, manual, failed };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["ai-knowledge-documents"] });
+      queryClient.invalidateQueries({ queryKey: ["ai-knowledge-validation"] });
+      toast.success(
+        `Validation repair started for ${result.repaired}/${result.attempted} docs` +
+          (result.manual > 0 ? ` (${result.manual} text docs require manual re-upload)` : "") +
+          (result.failed > 0 ? ` (${result.failed} failed to trigger)` : "")
+      );
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to run validation repair");
+    },
   });
 
   const deleteMutation = useMutation({
@@ -94,6 +326,7 @@ export const AIKnowledgeBaseSettings = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["ai-knowledge-documents"] });
+      queryClient.invalidateQueries({ queryKey: ["ai-knowledge-validation"] });
       toast.success("Document deleted");
       setDeleteDocId(null);
     },
@@ -190,6 +423,7 @@ export const AIKnowledgeBaseSettings = () => {
       setCategory("");
       setDescription("");
       queryClient.invalidateQueries({ queryKey: ["ai-knowledge-documents"] });
+      queryClient.invalidateQueries({ queryKey: ["ai-knowledge-validation"] });
 
     } catch (error: any) {
       console.error("Upload error:", error);
@@ -252,6 +486,7 @@ export const AIKnowledgeBaseSettings = () => {
       setUrlCategory("");
       setUrlDescription("");
       queryClient.invalidateQueries({ queryKey: ["ai-knowledge-documents"] });
+      queryClient.invalidateQueries({ queryKey: ["ai-knowledge-validation"] });
 
     } catch (error: any) {
       console.error("URL upload error:", error);
@@ -305,6 +540,7 @@ export const AIKnowledgeBaseSettings = () => {
       setTextCategory("");
       setTextDescription("");
       queryClient.invalidateQueries({ queryKey: ["ai-knowledge-documents"] });
+      queryClient.invalidateQueries({ queryKey: ["ai-knowledge-validation"] });
 
     } catch (error: any) {
       console.error("Text upload error:", error);
@@ -592,6 +828,129 @@ export const AIKnowledgeBaseSettings = () => {
 
       <Card className="bg-card border-border">
         <CardHeader>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-primary" />
+                Knowledge Validation
+              </CardTitle>
+              <CardDescription>
+                Verifies every uploaded document is processed, chunked, and embedded for reliable retrieval.
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetchKnowledgeValidation()}
+                disabled={validationLoading}
+                className="gap-2"
+              >
+                {validationLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                Refresh
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => repairValidationMutation.mutate()}
+                disabled={
+                  repairValidationMutation.isPending ||
+                  !knowledgeValidation ||
+                  knowledgeValidation.issues.length === 0
+                }
+                className="gap-2"
+              >
+                {repairValidationMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                Auto-fix issues
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {validationLoading ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : knowledgeValidation ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <p className="text-xs text-muted-foreground">Total docs</p>
+                  <p className="text-lg font-semibold">{knowledgeValidation.summary.totalDocs}</p>
+                </div>
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <p className="text-xs text-muted-foreground">Healthy</p>
+                  <p className="text-lg font-semibold text-green-600">{knowledgeValidation.summary.healthyDocs}</p>
+                </div>
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <p className="text-xs text-muted-foreground">Failed</p>
+                  <p className="text-lg font-semibold text-red-500">{knowledgeValidation.summary.failedDocs}</p>
+                </div>
+                <div className="rounded-lg border bg-muted/20 p-3">
+                  <p className="text-xs text-muted-foreground">Processing/Pending</p>
+                  <p className="text-lg font-semibold">
+                    {knowledgeValidation.summary.processingDocs + knowledgeValidation.summary.pendingDocs}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline">
+                  Missing chunks: {knowledgeValidation.summary.docsMissingChunks}
+                </Badge>
+                <Badge variant="outline">
+                  Missing embeddings: {knowledgeValidation.summary.docsMissingEmbeddings}
+                </Badge>
+                <Badge variant={knowledgeValidation.issues.length === 0 ? "secondary" : "destructive"}>
+                  Open issues: {knowledgeValidation.issues.length}
+                </Badge>
+              </div>
+
+              {knowledgeValidation.issues.length === 0 ? (
+                <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-3 text-sm text-green-700">
+                  Validation passed. All completed documents are chunked and embedded.
+                </div>
+              ) : (
+                <div className="space-y-2 rounded-lg border p-3">
+                  <p className="text-sm font-medium">
+                    Validation issues ({knowledgeValidation.issues.length})
+                  </p>
+                  <div className="max-h-52 space-y-2 overflow-y-auto pr-1">
+                    {knowledgeValidation.issues.slice(0, 25).map((issue) => (
+                      <div key={`${issue.documentId}-${issue.issueType}`} className="rounded-md border bg-muted/20 p-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+                            {issue.issueType.replace("_", " ")}
+                          </Badge>
+                          <span className="text-xs font-medium">{issue.fileName}</span>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">{issue.detail}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Auto-fix retries failed/stuck docs and regenerates missing embeddings. Text entries that lost original
+                    content must be re-uploaded manually.
+                  </p>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Validation data is unavailable right now.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="bg-card border-border">
+        <CardHeader>
           <CardTitle>Uploaded Documents</CardTitle>
           <CardDescription>
             {documents?.length || 0} documents in the knowledge base
@@ -655,6 +1014,7 @@ export const AIKnowledgeBaseSettings = () => {
                                 });
                               }
                               queryClient.invalidateQueries({ queryKey: ["ai-knowledge-documents"] });
+                              queryClient.invalidateQueries({ queryKey: ["ai-knowledge-validation"] });
                               toast.success('Reprocessing started');
                             } catch (err: any) {
                               toast.error(err.message || 'Failed to reprocess');

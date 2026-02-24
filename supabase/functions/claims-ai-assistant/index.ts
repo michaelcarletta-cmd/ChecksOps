@@ -271,8 +271,27 @@ async function getQueryEmbedding(question: string): Promise<number[] | null> {
   }
 }
 
+interface KnowledgeSearchResult {
+  context: string;
+  retrievalMode: "none" | "keyword_only" | "hybrid";
+  chunkCount: number;
+  sourceCount: number;
+  topSources: string[];
+}
+
+interface EvidencePlanDecision {
+  strategy: "internal_only" | "internal_preferred" | "hybrid_balanced" | "web_priority";
+  reason: string;
+  shouldSearchWeb: boolean;
+  searchQuery: string | null;
+}
+
 // Search knowledge base using hybrid search (embedding + keyword)
-async function searchKnowledgeBase(supabase: any, question: string, category?: string): Promise<string> {
+async function searchKnowledgeBase(
+  supabase: any,
+  question: string,
+  category?: string
+): Promise<KnowledgeSearchResult> {
   try {
     const MAX_CHUNKS_PER_DOC = 3;
     const TOP_K = 10;
@@ -436,7 +455,13 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
 
     if (diverseChunks.length === 0) {
       console.log("[KB Retrieval] No matching chunks found for question:", question);
-      return "";
+      return {
+        context: "",
+        retrievalMode: queryEmbedding ? "hybrid" : "keyword_only",
+        chunkCount: 0,
+        sourceCount: 0,
+        topSources: [],
+      };
     }
 
     let knowledgeContext = "\n\n=== KNOWLEDGE BASE REFERENCE MATERIAL ===\n";
@@ -450,11 +475,114 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
     
     knowledgeContext += "=== END KNOWLEDGE BASE CONTENT ===\n";
 
-    return knowledgeContext;
+    const topSources = Array.from(
+      new Set(
+        diverseChunks
+          .map((chunk: any) => String(chunk.doc_file_name || "").trim())
+          .filter((name: string) => name.length > 0)
+      )
+    ).slice(0, 5);
+
+    return {
+      context: knowledgeContext,
+      retrievalMode: queryEmbedding ? "hybrid" : "keyword_only",
+      chunkCount: diverseChunks.length,
+      sourceCount: topSources.length,
+      topSources,
+    };
   } catch (error) {
     console.error("Error searching knowledge base:", error);
-    return "";
+    return {
+      context: "",
+      retrievalMode: "none",
+      chunkCount: 0,
+      sourceCount: 0,
+      topSources: [],
+    };
   }
+}
+
+function decideEvidencePlan(params: {
+  question: string;
+  sourceMode: "internal_only" | "hybrid";
+  isOperationalRequest: boolean;
+  reportType?: string;
+  kbSourceCount: number;
+  claimLossType?: string | null;
+}): EvidencePlanDecision {
+  const rawQuestion = params.question || "";
+  const lossType = params.claimLossType || "property damage";
+  const defaultQuery = `${lossType} insurance claim ${rawQuestion}`.trim();
+
+  if (params.sourceMode === "internal_only") {
+    return {
+      strategy: "internal_only",
+      reason: "Internal-only mode is enabled, so external web search is disabled.",
+      shouldSearchWeb: false,
+      searchQuery: null,
+    };
+  }
+
+  if (params.isOperationalRequest) {
+    return {
+      strategy: "internal_preferred",
+      reason: "Operational request detected; internal sources are preferred and web search is unnecessary.",
+      shouldSearchWeb: false,
+      searchQuery: null,
+    };
+  }
+
+  if (params.reportType) {
+    return {
+      strategy: "internal_preferred",
+      reason: "Report generation uses claim/internal context first unless recency is explicitly requested.",
+      shouldSearchWeb: false,
+      searchQuery: null,
+    };
+  }
+
+  const asksCurrentInfo = /\b(latest|current|recent|today|new law|updated|as of|202[4-9])\b/i.test(rawQuestion);
+  const explicitlyRequestsWeb = /\b(web|internet|online|google|external source|search the web)\b/i.test(rawQuestion);
+  const explicitlyRequestsInternal = /\b(internal|in-house|our docs|knowledge base|from my files)\b/i.test(rawQuestion);
+  const legalOrCodeHeavy = /\b(regulation|statute|law|legal|code|building code|irc|ibc|astm|manufacturer|department of insurance|doi)\b/i.test(rawQuestion);
+
+  if (explicitlyRequestsInternal) {
+    return {
+      strategy: "internal_preferred",
+      reason: "User explicitly requested in-house/internal evidence.",
+      shouldSearchWeb: false,
+      searchQuery: null,
+    };
+  }
+
+  if (explicitlyRequestsWeb || asksCurrentInfo) {
+    return {
+      strategy: "web_priority",
+      reason: explicitlyRequestsWeb
+        ? "User explicitly requested web/external sources."
+        : "Question asks for current/recent information, so web verification is prioritized.",
+      shouldSearchWeb: true,
+      searchQuery: defaultQuery,
+    };
+  }
+
+  if (legalOrCodeHeavy && params.kbSourceCount === 0) {
+    return {
+      strategy: "hybrid_balanced",
+      reason: "Legal/code question with no matching in-house KB sources found; using web fallback.",
+      shouldSearchWeb: true,
+      searchQuery: defaultQuery,
+    };
+  }
+
+  return {
+    strategy: "internal_preferred",
+    reason: params.kbSourceCount > 0
+      ? "Relevant in-house KB sources were found; prioritizing internal evidence."
+      : "No explicit web requirement detected; defaulting to internal-first guidance.",
+    shouldSearchWeb: false,
+    searchQuery: null,
+  };
 }
 
 // Report generation prompts
@@ -3419,7 +3547,15 @@ serve(async (req) => {
     let claim = null;
     let claimsOverview = "";
     let knowledgeBaseContext = "";
+    let knowledgeBaseResult: KnowledgeSearchResult = {
+      context: "",
+      retrievalMode: "none",
+      chunkCount: 0,
+      sourceCount: 0,
+      topSources: [],
+    };
     let staffMembers: { id: string; name: string; email: string }[] = [];
+    const sourceMode: "internal_only" | "hybrid" = body.sourceMode === "internal_only" ? "internal_only" : "hybrid";
 
     // Get staff members for task assignment
     staffMembers = await getStaffMembers(supabase);
@@ -3757,7 +3893,8 @@ If the document is ambiguous about the type of loss, ask the user to clarify rat
     const isOperationalRequest = operationalPatterns.test((question || '').trim());
     
     if (!isOperationalRequest) {
-      knowledgeBaseContext = await searchKnowledgeBase(supabase, reportQuestion || question);
+      knowledgeBaseResult = await searchKnowledgeBase(supabase, reportQuestion || question);
+      knowledgeBaseContext = knowledgeBaseResult.context;
     } else {
       console.log('[KB Retrieval] Skipped — operational/task request detected');
     }
@@ -3765,7 +3902,6 @@ If the document is ambiguous about the type of loss, ask the user to clarify rat
     // === CROSS-CLAIM RETRIEVAL: Search vectorized claim docs for precedents ===
     let crossClaimContext = "";
     let playbookContext = "";
-    const sourceMode = body.sourceMode || 'hybrid'; // 'internal_only' or 'hybrid'
     
     // Fire cross-claim search for claim mode OR when a document is uploaded (even in general chat)
     const hasUploadedDoc = !!(resolvedDocContent && resolvedDocContent.trim());
@@ -3788,18 +3924,31 @@ If the document is ambiguous about the type of loss, ask the user to clarify rat
       }
     }
     
-    // Determine if web search is needed
+    // Determine if web search is needed (internal-first unless recency/external signals require web)
     let webSearchResults = "";
-    const isAcvQuestion = /\bacv\b|actual cash value|code upgrade|ordinance and law|ordinance & law/i.test(question || "");
-    const needsWebSearch = !reportType && !isAcvQuestion && /regulation|law|legal|code|requirement|guideline|best practice|industry standard/i.test(question);
-    
-    if (needsWebSearch) {
-      console.log("Performing web search for:", question);
-      const lossType = claim?.loss_type || "property damage";
-      const searchQuery = `${lossType} insurance claim ${question}`;
-      webSearchResults = await searchWeb(searchQuery);
-      if (webSearchResults && webSearchResults !== "Web search unavailable: API key not configured") {
+    let webSearchQueryUsed: string | null = null;
+    let webSearchStatus: "not_requested" | "success" | "unavailable" | "failed" = "not_requested";
+    const evidencePlan = decideEvidencePlan({
+      question: question || reportQuestion || "",
+      sourceMode,
+      isOperationalRequest,
+      reportType,
+      kbSourceCount: knowledgeBaseResult.sourceCount,
+      claimLossType: claim?.loss_type || null,
+    });
+
+    if (evidencePlan.shouldSearchWeb && evidencePlan.searchQuery) {
+      webSearchQueryUsed = evidencePlan.searchQuery;
+      console.log("[EvidencePlan] Performing web search:", {
+        query: webSearchQueryUsed,
+        reason: evidencePlan.reason,
+      });
+      webSearchResults = await searchWeb(webSearchQueryUsed);
+      if (webSearchResults && !webSearchResults.toLowerCase().includes("unavailable") && !webSearchResults.toLowerCase().includes("failed")) {
+        webSearchStatus = "success";
         webSearchResults = `\n\nRelevant Industry Information:\n${webSearchResults}`;
+      } else {
+        webSearchStatus = webSearchResults.toLowerCase().includes("failed") ? "failed" : "unavailable";
       }
     }
 
@@ -5531,8 +5680,31 @@ ${knowledgeBaseContext || ''}`
       ).catch(err => console.error('[DocAnalysis] Persist error:', err));
     }
 
+    const evidenceUsed = {
+      sourceModeRequested: sourceMode,
+      strategy: evidencePlan.strategy,
+      decisionReason: evidencePlan.reason,
+      internal: {
+        knowledgeBaseUsed: knowledgeBaseResult.chunkCount > 0,
+        knowledgeRetrievalMode: knowledgeBaseResult.retrievalMode,
+        knowledgeChunkCount: knowledgeBaseResult.chunkCount,
+        knowledgeSourceCount: knowledgeBaseResult.sourceCount,
+        topKnowledgeSources: knowledgeBaseResult.topSources,
+        crossClaimUsed: Boolean(crossClaimContext),
+        playbookUsed: Boolean(playbookContext),
+        escalationSignalsUsed: Boolean(escalationContext),
+        uploadedDocumentUsed: Boolean(hasUploadedDoc),
+        claimContextUsed: Boolean(claimId),
+      },
+      web: {
+        searched: webSearchStatus !== "not_requested",
+        query: webSearchQueryUsed,
+        status: webSearchStatus,
+      },
+    };
+
     return new Response(
-      JSON.stringify({ answer, reportType, savedFile, tasksCreated }),
+      JSON.stringify({ answer, reportType, savedFile, tasksCreated, evidenceUsed }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 

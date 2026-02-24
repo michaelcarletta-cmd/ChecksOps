@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Bot, Send, Loader2, Sparkles, Brain, Globe, Database } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,6 +19,24 @@ interface AiMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  evidenceUsed?: EvidenceUsed | null;
+}
+
+interface EvidenceUsed {
+  sourceModeRequested?: "internal_only" | "hybrid";
+  strategy?: string;
+  decisionReason?: string;
+  internal?: {
+    knowledgeBaseUsed?: boolean;
+    knowledgeSourceCount?: number;
+    crossClaimUsed?: boolean;
+    claimContextUsed?: boolean;
+    uploadedDocumentUsed?: boolean;
+  };
+  web?: {
+    searched?: boolean;
+    status?: "not_requested" | "success" | "unavailable" | "failed";
+  };
 }
 
 interface ClaimsAIAssistantProps {
@@ -117,6 +136,7 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
         role: "assistant",
         content: data.answer,
         timestamp: new Date(),
+        evidenceUsed: data.evidenceUsed || null,
       };
 
       setAiMessages((prev) => [...prev, assistantMessage]);
@@ -203,6 +223,28 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
         </div>
       </Card>
     );
+  };
+
+  const getEvidenceSummary = (evidence?: EvidenceUsed | null) => {
+    if (!evidence) return null;
+
+    const internalUsed =
+      Boolean(evidence.internal?.knowledgeBaseUsed) ||
+      Boolean(evidence.internal?.crossClaimUsed) ||
+      Boolean(evidence.internal?.claimContextUsed) ||
+      Boolean(evidence.internal?.uploadedDocumentUsed);
+    const webUsed = Boolean(evidence.web?.searched && evidence.web?.status === "success");
+
+    let label = "Internal evidence";
+    if (internalUsed && webUsed) label = "Internal + web evidence";
+    else if (!internalUsed && webUsed) label = "Web evidence";
+
+    return {
+      label,
+      kbSources: evidence.internal?.knowledgeSourceCount || 0,
+      webStatus: evidence.web?.status || "not_requested",
+      reason: evidence.decisionReason || "",
+    };
   };
 
   return (
@@ -310,6 +352,30 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
                             : ["No response."].map((t, i) => (
                                 <p key={i} className="mb-0">{t}</p>
                               ))}
+                          {(() => {
+                            const evidence = getEvidenceSummary(message.evidenceUsed);
+                            if (!evidence) return null;
+                            return (
+                              <div className="mt-3 space-y-1 rounded-md border bg-background/60 p-2">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    Evidence: {evidence.label}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-[10px]">
+                                    KB sources: {evidence.kbSources}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-[10px]">
+                                    Web: {evidence.webStatus}
+                                  </Badge>
+                                </div>
+                                {evidence.reason && (
+                                  <p className="text-[11px] text-muted-foreground">
+                                    Decision: {evidence.reason}
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
