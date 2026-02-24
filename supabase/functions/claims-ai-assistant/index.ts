@@ -2555,7 +2555,7 @@ async function buildPhotoEstimateEvidenceContext(
         damage.sampleLocations.size > 0
           ? ` near ${Array.from(damage.sampleLocations)[0]}`
           : "";
-      return `- ${damage.label}${severity} seen across ${damage.count} analyzed photo(s)${location}`;
+      return `- ${damage.label}${severity} documented in ${damage.count} photo(s)${location}`;
     });
 
     const estimateHeader = latestEstimate
@@ -2565,11 +2565,11 @@ async function buildPhotoEstimateEvidenceContext(
 
     const fallbackPhotoNote =
       analyzedPhotos.length === 0
-        ? "No AI-analyzed photos were found on this claim yet."
+        ? "No photo damage documentation was found on this claim yet."
         : "";
 
     const summaryText = [
-      `AI-analyzed photos reviewed: ${analyzedPhotos.length}.`,
+      `Photo documentation reviewed: ${analyzedPhotos.length} image(s).`,
       fallbackPhotoNote,
       photoHighlights.length > 0 ? "Key photo-documented damages:" : "",
       ...photoHighlights,
@@ -2611,6 +2611,7 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
   const carrier = String(claimData?.insurance_company || "the insurance carrier").trim();
   const policyholder = String(claimData?.policyholder_name || "the insured").trim();
   const recipient = recipientName && !recipientName.includes("@") ? recipientName : "Adjuster";
+  const estimateLeadIn = "Attached is our estimate for the damages sustained to the property.";
 
   try {
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -2626,7 +2627,7 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
           {
             role: "system",
             content:
-              "You are a senior public-adjuster communication specialist. Rewrite emails in plain text only (no markdown). Keep professional tone, concise but specific. Include only the strongest documented damages and clearly tie them to estimate scope.",
+              "You are a senior public-adjuster communication specialist. Rewrite emails in plain text only (no markdown). Keep professional tone, concise but specific. Include only the strongest documented damages and clearly tie them to estimate scope. NEVER mention AI, automated analysis, models, or computer vision.",
           },
           {
             role: "user",
@@ -2641,10 +2642,14 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
               evidenceSummary,
               "",
               "Requirements:",
+              `- Include this sentence naturally near the beginning: "${estimateLeadIn}"`,
+              "- Include a sentence like: \"This estimate is in line with the damages found, such as ...\" and then list key damages.",
               "- Keep greeting and courteous close.",
-              "- Include important property damages from analyzed photos (not every single point).",
+              "- Include important property damages from the photo documentation (not every single point).",
               "- Tie damages to estimate scope items already on file.",
+              "- Explain what repairs are required for those damages and why those items are included in the estimate.",
               "- Ask for scope/payment update based on this evidence.",
+              "- Do NOT mention AI, analysis tools, or automated photo review.",
               "- Return only the final email body text.",
             ].join("\n"),
           },
@@ -2655,18 +2660,18 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Photo/estimate rewrite failed:", response.status, errorText);
-      return `${trimmedBody}\n\n${evidenceSummary}`;
+      return `${estimateLeadIn}\n\nThis estimate is in line with the damages found and the corresponding repair scope, including:\n${evidenceSummary}\n\n${trimmedBody}`;
     }
 
     const data = await response.json();
     const rewritten = String(data?.choices?.[0]?.message?.content || "").trim();
     if (!rewritten) {
-      return `${trimmedBody}\n\n${evidenceSummary}`;
+      return `${estimateLeadIn}\n\nThis estimate is in line with the damages found and the corresponding repair scope, including:\n${evidenceSummary}\n\n${trimmedBody}`;
     }
     return rewritten;
   } catch (error) {
     console.error("Error rewriting email with photo/estimate evidence:", error);
-    return `${trimmedBody}\n\n${evidenceSummary}`;
+    return `${estimateLeadIn}\n\nThis estimate is in line with the damages found and the corresponding repair scope, including:\n${evidenceSummary}\n\n${trimmedBody}`;
   }
 }
 async function resolveCommunicationClaim(
@@ -5635,7 +5640,7 @@ When the user asks to draft, review, edit, approve, or "let me check it first":
 2. Do NOT call send_email/send_sms unless the user explicitly asks to send now.
 3. Drafts should be polished and ready for approval with greeting, context, clear ask, and closing.
 4. Assume the user can edit the draft body and click an "Approve & Send" button in the UI.
-5. If the user asks for a draft "based on damage in the photos", ground the draft in AI-analyzed photo damages and align those points to estimate scope already on file.
+5. If the user asks for a draft "based on damage in the photos", ground the draft in photo-documented damages and align those points to estimate scope already on file.
 ACTION TOOLS FOR "DO IT FOR ME":
 - send_portal_notification: Send claim portal notifications to client/contractors and create notification records.
 - create_claim_letter: Create/save a letter file to the claim and optionally send it immediately by email.
@@ -6035,7 +6040,7 @@ When the user asks to "send a text/email", "text the client", "email the adjuste
 3. For EMAIL drafts, include: greeting, claim reference, concise context, specific request/action, and courteous closing.
 4. If user asks for DRAFT ONLY (or asks to review before sending), call draft_email or draft_sms and do not send yet.
 5. If user explicitly asked to SEND now, call send_email or send_sms immediately using the professional draft body.
-6. When the request says "based on damage in the photos" (or equivalent), explicitly incorporate AI-analyzed photo damages and tie them to estimate/scope items already on file.
+6. When the request says "based on damage in the photos" (or equivalent), explicitly incorporate photo-documented damages and tie them to estimate/scope items already on file.
 7. If the user asks for portal notifications, call send_portal_notification.
 8. If the user asks for a letter, call create_claim_letter (and send it if requested).
 9. If the user asks to schedule a call, call schedule_claim_call.
@@ -7192,9 +7197,9 @@ ${knowledgeBaseContext || ''}`
             answer += `\n\n📝 **Email draft ready:** ${recipientLabel} (subject: "${subject}")`;
             answer += `\nUse the draft editor below to review/edit, then click **Approve & Send** when ready.`;
             if (evidenceContextUsed) {
-              answer += `\n📸 Draft includes AI photo-damage findings aligned to estimate scope on file.`;
+              answer += `\n📸 Draft includes photo-damage findings aligned to estimate scope on file.`;
             } else if (evidenceContextMissing && shouldInjectPhotoEvidence) {
-              answer += `\n⚠️ No analyzed photo/estimate evidence was found to auto-include.`;
+              answer += `\n⚠️ No photo/estimate evidence was found to auto-include.`;
             }
             if (recipientErrors.length > 0) {
               answer += `\n⚠️ **Skipped recipients:** ${recipientErrors.join(" | ")}`;
