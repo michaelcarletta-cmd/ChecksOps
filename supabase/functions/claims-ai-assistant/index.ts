@@ -2304,6 +2304,13 @@ function dedupeSmsRecipients(recipients: ResolvedSmsRecipient[]): ResolvedSmsRec
   return deduped;
 }
 
+function isCarrierFacingEmailRecipients(recipients: ResolvedEmailRecipient[]): boolean {
+  return recipients.some((recipient) => {
+    const recipientType = String(recipient.type || "").toLowerCase();
+    return recipientType === "adjuster" || recipientType === "insurance_company" || recipientType.includes("carrier");
+  });
+}
+
 function buildClaimMailboxEmail(claimData: any, claimId: string): string {
   const sanitizedPolicyNumber = claimData?.policy_number
     ? String(claimData.policy_number).replace(/[^a-zA-Z0-9]/g, "").toLowerCase()
@@ -2661,11 +2668,13 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
   claimData: any,
   recipientName: string | undefined,
   evidenceSummary: string,
+  options?: { carrierFacing?: boolean },
 ): Promise<string> {
   const trimmedBody = String(rawBody || "").trim();
   if (!trimmedBody || !evidenceSummary.trim()) {
     return trimmedBody;
   }
+  const carrierFacing = options?.carrierFacing === true;
 
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
@@ -2677,6 +2686,9 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
   const policyholder = String(claimData?.policyholder_name || "the insured").trim();
   const recipient = recipientName && !recipientName.includes("@") ? recipientName : "Adjuster";
   const estimateLeadIn = "Attached is our estimate for the damages sustained to the property.";
+  const fallbackPrefix = carrierFacing
+    ? `${estimateLeadIn}\n\nThis estimate is in line with the documented damages found, including:\n${evidenceSummary}\n\nBased on these documented impacts and resulting condition findings, the full repair scope reflected in our estimate is required to restore the property to pre-loss condition. Please provide your revised scope and payment position in writing.`
+    : `${estimateLeadIn}\n\nThis estimate is in line with the damages found and the corresponding repair scope, including:\n${evidenceSummary}`;
 
   try {
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -2715,6 +2727,12 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
               "- Use specific, direct damage statements (example style): \"Stone wall is displaced due to vehicle impact. Wood siding and underlying plywood sustained impact damage. The impact displaced the chimney from its original position, creating gaps and exposing underlying structures.\"",
               "- Pull details from the most severe photo condition findings and weave them naturally into the draft.",
               "- Explain what repairs are required for those damages and why those items are included in the estimate.",
+              carrierFacing
+                ? "- This is carrier-facing: use assertive but professional claim-advocacy language. Use decisive phrasing (e.g., \"documented damage confirms,\" \"requires replacement/repair\"). Avoid hedging terms like \"might\" or \"possibly.\""
+                : "- Use collaborative but professional tone suitable for client-facing communications.",
+              carrierFacing
+                ? "- Include a direct ask for revised scope and payment alignment, with a request for written confirmation."
+                : "- Include a clear request for next steps or confirmation.",
               "- Ask for scope/payment update based on this evidence.",
               "- Do NOT mention AI, analysis tools, or automated photo review.",
               "- Return only the final email body text.",
@@ -2727,18 +2745,18 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Photo/estimate rewrite failed:", response.status, errorText);
-      return `${estimateLeadIn}\n\nThis estimate is in line with the damages found and the corresponding repair scope, including:\n${evidenceSummary}\n\n${trimmedBody}`;
+      return `${fallbackPrefix}\n\n${trimmedBody}`;
     }
 
     const data = await response.json();
     const rewritten = String(data?.choices?.[0]?.message?.content || "").trim();
     if (!rewritten) {
-      return `${estimateLeadIn}\n\nThis estimate is in line with the damages found and the corresponding repair scope, including:\n${evidenceSummary}\n\n${trimmedBody}`;
+      return `${fallbackPrefix}\n\n${trimmedBody}`;
     }
     return rewritten;
   } catch (error) {
     console.error("Error rewriting email with photo/estimate evidence:", error);
-    return `${estimateLeadIn}\n\nThis estimate is in line with the damages found and the corresponding repair scope, including:\n${evidenceSummary}\n\n${trimmedBody}`;
+    return `${fallbackPrefix}\n\n${trimmedBody}`;
   }
 }
 async function resolveCommunicationClaim(
@@ -6108,11 +6126,12 @@ When the user asks to "send a text/email", "text the client", "email the adjuste
 4. If user asks for DRAFT ONLY (or asks to review before sending), call draft_email or draft_sms and do not send yet.
 5. If user explicitly asked to SEND now, call send_email or send_sms immediately using the professional draft body.
 6. When the request says "based on damage in the photos" (or equivalent), explicitly incorporate photo-documented damages and tie them to estimate/scope items already on file.
-7. If the user asks for portal notifications, call send_portal_notification.
-8. If the user asks for a letter, call create_claim_letter (and send it if requested).
-9. If the user asks to schedule a call, call schedule_claim_call.
-10. If recipient/channel are missing or ambiguous, ask ONE concise clarification; otherwise execute.
-11. Confirm exactly what action was completed after the tool succeeds.
+7. For carrier-facing emails (adjuster/insurance company recipients), use assertive but professional claim-advocacy tone with direct causation + repair-necessity language and a clear written ask for revised scope/payment.
+8. If the user asks for portal notifications, call send_portal_notification.
+9. If the user asks for a letter, call create_claim_letter (and send it if requested).
+10. If the user asks to schedule a call, call schedule_claim_call.
+11. If recipient/channel are missing or ambiguous, ask ONE concise clarification; otherwise execute.
+12. Confirm exactly what action was completed after the tool succeeds.
 NEVER tell the user to copy/paste and send manually when they asked you to send it.
 
 You are the smartest person in the room: analyze first, then deliver. When the user asks for help communicating with the client or battling the carrier, synthesize status and notes and produce the deliverable (draft, strategy, next step). No hedging, no "I'd be happy to help" — just the analysis and the draft or action.
@@ -7204,6 +7223,7 @@ ${knowledgeBaseContext || ''}`
               answer += `\n\n❌ **Unable to draft email:** ${recipientErrors[0] || "No valid recipients found."}`;
               continue;
             }
+            const carrierFacing = isCarrierFacingEmailRecipients(dedupedRecipients);
 
             const polishedBodyText = buildProfessionalEmailBody(
               bodyText,
@@ -7228,6 +7248,7 @@ ${knowledgeBaseContext || ''}`
                   claimResolution.claim,
                   dedupedRecipients[0]?.name,
                   evidenceContext.summaryText,
+                  { carrierFacing },
                 );
                 evidenceContextUsed = true;
               } else {
@@ -7343,6 +7364,7 @@ ${knowledgeBaseContext || ''}`
               answer += `\n\n❌ **Unable to send email:** ${recipientErrors[0] || "No valid recipients found."}`;
               continue;
             }
+            const carrierFacing = isCarrierFacingEmailRecipients(dedupedRecipients);
 
             const polishedBodyText = buildProfessionalEmailBody(
               bodyText,
@@ -7365,6 +7387,7 @@ ${knowledgeBaseContext || ''}`
                   claimResolution.claim,
                   dedupedRecipients[0]?.name,
                   evidenceContext.summaryText,
+                  { carrierFacing },
                 );
               }
             }
