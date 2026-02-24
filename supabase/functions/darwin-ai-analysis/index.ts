@@ -17,6 +17,8 @@ const corsHeaders = {
 
 // Size threshold for using native extraction vs AI multimodal (8MB base64 ~ 6MB file)
 const AI_EXTRACTION_LIMIT = 8 * 1024 * 1024;
+const MODEL_REQUEST_TIMEOUT_MS = 55_000;
+const MODEL_TOTAL_RUNTIME_LIMIT_MS = 180_000;
 
 // ============================================================================
 // MANDATORY ORDER OF OPERATIONS FRAMEWORK
@@ -685,6 +687,18 @@ interface CarrierDismantlerMiddlewareContext {
   claimFactsPack?: ClaimFactsPack;
 }
 
+type DarwinExecutionStepStatus = 'started' | 'completed' | 'skipped' | 'error';
+
+interface DarwinExecutionStep {
+  key: string;
+  label: string;
+  status: DarwinExecutionStepStatus;
+  detail?: string;
+  startedAt: string;
+  finishedAt?: string;
+  durationMs?: number;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -700,7 +714,44 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    const operationStartedAt = Date.now();
+    const executionSteps: DarwinExecutionStep[] = [];
+    const startStep = (key: string, label: string, detail?: string): DarwinExecutionStep => {
+      const step: DarwinExecutionStep = {
+        key,
+        label,
+        detail,
+        status: 'started',
+        startedAt: new Date().toISOString(),
+      };
+      executionSteps.push(step);
+      return step;
+    };
+    const endStep = (step: DarwinExecutionStep, status: DarwinExecutionStepStatus, detail?: string) => {
+      const finished = Date.now();
+      step.status = status;
+      if (detail) step.detail = detail;
+      step.finishedAt = new Date(finished).toISOString();
+      step.durationMs = Math.max(0, finished - new Date(step.startedAt).getTime());
+    };
+    const markStep = (key: string, label: string, status: DarwinExecutionStepStatus, detail?: string) => {
+      const step: DarwinExecutionStep = {
+        key,
+        label,
+        status,
+        detail,
+        startedAt: new Date().toISOString(),
+      };
+      if (status !== 'started') {
+        step.finishedAt = step.startedAt;
+        step.durationMs = 0;
+      }
+      executionSteps.push(step);
+    };
+
+    const requestStep = startStep('request', 'Load analysis request');
     const { claimId, analysisType, mode, content, pdfContent, pdfFileName, pdfContents, additionalContext, claim: providedClaim, contextData, darwinNotes: providedNotes, claimFactsPack: providedClaimFactsPack, enableEvidenceIndex: enableEvidenceIndexParam, enableDismantler: enableDismantlerParam }: AnalysisRequest = await req.json();
+    endStep(requestStep, 'completed', `analysisType=${analysisType}`);
     const darwinMode = normalizeDarwinMode(mode);
     const useStructuredDarwinOutput = STRUCTURED_DARWIN_ANALYSIS_TYPES.has(analysisType);
     const enableEvidenceIndex = enableEvidenceIndexParam !== false;
@@ -5439,6 +5490,8 @@ If any are missing, append a "COMPLETENESS WARNING" section listing what's missi
       }
     }
 
+    markStep('context', 'Build claim context', 'completed', `messages=${messages.length}`);
+
     // ═══ STRATEGIC PIPELINE ENFORCEMENT ═══
     // For strategic output types, run the 4-step pipeline (Load Memory → Web Search → Build Thesis → Output)
     const STRATEGIC_PIPELINE_TYPES = [
@@ -5448,6 +5501,7 @@ If any are missing, append a "COMPLETENESS WARNING" section listing what's missi
     ];
 
     if (STRATEGIC_PIPELINE_TYPES.includes(analysisType)) {
+      const strategicPipelineStep = startStep('strategic_pipeline', 'Run strategic 4-step pipeline');
       console.log(`[Strategic Pipeline] Running 4-step pipeline for ${analysisType}`);
       try {
         const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -5508,15 +5562,30 @@ The LOSS DOMAIN FIDELITY section in the pipeline context above is MANDATORY.
 VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
 `;
             }
+            endStep(
+              strategicPipelineStep,
+              'completed',
+              `context=${pipelineData.pipelineContext.length} chars, deltas=${pipelineData.deltaSummary || 'n/a'}`,
+            );
+          } else {
+            endStep(strategicPipelineStep, 'completed', 'No additional pipeline context required');
           }
         } else {
           console.error(`[Strategic Pipeline] Pipeline call failed: ${pipelineResponse.status}`);
+          endStep(strategicPipelineStep, 'error', `HTTP ${pipelineResponse.status}`);
           // Continue without pipeline - don't block the analysis
         }
       } catch (pipelineError) {
         console.error('[Strategic Pipeline] Pipeline error:', pipelineError);
+        endStep(
+          strategicPipelineStep,
+          'error',
+          pipelineError instanceof Error ? pipelineError.message : 'Unknown pipeline error',
+        );
         // Continue without pipeline - graceful degradation
       }
+    } else {
+      markStep('strategic_pipeline', 'Run strategic 4-step pipeline', 'skipped', 'Not required for this analysis type');
     }
     // ═══ END STRATEGIC PIPELINE ═══
 
@@ -5597,45 +5666,77 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     
     // Model fallback with retries - more retries for PDF processing since fewer models available
     const RETRIES_PER_MODEL = needsPdfProcessing ? 3 : 1;
-    const RETRY_DELAY = 2000; // 2 seconds between retries
+    const BASE_RETRY_DELAY_MS = 1500;
+    const getRetryDelayMs = (attemptIndex: number) =>
+      Math.min(8000, BASE_RETRY_DELAY_MS * Math.pow(2, Math.max(0, attemptIndex)));
     
     let aiData: any = null;
     let lastError: string = '';
     let successfulModel: string = '';
+    let modelAttempts = 0;
+    let modelFailures = 0;
+    const modelLoopStartedAt = Date.now();
+    const modelRunStep = startStep(
+      'model_execution',
+      'Run AI model with fallback chain',
+      `models=${modelFallbackChain.join(' -> ')}`,
+    );
     
     modelLoop:
     for (const currentModel of modelFallbackChain) {
+      if (Date.now() - modelLoopStartedAt > MODEL_TOTAL_RUNTIME_LIMIT_MS) {
+        lastError = `Model runtime limit exceeded (${Math.round(MODEL_TOTAL_RUNTIME_LIMIT_MS / 1000)}s).`;
+        console.error(lastError);
+        break;
+      }
       console.log(`Trying model: ${currentModel}`);
       
       for (let attempt = 0; attempt < RETRIES_PER_MODEL; attempt++) {
+        if (Date.now() - modelLoopStartedAt > MODEL_TOTAL_RUNTIME_LIMIT_MS) {
+          lastError = `Model runtime limit exceeded (${Math.round(MODEL_TOTAL_RUNTIME_LIMIT_MS / 1000)}s).`;
+          console.error(lastError);
+          break modelLoop;
+        }
+
+        modelAttempts += 1;
         try {
           console.log(`  Attempt ${attempt + 1}/${RETRIES_PER_MODEL} for ${currentModel}`);
           
           const requestBody = { ...baseRequestBody, model: currentModel };
-          
-          const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestBody),
-          });
+          const requestController = new AbortController();
+          const timeoutId = setTimeout(() => requestController.abort(), MODEL_REQUEST_TIMEOUT_MS);
+          let response: Response;
+          try {
+            response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(requestBody),
+              signal: requestController.signal,
+            });
+          } finally {
+            clearTimeout(timeoutId);
+          }
 
           // Handle HTTP-level errors
           if (!response.ok) {
             const errorText = await response.text();
             lastError = `HTTP ${response.status} on ${currentModel}: ${errorText.substring(0, 200)}`;
+            modelFailures += 1;
             console.error(`  AI Gateway HTTP error:`, response.status);
             
             // Don't retry on client errors (4xx) except 429
             if (response.status === 429) {
+              endStep(modelRunStep, 'error', `Rate-limited after ${modelAttempts} attempts`);
               return new Response(
                 JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
                 { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
               );
             }
             if (response.status === 402) {
+              endStep(modelRunStep, 'error', `Credits exhausted after ${modelAttempts} attempts`);
               return new Response(
                 JSON.stringify({ error: 'AI usage limit reached. Please add credits to continue.' }),
                 { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -5649,8 +5750,9 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
             
             // Retry on 5xx errors
             if (attempt < RETRIES_PER_MODEL - 1) {
-              console.log(`  Retrying in ${RETRY_DELAY}ms...`);
-              await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+              const delay = getRetryDelayMs(attempt);
+              console.log(`  Retrying in ${delay}ms...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
               continue;
             }
             // Exhausted retries for this model, try next
@@ -5677,12 +5779,14 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
             const errorCode = aiData.error.code || aiData.error.status || 0;
             const errorMsg = aiData.error.message || aiData.error || 'Unknown error';
             lastError = `API Error ${errorCode} on ${currentModel}: ${errorMsg}`;
+            modelFailures += 1;
             console.error('  AI Gateway returned error in body:', aiData.error);
             
             // Retry on server errors (5xx codes in the body)
             if (errorCode >= 500 && attempt < RETRIES_PER_MODEL - 1) {
-              console.log(`  Retrying due to API error ${errorCode} in ${RETRY_DELAY}ms...`);
-              await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+              const delay = getRetryDelayMs(attempt);
+              console.log(`  Retrying due to API error ${errorCode} in ${delay}ms...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
               continue;
             }
             // Try next model
@@ -5693,11 +5797,13 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
           // Check if we got valid choices
           if (!aiData.choices || aiData.choices.length === 0) {
             lastError = `No choices from ${currentModel}`;
+            modelFailures += 1;
             console.error('  AI Gateway returned no choices');
             
             if (attempt < RETRIES_PER_MODEL - 1) {
-              console.log(`  Retrying due to empty response in ${RETRY_DELAY}ms...`);
-              await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+              const delay = getRetryDelayMs(attempt);
+              console.log(`  Retrying due to empty response in ${delay}ms...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
               continue;
             }
             // Try next model
@@ -5708,15 +5814,21 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
           // Success!
           successfulModel = currentModel;
           console.log(`  SUCCESS with model ${currentModel}!`);
+          endStep(modelRunStep, 'completed', `model=${successfulModel}, attempts=${modelAttempts}, failures=${modelFailures}`);
           break modelLoop;
           
         } catch (fetchError) {
+          const isAbortTimeout = fetchError instanceof Error && fetchError.name === 'AbortError';
           console.error(`  Fetch error (attempt ${attempt + 1}):`, fetchError);
-          lastError = fetchError instanceof Error ? fetchError.message : 'Network error';
+          lastError = isAbortTimeout
+            ? `Request timeout after ${Math.round(MODEL_REQUEST_TIMEOUT_MS / 1000)}s on ${currentModel}`
+            : (fetchError instanceof Error ? fetchError.message : 'Network error');
+          modelFailures += 1;
           
           if (attempt < RETRIES_PER_MODEL - 1) {
-            console.log(`  Retrying in ${RETRY_DELAY}ms...`);
-            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+            const delay = getRetryDelayMs(attempt);
+            console.log(`  Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
           }
           // If exhausted retries, will continue to next model
         }
@@ -5724,11 +5836,14 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     }
     
     if (!aiData || !aiData.choices || aiData.choices.length === 0) {
+      endStep(modelRunStep, 'error', `attempts=${modelAttempts}, failures=${modelFailures}, error=${lastError}`);
       console.error('All models failed:', lastError);
       throw new Error(`AI Gateway temporarily unavailable. Tried ${modelFallbackChain.length} models. ${lastError}`);
     }
     
     console.log(`Darwin AI analysis completed using model: ${successfulModel}`);
+
+    const parseStep = startStep('parse_model_output', 'Parse model output');
 
     // For task_followup in legacy mode, parse the tool call response
     let suggestedActions: Array<{type: string; title: string; content: string}> = [];
@@ -5782,6 +5897,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       structuredResult = parseStructuredResponse(analysisResult);
       analysisResult = JSON.stringify(structuredResult, null, 2);
     }
+    endStep(parseStep, 'completed', `resultLength=${analysisResult.length}`);
     
     console.log(`Darwin AI Analysis completed for ${analysisType}, result length: ${analysisResult.length}`);
 
@@ -5790,6 +5906,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       ? `PDF: ${pdfFileName}` 
       : additionalContext?.trigger_reason || `${analysisType} analysis`;
     
+    const saveStep = startStep('persist_analysis', 'Persist analysis snapshot');
     try {
       const { error: saveError } = await supabase
         .from('darwin_analysis_results')
@@ -5803,16 +5920,20 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       
       if (saveError) {
         console.error('Failed to save analysis result:', saveError);
+        endStep(saveStep, 'error', saveError.message);
       } else {
         console.log(`Analysis result saved to darwin_analysis_results for claim ${claimId}`);
+        endStep(saveStep, 'completed');
       }
     } catch (saveErr) {
       console.error('Error saving analysis result:', saveErr);
+      endStep(saveStep, 'error', saveErr instanceof Error ? saveErr.message : 'Unknown save error');
       // Don't fail the request if save fails
     }
 
     // ═══ UNIVERSAL CARRIER DISMANTLER POST-PROCESSOR (unless enableDismantler=false) ═══
     let carrierDismantlerResult: DismantlerResult | null = null;
+    const dismantlerStep = startStep('carrier_dismantler', 'Run carrier dismantler middleware');
     try {
       const shouldRunDismantler =
         enableDismantler &&
@@ -6073,18 +6194,33 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
                 inferenceChipCount: 0,
               });
             }
+            endStep(
+              dismantlerStep,
+              'completed',
+              `confidence=${carrierDismantlerResult?.confidence ?? 'n/a'}, objections=${carrierDismantlerResult?.objections?.length ?? 0}`,
+            );
           } else {
             console.error(
               'Carrier Dismantler middleware call failed:',
               dismantlerResp.status,
             );
+            endStep(dismantlerStep, 'error', `HTTP ${dismantlerResp.status}`);
           }
+        } else {
+          endStep(dismantlerStep, 'error', 'Missing Supabase environment secrets');
         }
+      } else {
+        endStep(dismantlerStep, 'skipped', 'Not applicable for this analysis type');
       }
     } catch (middlewareErr) {
       console.error(
         'Carrier Dismantler middleware error (non-fatal):',
         middlewareErr,
+      );
+      endStep(
+        dismantlerStep,
+        'error',
+        middlewareErr instanceof Error ? middlewareErr.message : 'Unknown middleware error',
       );
     }
 
@@ -6095,6 +6231,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       );
     }
 
+    const responseBuildStep = startStep('response', 'Build response payload');
     const responsePayload: any = {
       success: true,
       analysisType,
@@ -6105,6 +6242,17 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       claimId,
     };
     if (claimFactsPack) responsePayload.claimFactsPack = claimFactsPack;
+    responsePayload.executionSteps = executionSteps;
+    responsePayload.processingMetrics = {
+      totalDurationMs: Date.now() - operationStartedAt,
+      successfulModel,
+      modelAttempts,
+      modelFailures,
+      fallbackModelsTried: modelFallbackChain.length,
+      usedToolCalling: useTaskFollowupToolCalling,
+      strategicPipelineApplied: STRATEGIC_PIPELINE_TYPES.includes(analysisType),
+    };
+    endStep(responseBuildStep, 'completed', `durationMs=${responsePayload.processingMetrics.totalDurationMs}`);
     return new Response(
       JSON.stringify(responsePayload),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },

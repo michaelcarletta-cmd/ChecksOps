@@ -41,6 +41,28 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const AI_GATEWAY_REQUEST_TIMEOUT_MS = 45_000;
+const AI_GATEWAY_FOLLOW_UP_TIMEOUT_MS = 30_000;
+const MAX_TOOL_CALLS_PER_TURN = 18;
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 // Helper function to search web using Perplexity
 async function searchWeb(query: string): Promise<string> {
   // Try both possible API key names from connector
@@ -6313,14 +6335,14 @@ Be relentlessly focused on advancing the claim toward a fair, full, and fast set
       requestBody.tool_choice = "auto";
     }
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiResponse = await fetchWithTimeout("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(requestBody),
-    });
+    }, AI_GATEWAY_REQUEST_TIMEOUT_MS);
 
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
@@ -6353,12 +6375,21 @@ Be relentlessly focused on advancing the claim toward a fair, full, and fast set
     let portalNotificationsSent: any[] = [];
     let lettersCreated: any[] = [];
     let callsScheduled: any[] = [];
+    let toolCallsTotal = Array.isArray(firstChoice.message.tool_calls) ? firstChoice.message.tool_calls.length : 0;
+    let toolCallsProcessed = 0;
+    let toolCallProcessingMs = 0;
 
     // Handle tool calls if present
     if (firstChoice.message.tool_calls && firstChoice.message.tool_calls.length > 0) {
       console.log("Processing tool calls:", firstChoice.message.tool_calls.length);
+      const toolCallStartedAt = Date.now();
+      const cappedToolCalls = firstChoice.message.tool_calls.slice(0, MAX_TOOL_CALLS_PER_TURN);
+      if (firstChoice.message.tool_calls.length > MAX_TOOL_CALLS_PER_TURN) {
+        answer += `\n\n⚠️ Processed the first ${MAX_TOOL_CALLS_PER_TURN} actions to prevent long-running loops. Please run the remaining actions in a follow-up request if needed.`;
+      }
       
-      for (const toolCall of firstChoice.message.tool_calls) {
+      for (const toolCall of cappedToolCalls) {
+        toolCallsProcessed += 1;
         if (toolCall.function.name === "create_task") {
           try {
             const params = JSON.parse(toolCall.function.arguments);
@@ -6693,7 +6724,7 @@ ${knowledgeBaseContext || ''}`
                 ...conversationMessages.slice(1) // Skip the original system message
               ];
               
-              const followUpResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              const followUpResponse = await fetchWithTimeout("https://ai.gateway.lovable.dev/v1/chat/completions", {
                 method: "POST",
                 headers: {
                   Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -6704,7 +6735,7 @@ ${knowledgeBaseContext || ''}`
                   messages: followUpMessages,
                   max_tokens: 2000,
                 }),
-              });
+              }, AI_GATEWAY_FOLLOW_UP_TIMEOUT_MS);
               
               if (followUpResponse.ok) {
                 const followUpData = await followUpResponse.json();
@@ -8363,6 +8394,7 @@ ${knowledgeBaseContext || ''}`
           }
         }
       }
+      toolCallProcessingMs = Date.now() - toolCallStartedAt;
     }
 
     // If this is a report, save it as a Word document
@@ -8477,6 +8509,13 @@ ${knowledgeBaseContext || ''}`
         lettersCreated,
         callsScheduled,
         evidenceUsed,
+        aiDiagnostics: {
+          toolCallsTotal,
+          toolCallsProcessed,
+          toolCallProcessingMs,
+          toolCallCapped: toolCallsTotal > MAX_TOOL_CALLS_PER_TURN,
+          requestTimeoutMs: AI_GATEWAY_REQUEST_TIMEOUT_MS,
+        },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
