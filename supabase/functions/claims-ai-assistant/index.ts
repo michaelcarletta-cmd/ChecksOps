@@ -1381,7 +1381,7 @@ const tools = [
     type: "function",
     function: {
       name: "send_email",
-      description: "Send an email immediately from chat. Use this when the user explicitly asks to send an email now. If recipient is not provided, default to the policyholder for the active claim.",
+      description: "Send an email immediately from chat. Use this when the user explicitly asks to send an email now. For carrier emails (recipient_type=insurance_company), auto-send to both insurance company and assigned adjuster when available, with fallback to whichever exists. Outbound subject is claim number only.",
       parameters: {
         type: "object",
         properties: {
@@ -1395,7 +1395,7 @@ const tools = [
           },
           subject: {
             type: "string",
-            description: "Email subject line."
+            description: "Draft subject/context. Outbound email subject is normalized to the claim number only."
           },
           body: {
             type: "string",
@@ -1426,7 +1426,7 @@ const tools = [
           recipient_type: {
             type: "string",
             enum: ["policyholder", "adjuster", "insurance_company", "referrer", "contractor", "manual"],
-            description: "Single-recipient shortcut instead of recipients[]"
+            description: "Single-recipient shortcut instead of recipients[]. For insurance_company, system auto-targets company + assigned adjuster when available."
           },
           recipient_name: {
             type: "string",
@@ -1569,7 +1569,7 @@ const tools = [
           },
           subject: {
             type: "string",
-            description: "Letter subject/title."
+            description: "Letter subject/title for the saved letter artifact."
           },
           body: {
             type: "string",
@@ -2035,6 +2035,12 @@ function buildClaimMailboxEmail(claimData: any, claimId: string): string {
   return `claim-${token}@claims.freedomclaims.work`;
 }
 
+function buildClaimNumberSubject(claimData: any, claimId: string): string {
+  const claimNumber = String(claimData?.claim_number || "").trim();
+  if (claimNumber) return claimNumber;
+  return claimId;
+}
+
 async function resolveCommunicationClaim(
   supabase: any,
   params: any,
@@ -2147,14 +2153,11 @@ async function resolveEmailRecipientForClaim(
   }
 
   if (recipientType === "insurance_company") {
-    if (!claimData?.insurance_email) return { error: "Insurance company email is missing on this claim." };
-    return {
-      recipient: {
-        email: claimData.insurance_email,
-        name: claimData.insurance_company || "Insurance Company",
-        type: "insurance_company",
-      },
-    };
+    const carrierRecipientSet = await resolveCarrierEmailRecipientsForClaim(supabase, claimData, claimId, input.recipient_name);
+    if (carrierRecipientSet.recipients.length > 0) {
+      return { recipient: carrierRecipientSet.recipients[0] };
+    }
+    return { error: carrierRecipientSet.errors[0] || "Insurance company email is missing on this claim." };
   }
 
   if (recipientType === "adjuster") {
@@ -2187,6 +2190,16 @@ async function resolveEmailRecipientForClaim(
           email: claimData.adjuster_email,
           name: claimData.adjuster_name || "Adjuster",
           type: "adjuster",
+        },
+      };
+    }
+
+    if (claimData?.insurance_email) {
+      return {
+        recipient: {
+          email: claimData.insurance_email,
+          name: claimData.insurance_company || "Insurance Company",
+          type: "insurance_company",
         },
       };
     }
@@ -2246,6 +2259,66 @@ async function resolveEmailRecipientForClaim(
   }
 
   return { error: "Unsupported email recipient type." };
+}
+
+async function resolveCarrierEmailRecipientsForClaim(
+  supabase: any,
+  claimData: any,
+  claimId: string,
+  adjusterNameFilter?: string,
+): Promise<{ recipients: ResolvedEmailRecipient[]; errors: string[] }> {
+  const recipients: ResolvedEmailRecipient[] = [];
+  const errors: string[] = [];
+
+  if (claimData?.insurance_email) {
+    recipients.push({
+      email: claimData.insurance_email,
+      name: claimData.insurance_company || "Insurance Company",
+      type: "insurance_company",
+    });
+  }
+
+  let adjusterRecipient: ResolvedEmailRecipient | null = null;
+  let query = supabase
+    .from("claim_adjusters")
+    .select("adjuster_name, adjuster_email, is_primary")
+    .eq("claim_id", claimId);
+
+  if (adjusterNameFilter) {
+    query = query.ilike("adjuster_name", `%${adjusterNameFilter}%`);
+  }
+
+  const { data: adjusters } = await query;
+  const withEmail = (adjusters || []).filter((a: any) => a.adjuster_email);
+  const chosenAdjuster = withEmail.find((a: any) => a.is_primary) || withEmail[0];
+
+  if (chosenAdjuster?.adjuster_email) {
+    adjusterRecipient = {
+      email: chosenAdjuster.adjuster_email,
+      name: chosenAdjuster.adjuster_name || "Adjuster",
+      type: "adjuster",
+    };
+  } else if (claimData?.adjuster_email) {
+    adjusterRecipient = {
+      email: claimData.adjuster_email,
+      name: claimData.adjuster_name || "Adjuster",
+      type: "adjuster",
+    };
+  }
+
+  if (adjusterRecipient) {
+    recipients.push(adjusterRecipient);
+  }
+
+  const dedupedRecipients = dedupeEmailRecipients(recipients);
+  if (dedupedRecipients.length === 0) {
+    errors.push("No insurance company or assigned adjuster email is available on this claim.");
+  }
+
+  return {
+    recipients: dedupedRecipients,
+    errors,
+  };
 }
 
 async function resolveSmsRecipientForClaim(
@@ -4833,8 +4906,10 @@ When the user explicitly asks to SEND an email/text/SMS now:
 1. Use send_email for email requests and send_sms for text/SMS requests.
 2. If the user says "draft and send", generate the content and then call the send tool in the same turn.
 3. If recipient details are missing, use the active claim context (default policyholder) when appropriate.
-4. If recipient is still ambiguous, ask ONE concise clarifying question.
-5. NEVER tell the user to copy/paste and send manually when they asked you to send it.
+4. For carrier emails, use recipient_type: "insurance_company" so the system sends to both insurance company email and assigned adjuster when available (with fallback to whichever exists).
+5. Outbound claim email subject must be the claim number only.
+6. If recipient is still ambiguous, ask ONE concise clarifying question.
+7. NEVER tell the user to copy/paste and send manually when they asked you to send it.
 
 ACTION TOOLS FOR "DO IT FOR ME":
 - send_portal_notification: Send claim portal notifications to client/contractors and create notification records.
@@ -6283,18 +6358,35 @@ ${knowledgeBaseContext || ''}`
               continue;
             }
 
-            const subject = String(params.subject || "").trim();
             const bodyText = String(params.body || "").trim();
-            if (!subject || !bodyText) {
-              answer += `\n\n❌ **Unable to send email:** subject and body are required.`;
+            if (!bodyText) {
+              answer += `\n\n❌ **Unable to send email:** body is required.`;
               continue;
             }
+            const subject = buildClaimNumberSubject(claimResolution.claim, claimResolution.claimId);
 
             const recipientInputs = collectRecipientInputs(params, "email");
             const resolvedRecipients: ResolvedEmailRecipient[] = [];
             const recipientErrors: string[] = [];
 
             for (const recipientInput of recipientInputs) {
+              const recipientType = normalizeRecipientType(recipientInput.recipient_type);
+              if (recipientType === "insurance_company" && !recipientInput.recipient_email) {
+                const carrierRecipientSet = await resolveCarrierEmailRecipientsForClaim(
+                  supabase,
+                  claimResolution.claim,
+                  claimResolution.claimId,
+                  recipientInput.recipient_name,
+                );
+                if (carrierRecipientSet.recipients.length > 0) {
+                  resolvedRecipients.push(...carrierRecipientSet.recipients);
+                }
+                if (carrierRecipientSet.errors.length > 0) {
+                  recipientErrors.push(...carrierRecipientSet.errors);
+                }
+                continue;
+              }
+
               const resolved = await resolveEmailRecipientForClaim(
                 supabase,
                 claimResolution.claim,
@@ -6615,9 +6707,21 @@ ${knowledgeBaseContext || ''}`
               claimResolution.claimId,
               params,
             );
-            const letterRecipient = recipientResolution.recipient;
+            const normalizedLetterRecipientType = normalizeRecipientType(params.recipient_type);
+            const carrierLetterRecipients =
+              normalizedLetterRecipientType === "insurance_company"
+                ? await resolveCarrierEmailRecipientsForClaim(
+                    supabase,
+                    claimResolution.claim,
+                    claimResolution.claimId,
+                    params.recipient_name,
+                  )
+                : null;
+            const letterRecipient =
+              carrierLetterRecipients?.recipients?.[0] || recipientResolution.recipient;
 
             const claimReference = claimResolution.claim.claim_number || claimResolution.claimId;
+            const outboundEmailSubject = buildClaimNumberSubject(claimResolution.claim, claimResolution.claimId);
             const toLine = letterRecipient
               ? `${letterRecipient.name}${letterRecipient.email ? ` <${letterRecipient.email}>` : ""}`
               : (params.recipient_name || "Recipient");
@@ -6665,19 +6769,25 @@ ${knowledgeBaseContext || ''}`
 
             let emailSendStatus = "not_sent";
             if (params.send_email === true) {
-              if (!letterRecipient?.email) {
-                emailSendStatus = `failed: ${recipientResolution.error || "recipient email not found"}`;
+              const emailRecipients =
+                carrierLetterRecipients && carrierLetterRecipients.recipients.length > 0
+                  ? carrierLetterRecipients.recipients
+                  : letterRecipient?.email
+                    ? [letterRecipient]
+                    : [];
+
+              if (emailRecipients.length === 0) {
+                const carrierError = carrierLetterRecipients?.errors?.[0];
+                emailSendStatus = `failed: ${carrierError || recipientResolution.error || "recipient email not found"}`;
               } else {
                 const claimEmailCc = buildClaimMailboxEmail(claimResolution.claim, claimResolution.claimId);
                 const sendPayload: Record<string, any> = {
-                  recipients: [
-                    {
-                      email: letterRecipient.email,
-                      name: letterRecipient.name,
-                      type: letterRecipient.type,
-                    },
-                  ],
-                  subject,
+                  recipients: emailRecipients.map((recipient) => ({
+                    email: recipient.email,
+                    name: recipient.name,
+                    type: recipient.type,
+                  })),
+                  subject: outboundEmailSubject,
                   body: bodyText,
                   claimId: claimResolution.claimId,
                   claimEmailCc,
@@ -6706,8 +6816,8 @@ ${knowledgeBaseContext || ''}`
                 if (sendResult.success) {
                   emailsSent.push({
                     claimId: claimResolution.claimId,
-                    subject,
-                    recipients: [letterRecipient.email],
+                    subject: outboundEmailSubject,
+                    recipients: emailRecipients.map((recipient) => recipient.email),
                   });
                 }
               }
@@ -6719,6 +6829,12 @@ ${knowledgeBaseContext || ''}`
               fileId: savedFile?.fileId || null,
               fileName: savedFile?.fileName || null,
               recipientEmail: letterRecipient?.email || null,
+              recipientEmails:
+                carrierLetterRecipients && carrierLetterRecipients.recipients.length > 0
+                  ? carrierLetterRecipients.recipients.map((recipient) => recipient.email)
+                  : letterRecipient?.email
+                    ? [letterRecipient.email]
+                    : [],
               emailSendStatus,
             });
 
