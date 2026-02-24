@@ -2454,6 +2454,25 @@ function truncateSentence(text: string, max = 180): string {
   return `${clean.slice(0, Math.max(0, max - 3)).trim()}...`;
 }
 
+function severityScore(raw?: string): number {
+  const normalized = String(raw || "").toLowerCase().trim();
+  if (!normalized) return 0;
+  if (/(critical|catastrophic|extreme)/.test(normalized)) return 5;
+  if (/(severe|major|high)/.test(normalized)) return 4;
+  if (/(moderate|medium)/.test(normalized)) return 3;
+  if (/(minor|low|light)/.test(normalized)) return 2;
+  return 1;
+}
+
+function conditionRatingScore(raw?: string): number {
+  const normalized = String(raw || "").toLowerCase().trim();
+  if (!normalized) return 0;
+  if (/(critical|severe|poor|failed|failing|unsafe|unserviceable)/.test(normalized)) return 4;
+  if (/(moderate|fair|compromised|weathered)/.test(normalized)) return 2;
+  if (/(good|minor|serviceable)/.test(normalized)) return 1;
+  return 1;
+}
+
 async function buildPhotoEstimateEvidenceContext(
   supabase: any,
   claimId: string,
@@ -2461,14 +2480,20 @@ async function buildPhotoEstimateEvidenceContext(
   try {
     const { data: photos } = await supabase
       .from("claim_photos")
-      .select("id, file_name, category, ai_detected_damages, ai_analysis_summary, ai_analyzed_at")
+      .select("id, file_name, category, ai_detected_damages, ai_analysis_summary, ai_analyzed_at, ai_condition_rating, ai_condition_notes")
       .eq("claim_id", claimId)
       .order("created_at", { ascending: false })
       .limit(120);
 
     const analyzedPhotos = (photos || []).filter((photo: any) => {
       const parsedDamages = parseDamagesArray(photo.ai_detected_damages);
-      return Boolean(photo.ai_analyzed_at || parsedDamages.length > 0 || photo.ai_analysis_summary);
+      return Boolean(
+        photo.ai_analyzed_at ||
+        parsedDamages.length > 0 ||
+        photo.ai_analysis_summary ||
+        photo.ai_condition_notes ||
+        photo.ai_condition_rating
+      );
     });
 
     const damageMap = new Map<
@@ -2476,6 +2501,7 @@ async function buildPhotoEstimateEvidenceContext(
       {
         label: string;
         count: number;
+        maxSeverityScore: number;
         severities: Set<string>;
         sampleLocations: Set<string>;
         sampleNotes: Set<string>;
@@ -2491,12 +2517,16 @@ async function buildPhotoEstimateEvidenceContext(
         const existing = damageMap.get(key) || {
           label: truncateSentence(damage.type, 80),
           count: 0,
+          maxSeverityScore: 0,
           severities: new Set<string>(),
           sampleLocations: new Set<string>(),
           sampleNotes: new Set<string>(),
         };
         existing.count += 1;
-        if (damage.severity) existing.severities.add(truncateSentence(damage.severity, 24));
+        if (damage.severity) {
+          existing.severities.add(truncateSentence(damage.severity, 24));
+          existing.maxSeverityScore = Math.max(existing.maxSeverityScore, severityScore(damage.severity));
+        }
         if (damage.location) existing.sampleLocations.add(truncateSentence(damage.location, 36));
         if (damage.notes) existing.sampleNotes.add(truncateSentence(damage.notes, 80));
         damageMap.set(key, existing);
@@ -2504,7 +2534,7 @@ async function buildPhotoEstimateEvidenceContext(
     }
 
     const topDamages = Array.from(damageMap.values())
-      .sort((a, b) => b.count - a.count)
+      .sort((a, b) => (b.maxSeverityScore - a.maxSeverityScore) || (b.count - a.count))
       .slice(0, 7);
 
     const { data: latestEstimate } = await supabase
@@ -2558,6 +2588,39 @@ async function buildPhotoEstimateEvidenceContext(
       return `- ${damage.label}${severity} documented in ${damage.count} photo(s)${location}`;
     });
 
+    const severePhotoHighlights = analyzedPhotos
+      .map((photo: any) => {
+        const damages = parseDamagesArray(photo.ai_detected_damages);
+        const maxDamageSeverity = damages.reduce((max, damage) => Math.max(max, severityScore(damage.severity)), 0);
+        const score =
+          (maxDamageSeverity * 2) +
+          conditionRatingScore(photo.ai_condition_rating) +
+          (photo.ai_condition_notes ? 0.75 : 0) +
+          Math.min(damages.length, 4) * 0.25;
+
+        return { photo, damages, score };
+      })
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4)
+      .map(({ photo, damages }) => {
+        const leadDamage = damages
+          .slice(0, 2)
+          .map((damage) => truncateSentence(damage.type, 50))
+          .join("; ");
+        const conditionPart = photo.ai_condition_rating
+          ? `Condition rating: ${photo.ai_condition_rating}.`
+          : "";
+        const notesPart = photo.ai_condition_notes
+          ? ` ${truncateSentence(photo.ai_condition_notes, 170)}`
+          : (photo.ai_analysis_summary ? ` ${truncateSentence(photo.ai_analysis_summary, 150)}` : "");
+        const damagePart = leadDamage
+          ? ` Key damages include ${leadDamage}.`
+          : "";
+        const categoryPart = photo.category ? ` (${photo.category})` : "";
+        return `- ${truncateSentence(photo.file_name || "Photo", 60)}${categoryPart}: ${conditionPart}${notesPart}${damagePart}`;
+      });
+
     const estimateHeader = latestEstimate
       ? `Latest estimate on file: ${latestEstimate.vendor || "Estimate"} v${latestEstimate.version || 1}` +
         `${latestEstimate.total_rcv ? `, total RCV $${Number(latestEstimate.total_rcv).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : ""}.`
@@ -2573,6 +2636,8 @@ async function buildPhotoEstimateEvidenceContext(
       fallbackPhotoNote,
       photoHighlights.length > 0 ? "Key photo-documented damages:" : "",
       ...photoHighlights,
+      severePhotoHighlights.length > 0 ? "Most severe photo condition findings (use this language in the draft):" : "",
+      ...severePhotoHighlights,
       estimateHeader,
       estimateHighlights.length > 0 ? "Estimate scope alignment points:" : "",
       ...estimateHighlights,
@@ -2647,6 +2712,8 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
               "- Keep greeting and courteous close.",
               "- Include important property damages from the photo documentation (not every single point).",
               "- Tie damages to estimate scope items already on file.",
+              "- Use specific, direct damage statements (example style): \"Stone wall is displaced due to vehicle impact. Wood siding and underlying plywood sustained impact damage. The impact displaced the chimney from its original position, creating gaps and exposing underlying structures.\"",
+              "- Pull details from the most severe photo condition findings and weave them naturally into the draft.",
               "- Explain what repairs are required for those damages and why those items are included in the estimate.",
               "- Ask for scope/payment update based on this evidence.",
               "- Do NOT mention AI, analysis tools, or automated photo review.",
