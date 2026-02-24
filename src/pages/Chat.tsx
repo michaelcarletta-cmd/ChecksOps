@@ -204,6 +204,31 @@ export default function Chat() {
         queryClient.invalidateQueries({ queryKey: ["claims"] });
       }
 
+      if (Array.isArray(data.emailsSent) && data.emailsSent.length > 0) {
+        const recipientCount = data.emailsSent.reduce(
+          (total: number, item: any) => total + (Array.isArray(item?.recipients) ? item.recipients.length : 0),
+          0
+        );
+        toast.success(
+          recipientCount > 0
+            ? `Email sent to ${recipientCount} recipient${recipientCount > 1 ? "s" : ""}`
+            : "Email sent"
+        );
+        queryClient.invalidateQueries({ queryKey: ["emails"] });
+      }
+
+      if (Array.isArray(data.smsSent) && data.smsSent.length > 0) {
+        const recipientCount = data.smsSent.reduce(
+          (total: number, item: any) => total + (Array.isArray(item?.recipients) ? item.recipients.length : 0),
+          0
+        );
+        toast.success(
+          recipientCount > 0
+            ? `SMS sent to ${recipientCount} recipient${recipientCount > 1 ? "s" : ""}`
+            : "SMS sent"
+        );
+      }
+
       const assistantMessage: AiMessage = {
         role: "assistant",
         content: data.answer,
