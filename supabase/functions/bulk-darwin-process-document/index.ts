@@ -10,6 +10,8 @@ const BATCH_SIZE = 5; // Small batch: each file runs AI classification + chunkin
 const JOB_TYPE = "bulk_darwin_process_document";
 const TTL_SECONDS = 120;
 const BATCH_MAX_RUNTIME_MS = 55_000; // Safe exit before edge timeout
+const PER_FILE_TIMEOUT_MS = 45_000; // Prevent single-file hangs from blocking the batch
+const MIN_FILE_BUDGET_MS = 3_000; // Leave enough budget to return/release lock
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -54,6 +56,25 @@ serve(async (req) => {
       }
     }
 
+    // Ensure lock row exists. If a migration was skipped, acquire_darwin_job can otherwise
+    // return "already running" with empty metadata forever.
+    const { data: existingJobRow, error: existingJobErr } = await supabase
+      .from("darwin_jobs")
+      .select("job_type")
+      .eq("job_type", JOB_TYPE)
+      .maybeSingle();
+    if (existingJobErr) {
+      console.warn(`[BulkDarwin] Unable to verify lock row before acquire: ${existingJobErr.message}`);
+    }
+    if (!existingJobRow) {
+      const { error: seedErr } = await supabase
+        .from("darwin_jobs")
+        .insert({ job_type: JOB_TYPE, status: "idle" });
+      if (seedErr && seedErr.code !== "23505") {
+        console.warn(`[BulkDarwin] Failed to seed lock row for ${JOB_TYPE}: ${seedErr.message}`);
+      }
+    }
+
     // Atomic acquire via RPC
     const { data: lockResult, error: lockErr } = await supabase.rpc("acquire_darwin_job", {
       p_job_type: JOB_TYPE,
@@ -68,8 +89,20 @@ serve(async (req) => {
     }
 
     if (!lockResult?.acquired) {
+      const hasLockMetadata =
+        !!lockResult?.claimed_by ||
+        !!lockResult?.heartbeat_at ||
+        !!lockResult?.started_at ||
+        !!lockResult?.status;
       return new Response(
-        JSON.stringify({ success: false, error: "Job already running", job: lockResult }),
+        JSON.stringify({
+          success: false,
+          error: hasLockMetadata
+            ? "Job already running"
+            : "Job lock metadata missing; fallback mode recommended",
+          error_code: hasLockMetadata ? "JOB_ALREADY_RUNNING" : "JOB_LOCK_METADATA_MISSING",
+          job: lockResult || null,
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -79,6 +112,7 @@ serve(async (req) => {
       .from("claim_files")
       .select("id, claim_id, file_name")
       .not("extracted_text", "is", null)
+      .neq("extracted_text", "")
       .or("processed_by_darwin.is.null,processed_by_darwin.eq.false")
       .order("id", { ascending: true })
       .limit(BATCH_SIZE);
@@ -119,23 +153,33 @@ serve(async (req) => {
       .from("claim_files")
       .select("id", { count: "exact", head: true })
       .not("extracted_text", "is", null)
+      .neq("extracted_text", "")
       .or("processed_by_darwin.is.null,processed_by_darwin.eq.false");
     if (cursor) countQuery = countQuery.gt("id", cursor);
     const { count: totalRemaining } = await countQuery;
 
     const log: Array<{ file_id: string; file_name: string; success: boolean; error?: string }> = [];
     const batchStart = Date.now();
-    let processedCount = 0;
+    let attemptedCount = 0;
 
     const processUrl = `${supabaseUrl}/functions/v1/darwin-process-document`;
 
     for (const file of files) {
-      if (Date.now() - batchStart > BATCH_MAX_RUNTIME_MS) {
+      const elapsedMs = Date.now() - batchStart;
+      const remainingBudgetMs = BATCH_MAX_RUNTIME_MS - elapsedMs;
+      if (remainingBudgetMs <= MIN_FILE_BUDGET_MS) {
         console.warn(
-          `[BulkDarwin] Approaching timeout after ${processedCount} files — exiting with cursor`
+          `[BulkDarwin] Approaching timeout after ${attemptedCount} attempted files — exiting with cursor`
         );
         break;
       }
+
+      const thisFileTimeoutMs = Math.min(
+        PER_FILE_TIMEOUT_MS,
+        Math.max(remainingBudgetMs - 1_000, MIN_FILE_BUDGET_MS)
+      );
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), thisFileTimeoutMs);
 
       try {
         const res = await fetch(processUrl, {
@@ -144,6 +188,7 @@ serve(async (req) => {
             Authorization: `Bearer ${serviceKey}`,
             "Content-Type": "application/json",
           },
+          signal: controller.signal,
           body: JSON.stringify({
             fileId: file.id,
             claimId: file.claim_id,
@@ -155,7 +200,6 @@ serve(async (req) => {
         const ok = res.ok && (data.success !== false);
 
         if (ok) {
-          processedCount++;
           log.push({ file_id: file.id, file_name: file.file_name, success: true });
           console.log(`[BulkDarwin] Processed ${file.file_name} (${file.id})`);
         } else {
@@ -168,25 +212,33 @@ serve(async (req) => {
           console.error(`[BulkDarwin] Failed ${file.file_name}: ${data.error || res.status}`);
         }
       } catch (err) {
+        const isTimeout = err instanceof DOMException && err.name === "AbortError";
         log.push({
           file_id: file.id,
           file_name: file.file_name,
           success: false,
-          error: err instanceof Error ? err.message : String(err),
+          error: isTimeout ? `Timeout after ${thisFileTimeoutMs}ms` : err instanceof Error ? err.message : String(err),
         });
         console.error(`[BulkDarwin] Error processing ${file.file_name}:`, err);
+      } finally {
+        clearTimeout(timeoutId);
       }
 
+      attemptedCount++;
       await supabase.rpc("heartbeat_darwin_job", { p_job_type: JOB_TYPE, p_claimed_by: "bulk-darwin-process-document" });
     }
 
-    const lastId = files[Math.min(processedCount, files.length - 1)]?.id;
+    // Cursor must advance by attempted rows (not successful rows), otherwise failed files
+    // can cause the batch to revisit almost the same window repeatedly.
+    const lastAttemptedIndex = Math.min(attemptedCount, files.length) - 1;
+    const lastId = lastAttemptedIndex >= 0 ? files[lastAttemptedIndex]?.id : cursor;
     const successCount = log.filter((l) => l.success).length;
 
     let finalCountQuery = supabase
       .from("claim_files")
       .select("id", { count: "exact", head: true })
       .not("extracted_text", "is", null)
+      .neq("extracted_text", "")
       .or("processed_by_darwin.is.null,processed_by_darwin.eq.false");
     if (lastId) finalCountQuery = finalCountQuery.gt("id", lastId);
     const { count: finalRemaining } = await finalCountQuery;

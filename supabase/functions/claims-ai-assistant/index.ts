@@ -271,8 +271,27 @@ async function getQueryEmbedding(question: string): Promise<number[] | null> {
   }
 }
 
+interface KnowledgeSearchResult {
+  context: string;
+  retrievalMode: "none" | "keyword_only" | "hybrid";
+  chunkCount: number;
+  sourceCount: number;
+  topSources: string[];
+}
+
+interface EvidencePlanDecision {
+  strategy: "internal_only" | "internal_preferred" | "hybrid_balanced" | "web_priority";
+  reason: string;
+  shouldSearchWeb: boolean;
+  searchQuery: string | null;
+}
+
 // Search knowledge base using hybrid search (embedding + keyword)
-async function searchKnowledgeBase(supabase: any, question: string, category?: string): Promise<string> {
+async function searchKnowledgeBase(
+  supabase: any,
+  question: string,
+  category?: string
+): Promise<KnowledgeSearchResult> {
   try {
     const MAX_CHUNKS_PER_DOC = 3;
     const TOP_K = 10;
@@ -436,7 +455,13 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
 
     if (diverseChunks.length === 0) {
       console.log("[KB Retrieval] No matching chunks found for question:", question);
-      return "";
+      return {
+        context: "",
+        retrievalMode: queryEmbedding ? "hybrid" : "keyword_only",
+        chunkCount: 0,
+        sourceCount: 0,
+        topSources: [],
+      };
     }
 
     let knowledgeContext = "\n\n=== KNOWLEDGE BASE REFERENCE MATERIAL ===\n";
@@ -450,11 +475,114 @@ async function searchKnowledgeBase(supabase: any, question: string, category?: s
     
     knowledgeContext += "=== END KNOWLEDGE BASE CONTENT ===\n";
 
-    return knowledgeContext;
+    const topSources = Array.from(
+      new Set(
+        diverseChunks
+          .map((chunk: any) => String(chunk.doc_file_name || "").trim())
+          .filter((name: string) => name.length > 0)
+      )
+    ).slice(0, 5);
+
+    return {
+      context: knowledgeContext,
+      retrievalMode: queryEmbedding ? "hybrid" : "keyword_only",
+      chunkCount: diverseChunks.length,
+      sourceCount: topSources.length,
+      topSources,
+    };
   } catch (error) {
     console.error("Error searching knowledge base:", error);
-    return "";
+    return {
+      context: "",
+      retrievalMode: "none",
+      chunkCount: 0,
+      sourceCount: 0,
+      topSources: [],
+    };
   }
+}
+
+function decideEvidencePlan(params: {
+  question: string;
+  sourceMode: "internal_only" | "hybrid";
+  isOperationalRequest: boolean;
+  reportType?: string;
+  kbSourceCount: number;
+  claimLossType?: string | null;
+}): EvidencePlanDecision {
+  const rawQuestion = params.question || "";
+  const lossType = params.claimLossType || "property damage";
+  const defaultQuery = `${lossType} insurance claim ${rawQuestion}`.trim();
+
+  if (params.sourceMode === "internal_only") {
+    return {
+      strategy: "internal_only",
+      reason: "Internal-only mode is enabled, so external web search is disabled.",
+      shouldSearchWeb: false,
+      searchQuery: null,
+    };
+  }
+
+  if (params.isOperationalRequest) {
+    return {
+      strategy: "internal_preferred",
+      reason: "Operational request detected; internal sources are preferred and web search is unnecessary.",
+      shouldSearchWeb: false,
+      searchQuery: null,
+    };
+  }
+
+  if (params.reportType) {
+    return {
+      strategy: "internal_preferred",
+      reason: "Report generation uses claim/internal context first unless recency is explicitly requested.",
+      shouldSearchWeb: false,
+      searchQuery: null,
+    };
+  }
+
+  const asksCurrentInfo = /\b(latest|current|recent|today|new law|updated|as of|202[4-9])\b/i.test(rawQuestion);
+  const explicitlyRequestsWeb = /\b(web|internet|online|google|external source|search the web)\b/i.test(rawQuestion);
+  const explicitlyRequestsInternal = /\b(internal|in-house|our docs|knowledge base|from my files)\b/i.test(rawQuestion);
+  const legalOrCodeHeavy = /\b(regulation|statute|law|legal|code|building code|irc|ibc|astm|manufacturer|department of insurance|doi)\b/i.test(rawQuestion);
+
+  if (explicitlyRequestsInternal) {
+    return {
+      strategy: "internal_preferred",
+      reason: "User explicitly requested in-house/internal evidence.",
+      shouldSearchWeb: false,
+      searchQuery: null,
+    };
+  }
+
+  if (explicitlyRequestsWeb || asksCurrentInfo) {
+    return {
+      strategy: "web_priority",
+      reason: explicitlyRequestsWeb
+        ? "User explicitly requested web/external sources."
+        : "Question asks for current/recent information, so web verification is prioritized.",
+      shouldSearchWeb: true,
+      searchQuery: defaultQuery,
+    };
+  }
+
+  if (legalOrCodeHeavy && params.kbSourceCount === 0) {
+    return {
+      strategy: "hybrid_balanced",
+      reason: "Legal/code question with no matching in-house KB sources found; using web fallback.",
+      shouldSearchWeb: true,
+      searchQuery: defaultQuery,
+    };
+  }
+
+  return {
+    strategy: "internal_preferred",
+    reason: params.kbSourceCount > 0
+      ? "Relevant in-house KB sources were found; prioritizing internal evidence."
+      : "No explicit web requirement detected; defaulting to internal-first guidance.",
+    shouldSearchWeb: false,
+    searchQuery: null,
+  };
 }
 
 // Report generation prompts
@@ -1399,7 +1527,7 @@ const tools = [
           },
           body: {
             type: "string",
-            description: "Email body text to send."
+            description: "Professional, ready-to-send email body. Include greeting, claim context, clear ask, and courteous closing."
           },
           recipients: {
             type: "array",
@@ -2176,6 +2304,25 @@ function dedupeSmsRecipients(recipients: ResolvedSmsRecipient[]): ResolvedSmsRec
   return deduped;
 }
 
+function isCarrierFacingEmailRecipients(recipients: ResolvedEmailRecipient[]): boolean {
+  return recipients.some((recipient) => {
+    const recipientType = String(recipient.type || "").toLowerCase();
+    return recipientType === "adjuster" || recipientType === "insurance_company" || recipientType.includes("carrier");
+  });
+}
+
+function shouldInjectPhotoEvidenceForEmail(
+  question: string,
+  bodyText: string,
+  carrierFacing: boolean,
+): boolean {
+  if (shouldUsePhotoDamageEvidenceForCommunication(question, bodyText)) return true;
+  if (!carrierFacing) return false;
+
+  const combined = `${question || ""}\n${bodyText || ""}`.toLowerCase();
+  return /\b(estimate|scope|damage|damages|repair|replace|supplement|underpaid|payment|loss|property)\b/i.test(combined);
+}
+
 function buildClaimMailboxEmail(claimData: any, claimId: string): string {
   const sanitizedPolicyNumber = claimData?.policy_number
     ? String(claimData.policy_number).replace(/[^a-zA-Z0-9]/g, "").toLowerCase()
@@ -2326,21 +2473,46 @@ function truncateSentence(text: string, max = 180): string {
   return `${clean.slice(0, Math.max(0, max - 3)).trim()}...`;
 }
 
+function severityScore(raw?: string): number {
+  const normalized = String(raw || "").toLowerCase().trim();
+  if (!normalized) return 0;
+  if (/(critical|catastrophic|extreme)/.test(normalized)) return 5;
+  if (/(severe|major|high)/.test(normalized)) return 4;
+  if (/(moderate|medium)/.test(normalized)) return 3;
+  if (/(minor|low|light)/.test(normalized)) return 2;
+  return 1;
+}
+
+function conditionRatingScore(raw?: string): number {
+  const normalized = String(raw || "").toLowerCase().trim();
+  if (!normalized) return 0;
+  if (/(critical|severe|poor|failed|failing|unsafe|unserviceable)/.test(normalized)) return 4;
+  if (/(moderate|fair|compromised|weathered)/.test(normalized)) return 2;
+  if (/(good|minor|serviceable)/.test(normalized)) return 1;
+  return 1;
+}
+
 async function buildPhotoEstimateEvidenceContext(
   supabase: any,
   claimId: string,
-): Promise<{ summaryText: string; analyzedPhotoCount: number; estimateLineCount: number }> {
+): Promise<{ summaryText: string; analyzedPhotoCount: number; estimateLineCount: number; conditionNarratives: string[] }> {
   try {
     const { data: photos } = await supabase
       .from("claim_photos")
-      .select("id, file_name, category, ai_detected_damages, ai_analysis_summary, ai_analyzed_at")
+      .select("id, file_name, category, ai_detected_damages, ai_analysis_summary, ai_analyzed_at, ai_condition_rating, ai_condition_notes")
       .eq("claim_id", claimId)
       .order("created_at", { ascending: false })
       .limit(120);
 
     const analyzedPhotos = (photos || []).filter((photo: any) => {
       const parsedDamages = parseDamagesArray(photo.ai_detected_damages);
-      return Boolean(photo.ai_analyzed_at || parsedDamages.length > 0 || photo.ai_analysis_summary);
+      return Boolean(
+        photo.ai_analyzed_at ||
+        parsedDamages.length > 0 ||
+        photo.ai_analysis_summary ||
+        photo.ai_condition_notes ||
+        photo.ai_condition_rating
+      );
     });
 
     const damageMap = new Map<
@@ -2348,6 +2520,7 @@ async function buildPhotoEstimateEvidenceContext(
       {
         label: string;
         count: number;
+        maxSeverityScore: number;
         severities: Set<string>;
         sampleLocations: Set<string>;
         sampleNotes: Set<string>;
@@ -2363,12 +2536,16 @@ async function buildPhotoEstimateEvidenceContext(
         const existing = damageMap.get(key) || {
           label: truncateSentence(damage.type, 80),
           count: 0,
+          maxSeverityScore: 0,
           severities: new Set<string>(),
           sampleLocations: new Set<string>(),
           sampleNotes: new Set<string>(),
         };
         existing.count += 1;
-        if (damage.severity) existing.severities.add(truncateSentence(damage.severity, 24));
+        if (damage.severity) {
+          existing.severities.add(truncateSentence(damage.severity, 24));
+          existing.maxSeverityScore = Math.max(existing.maxSeverityScore, severityScore(damage.severity));
+        }
         if (damage.location) existing.sampleLocations.add(truncateSentence(damage.location, 36));
         if (damage.notes) existing.sampleNotes.add(truncateSentence(damage.notes, 80));
         damageMap.set(key, existing);
@@ -2376,7 +2553,7 @@ async function buildPhotoEstimateEvidenceContext(
     }
 
     const topDamages = Array.from(damageMap.values())
-      .sort((a, b) => b.count - a.count)
+      .sort((a, b) => (b.maxSeverityScore - a.maxSeverityScore) || (b.count - a.count))
       .slice(0, 7);
 
     const { data: latestEstimate } = await supabase
@@ -2427,8 +2604,72 @@ async function buildPhotoEstimateEvidenceContext(
         damage.sampleLocations.size > 0
           ? ` near ${Array.from(damage.sampleLocations)[0]}`
           : "";
-      return `- ${damage.label}${severity} seen across ${damage.count} analyzed photo(s)${location}`;
+      return `- ${damage.label}${severity} documented in ${damage.count} photo(s)${location}`;
     });
+
+    const severePhotoHighlights = analyzedPhotos
+      .map((photo: any) => {
+        const damages = parseDamagesArray(photo.ai_detected_damages);
+        const maxDamageSeverity = damages.reduce((max, damage) => Math.max(max, severityScore(damage.severity)), 0);
+        const score =
+          (maxDamageSeverity * 2) +
+          conditionRatingScore(photo.ai_condition_rating) +
+          (photo.ai_condition_notes ? 0.75 : 0) +
+          Math.min(damages.length, 4) * 0.25;
+
+        return { photo, damages, score };
+      })
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4)
+      .map(({ photo, damages }) => {
+        const leadDamage = damages
+          .slice(0, 2)
+          .map((damage) => truncateSentence(damage.type, 50))
+          .join("; ");
+        const conditionPart = photo.ai_condition_rating
+          ? `Condition rating: ${photo.ai_condition_rating}.`
+          : "";
+        const notesPart = photo.ai_condition_notes
+          ? ` ${truncateSentence(photo.ai_condition_notes, 170)}`
+          : (photo.ai_analysis_summary ? ` ${truncateSentence(photo.ai_analysis_summary, 150)}` : "");
+        const damagePart = leadDamage
+          ? ` Key damages include ${leadDamage}.`
+          : "";
+        const categoryPart = photo.category ? ` (${photo.category})` : "";
+        return `- ${truncateSentence(photo.file_name || "Photo", 60)}${categoryPart}: ${conditionPart}${notesPart}${damagePart}`;
+      });
+
+    const conditionNarratives = analyzedPhotos
+      .map((photo: any) => {
+        const damages = parseDamagesArray(photo.ai_detected_damages);
+        const leadDamage = damages
+          .slice(0, 2)
+          .map((damage) => truncateSentence(damage.type, 50))
+          .join("; ");
+        const notes = photo.ai_condition_notes
+          ? truncateSentence(photo.ai_condition_notes, 220)
+          : (photo.ai_analysis_summary ? truncateSentence(photo.ai_analysis_summary, 180) : "");
+
+        const narrativeParts = [
+          leadDamage ? `Damage observed: ${leadDamage}.` : "",
+          notes,
+        ].filter(Boolean);
+        if (narrativeParts.length === 0) return "";
+
+        const severityWeight =
+          damages.reduce((max, damage) => Math.max(max, severityScore(damage.severity)), 0) +
+          conditionRatingScore(photo.ai_condition_rating);
+
+        return {
+          text: truncateSentence(narrativeParts.join(" "), 240),
+          severityWeight,
+        };
+      })
+      .filter((entry: any) => Boolean(entry?.text))
+      .sort((a: any, b: any) => b.severityWeight - a.severityWeight)
+      .slice(0, 4)
+      .map((entry: any) => entry.text);
 
     const estimateHeader = latestEstimate
       ? `Latest estimate on file: ${latestEstimate.vendor || "Estimate"} v${latestEstimate.version || 1}` +
@@ -2437,14 +2678,16 @@ async function buildPhotoEstimateEvidenceContext(
 
     const fallbackPhotoNote =
       analyzedPhotos.length === 0
-        ? "No AI-analyzed photos were found on this claim yet."
+        ? "No photo damage documentation was found on this claim yet."
         : "";
 
     const summaryText = [
-      `AI-analyzed photos reviewed: ${analyzedPhotos.length}.`,
+      `Photo documentation reviewed: ${analyzedPhotos.length} image(s).`,
       fallbackPhotoNote,
       photoHighlights.length > 0 ? "Key photo-documented damages:" : "",
       ...photoHighlights,
+      severePhotoHighlights.length > 0 ? "Most severe photo condition findings (use this language in the draft):" : "",
+      ...severePhotoHighlights,
       estimateHeader,
       estimateHighlights.length > 0 ? "Estimate scope alignment points:" : "",
       ...estimateHighlights,
@@ -2456,11 +2699,46 @@ async function buildPhotoEstimateEvidenceContext(
       summaryText: truncateSentence(summaryText, 2600),
       analyzedPhotoCount: analyzedPhotos.length,
       estimateLineCount: estimateLineItems.length,
+      conditionNarratives,
     };
   } catch (error) {
     console.error("Error building photo/estimate evidence context:", error);
-    return { summaryText: "", analyzedPhotoCount: 0, estimateLineCount: 0 };
+    return { summaryText: "", analyzedPhotoCount: 0, estimateLineCount: 0, conditionNarratives: [] };
   }
+}
+
+function ensureConditionNarrativesInBody(
+  body: string,
+  conditionNarratives: string[] = [],
+  carrierFacing: boolean,
+): string {
+  const cleanBody = String(body || "").trim();
+  if (!cleanBody) return cleanBody;
+  const narratives = (conditionNarratives || []).map((n) => String(n || "").trim()).filter(Boolean);
+  if (narratives.length === 0) return cleanBody;
+
+  const bodyNormalized = normalizeDamageKey(cleanBody);
+  const matchedNarratives = narratives.filter((narrative) => {
+    const tokens = normalizeDamageKey(narrative)
+      .split(" ")
+      .filter((token) => token.length >= 6)
+      .slice(0, 8);
+    return tokens.some((token) => bodyNormalized.includes(token));
+  });
+
+  if (matchedNarratives.length >= Math.min(2, narratives.length)) {
+    return cleanBody;
+  }
+
+  const leadLine = carrierFacing
+    ? "The observed property conditions include the following documented impacts:"
+    : "The observed property conditions include the following documented findings:";
+  const repairLine = carrierFacing
+    ? "These conditions require the repair and replacement scope reflected in our estimate to restore the property to pre-loss condition."
+    : "These conditions support the repair and replacement scope reflected in our estimate.";
+
+  const additions = narratives.slice(0, 3).map((narrative) => `- ${truncateSentence(narrative, 220)}`);
+  return `${cleanBody}\n\n${leadLine}\n${additions.join("\n")}\n${repairLine}`;
 }
 
 async function rewriteEmailBodyWithPhotoEstimateEvidence(
@@ -2468,11 +2746,13 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
   claimData: any,
   recipientName: string | undefined,
   evidenceSummary: string,
+  options?: { carrierFacing?: boolean; conditionNarratives?: string[] },
 ): Promise<string> {
   const trimmedBody = String(rawBody || "").trim();
   if (!trimmedBody || !evidenceSummary.trim()) {
     return trimmedBody;
   }
+  const carrierFacing = options?.carrierFacing === true;
 
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) {
@@ -2483,6 +2763,10 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
   const carrier = String(claimData?.insurance_company || "the insurance carrier").trim();
   const policyholder = String(claimData?.policyholder_name || "the insured").trim();
   const recipient = recipientName && !recipientName.includes("@") ? recipientName : "Adjuster";
+  const estimateLeadIn = "Attached is our estimate for the damages sustained to the property.";
+  const fallbackPrefix = carrierFacing
+    ? `${estimateLeadIn}\n\nThis estimate is in line with the documented damages found, including:\n${evidenceSummary}\n\nBased on these documented impacts and resulting condition findings, the full repair scope reflected in our estimate is required to restore the property to pre-loss condition. Please provide your revised scope and payment position in writing.`
+    : `${estimateLeadIn}\n\nThis estimate is in line with the damages found and the corresponding repair scope, including:\n${evidenceSummary}`;
 
   try {
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -2498,7 +2782,7 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
           {
             role: "system",
             content:
-              "You are a senior public-adjuster communication specialist. Rewrite emails in plain text only (no markdown). Keep professional tone, concise but specific. Include only the strongest documented damages and clearly tie them to estimate scope.",
+              "You are a senior public-adjuster communication specialist. Rewrite emails in plain text only (no markdown). Keep professional tone, concise but specific. Include only the strongest documented damages and clearly tie them to estimate scope. NEVER mention AI, automated analysis, models, or computer vision.",
           },
           {
             role: "user",
@@ -2513,10 +2797,22 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
               evidenceSummary,
               "",
               "Requirements:",
+              `- Include this sentence naturally near the beginning: "${estimateLeadIn}"`,
+              "- Include a sentence like: \"This estimate is in line with the damages found, such as ...\" and then list key damages.",
               "- Keep greeting and courteous close.",
-              "- Include important property damages from analyzed photos (not every single point).",
+              "- Include important property damages from the photo documentation (not every single point).",
               "- Tie damages to estimate scope items already on file.",
+              "- Use specific, direct damage statements (example style): \"Stone wall is displaced due to vehicle impact. Wood siding and underlying plywood sustained impact damage. The impact displaced the chimney from its original position, creating gaps and exposing underlying structures.\"",
+              "- Pull details from the most severe photo condition findings and weave them naturally into the draft.",
+              "- Explain what repairs are required for those damages and why those items are included in the estimate.",
+              carrierFacing
+                ? "- This is carrier-facing: use assertive but professional claim-advocacy language. Use decisive phrasing (e.g., \"documented damage confirms,\" \"requires replacement/repair\"). Avoid hedging terms like \"might\" or \"possibly.\""
+                : "- Use collaborative but professional tone suitable for client-facing communications.",
+              carrierFacing
+                ? "- Include a direct ask for revised scope and payment alignment, with a request for written confirmation."
+                : "- Include a clear request for next steps or confirmation.",
               "- Ask for scope/payment update based on this evidence.",
+              "- Do NOT mention AI, analysis tools, or automated photo review.",
               "- Return only the final email body text.",
             ].join("\n"),
           },
@@ -2527,18 +2823,34 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Photo/estimate rewrite failed:", response.status, errorText);
-      return `${trimmedBody}\n\n${evidenceSummary}`;
+      return ensureConditionNarrativesInBody(
+        `${fallbackPrefix}\n\n${trimmedBody}`,
+        options?.conditionNarratives || [],
+        carrierFacing,
+      );
     }
 
     const data = await response.json();
     const rewritten = String(data?.choices?.[0]?.message?.content || "").trim();
     if (!rewritten) {
-      return `${trimmedBody}\n\n${evidenceSummary}`;
+      return ensureConditionNarrativesInBody(
+        `${fallbackPrefix}\n\n${trimmedBody}`,
+        options?.conditionNarratives || [],
+        carrierFacing,
+      );
     }
-    return rewritten;
+    return ensureConditionNarrativesInBody(
+      rewritten,
+      options?.conditionNarratives || [],
+      carrierFacing,
+    );
   } catch (error) {
     console.error("Error rewriting email with photo/estimate evidence:", error);
-    return `${trimmedBody}\n\n${evidenceSummary}`;
+    return ensureConditionNarrativesInBody(
+      `${fallbackPrefix}\n\n${trimmedBody}`,
+      options?.conditionNarratives || [],
+      carrierFacing,
+    );
   }
 }
 async function resolveCommunicationClaim(
@@ -2963,41 +3275,115 @@ async function invokeEdgeFunction(
   payload: Record<string, any>,
   authHeader?: string | null,
   fallbackServiceKey?: string,
-): Promise<{ success: boolean; data?: any; error?: string }> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+): Promise<{ success: boolean; data?: any; error?: string; status?: number }> {
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+  const serviceAuthHeader = fallbackServiceKey ? `Bearer ${fallbackServiceKey}` : undefined;
+
+  const parseJwtRole = (header?: string | null): string | null => {
+    if (!header || !header.startsWith("Bearer ")) return null;
+    const token = header.replace("Bearer ", "").trim();
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    try {
+      const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const padding = "=".repeat((4 - (normalized.length % 4)) % 4);
+      const decoded = atob(normalized + padding);
+      const payloadObj = JSON.parse(decoded);
+      return payloadObj?.role || payloadObj?.app_metadata?.role || null;
+    } catch {
+      return null;
+    }
   };
 
-  if (authHeader) {
-    headers.Authorization = authHeader;
-  } else if (fallbackServiceKey) {
-    headers.Authorization = `Bearer ${fallbackServiceKey}`;
-  }
+  const requestedRole = parseJwtRole(authHeader);
+  const shouldUseUserAuth = requestedRole === "authenticated";
+  const initialAuthorization = shouldUseUserAuth
+    ? (authHeader || undefined)
+    : (serviceAuthHeader || authHeader || undefined);
 
-  try {
-    const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-    });
+  const invokeWithAuth = async (
+    authorization?: string,
+  ): Promise<{ success: boolean; data?: any; error?: string; status?: number }> => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
 
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      return {
-        success: false,
-        data,
-        error: data?.error || data?.message || `Edge function ${functionName} failed with ${response.status}`,
-      };
+    if (authorization) {
+      headers.Authorization = authorization;
+    }
+    if (supabaseAnonKey) {
+      headers.apikey = supabaseAnonKey;
+    } else if (fallbackServiceKey) {
+      headers.apikey = fallbackServiceKey;
     }
 
-    return { success: true, data };
-  } catch (err) {
+    try {
+      const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      const rawText = await response.text();
+      let data: any = {};
+      if (rawText) {
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          data = { raw: rawText };
+        }
+      }
+
+      if (!response.ok) {
+        const responseError =
+          data?.error ||
+          data?.message ||
+          (rawText ? rawText.slice(0, 400) : "") ||
+          `Edge function ${functionName} failed with ${response.status}`;
+
+        return {
+          success: false,
+          data,
+          status: response.status,
+          error: String(responseError),
+        };
+      }
+
+      return { success: true, data, status: response.status };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : `Failed to call ${functionName}`,
+      };
+    }
+  };
+
+  const firstAttempt = await invokeWithAuth(initialAuthorization);
+  if (firstAttempt.success) {
+    return firstAttempt;
+  }
+
+  const shouldRetryWithServiceAuth = Boolean(
+    serviceAuthHeader &&
+    initialAuthorization !== serviceAuthHeader &&
+    (firstAttempt.status === 401 || firstAttempt.status === 403),
+  );
+
+  if (shouldRetryWithServiceAuth) {
+    const fallbackAttempt = await invokeWithAuth(serviceAuthHeader);
+    if (fallbackAttempt.success) {
+      return fallbackAttempt;
+    }
+
     return {
       success: false,
-      error: err instanceof Error ? err.message : `Failed to call ${functionName}`,
+      data: fallbackAttempt.data || firstAttempt.data,
+      status: fallbackAttempt.status || firstAttempt.status,
+      error: fallbackAttempt.error || firstAttempt.error,
     };
   }
+
+  return firstAttempt;
 }
 
 async function getAuthenticatedUserId(supabase: any, authHeader?: string | null): Promise<string | null> {
@@ -4975,7 +5361,15 @@ serve(async (req) => {
     let claim = null;
     let claimsOverview = "";
     let knowledgeBaseContext = "";
+    let knowledgeBaseResult: KnowledgeSearchResult = {
+      context: "",
+      retrievalMode: "none",
+      chunkCount: 0,
+      sourceCount: 0,
+      topSources: [],
+    };
     let staffMembers: { id: string; name: string; email: string }[] = [];
+    const sourceMode: "internal_only" | "hybrid" = body.sourceMode === "internal_only" ? "internal_only" : "hybrid";
 
     // Get staff members for task assignment
     staffMembers = await getStaffMembers(supabase);
@@ -5309,11 +5703,12 @@ If the document is ambiguous about the type of loss, ask the user to clarify rat
     }
 
     // Search the knowledge base ONLY for analytical/strategic questions — NOT for simple operational tasks
-    const operationalPatterns = /^(create|add|make|mark|complete|delete|remove|update|change|set|assign|close|reopen|show|list|find tasks|bulk|share|remind|jot|note|what (tasks|claims|did I)|how many claims|send (an? )?(email|text|sms|portal|notification)|email (the )?(client|policyholder|adjuster|insured)|text (the )?(client|policyholder|adjuster|insured)|notify (the )?(client|contractor|portal)|portal message|draft and send|write (a )?letter|send (a )?letter|schedule (a )?call|book (a )?call|set (up )?(a )?call)/i;
+    const operationalPatterns = /^(create|add|make|mark|complete|delete|remove|update|change|set|assign|close|reopen|show|list|find tasks|bulk|share|remind|jot|note|what (tasks|claims|did I)|how many claims|send (an? )?(email|text|sms|portal|notification)|email (the )?(client|policyholder|adjuster|insured)|text (the )?(client|policyholder|adjuster|insured)|notify (the )?(client|contractor|portal)|portal message|draft (an? )?(email|text|sms|message)|draft and send|write (a )?letter|send (a )?letter|schedule (a )?call|book (a )?call|set (up )?(a )?call)/i;
     const isOperationalRequest = operationalPatterns.test((question || '').trim());
     
     if (!isOperationalRequest) {
-      knowledgeBaseContext = await searchKnowledgeBase(supabase, reportQuestion || question);
+      knowledgeBaseResult = await searchKnowledgeBase(supabase, reportQuestion || question);
+      knowledgeBaseContext = knowledgeBaseResult.context;
     } else {
       console.log('[KB Retrieval] Skipped — operational/task request detected');
     }
@@ -5321,7 +5716,6 @@ If the document is ambiguous about the type of loss, ask the user to clarify rat
     // === CROSS-CLAIM RETRIEVAL: Search vectorized claim docs for precedents ===
     let crossClaimContext = "";
     let playbookContext = "";
-    const sourceMode = body.sourceMode || 'hybrid'; // 'internal_only' or 'hybrid'
     
     // Fire cross-claim search for claim mode OR when a document is uploaded (even in general chat)
     const hasUploadedDoc = !!(resolvedDocContent && resolvedDocContent.trim());
@@ -5344,23 +5738,31 @@ If the document is ambiguous about the type of loss, ask the user to clarify rat
       }
     }
     
-    // Determine if web search is needed
+    // Determine if web search is needed (internal-first unless recency/external signals require web)
     let webSearchResults = "";
+    let webSearchQueryUsed: string | null = null;
     let webSearchStatus: "not_requested" | "success" | "unavailable" | "failed" = "not_requested";
-    const isAcvQuestion = /\bacv\b|actual cash value|code upgrade|ordinance and law|ordinance & law/i.test(question || "");
-    const needsWebSearch = !reportType && !isAcvQuestion && /regulation|law|legal|code|requirement|guideline|best practice|industry standard/i.test(question);
-    
-    if (needsWebSearch) {
-      webSearchStatus = "failed";
-      console.log("Performing web search for:", question);
-      const lossType = claim?.loss_type || "property damage";
-      const searchQuery = `${lossType} insurance claim ${question}`;
-      webSearchResults = await searchWeb(searchQuery);
-      if (webSearchResults && webSearchResults !== "Web search unavailable: API key not configured") {
+    const evidencePlan = decideEvidencePlan({
+      question: question || reportQuestion || "",
+      sourceMode,
+      isOperationalRequest,
+      reportType,
+      kbSourceCount: knowledgeBaseResult.sourceCount,
+      claimLossType: claim?.loss_type || null,
+    });
+
+    if (evidencePlan.shouldSearchWeb && evidencePlan.searchQuery) {
+      webSearchQueryUsed = evidencePlan.searchQuery;
+      console.log("[EvidencePlan] Performing web search:", {
+        query: webSearchQueryUsed,
+        reason: evidencePlan.reason,
+      });
+      webSearchResults = await searchWeb(webSearchQueryUsed);
+      if (webSearchResults && !webSearchResults.toLowerCase().includes("unavailable") && !webSearchResults.toLowerCase().includes("failed")) {
         webSearchStatus = "success";
         webSearchResults = `\n\nRelevant Industry Information:\n${webSearchResults}`;
       } else {
-        webSearchStatus = "unavailable";
+        webSearchStatus = webSearchResults.toLowerCase().includes("failed") ? "failed" : "unavailable";
       }
     }
 
@@ -5417,7 +5819,7 @@ When the user asks to draft, review, edit, approve, or "let me check it first":
 2. Do NOT call send_email/send_sms unless the user explicitly asks to send now.
 3. Drafts should be polished and ready for approval with greeting, context, clear ask, and closing.
 4. Assume the user can edit the draft body and click an "Approve & Send" button in the UI.
-5. If the user asks for a draft "based on damage in the photos", ground the draft in AI-analyzed photo damages and align those points to estimate scope already on file.
+5. If the user asks for a draft "based on damage in the photos", ground the draft in photo-documented damages and align those points to estimate scope already on file.
 ACTION TOOLS FOR "DO IT FOR ME":
 - send_portal_notification: Send claim portal notifications to client/contractors and create notification records.
 - create_claim_letter: Create/save a letter file to the claim and optionally send it immediately by email.
@@ -5574,6 +5976,7 @@ FORMATTING REQUIREMENT: Write in plain text only. Do NOT use markdown formatting
 === RESPONSE DISCIPLINE ===
 RULE #1: Match your response to the request complexity.
 - For SIMPLE OPERATIONAL requests (create a task, update status, bulk operations, assign staff, list tasks, close claims): Execute the action immediately and confirm briefly. Do NOT reference training materials, knowledge base content, or provide unsolicited analysis.
+- For COMMUNICATION DRAFTING requests (email/text/letter/portal drafts): deliver polished, professional, ready-to-send copy. These are deliverables, not one-line confirmations.
 - For ANALYTICAL/STRATEGIC requests (denial analysis, coverage questions, rebuttal strategy, evidence evaluation): Provide thorough, structured analysis using all available context including knowledge base materials.
 - NEVER pad a simple request with irrelevant knowledge base citations or training material references.
 - If you have knowledge base content in your context but the question is operational, IGNORE the knowledge base content entirely.
@@ -5680,7 +6083,8 @@ You have access to the user's active claims and pending tasks. Provide practical
 
 === RESPONSE DISCIPLINE (HIGHEST PRIORITY) ===
 RULE #1: Match your response to the request complexity.
-- For SIMPLE OPERATIONAL requests (create a task, update status, bulk operations, assign staff, list tasks, close claims, send emails): Execute the action immediately and confirm briefly. Do NOT reference training materials, knowledge base content, or provide unsolicited analysis. Keep responses concise and action-focused.
+- For SIMPLE OPERATIONAL requests (create a task, update status, bulk operations, assign staff, list tasks, close claims): Execute the action immediately and confirm briefly. Do NOT reference training materials, knowledge base content, or provide unsolicited analysis. Keep responses concise and action-focused.
+- For COMMUNICATION DRAFTING/SENDING requests (emails, texts, letters, portal updates): produce polished professional content first, then execute send actions. Do not use shorthand or casual one-line drafts.
 - For ANALYTICAL/STRATEGIC requests (denial analysis, coverage questions, rebuttal strategy, evidence evaluation, document analysis): Provide thorough, structured analysis using all available context.
 - NEVER pad a simple request with irrelevant knowledge base citations or training material references.
 - If you have knowledge base content in your context but the question is operational, IGNORE the knowledge base content entirely.
@@ -5815,12 +6219,13 @@ When the user asks to "send a text/email", "text the client", "email the adjuste
 3. For EMAIL drafts, include: greeting, claim reference, concise context, specific request/action, and courteous closing.
 4. If user asks for DRAFT ONLY (or asks to review before sending), call draft_email or draft_sms and do not send yet.
 5. If user explicitly asked to SEND now, call send_email or send_sms immediately using the professional draft body.
-6. When the request says "based on damage in the photos" (or equivalent), explicitly incorporate AI-analyzed photo damages and tie them to estimate/scope items already on file.
-7. If the user asks for portal notifications, call send_portal_notification.
-8. If the user asks for a letter, call create_claim_letter (and send it if requested).
-9. If the user asks to schedule a call, call schedule_claim_call.
-10. If recipient/channel are missing or ambiguous, ask ONE concise clarification; otherwise execute.
-11. Confirm exactly what action was completed after the tool succeeds.
+6. When the request says "based on damage in the photos" (or equivalent), explicitly incorporate photo-documented damages and tie them to estimate/scope items already on file.
+7. For carrier-facing emails (adjuster/insurance company recipients), use assertive but professional claim-advocacy tone with direct causation + repair-necessity language and a clear written ask for revised scope/payment.
+8. If the user asks for portal notifications, call send_portal_notification.
+9. If the user asks for a letter, call create_claim_letter (and send it if requested).
+10. If the user asks to schedule a call, call schedule_claim_call.
+11. If recipient/channel are missing or ambiguous, ask ONE concise clarification; otherwise execute.
+12. Confirm exactly what action was completed after the tool succeeds.
 NEVER tell the user to copy/paste and send manually when they asked you to send it.
 
 You are the smartest person in the room: analyze first, then deliver. When the user asks for help communicating with the client or battling the carrier, synthesize status and notes and produce the deliverable (draft, strategy, next step). No hedging, no "I'd be happy to help" — just the analysis and the draft or action.
@@ -6912,15 +7317,17 @@ ${knowledgeBaseContext || ''}`
               answer += `\n\n❌ **Unable to draft email:** ${recipientErrors[0] || "No valid recipients found."}`;
               continue;
             }
+            const carrierFacing = isCarrierFacingEmailRecipients(dedupedRecipients);
 
             const polishedBodyText = buildProfessionalEmailBody(
               bodyText,
               claimResolution.claim,
               dedupedRecipients[0]?.name,
             );
-            const shouldInjectPhotoEvidence = shouldUsePhotoDamageEvidenceForCommunication(
+            const shouldInjectPhotoEvidence = shouldInjectPhotoEvidenceForEmail(
               String(question || ""),
               bodyText,
+              carrierFacing,
             );
             let evidenceAwareBodyText = polishedBodyText;
             let evidenceContextUsed = false;
@@ -6936,6 +7343,10 @@ ${knowledgeBaseContext || ''}`
                   claimResolution.claim,
                   dedupedRecipients[0]?.name,
                   evidenceContext.summaryText,
+                  {
+                    carrierFacing,
+                    conditionNarratives: evidenceContext.conditionNarratives,
+                  },
                 );
                 evidenceContextUsed = true;
               } else {
@@ -6972,9 +7383,9 @@ ${knowledgeBaseContext || ''}`
             answer += `\n\n📝 **Email draft ready:** ${recipientLabel} (subject: "${subject}")`;
             answer += `\nUse the draft editor below to review/edit, then click **Approve & Send** when ready.`;
             if (evidenceContextUsed) {
-              answer += `\n📸 Draft includes AI photo-damage findings aligned to estimate scope on file.`;
+              answer += `\n📸 Draft includes photo-damage findings aligned to estimate scope on file.`;
             } else if (evidenceContextMissing && shouldInjectPhotoEvidence) {
-              answer += `\n⚠️ No analyzed photo/estimate evidence was found to auto-include.`;
+              answer += `\n⚠️ No photo/estimate evidence was found to auto-include.`;
             }
             if (recipientErrors.length > 0) {
               answer += `\n⚠️ **Skipped recipients:** ${recipientErrors.join(" | ")}`;
@@ -7051,15 +7462,17 @@ ${knowledgeBaseContext || ''}`
               answer += `\n\n❌ **Unable to send email:** ${recipientErrors[0] || "No valid recipients found."}`;
               continue;
             }
+            const carrierFacing = isCarrierFacingEmailRecipients(dedupedRecipients);
 
             const polishedBodyText = buildProfessionalEmailBody(
               bodyText,
               claimResolution.claim,
               dedupedRecipients[0]?.name,
             );
-            const shouldInjectPhotoEvidence = shouldUsePhotoDamageEvidenceForCommunication(
+            const shouldInjectPhotoEvidence = shouldInjectPhotoEvidenceForEmail(
               String(question || ""),
               bodyText,
+              carrierFacing,
             );
             let evidenceAwareBodyText = polishedBodyText;
             if (shouldInjectPhotoEvidence) {
@@ -7073,6 +7486,10 @@ ${knowledgeBaseContext || ''}`
                   claimResolution.claim,
                   dedupedRecipients[0]?.name,
                   evidenceContext.summaryText,
+                  {
+                    carrierFacing,
+                    conditionNarratives: evidenceContext.conditionNarratives,
+                  },
                 );
               }
             }
@@ -7222,6 +7639,7 @@ ${knowledgeBaseContext || ''}`
             }
 
             const supabaseUrlForInvoke = Deno.env.get("SUPABASE_URL")!;
+            const supabaseServiceKeyForInvoke = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
             const messageBody = String(params.message_body || "").trim();
             if (!messageBody) {
               answer += `\n\n❌ **Unable to send SMS:** message_body is required.`;
@@ -7277,6 +7695,7 @@ ${knowledgeBaseContext || ''}`
                   messageBody,
                 },
                 authHeader,
+                supabaseServiceKeyForInvoke,
               );
 
               if (sendResult.success) {
@@ -8024,25 +8443,23 @@ ${knowledgeBaseContext || ''}`
 
     const evidenceUsed = {
       sourceModeRequested: sourceMode,
-      strategy: sourceMode === "internal_only"
-        ? "internal_only"
-        : webSearchStatus === "success"
-          ? "hybrid_with_web"
-          : "internal_preferred",
-      decisionReason: sourceMode === "internal_only"
-        ? "Source mode set to internal-only."
-        : webSearchStatus === "success"
-          ? "Web search used for external/regulatory context."
-          : "Response based on internal context and available claim evidence.",
+      strategy: evidencePlan.strategy,
+      decisionReason: evidencePlan.reason,
       internal: {
-        knowledgeBaseUsed: Boolean(knowledgeBaseContext && knowledgeBaseContext.trim()),
-        knowledgeSourceCount: knowledgeBaseContext && knowledgeBaseContext.trim() ? 1 : 0,
-        crossClaimUsed: Boolean(crossClaimContext && crossClaimContext.trim()),
-        claimContextUsed: Boolean(claimId),
+        knowledgeBaseUsed: knowledgeBaseResult.chunkCount > 0,
+        knowledgeRetrievalMode: knowledgeBaseResult.retrievalMode,
+        knowledgeChunkCount: knowledgeBaseResult.chunkCount,
+        knowledgeSourceCount: knowledgeBaseResult.sourceCount,
+        topKnowledgeSources: knowledgeBaseResult.topSources,
+        crossClaimUsed: Boolean(crossClaimContext),
+        playbookUsed: Boolean(playbookContext),
+        escalationSignalsUsed: Boolean(escalationContext),
         uploadedDocumentUsed: Boolean(hasUploadedDoc),
+        claimContextUsed: Boolean(claimId),
       },
       web: {
-        searched: Boolean(needsWebSearch),
+        searched: webSearchStatus !== "not_requested",
+        query: webSearchQueryUsed,
         status: webSearchStatus,
       },
     };
