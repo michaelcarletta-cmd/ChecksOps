@@ -1576,6 +1576,138 @@ const tools = [
   {
     type: "function",
     function: {
+      name: "draft_email",
+      description: "Draft a professional email without sending it. Use this when the user asks to draft, prepare, or review an email before approval. The UI can then let the user edit and approve send.",
+      parameters: {
+        type: "object",
+        properties: {
+          claim_id: {
+            type: "string",
+            description: "Claim UUID. Omit to use current claim context."
+          },
+          client_name: {
+            type: "string",
+            description: "Client/policyholder name to resolve a claim if claim_id is not provided."
+          },
+          subject: {
+            type: "string",
+            description: "Draft subject/context. Outbound subject is normalized to the claim number only."
+          },
+          body: {
+            type: "string",
+            description: "Professional, ready-to-send email body. Include greeting, claim context, clear ask, and courteous closing."
+          },
+          recipients: {
+            type: "array",
+            description: "Optional recipient list. If omitted, defaults to policyholder in claim context.",
+            items: {
+              type: "object",
+              properties: {
+                recipient_type: {
+                  type: "string",
+                  enum: ["policyholder", "adjuster", "insurance_company", "referrer", "contractor", "manual"],
+                  description: "Recipient source type."
+                },
+                recipient_name: {
+                  type: "string",
+                  description: "Optional recipient name filter (useful for selecting a specific adjuster/contractor)."
+                },
+                recipient_email: {
+                  type: "string",
+                  description: "Direct email address (required when recipient_type is manual)."
+                }
+              }
+            }
+          },
+          recipient_type: {
+            type: "string",
+            enum: ["policyholder", "adjuster", "insurance_company", "referrer", "contractor", "manual"],
+            description: "Single-recipient shortcut instead of recipients[]. For insurance_company, system auto-targets company + assigned adjuster when available."
+          },
+          recipient_name: {
+            type: "string",
+            description: "Single-recipient name filter/label."
+          },
+          recipient_email: {
+            type: "string",
+            description: "Single-recipient direct email address."
+          },
+          cc_claim_mailbox: {
+            type: "boolean",
+            description: "Whether to CC the claim mailbox address when the draft is approved and sent. Default true."
+          }
+        },
+        required: ["body"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "draft_sms",
+      description: "Draft an SMS/text message without sending it. Use this when the user asks to draft, prepare, or review a text before approval.",
+      parameters: {
+        type: "object",
+        properties: {
+          claim_id: {
+            type: "string",
+            description: "Claim UUID. Omit to use current claim context."
+          },
+          client_name: {
+            type: "string",
+            description: "Client/policyholder name to resolve a claim if claim_id is not provided."
+          },
+          message_body: {
+            type: "string",
+            description: "SMS draft content."
+          },
+          recipients: {
+            type: "array",
+            description: "Optional recipient list. If omitted, defaults to policyholder in claim context.",
+            items: {
+              type: "object",
+              properties: {
+                recipient_type: {
+                  type: "string",
+                  enum: ["policyholder", "adjuster", "insurance_company", "referrer", "contractor", "manual"],
+                  description: "Recipient source type."
+                },
+                recipient_name: {
+                  type: "string",
+                  description: "Optional recipient name filter/label."
+                },
+                recipient_phone: {
+                  type: "string",
+                  description: "Direct phone number (required when recipient_type is manual)."
+                }
+              }
+            }
+          },
+          recipient_type: {
+            type: "string",
+            enum: ["policyholder", "adjuster", "insurance_company", "referrer", "contractor", "manual"],
+            description: "Single-recipient shortcut instead of recipients[]."
+          },
+          recipient_name: {
+            type: "string",
+            description: "Single-recipient name filter/label."
+          },
+          recipient_phone: {
+            type: "string",
+            description: "Single-recipient direct phone number."
+          },
+          to_number: {
+            type: "string",
+            description: "Legacy alias for recipient_phone."
+          }
+        },
+        required: ["message_body"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
       name: "send_sms",
       description: "Send an SMS/text message immediately from chat. Use this when the user explicitly asks to text/send SMS now. If recipient is not provided, default to the policyholder for the active claim.",
       parameters: {
@@ -2098,6 +2230,22 @@ type ResolvedSmsRecipient = {
   type: string;
 };
 
+type CommunicationDraft = {
+  draftId: string;
+  channel: "email" | "sms";
+  claimId: string;
+  claimReference: string;
+  subject?: string;
+  body: string;
+  claimEmailCc?: string;
+  recipients: Array<{
+    name: string;
+    type: string;
+    email?: string;
+    phone?: string;
+  }>;
+};
+
 function normalizeRecipientType(raw?: string): CommunicationRecipientType | null {
   if (!raw) return null;
   const normalized = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
@@ -2215,6 +2363,28 @@ function buildProfessionalEmailBody(
     "",
     "Thank you,",
   ].join("\n");
+}
+
+function buildProfessionalSmsBody(
+  rawBody: string,
+  claimData: any,
+  recipientName?: string,
+): string {
+  const trimmed = String(rawBody || "").trim();
+  if (!trimmed) return "";
+
+  const hasClaimReference = /\bclaim\b/i.test(trimmed);
+  const hasGreeting = /^(hi|hello|good (morning|afternoon|evening))\b/i.test(trimmed);
+  if (hasGreeting && hasClaimReference && trimmed.length >= 40) {
+    return trimmed;
+  }
+
+  const claimNumber = String(claimData?.claim_number || "").trim();
+  const claimReference = claimNumber ? `claim ${claimNumber}` : "this claim";
+  const safeRecipient = String(recipientName || "").trim() || "there";
+  const normalizedRequest = /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+
+  return `Hi ${safeRecipient}, regarding ${claimReference}: ${normalizedRequest}`;
 }
 
 async function resolveCommunicationClaim(
@@ -5067,7 +5237,7 @@ If the document is ambiguous about the type of loss, ask the user to clarify rat
     }
 
     // Search the knowledge base ONLY for analytical/strategic questions — NOT for simple operational tasks
-    const operationalPatterns = /^(create|add|make|mark|complete|delete|remove|update|change|set|assign|close|reopen|show|list|find tasks|bulk|share|remind|jot|note|what (tasks|claims|did I)|how many claims|send (an? )?(email|text|sms|portal|notification)|email (the )?(client|policyholder|adjuster|insured)|text (the )?(client|policyholder|adjuster|insured)|notify (the )?(client|contractor|portal)|portal message|draft and send|write (a )?letter|send (a )?letter|schedule (a )?call|book (a )?call|set (up )?(a )?call)/i;
+    const operationalPatterns = /^(create|add|make|mark|complete|delete|remove|update|change|set|assign|close|reopen|show|list|find tasks|bulk|share|remind|jot|note|what (tasks|claims|did I)|how many claims|send (an? )?(email|text|sms|portal|notification)|email (the )?(client|policyholder|adjuster|insured)|text (the )?(client|policyholder|adjuster|insured)|notify (the )?(client|contractor|portal)|portal message|draft (an? )?(email|text|sms|message)|draft and send|write (a )?letter|send (a )?letter|schedule (a )?call|book (a )?call|set (up )?(a )?call)/i;
     const isOperationalRequest = operationalPatterns.test((question || '').trim());
     
     if (!isOperationalRequest) {
@@ -5176,6 +5346,13 @@ When the user explicitly asks to SEND an email/text/SMS now:
 5. Outbound claim email subject must be the claim number only.
 6. If recipient is still ambiguous, ask ONE concise clarifying question.
 7. NEVER tell the user to copy/paste and send manually when they asked you to send it.
+
+*** CRITICAL - DRAFT/APPROVAL WORKFLOW ***
+When the user asks to draft, review, edit, approve, or "let me check it first":
+1. Use draft_email for email drafts and draft_sms for text drafts.
+2. Do NOT call send_email/send_sms unless the user explicitly asks to send now.
+3. Drafts should be polished and ready for approval with greeting, context, clear ask, and closing.
+4. Assume the user can edit the draft body and click an "Approve & Send" button in the UI.
 
 ACTION TOOLS FOR "DO IT FOR ME":
 - send_portal_notification: Send claim portal notifications to client/contractors and create notification records.
@@ -5574,8 +5751,8 @@ When the user asks to "send a text/email", "text the client", "email the adjuste
 1. FIRST use claim context/history to make the communication accurate.
 2. DRAFT polished, professional message content in plain language (no slang/shorthand).
 3. For EMAIL drafts, include: greeting, claim reference, concise context, specific request/action, and courteous closing.
-4. If user asks for DRAFT ONLY, provide the draft and do not send.
-5. If user explicitly asked to SEND, call send_email or send_sms immediately using the professional draft body (do not stop at draft-only).
+4. If user asks for DRAFT ONLY (or asks to review before sending), call draft_email or draft_sms and do not send yet.
+5. If user explicitly asked to SEND now, call send_email or send_sms immediately using the professional draft body.
 6. If the user asks for portal notifications, call send_portal_notification.
 7. If the user asks for a letter, call create_claim_letter (and send it if requested).
 8. If the user asks to schedule a call, call schedule_claim_call.
@@ -5704,6 +5881,7 @@ Be relentlessly focused on advancing the claim toward a fair, full, and fast set
     let tasksCreated: any[] = [];
     let emailsSent: any[] = [];
     let smsSent: any[] = [];
+    let communicationDrafts: CommunicationDraft[] = [];
     let portalNotificationsSent: any[] = [];
     let lettersCreated: any[] = [];
     let callsScheduled: any[] = [];
@@ -6607,6 +6785,111 @@ ${knowledgeBaseContext || ''}`
             console.error("Error in list_claim_tasks:", parseErr);
             answer += `\n\n❌ **Error listing tasks:** Invalid parameters`;
           }
+        } else if (toolCall.function.name === "draft_email") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments || "{}");
+            console.log("Drafting email from assistant:", params);
+
+            const claimResolution = await resolveCommunicationClaim(
+              supabase,
+              params,
+              claimId || null,
+              claim,
+            );
+
+            if (!claimResolution.claimId || !claimResolution.claim) {
+              answer += `\n\n❌ **Unable to draft email:** ${claimResolution.error || "Claim could not be resolved."}`;
+              continue;
+            }
+
+            const bodyText = String(params.body || "").trim();
+            if (!bodyText) {
+              answer += `\n\n❌ **Unable to draft email:** body is required.`;
+              continue;
+            }
+            const subject = buildClaimNumberSubject(claimResolution.claim, claimResolution.claimId);
+
+            const recipientInputs = collectRecipientInputs(params, "email");
+            const resolvedRecipients: ResolvedEmailRecipient[] = [];
+            const recipientErrors: string[] = [];
+
+            for (const recipientInput of recipientInputs) {
+              const recipientType = normalizeRecipientType(recipientInput.recipient_type);
+              if (recipientType === "insurance_company" && !recipientInput.recipient_email) {
+                const carrierRecipientSet = await resolveCarrierEmailRecipientsForClaim(
+                  supabase,
+                  claimResolution.claim,
+                  claimResolution.claimId,
+                  recipientInput.recipient_name,
+                );
+                if (carrierRecipientSet.recipients.length > 0) {
+                  resolvedRecipients.push(...carrierRecipientSet.recipients);
+                }
+                if (carrierRecipientSet.errors.length > 0) {
+                  recipientErrors.push(...carrierRecipientSet.errors);
+                }
+                continue;
+              }
+
+              const resolved = await resolveEmailRecipientForClaim(
+                supabase,
+                claimResolution.claim,
+                claimResolution.claimId,
+                recipientInput,
+              );
+              if (resolved.recipient) {
+                resolvedRecipients.push(resolved.recipient);
+              } else if (resolved.error) {
+                recipientErrors.push(resolved.error);
+              }
+            }
+
+            const dedupedRecipients = dedupeEmailRecipients(resolvedRecipients);
+            if (dedupedRecipients.length === 0) {
+              answer += `\n\n❌ **Unable to draft email:** ${recipientErrors[0] || "No valid recipients found."}`;
+              continue;
+            }
+
+            const polishedBodyText = buildProfessionalEmailBody(
+              bodyText,
+              claimResolution.claim,
+              dedupedRecipients[0]?.name,
+            );
+            const claimEmailCc = params.cc_claim_mailbox === false
+              ? undefined
+              : buildClaimMailboxEmail(claimResolution.claim, claimResolution.claimId);
+
+            const draftId = crypto.randomUUID();
+            communicationDrafts.push({
+              draftId,
+              channel: "email",
+              claimId: claimResolution.claimId,
+              claimReference:
+                String(claimResolution.claim.claim_number || "").trim() ||
+                claimResolution.claimName ||
+                claimResolution.claimId,
+              subject,
+              body: polishedBodyText,
+              claimEmailCc,
+              recipients: dedupedRecipients.map((recipient) => ({
+                name: recipient.name,
+                type: recipient.type,
+                email: recipient.email,
+              })),
+            });
+
+            const recipientLabel = dedupedRecipients
+              .map((recipient) => `${recipient.name} <${recipient.email}>`)
+              .join(", ");
+            answer += `\n\n📝 **Email draft ready:** ${recipientLabel} (subject: "${subject}")`;
+            answer += `\nUse the draft editor below to review/edit, then click **Approve & Send** when ready.`;
+            if (recipientErrors.length > 0) {
+              answer += `\n⚠️ **Skipped recipients:** ${recipientErrors.join(" | ")}`;
+            }
+          } catch (parseErr) {
+            console.error("Error in draft_email:", parseErr);
+            answer += `\n\n❌ **Error drafting email:** Invalid parameters`;
+          }
         } else if (toolCall.function.name === "send_email") {
           try {
             const params = JSON.parse(toolCall.function.arguments || "{}");
@@ -6737,6 +7020,84 @@ ${knowledgeBaseContext || ''}`
           } catch (parseErr) {
             console.error("Error in send_email:", parseErr);
             answer += `\n\n❌ **Error sending email:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "draft_sms") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments || "{}");
+            console.log("Drafting SMS from assistant:", params);
+
+            const claimResolution = await resolveCommunicationClaim(
+              supabase,
+              params,
+              claimId || null,
+              claim,
+            );
+            if (!claimResolution.claimId || !claimResolution.claim) {
+              answer += `\n\n❌ **Unable to draft SMS:** ${claimResolution.error || "Claim could not be resolved."}`;
+              continue;
+            }
+
+            const messageBody = String(params.message_body || params.body || "").trim();
+            if (!messageBody) {
+              answer += `\n\n❌ **Unable to draft SMS:** message_body is required.`;
+              continue;
+            }
+
+            const recipientInputs = collectRecipientInputs(params, "sms");
+            const resolvedRecipients: ResolvedSmsRecipient[] = [];
+            const recipientErrors: string[] = [];
+
+            for (const recipientInput of recipientInputs) {
+              const resolved = await resolveSmsRecipientForClaim(
+                supabase,
+                claimResolution.claim,
+                claimResolution.claimId,
+                recipientInput,
+              );
+              if (resolved.recipient) {
+                resolvedRecipients.push(resolved.recipient);
+              } else if (resolved.error) {
+                recipientErrors.push(resolved.error);
+              }
+            }
+
+            const dedupedRecipients = dedupeSmsRecipients(resolvedRecipients);
+            if (dedupedRecipients.length === 0) {
+              answer += `\n\n❌ **Unable to draft SMS:** ${recipientErrors[0] || "No valid recipients found."}`;
+              continue;
+            }
+
+            const polishedMessageBody = buildProfessionalSmsBody(
+              messageBody,
+              claimResolution.claim,
+              dedupedRecipients[0]?.name,
+            );
+
+            const draftId = crypto.randomUUID();
+            communicationDrafts.push({
+              draftId,
+              channel: "sms",
+              claimId: claimResolution.claimId,
+              claimReference:
+                String(claimResolution.claim.claim_number || "").trim() ||
+                claimResolution.claimName ||
+                claimResolution.claimId,
+              body: polishedMessageBody,
+              recipients: dedupedRecipients.map((recipient) => ({
+                name: recipient.name,
+                type: recipient.type,
+                phone: recipient.phone,
+              })),
+            });
+
+            answer += `\n\n📝 **SMS draft ready:** ${dedupedRecipients.map((recipient) => `${recipient.name} (${recipient.phone})`).join(", ")}`;
+            answer += `\nUse the draft editor below to review/edit, then click **Approve & Send** when ready.`;
+            if (recipientErrors.length > 0) {
+              answer += `\n⚠️ **Skipped recipients:** ${recipientErrors.join(" | ")}`;
+            }
+          } catch (parseErr) {
+            console.error("Error in draft_sms:", parseErr);
+            answer += `\n\n❌ **Error drafting SMS:** Invalid parameters`;
           }
         } else if (toolCall.function.name === "send_sms") {
           try {
@@ -7583,6 +7944,7 @@ ${knowledgeBaseContext || ''}`
         tasksCreated,
         emailsSent,
         smsSent,
+        communicationDrafts,
         portalNotificationsSent,
         lettersCreated,
         callsScheduled,

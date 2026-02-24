@@ -10,6 +10,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { CommunicationDraftComposer, type CommunicationDraft } from "@/components/CommunicationDraftComposer";
 
 interface AiMessage {
   role: "user" | "assistant";
@@ -17,6 +18,7 @@ interface AiMessage {
   timestamp: Date;
   attachmentName?: string;
   evidenceUsed?: EvidenceUsed | null;
+  communicationDrafts?: CommunicationDraft[];
 }
 
 interface EvidenceUsed {
@@ -71,6 +73,9 @@ export default function Chat() {
   const [loading, setLoading] = useState(false);
   const [attachedFile, setAttachedFile] = useState<UploadedFile | null>(null);
   const [processingFile, setProcessingFile] = useState(false);
+  const [draftEdits, setDraftEdits] = useState<Record<string, string>>({});
+  const [sendingDraftIds, setSendingDraftIds] = useState<Record<string, boolean>>({});
+  const [sentDraftIds, setSentDraftIds] = useState<Record<string, boolean>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -276,6 +281,7 @@ export default function Chat() {
         content: data.answer,
         timestamp: new Date(),
         evidenceUsed: data.evidenceUsed || null,
+        communicationDrafts: Array.isArray(data.communicationDrafts) ? data.communicationDrafts : [],
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -285,6 +291,86 @@ export default function Chat() {
     } finally {
       setLoading(false);
       inputRef.current?.focus();
+    }
+  };
+
+  const getDraftBody = (draft: CommunicationDraft) => draftEdits[draft.draftId] ?? draft.body;
+
+  const resetDraftBody = (draftId: string) => {
+    setDraftEdits((prev) => {
+      if (!(draftId in prev)) return prev;
+      const next = { ...prev };
+      delete next[draftId];
+      return next;
+    });
+  };
+
+  const handleApproveAndSendDraft = async (draft: CommunicationDraft) => {
+    if (sendingDraftIds[draft.draftId] || sentDraftIds[draft.draftId]) return;
+
+    const body = getDraftBody(draft).trim();
+    if (!body) {
+      toast.error("Draft body cannot be empty");
+      return;
+    }
+
+    setSendingDraftIds((prev) => ({ ...prev, [draft.draftId]: true }));
+
+    try {
+      if (draft.channel === "email") {
+        const recipients = draft.recipients
+          .filter((recipient) => Boolean(recipient.email))
+          .map((recipient) => ({
+            email: String(recipient.email),
+            name: recipient.name || String(recipient.email),
+            type: recipient.type || "manual",
+          }));
+
+        if (recipients.length === 0) {
+          throw new Error("This draft has no valid email recipients.");
+        }
+
+        const { data, error } = await supabase.functions.invoke("send-email", {
+          body: {
+            recipients,
+            subject: draft.subject || draft.claimReference,
+            body,
+            claimId: draft.claimId,
+            claimEmailCc: draft.claimEmailCc,
+          },
+        });
+
+        if (error) throw error;
+        if (data?.error) throw new Error(String(data.error));
+
+        toast.success(`Email sent to ${recipients.length} recipient${recipients.length > 1 ? "s" : ""}`);
+        queryClient.invalidateQueries({ queryKey: ["emails"] });
+      } else {
+        const recipients = draft.recipients.filter((recipient) => Boolean(recipient.phone));
+        if (recipients.length === 0) {
+          throw new Error("This draft has no valid phone recipients.");
+        }
+
+        for (const recipient of recipients) {
+          const { data, error } = await supabase.functions.invoke("send-sms", {
+            body: {
+              claimId: draft.claimId,
+              toNumber: recipient.phone,
+              messageBody: body,
+            },
+          });
+          if (error) throw error;
+          if (data?.error) throw new Error(String(data.error));
+        }
+
+        toast.success(`SMS sent to ${recipients.length} recipient${recipients.length > 1 ? "s" : ""}`);
+      }
+
+      setSentDraftIds((prev) => ({ ...prev, [draft.draftId]: true }));
+    } catch (error: any) {
+      toast.error(error.message || "Failed to send draft");
+    } finally {
+      setSendingDraftIds((prev) => ({ ...prev, [draft.draftId]: false }));
     }
   };
 
@@ -299,6 +385,9 @@ export default function Chat() {
 
   const clearChat = () => {
     setMessages([]);
+    setDraftEdits({});
+    setSendingDraftIds({});
+    setSentDraftIds({});
   };
 
   const getEvidenceSummary = (evidence?: EvidenceUsed | null) => {
@@ -400,6 +489,27 @@ export default function Chat() {
                     }`}
                   >
                     <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                    {msg.role === "assistant" && Array.isArray(msg.communicationDrafts) && msg.communicationDrafts.length > 0 && (
+                      <div className="space-y-2">
+                        {msg.communicationDrafts.map((draft) => (
+                          <CommunicationDraftComposer
+                            key={draft.draftId}
+                            draft={draft}
+                            value={getDraftBody(draft)}
+                            onChange={(value) =>
+                              setDraftEdits((prev) => ({
+                                ...prev,
+                                [draft.draftId]: value,
+                              }))
+                            }
+                            onReset={() => resetDraftBody(draft.draftId)}
+                            onApprove={() => handleApproveAndSendDraft(draft)}
+                            isSending={Boolean(sendingDraftIds[draft.draftId])}
+                            isSent={Boolean(sentDraftIds[draft.draftId])}
+                          />
+                        ))}
+                      </div>
+                    )}
                     {msg.role === "assistant" && (() => {
                       const evidence = getEvidenceSummary(msg.evidenceUsed);
                       if (!evidence) return null;

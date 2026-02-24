@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQueryClient } from "@tanstack/react-query";
 import { Toggle } from "@/components/ui/toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { CommunicationDraftComposer, type CommunicationDraft } from "@/components/CommunicationDraftComposer";
 
 type SourceMode = "internal_only" | "hybrid";
 
@@ -20,6 +21,7 @@ interface AiMessage {
   content: string;
   timestamp: Date;
   evidenceUsed?: EvidenceUsed | null;
+  communicationDrafts?: CommunicationDraft[];
 }
 
 interface EvidenceUsed {
@@ -51,11 +53,17 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [sourceMode, setSourceMode] = useState<SourceMode>("hybrid");
+  const [draftEdits, setDraftEdits] = useState<Record<string, string>>({});
+  const [sendingDraftIds, setSendingDraftIds] = useState<Record<string, boolean>>({});
+  const [sentDraftIds, setSentDraftIds] = useState<Record<string, boolean>>({});
   const queryClient = useQueryClient();
 
   // Clear messages when switching between claims
   useEffect(() => {
     setAiMessages([]);
+    setDraftEdits({});
+    setSendingDraftIds({});
+    setSentDraftIds({});
   }, [claimId]);
 
   const isClaimContext = !!claimId;
@@ -200,6 +208,7 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
         content: data.answer,
         timestamp: new Date(),
         evidenceUsed: data.evidenceUsed || null,
+        communicationDrafts: Array.isArray(data.communicationDrafts) ? data.communicationDrafts : [],
       };
 
       setAiMessages((prev) => [...prev, assistantMessage]);
@@ -208,6 +217,92 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
       toast.error(error.message || "Failed to get AI response");
     } finally {
       setAiLoading(false);
+    }
+  };
+
+  const getDraftBody = (draft: CommunicationDraft) => draftEdits[draft.draftId] ?? draft.body;
+
+  const resetDraftBody = (draftId: string) => {
+    setDraftEdits((prev) => {
+      if (!(draftId in prev)) return prev;
+      const next = { ...prev };
+      delete next[draftId];
+      return next;
+    });
+  };
+
+  const handleApproveAndSendDraft = async (draft: CommunicationDraft) => {
+    if (sendingDraftIds[draft.draftId] || sentDraftIds[draft.draftId]) return;
+
+    const body = getDraftBody(draft).trim();
+    if (!body) {
+      toast.error("Draft body cannot be empty");
+      return;
+    }
+
+    setSendingDraftIds((prev) => ({ ...prev, [draft.draftId]: true }));
+
+    try {
+      if (draft.channel === "email") {
+        const recipients = draft.recipients
+          .filter((recipient) => Boolean(recipient.email))
+          .map((recipient) => ({
+            email: String(recipient.email),
+            name: recipient.name || String(recipient.email),
+            type: recipient.type || "manual",
+          }));
+
+        if (recipients.length === 0) {
+          throw new Error("This draft has no valid email recipients.");
+        }
+
+        const { data, error } = await supabase.functions.invoke("send-email", {
+          body: {
+            recipients,
+            subject: draft.subject || claimNumber || draft.claimReference,
+            body,
+            claimId: draft.claimId,
+            claimEmailCc: draft.claimEmailCc,
+          },
+        });
+
+        if (error) throw error;
+        if (data?.error) throw new Error(String(data.error));
+
+        toast.success(`Email sent to ${recipients.length} recipient${recipients.length > 1 ? "s" : ""}`);
+        if (draft.claimId) {
+          queryClient.invalidateQueries({ queryKey: ["emails", draft.claimId] });
+        }
+        queryClient.invalidateQueries({ queryKey: ["emails"] });
+      } else {
+        const recipients = draft.recipients.filter((recipient) => Boolean(recipient.phone));
+        if (recipients.length === 0) {
+          throw new Error("This draft has no valid phone recipients.");
+        }
+
+        for (const recipient of recipients) {
+          const { data, error } = await supabase.functions.invoke("send-sms", {
+            body: {
+              claimId: draft.claimId,
+              toNumber: recipient.phone,
+              messageBody: body,
+            },
+          });
+          if (error) throw error;
+          if (data?.error) throw new Error(String(data.error));
+        }
+
+        toast.success(`SMS sent to ${recipients.length} recipient${recipients.length > 1 ? "s" : ""}`);
+        if (draft.claimId) {
+          queryClient.invalidateQueries({ queryKey: ["darwin-sms-activity", draft.claimId] });
+        }
+      }
+
+      setSentDraftIds((prev) => ({ ...prev, [draft.draftId]: true }));
+    } catch (error: any) {
+      toast.error(error.message || "Failed to send draft");
+    } finally {
+      setSendingDraftIds((prev) => ({ ...prev, [draft.draftId]: false }));
     }
   };
 
@@ -220,6 +315,9 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
 
   const clearChat = () => {
     setAiMessages([]);
+    setDraftEdits({});
+    setSendingDraftIds({});
+    setSentDraftIds({});
   };
 
   const getPlaceholder = () => {
@@ -281,7 +379,7 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
             <li>• Bulk update statuses & assign staff</li>
             <li>• Search communications & history</li>
             <li>• Find leads by storm activity</li>
-            <li>• Draft and send claim emails/SMS</li>
+            <li>• Draft, edit, approve, and send claim emails/SMS</li>
           </ul>
         </div>
       </Card>
@@ -415,6 +513,27 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
                             : ["No response."].map((t, i) => (
                                 <p key={i} className="mb-0">{t}</p>
                               ))}
+                          {Array.isArray(message.communicationDrafts) && message.communicationDrafts.length > 0 && (
+                            <div className="space-y-2">
+                              {message.communicationDrafts.map((draft) => (
+                                <CommunicationDraftComposer
+                                  key={draft.draftId}
+                                  draft={draft}
+                                  value={getDraftBody(draft)}
+                                  onChange={(value) =>
+                                    setDraftEdits((prev) => ({
+                                      ...prev,
+                                      [draft.draftId]: value,
+                                    }))
+                                  }
+                                  onReset={() => resetDraftBody(draft.draftId)}
+                                  onApprove={() => handleApproveAndSendDraft(draft)}
+                                  isSending={Boolean(sendingDraftIds[draft.draftId])}
+                                  isSent={Boolean(sentDraftIds[draft.draftId])}
+                                />
+                              ))}
+                            </div>
+                          )}
                           {(() => {
                             const evidence = getEvidenceSummary(message.evidenceUsed);
                             if (!evidence) return null;
