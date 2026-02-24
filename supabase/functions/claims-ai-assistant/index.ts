@@ -1508,6 +1508,138 @@ const tools = [
   {
     type: "function",
     function: {
+      name: "send_email",
+      description: "Send an email immediately from chat. Use this when the user explicitly asks to send an email now. If recipient is not provided, default to the policyholder for the active claim.",
+      parameters: {
+        type: "object",
+        properties: {
+          claim_id: {
+            type: "string",
+            description: "Claim UUID. Omit to use current claim context."
+          },
+          client_name: {
+            type: "string",
+            description: "Client/policyholder name to resolve a claim if claim_id is not provided."
+          },
+          subject: {
+            type: "string",
+            description: "Email subject line."
+          },
+          body: {
+            type: "string",
+            description: "Email body text to send."
+          },
+          recipients: {
+            type: "array",
+            description: "Optional recipient list. If omitted, defaults to policyholder in claim context.",
+            items: {
+              type: "object",
+              properties: {
+                recipient_type: {
+                  type: "string",
+                  enum: ["policyholder", "adjuster", "insurance_company", "referrer", "contractor", "manual"],
+                  description: "Recipient source type."
+                },
+                recipient_name: {
+                  type: "string",
+                  description: "Optional recipient name filter (useful for selecting a specific adjuster/contractor)."
+                },
+                recipient_email: {
+                  type: "string",
+                  description: "Direct email address (required when recipient_type is manual)."
+                }
+              }
+            }
+          },
+          recipient_type: {
+            type: "string",
+            enum: ["policyholder", "adjuster", "insurance_company", "referrer", "contractor", "manual"],
+            description: "Single-recipient shortcut instead of recipients[]"
+          },
+          recipient_name: {
+            type: "string",
+            description: "Single-recipient name filter/label."
+          },
+          recipient_email: {
+            type: "string",
+            description: "Single-recipient direct email address."
+          },
+          cc_claim_mailbox: {
+            type: "boolean",
+            description: "Whether to CC the claim mailbox address. Default true."
+          }
+        },
+        required: ["subject", "body"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "send_sms",
+      description: "Send an SMS/text message immediately from chat. Use this when the user explicitly asks to text/send SMS now. If recipient is not provided, default to the policyholder for the active claim.",
+      parameters: {
+        type: "object",
+        properties: {
+          claim_id: {
+            type: "string",
+            description: "Claim UUID. Omit to use current claim context."
+          },
+          client_name: {
+            type: "string",
+            description: "Client/policyholder name to resolve a claim if claim_id is not provided."
+          },
+          message_body: {
+            type: "string",
+            description: "SMS message content to send."
+          },
+          recipients: {
+            type: "array",
+            description: "Optional recipient list. If omitted, defaults to policyholder in claim context.",
+            items: {
+              type: "object",
+              properties: {
+                recipient_type: {
+                  type: "string",
+                  enum: ["policyholder", "adjuster", "insurance_company", "referrer", "contractor", "manual"],
+                  description: "Recipient source type."
+                },
+                recipient_name: {
+                  type: "string",
+                  description: "Optional recipient name filter (useful for selecting a specific adjuster/contractor)."
+                },
+                recipient_phone: {
+                  type: "string",
+                  description: "Direct phone number (required when recipient_type is manual)."
+                }
+              }
+            }
+          },
+          recipient_type: {
+            type: "string",
+            enum: ["policyholder", "adjuster", "insurance_company", "referrer", "contractor", "manual"],
+            description: "Single-recipient shortcut instead of recipients[]"
+          },
+          recipient_name: {
+            type: "string",
+            description: "Single-recipient name filter/label."
+          },
+          recipient_phone: {
+            type: "string",
+            description: "Single-recipient direct phone number."
+          },
+          to_number: {
+            type: "string",
+            description: "Legacy alias for recipient_phone."
+          }
+        },
+        required: ["message_body"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
       name: "bulk_process_tasks",
       description: "Process tasks across multiple claims at once. Can add a CLAIM NOTE (to the claim's Notes & Activity section), mark tasks as completed, and/or create follow-up tasks. Use this when the user asks to update, clear, complete, or process tasks across multiple claims. IMPORTANT: When the user says 'add a note' in the context of claims/tasks, they mean a claim note in Notes & Activity — NOT the dashboard quick notepad.",
       parameters: {
@@ -1776,6 +1908,490 @@ async function createTask(supabase: any, params: {
   } catch (err) {
     console.error("Exception creating task:", err);
     return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
+type CommunicationRecipientType =
+  | "policyholder"
+  | "adjuster"
+  | "insurance_company"
+  | "referrer"
+  | "contractor"
+  | "manual";
+
+type CommunicationRecipientInput = {
+  recipient_type?: string;
+  recipient_name?: string;
+  recipient_email?: string;
+  recipient_phone?: string;
+  to_number?: string;
+};
+
+type ResolvedEmailRecipient = {
+  email: string;
+  name: string;
+  type: string;
+};
+
+type ResolvedSmsRecipient = {
+  phone: string;
+  name: string;
+  type: string;
+};
+
+function normalizeRecipientType(raw?: string): CommunicationRecipientType | null {
+  if (!raw) return null;
+  const normalized = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (["policyholder", "client", "insured", "homeowner"].includes(normalized)) return "policyholder";
+  if (["adjuster", "carrier_adjuster", "insurance_adjuster", "primary_adjuster"].includes(normalized)) return "adjuster";
+  if (["insurance_company", "insurance", "carrier"].includes(normalized)) return "insurance_company";
+  if (["referrer", "referral"].includes(normalized)) return "referrer";
+  if (["contractor", "roofer", "vendor"].includes(normalized)) return "contractor";
+  if (["manual", "direct"].includes(normalized)) return "manual";
+  return null;
+}
+
+function collectRecipientInputs(params: any, _channel: "email" | "sms"): CommunicationRecipientInput[] {
+  if (Array.isArray(params?.recipients) && params.recipients.length > 0) {
+    return params.recipients;
+  }
+
+  const single: CommunicationRecipientInput = {
+    recipient_type: params?.recipient_type,
+    recipient_name: params?.recipient_name,
+    recipient_email: params?.recipient_email,
+    recipient_phone: params?.recipient_phone || params?.to_number,
+  };
+
+  // Default behavior for claim-context comms: send to policyholder when recipient not specified.
+  if (!single.recipient_type && !single.recipient_email && !single.recipient_phone) {
+    return [{ recipient_type: "policyholder" }];
+  }
+
+  return [single];
+}
+
+function dedupeEmailRecipients(recipients: ResolvedEmailRecipient[]): ResolvedEmailRecipient[] {
+  const seen = new Set<string>();
+  const deduped: ResolvedEmailRecipient[] = [];
+  for (const recipient of recipients) {
+    const key = recipient.email.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(recipient);
+  }
+  return deduped;
+}
+
+function dedupeSmsRecipients(recipients: ResolvedSmsRecipient[]): ResolvedSmsRecipient[] {
+  const seen = new Set<string>();
+  const deduped: ResolvedSmsRecipient[] = [];
+  for (const recipient of recipients) {
+    const digits = recipient.phone.replace(/\D/g, "");
+    const key = digits.length > 0 ? digits : recipient.phone.trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(recipient);
+  }
+  return deduped;
+}
+
+function buildClaimMailboxEmail(claimData: any, claimId: string): string {
+  const sanitizedPolicyNumber = claimData?.policy_number
+    ? String(claimData.policy_number).replace(/[^a-zA-Z0-9]/g, "").toLowerCase()
+    : "";
+  const token = sanitizedPolicyNumber || claimId.slice(0, 8);
+  return `claim-${token}@claims.freedomclaims.work`;
+}
+
+async function resolveCommunicationClaim(
+  supabase: any,
+  params: any,
+  fallbackClaimId: string | null,
+  currentClaim: any,
+): Promise<{ claimId: string | null; claim: any | null; claimName: string; error?: string }> {
+  try {
+    let targetClaimId = params?.claim_id || fallbackClaimId || null;
+
+    if (!targetClaimId && params?.client_name) {
+      const found = await findClaimByClientName(supabase, params.client_name);
+      if (found) targetClaimId = found.id;
+    }
+
+    if (!targetClaimId) {
+      return {
+        claimId: null,
+        claim: null,
+        claimName: "claim",
+        error: "No claim specified. Open a claim or provide a client name.",
+      };
+    }
+
+    if (currentClaim && currentClaim.id === targetClaimId) {
+      return {
+        claimId: targetClaimId,
+        claim: currentClaim,
+        claimName: currentClaim.policyholder_name || currentClaim.claim_number || "claim",
+      };
+    }
+
+    const { data: loadedClaim, error } = await supabase
+      .from("claims")
+      .select(`
+        id,
+        claim_number,
+        policyholder_name,
+        policyholder_email,
+        policyholder_phone,
+        adjuster_name,
+        adjuster_email,
+        adjuster_phone,
+        insurance_company,
+        insurance_email,
+        insurance_phone,
+        referrer_id,
+        policy_number
+      `)
+      .eq("id", targetClaimId)
+      .maybeSingle();
+
+    if (error || !loadedClaim) {
+      return {
+        claimId: targetClaimId,
+        claim: null,
+        claimName: "claim",
+        error: "Could not load claim details for communication.",
+      };
+    }
+
+    return {
+      claimId: targetClaimId,
+      claim: loadedClaim,
+      claimName: loadedClaim.policyholder_name || loadedClaim.claim_number || "claim",
+    };
+  } catch (err) {
+    console.error("Error resolving communication claim:", err);
+    return {
+      claimId: null,
+      claim: null,
+      claimName: "claim",
+      error: err instanceof Error ? err.message : "Failed to resolve claim",
+    };
+  }
+}
+
+async function resolveEmailRecipientForClaim(
+  supabase: any,
+  claimData: any,
+  claimId: string,
+  input: CommunicationRecipientInput,
+): Promise<{ recipient?: ResolvedEmailRecipient; error?: string }> {
+  const directEmail = input.recipient_email?.trim();
+  if (directEmail) {
+    return {
+      recipient: {
+        email: directEmail,
+        name: input.recipient_name?.trim() || directEmail,
+        type: "manual",
+      },
+    };
+  }
+
+  const recipientType = normalizeRecipientType(input.recipient_type) || "policyholder";
+
+  if (recipientType === "manual") {
+    return { error: "Manual email recipient requires recipient_email." };
+  }
+
+  if (recipientType === "policyholder") {
+    if (!claimData?.policyholder_email) return { error: "Policyholder email is missing on this claim." };
+    return {
+      recipient: {
+        email: claimData.policyholder_email,
+        name: claimData.policyholder_name || "Policyholder",
+        type: "policyholder",
+      },
+    };
+  }
+
+  if (recipientType === "insurance_company") {
+    if (!claimData?.insurance_email) return { error: "Insurance company email is missing on this claim." };
+    return {
+      recipient: {
+        email: claimData.insurance_email,
+        name: claimData.insurance_company || "Insurance Company",
+        type: "insurance_company",
+      },
+    };
+  }
+
+  if (recipientType === "adjuster") {
+    let query = supabase
+      .from("claim_adjusters")
+      .select("adjuster_name, adjuster_email, is_primary")
+      .eq("claim_id", claimId);
+
+    if (input.recipient_name) {
+      query = query.ilike("adjuster_name", `%${input.recipient_name}%`);
+    }
+
+    const { data: adjusters } = await query;
+    const withEmail = (adjusters || []).filter((a: any) => a.adjuster_email);
+    const chosen = withEmail.find((a: any) => a.is_primary) || withEmail[0];
+
+    if (chosen?.adjuster_email) {
+      return {
+        recipient: {
+          email: chosen.adjuster_email,
+          name: chosen.adjuster_name || "Adjuster",
+          type: "adjuster",
+        },
+      };
+    }
+
+    if (claimData?.adjuster_email) {
+      return {
+        recipient: {
+          email: claimData.adjuster_email,
+          name: claimData.adjuster_name || "Adjuster",
+          type: "adjuster",
+        },
+      };
+    }
+
+    return { error: "Adjuster email is missing on this claim." };
+  }
+
+  if (recipientType === "referrer") {
+    if (!claimData?.referrer_id) return { error: "No referrer is assigned to this claim." };
+    const { data: referrer } = await supabase
+      .from("referrers")
+      .select("name, email")
+      .eq("id", claimData.referrer_id)
+      .maybeSingle();
+
+    if (!referrer?.email) return { error: "Referrer email is missing on this claim." };
+    return {
+      recipient: {
+        email: referrer.email,
+        name: referrer.name || "Referrer",
+        type: "referrer",
+      },
+    };
+  }
+
+  if (recipientType === "contractor") {
+    const { data: assignments } = await supabase
+      .from("claim_contractors")
+      .select("contractor_id")
+      .eq("claim_id", claimId);
+    const contractorIds = (assignments || []).map((a: any) => a.contractor_id).filter(Boolean);
+
+    if (contractorIds.length === 0) {
+      return { error: "No contractors are assigned to this claim." };
+    }
+
+    let profileQuery = supabase
+      .from("profiles")
+      .select("full_name, email")
+      .in("id", contractorIds);
+
+    if (input.recipient_name) {
+      profileQuery = profileQuery.ilike("full_name", `%${input.recipient_name}%`);
+    }
+
+    const { data: profiles } = await profileQuery;
+    const chosen = (profiles || []).find((p: any) => p.email);
+    if (!chosen?.email) return { error: "Contractor email is missing on this claim." };
+
+    return {
+      recipient: {
+        email: chosen.email,
+        name: chosen.full_name || "Contractor",
+        type: "contractor",
+      },
+    };
+  }
+
+  return { error: "Unsupported email recipient type." };
+}
+
+async function resolveSmsRecipientForClaim(
+  supabase: any,
+  claimData: any,
+  claimId: string,
+  input: CommunicationRecipientInput,
+): Promise<{ recipient?: ResolvedSmsRecipient; error?: string }> {
+  const directPhone = (input.recipient_phone || input.to_number)?.trim();
+  if (directPhone) {
+    return {
+      recipient: {
+        phone: directPhone,
+        name: input.recipient_name?.trim() || directPhone,
+        type: "manual",
+      },
+    };
+  }
+
+  const recipientType = normalizeRecipientType(input.recipient_type) || "policyholder";
+
+  if (recipientType === "manual") {
+    return { error: "Manual SMS recipient requires recipient_phone." };
+  }
+
+  if (recipientType === "policyholder") {
+    if (!claimData?.policyholder_phone) return { error: "Policyholder phone is missing on this claim." };
+    return {
+      recipient: {
+        phone: claimData.policyholder_phone,
+        name: claimData.policyholder_name || "Policyholder",
+        type: "policyholder",
+      },
+    };
+  }
+
+  if (recipientType === "insurance_company") {
+    if (!claimData?.insurance_phone) return { error: "Insurance company phone is missing on this claim." };
+    return {
+      recipient: {
+        phone: claimData.insurance_phone,
+        name: claimData.insurance_company || "Insurance Company",
+        type: "insurance_company",
+      },
+    };
+  }
+
+  if (recipientType === "adjuster") {
+    let query = supabase
+      .from("claim_adjusters")
+      .select("adjuster_name, adjuster_phone, is_primary")
+      .eq("claim_id", claimId);
+
+    if (input.recipient_name) {
+      query = query.ilike("adjuster_name", `%${input.recipient_name}%`);
+    }
+
+    const { data: adjusters } = await query;
+    const withPhone = (adjusters || []).filter((a: any) => a.adjuster_phone);
+    const chosen = withPhone.find((a: any) => a.is_primary) || withPhone[0];
+
+    if (chosen?.adjuster_phone) {
+      return {
+        recipient: {
+          phone: chosen.adjuster_phone,
+          name: chosen.adjuster_name || "Adjuster",
+          type: "adjuster",
+        },
+      };
+    }
+
+    if (claimData?.adjuster_phone) {
+      return {
+        recipient: {
+          phone: claimData.adjuster_phone,
+          name: claimData.adjuster_name || "Adjuster",
+          type: "adjuster",
+        },
+      };
+    }
+
+    return { error: "Adjuster phone is missing on this claim." };
+  }
+
+  if (recipientType === "referrer") {
+    if (!claimData?.referrer_id) return { error: "No referrer is assigned to this claim." };
+    const { data: referrer } = await supabase
+      .from("referrers")
+      .select("name, phone")
+      .eq("id", claimData.referrer_id)
+      .maybeSingle();
+
+    if (!referrer?.phone) return { error: "Referrer phone is missing on this claim." };
+    return {
+      recipient: {
+        phone: referrer.phone,
+        name: referrer.name || "Referrer",
+        type: "referrer",
+      },
+    };
+  }
+
+  if (recipientType === "contractor") {
+    const { data: assignments } = await supabase
+      .from("claim_contractors")
+      .select("contractor_id")
+      .eq("claim_id", claimId);
+    const contractorIds = (assignments || []).map((a: any) => a.contractor_id).filter(Boolean);
+
+    if (contractorIds.length === 0) {
+      return { error: "No contractors are assigned to this claim." };
+    }
+
+    let profileQuery = supabase
+      .from("profiles")
+      .select("full_name, phone")
+      .in("id", contractorIds);
+
+    if (input.recipient_name) {
+      profileQuery = profileQuery.ilike("full_name", `%${input.recipient_name}%`);
+    }
+
+    const { data: profiles } = await profileQuery;
+    const chosen = (profiles || []).find((p: any) => p.phone);
+    if (!chosen?.phone) return { error: "Contractor phone is missing on this claim." };
+
+    return {
+      recipient: {
+        phone: chosen.phone,
+        name: chosen.full_name || "Contractor",
+        type: "contractor",
+      },
+    };
+  }
+
+  return { error: "Unsupported SMS recipient type." };
+}
+
+async function invokeEdgeFunction(
+  supabaseUrl: string,
+  functionName: string,
+  payload: Record<string, any>,
+  authHeader?: string | null,
+  fallbackServiceKey?: string,
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (authHeader) {
+    headers.Authorization = authHeader;
+  } else if (fallbackServiceKey) {
+    headers.Authorization = `Bearer ${fallbackServiceKey}`;
+  }
+
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      return {
+        success: false,
+        data,
+        error: data?.error || data?.message || `Edge function ${functionName} failed with ${response.status}`,
+      };
+    }
+
+    return { success: true, data };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : `Failed to call ${functionName}`,
+    };
   }
 }
 
@@ -3889,7 +4505,7 @@ If the document is ambiguous about the type of loss, ask the user to clarify rat
     }
 
     // Search the knowledge base ONLY for analytical/strategic questions — NOT for simple operational tasks
-    const operationalPatterns = /^(create|add|make|mark|complete|delete|remove|update|change|set|assign|close|reopen|show|list|find tasks|bulk|share|remind|jot|note|what (tasks|claims|did I)|how many claims)/i;
+    const operationalPatterns = /^(create|add|make|mark|complete|delete|remove|update|change|set|assign|close|reopen|show|list|find tasks|bulk|share|remind|jot|note|what (tasks|claims|did I)|how many claims|send (an? )?(email|text|sms)|email (the )?(client|policyholder|adjuster|insured)|text (the )?(client|policyholder|adjuster|insured)|draft and send)/i;
     const isOperationalRequest = operationalPatterns.test((question || '').trim());
     
     if (!isOperationalRequest) {
@@ -3988,6 +4604,14 @@ When the user asks about a SPECIFIC claim by name, number, or any identifier:
 3. WITHOUT calling this tool first, you will NOT have accurate claim information
 4. Common triggers: "help with [name] claim", "what's the status of [name]", "tell me about [claim number]", "the [name] file", etc.
 5. NEVER assume or guess claim details - always fetch the full context first
+
+*** CRITICAL - COMMUNICATION EXECUTION (USE WHEN USER SAYS "SEND") ***
+When the user explicitly asks to SEND an email/text/SMS now:
+1. Use send_email for email requests and send_sms for text/SMS requests.
+2. If the user says "draft and send", generate the content and then call the send tool in the same turn.
+3. If recipient details are missing, use the active claim context (default policyholder) when appropriate.
+4. If recipient is still ambiguous, ask ONE concise clarifying question.
+5. NEVER tell the user to copy/paste and send manually when they asked you to send it.
 
 IMPORTANT: You have the ability to CREATE TASKS. When the user asks you to create a task, reminder, follow-up, or to-do item:
 1. Use the create_task function
@@ -4375,12 +4999,13 @@ PROOF OF LOSS STRATEGY:
 
 === 7. CLIENT COMMUNICATIONS — SMARTEST IN THE ROOM ===
 
-When the user asks to "send a text/email to the client with an update" or "update the client" or "draft a client update":
-1. FIRST use get_full_claim_context and/or search_claim_history to get this claim's recent status, notes, and activity.
-2. ANALYZE that data: current status, last carrier action, next steps, any delays or wins.
-3. DRAFT a short, professional, client-facing update. Use plain language. No internal jargon (no "supplement," "RCV," "carrier dismantler," etc.). Be reassuring and clear. Generalize the situation (e.g., "We're pushing for a full scope review" not "We ran the dismantler and have three objections").
-4. Respond with the ACTUAL DRAFT as the body of the text/email. Then add one line: e.g., "You can send this via the claim's Email or SMS from the claim file."
-NEVER respond by only repeating that the user asked to send a text or email. Never say "you asked me to send an update" — deliver the update.
+When the user asks to "send a text/email", "text the client", "email the adjuster", or "draft and send":
+1. FIRST use claim context/history to make the communication accurate.
+2. DRAFT clear, professional message content in plain language.
+3. If user explicitly asked to SEND, call send_email or send_sms immediately (do not stop at draft-only).
+4. If recipient/channel are missing or ambiguous, ask ONE concise clarification; otherwise execute.
+5. Confirm exactly who was sent the message after the tool succeeds.
+NEVER tell the user to copy/paste and send manually when they asked you to send it.
 
 You are the smartest person in the room: analyze first, then deliver. When the user asks for help communicating with the client or battling the carrier, synthesize status and notes and produce the deliverable (draft, strategy, next step). No hedging, no "I'd be happy to help" — just the analysis and the draft or action.
 
@@ -4501,6 +5126,8 @@ Be relentlessly focused on advancing the claim toward a fair, full, and fast set
     const firstChoice = aiData.choices[0];
     let answer = firstChoice.message.content || "";
     let tasksCreated: any[] = [];
+    let emailsSent: any[] = [];
+    let smsSent: any[] = [];
 
     // Handle tool calls if present
     if (firstChoice.message.tool_calls && firstChoice.message.tool_calls.length > 0) {
@@ -5401,6 +6028,209 @@ ${knowledgeBaseContext || ''}`
             console.error("Error in list_claim_tasks:", parseErr);
             answer += `\n\n❌ **Error listing tasks:** Invalid parameters`;
           }
+        } else if (toolCall.function.name === "send_email") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments || "{}");
+            console.log("Sending email from assistant:", params);
+
+            const authHeader = req.headers.get("authorization");
+            const supabaseUrlForInvoke = Deno.env.get("SUPABASE_URL")!;
+            const supabaseServiceKeyForInvoke = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+            const claimResolution = await resolveCommunicationClaim(
+              supabase,
+              params,
+              claimId || null,
+              claim,
+            );
+
+            if (!claimResolution.claimId || !claimResolution.claim) {
+              answer += `\n\n❌ **Unable to send email:** ${claimResolution.error || "Claim could not be resolved."}`;
+              continue;
+            }
+
+            const subject = String(params.subject || "").trim();
+            const bodyText = String(params.body || "").trim();
+            if (!subject || !bodyText) {
+              answer += `\n\n❌ **Unable to send email:** subject and body are required.`;
+              continue;
+            }
+
+            const recipientInputs = collectRecipientInputs(params, "email");
+            const resolvedRecipients: ResolvedEmailRecipient[] = [];
+            const recipientErrors: string[] = [];
+
+            for (const recipientInput of recipientInputs) {
+              const resolved = await resolveEmailRecipientForClaim(
+                supabase,
+                claimResolution.claim,
+                claimResolution.claimId,
+                recipientInput,
+              );
+              if (resolved.recipient) {
+                resolvedRecipients.push(resolved.recipient);
+              } else if (resolved.error) {
+                recipientErrors.push(resolved.error);
+              }
+            }
+
+            const dedupedRecipients = dedupeEmailRecipients(resolvedRecipients);
+            if (dedupedRecipients.length === 0) {
+              answer += `\n\n❌ **Unable to send email:** ${recipientErrors[0] || "No valid recipients found."}`;
+              continue;
+            }
+
+            const claimEmailCc = params.cc_claim_mailbox === false
+              ? undefined
+              : buildClaimMailboxEmail(claimResolution.claim, claimResolution.claimId);
+
+            const sendResult = await invokeEdgeFunction(
+              supabaseUrlForInvoke,
+              "send-email",
+              {
+                recipients: dedupedRecipients.map((r) => ({
+                  email: r.email,
+                  name: r.name,
+                  type: r.type,
+                })),
+                subject,
+                body: bodyText,
+                claimId: claimResolution.claimId,
+                claimEmailCc,
+              },
+              authHeader,
+              supabaseServiceKeyForInvoke,
+            );
+
+            if (!sendResult.success) {
+              answer += `\n\n❌ **Failed to send email:** ${sendResult.error || "Unknown error"}`;
+              continue;
+            }
+
+            const recipientLabel = dedupedRecipients
+              .map((r) => `${r.name} <${r.email}>`)
+              .join(", ");
+
+            emailsSent.push({
+              claimId: claimResolution.claimId,
+              subject,
+              recipients: dedupedRecipients.map((r) => r.email),
+            });
+
+            answer += `\n\n✅ **Email sent:** ${recipientLabel} (subject: "${subject}")`;
+
+            if (recipientErrors.length > 0) {
+              answer += `\n⚠️ **Skipped recipients:** ${recipientErrors.join(" | ")}`;
+            }
+
+            const attachmentErrors = Array.isArray(sendResult.data?.attachmentErrors)
+              ? sendResult.data.attachmentErrors
+              : [];
+            if (attachmentErrors.length > 0) {
+              answer += `\n⚠️ Attachment warnings: ${attachmentErrors.join(" | ")}`;
+            }
+          } catch (parseErr) {
+            console.error("Error in send_email:", parseErr);
+            answer += `\n\n❌ **Error sending email:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "send_sms") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments || "{}");
+            console.log("Sending SMS from assistant:", params);
+
+            const authHeader = req.headers.get("authorization");
+            if (!authHeader) {
+              answer += `\n\n❌ **Unable to send SMS:** Not authenticated.`;
+              continue;
+            }
+
+            const supabaseUrlForInvoke = Deno.env.get("SUPABASE_URL")!;
+            const messageBody = String(params.message_body || "").trim();
+            if (!messageBody) {
+              answer += `\n\n❌ **Unable to send SMS:** message_body is required.`;
+              continue;
+            }
+
+            const claimResolution = await resolveCommunicationClaim(
+              supabase,
+              params,
+              claimId || null,
+              claim,
+            );
+
+            if (!claimResolution.claimId || !claimResolution.claim) {
+              answer += `\n\n❌ **Unable to send SMS:** ${claimResolution.error || "Claim could not be resolved."}`;
+              continue;
+            }
+
+            const recipientInputs = collectRecipientInputs(params, "sms");
+            const resolvedRecipients: ResolvedSmsRecipient[] = [];
+            const recipientErrors: string[] = [];
+
+            for (const recipientInput of recipientInputs) {
+              const resolved = await resolveSmsRecipientForClaim(
+                supabase,
+                claimResolution.claim,
+                claimResolution.claimId,
+                recipientInput,
+              );
+              if (resolved.recipient) {
+                resolvedRecipients.push(resolved.recipient);
+              } else if (resolved.error) {
+                recipientErrors.push(resolved.error);
+              }
+            }
+
+            const dedupedRecipients = dedupeSmsRecipients(resolvedRecipients);
+            if (dedupedRecipients.length === 0) {
+              answer += `\n\n❌ **Unable to send SMS:** ${recipientErrors[0] || "No valid recipients found."}`;
+              continue;
+            }
+
+            const sentTo: string[] = [];
+            const sendErrors: string[] = [];
+
+            for (const recipient of dedupedRecipients) {
+              const sendResult = await invokeEdgeFunction(
+                supabaseUrlForInvoke,
+                "send-sms",
+                {
+                  claimId: claimResolution.claimId,
+                  toNumber: recipient.phone,
+                  messageBody,
+                },
+                authHeader,
+              );
+
+              if (sendResult.success) {
+                sentTo.push(`${recipient.name} (${recipient.phone})`);
+              } else {
+                sendErrors.push(`${recipient.name} (${recipient.phone}): ${sendResult.error || "send failed"}`);
+              }
+            }
+
+            if (sentTo.length > 0) {
+              smsSent.push({
+                claimId: claimResolution.claimId,
+                recipients: dedupedRecipients.map((r) => r.phone),
+                messageBody,
+              });
+              answer += `\n\n✅ **SMS sent:** ${sentTo.join(", ")}`;
+            }
+
+            if (recipientErrors.length > 0) {
+              answer += `\n⚠️ **Skipped recipients:** ${recipientErrors.join(" | ")}`;
+            }
+            if (sendErrors.length > 0) {
+              answer += `\n⚠️ **SMS failures:** ${sendErrors.join(" | ")}`;
+            }
+            if (sentTo.length === 0) {
+              answer += `\n\n❌ **Failed to send SMS.**`;
+            }
+          } catch (parseErr) {
+            console.error("Error in send_sms:", parseErr);
+            answer += `\n\n❌ **Error sending SMS:** Invalid parameters`;
+          }
         } else if (toolCall.function.name === "run_darwin_analysis") {
           try {
             const params = JSON.parse(toolCall.function.arguments);
@@ -5704,7 +6534,7 @@ ${knowledgeBaseContext || ''}`
     };
 
     return new Response(
-      JSON.stringify({ answer, reportType, savedFile, tasksCreated, evidenceUsed }),
+      JSON.stringify({ answer, reportType, savedFile, tasksCreated, emailsSent, smsSent, evidenceUsed }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 

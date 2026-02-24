@@ -132,6 +132,37 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
         queryClient.invalidateQueries({ queryKey: ["claims"] });
       }
 
+      if (Array.isArray(data.emailsSent) && data.emailsSent.length > 0) {
+        const recipientCount = data.emailsSent.reduce(
+          (total: number, item: any) => total + (Array.isArray(item?.recipients) ? item.recipients.length : 0),
+          0
+        );
+        toast.success(
+          recipientCount > 0
+            ? `Email sent to ${recipientCount} recipient${recipientCount > 1 ? "s" : ""}`
+            : "Email sent"
+        );
+        if (claimId) {
+          queryClient.invalidateQueries({ queryKey: ["emails", claimId] });
+        }
+        queryClient.invalidateQueries({ queryKey: ["emails"] });
+      }
+
+      if (Array.isArray(data.smsSent) && data.smsSent.length > 0) {
+        const recipientCount = data.smsSent.reduce(
+          (total: number, item: any) => total + (Array.isArray(item?.recipients) ? item.recipients.length : 0),
+          0
+        );
+        toast.success(
+          recipientCount > 0
+            ? `SMS sent to ${recipientCount} recipient${recipientCount > 1 ? "s" : ""}`
+            : "SMS sent"
+        );
+        if (claimId) {
+          queryClient.invalidateQueries({ queryKey: ["darwin-sms-activity", claimId] });
+        }
+      }
+
       const assistantMessage: AiMessage = {
         role: "assistant",
         content: data.answer,
@@ -218,7 +249,7 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
             <li>• Bulk update statuses & assign staff</li>
             <li>• Search communications & history</li>
             <li>• Find leads by storm activity</li>
-            <li>• Draft carrier communications</li>
+            <li>• Draft and send claim emails/SMS</li>
           </ul>
         </div>
       </Card>
