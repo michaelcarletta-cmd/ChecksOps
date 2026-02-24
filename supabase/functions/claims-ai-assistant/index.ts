@@ -1640,6 +1640,165 @@ const tools = [
   {
     type: "function",
     function: {
+      name: "send_portal_notification",
+      description: "Send a portal notification message on a claim to client and/or contractors. Use this when the user asks to notify portal users, send a portal message, or post an update to claim portal recipients.",
+      parameters: {
+        type: "object",
+        properties: {
+          claim_id: {
+            type: "string",
+            description: "Claim UUID. Omit to use current claim context."
+          },
+          client_name: {
+            type: "string",
+            description: "Client/policyholder name to resolve a claim if claim_id is not provided."
+          },
+          message: {
+            type: "string",
+            description: "Portal notification message body."
+          },
+          notify_client: {
+            type: "boolean",
+            description: "Send to the client/policyholder portal user. Default true."
+          },
+          notify_contractors: {
+            type: "boolean",
+            description: "Send to all assigned contractor portal users. Default false."
+          },
+          recipient_user_ids: {
+            type: "array",
+            items: { type: "string" },
+            description: "Optional explicit portal recipient user IDs to include."
+          },
+          send_email_copy: {
+            type: "boolean",
+            description: "Also trigger client email notification via notify-client-claim-update when client is included. Default true."
+          }
+        },
+        required: ["message"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_claim_letter",
+      description: "Create a claim letter and optionally send it by email immediately. Use this when the user asks to draft/create/write a letter and wants it saved or sent.",
+      parameters: {
+        type: "object",
+        properties: {
+          claim_id: {
+            type: "string",
+            description: "Claim UUID. Omit to use current claim context."
+          },
+          client_name: {
+            type: "string",
+            description: "Client/policyholder name to resolve a claim if claim_id is not provided."
+          },
+          subject: {
+            type: "string",
+            description: "Letter subject/title."
+          },
+          body: {
+            type: "string",
+            description: "Letter body content."
+          },
+          recipient_type: {
+            type: "string",
+            enum: ["policyholder", "adjuster", "insurance_company", "referrer", "contractor", "manual"],
+            description: "Intended recipient type for letter metadata and optional email delivery."
+          },
+          recipient_name: {
+            type: "string",
+            description: "Recipient name filter/label."
+          },
+          recipient_email: {
+            type: "string",
+            description: "Direct recipient email address for manual recipient or override."
+          },
+          save_to_claim_files: {
+            type: "boolean",
+            description: "Save the generated letter to claim files. Default true."
+          },
+          send_email: {
+            type: "boolean",
+            description: "Send the letter immediately by email. Default false."
+          },
+          record_communication: {
+            type: "boolean",
+            description: "Log the outbound letter in communications diary. Default true."
+          }
+        },
+        required: ["subject", "body"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "schedule_claim_call",
+      description: "Schedule and log a follow-up call for a claim, and optionally create a task. Use this when the user asks to schedule a call/callback/follow-up call.",
+      parameters: {
+        type: "object",
+        properties: {
+          claim_id: {
+            type: "string",
+            description: "Claim UUID. Omit to use current claim context."
+          },
+          client_name: {
+            type: "string",
+            description: "Client/policyholder name to resolve a claim if claim_id is not provided."
+          },
+          summary: {
+            type: "string",
+            description: "Purpose/agenda for the scheduled call."
+          },
+          scheduled_date: {
+            type: "string",
+            description: "Date for the call in YYYY-MM-DD format. Defaults to today."
+          },
+          scheduled_time: {
+            type: "string",
+            description: "Optional call time in HH:mm format."
+          },
+          call_with_type: {
+            type: "string",
+            enum: ["policyholder", "adjuster", "insurance_company", "referrer", "contractor", "manual"],
+            description: "Who the call is with."
+          },
+          call_with_name: {
+            type: "string",
+            description: "Name filter/label for call contact."
+          },
+          call_with_phone: {
+            type: "string",
+            description: "Direct phone for manual contact or override."
+          },
+          call_with_email: {
+            type: "string",
+            description: "Optional contact email for metadata."
+          },
+          create_task: {
+            type: "boolean",
+            description: "Create a follow-up task for the scheduled call. Default true."
+          },
+          priority: {
+            type: "string",
+            enum: ["low", "medium", "high"],
+            description: "Task priority when create_task is true."
+          },
+          assigned_to: {
+            type: "string",
+            description: "Optional assignee user UUID for the call task."
+          }
+        },
+        required: ["summary"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
       name: "bulk_process_tasks",
       description: "Process tasks across multiple claims at once. Can add a CLAIM NOTE (to the claim's Notes & Activity section), mark tasks as completed, and/or create follow-up tasks. Use this when the user asks to update, clear, complete, or process tasks across multiple claims. IMPORTANT: When the user says 'add a note' in the context of claims/tasks, they mean a claim note in Notes & Activity — NOT the dashboard quick notepad.",
       parameters: {
@@ -2039,6 +2198,7 @@ async function resolveCommunicationClaim(
       .from("claims")
       .select(`
         id,
+        client_id,
         claim_number,
         policyholder_name,
         policyholder_email,
@@ -2393,6 +2553,213 @@ async function invokeEdgeFunction(
       error: err instanceof Error ? err.message : `Failed to call ${functionName}`,
     };
   }
+}
+
+async function getAuthenticatedUserId(supabase: any, authHeader?: string | null): Promise<string | null> {
+  const token = authHeader?.replace("Bearer ", "").trim();
+  if (!token) return null;
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) return null;
+    return user.id;
+  } catch {
+    return null;
+  }
+}
+
+function getTodayDateString(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
+function buildCommunicationTimestamp(scheduledDate?: string, scheduledTime?: string): string {
+  const today = getTodayDateString();
+  const datePart = scheduledDate && /^\d{4}-\d{2}-\d{2}$/.test(scheduledDate)
+    ? scheduledDate
+    : today;
+
+  if (!scheduledTime) {
+    return `${datePart}T09:00:00.000Z`;
+  }
+
+  const normalizedTime = /^\d{2}:\d{2}(:\d{2})?$/.test(scheduledTime)
+    ? (scheduledTime.length === 5 ? `${scheduledTime}:00` : scheduledTime)
+    : "09:00:00";
+
+  return `${datePart}T${normalizedTime}.000Z`;
+}
+
+function sanitizeFileNamePart(value: string): string {
+  const cleaned = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  return cleaned || "letter";
+}
+
+async function saveLetterToClaimFiles(
+  supabase: any,
+  claimId: string,
+  subject: string,
+  content: string,
+  uploadedBy?: string | null,
+): Promise<{ fileId?: string; fileName?: string; filePath?: string; error?: string }> {
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const safeSubject = sanitizeFileNamePart(subject);
+    const fileName = `${timestamp}-${safeSubject}.txt`;
+    const filePath = `${claimId}/assistant-letters/${fileName}`;
+    const fileBytes = new TextEncoder().encode(content);
+
+    const { error: uploadError } = await supabase.storage
+      .from("claim-files")
+      .upload(filePath, fileBytes, {
+        contentType: "text/plain",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      return { error: `Failed to upload letter file: ${uploadError.message}` };
+    }
+
+    const { data: fileRecord, error: fileError } = await supabase
+      .from("claim_files")
+      .insert({
+        claim_id: claimId,
+        file_name: fileName,
+        file_path: filePath,
+        file_type: "text/plain",
+        uploaded_by: uploadedBy || null,
+      })
+      .select("id")
+      .single();
+
+    if (fileError) {
+      return { error: `Failed to create claim file record: ${fileError.message}` };
+    }
+
+    return {
+      fileId: fileRecord?.id,
+      fileName,
+      filePath,
+    };
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : "Failed to save letter file",
+    };
+  }
+}
+
+async function resolvePreferredLetterRecipient(
+  supabase: any,
+  claimData: any,
+  claimId: string,
+  params: any,
+): Promise<{ recipient?: ResolvedEmailRecipient; error?: string }> {
+  const directEmail = params?.recipient_email?.trim();
+  if (directEmail) {
+    return {
+      recipient: {
+        email: directEmail,
+        name: params?.recipient_name?.trim() || directEmail,
+        type: "manual",
+      },
+    };
+  }
+
+  const explicitType = normalizeRecipientType(params?.recipient_type);
+  if (explicitType) {
+    return resolveEmailRecipientForClaim(supabase, claimData, claimId, {
+      recipient_type: explicitType,
+      recipient_name: params?.recipient_name,
+    });
+  }
+
+  const fallbackTypes: CommunicationRecipientType[] = ["adjuster", "insurance_company", "policyholder"];
+  for (const fallbackType of fallbackTypes) {
+    const resolved = await resolveEmailRecipientForClaim(supabase, claimData, claimId, {
+      recipient_type: fallbackType,
+      recipient_name: params?.recipient_name,
+    });
+    if (resolved.recipient) {
+      return resolved;
+    }
+  }
+
+  return { error: "No email recipient could be resolved for this letter." };
+}
+
+async function resolvePortalRecipientsForClaim(
+  supabase: any,
+  claimData: any,
+  claimId: string,
+  options: {
+    notifyClient: boolean;
+    notifyContractors: boolean;
+    explicitRecipientUserIds?: string[];
+  },
+): Promise<{ recipientIds: string[]; recipientLabels: string[]; errors: string[] }> {
+  const recipientMap = new Map<string, string>();
+  const errors: string[] = [];
+
+  if (options.notifyClient) {
+    if (!claimData?.client_id) {
+      errors.push("No client is assigned to this claim.");
+    } else {
+      const { data: client } = await supabase
+        .from("clients")
+        .select("name, user_id")
+        .eq("id", claimData.client_id)
+        .maybeSingle();
+
+      if (!client?.user_id) {
+        errors.push("Client does not have portal access.");
+      } else {
+        recipientMap.set(client.user_id, `Client (${client.name || claimData.policyholder_name || "policyholder"})`);
+      }
+    }
+  }
+
+  if (options.notifyContractors) {
+    const { data: assignments } = await supabase
+      .from("claim_contractors")
+      .select("contractor_id")
+      .eq("claim_id", claimId);
+
+    const contractorIds = (assignments || [])
+      .map((assignment: any) => assignment.contractor_id)
+      .filter(Boolean);
+
+    if (contractorIds.length === 0) {
+      errors.push("No contractors are assigned to this claim.");
+    } else {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", contractorIds);
+      const profileMap = new Map<string, { full_name?: string; email?: string }>(
+        (profiles || []).map((profile: any) => [profile.id, profile]),
+      );
+
+      for (const contractorId of contractorIds) {
+        const profile = profileMap.get(contractorId);
+        const label = profile?.full_name || profile?.email || `Contractor (${contractorId.slice(0, 8)})`;
+        recipientMap.set(contractorId, label);
+      }
+    }
+  }
+
+  for (const explicitId of options.explicitRecipientUserIds || []) {
+    const userId = String(explicitId || "").trim();
+    if (!userId) continue;
+    if (!recipientMap.has(userId)) {
+      recipientMap.set(userId, `User (${userId.slice(0, 8)})`);
+    }
+  }
+
+  const recipientIds = Array.from(recipientMap.keys());
+  const recipientLabels = Array.from(recipientMap.values());
+  return { recipientIds, recipientLabels, errors };
 }
 
 // Helper function to resolve multiple claims from names or status filter
@@ -4505,7 +4872,7 @@ If the document is ambiguous about the type of loss, ask the user to clarify rat
     }
 
     // Search the knowledge base ONLY for analytical/strategic questions — NOT for simple operational tasks
-    const operationalPatterns = /^(create|add|make|mark|complete|delete|remove|update|change|set|assign|close|reopen|show|list|find tasks|bulk|share|remind|jot|note|what (tasks|claims|did I)|how many claims|send (an? )?(email|text|sms)|email (the )?(client|policyholder|adjuster|insured)|text (the )?(client|policyholder|adjuster|insured)|draft and send)/i;
+    const operationalPatterns = /^(create|add|make|mark|complete|delete|remove|update|change|set|assign|close|reopen|show|list|find tasks|bulk|share|remind|jot|note|what (tasks|claims|did I)|how many claims|send (an? )?(email|text|sms|portal|notification)|email (the )?(client|policyholder|adjuster|insured)|text (the )?(client|policyholder|adjuster|insured)|notify (the )?(client|contractor|portal)|portal message|draft and send|write (a )?letter|send (a )?letter|schedule (a )?call|book (a )?call|set (up )?(a )?call)/i;
     const isOperationalRequest = operationalPatterns.test((question || '').trim());
     
     if (!isOperationalRequest) {
@@ -4612,6 +4979,11 @@ When the user explicitly asks to SEND an email/text/SMS now:
 3. If recipient details are missing, use the active claim context (default policyholder) when appropriate.
 4. If recipient is still ambiguous, ask ONE concise clarifying question.
 5. NEVER tell the user to copy/paste and send manually when they asked you to send it.
+
+ACTION TOOLS FOR "DO IT FOR ME":
+- send_portal_notification: Send claim portal notifications to client/contractors and create notification records.
+- create_claim_letter: Create/save a letter file to the claim and optionally send it immediately by email.
+- schedule_claim_call: Schedule/log a call in communications diary and optionally create a follow-up task.
 
 IMPORTANT: You have the ability to CREATE TASKS. When the user asks you to create a task, reminder, follow-up, or to-do item:
 1. Use the create_task function
@@ -5003,8 +5375,11 @@ When the user asks to "send a text/email", "text the client", "email the adjuste
 1. FIRST use claim context/history to make the communication accurate.
 2. DRAFT clear, professional message content in plain language.
 3. If user explicitly asked to SEND, call send_email or send_sms immediately (do not stop at draft-only).
-4. If recipient/channel are missing or ambiguous, ask ONE concise clarification; otherwise execute.
-5. Confirm exactly who was sent the message after the tool succeeds.
+4. If the user asks for portal notifications, call send_portal_notification.
+5. If the user asks for a letter, call create_claim_letter (and send it if requested).
+6. If the user asks to schedule a call, call schedule_claim_call.
+7. If recipient/channel are missing or ambiguous, ask ONE concise clarification; otherwise execute.
+8. Confirm exactly what action was completed after the tool succeeds.
 NEVER tell the user to copy/paste and send manually when they asked you to send it.
 
 You are the smartest person in the room: analyze first, then deliver. When the user asks for help communicating with the client or battling the carrier, synthesize status and notes and produce the deliverable (draft, strategy, next step). No hedging, no "I'd be happy to help" — just the analysis and the draft or action.
@@ -5128,6 +5503,9 @@ Be relentlessly focused on advancing the claim toward a fair, full, and fast set
     let tasksCreated: any[] = [];
     let emailsSent: any[] = [];
     let smsSent: any[] = [];
+    let portalNotificationsSent: any[] = [];
+    let lettersCreated: any[] = [];
+    let callsScheduled: any[] = [];
 
     // Handle tool calls if present
     if (firstChoice.message.tool_calls && firstChoice.message.tool_calls.length > 0) {
@@ -6231,6 +6609,417 @@ ${knowledgeBaseContext || ''}`
             console.error("Error in send_sms:", parseErr);
             answer += `\n\n❌ **Error sending SMS:** Invalid parameters`;
           }
+        } else if (toolCall.function.name === "send_portal_notification") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments || "{}");
+            console.log("Sending portal notification from assistant:", params);
+
+            const authHeader = req.headers.get("authorization");
+            const requesterUserId = await getAuthenticatedUserId(supabase, authHeader);
+            const supabaseUrlForInvoke = Deno.env.get("SUPABASE_URL")!;
+            const supabaseServiceKeyForInvoke = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+            const claimResolution = await resolveCommunicationClaim(
+              supabase,
+              params,
+              claimId || null,
+              claim,
+            );
+            if (!claimResolution.claimId || !claimResolution.claim) {
+              answer += `\n\n❌ **Unable to send portal notification:** ${claimResolution.error || "Claim could not be resolved."}`;
+              continue;
+            }
+
+            const message = String(params.message || "").trim();
+            if (!message) {
+              answer += `\n\n❌ **Unable to send portal notification:** message is required.`;
+              continue;
+            }
+
+            const notifyClient = params.notify_client !== false;
+            const notifyContractors = params.notify_contractors === true;
+            const explicitRecipientUserIds = Array.isArray(params.recipient_user_ids)
+              ? params.recipient_user_ids.map((id: any) => String(id)).filter(Boolean)
+              : [];
+
+            const recipientResolution = await resolvePortalRecipientsForClaim(
+              supabase,
+              claimResolution.claim,
+              claimResolution.claimId,
+              {
+                notifyClient,
+                notifyContractors,
+                explicitRecipientUserIds,
+              },
+            );
+
+            if (recipientResolution.recipientIds.length === 0) {
+              const reason = recipientResolution.errors[0] || "No portal recipients found.";
+              answer += `\n\n❌ **Unable to send portal notification:** ${reason}`;
+              continue;
+            }
+
+            const { data: updateRecord, error: updateError } = await supabase
+              .from("claim_updates")
+              .insert({
+                claim_id: claimResolution.claimId,
+                content: message,
+                user_id: requesterUserId,
+                update_type: "notification",
+                recipients: recipientResolution.recipientIds,
+              })
+              .select("id")
+              .single();
+
+            if (updateError || !updateRecord?.id) {
+              answer += `\n\n❌ **Failed to send portal notification:** ${updateError?.message || "Could not create claim update."}`;
+              continue;
+            }
+
+            const notificationRows = recipientResolution.recipientIds.map((recipientId) => ({
+              user_id: recipientId,
+              claim_id: claimResolution.claimId,
+              update_id: updateRecord.id,
+            }));
+
+            const { error: notificationsError } = await supabase
+              .from("notifications")
+              .insert(notificationRows);
+            if (notificationsError) {
+              console.error("Failed to insert notifications:", notificationsError);
+            }
+
+            let emailCopyStatus = "not_requested";
+            if (params.send_email_copy !== false && notifyClient) {
+              const emailCopy = await invokeEdgeFunction(
+                supabaseUrlForInvoke,
+                "notify-client-claim-update",
+                {
+                  claimId: claimResolution.claimId,
+                  changeType: "general_update",
+                  customMessage: message,
+                },
+                authHeader,
+                supabaseServiceKeyForInvoke,
+              );
+              emailCopyStatus = emailCopy.success
+                ? "sent"
+                : `failed: ${emailCopy.error || "unknown error"}`;
+            }
+
+            portalNotificationsSent.push({
+              claimId: claimResolution.claimId,
+              recipientIds: recipientResolution.recipientIds,
+              recipientLabels: recipientResolution.recipientLabels,
+              emailCopyStatus,
+            });
+
+            answer += `\n\n✅ **Portal notification sent:** ${recipientResolution.recipientLabels.join(", ")}`;
+            if (recipientResolution.errors.length > 0) {
+              answer += `\n⚠️ **Recipient notes:** ${recipientResolution.errors.join(" | ")}`;
+            }
+            if (emailCopyStatus !== "not_requested") {
+              answer += `\n📧 Client email copy: ${emailCopyStatus}`;
+            }
+          } catch (parseErr) {
+            console.error("Error in send_portal_notification:", parseErr);
+            answer += `\n\n❌ **Error sending portal notification:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "create_claim_letter") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments || "{}");
+            console.log("Creating claim letter from assistant:", params);
+
+            const authHeader = req.headers.get("authorization");
+            const requesterUserId = await getAuthenticatedUserId(supabase, authHeader);
+            const supabaseUrlForInvoke = Deno.env.get("SUPABASE_URL")!;
+            const supabaseServiceKeyForInvoke = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+            const claimResolution = await resolveCommunicationClaim(
+              supabase,
+              params,
+              claimId || null,
+              claim,
+            );
+            if (!claimResolution.claimId || !claimResolution.claim) {
+              answer += `\n\n❌ **Unable to create letter:** ${claimResolution.error || "Claim could not be resolved."}`;
+              continue;
+            }
+
+            const subject = String(params.subject || "").trim();
+            const bodyText = String(params.body || "").trim();
+            if (!subject || !bodyText) {
+              answer += `\n\n❌ **Unable to create letter:** subject and body are required.`;
+              continue;
+            }
+
+            const recipientResolution = await resolvePreferredLetterRecipient(
+              supabase,
+              claimResolution.claim,
+              claimResolution.claimId,
+              params,
+            );
+            const letterRecipient = recipientResolution.recipient;
+
+            const claimReference = claimResolution.claim.claim_number || claimResolution.claimId;
+            const toLine = letterRecipient
+              ? `${letterRecipient.name}${letterRecipient.email ? ` <${letterRecipient.email}>` : ""}`
+              : (params.recipient_name || "Recipient");
+            const letterText = `Date: ${new Date().toLocaleDateString()}\nClaim: ${claimReference}\nTo: ${toLine}\nSubject: ${subject}\n\n${bodyText}\n`;
+
+            const shouldSave = params.save_to_claim_files !== false;
+            let savedFile: { fileId?: string; fileName?: string; filePath?: string; error?: string } | null = null;
+            if (shouldSave) {
+              savedFile = await saveLetterToClaimFiles(
+                supabase,
+                claimResolution.claimId,
+                subject,
+                letterText,
+                requesterUserId,
+              );
+              if (savedFile.error) {
+                answer += `\n\n❌ **Letter created but not saved:** ${savedFile.error}`;
+              }
+            }
+
+            if (params.record_communication !== false) {
+              const summaryPreview = bodyText.length > 320
+                ? `${bodyText.substring(0, 320)}...`
+                : bodyText;
+              const { error: diaryError } = await supabase
+                .from("claim_communications_diary")
+                .insert({
+                  claim_id: claimResolution.claimId,
+                  communication_type: "letter",
+                  direction: "outbound",
+                  contact_name: letterRecipient?.name || params.recipient_name || null,
+                  contact_email: letterRecipient?.email || params.recipient_email || null,
+                  contact_company:
+                    letterRecipient?.type === "adjuster" || letterRecipient?.type === "insurance_company"
+                      ? claimResolution.claim.insurance_company || null
+                      : null,
+                  summary: `Letter prepared: ${subject}\n\n${summaryPreview}`,
+                  follow_up_required: false,
+                  created_by: requesterUserId,
+                });
+              if (diaryError) {
+                console.error("Failed to log letter communication:", diaryError);
+              }
+            }
+
+            let emailSendStatus = "not_sent";
+            if (params.send_email === true) {
+              if (!letterRecipient?.email) {
+                emailSendStatus = `failed: ${recipientResolution.error || "recipient email not found"}`;
+              } else {
+                const claimEmailCc = buildClaimMailboxEmail(claimResolution.claim, claimResolution.claimId);
+                const sendPayload: Record<string, any> = {
+                  recipients: [
+                    {
+                      email: letterRecipient.email,
+                      name: letterRecipient.name,
+                      type: letterRecipient.type,
+                    },
+                  ],
+                  subject,
+                  body: bodyText,
+                  claimId: claimResolution.claimId,
+                  claimEmailCc,
+                };
+                if (savedFile?.filePath && savedFile?.fileName) {
+                  sendPayload.attachments = [
+                    {
+                      filePath: savedFile.filePath,
+                      fileName: savedFile.fileName,
+                      fileType: "text/plain",
+                    },
+                  ];
+                }
+
+                const sendResult = await invokeEdgeFunction(
+                  supabaseUrlForInvoke,
+                  "send-email",
+                  sendPayload,
+                  authHeader,
+                  supabaseServiceKeyForInvoke,
+                );
+                emailSendStatus = sendResult.success
+                  ? "sent"
+                  : `failed: ${sendResult.error || "unknown error"}`;
+
+                if (sendResult.success) {
+                  emailsSent.push({
+                    claimId: claimResolution.claimId,
+                    subject,
+                    recipients: [letterRecipient.email],
+                  });
+                }
+              }
+            }
+
+            lettersCreated.push({
+              claimId: claimResolution.claimId,
+              subject,
+              fileId: savedFile?.fileId || null,
+              fileName: savedFile?.fileName || null,
+              recipientEmail: letterRecipient?.email || null,
+              emailSendStatus,
+            });
+
+            answer += `\n\n✅ **Letter created:** "${subject}" for claim ${claimReference}`;
+            if (savedFile?.fileName) {
+              answer += `\n📎 Saved to claim files as ${savedFile.fileName}`;
+            } else if (!shouldSave) {
+              answer += `\nℹ️ Not saved to claim files (save_to_claim_files=false).`;
+            }
+            if (params.send_email === true) {
+              answer += `\n📧 Email delivery: ${emailSendStatus}`;
+            }
+            if (recipientResolution.error && !letterRecipient?.email) {
+              answer += `\n⚠️ Recipient note: ${recipientResolution.error}`;
+            }
+          } catch (parseErr) {
+            console.error("Error in create_claim_letter:", parseErr);
+            answer += `\n\n❌ **Error creating letter:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "schedule_claim_call") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments || "{}");
+            console.log("Scheduling claim call from assistant:", params);
+
+            const authHeader = req.headers.get("authorization");
+            const requesterUserId = await getAuthenticatedUserId(supabase, authHeader);
+
+            const claimResolution = await resolveCommunicationClaim(
+              supabase,
+              params,
+              claimId || null,
+              claim,
+            );
+            if (!claimResolution.claimId || !claimResolution.claim) {
+              answer += `\n\n❌ **Unable to schedule call:** ${claimResolution.error || "Claim could not be resolved."}`;
+              continue;
+            }
+
+            const callSummary = String(params.summary || "").trim();
+            if (!callSummary) {
+              answer += `\n\n❌ **Unable to schedule call:** summary is required.`;
+              continue;
+            }
+
+            const scheduledDate = params.scheduled_date && /^\d{4}-\d{2}-\d{2}$/.test(params.scheduled_date)
+              ? params.scheduled_date
+              : getTodayDateString();
+            const scheduledTime = params.scheduled_time
+              ? String(params.scheduled_time).trim()
+              : "";
+            const communicationDate = buildCommunicationTimestamp(scheduledDate, scheduledTime);
+
+            const callWithType = normalizeRecipientType(params.call_with_type) || "policyholder";
+            const phoneResolution = await resolveSmsRecipientForClaim(
+              supabase,
+              claimResolution.claim,
+              claimResolution.claimId,
+              {
+                recipient_type: callWithType,
+                recipient_name: params.call_with_name,
+                recipient_phone: params.call_with_phone,
+              },
+            );
+            const emailResolution = await resolveEmailRecipientForClaim(
+              supabase,
+              claimResolution.claim,
+              claimResolution.claimId,
+              {
+                recipient_type: callWithType,
+                recipient_name: params.call_with_name,
+                recipient_email: params.call_with_email,
+              },
+            );
+
+            const contactName = params.call_with_name
+              ? String(params.call_with_name).trim()
+              : phoneResolution.recipient?.name || emailResolution.recipient?.name || claimResolution.claim.policyholder_name || "Contact";
+            const contactPhone = String(params.call_with_phone || phoneResolution.recipient?.phone || "").trim() || null;
+            const contactEmail = String(params.call_with_email || emailResolution.recipient?.email || "").trim() || null;
+
+            const callSummaryLine = scheduledTime
+              ? `Scheduled call for ${scheduledDate} at ${scheduledTime}: ${callSummary}`
+              : `Scheduled call for ${scheduledDate}: ${callSummary}`;
+
+            const { error: diaryError } = await supabase
+              .from("claim_communications_diary")
+              .insert({
+                claim_id: claimResolution.claimId,
+                communication_date: communicationDate,
+                communication_type: "phone",
+                direction: "outbound",
+                contact_name: contactName,
+                contact_phone: contactPhone,
+                contact_email: contactEmail,
+                contact_company:
+                  callWithType === "adjuster" || callWithType === "insurance_company"
+                    ? claimResolution.claim.insurance_company || null
+                    : null,
+                summary: callSummaryLine,
+                follow_up_required: true,
+                follow_up_date: scheduledDate,
+                created_by: requesterUserId,
+              });
+
+            if (diaryError) {
+              answer += `\n\n❌ **Failed to schedule call:** ${diaryError.message}`;
+              continue;
+            }
+
+            let createdTaskId: string | null = null;
+            if (params.create_task !== false) {
+              const taskTitle = `Call ${contactName}`;
+              const taskDescriptionParts = [callSummary];
+              if (scheduledTime) taskDescriptionParts.push(`Time: ${scheduledTime}`);
+              if (contactPhone) taskDescriptionParts.push(`Phone: ${contactPhone}`);
+              if (contactEmail) taskDescriptionParts.push(`Email: ${contactEmail}`);
+
+              const { data: callTask, error: taskError } = await supabase
+                .from("tasks")
+                .insert({
+                  claim_id: claimResolution.claimId,
+                  title: taskTitle,
+                  description: taskDescriptionParts.join("\n"),
+                  due_date: scheduledDate,
+                  priority: params.priority || "medium",
+                  assigned_to: params.assigned_to || null,
+                  status: "pending",
+                })
+                .select("id")
+                .single();
+
+              if (taskError) {
+                console.error("Failed to create scheduled call task:", taskError);
+              } else {
+                createdTaskId = callTask?.id || null;
+              }
+            }
+
+            callsScheduled.push({
+              claimId: claimResolution.claimId,
+              contactName,
+              scheduledDate,
+              scheduledTime: scheduledTime || null,
+              taskId: createdTaskId,
+            });
+
+            answer += `\n\n✅ **Call scheduled:** ${contactName} on ${scheduledDate}${scheduledTime ? ` at ${scheduledTime}` : ""}`;
+            if (createdTaskId) {
+              answer += `\n📋 Follow-up task created.`;
+            }
+            if (phoneResolution.error && !contactPhone) {
+              answer += `\n⚠️ Phone note: ${phoneResolution.error}`;
+            }
+          } catch (parseErr) {
+            console.error("Error in schedule_claim_call:", parseErr);
+            answer += `\n\n❌ **Error scheduling call:** Invalid parameters`;
+          }
         } else if (toolCall.function.name === "run_darwin_analysis") {
           try {
             const params = JSON.parse(toolCall.function.arguments);
@@ -6534,7 +7323,18 @@ ${knowledgeBaseContext || ''}`
     };
 
     return new Response(
-      JSON.stringify({ answer, reportType, savedFile, tasksCreated, emailsSent, smsSent, evidenceUsed }),
+      JSON.stringify({
+        answer,
+        reportType,
+        savedFile,
+        tasksCreated,
+        emailsSent,
+        smsSent,
+        portalNotificationsSent,
+        lettersCreated,
+        callsScheduled,
+        evidenceUsed,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
