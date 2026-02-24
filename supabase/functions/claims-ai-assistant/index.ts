@@ -2483,7 +2483,7 @@ function conditionRatingScore(raw?: string): number {
 async function buildPhotoEstimateEvidenceContext(
   supabase: any,
   claimId: string,
-): Promise<{ summaryText: string; analyzedPhotoCount: number; estimateLineCount: number }> {
+): Promise<{ summaryText: string; analyzedPhotoCount: number; estimateLineCount: number; conditionNarratives: string[] }> {
   try {
     const { data: photos } = await supabase
       .from("claim_photos")
@@ -2628,6 +2628,37 @@ async function buildPhotoEstimateEvidenceContext(
         return `- ${truncateSentence(photo.file_name || "Photo", 60)}${categoryPart}: ${conditionPart}${notesPart}${damagePart}`;
       });
 
+    const conditionNarratives = analyzedPhotos
+      .map((photo: any) => {
+        const damages = parseDamagesArray(photo.ai_detected_damages);
+        const leadDamage = damages
+          .slice(0, 2)
+          .map((damage) => truncateSentence(damage.type, 50))
+          .join("; ");
+        const notes = photo.ai_condition_notes
+          ? truncateSentence(photo.ai_condition_notes, 220)
+          : (photo.ai_analysis_summary ? truncateSentence(photo.ai_analysis_summary, 180) : "");
+
+        const narrativeParts = [
+          leadDamage ? `Damage observed: ${leadDamage}.` : "",
+          notes,
+        ].filter(Boolean);
+        if (narrativeParts.length === 0) return "";
+
+        const severityWeight =
+          damages.reduce((max, damage) => Math.max(max, severityScore(damage.severity)), 0) +
+          conditionRatingScore(photo.ai_condition_rating);
+
+        return {
+          text: truncateSentence(narrativeParts.join(" "), 240),
+          severityWeight,
+        };
+      })
+      .filter((entry: any) => Boolean(entry?.text))
+      .sort((a: any, b: any) => b.severityWeight - a.severityWeight)
+      .slice(0, 4)
+      .map((entry: any) => entry.text);
+
     const estimateHeader = latestEstimate
       ? `Latest estimate on file: ${latestEstimate.vendor || "Estimate"} v${latestEstimate.version || 1}` +
         `${latestEstimate.total_rcv ? `, total RCV $${Number(latestEstimate.total_rcv).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : ""}.`
@@ -2656,11 +2687,46 @@ async function buildPhotoEstimateEvidenceContext(
       summaryText: truncateSentence(summaryText, 2600),
       analyzedPhotoCount: analyzedPhotos.length,
       estimateLineCount: estimateLineItems.length,
+      conditionNarratives,
     };
   } catch (error) {
     console.error("Error building photo/estimate evidence context:", error);
-    return { summaryText: "", analyzedPhotoCount: 0, estimateLineCount: 0 };
+    return { summaryText: "", analyzedPhotoCount: 0, estimateLineCount: 0, conditionNarratives: [] };
   }
+}
+
+function ensureConditionNarrativesInBody(
+  body: string,
+  conditionNarratives: string[] = [],
+  carrierFacing: boolean,
+): string {
+  const cleanBody = String(body || "").trim();
+  if (!cleanBody) return cleanBody;
+  const narratives = (conditionNarratives || []).map((n) => String(n || "").trim()).filter(Boolean);
+  if (narratives.length === 0) return cleanBody;
+
+  const bodyNormalized = normalizeDamageKey(cleanBody);
+  const matchedNarratives = narratives.filter((narrative) => {
+    const tokens = normalizeDamageKey(narrative)
+      .split(" ")
+      .filter((token) => token.length >= 6)
+      .slice(0, 8);
+    return tokens.some((token) => bodyNormalized.includes(token));
+  });
+
+  if (matchedNarratives.length >= Math.min(2, narratives.length)) {
+    return cleanBody;
+  }
+
+  const leadLine = carrierFacing
+    ? "The observed property conditions include the following documented impacts:"
+    : "The observed property conditions include the following documented findings:";
+  const repairLine = carrierFacing
+    ? "These conditions require the repair and replacement scope reflected in our estimate to restore the property to pre-loss condition."
+    : "These conditions support the repair and replacement scope reflected in our estimate.";
+
+  const additions = narratives.slice(0, 3).map((narrative) => `- ${truncateSentence(narrative, 220)}`);
+  return `${cleanBody}\n\n${leadLine}\n${additions.join("\n")}\n${repairLine}`;
 }
 
 async function rewriteEmailBodyWithPhotoEstimateEvidence(
@@ -2668,7 +2734,7 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
   claimData: any,
   recipientName: string | undefined,
   evidenceSummary: string,
-  options?: { carrierFacing?: boolean },
+  options?: { carrierFacing?: boolean; conditionNarratives?: string[] },
 ): Promise<string> {
   const trimmedBody = String(rawBody || "").trim();
   if (!trimmedBody || !evidenceSummary.trim()) {
@@ -2745,18 +2811,34 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Photo/estimate rewrite failed:", response.status, errorText);
-      return `${fallbackPrefix}\n\n${trimmedBody}`;
+      return ensureConditionNarrativesInBody(
+        `${fallbackPrefix}\n\n${trimmedBody}`,
+        options?.conditionNarratives || [],
+        carrierFacing,
+      );
     }
 
     const data = await response.json();
     const rewritten = String(data?.choices?.[0]?.message?.content || "").trim();
     if (!rewritten) {
-      return `${fallbackPrefix}\n\n${trimmedBody}`;
+      return ensureConditionNarrativesInBody(
+        `${fallbackPrefix}\n\n${trimmedBody}`,
+        options?.conditionNarratives || [],
+        carrierFacing,
+      );
     }
-    return rewritten;
+    return ensureConditionNarrativesInBody(
+      rewritten,
+      options?.conditionNarratives || [],
+      carrierFacing,
+    );
   } catch (error) {
     console.error("Error rewriting email with photo/estimate evidence:", error);
-    return `${fallbackPrefix}\n\n${trimmedBody}`;
+    return ensureConditionNarrativesInBody(
+      `${fallbackPrefix}\n\n${trimmedBody}`,
+      options?.conditionNarratives || [],
+      carrierFacing,
+    );
   }
 }
 async function resolveCommunicationClaim(
@@ -7248,7 +7330,10 @@ ${knowledgeBaseContext || ''}`
                   claimResolution.claim,
                   dedupedRecipients[0]?.name,
                   evidenceContext.summaryText,
-                  { carrierFacing },
+                  {
+                    carrierFacing,
+                    conditionNarratives: evidenceContext.conditionNarratives,
+                  },
                 );
                 evidenceContextUsed = true;
               } else {
@@ -7387,7 +7472,10 @@ ${knowledgeBaseContext || ''}`
                   claimResolution.claim,
                   dedupedRecipients[0]?.name,
                   evidenceContext.summaryText,
-                  { carrierFacing },
+                  {
+                    carrierFacing,
+                    conditionNarratives: evidenceContext.conditionNarratives,
+                  },
                 );
               }
             }
