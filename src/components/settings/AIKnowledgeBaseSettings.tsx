@@ -132,22 +132,37 @@ export const AIKnowledgeBaseSettings = () => {
       const documentsList = docs || [];
       const documentIds = documentsList.map((d) => d.id);
 
-      let chunkRows: Array<{ document_id: string; embedding: string | null }> = [];
-      if (documentIds.length > 0) {
-        const { data: chunks, error: chunksError } = await supabase
-          .from("ai_knowledge_chunks")
-          .select("document_id, embedding")
-          .in("document_id", documentIds);
-        if (chunksError) throw chunksError;
-        chunkRows = (chunks || []) as Array<{ document_id: string; embedding: string | null }>;
-      }
-
       const perDocStats = new Map<string, { chunkCount: number; embeddedCount: number }>();
-      for (const chunk of chunkRows) {
-        const current = perDocStats.get(chunk.document_id) || { chunkCount: 0, embeddedCount: 0 };
-        current.chunkCount += 1;
-        if (chunk.embedding) current.embeddedCount += 1;
-        perDocStats.set(chunk.document_id, current);
+      if (documentIds.length > 0) {
+        // Supabase returns chunk rows in pages; iterate all pages so large KBs
+        // do not show false "zero chunks" validation errors.
+        const CHUNK_PAGE_SIZE = 1000;
+        let offset = 0;
+
+        while (true) {
+          const { data: chunkPage, error: chunksError } = await supabase
+            .from("ai_knowledge_chunks")
+            .select("id, document_id, embedding")
+            .in("document_id", documentIds)
+            .order("id", { ascending: true })
+            .range(offset, offset + CHUNK_PAGE_SIZE - 1);
+          if (chunksError) throw chunksError;
+
+          const rows = (chunkPage || []) as Array<{
+            id: string;
+            document_id: string;
+            embedding: unknown | null;
+          }>;
+          for (const chunk of rows) {
+            const current = perDocStats.get(chunk.document_id) || { chunkCount: 0, embeddedCount: 0 };
+            current.chunkCount += 1;
+            if (chunk.embedding) current.embeddedCount += 1;
+            perDocStats.set(chunk.document_id, current);
+          }
+
+          if (rows.length < CHUNK_PAGE_SIZE) break;
+          offset += CHUNK_PAGE_SIZE;
+        }
       }
 
       const issues: KnowledgeValidationIssue[] = [];
