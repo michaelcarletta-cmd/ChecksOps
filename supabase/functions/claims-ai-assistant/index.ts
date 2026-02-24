@@ -2238,6 +2238,7 @@ type CommunicationDraft = {
   subject?: string;
   body: string;
   claimEmailCc?: string;
+  photoEstimateEvidenceApplied?: boolean;
   recipients: Array<{
     name: string;
     type: string;
@@ -7177,6 +7178,7 @@ ${knowledgeBaseContext || ''}`
               subject,
               body: evidenceAwareBodyText,
               claimEmailCc,
+              photoEstimateEvidenceApplied: evidenceContextUsed,
               recipients: dedupedRecipients.map((recipient) => ({
                 name: recipient.name,
                 type: recipient.type,

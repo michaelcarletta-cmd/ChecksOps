@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, Loader2, Mail, MessageSquare } from "lucide-react";
+import { CheckCircle2, Loader2, Mail, MessageSquare, Sparkles } from "lucide-react";
 
 export interface CommunicationDraftRecipient {
   name: string;
@@ -19,6 +19,7 @@ export interface CommunicationDraft {
   subject?: string;
   body: string;
   claimEmailCc?: string;
+  photoEstimateEvidenceApplied?: boolean;
   recipients: CommunicationDraftRecipient[];
 }
 
@@ -69,6 +70,12 @@ export const CommunicationDraftComposer = ({
         <Badge variant="outline" className="text-[10px]">
           Claim: {draft.claimReference}
         </Badge>
+        {draft.photoEstimateEvidenceApplied && (
+          <Badge variant="outline" className="text-[10px] text-primary border-primary/40">
+            <Sparkles className="mr-1 h-3 w-3" />
+            Photo + Estimate Evidence Applied
+          </Badge>
+        )}
         {isSent && (
           <Badge variant="outline" className="text-[10px] text-green-600 border-green-400/40">
             <CheckCircle2 className="mr-1 h-3 w-3" />
