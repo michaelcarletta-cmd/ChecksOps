@@ -2041,6 +2041,357 @@ function buildClaimNumberSubject(claimData: any, claimId: string): string {
   return claimId;
 }
 
+function buildProfessionalEmailBody(
+  rawBody: string,
+  claimData: any,
+  recipientName?: string,
+): string {
+  const trimmed = String(rawBody || "").trim();
+  if (!trimmed) return "";
+
+  const lines = trimmed
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const greetingLine = lines[0] || "";
+  const hasGreeting = /^(hi|hello|dear)\b/i.test(greetingLine);
+  const hasClosing = /(thank you|thanks|sincerely|regards|best)/i.test(trimmed);
+  const hasClaimReference = /claim\s*#?\s*[a-z0-9-]+/i.test(trimmed);
+  const looksDetailed = trimmed.length >= 180 || lines.length >= 5;
+
+  if (hasGreeting && hasClosing && (hasClaimReference || looksDetailed)) {
+    return trimmed;
+  }
+
+  const claimNumber = String(claimData?.claim_number || "").trim();
+  const claimReference = claimNumber ? `claim ${claimNumber}` : "this claim";
+  const policyholderName = String(claimData?.policyholder_name || "the insured").trim();
+
+  const normalizedRecipient = String(recipientName || "").trim();
+  const safeRecipient =
+    normalizedRecipient && !normalizedRecipient.includes("@")
+      ? normalizedRecipient
+      : "there";
+
+  const normalizedRequest = /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+
+  return [
+    `Hello ${safeRecipient},`,
+    "",
+    `I hope you're doing well. I'm writing regarding ${claimReference} for ${policyholderName}.`,
+    "",
+    normalizedRequest,
+    "",
+    "Please confirm receipt and provide your response at your earliest convenience.",
+    "",
+    "Thank you,",
+  ].join("\n");
+}
+
+function buildProfessionalSmsBody(
+  rawBody: string,
+  claimData: any,
+  recipientName?: string,
+): string {
+  const trimmed = String(rawBody || "").trim();
+  if (!trimmed) return "";
+
+  const hasClaimReference = /\bclaim\b/i.test(trimmed);
+  const hasGreeting = /^(hi|hello|good (morning|afternoon|evening))\b/i.test(trimmed);
+  if (hasGreeting && hasClaimReference && trimmed.length >= 40) {
+    return trimmed;
+  }
+
+  const claimNumber = String(claimData?.claim_number || "").trim();
+  const claimReference = claimNumber ? `claim ${claimNumber}` : "this claim";
+  const safeRecipient = String(recipientName || "").trim() || "there";
+  const normalizedRequest = /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+
+  return `Hi ${safeRecipient}, regarding ${claimReference}: ${normalizedRequest}`;
+}
+
+function shouldUsePhotoDamageEvidenceForCommunication(question: string, bodyText: string): boolean {
+  const combined = `${question || ""}\n${bodyText || ""}`.toLowerCase();
+  const explicitPattern = /based on (the )?damage (in|from) (the )?(photos|images)/i;
+  if (explicitPattern.test(combined)) return true;
+
+  const mentionsPhotos = /\b(photo|photos|picture|pictures|image|images)\b/i.test(combined);
+  const mentionsDamage = /\b(damage|damages|impact|leak|water|storm|wind|hail|fire|loss)\b/i.test(combined);
+  const mentionsEstimate = /\b(estimate|scope|line item|xactimate|aligned|align|coincide)\b/i.test(combined);
+
+  return mentionsPhotos && (mentionsDamage || mentionsEstimate);
+}
+
+function parseDamagesArray(rawDamages: any): Array<{ type: string; severity?: string; location?: string; notes?: string }> {
+  if (!rawDamages) return [];
+
+  let parsed: any = rawDamages;
+  if (typeof rawDamages === "string") {
+    try {
+      parsed = JSON.parse(rawDamages);
+    } catch {
+      return [];
+    }
+  }
+
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed
+    .map((entry: any) => {
+      if (typeof entry === "string") {
+        return { type: entry };
+      }
+      if (!entry || typeof entry !== "object") return null;
+      const type = String(
+        entry.type ||
+        entry.damage_type ||
+        entry.damage ||
+        entry.item ||
+        entry.name ||
+        "",
+      ).trim();
+      if (!type) return null;
+      return {
+        type,
+        severity: entry.severity ? String(entry.severity) : undefined,
+        location: entry.location ? String(entry.location) : (entry.area ? String(entry.area) : undefined),
+        notes: entry.notes ? String(entry.notes) : (entry.why ? String(entry.why) : undefined),
+      };
+    })
+    .filter((entry: any) => Boolean(entry?.type));
+}
+
+function normalizeDamageKey(raw: string): string {
+  return String(raw || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function truncateSentence(text: string, max = 180): string {
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  if (clean.length <= max) return clean;
+  return `${clean.slice(0, Math.max(0, max - 3)).trim()}...`;
+}
+
+async function buildPhotoEstimateEvidenceContext(
+  supabase: any,
+  claimId: string,
+): Promise<{ summaryText: string; analyzedPhotoCount: number; estimateLineCount: number }> {
+  try {
+    const { data: photos } = await supabase
+      .from("claim_photos")
+      .select("id, file_name, category, ai_detected_damages, ai_analysis_summary, ai_analyzed_at")
+      .eq("claim_id", claimId)
+      .order("created_at", { ascending: false })
+      .limit(120);
+
+    const analyzedPhotos = (photos || []).filter((photo: any) => {
+      const parsedDamages = parseDamagesArray(photo.ai_detected_damages);
+      return Boolean(photo.ai_analyzed_at || parsedDamages.length > 0 || photo.ai_analysis_summary);
+    });
+
+    const damageMap = new Map<
+      string,
+      {
+        label: string;
+        count: number;
+        severities: Set<string>;
+        sampleLocations: Set<string>;
+        sampleNotes: Set<string>;
+      }
+    >();
+
+    for (const photo of analyzedPhotos) {
+      const damages = parseDamagesArray(photo.ai_detected_damages);
+      for (const damage of damages) {
+        const key = normalizeDamageKey(damage.type);
+        if (!key) continue;
+
+        const existing = damageMap.get(key) || {
+          label: truncateSentence(damage.type, 80),
+          count: 0,
+          severities: new Set<string>(),
+          sampleLocations: new Set<string>(),
+          sampleNotes: new Set<string>(),
+        };
+        existing.count += 1;
+        if (damage.severity) existing.severities.add(truncateSentence(damage.severity, 24));
+        if (damage.location) existing.sampleLocations.add(truncateSentence(damage.location, 36));
+        if (damage.notes) existing.sampleNotes.add(truncateSentence(damage.notes, 80));
+        damageMap.set(key, existing);
+      }
+    }
+
+    const topDamages = Array.from(damageMap.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 7);
+
+    const { data: latestEstimate } = await supabase
+      .from("claim_estimates")
+      .select("id, vendor, version, total_rcv, total_acv, updated_at, created_at")
+      .eq("claim_id", claimId)
+      .order("updated_at", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let estimateLineItems: any[] = [];
+    if (latestEstimate?.id) {
+      const { data: estimateLines } = await supabase
+        .from("estimate_line_items")
+        .select("description, category, room, code, rcv, quantity, unit")
+        .eq("estimate_id", latestEstimate.id)
+        .order("rcv", { ascending: false })
+        .limit(120);
+      estimateLineItems = estimateLines || [];
+    }
+
+    const damageKeywords = topDamages.flatMap((damage) =>
+      normalizeDamageKey(damage.label)
+        .split(" ")
+        .filter((token) => token.length >= 4),
+    );
+
+    const matchedEstimateLines = estimateLineItems.filter((line) => {
+      const text = `${line.description || ""} ${line.category || ""} ${line.room || ""}`.toLowerCase();
+      return damageKeywords.some((keyword) => text.includes(keyword));
+    }).slice(0, 8);
+
+    const estimateHighlights = (matchedEstimateLines.length > 0 ? matchedEstimateLines : estimateLineItems.slice(0, 8))
+      .map((line) => {
+        const lineDesc = truncateSentence(String(line.description || "Estimate line item"), 90);
+        const rcv = Number(line.rcv || 0);
+        const amount = rcv > 0 ? ` ($${rcv.toLocaleString(undefined, { maximumFractionDigits: 0 })} RCV)` : "";
+        return `- ${lineDesc}${amount}`;
+      });
+
+    const photoHighlights = topDamages.map((damage) => {
+      const severity =
+        damage.severities.size > 0
+          ? ` [${Array.from(damage.severities).slice(0, 2).join(", ")}]`
+          : "";
+      const location =
+        damage.sampleLocations.size > 0
+          ? ` near ${Array.from(damage.sampleLocations)[0]}`
+          : "";
+      return `- ${damage.label}${severity} seen across ${damage.count} analyzed photo(s)${location}`;
+    });
+
+    const estimateHeader = latestEstimate
+      ? `Latest estimate on file: ${latestEstimate.vendor || "Estimate"} v${latestEstimate.version || 1}` +
+        `${latestEstimate.total_rcv ? `, total RCV $${Number(latestEstimate.total_rcv).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : ""}.`
+      : "No structured estimate line items were found on file.";
+
+    const fallbackPhotoNote =
+      analyzedPhotos.length === 0
+        ? "No AI-analyzed photos were found on this claim yet."
+        : "";
+
+    const summaryText = [
+      `AI-analyzed photos reviewed: ${analyzedPhotos.length}.`,
+      fallbackPhotoNote,
+      photoHighlights.length > 0 ? "Key photo-documented damages:" : "",
+      ...photoHighlights,
+      estimateHeader,
+      estimateHighlights.length > 0 ? "Estimate scope alignment points:" : "",
+      ...estimateHighlights,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return {
+      summaryText: truncateSentence(summaryText, 2600),
+      analyzedPhotoCount: analyzedPhotos.length,
+      estimateLineCount: estimateLineItems.length,
+    };
+  } catch (error) {
+    console.error("Error building photo/estimate evidence context:", error);
+    return { summaryText: "", analyzedPhotoCount: 0, estimateLineCount: 0 };
+  }
+}
+
+async function rewriteEmailBodyWithPhotoEstimateEvidence(
+  rawBody: string,
+  claimData: any,
+  recipientName: string | undefined,
+  evidenceSummary: string,
+): Promise<string> {
+  const trimmedBody = String(rawBody || "").trim();
+  if (!trimmedBody || !evidenceSummary.trim()) {
+    return trimmedBody;
+  }
+
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    return `${trimmedBody}\n\n${evidenceSummary}`;
+  }
+
+  const claimNumber = String(claimData?.claim_number || "").trim();
+  const carrier = String(claimData?.insurance_company || "the insurance carrier").trim();
+  const policyholder = String(claimData?.policyholder_name || "the insured").trim();
+  const recipient = recipientName && !recipientName.includes("@") ? recipientName : "Adjuster";
+
+  try {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        max_tokens: 900,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a senior public-adjuster communication specialist. Rewrite emails in plain text only (no markdown). Keep professional tone, concise but specific. Include only the strongest documented damages and clearly tie them to estimate scope.",
+          },
+          {
+            role: "user",
+            content: [
+              `Rewrite this email so it is professional and evidence-driven for ${carrier}.`,
+              `Claim #: ${claimNumber || "N/A"} | Policyholder: ${policyholder} | Recipient: ${recipient}`,
+              "",
+              "Original draft:",
+              trimmedBody,
+              "",
+              "Photo/estimate evidence context (use this to strengthen the draft):",
+              evidenceSummary,
+              "",
+              "Requirements:",
+              "- Keep greeting and courteous close.",
+              "- Include important property damages from analyzed photos (not every single point).",
+              "- Tie damages to estimate scope items already on file.",
+              "- Ask for scope/payment update based on this evidence.",
+              "- Return only the final email body text.",
+            ].join("\n"),
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Photo/estimate rewrite failed:", response.status, errorText);
+      return `${trimmedBody}\n\n${evidenceSummary}`;
+    }
+
+    const data = await response.json();
+    const rewritten = String(data?.choices?.[0]?.message?.content || "").trim();
+    if (!rewritten) {
+      return `${trimmedBody}\n\n${evidenceSummary}`;
+    }
+    return rewritten;
+  } catch (error) {
+    console.error("Error rewriting email with photo/estimate evidence:", error);
+    return `${trimmedBody}\n\n${evidenceSummary}`;
+  }
+}
 async function resolveCommunicationClaim(
   supabase: any,
   params: any,
@@ -4911,6 +5262,13 @@ When the user explicitly asks to SEND an email/text/SMS now:
 6. If recipient is still ambiguous, ask ONE concise clarifying question.
 7. NEVER tell the user to copy/paste and send manually when they asked you to send it.
 
+*** CRITICAL - DRAFT/APPROVAL WORKFLOW ***
+When the user asks to draft, review, edit, approve, or "let me check it first":
+1. Use draft_email for email drafts and draft_sms for text drafts.
+2. Do NOT call send_email/send_sms unless the user explicitly asks to send now.
+3. Drafts should be polished and ready for approval with greeting, context, clear ask, and closing.
+4. Assume the user can edit the draft body and click an "Approve & Send" button in the UI.
+5. If the user asks for a draft "based on damage in the photos", ground the draft in AI-analyzed photo damages and align those points to estimate scope already on file.
 ACTION TOOLS FOR "DO IT FOR ME":
 - send_portal_notification: Send claim portal notifications to client/contractors and create notification records.
 - create_claim_letter: Create/save a letter file to the claim and optionally send it immediately by email.
@@ -5304,13 +5662,16 @@ PROOF OF LOSS STRATEGY:
 
 When the user asks to "send a text/email", "text the client", "email the adjuster", or "draft and send":
 1. FIRST use claim context/history to make the communication accurate.
-2. DRAFT clear, professional message content in plain language.
-3. If user explicitly asked to SEND, call send_email or send_sms immediately (do not stop at draft-only).
-4. If the user asks for portal notifications, call send_portal_notification.
-5. If the user asks for a letter, call create_claim_letter (and send it if requested).
-6. If the user asks to schedule a call, call schedule_claim_call.
-7. If recipient/channel are missing or ambiguous, ask ONE concise clarification; otherwise execute.
-8. Confirm exactly what action was completed after the tool succeeds.
+2. DRAFT polished, professional message content in plain language (no slang/shorthand).
+3. For EMAIL drafts, include: greeting, claim reference, concise context, specific request/action, and courteous closing.
+4. If user asks for DRAFT ONLY (or asks to review before sending), call draft_email or draft_sms and do not send yet.
+5. If user explicitly asked to SEND now, call send_email or send_sms immediately using the professional draft body.
+6. When the request says "based on damage in the photos" (or equivalent), explicitly incorporate AI-analyzed photo damages and tie them to estimate/scope items already on file.
+7. If the user asks for portal notifications, call send_portal_notification.
+8. If the user asks for a letter, call create_claim_letter (and send it if requested).
+9. If the user asks to schedule a call, call schedule_claim_call.
+10. If recipient/channel are missing or ambiguous, ask ONE concise clarification; otherwise execute.
+11. Confirm exactly what action was completed after the tool succeeds.
 NEVER tell the user to copy/paste and send manually when they asked you to send it.
 
 You are the smartest person in the room: analyze first, then deliver. When the user asks for help communicating with the client or battling the carrier, synthesize status and notes and produce the deliverable (draft, strategy, next step). No hedging, no "I'd be happy to help" — just the analysis and the draft or action.
@@ -6337,6 +6698,140 @@ ${knowledgeBaseContext || ''}`
             console.error("Error in list_claim_tasks:", parseErr);
             answer += `\n\n❌ **Error listing tasks:** Invalid parameters`;
           }
+        } else if (toolCall.function.name === "draft_email") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments || "{}");
+            console.log("Drafting email from assistant:", params);
+
+            const claimResolution = await resolveCommunicationClaim(
+              supabase,
+              params,
+              claimId || null,
+              claim,
+            );
+
+            if (!claimResolution.claimId || !claimResolution.claim) {
+              answer += `\n\n❌ **Unable to draft email:** ${claimResolution.error || "Claim could not be resolved."}`;
+              continue;
+            }
+
+            const bodyText = String(params.body || "").trim();
+            if (!bodyText) {
+              answer += `\n\n❌ **Unable to draft email:** body is required.`;
+              continue;
+            }
+            const subject = buildClaimNumberSubject(claimResolution.claim, claimResolution.claimId);
+
+            const recipientInputs = collectRecipientInputs(params, "email");
+            const resolvedRecipients: ResolvedEmailRecipient[] = [];
+            const recipientErrors: string[] = [];
+
+            for (const recipientInput of recipientInputs) {
+              const recipientType = normalizeRecipientType(recipientInput.recipient_type);
+              if (recipientType === "insurance_company" && !recipientInput.recipient_email) {
+                const carrierRecipientSet = await resolveCarrierEmailRecipientsForClaim(
+                  supabase,
+                  claimResolution.claim,
+                  claimResolution.claimId,
+                  recipientInput.recipient_name,
+                );
+                if (carrierRecipientSet.recipients.length > 0) {
+                  resolvedRecipients.push(...carrierRecipientSet.recipients);
+                }
+                if (carrierRecipientSet.errors.length > 0) {
+                  recipientErrors.push(...carrierRecipientSet.errors);
+                }
+                continue;
+              }
+
+              const resolved = await resolveEmailRecipientForClaim(
+                supabase,
+                claimResolution.claim,
+                claimResolution.claimId,
+                recipientInput,
+              );
+              if (resolved.recipient) {
+                resolvedRecipients.push(resolved.recipient);
+              } else if (resolved.error) {
+                recipientErrors.push(resolved.error);
+              }
+            }
+
+            const dedupedRecipients = dedupeEmailRecipients(resolvedRecipients);
+            if (dedupedRecipients.length === 0) {
+              answer += `\n\n❌ **Unable to draft email:** ${recipientErrors[0] || "No valid recipients found."}`;
+              continue;
+            }
+
+            const polishedBodyText = buildProfessionalEmailBody(
+              bodyText,
+              claimResolution.claim,
+              dedupedRecipients[0]?.name,
+            );
+            const shouldInjectPhotoEvidence = shouldUsePhotoDamageEvidenceForCommunication(
+              String(question || ""),
+              bodyText,
+            );
+            let evidenceAwareBodyText = polishedBodyText;
+            let evidenceContextUsed = false;
+            let evidenceContextMissing = false;
+            if (shouldInjectPhotoEvidence) {
+              const evidenceContext = await buildPhotoEstimateEvidenceContext(
+                supabase,
+                claimResolution.claimId,
+              );
+              if (evidenceContext.summaryText) {
+                evidenceAwareBodyText = await rewriteEmailBodyWithPhotoEstimateEvidence(
+                  polishedBodyText,
+                  claimResolution.claim,
+                  dedupedRecipients[0]?.name,
+                  evidenceContext.summaryText,
+                );
+                evidenceContextUsed = true;
+              } else {
+                evidenceContextMissing = true;
+              }
+            }
+            const claimEmailCc = params.cc_claim_mailbox === false
+              ? undefined
+              : buildClaimMailboxEmail(claimResolution.claim, claimResolution.claimId);
+
+            const draftId = crypto.randomUUID();
+            communicationDrafts.push({
+              draftId,
+              channel: "email",
+              claimId: claimResolution.claimId,
+              claimReference:
+                String(claimResolution.claim.claim_number || "").trim() ||
+                claimResolution.claimName ||
+                claimResolution.claimId,
+              subject,
+              body: evidenceAwareBodyText,
+              claimEmailCc,
+              recipients: dedupedRecipients.map((recipient) => ({
+                name: recipient.name,
+                type: recipient.type,
+                email: recipient.email,
+              })),
+            });
+
+            const recipientLabel = dedupedRecipients
+              .map((recipient) => `${recipient.name} <${recipient.email}>`)
+              .join(", ");
+            answer += `\n\n📝 **Email draft ready:** ${recipientLabel} (subject: "${subject}")`;
+            answer += `\nUse the draft editor below to review/edit, then click **Approve & Send** when ready.`;
+            if (evidenceContextUsed) {
+              answer += `\n📸 Draft includes AI photo-damage findings aligned to estimate scope on file.`;
+            } else if (evidenceContextMissing && shouldInjectPhotoEvidence) {
+              answer += `\n⚠️ No analyzed photo/estimate evidence was found to auto-include.`;
+            }
+            if (recipientErrors.length > 0) {
+              answer += `\n⚠️ **Skipped recipients:** ${recipientErrors.join(" | ")}`;
+            }
+          } catch (parseErr) {
+            console.error("Error in draft_email:", parseErr);
+            answer += `\n\n❌ **Error drafting email:** Invalid parameters`;
+          }
         } else if (toolCall.function.name === "send_email") {
           try {
             const params = JSON.parse(toolCall.function.arguments || "{}");
@@ -6406,6 +6901,33 @@ ${knowledgeBaseContext || ''}`
               continue;
             }
 
+            const polishedBodyText = buildProfessionalEmailBody(
+              bodyText,
+              claimResolution.claim,
+              dedupedRecipients[0]?.name,
+            );
+            const shouldInjectPhotoEvidence = shouldUsePhotoDamageEvidenceForCommunication(
+              String(question || ""),
+              bodyText,
+            );
+            let evidenceAwareBodyText = polishedBodyText;
+            if (shouldInjectPhotoEvidence) {
+              const evidenceContext = await buildPhotoEstimateEvidenceContext(
+                supabase,
+                claimResolution.claimId,
+              );
+              if (evidenceContext.summaryText) {
+                evidenceAwareBodyText = await rewriteEmailBodyWithPhotoEstimateEvidence(
+                  polishedBodyText,
+                  claimResolution.claim,
+                  dedupedRecipients[0]?.name,
+                  evidenceContext.summaryText,
+                );
+              }
+            }
+            if (polishedBodyText !== bodyText) {
+              console.log("Auto-polished outbound email body for professional tone");
+            }
             const claimEmailCc = params.cc_claim_mailbox === false
               ? undefined
               : buildClaimMailboxEmail(claimResolution.claim, claimResolution.claimId);
@@ -6420,7 +6942,7 @@ ${knowledgeBaseContext || ''}`
                   type: r.type,
                 })),
                 subject,
-                body: bodyText,
+                body: evidenceAwareBodyText,
                 claimId: claimResolution.claimId,
                 claimEmailCc,
               },
