@@ -2591,41 +2591,115 @@ async function invokeEdgeFunction(
   payload: Record<string, any>,
   authHeader?: string | null,
   fallbackServiceKey?: string,
-): Promise<{ success: boolean; data?: any; error?: string }> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+): Promise<{ success: boolean; data?: any; error?: string; status?: number }> {
+  const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
+  const serviceAuthHeader = fallbackServiceKey ? `Bearer ${fallbackServiceKey}` : undefined;
+
+  const parseJwtRole = (header?: string | null): string | null => {
+    if (!header || !header.startsWith("Bearer ")) return null;
+    const token = header.replace("Bearer ", "").trim();
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    try {
+      const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const padding = "=".repeat((4 - (normalized.length % 4)) % 4);
+      const decoded = atob(normalized + padding);
+      const payloadObj = JSON.parse(decoded);
+      return payloadObj?.role || payloadObj?.app_metadata?.role || null;
+    } catch {
+      return null;
+    }
   };
 
-  if (authHeader) {
-    headers.Authorization = authHeader;
-  } else if (fallbackServiceKey) {
-    headers.Authorization = `Bearer ${fallbackServiceKey}`;
-  }
+  const requestedRole = parseJwtRole(authHeader);
+  const shouldUseUserAuth = requestedRole === "authenticated";
+  const initialAuthorization = shouldUseUserAuth
+    ? (authHeader || undefined)
+    : (serviceAuthHeader || authHeader || undefined);
 
-  try {
-    const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-    });
+  const invokeWithAuth = async (
+    authorization?: string,
+  ): Promise<{ success: boolean; data?: any; error?: string; status?: number }> => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
 
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      return {
-        success: false,
-        data,
-        error: data?.error || data?.message || `Edge function ${functionName} failed with ${response.status}`,
-      };
+    if (authorization) {
+      headers.Authorization = authorization;
+    }
+    if (supabaseAnonKey) {
+      headers.apikey = supabaseAnonKey;
+    } else if (fallbackServiceKey) {
+      headers.apikey = fallbackServiceKey;
     }
 
-    return { success: true, data };
-  } catch (err) {
+    try {
+      const response = await fetch(`${supabaseUrl}/functions/v1/${functionName}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      const rawText = await response.text();
+      let data: any = {};
+      if (rawText) {
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          data = { raw: rawText };
+        }
+      }
+
+      if (!response.ok) {
+        const responseError =
+          data?.error ||
+          data?.message ||
+          (rawText ? rawText.slice(0, 400) : "") ||
+          `Edge function ${functionName} failed with ${response.status}`;
+
+        return {
+          success: false,
+          data,
+          status: response.status,
+          error: String(responseError),
+        };
+      }
+
+      return { success: true, data, status: response.status };
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : `Failed to call ${functionName}`,
+      };
+    }
+  };
+
+  const firstAttempt = await invokeWithAuth(initialAuthorization);
+  if (firstAttempt.success) {
+    return firstAttempt;
+  }
+
+  const shouldRetryWithServiceAuth = Boolean(
+    serviceAuthHeader &&
+    initialAuthorization !== serviceAuthHeader &&
+    (firstAttempt.status === 401 || firstAttempt.status === 403),
+  );
+
+  if (shouldRetryWithServiceAuth) {
+    const fallbackAttempt = await invokeWithAuth(serviceAuthHeader);
+    if (fallbackAttempt.success) {
+      return fallbackAttempt;
+    }
+
     return {
       success: false,
-      error: err instanceof Error ? err.message : `Failed to call ${functionName}`,
+      data: fallbackAttempt.data || firstAttempt.data,
+      status: fallbackAttempt.status || firstAttempt.status,
+      error: fallbackAttempt.error || firstAttempt.error,
     };
   }
+
+  return firstAttempt;
 }
 
 async function getAuthenticatedUserId(supabase: any, authHeader?: string | null): Promise<string | null> {
@@ -6615,6 +6689,7 @@ ${knowledgeBaseContext || ''}`
             }
 
             const supabaseUrlForInvoke = Deno.env.get("SUPABASE_URL")!;
+            const supabaseServiceKeyForInvoke = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
             const messageBody = String(params.message_body || "").trim();
             if (!messageBody) {
               answer += `\n\n❌ **Unable to send SMS:** message_body is required.`;
@@ -6670,6 +6745,7 @@ ${knowledgeBaseContext || ''}`
                   messageBody,
                 },
                 authHeader,
+                supabaseServiceKeyForInvoke,
               );
 
               if (sendResult.success) {
