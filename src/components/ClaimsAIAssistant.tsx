@@ -144,6 +144,38 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
         }
       }
 
+      if (Array.isArray(data.portalNotificationsSent) && data.portalNotificationsSent.length > 0) {
+        const recipientCount = data.portalNotificationsSent.reduce(
+          (total: number, item: any) => total + (Array.isArray(item?.recipientIds) ? item.recipientIds.length : 0),
+          0
+        );
+        toast.success(
+          recipientCount > 0
+            ? `Portal notification sent to ${recipientCount} recipient${recipientCount > 1 ? "s" : ""}`
+            : "Portal notification sent"
+        );
+        queryClient.invalidateQueries({ queryKey: ["claim-notifications"] });
+        queryClient.invalidateQueries({ queryKey: ["unread-claim-notifications"] });
+      }
+
+      if (Array.isArray(data.lettersCreated) && data.lettersCreated.length > 0) {
+        const letterCount = data.lettersCreated.length;
+        toast.success(`Created ${letterCount} claim letter${letterCount > 1 ? "s" : ""}`);
+        if (claimId) {
+          queryClient.invalidateQueries({ queryKey: ["claim-files", claimId] });
+        }
+        queryClient.invalidateQueries({ queryKey: ["claim-files"] });
+      }
+
+      if (Array.isArray(data.callsScheduled) && data.callsScheduled.length > 0) {
+        const callCount = data.callsScheduled.length;
+        toast.success(`Scheduled ${callCount} call${callCount > 1 ? "s" : ""}`);
+        if (claimId) {
+          queryClient.invalidateQueries({ queryKey: ["claim-tasks", claimId] });
+        }
+        queryClient.invalidateQueries({ queryKey: ["claim-tasks"] });
+      }
+
       const assistantMessage: AiMessage = {
         role: "assistant",
         content: data.answer,
