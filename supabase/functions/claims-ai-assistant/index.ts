@@ -1448,6 +1448,138 @@ const tools = [
   {
     type: "function",
     function: {
+      name: "draft_email",
+      description: "Draft a professional email without sending it. Use this when the user asks to draft, prepare, or review an email before approval. The UI can then let the user edit and approve send.",
+      parameters: {
+        type: "object",
+        properties: {
+          claim_id: {
+            type: "string",
+            description: "Claim UUID. Omit to use current claim context."
+          },
+          client_name: {
+            type: "string",
+            description: "Client/policyholder name to resolve a claim if claim_id is not provided."
+          },
+          subject: {
+            type: "string",
+            description: "Draft subject/context. Outbound subject is normalized to the claim number only."
+          },
+          body: {
+            type: "string",
+            description: "Professional, ready-to-send email body. Include greeting, claim context, clear ask, and courteous closing."
+          },
+          recipients: {
+            type: "array",
+            description: "Optional recipient list. If omitted, defaults to policyholder in claim context.",
+            items: {
+              type: "object",
+              properties: {
+                recipient_type: {
+                  type: "string",
+                  enum: ["policyholder", "adjuster", "insurance_company", "referrer", "contractor", "manual"],
+                  description: "Recipient source type."
+                },
+                recipient_name: {
+                  type: "string",
+                  description: "Optional recipient name filter (useful for selecting a specific adjuster/contractor)."
+                },
+                recipient_email: {
+                  type: "string",
+                  description: "Direct email address (required when recipient_type is manual)."
+                }
+              }
+            }
+          },
+          recipient_type: {
+            type: "string",
+            enum: ["policyholder", "adjuster", "insurance_company", "referrer", "contractor", "manual"],
+            description: "Single-recipient shortcut instead of recipients[]. For insurance_company, system auto-targets company + assigned adjuster when available."
+          },
+          recipient_name: {
+            type: "string",
+            description: "Single-recipient name filter/label."
+          },
+          recipient_email: {
+            type: "string",
+            description: "Single-recipient direct email address."
+          },
+          cc_claim_mailbox: {
+            type: "boolean",
+            description: "Whether to CC the claim mailbox address when the draft is approved and sent. Default true."
+          }
+        },
+        required: ["body"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "draft_sms",
+      description: "Draft an SMS/text message without sending it. Use this when the user asks to draft, prepare, or review a text before approval.",
+      parameters: {
+        type: "object",
+        properties: {
+          claim_id: {
+            type: "string",
+            description: "Claim UUID. Omit to use current claim context."
+          },
+          client_name: {
+            type: "string",
+            description: "Client/policyholder name to resolve a claim if claim_id is not provided."
+          },
+          message_body: {
+            type: "string",
+            description: "SMS draft content."
+          },
+          recipients: {
+            type: "array",
+            description: "Optional recipient list. If omitted, defaults to policyholder in claim context.",
+            items: {
+              type: "object",
+              properties: {
+                recipient_type: {
+                  type: "string",
+                  enum: ["policyholder", "adjuster", "insurance_company", "referrer", "contractor", "manual"],
+                  description: "Recipient source type."
+                },
+                recipient_name: {
+                  type: "string",
+                  description: "Optional recipient name filter/label."
+                },
+                recipient_phone: {
+                  type: "string",
+                  description: "Direct phone number (required when recipient_type is manual)."
+                }
+              }
+            }
+          },
+          recipient_type: {
+            type: "string",
+            enum: ["policyholder", "adjuster", "insurance_company", "referrer", "contractor", "manual"],
+            description: "Single-recipient shortcut instead of recipients[]."
+          },
+          recipient_name: {
+            type: "string",
+            description: "Single-recipient name filter/label."
+          },
+          recipient_phone: {
+            type: "string",
+            description: "Single-recipient direct phone number."
+          },
+          to_number: {
+            type: "string",
+            description: "Legacy alias for recipient_phone."
+          }
+        },
+        required: ["message_body"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
       name: "send_sms",
       description: "Send an SMS/text message immediately from chat. Use this when the user explicitly asks to text/send SMS now. If recipient is not provided, default to the policyholder for the active claim.",
       parameters: {
@@ -1968,6 +2100,23 @@ type ResolvedSmsRecipient = {
   phone: string;
   name: string;
   type: string;
+};
+
+type CommunicationDraft = {
+  draftId: string;
+  channel: "email" | "sms";
+  claimId: string;
+  claimReference: string;
+  subject?: string;
+  body: string;
+  claimEmailCc?: string;
+  photoEstimateEvidenceApplied?: boolean;
+  recipients: Array<{
+    name: string;
+    type: string;
+    email?: string;
+    phone?: string;
+  }>;
 };
 
 function normalizeRecipientType(raw?: string): CommunicationRecipientType | null {
@@ -5795,6 +5944,7 @@ Be relentlessly focused on advancing the claim toward a fair, full, and fast set
     let tasksCreated: any[] = [];
     let emailsSent: any[] = [];
     let smsSent: any[] = [];
+    let communicationDrafts: CommunicationDraft[] = [];
     let portalNotificationsSent: any[] = [];
     let lettersCreated: any[] = [];
     let callsScheduled: any[] = [];
@@ -6808,6 +6958,7 @@ ${knowledgeBaseContext || ''}`
               subject,
               body: evidenceAwareBodyText,
               claimEmailCc,
+              photoEstimateEvidenceApplied: evidenceContextUsed,
               recipients: dedupedRecipients.map((recipient) => ({
                 name: recipient.name,
                 type: recipient.type,
@@ -6980,6 +7131,84 @@ ${knowledgeBaseContext || ''}`
           } catch (parseErr) {
             console.error("Error in send_email:", parseErr);
             answer += `\n\n❌ **Error sending email:** Invalid parameters`;
+          }
+        } else if (toolCall.function.name === "draft_sms") {
+          try {
+            const params = JSON.parse(toolCall.function.arguments || "{}");
+            console.log("Drafting SMS from assistant:", params);
+
+            const claimResolution = await resolveCommunicationClaim(
+              supabase,
+              params,
+              claimId || null,
+              claim,
+            );
+            if (!claimResolution.claimId || !claimResolution.claim) {
+              answer += `\n\n❌ **Unable to draft SMS:** ${claimResolution.error || "Claim could not be resolved."}`;
+              continue;
+            }
+
+            const messageBody = String(params.message_body || params.body || "").trim();
+            if (!messageBody) {
+              answer += `\n\n❌ **Unable to draft SMS:** message_body is required.`;
+              continue;
+            }
+
+            const recipientInputs = collectRecipientInputs(params, "sms");
+            const resolvedRecipients: ResolvedSmsRecipient[] = [];
+            const recipientErrors: string[] = [];
+
+            for (const recipientInput of recipientInputs) {
+              const resolved = await resolveSmsRecipientForClaim(
+                supabase,
+                claimResolution.claim,
+                claimResolution.claimId,
+                recipientInput,
+              );
+              if (resolved.recipient) {
+                resolvedRecipients.push(resolved.recipient);
+              } else if (resolved.error) {
+                recipientErrors.push(resolved.error);
+              }
+            }
+
+            const dedupedRecipients = dedupeSmsRecipients(resolvedRecipients);
+            if (dedupedRecipients.length === 0) {
+              answer += `\n\n❌ **Unable to draft SMS:** ${recipientErrors[0] || "No valid recipients found."}`;
+              continue;
+            }
+
+            const polishedMessageBody = buildProfessionalSmsBody(
+              messageBody,
+              claimResolution.claim,
+              dedupedRecipients[0]?.name,
+            );
+
+            const draftId = crypto.randomUUID();
+            communicationDrafts.push({
+              draftId,
+              channel: "sms",
+              claimId: claimResolution.claimId,
+              claimReference:
+                String(claimResolution.claim.claim_number || "").trim() ||
+                claimResolution.claimName ||
+                claimResolution.claimId,
+              body: polishedMessageBody,
+              recipients: dedupedRecipients.map((recipient) => ({
+                name: recipient.name,
+                type: recipient.type,
+                phone: recipient.phone,
+              })),
+            });
+
+            answer += `\n\n📝 **SMS draft ready:** ${dedupedRecipients.map((recipient) => `${recipient.name} (${recipient.phone})`).join(", ")}`;
+            answer += `\nUse the draft editor below to review/edit, then click **Approve & Send** when ready.`;
+            if (recipientErrors.length > 0) {
+              answer += `\n⚠️ **Skipped recipients:** ${recipientErrors.join(" | ")}`;
+            }
+          } catch (parseErr) {
+            console.error("Error in draft_sms:", parseErr);
+            answer += `\n\n❌ **Error drafting SMS:** Invalid parameters`;
           }
         } else if (toolCall.function.name === "send_sms") {
           try {
@@ -7826,6 +8055,7 @@ ${knowledgeBaseContext || ''}`
         tasksCreated,
         emailsSent,
         smsSent,
+        communicationDrafts,
         portalNotificationsSent,
         lettersCreated,
         callsScheduled,

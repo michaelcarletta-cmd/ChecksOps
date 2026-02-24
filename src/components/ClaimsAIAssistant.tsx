@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Bot, Send, Loader2, Sparkles, Brain, Globe, Database } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useQueryClient } from "@tanstack/react-query";
 import { Toggle } from "@/components/ui/toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { CommunicationDraftComposer, type CommunicationDraft } from "@/components/CommunicationDraftComposer";
 
 type SourceMode = "internal_only" | "hybrid";
 
@@ -18,6 +20,25 @@ interface AiMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  evidenceUsed?: EvidenceUsed | null;
+  communicationDrafts?: CommunicationDraft[];
+}
+
+interface EvidenceUsed {
+  sourceModeRequested?: "internal_only" | "hybrid";
+  strategy?: string;
+  decisionReason?: string;
+  internal?: {
+    knowledgeBaseUsed?: boolean;
+    knowledgeSourceCount?: number;
+    crossClaimUsed?: boolean;
+    claimContextUsed?: boolean;
+    uploadedDocumentUsed?: boolean;
+  };
+  web?: {
+    searched?: boolean;
+    status?: "not_requested" | "success" | "unavailable" | "failed";
+  };
 }
 
 interface ClaimsAIAssistantProps {
@@ -32,11 +53,17 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [sourceMode, setSourceMode] = useState<SourceMode>("hybrid");
+  const [draftEdits, setDraftEdits] = useState<Record<string, string>>({});
+  const [sendingDraftIds, setSendingDraftIds] = useState<Record<string, boolean>>({});
+  const [sentDraftIds, setSentDraftIds] = useState<Record<string, boolean>>({});
   const queryClient = useQueryClient();
 
   // Clear messages when switching between claims
   useEffect(() => {
     setAiMessages([]);
+    setDraftEdits({});
+    setSendingDraftIds({});
+    setSentDraftIds({});
   }, [claimId]);
 
   const isClaimContext = !!claimId;
@@ -180,6 +207,8 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
         role: "assistant",
         content: data.answer,
         timestamp: new Date(),
+        evidenceUsed: data.evidenceUsed || null,
+        communicationDrafts: Array.isArray(data.communicationDrafts) ? data.communicationDrafts : [],
       };
 
       setAiMessages((prev) => [...prev, assistantMessage]);
@@ -188,6 +217,92 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
       toast.error(error.message || "Failed to get AI response");
     } finally {
       setAiLoading(false);
+    }
+  };
+
+  const getDraftBody = (draft: CommunicationDraft) => draftEdits[draft.draftId] ?? draft.body;
+
+  const resetDraftBody = (draftId: string) => {
+    setDraftEdits((prev) => {
+      if (!(draftId in prev)) return prev;
+      const next = { ...prev };
+      delete next[draftId];
+      return next;
+    });
+  };
+
+  const handleApproveAndSendDraft = async (draft: CommunicationDraft) => {
+    if (sendingDraftIds[draft.draftId] || sentDraftIds[draft.draftId]) return;
+
+    const body = getDraftBody(draft).trim();
+    if (!body) {
+      toast.error("Draft body cannot be empty");
+      return;
+    }
+
+    setSendingDraftIds((prev) => ({ ...prev, [draft.draftId]: true }));
+
+    try {
+      if (draft.channel === "email") {
+        const recipients = draft.recipients
+          .filter((recipient) => Boolean(recipient.email))
+          .map((recipient) => ({
+            email: String(recipient.email),
+            name: recipient.name || String(recipient.email),
+            type: recipient.type || "manual",
+          }));
+
+        if (recipients.length === 0) {
+          throw new Error("This draft has no valid email recipients.");
+        }
+
+        const { data, error } = await supabase.functions.invoke("send-email", {
+          body: {
+            recipients,
+            subject: draft.subject || claimNumber || draft.claimReference,
+            body,
+            claimId: draft.claimId,
+            claimEmailCc: draft.claimEmailCc,
+          },
+        });
+
+        if (error) throw error;
+        if (data?.error) throw new Error(String(data.error));
+
+        toast.success(`Email sent to ${recipients.length} recipient${recipients.length > 1 ? "s" : ""}`);
+        if (draft.claimId) {
+          queryClient.invalidateQueries({ queryKey: ["emails", draft.claimId] });
+        }
+        queryClient.invalidateQueries({ queryKey: ["emails"] });
+      } else {
+        const recipients = draft.recipients.filter((recipient) => Boolean(recipient.phone));
+        if (recipients.length === 0) {
+          throw new Error("This draft has no valid phone recipients.");
+        }
+
+        for (const recipient of recipients) {
+          const { data, error } = await supabase.functions.invoke("send-sms", {
+            body: {
+              claimId: draft.claimId,
+              toNumber: recipient.phone,
+              messageBody: body,
+            },
+          });
+          if (error) throw error;
+          if (data?.error) throw new Error(String(data.error));
+        }
+
+        toast.success(`SMS sent to ${recipients.length} recipient${recipients.length > 1 ? "s" : ""}`);
+        if (draft.claimId) {
+          queryClient.invalidateQueries({ queryKey: ["darwin-sms-activity", draft.claimId] });
+        }
+      }
+
+      setSentDraftIds((prev) => ({ ...prev, [draft.draftId]: true }));
+    } catch (error: any) {
+      toast.error(error.message || "Failed to send draft");
+    } finally {
+      setSendingDraftIds((prev) => ({ ...prev, [draft.draftId]: false }));
     }
   };
 
@@ -200,6 +315,9 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
 
   const clearChat = () => {
     setAiMessages([]);
+    setDraftEdits({});
+    setSendingDraftIds({});
+    setSentDraftIds({});
   };
 
   const getPlaceholder = () => {
@@ -261,11 +379,33 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
             <li>• Bulk update statuses & assign staff</li>
             <li>• Search communications & history</li>
             <li>• Find leads by storm activity</li>
-            <li>• Draft and send claim emails/SMS</li>
+            <li>• Draft, edit, approve, and send claim emails/SMS</li>
           </ul>
         </div>
       </Card>
     );
+  };
+
+  const getEvidenceSummary = (evidence?: EvidenceUsed | null) => {
+    if (!evidence) return null;
+
+    const internalUsed =
+      Boolean(evidence.internal?.knowledgeBaseUsed) ||
+      Boolean(evidence.internal?.crossClaimUsed) ||
+      Boolean(evidence.internal?.claimContextUsed) ||
+      Boolean(evidence.internal?.uploadedDocumentUsed);
+    const webUsed = Boolean(evidence.web?.searched && evidence.web?.status === "success");
+
+    let label = "Internal evidence";
+    if (internalUsed && webUsed) label = "Internal + web evidence";
+    else if (!internalUsed && webUsed) label = "Web evidence";
+
+    return {
+      label,
+      kbSources: evidence.internal?.knowledgeSourceCount || 0,
+      webStatus: evidence.web?.status || "not_requested",
+      reason: evidence.decisionReason || "",
+    };
   };
 
   return (
@@ -373,6 +513,51 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
                             : ["No response."].map((t, i) => (
                                 <p key={i} className="mb-0">{t}</p>
                               ))}
+                          {Array.isArray(message.communicationDrafts) && message.communicationDrafts.length > 0 && (
+                            <div className="space-y-2">
+                              {message.communicationDrafts.map((draft) => (
+                                <CommunicationDraftComposer
+                                  key={draft.draftId}
+                                  draft={draft}
+                                  value={getDraftBody(draft)}
+                                  onChange={(value) =>
+                                    setDraftEdits((prev) => ({
+                                      ...prev,
+                                      [draft.draftId]: value,
+                                    }))
+                                  }
+                                  onReset={() => resetDraftBody(draft.draftId)}
+                                  onApprove={() => handleApproveAndSendDraft(draft)}
+                                  isSending={Boolean(sendingDraftIds[draft.draftId])}
+                                  isSent={Boolean(sentDraftIds[draft.draftId])}
+                                />
+                              ))}
+                            </div>
+                          )}
+                          {(() => {
+                            const evidence = getEvidenceSummary(message.evidenceUsed);
+                            if (!evidence) return null;
+                            return (
+                              <div className="mt-3 space-y-1 rounded-md border bg-background/60 p-2">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    Evidence: {evidence.label}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-[10px]">
+                                    KB sources: {evidence.kbSources}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-[10px]">
+                                    Web: {evidence.webStatus}
+                                  </Badge>
+                                </div>
+                                {evidence.reason && (
+                                  <p className="text-[11px] text-muted-foreground">
+                                    Decision: {evidence.reason}
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
