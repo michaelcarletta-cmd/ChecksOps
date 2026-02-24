@@ -61,6 +61,19 @@ interface KnowledgeValidationData {
   issues: KnowledgeValidationIssue[];
 }
 
+interface KnowledgeValidationRepairResult {
+  attempted: number;
+  repaired: number;
+  manual: number;
+  failed: number;
+  failures: Array<{
+    documentId: string;
+    fileName: string;
+    issueType: KnowledgeValidationIssue["issueType"];
+    error: string;
+  }>;
+}
+
 export const AIKnowledgeBaseSettings = () => {
   const queryClient = useQueryClient();
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -82,6 +95,12 @@ export const AIKnowledgeBaseSettings = () => {
   const [textUploading, setTextUploading] = useState(false);
   const [urlDescription, setUrlDescription] = useState("");
   const [urlUploading, setUrlUploading] = useState(false);
+  const [repairProgress, setRepairProgress] = useState<{
+    current: number;
+    total: number;
+    fileName?: string;
+  } | null>(null);
+  const [lastRepairResult, setLastRepairResult] = useState<KnowledgeValidationRepairResult | null>(null);
 
   const { data: documents, isLoading } = useQuery({
     queryKey: ["ai-knowledge-documents"],
@@ -240,23 +259,51 @@ export const AIKnowledgeBaseSettings = () => {
     refetchInterval: 15000,
   });
 
+  const invokeFunctionOrThrow = async (functionName: string, body: Record<string, unknown>) => {
+    const { data, error } = await supabase.functions.invoke(functionName, { body });
+    if (error) {
+      throw new Error(error.message || `Failed to invoke ${functionName}`);
+    }
+    if (data && typeof data === "object" && "error" in data && (data as any).error) {
+      throw new Error(String((data as any).error));
+    }
+    return data;
+  };
+
   const repairValidationMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (): Promise<KnowledgeValidationRepairResult> => {
       if (!knowledgeValidation) {
-        return { attempted: 0, repaired: 0, manual: 0, failed: 0 };
+        return { attempted: 0, repaired: 0, manual: 0, failed: 0, failures: [] };
       }
 
-      const issues = knowledgeValidation.issues.slice(0, 50);
+      const MAX_ISSUES_PER_RUN = 250;
+      const issues = knowledgeValidation.issues.slice(0, MAX_ISSUES_PER_RUN);
       let repaired = 0;
       let manual = 0;
       let failed = 0;
+      const failures: KnowledgeValidationRepairResult["failures"] = [];
 
-      for (const issue of issues) {
+      for (let index = 0; index < issues.length; index += 1) {
+        const issue = issues[index];
+        setRepairProgress({
+          current: index + 1,
+          total: issues.length,
+          fileName: issue.fileName,
+        });
         try {
           if (issue.issueType === "missing_embeddings") {
-            await supabase.functions.invoke("generate-embeddings", {
-              body: { documentId: issue.documentId },
+            await invokeFunctionOrThrow("generate-embeddings", {
+              documentId: issue.documentId,
             });
+            const { count: remainingCount, error: verifyError } = await supabase
+              .from("ai_knowledge_chunks")
+              .select("id", { count: "exact", head: true })
+              .eq("document_id", issue.documentId)
+              .is("embedding", null);
+            if (verifyError) throw verifyError;
+            if ((remainingCount || 0) > 0) {
+              throw new Error(`Embeddings still missing for ${remainingCount} chunk(s).`);
+            }
             repaired += 1;
             continue;
           }
@@ -267,39 +314,64 @@ export const AIKnowledgeBaseSettings = () => {
             continue;
           }
 
-          await supabase
+          const { error: resetError } = await supabase
             .from("ai_knowledge_documents")
             .update({ status: "pending", error_message: null })
             .eq("id", issue.documentId);
+          if (resetError) throw resetError;
 
           if (issue.fileType === "url") {
-            await supabase.functions.invoke("process-knowledge-url", {
-              body: { documentId: issue.documentId, url: issue.filePath },
+            await invokeFunctionOrThrow("process-knowledge-url", {
+              documentId: issue.documentId,
+              url: issue.filePath,
             });
           } else {
-            await supabase.functions.invoke("process-knowledge-document", {
-              body: { documentId: issue.documentId },
+            await invokeFunctionOrThrow("process-knowledge-document", {
+              documentId: issue.documentId,
             });
           }
           repaired += 1;
         } catch (error) {
           console.error("Validation repair error:", issue.documentId, error);
           failed += 1;
+          failures.push({
+            documentId: issue.documentId,
+            fileName: issue.fileName,
+            issueType: issue.issueType,
+            error: error instanceof Error ? error.message : "Unknown error",
+          });
         }
       }
 
-      return { attempted: issues.length, repaired, manual, failed };
+      return { attempted: issues.length, repaired, manual, failed, failures };
+    },
+    onMutate: () => {
+      setLastRepairResult(null);
+      setRepairProgress({ current: 0, total: knowledgeValidation?.issues.length || 0 });
     },
     onSuccess: (result) => {
+      setRepairProgress(null);
+      setLastRepairResult(result);
       queryClient.invalidateQueries({ queryKey: ["ai-knowledge-documents"] });
       queryClient.invalidateQueries({ queryKey: ["ai-knowledge-validation"] });
-      toast.success(
-        `Validation repair started for ${result.repaired}/${result.attempted} docs` +
-          (result.manual > 0 ? ` (${result.manual} text docs require manual re-upload)` : "") +
-          (result.failed > 0 ? ` (${result.failed} failed to trigger)` : "")
-      );
+      if (result.repaired > 0) {
+        toast.success(
+          `Validation repair started for ${result.repaired}/${result.attempted} docs` +
+            (result.manual > 0 ? ` (${result.manual} text docs require manual re-upload)` : "") +
+            (result.failed > 0 ? ` (${result.failed} failed to trigger)` : "")
+        );
+      } else if (result.manual > 0 && result.failed === 0) {
+        toast.warning(
+          `No automatic repairs possible. ${result.manual} text docs require manual re-upload.`
+        );
+      } else if (result.failed > 0) {
+        toast.error(`Auto-fix could not trigger repairs (${result.failed} failed).`);
+      } else {
+        toast.info("No validation issues required repair.");
+      }
     },
     onError: (error: any) => {
+      setRepairProgress(null);
       toast.error(error.message || "Failed to run validation repair");
     },
   });
@@ -869,7 +941,9 @@ export const AIKnowledgeBaseSettings = () => {
                 ) : (
                   <RefreshCw className="h-4 w-4" />
                 )}
-                Auto-fix issues
+                {repairValidationMutation.isPending
+                  ? `Auto-fixing ${repairProgress?.current || 0}/${repairProgress?.total || 0}`
+                  : "Auto-fix issues"}
               </Button>
             </div>
           </div>
@@ -913,6 +987,40 @@ export const AIKnowledgeBaseSettings = () => {
                   Open issues: {knowledgeValidation.issues.length}
                 </Badge>
               </div>
+
+              {repairValidationMutation.isPending && repairProgress && (
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
+                  <p className="font-medium">
+                    Auto-fix in progress: {repairProgress.current}/{repairProgress.total}
+                  </p>
+                  {repairProgress.fileName && (
+                    <p className="text-xs text-muted-foreground mt-1 truncate">
+                      Currently processing: {repairProgress.fileName}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {lastRepairResult && (
+                <div className="rounded-lg border p-3 space-y-2">
+                  <p className="text-sm font-medium">
+                    Last auto-fix run: attempted {lastRepairResult.attempted}, triggered {lastRepairResult.repaired},
+                    manual {lastRepairResult.manual}, failed {lastRepairResult.failed}
+                  </p>
+                  {lastRepairResult.failures.length > 0 && (
+                    <div className="max-h-40 overflow-y-auto space-y-1">
+                      {lastRepairResult.failures.slice(0, 12).map((failure) => (
+                        <div key={`${failure.documentId}-${failure.issueType}`} className="rounded border bg-muted/20 p-2">
+                          <p className="text-xs font-medium">
+                            {failure.fileName} ({failure.issueType.replace("_", " ")})
+                          </p>
+                          <p className="text-xs text-red-500">{failure.error}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {knowledgeValidation.issues.length === 0 ? (
                 <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-3 text-sm text-green-700">
