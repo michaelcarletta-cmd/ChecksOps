@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { HardHat, Loader2, Copy, Download, Sparkles, Upload, X, FileText, History, FolderOpen } from "lucide-react";
+import { HardHat, Loader2, Copy, Download, Sparkles, Upload, X, FileText, History, FolderOpen, CheckCircle2, CircleDashed, AlertTriangle } from "lucide-react";
 import { useDeclaredPosition } from "@/hooks/useDeclaredPosition";
 import { PositionGateBanner } from "./PositionGateBanner";
 import { publishCarrierDismantler } from "@/lib/darwinDismantlerBus";
@@ -26,6 +26,16 @@ interface ClaimFile {
   uploaded_at: string | null;
 }
 
+interface AnalysisExecutionStep {
+  key: string;
+  label: string;
+  status: "started" | "completed" | "skipped" | "error";
+  detail?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  durationMs?: number;
+}
+
 export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerReportAnalyzerProps) => {
   const [reportContent, setReportContent] = useState("");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -39,6 +49,7 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [inputMethod, setInputMethod] = useState<'existing' | 'upload' | 'paste'>('existing');
   const [provisionalOverride, setProvisionalOverride] = useState(false);
+  const [executionSteps, setExecutionSteps] = useState<AnalysisExecutionStep[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { position, isLocked, loading: positionLoading } = useDeclaredPosition(claimId);
@@ -144,6 +155,7 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
     }
 
     setLoading(true);
+    setExecutionSteps([]);
     try {
       let pdfBase64 = null;
       let fileName = null;
@@ -204,6 +216,7 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
       }
 
       setAnalysis(data.result);
+      setExecutionSteps(Array.isArray(data?.executionSteps) ? data.executionSteps : []);
       if (data?.carrierDismantler) {
         publishCarrierDismantler({
           claimId,
@@ -424,6 +437,35 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
             </>
           )}
         </Button>
+
+        {executionSteps.length > 0 && (
+          <div className="space-y-2 rounded-md border p-3 bg-muted/20">
+            <div className="text-sm font-medium">Darwin processing steps</div>
+            <div className="space-y-1.5">
+              {executionSteps.map((step, idx) => {
+                const icon = step.status === "completed"
+                  ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                  : step.status === "error"
+                    ? <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
+                    : <CircleDashed className="h-3.5 w-3.5 text-muted-foreground" />;
+                return (
+                  <div key={`${step.key}-${idx}`} className="flex items-start gap-2 text-xs">
+                    <div className="mt-0.5">{icon}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium">{step.label}</div>
+                      {step.detail && <div className="text-muted-foreground">{step.detail}</div>}
+                    </div>
+                    {typeof step.durationMs === "number" && (
+                      <div className="text-muted-foreground whitespace-nowrap">
+                        {(step.durationMs / 1000).toFixed(step.durationMs >= 10000 ? 0 : 1)}s
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {analysis && (
           <div className="space-y-3 pt-4 border-t">

@@ -44,7 +44,149 @@ interface ExtractedEstimate {
     total_depreciation: number;
     net_total: number;
   };
+  quality_review?: {
+    questionable_count: number;
+    questionable_line_items: QuestionableLineItem[];
+  };
+  estimate_record?: {
+    id: string;
+    version: number;
+    persisted_line_items: number;
+  } | null;
+  review_prompt?: string;
   raw_text?: string;
+}
+
+interface QuestionableLineItem {
+  index: number;
+  line_item_id?: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  unit_cost: number;
+  total: number;
+  category: string;
+  reasons: string[];
+  suggested_fixes: string[];
+}
+
+interface EstimateExecutionStep {
+  key: string;
+  label: string;
+  status: "started" | "completed" | "error";
+  detail?: string;
+  startedAt: string;
+  finishedAt?: string;
+  durationMs?: number;
+}
+
+const toMoneyNumber = (value: unknown, fallback = 0): number => {
+  const raw = typeof value === "number" ? value : Number(String(value ?? "").replace(/[^0-9.-]/g, ""));
+  if (!Number.isFinite(raw)) return fallback;
+  return Math.round(raw * 100) / 100;
+};
+
+const toQuantityNumber = (value: unknown, fallback = 1): number => {
+  const raw = typeof value === "number" ? value : Number(String(value ?? "").replace(/[^0-9.-]/g, ""));
+  if (!Number.isFinite(raw) || raw <= 0) return fallback;
+  return Math.round(raw * 1000) / 1000;
+};
+
+function normalizeLineItems(
+  rawLineItems: unknown,
+): Array<{
+  description: string;
+  quantity: number;
+  unit: string;
+  unit_cost: number;
+  total: number;
+  category: string;
+}> {
+  if (!Array.isArray(rawLineItems)) return [];
+  return rawLineItems
+    .map((item: any) => {
+      const description = String(item?.description || "").trim();
+      const quantity = toQuantityNumber(item?.quantity, 1);
+      const unit = String(item?.unit || "EA").trim().toUpperCase() || "EA";
+      const unitCost = toMoneyNumber(item?.unit_cost, 0);
+      let total = toMoneyNumber(item?.total, 0);
+      if (total <= 0 && quantity > 0 && unitCost > 0) {
+        total = Math.round(quantity * unitCost * 100) / 100;
+      }
+      return {
+        description,
+        quantity,
+        unit,
+        unit_cost: unitCost,
+        total,
+        category: String(item?.category || "General").trim() || "General",
+      };
+    })
+    .filter((item) => item.description.length > 0);
+}
+
+function buildLineItemQualityReview(
+  lineItems: Array<{
+    description: string;
+    quantity: number;
+    unit: string;
+    unit_cost: number;
+    total: number;
+    category: string;
+  }>,
+): { questionable_count: number; questionable_line_items: QuestionableLineItem[] } {
+  const questionable = lineItems
+    .map((item, index) => {
+      const reasons: string[] = [];
+      const suggestedFixes: string[] = [];
+      if (!item.description || item.description.length < 5) {
+        reasons.push("Line item description is too short or missing.");
+        suggestedFixes.push("Verify description from estimate.");
+      }
+      if (!item.quantity || item.quantity <= 0) {
+        reasons.push("Quantity is zero or missing.");
+        suggestedFixes.push("Set a valid quantity.");
+      }
+      if (!item.unit || item.unit.length > 8) {
+        reasons.push("Unit is missing or malformed.");
+        suggestedFixes.push("Set a valid unit (EA, SF, LF, etc.).");
+      }
+      if (!Number.isFinite(item.total) || item.total <= 0) {
+        reasons.push("Total amount is missing or zero.");
+        suggestedFixes.push("Confirm total from estimate line.");
+      }
+      if (item.quantity > 0 && item.unit_cost > 0 && item.total > 0) {
+        const expected = item.quantity * item.unit_cost;
+        const delta = Math.abs(expected - item.total);
+        if (delta > Math.max(2, expected * 0.2)) {
+          reasons.push("Total does not align with quantity × unit cost.");
+          suggestedFixes.push("Recalculate unit price or total.");
+        }
+      }
+      if (!item.category || item.category.toLowerCase() === "general") {
+        reasons.push("Category could not be confidently classified.");
+        suggestedFixes.push("Confirm trade/category (Roofing, Interior, etc.).");
+      }
+
+      if (reasons.length === 0) return null;
+      return {
+        index,
+        description: item.description,
+        quantity: item.quantity,
+        unit: item.unit,
+        unit_cost: item.unit_cost,
+        total: item.total,
+        category: item.category,
+        reasons,
+        suggested_fixes: suggestedFixes,
+      } as QuestionableLineItem;
+    })
+    .filter(Boolean) as QuestionableLineItem[];
+
+  return {
+    questionable_count: questionable.length,
+    questionable_line_items: questionable,
+  };
 }
 
 serve(async (req) => {
@@ -53,11 +195,34 @@ serve(async (req) => {
   }
 
   try {
+    const operationStartedAt = Date.now();
+    const executionSteps: EstimateExecutionStep[] = [];
+    const startStep = (key: string, label: string, detail?: string) => {
+      const step: EstimateExecutionStep = {
+        key,
+        label,
+        status: "started",
+        detail,
+        startedAt: new Date().toISOString(),
+      };
+      executionSteps.push(step);
+      return step;
+    };
+    const endStep = (step: EstimateExecutionStep, status: EstimateExecutionStep["status"], detail?: string) => {
+      const finished = Date.now();
+      step.status = status;
+      if (detail) step.detail = detail;
+      step.finishedAt = new Date(finished).toISOString();
+      step.durationMs = Math.max(0, finished - new Date(step.startedAt).getTime());
+    };
+    const persistenceWarnings: string[] = [];
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY not configured");
     }
 
+    const requestStep = startStep("request", "Validate estimate upload request");
     const formData = await req.formData();
     const file = formData.get("file") as File;
     const claimId = formData.get("claimId") as string;
@@ -65,6 +230,7 @@ serve(async (req) => {
     if (!file) {
       throw new Error("No file provided");
     }
+    endStep(requestStep, "completed", `file=${file.name}`);
 
     console.log(`Processing estimate file: ${file.name}, type: ${file.type}, size: ${file.size}`);
 
@@ -74,6 +240,7 @@ serve(async (req) => {
       throw new Error(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum size is 8MB.`);
     }
 
+    const encodeStep = startStep("encode_document", "Prepare estimate document for AI extraction");
     // Convert file to base64 for AI processing - use chunked approach to avoid stack overflow
     const arrayBuffer = await file.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
@@ -86,6 +253,7 @@ serve(async (req) => {
       base64 += String.fromCharCode.apply(null, Array.from(chunk));
     }
     base64 = btoa(base64);
+    endStep(encodeStep, "completed", `bytes=${uint8Array.length}`);
     
     const mimeType = file.type || "application/pdf";
 
@@ -147,6 +315,7 @@ Important guidelines:
 - The deductible is usually shown separately from depreciation
 - Return ONLY the JSON object, no other text`;
 
+    const aiStep = startStep("ai_extract", "Extract estimate values and line items with AI");
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -180,15 +349,18 @@ Important guidelines:
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
       console.error("AI API error:", aiResponse.status, errorText);
+      endStep(aiStep, "error", `HTTP ${aiResponse.status}`);
       throw new Error(`AI processing failed: ${aiResponse.status}`);
     }
 
     const aiData = await aiResponse.json();
     const content = aiData.choices?.[0]?.message?.content || "";
+    endStep(aiStep, "completed", `responseChars=${String(content).length}`);
     
     console.log("AI response received, parsing JSON...");
 
     // Parse the JSON from the AI response
+    const parseStep = startStep("parse", "Parse AI extraction payload");
     let extractedData: ExtractedEstimate;
     try {
       // Try to find JSON in the response
@@ -200,16 +372,55 @@ Important guidelines:
       }
     } catch (parseError) {
       console.error("JSON parse error:", parseError, "Content:", content);
+      endStep(parseStep, "error", "Failed to parse JSON from model output");
       throw new Error("Failed to parse estimate data from AI response");
     }
+    endStep(parseStep, "completed");
+
+    extractedData.dwelling = {
+      rcv: toMoneyNumber(extractedData.dwelling?.rcv, 0),
+      recoverable_depreciation: toMoneyNumber(extractedData.dwelling?.recoverable_depreciation, 0),
+      non_recoverable_depreciation: toMoneyNumber(extractedData.dwelling?.non_recoverable_depreciation, 0),
+      deductible: toMoneyNumber(extractedData.dwelling?.deductible, 0),
+    };
+    extractedData.other_structures = {
+      rcv: toMoneyNumber(extractedData.other_structures?.rcv, 0),
+      recoverable_depreciation: toMoneyNumber(extractedData.other_structures?.recoverable_depreciation, 0),
+      non_recoverable_depreciation: toMoneyNumber(extractedData.other_structures?.non_recoverable_depreciation, 0),
+      deductible: toMoneyNumber(extractedData.other_structures?.deductible, 0),
+    };
+    extractedData.contents = {
+      rcv: toMoneyNumber(extractedData.contents?.rcv, 0),
+      recoverable_depreciation: toMoneyNumber(extractedData.contents?.recoverable_depreciation, 0),
+      non_recoverable_depreciation: toMoneyNumber(extractedData.contents?.non_recoverable_depreciation, 0),
+    };
+    extractedData.pwi = {
+      rcv: toMoneyNumber(extractedData.pwi?.rcv, 0),
+      recoverable_depreciation: toMoneyNumber(extractedData.pwi?.recoverable_depreciation, 0),
+      non_recoverable_depreciation: toMoneyNumber(extractedData.pwi?.non_recoverable_depreciation, 0),
+      deductible: toMoneyNumber(extractedData.pwi?.deductible, 0),
+    };
+    extractedData.totals = {
+      gross_total: toMoneyNumber(extractedData.totals?.gross_total, 0),
+      total_depreciation: toMoneyNumber(extractedData.totals?.total_depreciation, 0),
+      net_total: toMoneyNumber(extractedData.totals?.net_total, 0),
+    };
+    extractedData.line_items = normalizeLineItems(extractedData.line_items);
+    extractedData.quality_review = buildLineItemQualityReview(extractedData.line_items);
+    extractedData.review_prompt = extractedData.quality_review.questionable_count > 0
+      ? `Review ${extractedData.quality_review.questionable_count} questionable line item(s) before finalizing.`
+      : "No questionable line items detected.";
 
     console.log("Extracted estimate data:", JSON.stringify(extractedData, null, 2));
 
-    // If claimId provided, update the settlement record
+    let persistedEstimateRecord: ExtractedEstimate["estimate_record"] = null;
+
+    // If claimId provided, update settlement and persist line items
     if (claimId) {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const supabase = createClient(supabaseUrl, supabaseKey);
+      const settlementStep = startStep("persist_settlement", "Update claim settlement totals");
 
       // Check if settlement exists
       const { data: existingSettlement } = await supabase
@@ -245,6 +456,7 @@ Important guidelines:
 
         if (updateError) {
           console.error("Settlement update error:", updateError);
+          endStep(settlementStep, "error", updateError.message);
           throw updateError;
         }
         console.log("Settlement updated successfully");
@@ -258,17 +470,121 @@ Important guidelines:
 
         if (insertError) {
           console.error("Settlement insert error:", insertError);
+          endStep(settlementStep, "error", insertError.message);
           throw insertError;
         }
         console.log("Settlement created successfully");
       }
+      endStep(settlementStep, "completed");
+
+      const estimateStep = startStep("persist_estimate_line_items", "Persist estimate + line items");
+      try {
+        const { data: latestEstimate } = await supabase
+          .from("claim_estimates")
+          .select("version")
+          .eq("claim_id", claimId)
+          .order("version", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const nextVersion = (latestEstimate?.version || 0) + 1;
+        const { data: estimateRecord, error: estimateError } = await supabase
+          .from("claim_estimates")
+          .insert({
+            claim_id: claimId,
+            vendor: extractedData.estimate_type || "Uploaded Estimate",
+            version: nextVersion,
+            total_rcv: extractedData.totals?.gross_total || 0,
+            total_acv: extractedData.totals?.net_total || 0,
+            total_depr: extractedData.totals?.total_depreciation || 0,
+            metadata_json: {
+              source: "extract-estimate",
+              uploaded_file_name: file.name,
+              estimate_type: extractedData.estimate_type,
+            },
+          })
+          .select("id, version")
+          .single();
+
+        if (estimateError) throw estimateError;
+
+        let persistedLineItems = 0;
+        if (Array.isArray(extractedData.line_items) && extractedData.line_items.length > 0) {
+          const qualityReasonsByIndex = new Map<number, string[]>();
+          for (const q of extractedData.quality_review?.questionable_line_items || []) {
+            qualityReasonsByIndex.set(q.index, q.reasons);
+          }
+
+          const lineItemRows = extractedData.line_items.map((item, index) => ({
+            estimate_id: estimateRecord.id,
+            description: item.description,
+            category: item.category || "General",
+            quantity: item.quantity || 1,
+            unit: item.unit || "EA",
+            unit_price: item.unit_cost || 0,
+            rcv: item.total || 0,
+            acv: item.total || 0,
+            depreciation: 0,
+            metadata_json: {
+              source_index: index,
+              questionable_reasons: qualityReasonsByIndex.get(index) || [],
+            },
+          }));
+
+          const { data: insertedLineItems, error: lineItemsError } = await supabase
+            .from("estimate_line_items")
+            .insert(lineItemRows)
+            .select("id, metadata_json");
+          if (lineItemsError) throw lineItemsError;
+          persistedLineItems = insertedLineItems?.length || 0;
+
+          const idByIndex = new Map<number, string>();
+          for (const row of insertedLineItems || []) {
+            const idx = Number((row as any)?.metadata_json?.source_index);
+            if (Number.isFinite(idx)) {
+              idByIndex.set(idx, row.id);
+            }
+          }
+          if (extractedData.quality_review?.questionable_line_items) {
+            extractedData.quality_review.questionable_line_items =
+              extractedData.quality_review.questionable_line_items.map((item) => ({
+                ...item,
+                line_item_id: idByIndex.get(item.index),
+              }));
+          }
+        }
+
+        persistedEstimateRecord = {
+          id: estimateRecord.id,
+          version: estimateRecord.version,
+          persisted_line_items: persistedLineItems,
+        };
+        extractedData.estimate_record = persistedEstimateRecord;
+        endStep(estimateStep, "completed", `version=${estimateRecord.version}, lineItems=${persistedLineItems}`);
+      } catch (estimatePersistError) {
+        const message = estimatePersistError instanceof Error ? estimatePersistError.message : "Unknown estimate persistence error";
+        persistenceWarnings.push(`Estimate line-item persistence warning: ${message}`);
+        console.error("Estimate line-item persistence warning:", message);
+        endStep(estimateStep, "error", message);
+      }
     }
 
+    const totalDurationMs = Date.now() - operationStartedAt;
     return new Response(
       JSON.stringify({
         success: true,
         data: extractedData,
-        message: claimId ? "Estimate extracted and accounting updated" : "Estimate extracted successfully",
+        execution_steps: executionSteps,
+        processing_metrics: {
+          total_duration_ms: totalDurationMs,
+          questionable_line_items: extractedData.quality_review?.questionable_count || 0,
+          persisted_estimate_id: persistedEstimateRecord?.id || null,
+          persisted_line_items: persistedEstimateRecord?.persisted_line_items || 0,
+        },
+        warnings: persistenceWarnings,
+        message: claimId
+          ? "Estimate extracted, accounting updated, and line-item intelligence generated"
+          : "Estimate extracted successfully",
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

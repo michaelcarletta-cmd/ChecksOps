@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,9 @@ import {
   Camera,
   ClipboardCheck,
   DollarSign,
-  ArrowRight
+  ArrowRight,
+  MessageSquare,
+  UploadCloud,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -49,12 +51,9 @@ export const ClaimTimeline = ({ claimId, claim }: ClaimTimelineProps) => {
   const [loading, setLoading] = useState(true);
   const [generatingInsights, setGeneratingInsights] = useState(false);
   const [claimData, setClaimData] = useState<any>(claim);
+  const refreshDebounceRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    fetchTimelineData();
-  }, [claimId]);
-
-  const fetchTimelineData = async () => {
+  const fetchTimelineData = useCallback(async () => {
     setLoading(true);
     try {
       // Fetch claim if not provided
@@ -75,11 +74,19 @@ export const ClaimTimeline = ({ claimId, claim }: ClaimTimelineProps) => {
         { data: inspections },
         { data: emails },
         { data: checks },
+        { data: updates },
+        { data: files },
+        { data: analyses },
+        { data: aiEvents },
       ] = await Promise.all([
         supabase.from("tasks").select("*").eq("claim_id", claimId).order("due_date"),
         supabase.from("inspections").select("*").eq("claim_id", claimId).order("inspection_date"),
         supabase.from("emails").select("*").eq("claim_id", claimId).order("sent_at", { ascending: false }).limit(5),
         supabase.from("claim_checks").select("*").eq("claim_id", claimId).order("check_date"),
+        supabase.from("claim_updates").select("id, content, update_type, created_at").eq("claim_id", claimId).order("created_at", { ascending: false }).limit(10),
+        supabase.from("claim_files").select("id, file_name, uploaded_at").eq("claim_id", claimId).order("uploaded_at", { ascending: false }).limit(10),
+        supabase.from("darwin_analysis_results").select("id, analysis_type, input_summary, created_at").eq("claim_id", claimId).order("created_at", { ascending: false }).limit(10),
+        supabase.from("claim_events").select("id, event_type, summary, occurred_at").eq("claim_id", claimId).order("occurred_at", { ascending: false }).limit(12),
       ]);
 
       const timelineItems: Milestone[] = [];
@@ -174,6 +181,58 @@ export const ClaimTimeline = ({ claimId, claim }: ClaimTimelineProps) => {
         });
       });
 
+      // Add recent claim notes/messages
+      updates?.slice(0, 6).forEach((update) => {
+        timelineItems.push({
+          id: `update-${update.id}`,
+          title: `Claim Note (${update.update_type || "update"})`,
+          description: String(update.content || "").substring(0, 120),
+          date: update.created_at,
+          status: "completed",
+          type: "communication",
+          icon: MessageSquare,
+        });
+      });
+
+      // Add file uploads
+      files?.slice(0, 6).forEach((f) => {
+        timelineItems.push({
+          id: `upload-${f.id}`,
+          title: "File Uploaded",
+          description: f.file_name || "Claim file",
+          date: f.uploaded_at,
+          status: "completed",
+          type: "document",
+          icon: UploadCloud,
+        });
+      });
+
+      // Add AI-detected/derived claim events
+      aiEvents?.forEach((evt) => {
+        timelineItems.push({
+          id: `event-${evt.id}`,
+          title: `AI Event: ${String(evt.event_type || "timeline_event").replace(/_/g, " ")}`,
+          description: evt.summary || "Timeline event extracted from claim evidence",
+          date: evt.occurred_at,
+          status: "completed",
+          type: "milestone",
+          icon: Sparkles,
+        });
+      });
+
+      // Add AI analyses performed on the claim
+      analyses?.slice(0, 6).forEach((analysisRow) => {
+        timelineItems.push({
+          id: `ai-${analysisRow.id}`,
+          title: `Darwin Analysis: ${String(analysisRow.analysis_type || "analysis").replace(/_/g, " ")}`,
+          description: analysisRow.input_summary || "AI analysis generated",
+          date: analysisRow.created_at,
+          status: "completed",
+          type: "milestone",
+          icon: Sparkles,
+        });
+      });
+
       // Sort by date
       timelineItems.sort((a, b) => {
         if (!a.date) return 1;
@@ -187,7 +246,49 @@ export const ClaimTimeline = ({ claimId, claim }: ClaimTimelineProps) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    claimId,
+    claim?.id,
+    claim?.claim_number,
+    claim?.loss_type,
+    claim?.loss_date,
+    claim?.status,
+    claim?.created_at,
+  ]);
+
+  useEffect(() => {
+    fetchTimelineData();
+  }, [fetchTimelineData]);
+
+  useEffect(() => {
+    const scheduleRefresh = () => {
+      if (refreshDebounceRef.current) {
+        window.clearTimeout(refreshDebounceRef.current);
+      }
+      refreshDebounceRef.current = window.setTimeout(() => {
+        fetchTimelineData();
+      }, 500);
+    };
+
+    const channel = supabase
+      .channel(`claim-story-${claimId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "claim_updates", filter: `claim_id=eq.${claimId}` }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "claim_files", filter: `claim_id=eq.${claimId}` }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "inspections", filter: `claim_id=eq.${claimId}` }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "emails", filter: `claim_id=eq.${claimId}` }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "claim_checks", filter: `claim_id=eq.${claimId}` }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "darwin_analysis_results", filter: `claim_id=eq.${claimId}` }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "claim_events", filter: `claim_id=eq.${claimId}` }, scheduleRefresh)
+      .subscribe();
+
+    return () => {
+      if (refreshDebounceRef.current) {
+        window.clearTimeout(refreshDebounceRef.current);
+        refreshDebounceRef.current = null;
+      }
+      supabase.removeChannel(channel);
+    };
+  }, [claimId, fetchTimelineData]);
 
   const generateAIInsights = async () => {
     setGeneratingInsights(true);
