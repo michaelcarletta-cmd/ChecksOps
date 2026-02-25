@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
@@ -13,7 +12,7 @@ const BATCH_MAX_RUNTIME_MS = 55_000; // Safe exit before edge timeout
 const PER_FILE_TIMEOUT_MS = 45_000; // Prevent single-file hangs from blocking the batch
 const MIN_FILE_BUDGET_MS = 3_000; // Leave enough budget to return/release lock
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
   }

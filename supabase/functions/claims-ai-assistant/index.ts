@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 // Use dynamic import for pdf.js to avoid bundling issues
@@ -5360,7 +5359,7 @@ async function persistDocumentAnalysis(
   } catch (err) { console.error('[DocAnalysis] Error:', err); }
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }

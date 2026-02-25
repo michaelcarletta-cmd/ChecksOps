@@ -1,5 +1,3 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,7 +9,7 @@ const API_KEY = Deno.env.get('ONLINE_CHECK_WRITER_API_KEY');
 // Sandbox: https://test.onlinecheckwriter.com/api/v3
 const API_BASE_URL = 'https://app.onlinecheckwriter.com/api/v3';
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }

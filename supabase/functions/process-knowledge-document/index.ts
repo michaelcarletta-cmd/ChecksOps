@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import JSZip from "https://esm.sh/jszip@3.10.1";
@@ -369,7 +368,7 @@ async function transcribeMedia(dataUrl: string, fileName: string): Promise<strin
   return transcribedText;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
