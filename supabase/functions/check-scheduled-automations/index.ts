@@ -51,16 +51,16 @@ serve(async (req) => {
 
     console.log('Automation settings:', { excludeStatuses, excludeOlderThanDays });
 
-    // Get all active automations with scheduled or inactivity triggers
+    // Get all active automations with scheduler-driven triggers
     const { data: automations, error: automationsError } = await supabase
       .from('automations')
       .select('*')
       .eq('is_active', true)
-      .in('trigger_type', ['scheduled', 'inactivity']);
+      .in('trigger_type', ['scheduled', 'inactivity', 'inspection_upcoming_24h']);
 
     if (automationsError) throw automationsError;
 
-    console.log(`Found ${automations?.length || 0} scheduled/inactivity automations`);
+    console.log(`Found ${automations?.length || 0} scheduler-driven automations`);
 
     const results = [];
 
@@ -72,6 +72,14 @@ serve(async (req) => {
         } else if (automation.trigger_type === 'inactivity') {
           const inactivity = await processInactivityAutomation(supabase, automation, excludeStatuses, excludeOlderThanDays);
           results.push({ automation_id: automation.id, type: 'inactivity', ...inactivity });
+        } else if (automation.trigger_type === 'inspection_upcoming_24h') {
+          const inspectionUpcoming = await processInspectionUpcoming24hAutomation(
+            supabase,
+            automation,
+            excludeStatuses,
+            excludeOlderThanDays,
+          );
+          results.push({ automation_id: automation.id, type: 'inspection_upcoming_24h', ...inspectionUpcoming });
         }
       } catch (error: any) {
         console.error(`Error processing automation ${automation.id}:`, error);
@@ -130,6 +138,125 @@ serve(async (req) => {
     );
   }
 });
+
+function buildInspectionDateTime(inspectionDate: string, inspectionTime?: string | null): Date | null {
+  if (!inspectionDate) return null;
+  const normalizedTime = inspectionTime && /^\d{2}:\d{2}/.test(inspectionTime)
+    ? inspectionTime.slice(0, 5)
+    : '09:00';
+  const parsed = new Date(`${inspectionDate}T${normalizedTime}:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+async function processInspectionUpcoming24hAutomation(
+  supabase: any,
+  automation: any,
+  excludeStatuses: string[],
+  excludeOlderThanDays: number | null,
+) {
+  const config = automation.trigger_config || {};
+  const reminderHours = Number(config.hours_before);
+  const hoursBefore = Number.isFinite(reminderHours) && reminderHours > 0 ? reminderHours : 24;
+  const now = new Date();
+  const lookAheadDays = Math.max(2, Math.ceil(hoursBefore / 24) + 1);
+  const endDate = new Date(now);
+  endDate.setDate(endDate.getDate() + lookAheadDays);
+
+  const { data: inspections, error: inspectionsError } = await supabase
+    .from('inspections')
+    .select(`
+      id,
+      claim_id,
+      inspection_date,
+      inspection_time,
+      inspection_type,
+      inspector_name,
+      notes,
+      status,
+      claim:claims!inspections_claim_id_fkey(
+        id,
+        claim_number,
+        created_at,
+        status
+      )
+    `)
+    .eq('status', 'scheduled')
+    .gte('inspection_date', now.toISOString().split('T')[0])
+    .lte('inspection_date', endDate.toISOString().split('T')[0])
+    .order('inspection_date', { ascending: true });
+
+  if (inspectionsError) throw inspectionsError;
+
+  const createdExecutions: string[] = [];
+
+  for (const inspection of inspections || []) {
+    const claim = Array.isArray(inspection.claim) ? inspection.claim[0] : inspection.claim;
+    if (!claim) continue;
+
+    if (excludeStatuses?.length > 0 && claim.status && excludeStatuses.includes(claim.status)) {
+      continue;
+    }
+
+    if (excludeOlderThanDays) {
+      const claimAge = Math.floor((Date.now() - new Date(claim.created_at).getTime()) / (1000 * 60 * 60 * 24));
+      if (claimAge > excludeOlderThanDays) {
+        continue;
+      }
+    }
+
+    const inspectionAt = buildInspectionDateTime(inspection.inspection_date, inspection.inspection_time);
+    if (!inspectionAt) continue;
+
+    const hoursUntilInspection = (inspectionAt.getTime() - now.getTime()) / (1000 * 60 * 60);
+    if (hoursUntilInspection <= 0 || hoursUntilInspection > hoursBefore) {
+      continue;
+    }
+
+    // Prevent duplicate reminder execution records for the same inspection.
+    const { data: existingExecution, error: existingExecError } = await supabase
+      .from('automation_executions')
+      .select('id')
+      .eq('automation_id', automation.id)
+      .eq('claim_id', inspection.claim_id)
+      .contains('trigger_data', {
+        inspection_id: inspection.id,
+        triggered_by: 'inspection_upcoming_24h',
+      })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingExecError) throw existingExecError;
+    if (existingExecution) continue;
+
+    const { data: execution, error: executionError } = await supabase
+      .from('automation_executions')
+      .insert({
+        automation_id: automation.id,
+        claim_id: inspection.claim_id,
+        trigger_data: {
+          triggered_by: 'inspection_upcoming_24h',
+          reminder_hours: hoursBefore,
+          inspection_id: inspection.id,
+          inspection_date: inspection.inspection_date,
+          inspection_time: inspection.inspection_time,
+          inspection_type: inspection.inspection_type,
+          inspector_name: inspection.inspector_name,
+          notes: inspection.notes,
+          claim_number: claim.claim_number,
+          hours_until_inspection: Number(hoursUntilInspection.toFixed(2)),
+        },
+        status: 'pending',
+      })
+      .select('id')
+      .single();
+
+    if (executionError) throw executionError;
+    createdExecutions.push(execution.id);
+    console.log(`Created 24h inspection reminder execution for claim ${inspection.claim_id}, inspection ${inspection.id}`);
+  }
+
+  return { created: createdExecutions.length, execution_ids: createdExecutions };
+}
 
 async function processScheduledAutomation(supabase: any, automation: any, excludeStatuses: string[], excludeOlderThanDays: number | null) {
   const config = automation.trigger_config || {};

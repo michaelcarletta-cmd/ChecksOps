@@ -40,7 +40,7 @@ interface ActionConfig {
     recipient_types?: ('policyholder' | 'adjuster' | 'referrer' | 'contractors')[]; // Multiple recipient types
     manual_emails?: string[]; // Manually entered email addresses
     manual_emails_text?: string; // Raw input for editing
-    recipient_type?: 'policyholder' | 'adjuster' | 'referrer'; // Legacy support
+    recipient_type?: 'policyholder' | 'adjuster' | 'referrer' | 'contractors' | 'claim_staff'; // Legacy + SMS support
     subject?: string;
     message?: string;
     email_template_id?: string; // Reference to email template
@@ -362,6 +362,8 @@ export const AutomationsSettings = () => {
           : 'When any task is completed';
       case 'inspection_scheduled':
         return 'When a new inspection is scheduled';
+      case 'inspection_upcoming_24h':
+        return `When inspection is within ${config.hours_before || 24} hours`;
       case 'inbound_email':
         return `When email received from ${senderLabels[config.sender_type] || 'any sender'}`;
       case 'inbound_sms':
@@ -405,7 +407,13 @@ export const AutomationsSettings = () => {
         const recipientsStr = recipientParts.length > 0 ? recipientParts.join(' & ') : 'no recipients';
         return `Email to ${recipientsStr}: ${templateInfo}${attachmentInfo}`;
       case 'send_sms':
-        return `SMS to ${action.config.recipient_type}`;
+        const smsRecipientLabel: Record<string, string> = {
+          policyholder: 'Policyholder',
+          adjuster: 'Insurance Adjuster',
+          contractors: 'Assigned Contractors',
+          claim_staff: 'Assigned Staff',
+        };
+        return `SMS to ${smsRecipientLabel[action.config.recipient_type || ''] || action.config.recipient_type || 'recipient'}`;
       case 'create_task':
         const assignInfo = action.config.assign_to_type === 'user' 
           ? ` → ${users?.find(u => u.id === action.config.assign_to_user_id)?.full_name || 'User'}`
@@ -517,6 +525,7 @@ export const AutomationsSettings = () => {
                         <SelectItem value="status_change">When Claim Status Changes</SelectItem>
                         <SelectItem value="task_completed">When Task is Completed</SelectItem>
                         <SelectItem value="inspection_scheduled">When Inspection is Scheduled</SelectItem>
+                          <SelectItem value="inspection_upcoming_24h">24 Hours Before Inspection</SelectItem>
                         <SelectItem value="inbound_email">When Inbound Email Received</SelectItem>
                         <SelectItem value="inbound_sms">When Inbound SMS Received</SelectItem>
                         <SelectItem value="manual">Manual Trigger Only</SelectItem>
@@ -875,7 +884,7 @@ export const AutomationsSettings = () => {
                           />
                           <p className="text-xs text-muted-foreground">
                             Available: {'{claim.policyholder_name}'}, {'{claim.claim_number}'}, {'{claim.status}'}, {'{claim.loss_type}'}
-                            {triggerType === 'inspection_scheduled' && (
+                            {(triggerType === 'inspection_scheduled' || triggerType === 'inspection_upcoming_24h') && (
                               <>
                                 <br />
                                 Inspection: {'{inspection.date}'}, {'{inspection.time}'}, {'{inspection.type}'}, {'{inspection.inspector}'}
@@ -963,6 +972,7 @@ export const AutomationsSettings = () => {
                               <SelectItem value="policyholder">Policyholder</SelectItem>
                               <SelectItem value="adjuster">Insurance Adjuster</SelectItem>
                               <SelectItem value="contractors">Assigned Contractors</SelectItem>
+                              <SelectItem value="claim_staff">Assigned Staff</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -1014,7 +1024,7 @@ export const AutomationsSettings = () => {
                           />
                           <p className="text-xs text-muted-foreground">
                             Keep under 160 characters for best delivery.
-                            {triggerType === 'inspection_scheduled' && (
+                            {(triggerType === 'inspection_scheduled' || triggerType === 'inspection_upcoming_24h') && (
                               <>
                                 {' '}Use {'{inspection.date}'}, {'{inspection.time}'}, {'{inspection.type}'} for inspection details.
                               </>
