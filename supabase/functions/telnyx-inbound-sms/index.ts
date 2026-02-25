@@ -31,6 +31,10 @@ function smartDecode(input: string): Uint8Array {
   return bytes;
 }
 
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
 /** Verify Telnyx webhook signature (ed25519) */
 async function verifyTelnyxSignature(req: Request, body: string): Promise<boolean> {
   const signature = req.headers.get('telnyx-signature-ed25519');
@@ -56,11 +60,12 @@ async function verifyTelnyxSignature(req: Request, body: string): Promise<boolea
 
     console.log(`Sig verify: pubkey ${publicKeyBytes.length}B, sig ${signatureBytes.length}B`);
 
-    const key = await crypto.subtle.importKey('raw', publicKeyBytes, { name: 'Ed25519' }, false, ['verify']);
+    const key = await crypto.subtle.importKey('raw', toArrayBuffer(publicKeyBytes), { name: 'Ed25519' }, false, ['verify']);
     const encoder = new TextEncoder();
-    return await crypto.subtle.verify('Ed25519', key, signatureBytes, encoder.encode(signedPayload));
-  } catch (err) {
-    console.error('Signature verification error:', err.message || err);
+    return await crypto.subtle.verify('Ed25519', key, toArrayBuffer(signatureBytes), encoder.encode(signedPayload));
+  } catch (err: unknown) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    console.error('Signature verification error:', errMessage);
     return false;
   }
 }

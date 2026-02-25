@@ -567,6 +567,7 @@ interface ClaimFactsPack {
     inferredType?: string;
     confidence: 0 | 0.5 | 1;
   }>;
+  missingDocRequests?: MissingDocRequest[];
   evidenceGaps: string[];
 }
 

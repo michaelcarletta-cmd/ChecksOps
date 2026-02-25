@@ -131,7 +131,8 @@ serve(async (req) => {
 
     // Use pre-imported PizZip and Docxtemplater
     const zip = new PizZip(uint8Array);
-    const doc = new Docxtemplater(zip, {
+    const DocxtemplaterCtor = Docxtemplater as unknown as new (zip: any, options: any) => any;
+    const doc = new DocxtemplaterCtor(zip, {
       paragraphLoop: true,
       linebreaks: true,
       nullGetter: () => "",
