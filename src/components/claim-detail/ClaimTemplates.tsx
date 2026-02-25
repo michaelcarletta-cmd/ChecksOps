@@ -109,7 +109,10 @@ export function ClaimTemplates({ claimId, claim }: ClaimTemplatesProps) {
       }
 
       // Create blob from the returned data
-      const blob = new Blob([new Uint8Array(data.content.data)], {
+      const contentArray = Array.isArray(data.content)
+        ? data.content
+        : data.content?.data || data.content;
+      const blob = new Blob([new Uint8Array(contentArray)], {
         type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       });
       const url = URL.createObjectURL(blob);

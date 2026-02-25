@@ -1,6 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
-import PizZip from "pizzip";
-import Docxtemplater from "docxtemplater";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import PizZip from "https://esm.sh/pizzip@3.1.7";
+import Docxtemplater from "https://esm.sh/docxtemplater@3.44.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -302,7 +302,7 @@ Deno.serve(async (req) => {
 
     // Generate the output file
     const outputBuffer = doc.getZip().generate({
-      type: "nodebuffer",
+      type: "uint8array",
       compression: "DEFLATE",
     });
 
@@ -310,7 +310,7 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        content: outputBuffer,
+        content: Array.from(outputBuffer),
         fileName: outputFileName,
         isPDF: false,
       }),
