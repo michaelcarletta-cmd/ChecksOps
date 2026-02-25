@@ -539,6 +539,64 @@ async function sendSms(supabase: any, config: any, execution: any) {
     return { sent_count: results.length, results };
   }
 
+  // Handle assigned internal staff on a claim.
+  if (config.recipient_type === 'claim_staff') {
+    const { data: assignedStaff, error: assignedStaffError } = await supabase
+      .from('claim_staff')
+      .select('staff_id')
+      .eq('claim_id', execution.claim_id);
+
+    if (assignedStaffError) {
+      throw assignedStaffError;
+    }
+
+    if (!assignedStaff || assignedStaff.length === 0) {
+      console.log(`No claim staff assigned for claim ${execution.claim_id}, skipping SMS action`);
+      return { sent_count: 0, skipped: true, reason: 'no_claim_staff_assigned' };
+    }
+
+    const staffIds = Array.from(new Set(
+      assignedStaff
+        .map((staff: any) => staff.staff_id)
+        .filter((staffId: string | null) => !!staffId)
+    ));
+
+    const { data: staffProfiles, error: staffProfilesError } = await supabase
+      .from('profiles')
+      .select('id, full_name, phone')
+      .in('id', staffIds);
+
+    if (staffProfilesError) {
+      throw staffProfilesError;
+    }
+
+    const recipients = (staffProfiles || []).filter((staff: any) => !!staff.phone);
+    if (recipients.length === 0) {
+      console.log(`Assigned claim staff have no phone numbers for claim ${execution.claim_id}, skipping SMS action`);
+      return { sent_count: 0, skipped: true, reason: 'assigned_staff_missing_phone' };
+    }
+
+    const results = [];
+    for (const staff of recipients) {
+      try {
+        const result = await sendToPhone(staff.phone);
+        results.push({
+          ...result,
+          staff_id: staff.id,
+          staff_name: staff.full_name,
+        });
+      } catch (err) {
+        console.error(`Failed to send SMS to assigned staff ${staff.id}:`, err);
+      }
+    }
+
+    if (results.length === 0) {
+      throw new Error('Failed to send SMS to assigned claim staff');
+    }
+
+    return { sent_count: results.length, results };
+  }
+
   // Determine recipient phone for non-contractor types
   let recipientPhone = '';
 
