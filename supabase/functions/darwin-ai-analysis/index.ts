@@ -361,12 +361,27 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 async function downloadPdfFromClaimStorageAsBase64(supabase: any, path: string): Promise<string> {
+  console.log(`[downloadPdf] Attempting to download from claim-files: "${path}"`);
   const { data: fileBlob, error } = await supabase.storage.from('claim-files').download(path);
   if (error || !fileBlob) {
-    throw new Error(`Unable to download PDF from claim-files storage at "${path}"`);
+    console.error(`[downloadPdf] Storage download failed for "${path}":`, JSON.stringify(error));
+    // Fallback: try fetching extracted text from DB instead
+    const { data: fileRow } = await supabase
+      .from('claim_files')
+      .select('extracted_text')
+      .eq('file_path', path)
+      .maybeSingle();
+    if (fileRow?.extracted_text && fileRow.extracted_text.length > 50) {
+      console.log(`[downloadPdf] Using extracted_text fallback for "${path}" (${fileRow.extracted_text.length} chars)`);
+      // Return a fake base64 that signals text-only mode
+      const textBlock = `[EXTRACTED TEXT FROM: ${path}]\n\n${fileRow.extracted_text}`;
+      return btoa(unescape(encodeURIComponent(textBlock)));
+    }
+    throw new Error(`Unable to download PDF from claim-files storage at "${path}": ${JSON.stringify(error) || 'no data'}`);
   }
 
   const bytes = new Uint8Array(await fileBlob.arrayBuffer());
+  console.log(`[downloadPdf] Successfully downloaded ${bytes.length} bytes from "${path}"`);
   return bytesToBase64(bytes);
 }
 
