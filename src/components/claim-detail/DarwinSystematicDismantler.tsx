@@ -79,7 +79,7 @@ export const DarwinSystematicDismantler = ({ claimId, claim }: DarwinSystematicD
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   
-  const { files: claimFiles, loading: loadingFiles, downloadFileAsBase64 } = useClaimFiles(claimId);
+  const { files: claimFiles, loading: loadingFiles } = useClaimFiles(claimId);
   const { position, isLocked, loading: positionLoading } = useDeclaredPosition(claimId);
 
   const toggleFileSelection = (fileId: string) => {
@@ -164,6 +164,25 @@ export const DarwinSystematicDismantler = ({ claimId, claim }: DarwinSystematicD
     }
   };
 
+  const uploadPdfToClaimStorage = async (file: File): Promise<string> => {
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw new Error("You must be signed in to upload documents.");
+    }
+
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const storagePath = `${claimId}/analysis-temp/${Date.now()}-${safeName}`;
+    const { error: uploadError } = await supabase.storage
+      .from("claim-files")
+      .upload(storagePath, file, {
+        contentType: file.type || "application/pdf",
+        upsert: false,
+      });
+
+    if (uploadError) throw uploadError;
+    return storagePath;
+  };
+
   const toggleAssertion = (id: string) => {
     const newExpanded = new Set(expandedAssertions);
     if (newExpanded.has(id)) {
@@ -186,132 +205,37 @@ export const DarwinSystematicDismantler = ({ claimId, claim }: DarwinSystematicD
 
     setLoading(true);
     try {
-      let pdfContents: Array<{ name: string; content: string; folder?: string }> = [];
+      let pdfFilePaths: Array<{ path: string; name: string; folder?: string }> = [];
+      let singlePdfPath: string | null = null;
       let singlePdfBase64: string | null = null;
       let fileName: string | undefined;
-      let downloadFailures: string[] = [];
 
       // Handle multiple claim files
       if (selectedFiles.length > 0) {
-        for (const file of selectedFiles) {
-          try {
-            const base64 = await downloadFileAsBase64(file.file_path);
-            if (base64) {
-              pdfContents.push({
-                name: file.file_name,
-                content: base64,
-                folder: file.folder_name
-              });
-            } else {
-              downloadFailures.push(file.file_name);
-              console.warn(`Failed to download file: ${file.file_name} (path: ${file.file_path})`);
-            }
-          } catch (err) {
-            downloadFailures.push(file.file_name);
-            console.error(`Error downloading file ${file.file_name}:`, err);
-          }
-        }
-
-        if (pdfContents.length === 0 && downloadFailures.length > 0) {
-          toast({
-            title: "File download failed",
-            description: `Could not download any of the selected files: ${downloadFailures.join(', ')}. Please try re-uploading them.`,
-            variant: "destructive"
-          });
-          setLoading(false);
-          return;
-        }
-
-        if (downloadFailures.length > 0) {
-          toast({
-            title: "Some files skipped",
-            description: `Could not download: ${downloadFailures.join(', ')}. Analyzing ${pdfContents.length} remaining files.`,
-          });
-        }
+        pdfFilePaths = selectedFiles.slice(0, 5).map((file) => ({
+          path: file.file_path,
+          name: file.file_name,
+          folder: file.folder_name,
+        }));
       } else if (pdfFile) {
         // Handle single uploaded PDF
-        const arrayBuffer = await pdfFile.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        singlePdfBase64 = btoa(binary);
         fileName = pdfFile.name;
-      }
-
-      // If file downloads succeeded but files are very large, warn the user
-      const totalSize = pdfContents.reduce((sum, p) => sum + p.content.length, 0);
-      if (totalSize > 15 * 1024 * 1024) {
-        // Over ~11MB of actual files - use text extraction fallback
-        console.log(`Total PDF base64 size: ${totalSize} bytes, using text extraction fallback`);
-        
-        // Try to use extracted_text from the database instead
-        const fileIds = selectedFiles.map(f => f.id);
-        const { data: fileTexts } = await supabase
-          .from('claim_files')
-          .select('id, file_name, extracted_text')
-          .in('id', fileIds);
-        
-        const textContent = (fileTexts || [])
-          .filter(f => f.extracted_text && f.extracted_text.trim().length > 50)
-          .map(f => `=== ${f.file_name} ===\n${f.extracted_text}`)
-          .join('\n\n');
-        
-        if (textContent.length > 200) {
-          // Use text-only mode with extracted text
-          const { data, error } = await supabase.functions.invoke('darwin-ai-analysis', {
-            body: {
-              claimId,
-              analysisType: 'systematic_dismantling',
-              content: textContent,
-              additionalContext: {
-                _useTextOnly: true,
-                previousResponses,
-                ...(isLocked && position ? {
-                  declaredPosition: {
-                    primary_cause_of_loss: position.primary_cause_of_loss,
-                    primary_coverage_theory: position.primary_coverage_theory,
-                    primary_carrier_error: position.primary_carrier_error,
-                    carrier_dependency_statement: position.carrier_dependency_statement,
-                  }
-                } : {}),
-                ...(provisionalOverride ? { provisionalPosition: true } : {}),
-              }
+        try {
+          singlePdfPath = await uploadPdfToClaimStorage(pdfFile);
+        } catch (uploadErr) {
+          // Fallback for very small PDFs if storage upload fails.
+          if (pdfFile.size <= 3 * 1024 * 1024) {
+            const arrayBuffer = await pdfFile.arrayBuffer();
+            const bytes = new Uint8Array(arrayBuffer);
+            let binary = '';
+            for (let i = 0; i < bytes.length; i++) {
+              binary += String.fromCharCode(bytes[i]);
             }
-          });
-
-          if (error) throw error;
-          if (data?.error) throw new Error(data.error);
-
-          setRawAnalysis(data.result);
-          setLastAnalyzed(new Date());
-          if (data.structured) setResult(data.structured);
-
-          const { data: userData } = await supabase.auth.getUser();
-          await supabase.from('darwin_analysis_results').insert({
-            claim_id: claimId,
-            analysis_type: 'systematic_dismantling',
-            input_summary: data.structured ? JSON.stringify(data.structured) : `${selectedFiles.length} files (text mode)`,
-            result: data.result,
-            pdf_file_name: `${selectedFiles.length} files (text extraction)`,
-            created_by: userData.user?.id
-          });
-
-          toast({
-            title: "Systematic dismantling complete",
-            description: "Analysis used extracted text due to large file sizes"
-          });
-          setLoading(false);
-          return;
+            singlePdfBase64 = btoa(binary);
+          } else {
+            throw uploadErr;
+          }
         }
-        
-        // If no extracted text available, limit to 3 files
-        pdfContents = pdfContents.slice(0, 3);
-        toast({
-          title: "Large files detected",
-          description: "Limiting to 3 files to avoid timeouts. Consider selecting fewer files.",
-        });
       }
 
       const { data, error } = await supabase.functions.invoke('darwin-ai-analysis', {
@@ -320,8 +244,9 @@ export const DarwinSystematicDismantler = ({ claimId, claim }: DarwinSystematicD
           analysisType: 'systematic_dismantling',
           content: carrierContent || undefined,
           pdfContent: singlePdfBase64 || undefined,
+          pdfFilePath: singlePdfPath || undefined,
           pdfFileName: fileName,
-          pdfContents: pdfContents.length > 0 ? pdfContents : undefined,
+          pdfFilePaths: pdfFilePaths.length > 0 ? pdfFilePaths : undefined,
           additionalContext: {
             previousResponses,
             ...(isLocked && position ? {
@@ -371,9 +296,14 @@ export const DarwinSystematicDismantler = ({ claimId, claim }: DarwinSystematicD
       });
     } catch (error: any) {
       console.error("Systematic dismantling error:", error);
+      const rawMessage = String(error?.message || "");
+      const isEdgeTransportError =
+        /Failed to send a request to the Edge Function|FunctionsFetchError|Failed to fetch|Load failed/i.test(rawMessage);
       toast({
         title: "Analysis failed",
-        description: error.message || "Failed to analyze carrier response",
+        description: isEdgeTransportError
+          ? "Darwin could not reach the analysis function. Please retry. If this persists, redeploy darwin-ai-analysis and confirm LOVABLE_API_KEY is set."
+          : (error.message || "Failed to analyze carrier response"),
         variant: "destructive"
       });
     } finally {

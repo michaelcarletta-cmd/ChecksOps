@@ -144,6 +144,25 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
     setPdfFile(null);
   };
 
+  const uploadPdfToClaimStorage = async (file: File): Promise<string> => {
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw new Error("You must be signed in to upload documents.");
+    }
+
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const storagePath = `${claimId}/analysis-temp/${Date.now()}-${safeName}`;
+    const { error: uploadError } = await supabase.storage
+      .from("claim-files")
+      .upload(storagePath, file, {
+        contentType: file.type || "application/pdf",
+        upsert: false,
+      });
+
+    if (uploadError) throw uploadError;
+    return storagePath;
+  };
+
   const handleAnalyze = async () => {
     if (!reportContent.trim() && !pdfFile && !selectedClaimFile) {
       toast({
@@ -158,33 +177,30 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
     setExecutionSteps([]);
     try {
       let pdfBase64 = null;
+      let pdfFilePath: string | null = null;
       let fileName = null;
 
-      // If using existing claim file, download it first
       if (selectedClaimFile) {
-        const { data: fileData, error: downloadError } = await supabase.storage
-          .from('claim-files')
-          .download(selectedClaimFile.file_path);
-
-        if (downloadError) throw downloadError;
-
-        const arrayBuffer = await fileData.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        pdfBase64 = btoa(binary);
+        pdfFilePath = selectedClaimFile.file_path;
         fileName = selectedClaimFile.file_name;
       } else if (pdfFile) {
-        const arrayBuffer = await pdfFile.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        let binary = '';
-        for (let i = 0; i < bytes.length; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        pdfBase64 = btoa(binary);
         fileName = pdfFile.name;
+        try {
+          pdfFilePath = await uploadPdfToClaimStorage(pdfFile);
+        } catch (uploadErr) {
+          // Fallback for very small PDFs if storage upload fails.
+          if (pdfFile.size <= 3 * 1024 * 1024) {
+            const arrayBuffer = await pdfFile.arrayBuffer();
+            const bytes = new Uint8Array(arrayBuffer);
+            let binary = '';
+            for (let i = 0; i < bytes.length; i++) {
+              binary += String.fromCharCode(bytes[i]);
+            }
+            pdfBase64 = btoa(binary);
+          } else {
+            throw uploadErr;
+          }
+        }
       }
 
       const { data, error } = await supabase.functions.invoke('darwin-ai-analysis', {
@@ -193,6 +209,7 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
           analysisType: 'engineer_report_rebuttal',
           content: reportContent || undefined,
           pdfContent: pdfBase64 || undefined,
+          pdfFilePath: pdfFilePath || undefined,
           pdfFileName: fileName || undefined,
           additionalContext: {
             ...(additionalContext ? { userContext: additionalContext } : {}),
@@ -245,9 +262,14 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
       });
     } catch (error: any) {
       console.error("Engineer report analysis error:", error);
+      const rawMessage = String(error?.message || "");
+      const isEdgeTransportError =
+        /Failed to send a request to the Edge Function|FunctionsFetchError|Failed to fetch|Load failed/i.test(rawMessage);
       toast({
         title: "Analysis failed",
-        description: error.message || "Failed to analyze engineer report",
+        description: isEdgeTransportError
+          ? "Darwin could not reach the analysis function. Please retry. If this persists, redeploy darwin-ai-analysis and confirm LOVABLE_API_KEY is set."
+          : (error.message || "Failed to analyze engineer report"),
         variant: "destructive"
       });
     } finally {

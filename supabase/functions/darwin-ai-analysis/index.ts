@@ -348,6 +348,30 @@ async function extractTextFromPDFNative(base64Content: string, fileName: string)
   }
 }
 
+function fileNameFromStoragePath(path: string): string {
+  const parts = String(path || '').split('/');
+  return parts[parts.length - 1] || 'document.pdf';
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function downloadPdfFromClaimStorageAsBase64(supabase: any, path: string): Promise<string> {
+  const { data: fileBlob, error } = await supabase.storage.from('claim-files').download(path);
+  if (error || !fileBlob) {
+    throw new Error(`Unable to download PDF from claim-files storage at "${path}"`);
+  }
+
+  const bytes = new Uint8Array(await fileBlob.arrayBuffer());
+  return bytesToBase64(bytes);
+}
+
 // Reuse the same knowledge base search logic as the main Claims AI Assistant
 // so Darwin can leverage uploaded training materials (including ACV audio).
 async function searchKnowledgeBase(supabase: any, question: string, category?: string): Promise<string> {
@@ -671,7 +695,9 @@ interface AnalysisRequest {
   mode?: string;
   content?: string;
   pdfContent?: string;
+  pdfFilePath?: string;
   pdfFileName?: string;
+  pdfFilePaths?: Array<{ path: string; name?: string; folder?: string }>;
   pdfContents?: Array<{ name: string; content: string; folder?: string }>;
   additionalContext?: any;
   claim?: any;
@@ -751,13 +777,31 @@ serve(async (req) => {
     };
 
     const requestStep = startStep('request', 'Load analysis request');
-    const { claimId, analysisType, mode, content, pdfContent, pdfFileName, pdfContents, additionalContext, claim: providedClaim, contextData, darwinNotes: providedNotes, claimFactsPack: providedClaimFactsPack, enableEvidenceIndex: enableEvidenceIndexParam, enableDismantler: enableDismantlerParam }: AnalysisRequest = await req.json();
+    const requestPayload: AnalysisRequest = await req.json();
+    let {
+      claimId,
+      analysisType,
+      mode,
+      content,
+      pdfContent,
+      pdfFilePath,
+      pdfFileName,
+      pdfContents,
+      pdfFilePaths,
+      additionalContext = {},
+      claim: providedClaim,
+      contextData,
+      darwinNotes: providedNotes,
+      claimFactsPack: providedClaimFactsPack,
+      enableEvidenceIndex: enableEvidenceIndexParam,
+      enableDismantler: enableDismantlerParam,
+    } = requestPayload;
     endStep(requestStep, 'completed', `analysisType=${analysisType}`);
     const darwinMode = normalizeDarwinMode(mode);
     const useStructuredDarwinOutput = STRUCTURED_DARWIN_ANALYSIS_TYPES.has(analysisType);
     const enableEvidenceIndex = enableEvidenceIndexParam !== false;
     const enableDismantler = enableDismantlerParam !== false;
-    console.log(`Darwin AI Analysis - Type: ${analysisType}, Mode: ${darwinMode}, Claim: ${claimId}, Has PDF: ${!!pdfContent}, ClaimFactsPack: ${!!providedClaimFactsPack}, enableEvidenceIndex: ${enableEvidenceIndex}, enableDismantler: ${enableDismantler}`);
+    console.log(`Darwin AI Analysis - Type: ${analysisType}, Mode: ${darwinMode}, Claim: ${claimId}, Has PDF: ${!!pdfContent || !!pdfFilePath || !!(pdfFilePaths && pdfFilePaths.length)}, ClaimFactsPack: ${!!providedClaimFactsPack}, enableEvidenceIndex: ${enableEvidenceIndex}, enableDismantler: ${enableDismantler}`);
 
     // Fetch claim data
     const { data: claim, error: claimError } = await supabase
@@ -767,6 +811,100 @@ serve(async (req) => {
       .single();
 
     if (claimError) throw claimError;
+
+    // Resolve storage-backed PDF inputs to base64 so clients can send file paths
+    // instead of huge payloads that often fail at the function gateway.
+    if (!pdfContent && pdfFilePath) {
+      try {
+        pdfContent = await downloadPdfFromClaimStorageAsBase64(supabase, pdfFilePath);
+        if (!pdfFileName) {
+          pdfFileName = fileNameFromStoragePath(pdfFilePath);
+        }
+      } catch (pathErr) {
+        console.error('Failed to resolve pdfFilePath:', pathErr);
+        throw new Error('Unable to load the selected PDF from claim storage. Please re-upload the file and try again.');
+      }
+    }
+
+    if ((!pdfContents || pdfContents.length === 0) && Array.isArray(pdfFilePaths) && pdfFilePaths.length > 0) {
+      const resolvedPdfs: Array<{ name: string; content: string; folder?: string }> = [];
+      const failedPaths: string[] = [];
+      const maxPdfs = Math.min(pdfFilePaths.length, 5);
+
+      for (const fileRef of pdfFilePaths.slice(0, maxPdfs)) {
+        const path = String(fileRef?.path || '').trim();
+        if (!path) continue;
+        try {
+          const base64 = await downloadPdfFromClaimStorageAsBase64(supabase, path);
+          resolvedPdfs.push({
+            name: fileRef.name || fileNameFromStoragePath(path),
+            content: base64,
+            folder: fileRef.folder,
+          });
+        } catch (pathErr) {
+          console.error(`Failed to resolve pdfFilePaths item (${path}):`, pathErr);
+          failedPaths.push(path);
+        }
+      }
+
+      if (resolvedPdfs.length === 0) {
+        throw new Error('Unable to load any selected carrier PDFs from claim storage. Please re-upload the files and try again.');
+      }
+      if (failedPaths.length > 0) {
+        console.warn('Some pdfFilePaths could not be resolved:', failedPaths);
+      }
+      pdfContents = resolvedPdfs;
+    }
+
+    // For large PDFs, force text-only analysis to avoid multimodal gateway
+    // payload failures that surface as "Failed to send request to Edge Function".
+    const largePdfTextFallbackTypes = new Set([
+      'denial_rebuttal',
+      'engineer_report_rebuttal',
+      'document_compilation',
+      'document_comparison',
+      'estimate_work_summary',
+      'estimate_gap_analysis',
+      'systematic_dismantling',
+    ]);
+    if (pdfContent && largePdfTextFallbackTypes.has(analysisType) && pdfContent.length > AI_EXTRACTION_LIMIT) {
+      try {
+        const extracted = await extractTextFromPDFNative(pdfContent, pdfFileName || 'document.pdf');
+        const block = `=== ${pdfFileName || 'Document'} ===\n${extracted.substring(0, 100000)}`;
+        content = [content, block].filter(Boolean).join('\n\n');
+        additionalContext._useTextOnly = true;
+        pdfContent = undefined;
+      } catch (nativeErr) {
+        console.error('Large single-PDF text fallback failed:', nativeErr);
+        throw new Error('This PDF is too large for direct analysis and text extraction failed. Please upload a smaller/selectable-text PDF or split the document.');
+      }
+    }
+
+    if (analysisType === 'systematic_dismantling' && Array.isArray(pdfContents) && pdfContents.length > 0) {
+      const combinedBase64Length = pdfContents.reduce((sum, pdf) => sum + (pdf.content?.length || 0), 0);
+      const hasVeryLargePdf = pdfContents.some((pdf) => (pdf.content?.length || 0) > AI_EXTRACTION_LIMIT);
+      if (combinedBase64Length > AI_EXTRACTION_LIMIT || hasVeryLargePdf) {
+        const extractedBlocks: string[] = [];
+        for (const pdf of pdfContents.slice(0, 5)) {
+          try {
+            const extracted = await extractTextFromPDFNative(pdf.content, pdf.name || 'document.pdf');
+            if (extracted?.trim()) {
+              extractedBlocks.push(`=== ${pdf.name || 'Document'} ===\n${extracted.substring(0, 70000)}`);
+            }
+          } catch (nativeErr) {
+            console.warn(`Failed to extract text from ${pdf.name || 'document.pdf'}:`, nativeErr);
+          }
+        }
+
+        if (extractedBlocks.length === 0) {
+          throw new Error('Selected PDFs are too large for direct analysis and text extraction failed. Try fewer files or use files with selectable text.');
+        }
+
+        content = [content, extractedBlocks.join('\n\n')].filter(Boolean).join('\n\n');
+        additionalContext._useTextOnly = true;
+        pdfContents = undefined;
+      }
+    }
 
     // Detect state from policyholder address (NJ and PA only)
     const detectState = (address: string | null): { state: string; stateName: string; insuranceCode: string; promptPayAct: string; adminCode: string } => {
@@ -3042,12 +3180,13 @@ Please provide a comprehensive document comparison that includes:
         
         // Check if PDF is large and needs native extraction
         let extractedPdfText = '';
-        const isLargePdf = pdfContent && pdfContent.length > AI_EXTRACTION_LIMIT;
+        const smartExtractionPdf = pdfContent || '';
+        const isLargePdf = smartExtractionPdf.length > AI_EXTRACTION_LIMIT;
         
         if (isLargePdf) {
-          console.log(`Large PDF detected (${Math.round(pdfContent.length / 1024 / 1024)}MB base64), using native extraction first`);
+          console.log(`Large PDF detected (${Math.round(smartExtractionPdf.length / 1024 / 1024)}MB base64), using native extraction first`);
           try {
-            extractedPdfText = await extractTextFromPDFNative(pdfContent, pdfFileName || 'document.pdf');
+            extractedPdfText = await extractTextFromPDFNative(smartExtractionPdf, pdfFileName || 'document.pdf');
           } catch (nativeError) {
             console.error('Native extraction failed for large PDF:', nativeError);
             throw new Error(`This PDF is too large for AI processing and native text extraction failed. The PDF may be scanned/image-based. Please use a smaller file (<8MB) for scanned documents, or ensure the PDF has selectable text.`);
@@ -5247,7 +5386,7 @@ Build the comprehensive timeline, identify timing risk flags, and list missing d
     let messages: any[];
     
     // Handle multiple PDFs for demand_package or systematic_dismantling
-    if (pdfContents && pdfContents.length > 0 && (analysisType === 'demand_package' || analysisType === 'systematic_dismantling')) {
+    if (pdfContents && pdfContents.length > 0 && !additionalContext?._useTextOnly && (analysisType === 'demand_package' || analysisType === 'systematic_dismantling')) {
       const contentParts: any[] = [];
       
       // Add each PDF as an image_url (Gemini will process PDFs this way)
@@ -5279,7 +5418,7 @@ Build the comprehensive timeline, identify timing risk flags, and list missing d
       ];
       
       console.log(`${analysisType} with ${pdfContents.length} PDFs (processing ${Math.min(pdfContents.length, maxPdfs)})`);
-    } else if (analysisType === 'supplement' && (additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf || pdfContent)) {
+    } else if (analysisType === 'supplement' && !additionalContext?._useTextOnly && (additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf || pdfContent)) {
       // Supplement comparison with potentially two PDFs
       const contentParts: any[] = [];
       
@@ -5320,7 +5459,7 @@ Build the comprehensive timeline, identify timing risk flags, and list missing d
       ];
       
       console.log(`Supplement analysis with ${additionalContext?.ourEstimatePdf ? 1 : 0} our estimate + ${(additionalContext?.insuranceEstimatePdf || pdfContent) ? 1 : 0} insurance estimate`);
-    } else if (analysisType === 'estimate_comparison' && additionalContext?.carrierEstimatePdf && additionalContext?.ourEstimatePdf) {
+    } else if (analysisType === 'estimate_comparison' && !additionalContext?._useTextOnly && additionalContext?.carrierEstimatePdf && additionalContext?.ourEstimatePdf) {
       // Estimate comparison with two PDFs
       const contentParts: any[] = [];
       
