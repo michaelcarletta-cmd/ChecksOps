@@ -90,13 +90,15 @@ Deno.serve(async (req) => {
         console.log(`Claim ${claim.claim_number}: Status changed to waiting on RD check - stopping RD request follow-ups`);
         
         // Stop RD request follow-ups since RD has been released
+        // Only auto-enable check tracking if the user hasn't explicitly disabled it
+        const enableCheckTracking = automation.rd_check_tracking_enabled !== false;
         await supabase
           .from('claim_automations')
           .update({
+            rd_follow_up_enabled: false,
             rd_follow_up_stopped_at: new Date().toISOString(),
             rd_follow_up_stop_reason: 'rd_released',
-            // Auto-enable RD check tracking if not already
-            rd_check_tracking_enabled: true,
+            rd_check_tracking_enabled: enableCheckTracking,
             rd_check_released_at: automation.rd_check_released_at || new Date().toISOString(),
           })
           .eq('id', automation.id);

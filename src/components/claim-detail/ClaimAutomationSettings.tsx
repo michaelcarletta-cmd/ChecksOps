@@ -265,6 +265,7 @@ export const ClaimAutomationSettings = ({ claimId }: ClaimAutomationSettingsProp
         rd_follow_up_enabled: false,
         rd_follow_up_stopped_at: new Date().toISOString(),
         rd_follow_up_stop_reason: 'manual',
+        rd_check_tracking_enabled: false,
       });
     }
   };
