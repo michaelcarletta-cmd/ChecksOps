@@ -228,7 +228,7 @@ Deno.serve(async (req) => {
 
     if (policyDocs.length > 0) {
       const missingDocs: string[] = [];
-      const coverages: ClaimFactsPack["policy"]["coverages"] = [];
+      const coverages: NonNullable<ClaimFactsPack["policy"]>["coverages"] = [];
       const meta = policyDocs[0].classification_metadata as any;
       if (meta?.policyNumber) {
         pack.policy = pack.policy || {

@@ -2440,7 +2440,9 @@ function shouldUsePhotoDamageEvidenceForCommunication(question: string, bodyText
   return mentionsPhotos && (mentionsDamage || mentionsEstimate);
 }
 
-function parseDamagesArray(rawDamages: any): Array<{ type: string; severity?: string; location?: string; notes?: string }> {
+type ParsedDamage = { type: string; severity?: string; location?: string; notes?: string };
+
+function parseDamagesArray(rawDamages: any): ParsedDamage[] {
   if (!rawDamages) return [];
 
   let parsed: any = rawDamages;
@@ -2454,7 +2456,7 @@ function parseDamagesArray(rawDamages: any): Array<{ type: string; severity?: st
 
   if (!Array.isArray(parsed)) return [];
 
-  return parsed
+  const normalizedEntries = parsed
     .map((entry: any) => {
       if (typeof entry === "string") {
         return { type: entry };
@@ -2475,8 +2477,9 @@ function parseDamagesArray(rawDamages: any): Array<{ type: string; severity?: st
         location: entry.location ? String(entry.location) : (entry.area ? String(entry.area) : undefined),
         notes: entry.notes ? String(entry.notes) : (entry.why ? String(entry.why) : undefined),
       };
-    })
-    .filter((entry: any) => Boolean(entry?.type));
+    });
+
+  return normalizedEntries.filter((entry): entry is ParsedDamage => Boolean(entry?.type));
 }
 
 function normalizeDamageKey(raw: string): string {
@@ -2628,8 +2631,9 @@ async function buildPhotoEstimateEvidenceContext(
       return `- ${damage.label}${severity} documented in ${damage.count} photo(s)${location}`;
     });
 
+    type ScoredPhotoDamage = { photo: any; damages: ParsedDamage[]; score: number };
     const severePhotoHighlights = analyzedPhotos
-      .map((photo: any) => {
+      .map((photo: any): ScoredPhotoDamage => {
         const damages = parseDamagesArray(photo.ai_detected_damages);
         const maxDamageSeverity = damages.reduce((max, damage) => Math.max(max, severityScore(damage.severity)), 0);
         const score =
@@ -2640,13 +2644,13 @@ async function buildPhotoEstimateEvidenceContext(
 
         return { photo, damages, score };
       })
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score)
+      .filter((entry: ScoredPhotoDamage) => entry.score > 0)
+      .sort((a: ScoredPhotoDamage, b: ScoredPhotoDamage) => b.score - a.score)
       .slice(0, 4)
-      .map(({ photo, damages }) => {
+      .map(({ photo, damages }: ScoredPhotoDamage) => {
         const leadDamage = damages
           .slice(0, 2)
-          .map((damage) => truncateSentence(damage.type, 50))
+          .map((damage: ParsedDamage) => truncateSentence(damage.type, 50))
           .join("; ");
         const conditionPart = photo.ai_condition_rating
           ? `Condition rating: ${photo.ai_condition_rating}.`

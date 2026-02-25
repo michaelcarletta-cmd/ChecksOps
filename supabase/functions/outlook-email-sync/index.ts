@@ -93,7 +93,7 @@ async function fetchGraphEmails(accessToken: string, maxPages = 10): Promise<any
 
   let page = 0;
   while (url && page < maxPages) {
-    const response = await fetch(url, {
+    const response: Response = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
@@ -111,7 +111,7 @@ async function fetchGraphEmails(accessToken: string, maxPages = 10): Promise<any
       throw new Error(`Graph API error: ${detail || response.status}`);
     }
 
-    const data = await response.json();
+    const data: any = await response.json();
     const emails = (data.value || []).map((msg: any) => {
       let fullBody = '';
       if (msg.body?.content) {
