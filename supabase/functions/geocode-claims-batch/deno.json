@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "npm:@supabase/supabase-js@2.49.1": "https://esm.sh/@supabase/supabase-js@2.49.1?target=deno"
+  }
+}
