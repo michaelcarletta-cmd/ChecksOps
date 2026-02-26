@@ -74,12 +74,20 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Update execution as success
+        // Determine overall status: if ALL actions failed, mark as failed
+        const allFailed = actionResults.length > 0 && actionResults.every((r: any) => !r.success);
+        const finalStatus = allFailed ? 'failed' : 'success';
+        const errorMsg = allFailed 
+          ? actionResults.map((r: any) => r.error).filter(Boolean).join('; ') 
+          : null;
+
+        // Update execution status
         await supabase
           .from('automation_executions')
           .update({
-            status: 'success',
+            status: finalStatus,
             result: { actions: actionResults },
+            error_message: errorMsg,
             completed_at: new Date().toISOString()
           })
           .eq('id', execution.id);
@@ -116,30 +124,33 @@ Deno.serve(async (req) => {
 });
 
 async function executeAction(supabase: any, action: any, execution: any) {
-  const { type, config } = action;
+  const { type, config, ...topLevelProps } = action;
+  // Actions may store their properties either nested under `config` or at the top level.
+  // Merge both so downstream handlers always find the values they need.
+  const mergedConfig = { ...topLevelProps, ...(config || {}) };
 
   switch (type) {
     case 'create_task':
-      return await createTask(supabase, config, execution);
+      return await createTask(supabase, mergedConfig, execution);
     
     case 'send_notification':
-      return await sendNotification(supabase, config, execution);
+      return await sendNotification(supabase, mergedConfig, execution);
     
     case 'update_claim':
-      return await updateClaim(supabase, config, execution);
+      return await updateClaim(supabase, mergedConfig, execution);
     
     case 'update_claim_status':
-      return await updateClaimStatus(supabase, config, execution);
+      return await updateClaimStatus(supabase, mergedConfig, execution);
     
     case 'send_email':
-      return await sendEmail(supabase, config, execution);
+      return await sendEmail(supabase, mergedConfig, execution);
     
     case 'send_sms':
-      return await sendSms(supabase, config, execution);
+      return await sendSms(supabase, mergedConfig, execution);
     
     case 'webhook':
     case 'call_webhook':
-      return await callWebhook(supabase, config, execution);
+      return await callWebhook(supabase, mergedConfig, execution);
     
     default:
       throw new Error(`Unknown action type: ${type}`);
@@ -434,7 +445,7 @@ async function sendSms(supabase: any, config: any, execution: any) {
     .single();
 
   // Get message from template or config
-  let messageTemplate = config.message || '';
+  let messageTemplate = config.message || config.message_template || '';
   if (config.sms_template_id) {
     const { data: template } = await supabase
       .from('sms_templates')
@@ -758,9 +769,30 @@ function formatTimeTo12Hour(time24: string): string {
 function replaceVariables(template: string, claim: any, triggerData: any, inspection?: any): string {
   let result = template;
   
-  // Replace claim variables
+  // Replace claim variables - support both {claim.field} and {{field}} patterns
   if (claim) {
     result = result.replace(/\{claim\.(\w+)\}/g, (_, field) => claim[field] || '');
+    // Also support {{claim_number}}, {{policyholder_name}}, etc.
+    result = result.replace(/\{\{(\w+)\}\}/g, (match, field) => {
+      // Check claim fields first
+      if (claim[field] !== undefined && claim[field] !== null) return claim[field];
+      // Check trigger data
+      if (triggerData && triggerData[field] !== undefined && triggerData[field] !== null) {
+        // Format times nicely
+        if (field === 'inspection_time' && triggerData[field]) {
+          return formatTimeTo12Hour(triggerData[field]);
+        }
+        return triggerData[field];
+      }
+      // Check inspection data
+      if (inspection && inspection[field] !== undefined && inspection[field] !== null) {
+        if (field === 'inspection_time' && inspection[field]) {
+          return formatTimeTo12Hour(inspection[field]);
+        }
+        return inspection[field];
+      }
+      return ''; // return empty string if not found
+    });
   }
   
   // Replace trigger variables (including inspection data)
