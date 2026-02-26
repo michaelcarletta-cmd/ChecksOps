@@ -11,11 +11,15 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Validate CRON_SECRET for security
+  // Validate CRON_SECRET for security, while allowing service-role internal calls.
   const cronSecret = Deno.env.get('CRON_SECRET');
   const providedSecret = req.headers.get('x-cron-secret');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
+  const isServiceRoleCall = Boolean(serviceRoleKey && authHeader === `Bearer ${serviceRoleKey}`);
+  const hasValidCronSecret = Boolean(cronSecret && providedSecret === cronSecret);
   
-  if (cronSecret && providedSecret !== cronSecret) {
+  if (cronSecret && !hasValidCronSecret && !isServiceRoleCall) {
     console.error('Invalid or missing cron secret');
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
@@ -36,7 +40,8 @@ serve(async (req) => {
         automation:automations(*)
       `)
       .eq('status', 'pending')
-      .limit(10);
+      .order('created_at', { ascending: true })
+      .limit(50);
 
     if (fetchError) throw fetchError;
 
