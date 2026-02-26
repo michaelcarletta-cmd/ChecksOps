@@ -252,6 +252,35 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
     }
   };
 
+  const normalizePhone = (value: string | null | undefined) => (value || "").replace(/\D/g, "");
+  const resolveAdjusterExtension = (adjuster: Adjuster): string | null => {
+    const linkedExtension = Array.isArray(adjuster.adjuster)
+      ? adjuster.adjuster[0]?.phone_extension ?? null
+      : adjuster.adjuster?.phone_extension ?? null;
+    if (linkedExtension) return linkedExtension;
+
+    const adjusterEmail = (adjuster.adjuster_email || "").trim().toLowerCase();
+    const adjusterPhone = normalizePhone(adjuster.adjuster_phone);
+    const adjusterName = (adjuster.adjuster_name || "").trim().toLowerCase();
+
+    const matchedDirectoryAdjuster = directoryAdjusters.find((candidate) => {
+      if (adjuster.adjuster_id && candidate.id === adjuster.adjuster_id) return true;
+
+      const candidateEmail = (candidate.email || "").trim().toLowerCase();
+      if (adjusterEmail && candidateEmail && candidateEmail === adjusterEmail) return true;
+
+      const candidatePhone = normalizePhone(candidate.phone);
+      if (adjusterPhone && candidatePhone && candidatePhone === adjusterPhone) return true;
+
+      const candidateName = (candidate.name || "").trim().toLowerCase();
+      if (adjusterName && candidateName && candidateName === adjusterName) return true;
+
+      return false;
+    });
+
+    return matchedDirectoryAdjuster?.phone_extension ?? null;
+  };
+
   return (
     <div className="grid gap-6">
       {/* Adjuster Information */}
@@ -273,11 +302,10 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
             <p className="text-sm text-muted-foreground">No adjusters assigned yet.</p>
           ) : (
             <div className="space-y-4">
-              {adjusters.map((adjuster) => (
-                <div
-                  key={adjuster.id}
-                  className="border rounded-lg p-4 bg-muted/20"
-                >
+              {adjusters.map((adjuster) => {
+                const adjusterExtension = resolveAdjusterExtension(adjuster);
+                return (
+                <div key={adjuster.id} className="border rounded-lg p-4 bg-muted/20">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{adjuster.adjuster_name}</span>
@@ -316,7 +344,7 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
                         <span className="text-muted-foreground">Phone: </span>
                         <span>
                           {adjuster.adjuster_phone}
-                          {adjuster.adjuster?.phone_extension ? ` ext ${adjuster.adjuster.phone_extension}` : ""}
+                          {adjusterExtension ? ` ext ${adjusterExtension}` : ""}
                         </span>
                       </div>
                     )}
@@ -334,7 +362,8 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
