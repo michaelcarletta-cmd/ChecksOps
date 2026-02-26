@@ -257,8 +257,7 @@ async function processInspectionUpcoming24hAutomation(
       })
       .in('status', ['pending', 'running', 'success'])
       .order('created_at', { ascending: false })
-      .limit(1)
-      .returns<Array<{ id: string; status: string }>>();
+      .limit(1);
 
     if (existingExecError) throw existingExecError;
     if (existingExecutions && existingExecutions.length > 0) continue;
