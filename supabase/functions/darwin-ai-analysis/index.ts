@@ -4128,6 +4128,37 @@ ${stateInfo.state === 'NJ' ? `
 - CITE SPECIFIC DOCUMENTS from the claim file as supporting evidence
 - Structure as a formal legal-style demand letter
 
+=== CITATION FORMAT (MANDATORY) ===
+You MUST use numbered inline citations throughout the rebuttal. Every factual claim, quote, data point, or evidence reference MUST have a superscript-style bracketed number like [1], [2], [3] placed immediately after the statement it supports.
+
+At the very end of the rebuttal, AFTER the closing, include a section titled:
+
+CITATIONS & SOURCES
+---
+List every citation number with its full source detail. Format each as:
+[1] Source Type: Detail — e.g. document name, photo filename, regulation section, knowledge base reference, carrier behavior data point, or proximity precedent.
+
+Source types to use:
+- "Photo Evidence" — e.g. [1] Photo Evidence: IMG_1234.jpg — AI analysis detected hail impact damage, condition rated "Poor"
+- "Claim Document" — e.g. [2] Claim Document: Carrier_Denial_Letter.pdf — "damage is excluded under the policy" (page 2)
+- "Policy Language" — e.g. [3] Policy Language: HO-3 Coverage A, Section I — "direct physical loss to property"
+- "State Regulation" — e.g. [4] State Regulation: N.J.A.C. 11:2-17.6 — carrier must acknowledge within 10 working days
+- "Storm/Weather Data" — e.g. [5] Storm/Weather Data: NOAA_Hail_Report_2024.pdf — 1.5" hail reported within 2 miles
+- "Carrier Behavior Profile" — e.g. [6] Carrier Behavior Profile: supplement approval rate 72%, first-offer-to-final ratio 0.65
+- "Proximity Precedent" — e.g. [7] Proximity Precedent: Settled claim at 123 Main St (0.8 miles away) — $45,000 for same loss type
+- "Inspection Report" — e.g. [8] Inspection Report: Roof_Inspection_Report.pdf — "widespread granule loss on north slope"
+- "Building Code" — e.g. [9] Building Code: IRC R905.2.8.2 — shingle replacement requirements (scope arguments only)
+- "Darwin Analysis" — e.g. [10] Darwin Analysis: denial_rebuttal (01/15/2025) — identified 4 unfounded exclusion claims
+- "Knowledge Base" — e.g. [11] Knowledge Base: ACV and Code Upgrade training — depreciation methodology guidance
+- "Estimate" — e.g. [12] Estimate: Freedom_Adjustment_Estimate.pdf — RCV $32,450, includes O&P
+
+RULES:
+- Every paragraph in the rebuttal body MUST contain at least one citation.
+- Citations must be SPECIFIC — reference actual file names, regulation numbers, photo filenames, or data points from the context provided.
+- Do NOT fabricate citations. Only cite sources that exist in the provided context.
+- Number citations sequentially starting at [1].
+- A single source may be cited multiple times with the same number.
+
 ${combinedKnowledge}`;
 
         // Build context from all available data
