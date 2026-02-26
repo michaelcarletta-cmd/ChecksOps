@@ -10,11 +10,15 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Validate CRON_SECRET for security
+  // Validate CRON_SECRET for security, while allowing service-role internal calls.
   const cronSecret = Deno.env.get('CRON_SECRET');
   const providedSecret = req.headers.get('x-cron-secret');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
+  const isServiceRoleCall = Boolean(serviceRoleKey && authHeader === `Bearer ${serviceRoleKey}`);
+  const hasValidCronSecret = Boolean(cronSecret && providedSecret === cronSecret);
   
-  if (cronSecret && providedSecret !== cronSecret) {
+  if (cronSecret && !hasValidCronSecret && !isServiceRoleCall) {
     console.error('Invalid or missing cron secret');
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
@@ -138,11 +142,39 @@ Deno.serve(async (req) => {
   }
 });
 
+function normalizeInspectionTime(inspectionTime?: string | null): string {
+  if (!inspectionTime) return '09:00';
+  const trimmed = inspectionTime.trim();
+
+  // 24h HH:MM or HH:MM:SS
+  const match24h = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (match24h) {
+    const hour = Number(match24h[1]);
+    const minute = Number(match24h[2]);
+    if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+      return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    }
+  }
+
+  // 12h H:MM AM/PM
+  const match12h = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (match12h) {
+    let hour = Number(match12h[1]);
+    const minute = Number(match12h[2]);
+    const meridiem = match12h[3].toUpperCase();
+    if (hour >= 1 && hour <= 12 && minute >= 0 && minute <= 59) {
+      if (meridiem === 'PM' && hour !== 12) hour += 12;
+      if (meridiem === 'AM' && hour === 12) hour = 0;
+      return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    }
+  }
+
+  return '09:00';
+}
+
 function buildInspectionDateTime(inspectionDate: string, inspectionTime?: string | null): Date | null {
   if (!inspectionDate) return null;
-  const normalizedTime = inspectionTime && /^\d{2}:\d{2}/.test(inspectionTime)
-    ? inspectionTime.slice(0, 5)
-    : '09:00';
+  const normalizedTime = normalizeInspectionTime(inspectionTime);
   const parsed = new Date(`${inspectionDate}T${normalizedTime}:00`);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
@@ -179,7 +211,7 @@ async function processInspectionUpcoming24hAutomation(
         status
       )
     `)
-    .eq('status', 'scheduled')
+    .or('status.eq.scheduled,status.eq.Scheduled,status.is.null')
     .gte('inspection_date', now.toISOString().split('T')[0])
     .lte('inspection_date', endDate.toISOString().split('T')[0])
     .order('inspection_date', { ascending: true });
@@ -207,25 +239,27 @@ async function processInspectionUpcoming24hAutomation(
     if (!inspectionAt) continue;
 
     const hoursUntilInspection = (inspectionAt.getTime() - now.getTime()) / (1000 * 60 * 60);
-    if (hoursUntilInspection <= 0 || hoursUntilInspection > hoursBefore) {
+    // Add a small tolerance for runtime/clock drift at the exact boundary.
+    if (hoursUntilInspection <= 0 || hoursUntilInspection > hoursBefore + 0.25) {
       continue;
     }
 
     // Prevent duplicate reminder execution records for the same inspection.
-    const { data: existingExecution, error: existingExecError } = await supabase
+    const { data: existingExecutions, error: existingExecError } = await supabase
       .from('automation_executions')
-      .select('id')
+      .select('id, status')
       .eq('automation_id', automation.id)
       .eq('claim_id', inspection.claim_id)
       .contains('trigger_data', {
         inspection_id: inspection.id,
         triggered_by: 'inspection_upcoming_24h',
       })
-      .limit(1)
-      .maybeSingle();
+      .in('status', ['pending', 'running', 'success'])
+      .order('created_at', { ascending: false })
+      .limit(1);
 
     if (existingExecError) throw existingExecError;
-    if (existingExecution) continue;
+    if (existingExecutions && existingExecutions.length > 0) continue;
 
     const { data: execution, error: executionError } = await supabase
       .from('automation_executions')

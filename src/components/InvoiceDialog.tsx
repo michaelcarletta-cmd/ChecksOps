@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { FileText, Plus, Trash2, Download, Send, Loader2, Link, Copy, CheckCircle } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
+import html2pdf from "html2pdf.js";
 
 interface InvoiceLineItem {
   description: string;
@@ -62,6 +63,8 @@ export function InvoiceDialog({
     { description: "", quantity: 1, unitPrice: 0 },
   ]);
   const [generatedPdfUrl, setGeneratedPdfUrl] = useState<string | null>(null);
+  const [generatedAttachmentPath, setGeneratedAttachmentPath] = useState<string | null>(null);
+  const [generatedAttachmentName, setGeneratedAttachmentName] = useState<string | null>(null);
 
   // Load company branding on mount
   useEffect(() => {
@@ -99,6 +102,144 @@ export function InvoiceDialog({
     return lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
   };
 
+  const buildInvoicePayload = () => ({
+    invoiceNumber: formData.invoiceNumber,
+    invoiceDate: formData.invoiceDate,
+    dueDate: formData.dueDate,
+    sender: companyBranding ? {
+      name: companyBranding.company_name || '',
+      email: companyBranding.company_email || '',
+      phone: companyBranding.company_phone || '',
+      address: companyBranding.company_address || '',
+      logoUrl: companyBranding.letterhead_url || '',
+    } : null,
+    recipient: {
+      name: formData.recipientName,
+      email: formData.recipientEmail,
+      address: formData.recipientAddress,
+    },
+    lineItems,
+    subtotal: calculateSubtotal(),
+    notes: formData.notes,
+    claimNumber,
+    claimId,
+  });
+
+  const requestInvoiceHtmlUrl = async (): Promise<{ pdfUrl: string; fileName?: string }> => {
+    const { data, error } = await supabase.functions.invoke("generate-invoice", {
+      body: buildInvoicePayload(),
+    });
+
+    if (error) throw error;
+    if (!data?.pdfUrl) {
+      throw new Error("Invoice generation did not return a document URL.");
+    }
+
+    return {
+      pdfUrl: String(data.pdfUrl),
+      fileName: typeof data.fileName === "string" ? data.fileName : undefined,
+    };
+  };
+
+  const convertInvoiceHtmlToPdfBlob = async (invoiceHtml: string, fileName: string): Promise<Blob> => {
+    const container = document.createElement("div");
+    container.innerHTML = invoiceHtml;
+    document.body.appendChild(container);
+
+    try {
+      const worker = (html2pdf() as any)
+        .set({
+          margin: 0.35,
+          filename: fileName,
+          image: { type: "jpeg", quality: 0.95 },
+          html2canvas: { scale: 2, useCORS: true, logging: false, scrollY: 0 },
+          jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
+          pagebreak: { mode: ["css", "legacy"] },
+        } as any)
+        .from(container)
+        .toPdf();
+
+      const jsPdfDoc = await worker.get("pdf");
+      const blob = jsPdfDoc.output("blob");
+      if (!blob || !(blob instanceof Blob)) {
+        throw new Error("Failed to convert invoice to PDF.");
+      }
+      return blob;
+    } finally {
+      document.body.removeChild(container);
+    }
+  };
+
+  const persistInvoiceAttachment = async (pdfBlob: Blob, invoicePdfName: string) => {
+    const safeInvoiceName = invoicePdfName.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const storagePath = claimId
+      ? `${claimId}/invoices/${Date.now()}-${safeInvoiceName}`
+      : `invoices/${Date.now()}-${safeInvoiceName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("claim-files")
+      .upload(storagePath, pdfBlob, {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+    if (uploadError) throw uploadError;
+
+    if (claimId) {
+      const { data: folder } = await supabase
+        .from("claim_folders")
+        .select("id")
+        .eq("claim_id", claimId)
+        .eq("name", "Invoicing")
+        .maybeSingle();
+
+      const { data: authData } = await supabase.auth.getUser();
+      await supabase
+        .from("claim_files")
+        .insert({
+          claim_id: claimId,
+          folder_id: folder?.id || null,
+          file_name: invoicePdfName,
+          file_path: storagePath,
+          file_size: pdfBlob.size,
+          file_type: "application/pdf",
+          uploaded_by: authData.user?.id || null,
+        });
+    }
+
+    setGeneratedAttachmentPath(storagePath);
+    setGeneratedAttachmentName(invoicePdfName);
+    return { filePath: storagePath, fileName: invoicePdfName, fileType: "application/pdf" as const };
+  };
+
+  const ensureInvoicePdfAttachment = async (invoiceHtmlUrl?: string) => {
+    if (generatedAttachmentPath && generatedAttachmentName) {
+      return {
+        filePath: generatedAttachmentPath,
+        fileName: generatedAttachmentName,
+        fileType: "application/pdf" as const,
+      };
+    }
+
+    const invoiceDoc = invoiceHtmlUrl
+      ? { pdfUrl: invoiceHtmlUrl }
+      : generatedPdfUrl
+        ? { pdfUrl: generatedPdfUrl }
+        : await requestInvoiceHtmlUrl();
+
+    if (!generatedPdfUrl) {
+      setGeneratedPdfUrl(invoiceDoc.pdfUrl);
+    }
+
+    const invoiceHtml = await fetch(invoiceDoc.pdfUrl).then(async (res) => {
+      if (!res.ok) throw new Error("Unable to fetch generated invoice document.");
+      return await res.text();
+    });
+
+    const invoicePdfName = `${formData.invoiceNumber.replace(/[^a-zA-Z0-9._-]/g, "_")}.pdf`;
+    const pdfBlob = await convertInvoiceHtmlToPdfBlob(invoiceHtml, invoicePdfName);
+    return await persistInvoiceAttachment(pdfBlob, invoicePdfName);
+  };
+
   const generateInvoicePdf = async () => {
     if (!formData.recipientName || lineItems.some(item => !item.description || item.unitPrice <= 0)) {
       toast.error("Please fill in recipient name and all line item details");
@@ -107,38 +248,14 @@ export function InvoiceDialog({
 
     setIsGenerating(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-invoice", {
-        body: {
-          invoiceNumber: formData.invoiceNumber,
-          invoiceDate: formData.invoiceDate,
-          dueDate: formData.dueDate,
-          // Send company branding as sender
-          sender: companyBranding ? {
-            name: companyBranding.company_name || '',
-            email: companyBranding.company_email || '',
-            phone: companyBranding.company_phone || '',
-            address: companyBranding.company_address || '',
-            logoUrl: companyBranding.letterhead_url || '',
-          } : null,
-          recipient: {
-            name: formData.recipientName,
-            email: formData.recipientEmail,
-            address: formData.recipientAddress,
-          },
-          lineItems,
-          subtotal: calculateSubtotal(),
-          notes: formData.notes,
-          claimNumber,
-          claimId,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data?.pdfUrl) {
-        setGeneratedPdfUrl(data.pdfUrl);
-        toast.success("Invoice generated successfully");
-      }
+      const invoiceDoc = await requestInvoiceHtmlUrl();
+      setGeneratedPdfUrl(invoiceDoc.pdfUrl);
+      const attachment = await ensureInvoicePdfAttachment(invoiceDoc.pdfUrl);
+      toast.success(
+        attachment
+          ? "Invoice PDF generated and saved for email attachment"
+          : "Invoice generated successfully"
+      );
     } catch (err: any) {
       console.error("Invoice generation error:", err);
       toast.error(err.message || "Failed to generate invoice");
@@ -189,15 +306,26 @@ export function InvoiceDialog({
 
     setIsSending(true);
     try {
+      const invoiceAttachment = await ensureInvoicePdfAttachment();
+      if (!invoiceAttachment) {
+        throw new Error("Invoice PDF could not be prepared for email attachment.");
+      }
+
       const paymentButton = paymentLink
         ? `<p style="margin: 24px 0;"><a href="${paymentLink}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Pay Online — $${calculateSubtotal().toFixed(2)}</a></p>`
         : "";
 
+      const lineItemsHtml = lineItems
+        .filter((item) => item.description?.trim())
+        .map((item) => `<li>${item.description} — ${item.quantity} × $${item.unitPrice.toFixed(2)} = $${(item.quantity * item.unitPrice).toFixed(2)}</li>`)
+        .join("");
+
       const emailBody = `<h2>Invoice ${formData.invoiceNumber}</h2>
 <p>Dear ${formData.recipientName},</p>
-<p>Please find your invoice details below.</p>
+<p>Please find your invoice details below. A PDF copy of this invoice is attached so you can review exactly what is being billed.</p>
 <p><strong>Amount Due:</strong> $${calculateSubtotal().toFixed(2)}</p>
 <p><strong>Due Date:</strong> ${format(new Date(formData.dueDate), "MMMM d, yyyy")}</p>
+${lineItemsHtml ? `<p><strong>Invoice Items:</strong></p><ul>${lineItemsHtml}</ul>` : ""}
 ${formData.notes ? `<p><strong>Notes:</strong> ${formData.notes}</p>` : ""}
 ${paymentButton}
 ${!paymentLink ? "" : `<p style="font-size: 12px; color: #666;">Or copy this link: ${paymentLink}</p>`}
@@ -210,6 +338,7 @@ ${!paymentLink ? "" : `<p style="font-size: 12px; color: #666;">Or copy this lin
           subject: `Invoice ${formData.invoiceNumber}${claimNumber ? ` - Claim ${claimNumber}` : ""}`,
           body: emailBody,
           claimId,
+          attachments: [invoiceAttachment],
         },
       });
 
@@ -227,6 +356,22 @@ ${!paymentLink ? "" : `<p style="font-size: 12px; color: #666;">Or copy this lin
   };
 
   const downloadInvoice = () => {
+    if (generatedAttachmentPath) {
+      supabase.storage
+        .from("claim-files")
+        .createSignedUrl(generatedAttachmentPath, 60 * 60)
+        .then(({ data, error }) => {
+          if (error || !data?.signedUrl) {
+            throw error || new Error("Failed to create PDF download URL.");
+          }
+          window.open(data.signedUrl, "_blank");
+        })
+        .catch(() => {
+          toast.error("Unable to download generated PDF invoice");
+        });
+      return;
+    }
+
     if (generatedPdfUrl) {
       // Fetch the HTML and open in a new window with print styling
       fetch(generatedPdfUrl)
@@ -257,6 +402,8 @@ ${!paymentLink ? "" : `<p style="font-size: 12px; color: #666;">Or copy this lin
     });
     setLineItems([{ description: "", quantity: 1, unitPrice: 0 }]);
     setGeneratedPdfUrl(null);
+    setGeneratedAttachmentPath(null);
+    setGeneratedAttachmentName(null);
     setPaymentLink(null);
   };
 

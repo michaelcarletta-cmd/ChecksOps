@@ -39,6 +39,7 @@ interface DirectoryAdjuster {
   name: string;
   email: string | null;
   phone: string | null;
+  phone_extension: string | null;
   company: string | null;
 }
 
@@ -49,6 +50,7 @@ interface ClaimAssignedProps {
 interface Adjuster {
   id: string;
   claim_id: string;
+  adjuster_id: string | null;
   adjuster_name: string;
   adjuster_email: string | null;
   adjuster_phone: string | null;
@@ -56,6 +58,9 @@ interface Adjuster {
   is_primary: boolean;
   notes: string | null;
   created_at: string;
+  adjuster?: {
+    phone_extension: string | null;
+  } | null;
 }
 
 export function ClaimAssigned({ claim }: ClaimAssignedProps) {
@@ -79,7 +84,7 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("adjusters")
-        .select("id, name, email, phone, company")
+        .select("id, name, email, phone, phone_extension, company")
         .eq("is_active", true)
         .order("name");
       if (error) throw error;
@@ -92,7 +97,7 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("claim_adjusters")
-        .select("*")
+        .select("*, adjuster:adjusters(phone_extension)")
         .eq("claim_id", claim.id)
         .order("is_primary", { ascending: false })
         .order("created_at", { ascending: true });
@@ -309,7 +314,10 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
                     {adjuster.adjuster_phone && (
                       <div>
                         <span className="text-muted-foreground">Phone: </span>
-                        <span>{adjuster.adjuster_phone}</span>
+                        <span>
+                          {adjuster.adjuster_phone}
+                          {adjuster.adjuster?.phone_extension ? ` ext ${adjuster.adjuster.phone_extension}` : ""}
+                        </span>
                       </div>
                     )}
                     {adjuster.adjuster_email && (
