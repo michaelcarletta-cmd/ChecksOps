@@ -373,9 +373,9 @@ async function downloadPdfFromClaimStorageAsBase64(supabase: any, path: string):
       .maybeSingle();
     if (fileRow?.extracted_text && fileRow.extracted_text.length > 50) {
       console.log(`[downloadPdf] Using extracted_text fallback for "${path}" (${fileRow.extracted_text.length} chars)`);
-      // Return a fake base64 that signals text-only mode
-      const textBlock = `[EXTRACTED TEXT FROM: ${path}]\n\n${fileRow.extracted_text}`;
-      return btoa(unescape(encodeURIComponent(textBlock)));
+      // Return a tagged string so callers know this is NOT real PDF binary.
+      // The TEXT_FALLBACK: prefix is detected downstream to switch to text-only mode.
+      return `TEXT_FALLBACK:${fileRow.extracted_text}`;
     }
     throw new Error(`Unable to download PDF from claim-files storage at "${path}": ${JSON.stringify(error) || 'no data'}`);
   }
@@ -833,6 +833,15 @@ Deno.serve(async (req) => {
         if (!pdfFileName) {
           pdfFileName = fileNameFromStoragePath(pdfFilePath);
         }
+        // Detect text-only fallback from downloadPdf (storage failed, used extracted_text)
+        if (pdfContent && pdfContent.startsWith('TEXT_FALLBACK:')) {
+          const extractedText = pdfContent.slice('TEXT_FALLBACK:'.length);
+          console.log(`[downloadPdf] Routing text fallback to text-only mode (${extractedText.length} chars)`);
+          const block = `=== ${pdfFileName || 'Document'} ===\n${extractedText.substring(0, 100000)}`;
+          content = [content, block].filter(Boolean).join('\n\n');
+          additionalContext._useTextOnly = true;
+          pdfContent = undefined;
+        }
       } catch (pathErr) {
         console.error('Failed to resolve pdfFilePath:', pathErr);
         throw new Error('Unable to load the selected PDF from claim storage. Please re-upload the file and try again.');
@@ -849,11 +858,20 @@ Deno.serve(async (req) => {
         if (!path) continue;
         try {
           const base64 = await downloadPdfFromClaimStorageAsBase64(supabase, path);
-          resolvedPdfs.push({
-            name: fileRef.name || fileNameFromStoragePath(path),
-            content: base64,
-            folder: fileRef.folder,
-          });
+          // Detect text-only fallback
+          if (base64 && base64.startsWith('TEXT_FALLBACK:')) {
+            const extractedText = base64.slice('TEXT_FALLBACK:'.length);
+            console.log(`[downloadPdf] Multi-PDF text fallback for "${path}" (${extractedText.length} chars)`);
+            const block = `=== ${fileRef.name || fileNameFromStoragePath(path)} ===\n${extractedText.substring(0, 70000)}`;
+            content = [content, block].filter(Boolean).join('\n\n');
+            additionalContext._useTextOnly = true;
+          } else {
+            resolvedPdfs.push({
+              name: fileRef.name || fileNameFromStoragePath(path),
+              content: base64,
+              folder: fileRef.folder,
+            });
+          }
         } catch (pathErr) {
           console.error(`Failed to resolve pdfFilePaths item (${path}):`, pathErr);
           failedPaths.push(path);
