@@ -1352,6 +1352,7 @@ You have access to:
 2. UPLOADED DOCUMENTS - estimates, inspections, correspondence
 3. KNOWLEDGE BASE - building codes, manufacturer specs, industry standards
 4. STATE REGULATIONS - ${stateInfo.stateName} insurance law and administrative codes
+5. EMAIL COMMUNICATIONS - all emails sent to and received from the carrier/adjuster synced to this claim. Use these to identify carrier promises, contradictions, timeline violations, and shifting positions.
 
 USE ALL OF THIS EVIDENCE. Every assertion the carrier makes must be challenged with SPECIFIC, VERIFIABLE FACTS from the evidence on file.
 
@@ -1453,6 +1454,17 @@ ${photoEvidenceSection}
 ${documentEvidenceSection}
 
 ${extractedDocContent || ''}
+
+${context.emails?.length > 0 ? `
+=== EMAIL COMMUNICATIONS TIMELINE (${context.emails.length} emails) ===
+CRITICAL: Review these emails for carrier promises, contradictions, shifting positions, timeline violations, and admissions. Quote specific emails when they support your rebuttal arguments.
+
+${context.emails.map((e: any) => `--- EMAIL ${e.direction === 'outbound' ? 'SENT' : 'RECEIVED'} (${new Date(e.sent_at || e.created_at).toLocaleDateString()}) ---
+From: ${e.from_address || e.sent_by || 'Unknown'}
+To: ${e.to_address || e.recipient_email || 'Unknown'}
+Subject: ${e.subject || 'No Subject'}
+${e.body ? e.body.substring(0, 2000) : 'No body'}
+`).join('\n')}` : ''}
 
 ${combinedKnowledge || ''}
 
@@ -4096,6 +4108,7 @@ THE PROOF CASTLE FRAMEWORK:
 - NEVER cite case law or legal precedents - stick to facts and regulations
 - CITE SPECIFIC PHOTOS BY FILENAME showing damage that contradicts carrier claims
 - REFERENCE SPECIFIC DOCUMENTS from the claim file as evidence
+- REVIEW EMAIL COMMUNICATIONS for carrier promises, contradictions, shifting positions, and timeline violations. Quote specific emails when they strengthen your arguments.
 
 === STATE-SPECIFIC REGULATIONS ===
 This claim is in ${stateInfo.stateName}:
@@ -4150,6 +4163,7 @@ Source types to use:
 - "Building Code" — e.g. [9] Building Code: IRC R905.2.8.2 — shingle replacement requirements (scope arguments only)
 - "Darwin Analysis" — e.g. [10] Darwin Analysis: denial_rebuttal (01/15/2025) — identified 4 unfounded exclusion claims
 - "Knowledge Base" — e.g. [11] Knowledge Base: ACV and Code Upgrade training — depreciation methodology guidance
+- "Email Communication" — e.g. [13] Email Communication: From adjuster@carrier.com (01/20/2025) — "we will have our inspector out next week" (broken promise / timeline violation)
 - "Estimate" — e.g. [12] Estimate: Freedom_Adjustment_Estimate.pdf — RCV $32,450, includes O&P
 
 RULES:
@@ -4246,6 +4260,19 @@ USE THIS EVIDENCE TO ARGUE:
 - Reference specific nearby addresses and settlement amounts as proof of pattern
 - If same carrier approved a claim 0.5-2 miles away for the same loss type, the denial of this claim is unreasonable
 \n`;
+        }
+
+        // Add email communications for carrier correspondence analysis
+        if (context.emails?.length > 0) {
+          intelligenceContext += `\n=== EMAIL COMMUNICATIONS TIMELINE (${context.emails.length} emails) ===
+CRITICAL: Review these emails for carrier promises, contradictions, shifting positions, timeline violations, and admissions that support the rebuttal. Quote specific emails when they strengthen your arguments.
+
+${context.emails.map((e: any) => `--- EMAIL ${e.direction === 'outbound' ? 'SENT' : 'RECEIVED'} (${new Date(e.sent_at || e.created_at).toLocaleDateString()}) ---
+From: ${e.from_address || e.sent_by || 'Unknown'}
+To: ${e.to_address || e.recipient_email || 'Unknown'}
+Subject: ${e.subject || 'No Subject'}
+${e.body ? e.body.substring(0, 2000) : 'No body'}
+`).join('\n')}\n`;
         }
 
         userPrompt = `${claimSummary}
