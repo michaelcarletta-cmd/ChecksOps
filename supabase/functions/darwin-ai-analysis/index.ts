@@ -878,7 +878,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      if (resolvedPdfs.length === 0) {
+      if (resolvedPdfs.length === 0 && !additionalContext?._useTextOnly) {
         throw new Error('Unable to load any selected carrier PDFs from claim storage. Please re-upload the files and try again.');
       }
       if (failedPaths.length > 0) {
