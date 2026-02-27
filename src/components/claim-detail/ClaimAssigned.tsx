@@ -378,6 +378,8 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
         mortgagePortalSite={claim.mortgage_portal_site}
         mortgagePortalUsername={claim.mortgage_portal_username}
         mortgagePortalPassword={claim.mortgage_portal_password}
+        claimTrackingNumber={claim.claim_tracking_number}
+        fedexTrackingNumber={claim.fedex_tracking_number}
       />
 
       {/* Partner Sales Rep Assignment */}
