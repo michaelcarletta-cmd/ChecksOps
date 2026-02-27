@@ -13,6 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { DarwinInlineNudges } from "@/components/claim-detail/DarwinInlineNudges";
+import { MergeFieldButtons } from "@/components/MergeFieldButtons";
 
 interface Recipient {
   email: string;
@@ -558,7 +559,10 @@ export function EmailComposer({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="body">Message</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="body">Message</Label>
+              <MergeFieldButtons compact onInsert={(field) => setBody(prev => prev + field)} />
+            </div>
             <Textarea
               id="body"
               placeholder="Type your message here..."

@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, MessageSquare } from "lucide-react";
+import { MergeFieldButtons } from "@/components/MergeFieldButtons";
 
 interface SMSTemplate {
   id: string;
@@ -24,21 +25,7 @@ interface SMSTemplate {
 
 const CATEGORIES = ["Reminders", "Follow-ups", "Notifications", "Requests", "Updates", "Other"];
 
-const MERGE_FIELDS = [
-  { label: "Policyholder Name", value: "{claim.policyholder_name}" },
-  { label: "Claim Number", value: "{claim.claim_number}" },
-  { label: "Policy Number", value: "{claim.policy_number}" },
-  { label: "Inspection Date", value: "{inspection.date}" },
-  { label: "Inspection Time", value: "{inspection.time}" },
-  { label: "Inspector Name", value: "{inspection.inspector}" },
-  { label: "Total RCV", value: "{settlement.total_rcv}" },
-  { label: "Total Net", value: "{settlement.total_net}" },
-  { label: "Total Deductible", value: "{settlement.total_deductible}" },
-  { label: "Dwelling RCV", value: "{settlement.dwelling_rcv}" },
-  { label: "Prior Offer", value: "{settlement.prior_offer}" },
-  { label: "Total Recoverable Dep", value: "{settlement.total_recoverable_dep}" },
-  { label: "Total Non-Recoverable Dep", value: "{settlement.total_non_recoverable_dep}" },
-];
+// Merge fields now come from the shared MergeFieldButtons component
 
 export default function SMSTemplatesSettings() {
   const queryClient = useQueryClient();
@@ -213,22 +200,9 @@ export default function SMSTemplatesSettings() {
                 />
               </div>
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between">
                   <Label htmlFor="body">Message Body</Label>
-                  <div className="flex gap-1 flex-wrap">
-                    {MERGE_FIELDS.map((field) => (
-                      <Button
-                        key={field.value}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="text-xs h-6"
-                        onClick={() => insertMergeField(field.value)}
-                      >
-                        {field.label}
-                      </Button>
-                    ))}
-                  </div>
+                  <MergeFieldButtons onInsert={(field) => insertMergeField(field)} />
                 </div>
                 <Textarea
                   id="body"
