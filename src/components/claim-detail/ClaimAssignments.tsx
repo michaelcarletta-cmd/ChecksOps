@@ -17,6 +17,8 @@ interface ClaimAssignmentsProps {
   mortgagePortalSite?: string | null;
   mortgagePortalUsername?: string | null;
   mortgagePortalPassword?: string | null;
+  claimTrackingNumber?: string | null;
+  fedexTrackingNumber?: string | null;
 }
 
 interface Contractor {
@@ -61,7 +63,9 @@ export function ClaimAssignments({
   ssnLastFour,
   mortgagePortalSite,
   mortgagePortalUsername,
-  mortgagePortalPassword 
+  mortgagePortalPassword,
+  claimTrackingNumber,
+  fedexTrackingNumber 
 }: ClaimAssignmentsProps) {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [assignedStaff, setAssignedStaff] = useState<AssignedStaff[]>([]);
@@ -76,6 +80,8 @@ export function ClaimAssignments({
   const [editPortalSite, setEditPortalSite] = useState<string>(mortgagePortalSite || "");
   const [editPortalUsername, setEditPortalUsername] = useState<string>(mortgagePortalUsername || "");
   const [editPortalPassword, setEditPortalPassword] = useState<string>(mortgagePortalPassword || "");
+  const [editClaimTrackingNumber, setEditClaimTrackingNumber] = useState<string>(claimTrackingNumber || "");
+  const [editFedexTrackingNumber, setEditFedexTrackingNumber] = useState<string>(fedexTrackingNumber || "");
   const [addMortgageOpen, setAddMortgageOpen] = useState(false);
   const [newMortgageName, setNewMortgageName] = useState("");
 
@@ -314,7 +320,9 @@ export function ClaimAssignments({
         ssn_last_four: editSsnLastFour || null,
         mortgage_portal_site: editPortalSite || null,
         mortgage_portal_username: editPortalUsername || null,
-        mortgage_portal_password: editPortalPassword || null
+        mortgage_portal_password: editPortalPassword || null,
+        claim_tracking_number: editClaimTrackingNumber || null,
+        fedex_tracking_number: editFedexTrackingNumber || null
       })
       .eq("id", claimId);
 
@@ -549,14 +557,14 @@ export function ClaimAssignments({
                         id="portalUsername"
                         value={editPortalUsername}
                         onChange={(e) => setEditPortalUsername(e.target.value)}
-                        placeholder="Portal username"
+                        placeholder="Enter username"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="portalPassword">Password</Label>
                       <Input
                         id="portalPassword"
-                        type="password"
+                        type="text"
                         value={editPortalPassword}
                         onChange={(e) => setEditPortalPassword(e.target.value)}
                         placeholder="Portal password"
@@ -573,6 +581,30 @@ export function ClaimAssignments({
                       Open Portal →
                     </a>
                   )}
+                </div>
+              </div>
+              {/* Tracking Numbers */}
+              <div className="space-y-4 border-t pt-4">
+                <p className="text-sm font-medium text-muted-foreground">Tracking Numbers</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="claimTrackingNumber">Claim Tracking Number</Label>
+                    <Input
+                      id="claimTrackingNumber"
+                      value={editClaimTrackingNumber}
+                      onChange={(e) => setEditClaimTrackingNumber(e.target.value)}
+                      placeholder="Enter claim tracking number"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="fedexTrackingNumber">FedEx Tracking Number</Label>
+                    <Input
+                      id="fedexTrackingNumber"
+                      value={editFedexTrackingNumber}
+                      onChange={(e) => setEditFedexTrackingNumber(e.target.value)}
+                      placeholder="Enter FedEx tracking number"
+                    />
+                  </div>
                 </div>
               </div>
 

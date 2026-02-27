@@ -3338,6 +3338,7 @@ export type Database = {
           claim_amount: number | null
           claim_email_id: string | null
           claim_number: string | null
+          claim_tracking_number: string | null
           client_id: string | null
           construction_status: string | null
           contract_pdf_path: string | null
@@ -3352,6 +3353,7 @@ export type Database = {
           esign_sent_at: string | null
           esign_signing_link: string | null
           esign_status: string | null
+          fedex_tracking_number: string | null
           fraud_flag: boolean | null
           fraud_flag_reason: string | null
           fraud_flagged_at: string | null
@@ -3403,6 +3405,7 @@ export type Database = {
           claim_amount?: number | null
           claim_email_id?: string | null
           claim_number?: string | null
+          claim_tracking_number?: string | null
           client_id?: string | null
           construction_status?: string | null
           contract_pdf_path?: string | null
@@ -3417,6 +3420,7 @@ export type Database = {
           esign_sent_at?: string | null
           esign_signing_link?: string | null
           esign_status?: string | null
+          fedex_tracking_number?: string | null
           fraud_flag?: boolean | null
           fraud_flag_reason?: string | null
           fraud_flagged_at?: string | null
@@ -3468,6 +3472,7 @@ export type Database = {
           claim_amount?: number | null
           claim_email_id?: string | null
           claim_number?: string | null
+          claim_tracking_number?: string | null
           client_id?: string | null
           construction_status?: string | null
           contract_pdf_path?: string | null
@@ -3482,6 +3487,7 @@ export type Database = {
           esign_sent_at?: string | null
           esign_signing_link?: string | null
           esign_status?: string | null
+          fedex_tracking_number?: string | null
           fraud_flag?: boolean | null
           fraud_flag_reason?: string | null
           fraud_flagged_at?: string | null
@@ -6990,6 +6996,7 @@ export type Database = {
           claim_amount: number | null
           claim_email_id: string | null
           claim_number: string | null
+          claim_tracking_number: string | null
           client_id: string | null
           construction_status: string | null
           contract_pdf_path: string | null
@@ -7004,6 +7011,7 @@ export type Database = {
           esign_sent_at: string | null
           esign_signing_link: string | null
           esign_status: string | null
+          fedex_tracking_number: string | null
           fraud_flag: boolean | null
           fraud_flag_reason: string | null
           fraud_flagged_at: string | null
