@@ -245,13 +245,38 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Clean up empty/placeholder strings
+    // Normalize casing helper: convert ALL CAPS to Title Case
+    function normalizeCase(value: string): string {
+      // If more than half the alpha chars are uppercase, it's likely ALL CAPS
+      const alphaChars = value.replace(/[^a-zA-Z]/g, '');
+      if (alphaChars.length < 2) return value;
+      const upperCount = (value.match(/[A-Z]/g) || []).length;
+      if (upperCount / alphaChars.length < 0.7) return value; // already mixed case
+
+      return value
+        .toLowerCase()
+        .replace(/(?:^|\s|[-/])\S/g, (ch) => ch.toUpperCase());
+    }
+
+    // Fields that should be normalized to title case
+    const titleCaseFields = ['policyholder_name', 'street_address', 'city', 'insurance_company', 'loss_type', 'loss_description'];
+    // Fields that should stay uppercase (abbreviations, codes)
+    const upperFields = ['state'];
+
+    // Clean up empty/placeholder strings and normalize casing
     for (const key of Object.keys(extracted)) {
       const val = extracted[key];
       if (!val || typeof val !== 'string' || val.trim() === "" || 
           val.toLowerCase().includes("not found") || val.toLowerCase().includes("not available") ||
           val.toLowerCase().includes("n/a") || val.toLowerCase() === "unknown") {
         delete extracted[key];
+        continue;
+      }
+      // Normalize casing for appropriate fields
+      if (titleCaseFields.includes(key)) {
+        extracted[key] = normalizeCase(val);
+      } else if (upperFields.includes(key)) {
+        extracted[key] = val.toUpperCase();
       }
     }
 
