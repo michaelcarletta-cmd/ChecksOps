@@ -19,6 +19,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { toast } from "sonner";
+import { DarwinRefinementChat } from "./DarwinRefinementChat";
 
 interface Regulation {
   id: string;
@@ -275,6 +276,12 @@ export const DarwinDOBILetterDrafter = ({ claimId, claim }: DarwinDOBILetterDraf
                     {draftedLetter}
                   </div>
                 </ScrollArea>
+                <DarwinRefinementChat
+                  currentDocument={draftedLetter}
+                  onDocumentUpdated={(revised) => setDraftedLetter(revised)}
+                  claimId={claimId}
+                  documentLabel="DOBI complaint letter"
+                />
               </div>
             )}
           </CardContent>
