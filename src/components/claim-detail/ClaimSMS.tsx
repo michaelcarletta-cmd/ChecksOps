@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { MessageSquare, Send, Phone, X, Plus, Users, FileText } from "lucide-react";
+import { MergeFieldButtons } from "@/components/MergeFieldButtons";
 import { format } from "date-fns";
 import { formatPhoneNumber, parseLocalDate } from "@/lib/utils";
 
@@ -526,9 +527,12 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="message">Message</Label>
-              <span className="text-xs text-muted-foreground">
-                {newMessage.length} characters
-              </span>
+              <div className="flex items-center gap-2">
+                <MergeFieldButtons compact onInsert={(field) => setNewMessage(prev => prev + field)} />
+                <span className="text-xs text-muted-foreground">
+                  {newMessage.length} chars
+                </span>
+              </div>
             </div>
             <Textarea
               id="message"

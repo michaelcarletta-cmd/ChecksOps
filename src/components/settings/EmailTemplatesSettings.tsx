@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Plus, Mail, Trash2, Pencil, Loader2, Info } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { MergeFieldButtons } from "@/components/MergeFieldButtons";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -259,7 +260,10 @@ export const EmailTemplatesSettings = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Email Body *</Label>
+                  <div className="flex items-center justify-between">
+                    <Label>Email Body *</Label>
+                    <MergeFieldButtons onInsert={(field) => setForm({ ...form, body: form.body + field })} />
+                  </div>
                   <Textarea
                     value={form.body}
                     onChange={(e) => setForm({ ...form, body: e.target.value })}
