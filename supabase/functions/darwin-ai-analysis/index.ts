@@ -1060,7 +1060,7 @@ Deno.serve(async (req) => {
     const typesThatUseEvidenceIndex = [
       'denial_rebuttal', 'engineer_report_rebuttal', 'systematic_dismantling', 'auto_draft_rebuttal',
       'estimate_gap_analysis', 'demand_package', 'correspondence', 'one_click_package', 'supplement',
-      'claim_analysis', 'operating_manual', 'case_study', 'marketing_assets',
+      'claim_analysis', 'operating_manual', 'case_study', 'marketing_assets', 'dobi_letter',
     ];
     if (enableEvidenceIndex && !claimFactsPack && typesThatUseEvidenceIndex.includes(analysisType)) {
       try {
@@ -5250,9 +5250,74 @@ State: ${stateInfo.stateName}
 Applicable Regulations: ${stateInfo.adminCode}
 Insurance Code: ${stateInfo.insuranceCode}`;
 
+        // Fetch carrier deadlines for timeline violations
+        const { data: carrierDeadlines } = await supabase
+          .from('claim_carrier_deadlines')
+          .select('*')
+          .eq('claim_id', claimId)
+          .order('deadline_date', { ascending: true });
+
+        // Fetch communications diary for documented interactions
+        const { data: communicationsLog } = await supabase
+          .from('claim_communications_diary')
+          .select('*')
+          .eq('claim_id', claimId)
+          .order('communication_date', { ascending: true });
+
+        // Fetch darwin analysis results for prior findings
+        const { data: priorAnalyses } = await supabase
+          .from('darwin_analysis_results')
+          .select('analysis_type, result, created_at')
+          .eq('claim_id', claimId)
+          .in('analysis_type', ['denial_rebuttal', 'compliance_check', 'systematic_dismantling', 'position_detection'])
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        // Build email communications section
+        let emailSection = '';
+        if (context.emails?.length > 0) {
+          emailSection = `\n=== EMAIL COMMUNICATIONS TIMELINE (${context.emails.length} emails) ===
+CRITICAL: Review these emails for carrier promises, contradictions, shifting positions, timeline violations, missed deadlines, and admissions. Quote specific emails when they demonstrate violations.
+
+${context.emails.map((e: any) => `--- EMAIL ${e.direction === 'outbound' ? 'SENT' : 'RECEIVED'} (${new Date(e.sent_at || e.created_at).toLocaleDateString()}) ---
+From: ${e.from_address || e.sent_by || 'Unknown'}
+To: ${e.to_address || e.recipient_email || 'Unknown'}
+Subject: ${e.subject || 'No Subject'}
+${e.body ? e.body.substring(0, 2000) : 'No body'}
+`).join('\n')}\n`;
+        }
+
+        // Build carrier deadlines section
+        let deadlinesSection = '';
+        if (carrierDeadlines?.length) {
+          deadlinesSection = `\n=== CARRIER DEADLINE TRACKING ===
+${carrierDeadlines.map((d: any) => `- ${d.deadline_type}: Trigger ${d.trigger_date} → Deadline ${d.deadline_date} | Status: ${d.status}${d.days_overdue ? ` | ${d.days_overdue} DAYS OVERDUE` : ''}${d.bad_faith_potential ? ' | BAD FAITH POTENTIAL' : ''}${d.carrier_response_date ? ` | Carrier responded: ${d.carrier_response_date}` : ' | NO CARRIER RESPONSE'}${d.notes ? ` | ${d.notes}` : ''}`).join('\n')}\n`;
+        }
+
+        // Build communications diary section
+        let diarySection = '';
+        if (communicationsLog?.length) {
+          diarySection = `\n=== COMMUNICATIONS DIARY (${communicationsLog.length} entries) ===
+${communicationsLog.map((c: any) => `- ${c.communication_date} | ${c.communication_type} (${c.direction}) | ${c.contact_name || 'Unknown'}${c.contact_company ? ` @ ${c.contact_company}` : ''}: ${c.summary}${c.promises_made ? ` | PROMISES: ${c.promises_made}` : ''}${c.deadlines_mentioned ? ` | DEADLINES: ${c.deadlines_mentioned}` : ''}${c.follow_up_required ? ' | FOLLOW-UP REQUIRED' : ''}`).join('\n')}\n`;
+        }
+
+        // Build prior analysis findings section
+        let priorFindingsSection = '';
+        if (priorAnalyses?.length) {
+          priorFindingsSection = `\n=== DARWIN PRIOR ANALYSIS FINDINGS ===
+${priorAnalyses.map((a: any) => {
+            const result = typeof a.result === 'string' ? a.result.substring(0, 500) : JSON.stringify(a.result)?.substring(0, 500);
+            return `- ${a.analysis_type} (${new Date(a.created_at).toLocaleDateString()}): ${result}`;
+          }).join('\n')}\n`;
+        }
+
         userPrompt = `Draft a formal complaint letter to the ${deptName} for the following claim:
 
 ${claimSummary}
+${emailSection}
+${deadlinesSection}
+${diarySection}
+${priorFindingsSection}
 
 SPECIFIC REGULATION VIOLATIONS TO CITE:
 ${violationsList}
@@ -5268,14 +5333,16 @@ Draft a comprehensive, hard-hitting formal complaint letter. Structure it as fol
 3. STATEMENT OF FACTS: A detailed chronological narrative of:
    - The loss event and damage sustained
    - The claim filing and carrier's handling timeline
-   - Specific carrier actions/inactions that constitute misconduct
+   - Specific carrier actions/inactions that constitute misconduct — CITE SPECIFIC EMAILS AND COMMUNICATIONS with dates
    - Any baseless accusations the carrier made (man-made damage, wear and tear, pre-existing conditions) and the LACK of evidence supporting those accusations
    - How the carrier's investigation was inadequate, biased, or predetermined
    - What evidence (photographs, contractor estimates, weather data) contradicts the carrier's position
+   - MISSED CARRIER DEADLINES — reference specific statutory deadlines and when they were exceeded
+   - BROKEN PROMISES — reference specific carrier promises from emails/communications that were not honored
 
 4. REGULATORY VIOLATIONS: For each selected violation:
    - State the exact citation and what the regulation requires
-   - Describe in detail the SPECIFIC carrier conduct that violates this regulation
+   - Describe in detail the SPECIFIC carrier conduct that violates this regulation — QUOTE from emails or communications diary entries when available
    - Explain HOW the carrier's actions fit the definition of the violation
    - Describe the harm caused to the policyholder by this violation
    - If relevant, note how this may be part of a pattern of conduct (general business practice)
@@ -5289,7 +5356,7 @@ Draft a comprehensive, hard-hitting formal complaint letter. Structure it as fol
 
 6. CLOSING: Professional closing with contact information
 
-The letter must be detailed enough that a regulator can understand exactly what the carrier did wrong and why it violates the cited statutes. Every accusation must be supported by the claim facts provided.`;
+The letter must be detailed enough that a regulator can understand exactly what the carrier did wrong and why it violates the cited statutes. Every accusation must be supported by the claim facts provided. USE SPECIFIC DATES, QUOTES FROM EMAILS, AND DOCUMENTED INTERACTIONS to make the complaint as concrete and evidence-backed as possible.`;
         break;
       }
 
