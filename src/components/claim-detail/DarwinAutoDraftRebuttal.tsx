@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { useDeclaredPosition } from "@/hooks/useDeclaredPosition";
 import { PositionGateBanner } from "./PositionGateBanner";
 import { publishCarrierDismantler } from "@/lib/darwinDismantlerBus";
+import { DarwinRefinementChat } from "./DarwinRefinementChat";
 
 interface DarwinAutoDraftRebuttalProps {
   claimId: string;
@@ -464,6 +465,15 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
               value={editableRebuttal}
               onChange={(e) => setEditableRebuttal(e.target.value)}
               className="min-h-[400px] font-mono text-sm bg-card text-card-foreground"
+            />
+            <DarwinRefinementChat
+              currentDocument={editableRebuttal}
+              onDocumentUpdated={(revised) => {
+                setEditableRebuttal(revised);
+                setRebuttal(revised);
+              }}
+              claimId={claimId}
+              documentLabel="rebuttal"
             />
           </div>
         )}
