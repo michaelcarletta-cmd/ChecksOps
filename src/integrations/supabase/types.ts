@@ -7029,7 +7029,32 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      portfolio_carrier_analytics: {
+        Row: {
+          active_claims: number | null
+          avg_payment_velocity: number | null
+          carrier_name: string | null
+          computed_at: string | null
+          high_resistance_pct: number | null
+          total_claims: number | null
+          total_gap: number | null
+        }
+        Relationships: []
+      }
+      portfolio_intelligence: {
+        Row: {
+          active_claims: number | null
+          at_risk_count: number | null
+          at_risk_pct: number | null
+          avg_payment_velocity: number | null
+          computed_at: string | null
+          total_claimed: number | null
+          total_claims: number | null
+          total_outstanding_gap: number | null
+          total_paid: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       acquire_darwin_job: {
@@ -7169,6 +7194,8 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      get_portfolio_carrier_analytics: { Args: never; Returns: Json }
+      get_portfolio_intelligence: { Args: never; Returns: Json }
       has_permission: {
         Args: { _permission: string; _user_id: string }
         Returns: boolean
@@ -7258,6 +7285,7 @@ export type Database = {
           similarity: number
         }[]
       }
+      refresh_portfolio_views: { Args: never; Returns: undefined }
       register_session: {
         Args: {
           p_device_info?: string

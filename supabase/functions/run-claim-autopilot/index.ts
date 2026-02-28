@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
     const { claimId } = await req.json();
     if (!claimId) throw new Error("claimId required");
 
-    const [claimRes, checksRes, emailsRes, filesRes, insightsRes, deadlinesRes, feedbackRes] =
+    const [claimRes, checksRes, emailsRes, filesRes, insightsRes, deadlinesRes, feedbackRes, prevStateRes] =
       await Promise.all([
         sb.from("claims").select("*, insurance_companies:insurance_company_id(name), loss_types:loss_type_id(name)").eq("id", claimId).single(),
         sb.from("claim_checks").select("*").eq("claim_id", claimId),
@@ -77,7 +77,8 @@ Deno.serve(async (req) => {
         sb.from("claim_files").select("id, file_name, folder_key, created_at").eq("claim_id", claimId),
         sb.from("claim_strategic_insights").select("overall_health_score, evidence_gaps, recommended_next_moves, warnings, leverage_points").eq("claim_id", claimId).maybeSingle(),
         sb.from("claim_carrier_deadlines").select("*").eq("claim_id", claimId).eq("status", "pending").order("deadline_date", { ascending: true }).limit(5),
-        sb.from("autopilot_action_feedback").select("action_type, confidence, user_action").eq("claim_id", claimId).order("created_at", { ascending: false }).limit(50),
+        sb.from("autopilot_action_feedback").select("action_type, confidence, user_action, resistance_at_action, gap_pct_at_action, phase_at_action").eq("claim_id", claimId).order("created_at", { ascending: false }).limit(100),
+        sb.from("claim_master_state").select("state_json").eq("claim_id", claimId).maybeSingle(),
       ]);
 
     const claim = claimRes.data;
@@ -89,6 +90,7 @@ Deno.serve(async (req) => {
     const insights = insightsRes.data;
     const deadlines = deadlinesRes.data || [];
     const feedback = feedbackRes.data || [];
+    const prevState = prevStateRes.data?.state_json as MasterState | null;
 
     // ---- Derived metrics ----
     const daysOpen = Math.max(1, Math.ceil((Date.now() - new Date(claim.created_at).getTime()) / 86400000));
@@ -101,26 +103,25 @@ Deno.serve(async (req) => {
       ? checks.sort((a: any, b: any) => new Date(b.check_date).getTime() - new Date(a.check_date).getTime())[0].check_date
       : null;
 
-    // ---- Confidence adjustment from feedback ----
-    const confidenceAdjustments = computeConfidenceAdjustments(feedback);
-
-    // ---- Payment Snapshot (with velocity) ----
+    // ---- Payment Snapshot ----
     const payment = computePayment(claim, checks, lastPaymentAt, daysOpen);
+
+    // ---- Contextual confidence adjustments ----
+    const resistance = computeResistance(claim, insights, emails, checks, daysSinceCarrier, prevState);
+    const gapPct = payment.claimed > 0 ? Math.round((payment.gap / payment.claimed) * 100) : 0;
+    const confidenceAdjustments = computeContextualConfidenceAdjustments(feedback, resistance, gapPct);
 
     // ---- Phase ----
     const phase = computePhase(claim, checks, files, emails, payment);
 
-    // ---- Health (conservative thresholds) ----
+    // ---- Health (conservative) ----
     const health = computeHealth(insights, claim, files, deadlines, daysOpen, daysSinceCarrier, payment);
 
-    // ---- Resistance ----
-    const resistance = computeResistance(claim, insights, emails);
-
-    // ---- Stability Index (internal only) ----
+    // ---- Stability Index ----
     const stability = computeStabilityIndex(payment, emails, deadlines, daysOpen, daysSinceCarrier);
 
-    // ---- Next Action ----
-    const nextAction = computeNextAction(claim, phase, payment, deadlines, emails, files, insights, daysOpen, daysSinceCarrier, resistance, confidenceAdjustments);
+    // ---- Next Action (with escalation governance) ----
+    const nextAction = computeNextAction(claim, phase, payment, deadlines, emails, files, insights, daysOpen, daysSinceCarrier, resistance, confidenceAdjustments, stability);
 
     // ---- Gap Analysis ----
     const gaps = sortGaps(insights?.evidence_gaps || []);
@@ -143,14 +144,18 @@ Deno.serve(async (req) => {
       stability_index: stability,
     };
 
+    // ---- Persist state ----
     const { error: upsertError } = await sb
       .from("claim_master_state")
       .upsert(
         { claim_id: claimId, state_json: masterState, updated_at: new Date().toISOString() },
         { onConflict: "claim_id" }
       );
-
     if (upsertError) throw upsertError;
+
+    // ---- Background: Money integrity check + drift analytics (fire and forget) ----
+    runMoneyIntegrityCheck(sb, claimId, payment, prevState?.payment_snapshot).catch(console.error);
+    updateDriftAnalytics(sb, feedback).catch(console.error);
 
     return new Response(JSON.stringify({ success: true, state: masterState }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -164,25 +169,60 @@ Deno.serve(async (req) => {
   }
 });
 
-// ===================== CONFIDENCE SELF-TUNING =====================
-function computeConfidenceAdjustments(feedback: any[]): Record<string, number> {
+// ===================== CONTEXTUAL CONFIDENCE SELF-TUNING =====================
+function computeContextualConfidenceAdjustments(
+  feedback: any[], currentResistance: string, currentGapPct: number
+): Record<string, number> {
   const adjustments: Record<string, number> = {};
-  // Group by action_type
-  const byType: Record<string, { done: number; snooze: number; override: number; dismiss: number }> = {};
+  
+  // Group by action_type + context_key (resistance + gap bucket)
+  const contextKey = (f: any) => {
+    const r = f.resistance_at_action || "unknown";
+    const g = f.gap_pct_at_action != null ? (f.gap_pct_at_action > 50 ? "high_gap" : f.gap_pct_at_action > 20 ? "med_gap" : "low_gap") : "unknown_gap";
+    return `${f.action_type}|${r}|${g}`;
+  };
+
+  const currentGapBucket = currentGapPct > 50 ? "high_gap" : currentGapPct > 20 ? "med_gap" : "low_gap";
+  
+  const byContext: Record<string, { done: number; negative: number; total: number }> = {};
   for (const f of feedback) {
-    if (!byType[f.action_type]) byType[f.action_type] = { done: 0, snooze: 0, override: 0, dismiss: 0 };
-    byType[f.action_type][f.user_action as keyof typeof byType[string]]++;
+    const key = contextKey(f);
+    if (!byContext[key]) byContext[key] = { done: 0, negative: 0, total: 0 };
+    byContext[key].total++;
+    if (f.user_action === "done") byContext[key].done++;
+    else byContext[key].negative++;
   }
-  for (const [type, counts] of Object.entries(byType)) {
-    const total = counts.done + counts.snooze + counts.override + counts.dismiss;
-    if (total < 3) continue; // Need minimum sample
-    const negativeRate = (counts.snooze + counts.override + counts.dismiss) / total;
-    // If users frequently reject this action type, penalize its priority
-    if (negativeRate > 0.6) adjustments[type] = -15;
-    else if (negativeRate > 0.4) adjustments[type] = -8;
-    // If users consistently complete, boost
-    else if (counts.done / total > 0.8) adjustments[type] = 5;
+
+  // Apply contextual adjustments matching current state
+  for (const [key, counts] of Object.entries(byContext)) {
+    if (counts.total < 3) continue;
+    const [actionType, resistance, gapBucket] = key.split("|");
+    
+    // Only apply if context matches current state
+    if (resistance !== currentResistance && resistance !== "unknown") continue;
+    if (gapBucket !== currentGapBucket && gapBucket !== "unknown_gap") continue;
+
+    const negativeRate = counts.negative / counts.total;
+    if (negativeRate > 0.6) adjustments[actionType] = Math.min(adjustments[actionType] ?? 0, -15);
+    else if (negativeRate > 0.4) adjustments[actionType] = Math.min(adjustments[actionType] ?? 0, -8);
+    else if (counts.done / counts.total > 0.8) adjustments[actionType] = Math.max(adjustments[actionType] ?? 0, 5);
   }
+
+  // Fallback: also apply global (non-contextual) if no contextual match found
+  const globalByType: Record<string, { done: number; negative: number; total: number }> = {};
+  for (const f of feedback) {
+    if (!globalByType[f.action_type]) globalByType[f.action_type] = { done: 0, negative: 0, total: 0 };
+    globalByType[f.action_type].total++;
+    if (f.user_action === "done") globalByType[f.action_type].done++;
+    else globalByType[f.action_type].negative++;
+  }
+  for (const [type, counts] of Object.entries(globalByType)) {
+    if (counts.total < 5 || adjustments[type] !== undefined) continue;
+    const negativeRate = counts.negative / counts.total;
+    if (negativeRate > 0.6) adjustments[type] = -10;
+    else if (negativeRate > 0.4) adjustments[type] = -5;
+  }
+
   return adjustments;
 }
 
@@ -200,39 +240,34 @@ function computePhase(claim: any, checks: any[], files: any[], _emails: any[], p
   return "Intake";
 }
 
-// ===================== PAYMENT (with velocity) =====================
+// ===================== PAYMENT =====================
 function computePayment(claim: any, checks: any[], lastPaymentAt: string | null, daysOpen: number): PaymentSnapshot {
   const claimed = claim.claim_amount || 0;
   const paid = checks.reduce((sum: number, c: any) => sum + (c.amount || 0), 0);
-  const rdAvailable = claim.depreciation_amount || 0;
+  const rdAvailable = claim.rd_amount || 0;
   const gap = Math.max(0, claimed - paid);
   const pctPaid = claimed > 0 ? Math.round((paid / claimed) * 100) : 0;
   const gapStaleDays = lastPaymentAt
     ? Math.floor((Date.now() - new Date(lastPaymentAt).getTime()) / 86400000)
     : null;
-  // Payment velocity: $/day
   const paymentVelocity = daysOpen > 0 ? Math.round((paid / daysOpen) * 100) / 100 : 0;
   return { claimed, paid, rd_available: rdAvailable, gap, pct_paid: pctPaid, gap_stale_days: gapStaleDays, payment_velocity: paymentVelocity };
 }
 
-// ===================== STABILITY INDEX (internal, not displayed) =====================
-function computeStabilityIndex(payment: PaymentSnapshot, emails: any[], deadlines: any[], daysOpen: number, daysSinceCarrier: number | null): StabilityIndex {
-  // Payment velocity score (0-25): higher velocity = more stable
-  const maxExpectedVelocity = payment.claimed > 0 ? payment.claimed / 30 : 100; // expect full payment in 30 days
+// ===================== STABILITY INDEX =====================
+function computeStabilityIndex(payment: PaymentSnapshot, emails: any[], deadlines: any[], _daysOpen: number, daysSinceCarrier: number | null): StabilityIndex {
+  const maxExpectedVelocity = payment.claimed > 0 ? payment.claimed / 30 : 100;
   const velocityScore = Math.min(25, payment.payment_velocity > 0 ? (payment.payment_velocity / maxExpectedVelocity) * 25 : 0);
 
-  // Carrier response consistency (0-25): regular inbound emails = stable
   const inboundEmails = emails.filter((e: any) => e.direction === "inbound");
   let responseConsistency = 0;
   if (inboundEmails.length >= 3) responseConsistency = 25;
   else if (inboundEmails.length >= 1 && daysSinceCarrier !== null && daysSinceCarrier < 14) responseConsistency = 18;
   else if (inboundEmails.length >= 1) responseConsistency = 10;
 
-  // Unresolved gap ratio (0-25 penalty): large gap = unstable
   const gapRatio = payment.claimed > 0 ? payment.gap / payment.claimed : 0;
   const gapPenalty = Math.min(25, gapRatio * 30);
 
-  // Deadline pressure (0-25 penalty): overdue deadlines = unstable
   const overdueCount = deadlines.filter((d: any) => new Date(d.deadline_date) < new Date()).length;
   const upcomingCount = deadlines.filter((d: any) => {
     const daysUntil = (new Date(d.deadline_date).getTime() - Date.now()) / 86400000;
@@ -241,14 +276,7 @@ function computeStabilityIndex(payment: PaymentSnapshot, emails: any[], deadline
   const deadlinePressure = Math.min(25, overdueCount * 15 + upcomingCount * 5);
 
   const score = Math.round(Math.max(0, Math.min(100, velocityScore + responseConsistency - gapPenalty - deadlinePressure)));
-
-  return {
-    score,
-    payment_velocity: velocityScore,
-    carrier_response_consistency: responseConsistency,
-    unresolved_gap_ratio: gapPenalty,
-    deadline_pressure: deadlinePressure,
-  };
+  return { score, payment_velocity: velocityScore, carrier_response_consistency: responseConsistency, unresolved_gap_ratio: gapPenalty, deadline_pressure: deadlinePressure };
 }
 
 // ===================== HEALTH (conservative – red = real danger) =====================
@@ -258,13 +286,13 @@ function computeHealth(
 ): "green" | "yellow" | "red" {
   let riskScore = 0;
 
-  // Factor 1: Aging (gentler thresholds)
+  // Aging (gentle)
   if (daysOpen > 90) riskScore += 25;
   else if (daysOpen > 60) riskScore += 18;
   else if (daysOpen > 30) riskScore += 10;
   else if (daysOpen > 14) riskScore += 4;
 
-  // Factor 2: Carrier silence (scaled more gradually)
+  // Carrier silence
   if (daysSinceCarrier !== null) {
     if (daysSinceCarrier > 30) riskScore += 22;
     else if (daysSinceCarrier > 21) riskScore += 15;
@@ -272,97 +300,150 @@ function computeHealth(
     else if (daysSinceCarrier > 7) riskScore += 3;
   }
 
-  // Factor 3: Overdue deadlines (only overdue, not upcoming)
+  // Overdue deadlines only
   const overdueCount = deadlines.filter((d: any) => new Date(d.deadline_date) < new Date()).length;
   riskScore += Math.min(overdueCount * 12, 25);
 
-  // Factor 4: Large unresolved gap (only significant gaps)
+  // Large gap
   if (payment.claimed > 0) {
     const gapPct = payment.gap / payment.claimed;
     if (gapPct > 0.6) riskScore += 12;
     else if (gapPct > 0.3) riskScore += 6;
   }
 
-  // Factor 5: Payment velocity stagnation
-  if (payment.payment_velocity === 0 && payment.gap > 0 && daysOpen > 14) {
-    riskScore += 8;
-  } else if (payment.payment_velocity > 0 && payment.gap > 0 && payment.gap_stale_days !== null && payment.gap_stale_days > 30) {
-    riskScore += 10;
-  }
+  // Velocity stagnation
+  if (payment.payment_velocity === 0 && payment.gap > 0 && daysOpen > 14) riskScore += 8;
+  else if (payment.gap > 0 && payment.gap_stale_days !== null && payment.gap_stale_days > 30) riskScore += 10;
 
-  // Factor 6: Few documents (minor)
+  // Few docs
   if (files.length < 3 && daysOpen > 7) riskScore += 3;
 
-  // Factor 7: Strategic insights health (only strong signal)
+  // Strategic insights
   const insightScore = insights?.overall_health_score;
   if (insightScore !== null && insightScore !== undefined) {
     if (insightScore < 30) riskScore += 12;
     else if (insightScore < 50) riskScore += 5;
   }
 
-  // Factor 8: Denial (significant but not panic)
+  // Denial
   if (claim.status === "Denied") riskScore += 12;
 
-  // CONSERVATIVE thresholds: red = real danger only
+  // CONSERVATIVE: red = real danger only
   if (riskScore >= 50) return "red";
   if (riskScore >= 25) return "yellow";
   return "green";
 }
 
-// ===================== RESISTANCE =====================
-function computeResistance(claim: any, insights: any, _emails: any[]): "low" | "med" | "high" {
+// ===================== RESISTANCE (with decay) =====================
+function computeResistance(
+  claim: any, insights: any, emails: any[], checks: any[],
+  daysSinceCarrier: number | null, prevState: MasterState | null
+): "low" | "med" | "high" {
+  let score = 0; // 0-100, thresholds: low < 30, med < 60, high >= 60
+
   const warnings = insights?.warnings || [];
   const criticals = warnings.filter((w: any) => w.severity === "critical" || w.severity === "high").length;
-  if (criticals >= 2) return "high";
-  if (criticals >= 1 || claim.status === "Denied") return "med";
+
+  // ---- Escalation triggers ----
+  if (claim.status === "Denied") score += 25;
+  if (criticals >= 2) score += 25;
+  else if (criticals >= 1) score += 15;
+
+  // Engineer involvement (check for engineer-related files/warnings)
+  const hasEngineer = warnings.some((w: any) =>
+    (w.title || w.message || "").toLowerCase().includes("engineer")
+  );
+  if (hasEngineer) score += 15;
+
+  // Silence > 21 days
+  if (daysSinceCarrier !== null && daysSinceCarrier > 21) score += 15;
+
+  // 2+ partial payments without closure
+  const partialPayments = checks.filter((c: any) => c.check_type !== "final");
+  if (partialPayments.length >= 2 && claim.status !== "Claim Settled") score += 10;
+
+  // ---- Decay triggers (reduce resistance) ----
+  // Recent payment movement
+  if (checks.length > 0) {
+    const mostRecent = checks.sort((a: any, b: any) => new Date(b.check_date).getTime() - new Date(a.check_date).getTime())[0];
+    const daysSincePayment = Math.floor((Date.now() - new Date(mostRecent.check_date).getTime()) / 86400000);
+    if (daysSincePayment < 14) score -= 10;
+  }
+
+  // Carrier responded within 7 days
+  if (daysSinceCarrier !== null && daysSinceCarrier < 7) score -= 10;
+
+  // Gap decreased by 15%+ from previous state
+  if (prevState?.payment_snapshot) {
+    const prevGap = prevState.payment_snapshot.gap;
+    const claimed = claim.claim_amount || 0;
+    if (prevGap > 0 && claimed > 0) {
+      const gapDecrease = (prevGap - Math.max(0, claimed - checks.reduce((s: number, c: any) => s + (c.amount || 0), 0))) / prevGap;
+      if (gapDecrease >= 0.15) score -= 15;
+    }
+  }
+
+  score = Math.max(0, Math.min(100, score));
+  if (score >= 60) return "high";
+  if (score >= 30) return "med";
   return "low";
 }
 
-// ===================== TONE FROM RESISTANCE =====================
+// ===================== TONE =====================
 function computeTone(resistance: "low" | "med" | "high"): "firm" | "standard" | "soft" {
   if (resistance === "high") return "firm";
   if (resistance === "low") return "soft";
   return "standard";
 }
 
-// ===================== NEXT ACTION =====================
+// ===================== NEXT ACTION (with escalation governance) =====================
 function computeNextAction(
   claim: any, phase: string, payment: PaymentSnapshot,
   deadlines: any[], emails: any[], files: any[], insights: any,
   daysOpen: number, daysSinceCarrier: number | null, resistance: "low" | "med" | "high",
-  confidenceAdjustments: Record<string, number>
+  confidenceAdjustments: Record<string, number>, stability: StabilityIndex
 ): NextAction {
   const candidates: NextAction[] = [];
   const resistanceWeight = resistance === "high" ? 20 : resistance === "med" ? 10 : 0;
   const tone = computeTone(resistance);
-
-  // ---- Stale Strategy Detection ----
   const gapPct = payment.claimed > 0 ? payment.gap / payment.claimed : 0;
   const outboundFollowUps = emails.filter((e: any) => e.direction === "outbound").length;
+
+  // ---- Stale Strategy Detection (with escalation governance) ----
   if (gapPct > 0.2 && (payment.gap_stale_days ?? 0) > 30 && outboundFollowUps >= 2) {
-    const scores = {
-      money_impact: payment.gap > 20000 ? 40 : payment.gap > 10000 ? 30 : 20,
-      deadline_risk: 10,
-      aging: Math.min(25, Math.floor((payment.gap_stale_days ?? 0) / 3)),
-      resistance: resistanceWeight,
-    };
-    candidates.push({
-      type: "escalation_recommended",
-      summary: `Strategy Stalled – Consider Escalation`,
-      due_at: new Date().toISOString(),
-      draft_id: null,
-      why: `$${payment.gap.toLocaleString()} gap unchanged for ${payment.gap_stale_days}+ days despite ${outboundFollowUps} follow-ups`,
-      confidence: "high",
-      tone,
-      priority: scores.money_impact + scores.deadline_risk + scores.aging + scores.resistance,
-      bullets: [
-        `Gap: $${payment.gap.toLocaleString()} (${Math.round(gapPct * 100)}% unpaid)`,
-        `${outboundFollowUps} follow-ups sent with no payment movement`,
-        tone === "firm" ? "Consider appraisal demand or DOI complaint" : "Evaluate appraisal, supervisor review, or formal complaint",
-        "Current negotiation approach is not producing results",
-      ],
-      scores,
-    });
+    // Escalation governance: must meet ALL criteria
+    const hasMinConfidence = true; // Stale detection is inherently high confidence
+    const stabilityBelowThreshold = stability.score < 40;
+    const noPaymentMovement = (payment.gap_stale_days ?? 0) > 30;
+    const hasFormalFollowUp = outboundFollowUps >= 1;
+    
+    const governancePass = hasMinConfidence && stabilityBelowThreshold && noPaymentMovement && hasFormalFollowUp;
+    
+    if (governancePass) {
+      const scores = {
+        money_impact: payment.gap > 20000 ? 40 : payment.gap > 10000 ? 30 : 20,
+        deadline_risk: 10,
+        aging: Math.min(25, Math.floor((payment.gap_stale_days ?? 0) / 3)),
+        resistance: resistanceWeight,
+      };
+      candidates.push({
+        type: "escalation_recommended",
+        summary: `Strategy Stalled – Consider Escalation`,
+        due_at: new Date().toISOString(),
+        draft_id: null,
+        why: `$${payment.gap.toLocaleString()} gap unchanged for ${payment.gap_stale_days}+ days despite ${outboundFollowUps} follow-ups. Stability index: ${stability.score}/100`,
+        confidence: "high",
+        tone,
+        priority: scores.money_impact + scores.deadline_risk + scores.aging + scores.resistance,
+        bullets: [
+          `Gap: $${payment.gap.toLocaleString()} (${Math.round(gapPct * 100)}% unpaid)`,
+          `${outboundFollowUps} follow-ups sent with no payment movement`,
+          tone === "firm" ? "Consider appraisal demand or DOI complaint" : "Evaluate appraisal, supervisor review, or formal complaint",
+          `Claim stability: ${stability.score}/100`,
+        ],
+        scores,
+      });
+    }
   }
 
   // ---- Overdue deadline ----
@@ -415,11 +496,7 @@ function computeNextAction(
       confidence: "high",
       tone,
       priority: scores.money_impact + scores.deadline_risk + scores.aging + scores.resistance,
-      bullets: [
-        `Deadline: ${upcoming[0].deadline_date}`,
-        `Type: ${upcoming[0].deadline_type}`,
-        "Review required documents and prepare submission",
-      ],
+      bullets: [`Deadline: ${upcoming[0].deadline_date}`, `Type: ${upcoming[0].deadline_type}`, "Review required documents and prepare submission"],
       scores,
     });
   }
@@ -432,10 +509,7 @@ function computeNextAction(
       aging: Math.min(30, daysSinceCarrier),
       resistance: resistanceWeight,
     };
-    const silenceBullets = [
-      `Last carrier communication: ${daysSinceCarrier} days ago`,
-      "Reference previous correspondence",
-    ];
+    const silenceBullets = [`Last carrier communication: ${daysSinceCarrier} days ago`, "Reference previous correspondence"];
     if (tone === "firm") {
       silenceBullets.push("Include regulatory timeline citations");
       silenceBullets.push("Request written response within 10 business days");
@@ -474,14 +548,8 @@ function computeNextAction(
   if (payment.gap > 0 && phase === "Payment") {
     const moneyImpact = payment.gap > 40000 ? 40 : payment.gap > 20000 ? 30 : payment.gap > 10000 ? 20 : 10;
     const staleBonus = (payment.gap_stale_days ?? 0) > 21 ? 15 : (payment.gap_stale_days ?? 0) > 14 ? 8 : 0;
-    // Low velocity + high gap = stagnation bonus
     const velocityBonus = payment.payment_velocity < 50 && payment.gap > 10000 ? 10 : 0;
-    const scores = {
-      money_impact: moneyImpact,
-      deadline_risk: 0,
-      aging: staleBonus + velocityBonus,
-      resistance: resistanceWeight,
-    };
+    const scores = { money_impact: moneyImpact, deadline_risk: 0, aging: staleBonus + velocityBonus, resistance: resistanceWeight };
     candidates.push({
       type: "collect_payment",
       summary: `$${payment.gap.toLocaleString()} Outstanding – ${payment.gap_stale_days ?? 0}d Stale`,
@@ -519,38 +587,31 @@ function computeNextAction(
   }
 
   // ---- Evidence gaps ----
-  const gaps = insights?.evidence_gaps || [];
-  if (gaps.length > 0 && phase !== "Intake") {
-    const scores = {
-      money_impact: gaps.length > 3 ? 15 : 8,
-      deadline_risk: 3,
-      aging: Math.min(10, Math.floor(daysOpen / 7)),
-      resistance: resistanceWeight,
-    };
+  const evidenceGaps = insights?.evidence_gaps || [];
+  if (evidenceGaps.length > 0 && phase !== "Intake") {
+    const scores = { money_impact: evidenceGaps.length > 3 ? 15 : 8, deadline_risk: 3, aging: Math.min(10, Math.floor(daysOpen / 7)), resistance: resistanceWeight };
     candidates.push({
       type: "address_gaps",
-      summary: `Address ${gaps.length} Evidence Gap${gaps.length > 1 ? "s" : ""} – Weakens Position`,
+      summary: `Address ${evidenceGaps.length} Evidence Gap${evidenceGaps.length > 1 ? "s" : ""} – Weakens Position`,
       due_at: null,
       draft_id: null,
-      why: "Missing evidence identified by Darwin weakens your negotiating position",
+      why: "Missing evidence weakens your negotiating position",
       confidence: "medium",
       tone: "standard",
       priority: scores.money_impact + scores.deadline_risk + scores.aging + scores.resistance,
-      bullets: gaps.slice(0, 3).map((g: any) => typeof g === "string" ? g : g.description || g.item || "Missing evidence"),
+      bullets: evidenceGaps.slice(0, 3).map((g: any) => typeof g === "string" ? g : g.description || g.item || "Missing evidence"),
       scores,
     });
   }
 
-  // Apply confidence self-tuning adjustments
+  // Apply contextual confidence adjustments
   for (const c of candidates) {
     const adj = confidenceAdjustments[c.type] || 0;
     c.priority = Math.max(0, c.priority + adj);
-    // Downgrade confidence if users frequently reject this type
     if (adj < -10 && c.confidence === "high") c.confidence = "medium";
     else if (adj < -10 && c.confidence === "medium") c.confidence = "low";
   }
 
-  // Sort by weighted priority, pick top
   candidates.sort((a, b) => b.priority - a.priority);
 
   return candidates[0] || {
@@ -565,6 +626,115 @@ function computeNextAction(
     bullets: ["All deadlines met", "No outstanding gaps detected", "Monitor for carrier response"],
     scores: { money_impact: 0, deadline_risk: 0, aging: 0, resistance: 0 },
   };
+}
+
+// ===================== MONEY INTEGRITY CHECK =====================
+async function runMoneyIntegrityCheck(
+  sb: any, claimId: string, payment: PaymentSnapshot, prevPayment?: PaymentSnapshot | null
+) {
+  const anomalies: { type: string; desc: string; severity: string }[] = [];
+
+  // Paid > Claimed
+  if (payment.paid > payment.claimed && payment.claimed > 0) {
+    anomalies.push({
+      type: "paid_exceeds_claimed",
+      desc: `Paid ($${payment.paid.toLocaleString()}) exceeds claimed ($${payment.claimed.toLocaleString()})`,
+      severity: "warning",
+    });
+  }
+
+  // RD available negative
+  if (payment.rd_available < 0) {
+    anomalies.push({
+      type: "negative_rd",
+      desc: `Recoverable depreciation is negative: $${payment.rd_available}`,
+      severity: "warning",
+    });
+  }
+
+  // Velocity spike: if velocity > 5x previous, flag
+  if (prevPayment && prevPayment.payment_velocity > 0 && payment.payment_velocity > prevPayment.payment_velocity * 5) {
+    anomalies.push({
+      type: "velocity_spike",
+      desc: `Payment velocity spiked from $${prevPayment.payment_velocity}/day to $${payment.payment_velocity}/day`,
+      severity: "info",
+    });
+  }
+
+  // Gap flip: high to zero without payment
+  if (prevPayment && prevPayment.gap > 5000 && payment.gap === 0 && payment.paid <= (prevPayment.paid || 0)) {
+    anomalies.push({
+      type: "gap_flip_no_payment",
+      desc: `Gap dropped from $${prevPayment.gap.toLocaleString()} to $0 without new payments`,
+      severity: "critical",
+    });
+  }
+
+  if (anomalies.length === 0) return;
+
+  // Check for existing unresolved anomalies to avoid duplicates
+  const { data: existing } = await sb
+    .from("autopilot_anomaly_log")
+    .select("anomaly_type")
+    .eq("claim_id", claimId)
+    .eq("resolved", false);
+
+  const existingTypes = new Set((existing || []).map((e: any) => e.anomaly_type));
+
+  const newAnomalies = anomalies
+    .filter((a) => !existingTypes.has(a.type))
+    .map((a) => ({
+      claim_id: claimId,
+      anomaly_type: a.type,
+      description: a.desc,
+      severity: a.severity,
+    }));
+
+  if (newAnomalies.length > 0) {
+    await sb.from("autopilot_anomaly_log").insert(newAnomalies);
+  }
+}
+
+// ===================== DRIFT ANALYTICS =====================
+async function updateDriftAnalytics(sb: any, feedback: any[]) {
+  if (feedback.length < 5) return; // Need minimum data
+
+  const now = new Date();
+  const periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+  const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+
+  // Group by action_type + context
+  const byType: Record<string, { done: number; snooze: number; override: number; dismiss: number; totalPriority: number; count: number }> = {};
+  for (const f of feedback) {
+    const key = f.action_type;
+    if (!byType[key]) byType[key] = { done: 0, snooze: 0, override: 0, dismiss: 0, totalPriority: 0, count: 0 };
+    byType[key][f.user_action as keyof typeof byType[string]] !== undefined && (byType[key] as any)[f.user_action]++;
+    byType[key].count++;
+  }
+
+  for (const [actionType, counts] of Object.entries(byType)) {
+    if (counts.count < 3) continue;
+    const total = counts.done + counts.snooze + counts.override + counts.dismiss;
+    const overrideRate = total > 0 ? Math.round((counts.override / total) * 100) : 0;
+    const executionRate = total > 0 ? Math.round((counts.done / total) * 100) : 0;
+    const flagged = overrideRate > 40;
+
+    await sb.from("autopilot_drift_analytics").upsert({
+      action_type: actionType,
+      context_key: "global",
+      period_start: periodStart,
+      period_end: periodEnd,
+      total_count: total,
+      done_count: counts.done,
+      snooze_count: counts.snooze,
+      override_count: counts.override,
+      dismiss_count: counts.dismiss,
+      override_rate: overrideRate,
+      execution_rate: executionRate,
+      flagged_misalignment: flagged,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "action_type,context_key,period_start" });
+  }
 }
 
 // ===================== GAP SORTING =====================

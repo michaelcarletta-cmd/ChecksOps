@@ -160,9 +160,11 @@ export function DarwinCockpit({ claimId, claim, onNavigateSection }: DarwinCockp
     }
   }, [claimId, queryClient]);
 
-  // Track feedback and recompute
+  // Track feedback with context for contextual pattern memory
   const trackFeedback = useCallback(async (userAction: "done" | "snooze" | "override" | "dismiss") => {
-    if (!na) return;
+    if (!na || !masterState) return;
+    const ps = masterState.payment_snapshot;
+    const gapPct = ps && ps.claimed > 0 ? Math.round((ps.gap / ps.claimed) * 100) : 0;
     try {
       await supabase.from("autopilot_action_feedback").insert({
         claim_id: claimId,
@@ -171,6 +173,9 @@ export function DarwinCockpit({ claimId, claim, onNavigateSection }: DarwinCockp
         confidence: na.confidence,
         user_action: userAction,
         priority_score: na.priority,
+        resistance_at_action: masterState.resistance,
+        gap_pct_at_action: gapPct,
+        phase_at_action: masterState.phase,
       });
     } catch (e) {
       console.error("Feedback tracking error:", e);
