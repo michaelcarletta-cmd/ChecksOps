@@ -7257,6 +7257,40 @@ export type Database = {
         }
         Relationships: []
       }
+      recovery_by_carrier: {
+        Row: {
+          avg_days_to_recovery: number | null
+          avg_recovery_pct: number | null
+          avg_resistance: number | null
+          avg_velocity: number | null
+          carrier_name: string | null
+          escalation_count: number | null
+          total_claims: number | null
+        }
+        Relationships: []
+      }
+      recovery_by_escalation: {
+        Row: {
+          avg_days_to_recovery: number | null
+          avg_recovery_pct: number | null
+          avg_resistance: number | null
+          avg_velocity: number | null
+          escalation_used: boolean | null
+          total_claims: number | null
+        }
+        Relationships: []
+      }
+      recovery_by_loss_type: {
+        Row: {
+          avg_days_to_recovery: number | null
+          avg_recovery_pct: number | null
+          avg_velocity: number | null
+          escalation_count: number | null
+          loss_type: string | null
+          total_claims: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       acquire_darwin_job: {
@@ -7398,6 +7432,7 @@ export type Database = {
       }
       get_portfolio_carrier_analytics: { Args: never; Returns: Json }
       get_portfolio_intelligence: { Args: never; Returns: Json }
+      get_weekly_command_review: { Args: never; Returns: Json }
       has_permission: {
         Args: { _permission: string; _user_id: string }
         Returns: boolean

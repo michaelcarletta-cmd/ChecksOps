@@ -62,6 +62,8 @@ const BASELINE_PRIORITY_WEIGHTS: Record<string, number> = {
   escalation_recommended: 85,
   deadline_overdue: 90,
   deadline_upcoming: 60,
+  supplement_48h: 70,
+  follow_up_14d: 55,
   follow_up_carrier: 55,
   initial_contact: 30,
   collect_payment: 65,
@@ -96,6 +98,16 @@ Deno.serve(async (req) => {
         sb.from("autopilot_action_feedback").select("action_type, confidence, user_action, resistance_at_action, gap_pct_at_action, phase_at_action").eq("claim_id", claimId).order("created_at", { ascending: false }).limit(100),
         sb.from("claim_master_state").select("state_json").eq("claim_id", claimId).maybeSingle(),
       ]);
+
+    // Fetch carrier behavior profile for carrier-specific strategy
+    const carrierName = claimRes.data?.insurance_companies?.name || claimRes.data?.insurance_company || null;
+    let carrierProfile: any = null;
+    if (carrierName) {
+      const { data: cp } = await sb.from("carrier_behavior_profiles")
+        .select("recommended_approach, preferred_communication, avg_initial_response_days, avg_supplement_response_days, supplement_approval_rate")
+        .eq("carrier_name", carrierName).maybeSingle();
+      carrierProfile = cp;
+    }
 
     const claim = claimRes.data;
     if (!claim) throw new Error("Claim not found");
@@ -137,7 +149,7 @@ Deno.serve(async (req) => {
     const stability = computeStabilityIndex(payment, emails, deadlines, daysOpen, daysSinceCarrier);
 
     // ---- Next Action (with escalation governance + penalty floor) ----
-    const nextAction = computeNextAction(claim, phase, payment, deadlines, emails, files, insights, daysOpen, daysSinceCarrier, resistance, confidenceAdjustments, stability);
+    const nextAction = computeNextAction(claim, phase, payment, deadlines, emails, files, insights, daysOpen, daysSinceCarrier, resistance, confidenceAdjustments, stability, carrierProfile);
 
     // ---- Gap Analysis ----
     const gaps = sortGaps(insights?.evidence_gaps || []);
@@ -395,18 +407,98 @@ function computeTone(resistance: "low" | "med" | "high"): "firm" | "standard" | 
   return "standard";
 }
 
-// ===================== NEXT ACTION (with escalation governance + penalty floor) =====================
+// ===================== NEXT ACTION (with escalation governance + penalty floor + carrier strategy) =====================
 function computeNextAction(
   claim: any, phase: string, payment: PaymentSnapshot,
   deadlines: any[], emails: any[], files: any[], insights: any,
   daysOpen: number, daysSinceCarrier: number | null, resistance: "low" | "med" | "high",
-  confidenceAdjustments: Record<string, number>, stability: StabilityIndex
+  confidenceAdjustments: Record<string, number>, stability: StabilityIndex,
+  carrierProfile?: any
 ): NextAction {
   const candidates: NextAction[] = [];
   const resistanceWeight = resistance === "high" ? 20 : resistance === "med" ? 10 : 0;
-  const tone = computeTone(resistance);
+  // Carrier-specific tone override: if carrier profile recommends aggressive approach, bias firm
+  let tone = computeTone(resistance);
+  if (carrierProfile?.recommended_approach) {
+    const approach = carrierProfile.recommended_approach.toLowerCase();
+    if (approach.includes("aggressive") || approach.includes("firm")) tone = "firm";
+    else if (approach.includes("collaborative") || approach.includes("soft")) tone = resistance === "high" ? "standard" : "soft";
+  }
   const gapPct = payment.claimed > 0 ? payment.gap / payment.claimed : 0;
   const outboundFollowUps = emails.filter((e: any) => e.direction === "outbound").length;
+
+  // ---- SPEED RULE: Supplement within 48h of estimate upload ----
+  const hasEstimate = files.some((f: any) => f.folder_key === "estimates");
+  const hasSupplementEmail = emails.some((e: any) => 
+    e.direction === "outbound" && (e.subject || "").toLowerCase().includes("supplement")
+  );
+  if (hasEstimate && !hasSupplementEmail && phase !== "Intake" && phase !== "Closeout") {
+    const estimateFiles = files.filter((f: any) => f.folder_key === "estimates")
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const latestEstimate = estimateFiles[0];
+    if (latestEstimate) {
+      const hoursSinceEstimate = (Date.now() - new Date(latestEstimate.created_at).getTime()) / 3600000;
+      if (hoursSinceEstimate <= 72) { // within 72h window (target 48h)
+        const urgency = hoursSinceEstimate > 48 ? 15 : 10;
+        const scores = {
+          money_impact: payment.gap > 20000 ? 35 : payment.gap > 10000 ? 25 : 15,
+          deadline_risk: urgency,
+          aging: 5,
+          resistance: resistanceWeight,
+        };
+        candidates.push({
+          type: "supplement_48h",
+          summary: `Send First Supplement – ${Math.round(hoursSinceEstimate)}h Since Estimate`,
+          due_at: new Date(new Date(latestEstimate.created_at).getTime() + 48 * 3600000).toISOString(),
+          draft_id: null,
+          why: `Estimate uploaded ${Math.round(hoursSinceEstimate)}h ago. First supplement should go out within 48 hours to establish speed and credibility.`,
+          confidence: "high",
+          tone,
+          priority: scores.money_impact + scores.deadline_risk + scores.aging + scores.resistance,
+          bullets: [
+            "Draft supplement referencing estimate discrepancies",
+            "Include line-item comparison if carrier estimate available",
+            hoursSinceEstimate > 48 ? "⚠️ Past 48h target — send immediately" : `${Math.round(48 - hoursSinceEstimate)}h remaining in speed window`,
+            tone === "firm" ? "Cite policy language supporting additional scope" : "Present scope differences professionally",
+          ],
+          scores,
+        });
+      }
+    }
+  }
+
+  // ---- SPEED RULE: 14-day follow-up cadence ----
+  const lastOutbound = emails.find((e: any) => e.direction === "outbound");
+  if (lastOutbound && daysSinceCarrier !== null && daysSinceCarrier >= 7) {
+    const daysSinceLastOutbound = Math.floor((Date.now() - new Date(lastOutbound.created_at).getTime()) / 86400000);
+    const followUpInterval = 14; // exact 14-day intervals
+    if (daysSinceLastOutbound >= followUpInterval && phase !== "Closeout") {
+      const intervalsMissed = Math.floor(daysSinceLastOutbound / followUpInterval);
+      const scores = {
+        money_impact: payment.gap > 20000 ? 25 : payment.gap > 5000 ? 15 : 5,
+        deadline_risk: intervalsMissed > 1 ? 15 : 5,
+        aging: Math.min(25, daysSinceLastOutbound),
+        resistance: resistanceWeight,
+      };
+      candidates.push({
+        type: "follow_up_14d",
+        summary: `14-Day Follow-Up Due – ${daysSinceLastOutbound}d Since Last Contact`,
+        due_at: new Date().toISOString(),
+        draft_id: null,
+        why: `${daysSinceLastOutbound} days since last outbound (${intervalsMissed} interval${intervalsMissed > 1 ? "s" : ""} elapsed). Consistent 14-day cadence establishes professional persistence.`,
+        confidence: "high",
+        tone,
+        priority: scores.money_impact + scores.deadline_risk + scores.aging + scores.resistance,
+        bullets: [
+          `Last outbound: ${daysSinceLastOutbound} days ago`,
+          `Follow-up intervals missed: ${intervalsMissed}`,
+          "Reference previous correspondence and pending items",
+          tone === "firm" ? "Include regulatory timeline reminder" : "Request written status update",
+        ],
+        scores,
+      });
+    }
+  }
 
   // ---- Stale Strategy Detection (with escalation governance) ----
   if (gapPct > 0.2 && (payment.gap_stale_days ?? 0) > 30 && outboundFollowUps >= 2) {
