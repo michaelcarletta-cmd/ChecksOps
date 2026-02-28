@@ -349,6 +349,50 @@ export type Database = {
         }
         Relationships: []
       }
+      autopilot_action_feedback: {
+        Row: {
+          action_summary: string
+          action_type: string
+          claim_id: string
+          confidence: string
+          created_at: string
+          id: string
+          priority_score: number | null
+          user_action: string
+          user_id: string | null
+        }
+        Insert: {
+          action_summary: string
+          action_type: string
+          claim_id: string
+          confidence?: string
+          created_at?: string
+          id?: string
+          priority_score?: number | null
+          user_action: string
+          user_id?: string | null
+        }
+        Update: {
+          action_summary?: string
+          action_type?: string
+          claim_id?: string
+          confidence?: string
+          created_at?: string
+          id?: string
+          priority_score?: number | null
+          user_action?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "autopilot_action_feedback_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bank_balance: {
         Row: {
           balance: number
