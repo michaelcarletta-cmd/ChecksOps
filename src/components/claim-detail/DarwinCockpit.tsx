@@ -51,12 +51,21 @@ interface NextAction {
 }
 
 interface PaymentSnapshot {
-  claimed: number;
-  paid: number;
-  rd_available: number;
+  claimed_rcv?: number;
+  acv_value?: number | null;
+  dep_total?: number | null;
+  paid_total?: number;
+  paid_acv?: number;
+  paid_rd?: number;
+  rd_available?: number | null;
   gap: number;
+  unclassified_payment_total?: number;
+  money_confidence?: "high" | "medium" | "low";
   pct_paid?: number;
   gap_stale_days?: number | null;
+  // Legacy aliases
+  claimed: number;
+  paid: number;
 }
 
 interface MasterState {
@@ -309,21 +318,30 @@ export function DarwinCockpit({ claimId, claim, onNavigateSection }: DarwinCockp
           <Card className="border-primary/20">
             <CardContent className="pt-4 pb-3">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <PaymentStat label="Claimed (RCV)" value={ps.claimed} />
-                <PaymentStat label="Paid" value={ps.paid} accent />
-                <PaymentStat label="RD Available" value={ps.rd_available} />
+                <PaymentStat label="RCV (Claimed)" value={ps.claimed_rcv ?? ps.claimed} />
+                <PaymentStat label="Paid" value={ps.paid_total ?? ps.paid} accent />
+                <PaymentStat
+                  label="RD Available"
+                  value={ps.rd_available}
+                  tooltip={ps.rd_available == null ? "Needs ACV/Dep split — review estimate or payment categories." : undefined}
+                />
                 <PaymentStat label="Outstanding Gap" value={ps.gap} warn={ps.gap > 0} />
               </div>
-              {ps.claimed > 0 && (
+              {ps.money_confidence && ps.money_confidence !== "high" && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-2 italic">
+                  ⚠ ACV/RD split incomplete — review estimate or payment categories.
+                </p>
+              )}
+              {(ps.claimed_rcv ?? ps.claimed) > 0 && (
                 <div className="mt-3">
                   <div className="flex justify-between text-xs text-muted-foreground mb-1">
                     <span>Payment Progress</span>
-                    <span>{ps.pct_paid ?? (ps.claimed > 0 ? Math.round((ps.paid / ps.claimed) * 100) : 0)}%</span>
+                    <span>{ps.pct_paid ?? ((ps.claimed_rcv ?? ps.claimed) > 0 ? Math.round(((ps.paid_total ?? ps.paid) / (ps.claimed_rcv ?? ps.claimed)) * 100) : 0)}%</span>
                   </div>
                   <div className="h-2 bg-muted rounded-full overflow-hidden">
                     <div
                       className="h-full bg-primary rounded-full transition-all"
-                      style={{ width: `${Math.min(100, ps.pct_paid ?? (ps.claimed > 0 ? (ps.paid / ps.claimed) * 100 : 0))}%` }}
+                      style={{ width: `${Math.min(100, ps.pct_paid ?? ((ps.claimed_rcv ?? ps.claimed) > 0 ? ((ps.paid_total ?? ps.paid) / (ps.claimed_rcv ?? ps.claimed)) * 100 : 0))}%` }}
                     />
                   </div>
                 </div>
@@ -398,19 +416,30 @@ export function DarwinCockpit({ claimId, claim, onNavigateSection }: DarwinCockp
   );
 }
 
-function PaymentStat({ label, value, accent, warn }: { label: string; value: number; accent?: boolean; warn?: boolean }) {
-  return (
+function PaymentStat({ label, value, accent, warn, tooltip }: { label: string; value: number | null | undefined; accent?: boolean; warn?: boolean; tooltip?: string }) {
+  const displayValue = value != null ? `$${value.toLocaleString()}` : "—";
+  const content = (
     <div className="text-center">
       <p className="text-[11px] text-muted-foreground mb-0.5">{label}</p>
       <p className={cn(
         "text-lg font-bold tabular-nums",
         accent && "text-primary",
-        warn && "text-destructive"
+        warn && "text-destructive",
+        value == null && "text-muted-foreground italic text-sm"
       )}>
-        ${value.toLocaleString()}
+        {value == null ? "Needs Data" : displayValue}
       </p>
     </div>
   );
+  if (tooltip) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{content}</TooltipTrigger>
+        <TooltipContent side="bottom" className="text-xs max-w-xs">{tooltip}</TooltipContent>
+      </Tooltip>
+    );
+  }
+  return content;
 }
 
 function IntelligenceDrawer({ state, claimId, onNavigateSection }: { state: MasterState | null; claimId: string; onNavigateSection?: (s: string) => void }) {

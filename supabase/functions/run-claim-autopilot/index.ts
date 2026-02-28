@@ -25,13 +25,22 @@ interface NextAction {
 }
 
 interface PaymentSnapshot {
-  claimed: number;
-  paid: number;
-  rd_available: number;
+  claimed_rcv: number;
+  acv_value: number | null;
+  dep_total: number | null;
+  paid_total: number;
+  paid_acv: number;
+  paid_rd: number;
+  rd_available: number | null;
   gap: number;
+  unclassified_payment_total: number;
+  money_confidence: "high" | "medium" | "low";
   pct_paid: number;
   gap_stale_days: number | null;
   payment_velocity: number;
+  // Legacy aliases for backward compat
+  claimed: number;
+  paid: number;
 }
 
 interface StabilityIndex {
@@ -90,7 +99,7 @@ Deno.serve(async (req) => {
     const { claimId } = await req.json();
     if (!claimId) throw new Error("claimId required");
 
-    const [claimRes, checksRes, emailsRes, filesRes, insightsRes, deadlinesRes, feedbackRes, prevStateRes] =
+    const [claimRes, checksRes, emailsRes, filesRes, insightsRes, deadlinesRes, feedbackRes, prevStateRes, moneyRes] =
       await Promise.all([
         sb.from("claims").select("*, insurance_companies:insurance_company_id(name), loss_types:loss_type_id(name)").eq("id", claimId).single(),
         sb.from("claim_checks").select("*").eq("claim_id", claimId),
@@ -100,6 +109,7 @@ Deno.serve(async (req) => {
         sb.from("claim_carrier_deadlines").select("*").eq("claim_id", claimId).eq("status", "pending").order("deadline_date", { ascending: true }).limit(5),
         sb.from("autopilot_action_feedback").select("action_type, confidence, user_action, resistance_at_action, gap_pct_at_action, phase_at_action").eq("claim_id", claimId).order("created_at", { ascending: false }).limit(100),
         sb.from("claim_master_state").select("state_json").eq("claim_id", claimId).maybeSingle(),
+        sb.rpc("get_claim_money_snapshot", { p_claim_id: claimId }),
       ]);
 
     // Fetch carrier behavior profile for carrier-specific strategy
@@ -131,7 +141,7 @@ Deno.serve(async (req) => {
     // CLOSED: Autopilot fully disabled — only persist minimal state for portfolio attribution
     if (automationMode === "closed") {
       const checks = checksRes.data || [];
-      const payment = computePayment(claim, checks, null, 1);
+      const payment = computePayment(moneyRes.data, checksRes.data || [], null, 1);
       const closedState: MasterState = {
         phase: "Closeout", phase_label: "Closed", health: "green", resistance: "low",
         next_action: { type: "none", summary: "Claim closed", due_at: null, draft_id: null, why: "Automation disabled – claim closed", priority: 0, confidence: "high", bullets: [], tone: "standard", scores: { money_impact: 0, deadline_risk: 0, aging: 0, resistance: 0 } },
@@ -147,7 +157,7 @@ Deno.serve(async (req) => {
     // SUSPENDED: No scoring, no next action, no health degradation — only financial exposure for portfolio
     if (automationMode === "suspended") {
       const checks = checksRes.data || [];
-      const payment = computePayment(claim, checks, null, 1);
+      const payment = computePayment(moneyRes.data, checksRes.data || [], null, 1);
       const prevState = prevStateRes.data?.state_json as MasterState | null;
       const suspendedState: MasterState = {
         phase: prevState?.phase || "Negotiation", phase_label: "Suspended", health: "green",
@@ -186,7 +196,7 @@ Deno.serve(async (req) => {
       : null;
 
     // ---- Payment Snapshot ----
-    const payment = computePayment(claim, checks, lastPaymentAt, daysOpen);
+    const payment = computePayment(moneyRes.data, checks, lastPaymentAt, daysOpen);
 
     // ---- Contextual confidence adjustments ----
     const resistance = computeResistance(claim, insights, emails, checks, daysSinceCarrier, prevState);
@@ -357,18 +367,42 @@ function computePhase(claim: any, checks: any[], files: any[], _emails: any[], p
   return "Intake";
 }
 
-// ===================== PAYMENT =====================
-function computePayment(claim: any, checks: any[], lastPaymentAt: string | null, daysOpen: number): PaymentSnapshot {
-  const claimed = claim.claim_amount || 0;
-  const paid = checks.reduce((sum: number, c: any) => sum + (c.amount || 0), 0);
-  const rdAvailable = claim.rd_amount || 0;
-  const gap = Math.max(0, claimed - paid);
-  const pctPaid = claimed > 0 ? Math.round((paid / claimed) * 100) : 0;
+// ===================== PAYMENT (reads from claim_money_snapshot view) =====================
+function computePayment(moneySnapshot: any, checks: any[], lastPaymentAt: string | null, daysOpen: number): PaymentSnapshot {
+  const ms = moneySnapshot || {};
+  const claimedRcv = Number(ms.rcv_claimed ?? 0);
+  const acvValue = ms.acv_value != null ? Number(ms.acv_value) : null;
+  const depTotal = ms.dep_total != null ? Number(ms.dep_total) : null;
+  const paidTotal = Number(ms.paid_total ?? 0);
+  const paidAcv = Number(ms.paid_acv ?? 0);
+  const paidRd = Number(ms.paid_rd ?? 0);
+  const rdAvailable = ms.rd_available != null ? Number(ms.rd_available) : null;
+  const gap = Number(ms.gap ?? Math.max(0, claimedRcv - paidTotal));
+  const unclassified = Number(ms.unclassified_payment_total ?? 0);
+  const confidence = (ms.money_confidence as "high" | "medium" | "low") || "low";
+  const pctPaid = claimedRcv > 0 ? Math.round((paidTotal / claimedRcv) * 100) : 0;
   const gapStaleDays = lastPaymentAt
     ? Math.floor((Date.now() - new Date(lastPaymentAt).getTime()) / 86400000)
     : null;
-  const paymentVelocity = daysOpen > 0 ? Math.round((paid / daysOpen) * 100) / 100 : 0;
-  return { claimed, paid, rd_available: rdAvailable, gap, pct_paid: pctPaid, gap_stale_days: gapStaleDays, payment_velocity: paymentVelocity };
+  const paymentVelocity = daysOpen > 0 ? Math.round((paidTotal / daysOpen) * 100) / 100 : 0;
+  return {
+    claimed_rcv: claimedRcv,
+    acv_value: acvValue,
+    dep_total: depTotal,
+    paid_total: paidTotal,
+    paid_acv: paidAcv,
+    paid_rd: paidRd,
+    rd_available: rdAvailable,
+    gap,
+    unclassified_payment_total: unclassified,
+    money_confidence: confidence,
+    pct_paid: pctPaid,
+    gap_stale_days: gapStaleDays,
+    payment_velocity: paymentVelocity,
+    // Legacy aliases
+    claimed: claimedRcv,
+    paid: paidTotal,
+  };
 }
 
 // ===================== STABILITY INDEX =====================
@@ -928,7 +962,7 @@ async function runMoneyIntegrityCheck(
   if (payment.paid > payment.claimed && payment.claimed > 0) {
     anomalies.push({ type: "paid_exceeds_claimed", desc: `Paid ($${payment.paid.toLocaleString()}) exceeds claimed ($${payment.claimed.toLocaleString()})`, severity: "warning" });
   }
-  if (payment.rd_available < 0) {
+  if (payment.rd_available != null && payment.rd_available < 0) {
     anomalies.push({ type: "negative_rd", desc: `Recoverable depreciation is negative: $${payment.rd_available}`, severity: "warning" });
   }
   if (prevPayment && prevPayment.payment_velocity > 0 && payment.payment_velocity > prevPayment.payment_velocity * 5) {
