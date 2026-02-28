@@ -74,27 +74,27 @@ interface MasterState {
 }
 
 const healthColors: Record<string, string> = {
-  green: "bg-green-500",
-  yellow: "bg-yellow-500",
+  green: "bg-emerald-500",
+  yellow: "bg-amber-400",
   red: "bg-red-500",
 };
 
 const healthLabels: Record<string, string> = {
-  green: "Healthy",
-  yellow: "Attention",
-  red: "Critical",
+  green: "On Track",
+  yellow: "Needs Attention",
+  red: "At Risk",
 };
 
 const resistanceColors: Record<string, string> = {
-  low: "text-green-600",
-  med: "text-yellow-600",
+  low: "text-emerald-600",
+  med: "text-amber-600",
   high: "text-red-600",
 };
 
 const confidenceColors: Record<string, string> = {
-  high: "bg-green-500",
-  medium: "bg-yellow-500",
-  low: "bg-muted-foreground/40",
+  high: "bg-emerald-500",
+  medium: "bg-amber-400",
+  low: "bg-muted-foreground/30",
 };
 
 const confidenceLabels: Record<string, string> = {
@@ -160,11 +160,35 @@ export function DarwinCockpit({ claimId, claim, onNavigateSection }: DarwinCockp
     }
   }, [claimId, queryClient]);
 
-  // Silent recompute trigger: mark done → re-run autopilot
+  // Track feedback and recompute
+  const trackFeedback = useCallback(async (userAction: "done" | "snooze" | "override" | "dismiss") => {
+    if (!na) return;
+    try {
+      await supabase.from("autopilot_action_feedback").insert({
+        claim_id: claimId,
+        action_type: na.type,
+        action_summary: na.summary,
+        confidence: na.confidence,
+        user_action: userAction,
+        priority_score: na.priority,
+      });
+    } catch (e) {
+      console.error("Feedback tracking error:", e);
+    }
+  }, [claimId, masterState]);
+
+  const na = masterState?.next_action;
+
   const handleMarkDone = useCallback(async () => {
+    await trackFeedback("done");
     toast.success("Action marked done");
     await runAutopilot();
-  }, [runAutopilot]);
+  }, [runAutopilot, trackFeedback]);
+
+  const handleSnooze = useCallback(async () => {
+    await trackFeedback("snooze");
+    toast("Action snoozed – will resurface later");
+  }, [trackFeedback]);
 
   const chips = [
     { label: "View Missing Docs", section: "document-analysis", icon: FileText },
@@ -185,7 +209,6 @@ export function DarwinCockpit({ claimId, claim, onNavigateSection }: DarwinCockp
 
   const state = masterState;
   const ps = state?.payment_snapshot;
-  const na = state?.next_action;
 
   return (
     <TooltipProvider>
@@ -353,7 +376,7 @@ export function DarwinCockpit({ claimId, claim, onNavigateSection }: DarwinCockp
                 <Button size="sm" variant="default" className="gap-1 text-xs" onClick={handleMarkDone}>
                   <CheckCircle2 className="h-3.5 w-3.5" /> Mark Done
                 </Button>
-                <Button size="sm" variant="outline" className="gap-1 text-xs">
+                <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={handleSnooze}>
                   <Clock className="h-3.5 w-3.5" /> Snooze
                 </Button>
                 {(na.type.includes("follow_up") || na.type.includes("contact") || na.type.includes("deadline")) && (
