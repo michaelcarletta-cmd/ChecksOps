@@ -57,6 +57,22 @@ interface MasterState {
   stability_index: StabilityIndex;
 }
 
+// ===================== BASELINE PRIORITY WEIGHTS (frozen quarterly) =====================
+const BASELINE_PRIORITY_WEIGHTS: Record<string, number> = {
+  escalation_recommended: 85,
+  deadline_overdue: 90,
+  deadline_upcoming: 60,
+  follow_up_carrier: 55,
+  initial_contact: 30,
+  collect_payment: 65,
+  gather_documents: 20,
+  address_gaps: 30,
+  review: 0,
+};
+
+// Penalty floor: never reduce below 60% of baseline
+const PENALTY_FLOOR_PCT = 0.6;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS")
     return new Response(null, { headers: corsHeaders });
@@ -120,7 +136,7 @@ Deno.serve(async (req) => {
     // ---- Stability Index ----
     const stability = computeStabilityIndex(payment, emails, deadlines, daysOpen, daysSinceCarrier);
 
-    // ---- Next Action (with escalation governance) ----
+    // ---- Next Action (with escalation governance + penalty floor) ----
     const nextAction = computeNextAction(claim, phase, payment, deadlines, emails, files, insights, daysOpen, daysSinceCarrier, resistance, confidenceAdjustments, stability);
 
     // ---- Gap Analysis ----
@@ -153,9 +169,13 @@ Deno.serve(async (req) => {
       );
     if (upsertError) throw upsertError;
 
-    // ---- Background: Money integrity check + drift analytics (fire and forget) ----
+    // ---- Background: Money integrity + drift + strategy tracking + quarterly snapshot + performance attribution + cash flow (fire and forget) ----
     runMoneyIntegrityCheck(sb, claimId, payment, prevState?.payment_snapshot).catch(console.error);
     updateDriftAnalytics(sb, feedback).catch(console.error);
+    trackStrategyExecution(sb, claimId, nextAction, payment, resistance).catch(console.error);
+    maybeCreateQuarterlySnapshot(sb, confidenceAdjustments).catch(console.error);
+    updatePerformanceAttribution(sb, claimId, claim, payment, resistance, nextAction, daysOpen).catch(console.error);
+    updateCashFlowForecast(sb).catch(console.error);
 
     return new Response(JSON.stringify({ success: true, state: masterState }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -175,7 +195,6 @@ function computeContextualConfidenceAdjustments(
 ): Record<string, number> {
   const adjustments: Record<string, number> = {};
   
-  // Group by action_type + context_key (resistance + gap bucket)
   const contextKey = (f: any) => {
     const r = f.resistance_at_action || "unknown";
     const g = f.gap_pct_at_action != null ? (f.gap_pct_at_action > 50 ? "high_gap" : f.gap_pct_at_action > 20 ? "med_gap" : "low_gap") : "unknown_gap";
@@ -193,12 +212,10 @@ function computeContextualConfidenceAdjustments(
     else byContext[key].negative++;
   }
 
-  // Apply contextual adjustments matching current state
   for (const [key, counts] of Object.entries(byContext)) {
     if (counts.total < 3) continue;
     const [actionType, resistance, gapBucket] = key.split("|");
     
-    // Only apply if context matches current state
     if (resistance !== currentResistance && resistance !== "unknown") continue;
     if (gapBucket !== currentGapBucket && gapBucket !== "unknown_gap") continue;
 
@@ -208,7 +225,6 @@ function computeContextualConfidenceAdjustments(
     else if (counts.done / counts.total > 0.8) adjustments[actionType] = Math.max(adjustments[actionType] ?? 0, 5);
   }
 
-  // Fallback: also apply global (non-contextual) if no contextual match found
   const globalByType: Record<string, { done: number; negative: number; total: number }> = {};
   for (const f of feedback) {
     if (!globalByType[f.action_type]) globalByType[f.action_type] = { done: 0, negative: 0, total: 0 };
@@ -286,13 +302,11 @@ function computeHealth(
 ): "green" | "yellow" | "red" {
   let riskScore = 0;
 
-  // Aging (gentle)
   if (daysOpen > 90) riskScore += 25;
   else if (daysOpen > 60) riskScore += 18;
   else if (daysOpen > 30) riskScore += 10;
   else if (daysOpen > 14) riskScore += 4;
 
-  // Carrier silence
   if (daysSinceCarrier !== null) {
     if (daysSinceCarrier > 30) riskScore += 22;
     else if (daysSinceCarrier > 21) riskScore += 15;
@@ -300,35 +314,28 @@ function computeHealth(
     else if (daysSinceCarrier > 7) riskScore += 3;
   }
 
-  // Overdue deadlines only
   const overdueCount = deadlines.filter((d: any) => new Date(d.deadline_date) < new Date()).length;
   riskScore += Math.min(overdueCount * 12, 25);
 
-  // Large gap
   if (payment.claimed > 0) {
     const gapPct = payment.gap / payment.claimed;
     if (gapPct > 0.6) riskScore += 12;
     else if (gapPct > 0.3) riskScore += 6;
   }
 
-  // Velocity stagnation
   if (payment.payment_velocity === 0 && payment.gap > 0 && daysOpen > 14) riskScore += 8;
   else if (payment.gap > 0 && payment.gap_stale_days !== null && payment.gap_stale_days > 30) riskScore += 10;
 
-  // Few docs
   if (files.length < 3 && daysOpen > 7) riskScore += 3;
 
-  // Strategic insights
   const insightScore = insights?.overall_health_score;
   if (insightScore !== null && insightScore !== undefined) {
     if (insightScore < 30) riskScore += 12;
     else if (insightScore < 50) riskScore += 5;
   }
 
-  // Denial
   if (claim.status === "Denied") riskScore += 12;
 
-  // CONSERVATIVE: red = real danger only
   if (riskScore >= 50) return "red";
   if (riskScore >= 25) return "yellow";
   return "green";
@@ -339,41 +346,33 @@ function computeResistance(
   claim: any, insights: any, emails: any[], checks: any[],
   daysSinceCarrier: number | null, prevState: MasterState | null
 ): "low" | "med" | "high" {
-  let score = 0; // 0-100, thresholds: low < 30, med < 60, high >= 60
+  let score = 0;
 
   const warnings = insights?.warnings || [];
   const criticals = warnings.filter((w: any) => w.severity === "critical" || w.severity === "high").length;
 
-  // ---- Escalation triggers ----
   if (claim.status === "Denied") score += 25;
   if (criticals >= 2) score += 25;
   else if (criticals >= 1) score += 15;
 
-  // Engineer involvement (check for engineer-related files/warnings)
   const hasEngineer = warnings.some((w: any) =>
     (w.title || w.message || "").toLowerCase().includes("engineer")
   );
   if (hasEngineer) score += 15;
 
-  // Silence > 21 days
   if (daysSinceCarrier !== null && daysSinceCarrier > 21) score += 15;
 
-  // 2+ partial payments without closure
   const partialPayments = checks.filter((c: any) => c.check_type !== "final");
   if (partialPayments.length >= 2 && claim.status !== "Claim Settled") score += 10;
 
-  // ---- Decay triggers (reduce resistance) ----
-  // Recent payment movement
   if (checks.length > 0) {
     const mostRecent = checks.sort((a: any, b: any) => new Date(b.check_date).getTime() - new Date(a.check_date).getTime())[0];
     const daysSincePayment = Math.floor((Date.now() - new Date(mostRecent.check_date).getTime()) / 86400000);
     if (daysSincePayment < 14) score -= 10;
   }
 
-  // Carrier responded within 7 days
   if (daysSinceCarrier !== null && daysSinceCarrier < 7) score -= 10;
 
-  // Gap decreased by 15%+ from previous state
   if (prevState?.payment_snapshot) {
     const prevGap = prevState.payment_snapshot.gap;
     const claimed = claim.claim_amount || 0;
@@ -396,7 +395,7 @@ function computeTone(resistance: "low" | "med" | "high"): "firm" | "standard" | 
   return "standard";
 }
 
-// ===================== NEXT ACTION (with escalation governance) =====================
+// ===================== NEXT ACTION (with escalation governance + penalty floor) =====================
 function computeNextAction(
   claim: any, phase: string, payment: PaymentSnapshot,
   deadlines: any[], emails: any[], files: any[], insights: any,
@@ -411,15 +410,11 @@ function computeNextAction(
 
   // ---- Stale Strategy Detection (with escalation governance) ----
   if (gapPct > 0.2 && (payment.gap_stale_days ?? 0) > 30 && outboundFollowUps >= 2) {
-    // Escalation governance: must meet ALL criteria
-    const hasMinConfidence = true; // Stale detection is inherently high confidence
     const stabilityBelowThreshold = stability.score < 40;
     const noPaymentMovement = (payment.gap_stale_days ?? 0) > 30;
     const hasFormalFollowUp = outboundFollowUps >= 1;
     
-    const governancePass = hasMinConfidence && stabilityBelowThreshold && noPaymentMovement && hasFormalFollowUp;
-    
-    if (governancePass) {
+    if (stabilityBelowThreshold && noPaymentMovement && hasFormalFollowUp) {
       const scores = {
         money_impact: payment.gap > 20000 ? 40 : payment.gap > 10000 ? 30 : 20,
         deadline_risk: 10,
@@ -604,10 +599,12 @@ function computeNextAction(
     });
   }
 
-  // Apply contextual confidence adjustments
+  // ---- Apply contextual confidence adjustments WITH PENALTY FLOOR ----
   for (const c of candidates) {
     const adj = confidenceAdjustments[c.type] || 0;
-    c.priority = Math.max(0, c.priority + adj);
+    const baseline = BASELINE_PRIORITY_WEIGHTS[c.type] ?? c.priority;
+    const floor = Math.round(baseline * PENALTY_FLOOR_PCT);
+    c.priority = Math.max(floor, c.priority + adj);
     if (adj < -10 && c.confidence === "high") c.confidence = "medium";
     else if (adj < -10 && c.confidence === "medium") c.confidence = "low";
   }
@@ -634,80 +631,41 @@ async function runMoneyIntegrityCheck(
 ) {
   const anomalies: { type: string; desc: string; severity: string }[] = [];
 
-  // Paid > Claimed
   if (payment.paid > payment.claimed && payment.claimed > 0) {
-    anomalies.push({
-      type: "paid_exceeds_claimed",
-      desc: `Paid ($${payment.paid.toLocaleString()}) exceeds claimed ($${payment.claimed.toLocaleString()})`,
-      severity: "warning",
-    });
+    anomalies.push({ type: "paid_exceeds_claimed", desc: `Paid ($${payment.paid.toLocaleString()}) exceeds claimed ($${payment.claimed.toLocaleString()})`, severity: "warning" });
   }
-
-  // RD available negative
   if (payment.rd_available < 0) {
-    anomalies.push({
-      type: "negative_rd",
-      desc: `Recoverable depreciation is negative: $${payment.rd_available}`,
-      severity: "warning",
-    });
+    anomalies.push({ type: "negative_rd", desc: `Recoverable depreciation is negative: $${payment.rd_available}`, severity: "warning" });
   }
-
-  // Velocity spike: if velocity > 5x previous, flag
   if (prevPayment && prevPayment.payment_velocity > 0 && payment.payment_velocity > prevPayment.payment_velocity * 5) {
-    anomalies.push({
-      type: "velocity_spike",
-      desc: `Payment velocity spiked from $${prevPayment.payment_velocity}/day to $${payment.payment_velocity}/day`,
-      severity: "info",
-    });
+    anomalies.push({ type: "velocity_spike", desc: `Payment velocity spiked from $${prevPayment.payment_velocity}/day to $${payment.payment_velocity}/day`, severity: "info" });
   }
-
-  // Gap flip: high to zero without payment
   if (prevPayment && prevPayment.gap > 5000 && payment.gap === 0 && payment.paid <= (prevPayment.paid || 0)) {
-    anomalies.push({
-      type: "gap_flip_no_payment",
-      desc: `Gap dropped from $${prevPayment.gap.toLocaleString()} to $0 without new payments`,
-      severity: "critical",
-    });
+    anomalies.push({ type: "gap_flip_no_payment", desc: `Gap dropped from $${prevPayment.gap.toLocaleString()} to $0 without new payments`, severity: "critical" });
   }
 
   if (anomalies.length === 0) return;
 
-  // Check for existing unresolved anomalies to avoid duplicates
-  const { data: existing } = await sb
-    .from("autopilot_anomaly_log")
-    .select("anomaly_type")
-    .eq("claim_id", claimId)
-    .eq("resolved", false);
-
+  const { data: existing } = await sb.from("autopilot_anomaly_log").select("anomaly_type").eq("claim_id", claimId).eq("resolved", false);
   const existingTypes = new Set((existing || []).map((e: any) => e.anomaly_type));
-
-  const newAnomalies = anomalies
-    .filter((a) => !existingTypes.has(a.type))
-    .map((a) => ({
-      claim_id: claimId,
-      anomaly_type: a.type,
-      description: a.desc,
-      severity: a.severity,
-    }));
-
-  if (newAnomalies.length > 0) {
-    await sb.from("autopilot_anomaly_log").insert(newAnomalies);
-  }
+  const newAnomalies = anomalies.filter((a) => !existingTypes.has(a.type)).map((a) => ({
+    claim_id: claimId, anomaly_type: a.type, description: a.desc, severity: a.severity,
+  }));
+  if (newAnomalies.length > 0) await sb.from("autopilot_anomaly_log").insert(newAnomalies);
 }
 
 // ===================== DRIFT ANALYTICS =====================
 async function updateDriftAnalytics(sb: any, feedback: any[]) {
-  if (feedback.length < 5) return; // Need minimum data
+  if (feedback.length < 5) return;
 
   const now = new Date();
   const periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
   const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
 
-  // Group by action_type + context
-  const byType: Record<string, { done: number; snooze: number; override: number; dismiss: number; totalPriority: number; count: number }> = {};
+  const byType: Record<string, { done: number; snooze: number; override: number; dismiss: number; count: number }> = {};
   for (const f of feedback) {
     const key = f.action_type;
-    if (!byType[key]) byType[key] = { done: 0, snooze: 0, override: 0, dismiss: 0, totalPriority: 0, count: 0 };
+    if (!byType[key]) byType[key] = { done: 0, snooze: 0, override: 0, dismiss: 0, count: 0 };
     byType[key][f.user_action as keyof typeof byType[string]] !== undefined && (byType[key] as any)[f.user_action]++;
     byType[key].count++;
   }
@@ -717,24 +675,163 @@ async function updateDriftAnalytics(sb: any, feedback: any[]) {
     const total = counts.done + counts.snooze + counts.override + counts.dismiss;
     const overrideRate = total > 0 ? Math.round((counts.override / total) * 100) : 0;
     const executionRate = total > 0 ? Math.round((counts.done / total) * 100) : 0;
-    const flagged = overrideRate > 40;
 
     await sb.from("autopilot_drift_analytics").upsert({
-      action_type: actionType,
-      context_key: "global",
-      period_start: periodStart,
-      period_end: periodEnd,
-      total_count: total,
-      done_count: counts.done,
-      snooze_count: counts.snooze,
-      override_count: counts.override,
-      dismiss_count: counts.dismiss,
-      override_rate: overrideRate,
-      execution_rate: executionRate,
-      flagged_misalignment: flagged,
-      updated_at: new Date().toISOString(),
+      action_type: actionType, context_key: "global", period_start: periodStart, period_end: periodEnd,
+      total_count: total, done_count: counts.done, snooze_count: counts.snooze,
+      override_count: counts.override, dismiss_count: counts.dismiss,
+      override_rate: overrideRate, execution_rate: executionRate,
+      flagged_misalignment: overrideRate > 40, updated_at: new Date().toISOString(),
     }, { onConflict: "action_type,context_key,period_start" });
   }
+}
+
+// ===================== STRATEGY OUTCOME TRACKING =====================
+async function trackStrategyExecution(
+  sb: any, claimId: string, nextAction: NextAction, payment: PaymentSnapshot, resistance: string
+) {
+  const strategyTypes = ["escalation_recommended", "deadline_overdue", "collect_payment"];
+  if (!strategyTypes.includes(nextAction.type)) return;
+
+  // Only log once per strategy type per claim per 7-day window
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+  const { data: recent } = await sb.from("strategy_outcome_tracking")
+    .select("id").eq("claim_id", claimId).eq("strategy_type", nextAction.type)
+    .gte("executed_at", weekAgo).limit(1);
+  if (recent && recent.length > 0) return;
+
+  const gapPct = payment.claimed > 0 ? Math.round((payment.gap / payment.claimed) * 100) : 0;
+  await sb.from("strategy_outcome_tracking").insert({
+    claim_id: claimId,
+    strategy_type: nextAction.type,
+    gap_at_execution: payment.gap,
+    gap_pct_at_execution: gapPct,
+    resistance_at_execution: resistance,
+  });
+}
+
+// ===================== QUARTERLY MODEL SNAPSHOT =====================
+async function maybeCreateQuarterlySnapshot(sb: any, confidenceAdjustments: Record<string, number>) {
+  // Check if we need a quarterly snapshot (every 90 days)
+  const { data: latest } = await sb.from("autopilot_model_snapshot")
+    .select("snapshot_date").order("snapshot_date", { ascending: false }).limit(1);
+  
+  const lastDate = latest?.[0]?.snapshot_date ? new Date(latest[0].snapshot_date) : null;
+  const daysSinceLast = lastDate ? Math.floor((Date.now() - lastDate.getTime()) / 86400000) : 999;
+  
+  if (daysSinceLast < 90) return;
+
+  // Fetch current drift analytics for summary
+  const { data: drift } = await sb.from("autopilot_drift_analytics")
+    .select("action_type, override_rate, execution_rate, flagged_misalignment")
+    .order("updated_at", { ascending: false }).limit(20);
+
+  await sb.from("autopilot_model_snapshot").insert({
+    snapshot_type: "quarterly",
+    scoring_weights: BASELINE_PRIORITY_WEIGHTS,
+    resistance_thresholds: { low_max: 30, med_max: 60, high_min: 60 },
+    health_parameters: {
+      aging_thresholds: [14, 30, 60, 90],
+      silence_thresholds: [7, 14, 21, 30],
+      red_threshold: 50,
+      yellow_threshold: 25,
+    },
+    confidence_adjustments: confidenceAdjustments,
+    escalation_governance: {
+      min_confidence: "medium",
+      max_stability: 40,
+      min_stale_days: 30,
+      min_followups: 1,
+      penalty_floor_pct: PENALTY_FLOOR_PCT,
+    },
+    drift_analytics_summary: drift || [],
+  });
+}
+
+// ===================== PERFORMANCE ATTRIBUTION =====================
+async function updatePerformanceAttribution(
+  sb: any, claimId: string, claim: any, payment: PaymentSnapshot,
+  resistance: string, nextAction: NextAction, daysOpen: number
+) {
+  // Only update on settled/closed claims or periodically
+  if (claim.status !== "Claim Settled" && claim.status !== "Dead File" && !claim.is_closed) return;
+
+  const gapRecoveryPct = payment.claimed > 0 ? Math.round((payment.paid / payment.claimed) * 100) : 0;
+  const carrierName = claim.insurance_companies?.name || claim.insurance_company || null;
+  const lossType = claim.loss_types?.name || claim.loss_type || null;
+
+  // Check if escalation was used
+  const { data: strategies } = await sb.from("strategy_outcome_tracking")
+    .select("strategy_type").eq("claim_id", claimId);
+  const escalationTypes = (strategies || [])
+    .filter((s: any) => s.strategy_type === "escalation_recommended")
+    .map((s: any) => s.strategy_type);
+
+  await sb.from("claim_performance_attribution").upsert({
+    claim_id: claimId,
+    revenue_captured: payment.paid,
+    gap_recovery_pct: gapRecoveryPct,
+    days_to_recovery: daysOpen,
+    escalation_used: escalationTypes.length > 0,
+    escalation_types: [...new Set(escalationTypes)],
+    resistance_peak_score: resistance === "high" ? 80 : resistance === "med" ? 45 : 15,
+    carrier_name: carrierName,
+    loss_type: lossType,
+    state_code: claim.state || null,
+    final_velocity: payment.payment_velocity,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "claim_id" });
+}
+
+// ===================== CASH FLOW FORECASTING =====================
+async function updateCashFlowForecast(sb: any) {
+  // Only recompute once per day
+  const today = new Date().toISOString().split("T")[0];
+  const { data: existing } = await sb.from("cash_flow_forecast")
+    .select("id").eq("forecast_date", today).limit(1);
+  if (existing && existing.length > 0) return;
+
+  // Fetch all active claim states
+  const { data: states } = await sb.from("claim_master_state")
+    .select("state_json, claim_id");
+  if (!states || states.length === 0) return;
+
+  let totalGap = 0;
+  let totalVelocity = 0;
+  let totalResistance = 0;
+  let activeCount = 0;
+
+  for (const s of states) {
+    const state = s.state_json as MasterState;
+    if (!state || state.phase === "Closeout") continue;
+    activeCount++;
+    totalGap += state.payment_snapshot?.gap || 0;
+    totalVelocity += state.payment_snapshot?.payment_velocity || 0;
+    const rScore = state.resistance === "high" ? 80 : state.resistance === "med" ? 45 : 15;
+    totalResistance += rScore;
+  }
+
+  const avgVelocity = activeCount > 0 ? Math.round((totalVelocity / activeCount) * 100) / 100 : 0;
+  const avgResistance = activeCount > 0 ? Math.round(totalResistance / activeCount) : 0;
+
+  // Forecast: velocity-based projection adjusted by resistance
+  const resistanceDrag = 1 - (avgResistance / 200); // 0.5 to 0.925
+  const dailyRecovery = totalVelocity * resistanceDrag;
+  const expected30d = Math.round(dailyRecovery * 30);
+  const expected60d = Math.round(dailyRecovery * 60);
+  const expected90dExposure = Math.max(0, Math.round(totalGap - dailyRecovery * 90));
+
+  await sb.from("cash_flow_forecast").upsert({
+    forecast_date: today,
+    expected_30d_recovery: expected30d,
+    expected_60d_recovery: expected60d,
+    expected_90d_exposure: expected90dExposure,
+    total_outstanding_gap: totalGap,
+    total_claims_active: activeCount,
+    avg_payment_velocity: avgVelocity,
+    avg_resistance_score: avgResistance,
+    methodology_notes: "Velocity-based projection with resistance drag factor",
+  }, { onConflict: "forecast_date" });
 }
 
 // ===================== GAP SORTING =====================

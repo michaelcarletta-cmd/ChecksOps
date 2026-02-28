@@ -393,6 +393,48 @@ export type Database = {
           },
         ]
       }
+      autopilot_model_snapshot: {
+        Row: {
+          confidence_adjustments: Json
+          created_at: string
+          drift_analytics_summary: Json
+          escalation_governance: Json
+          health_parameters: Json
+          id: string
+          notes: string | null
+          resistance_thresholds: Json
+          scoring_weights: Json
+          snapshot_date: string
+          snapshot_type: string
+        }
+        Insert: {
+          confidence_adjustments?: Json
+          created_at?: string
+          drift_analytics_summary?: Json
+          escalation_governance?: Json
+          health_parameters?: Json
+          id?: string
+          notes?: string | null
+          resistance_thresholds?: Json
+          scoring_weights?: Json
+          snapshot_date?: string
+          snapshot_type?: string
+        }
+        Update: {
+          confidence_adjustments?: Json
+          created_at?: string
+          drift_analytics_summary?: Json
+          escalation_governance?: Json
+          health_parameters?: Json
+          id?: string
+          notes?: string | null
+          resistance_thresholds?: Json
+          scoring_weights?: Json
+          snapshot_date?: string
+          snapshot_type?: string
+        }
+        Relationships: []
+      }
       bank_balance: {
         Row: {
           balance: number
@@ -718,6 +760,48 @@ export type Database = {
             referencedColumns: ["scenario_key"]
           },
         ]
+      }
+      cash_flow_forecast: {
+        Row: {
+          avg_payment_velocity: number | null
+          avg_resistance_score: number | null
+          created_at: string
+          expected_30d_recovery: number | null
+          expected_60d_recovery: number | null
+          expected_90d_exposure: number | null
+          forecast_date: string
+          id: string
+          methodology_notes: string | null
+          total_claims_active: number | null
+          total_outstanding_gap: number | null
+        }
+        Insert: {
+          avg_payment_velocity?: number | null
+          avg_resistance_score?: number | null
+          created_at?: string
+          expected_30d_recovery?: number | null
+          expected_60d_recovery?: number | null
+          expected_90d_exposure?: number | null
+          forecast_date?: string
+          id?: string
+          methodology_notes?: string | null
+          total_claims_active?: number | null
+          total_outstanding_gap?: number | null
+        }
+        Update: {
+          avg_payment_velocity?: number | null
+          avg_resistance_score?: number | null
+          created_at?: string
+          expected_30d_recovery?: number | null
+          expected_60d_recovery?: number | null
+          expected_90d_exposure?: number | null
+          forecast_date?: string
+          id?: string
+          methodology_notes?: string | null
+          total_claims_active?: number | null
+          total_outstanding_gap?: number | null
+        }
+        Relationships: []
       }
       causation_rubric_weights: {
         Row: {
@@ -2594,6 +2678,68 @@ export type Database = {
             foreignKeyName: "claim_payments_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_performance_attribution: {
+        Row: {
+          carrier_name: string | null
+          claim_id: string
+          created_at: string
+          days_to_recovery: number | null
+          escalation_types: string[] | null
+          escalation_used: boolean | null
+          final_velocity: number | null
+          gap_recovery_pct: number | null
+          id: string
+          loss_type: string | null
+          resistance_peak_score: number | null
+          revenue_captured: number | null
+          state_code: string | null
+          strategy_used: string | null
+          updated_at: string
+        }
+        Insert: {
+          carrier_name?: string | null
+          claim_id: string
+          created_at?: string
+          days_to_recovery?: number | null
+          escalation_types?: string[] | null
+          escalation_used?: boolean | null
+          final_velocity?: number | null
+          gap_recovery_pct?: number | null
+          id?: string
+          loss_type?: string | null
+          resistance_peak_score?: number | null
+          revenue_captured?: number | null
+          state_code?: string | null
+          strategy_used?: string | null
+          updated_at?: string
+        }
+        Update: {
+          carrier_name?: string | null
+          claim_id?: string
+          created_at?: string
+          days_to_recovery?: number | null
+          escalation_types?: string[] | null
+          escalation_used?: boolean | null
+          final_velocity?: number | null
+          gap_recovery_pct?: number | null
+          id?: string
+          loss_type?: string | null
+          resistance_peak_score?: number | null
+          revenue_captured?: number | null
+          state_code?: string | null
+          strategy_used?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_performance_attribution_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
             referencedRelation: "claims"
             referencedColumns: ["id"]
           },
@@ -6477,6 +6623,62 @@ export type Database = {
           version_name?: string
         }
         Relationships: []
+      }
+      strategy_outcome_tracking: {
+        Row: {
+          claim_id: string
+          created_at: string
+          executed_at: string
+          gap_at_execution: number | null
+          gap_pct_at_execution: number | null
+          gap_reduction_pct_30d: number | null
+          id: string
+          outcome_measured: boolean | null
+          outcome_measured_at: string | null
+          payment_30d_after: number | null
+          resistance_at_execution: string | null
+          resistance_change: string | null
+          strategy_type: string
+        }
+        Insert: {
+          claim_id: string
+          created_at?: string
+          executed_at?: string
+          gap_at_execution?: number | null
+          gap_pct_at_execution?: number | null
+          gap_reduction_pct_30d?: number | null
+          id?: string
+          outcome_measured?: boolean | null
+          outcome_measured_at?: string | null
+          payment_30d_after?: number | null
+          resistance_at_execution?: string | null
+          resistance_change?: string | null
+          strategy_type: string
+        }
+        Update: {
+          claim_id?: string
+          created_at?: string
+          executed_at?: string
+          gap_at_execution?: number | null
+          gap_pct_at_execution?: number | null
+          gap_reduction_pct_30d?: number | null
+          id?: string
+          outcome_measured?: boolean | null
+          outcome_measured_at?: string | null
+          payment_30d_after?: number | null
+          resistance_at_execution?: string | null
+          resistance_change?: string | null
+          strategy_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "strategy_outcome_tracking_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       task_automations: {
         Row: {
