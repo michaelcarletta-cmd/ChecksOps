@@ -112,6 +112,65 @@ Deno.serve(async (req) => {
     const claim = claimRes.data;
     if (!claim) throw new Error("Claim not found");
 
+    // ===================== AUTOMATION MODE GATE =====================
+    const automationMode: string = claim.automation_mode || "active";
+
+    // Check if auto-resume should trigger
+    if ((automationMode === "passive" || automationMode === "suspended") && claim.automation_resume_at) {
+      const resumeAt = new Date(claim.automation_resume_at);
+      if (resumeAt <= new Date()) {
+        await sb.from("claims").update({ automation_mode: "active", automation_resume_at: null }).eq("id", claimId);
+        // Continue as active
+      }
+    }
+
+    // CLOSED: Autopilot fully disabled — only persist minimal state for portfolio attribution
+    if (automationMode === "closed") {
+      const checks = checksRes.data || [];
+      const payment = computePayment(claim, checks, null, 1);
+      const closedState: MasterState = {
+        phase: "Closeout",
+        phase_label: "Closed",
+        health: "green",
+        resistance: "low",
+        next_action: { type: "none", summary: "Claim closed", due_at: null, draft_id: null, why: "Automation disabled – claim closed", priority: 0, confidence: "high", bullets: [], tone: "standard", scores: { money_impact: 0, deadline_risk: 0, aging: 0, resistance: 0 } },
+        payment_snapshot: payment,
+        gap_analysis: [],
+        last_contact_at: null,
+        last_payment_at: null,
+        days_open: 0,
+        days_since_carrier: null,
+        stability_index: { score: 100, payment_velocity: 0, carrier_response_consistency: 0, unresolved_gap_ratio: 0, deadline_pressure: 0 },
+      };
+      await sb.from("claim_master_state").upsert({ claim_id: claimId, state_json: closedState, updated_at: new Date().toISOString() }, { onConflict: "claim_id" });
+      return new Response(JSON.stringify({ success: true, state: closedState, automation_mode: "closed" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // SUSPENDED: No scoring, no next action, no health degradation — only financial exposure for portfolio
+    if (automationMode === "suspended") {
+      const checks = checksRes.data || [];
+      const payment = computePayment(claim, checks, null, 1);
+      const prevState = prevStateRes.data?.state_json as MasterState | null;
+      const suspendedState: MasterState = {
+        phase: prevState?.phase || "Negotiation",
+        phase_label: "Suspended",
+        health: "green",
+        resistance: prevState?.resistance || "low",
+        next_action: { type: "none", summary: "Automation suspended", due_at: null, draft_id: null, why: "Claim is in suspended mode (appraisal, litigation, or hold)", priority: 0, confidence: "high", bullets: [], tone: "standard", scores: { money_impact: 0, deadline_risk: 0, aging: 0, resistance: 0 } },
+        payment_snapshot: payment,
+        gap_analysis: prevState?.gap_analysis || [],
+        last_contact_at: prevState?.last_contact_at || null,
+        last_payment_at: prevState?.last_payment_at || null,
+        days_open: prevState?.days_open || 0,
+        days_since_carrier: prevState?.days_since_carrier || null,
+        stability_index: prevState?.stability_index || { score: 50, payment_velocity: 0, carrier_response_consistency: 0, unresolved_gap_ratio: 0, deadline_pressure: 0 },
+      };
+      await sb.from("claim_master_state").upsert({ claim_id: claimId, state_json: suspendedState, updated_at: new Date().toISOString() }, { onConflict: "claim_id" });
+      // Still run money anomaly check for suspended claims (financial integrity)
+      runMoneyIntegrityCheck(sb, claimId, payment, prevState?.payment_snapshot).catch(console.error);
+      return new Response(JSON.stringify({ success: true, state: suspendedState, automation_mode: "suspended" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     const checks = checksRes.data || [];
     const emails = emailsRes.data || [];
     const files = filesRes.data || [];
@@ -142,20 +201,40 @@ Deno.serve(async (req) => {
     // ---- Phase ----
     const phase = computePhase(claim, checks, files, emails, payment);
 
-    // ---- Health (conservative) ----
-    const health = computeHealth(insights, claim, files, deadlines, daysOpen, daysSinceCarrier, payment);
+    // ---- PASSIVE MODE: monitor only — no cadence, no escalation, no health degradation ----
+    const isPassive = automationMode === "passive";
+
+    // ---- Health (conservative) — passive claims stay green ----
+    const health = isPassive ? "green" : computeHealth(insights, claim, files, deadlines, daysOpen, daysSinceCarrier, payment);
 
     // ---- Stability Index ----
     const stability = computeStabilityIndex(payment, emails, deadlines, daysOpen, daysSinceCarrier);
 
-    // ---- Next Action (with escalation governance + penalty floor) ----
-    const nextAction = computeNextAction(claim, phase, payment, deadlines, emails, files, insights, daysOpen, daysSinceCarrier, resistance, confidenceAdjustments, stability, carrierProfile);
+    // ---- Next Action ----
+    let nextAction: NextAction;
+    if (isPassive) {
+      // Passive: no cadence follow-ups, no escalation — only money anomaly + cash-now detection
+      nextAction = {
+        type: "monitoring",
+        summary: "Monitoring – no active follow-ups",
+        due_at: null,
+        draft_id: null,
+        why: "Claim is in passive mode (waiting on insured, contractor, mortgage, or payment clearing)",
+        priority: 0,
+        confidence: "high",
+        bullets: [],
+        tone: "standard",
+        scores: { money_impact: 0, deadline_risk: 0, aging: 0, resistance: 0 },
+      };
+    } else {
+      nextAction = computeNextAction(claim, phase, payment, deadlines, emails, files, insights, daysOpen, daysSinceCarrier, resistance, confidenceAdjustments, stability, carrierProfile);
+    }
 
     // ---- Gap Analysis ----
     const gaps = sortGaps(insights?.evidence_gaps || []);
 
     // ---- Phase label ----
-    const phaseLabel = buildPhaseLabel(phase, payment);
+    const phaseLabel = isPassive ? "Passive – Monitoring" : buildPhaseLabel(phase, payment);
 
     const masterState: MasterState = {
       phase,
@@ -181,15 +260,20 @@ Deno.serve(async (req) => {
       );
     if (upsertError) throw upsertError;
 
-    // ---- Background: Money integrity + drift + strategy tracking + quarterly snapshot + performance attribution + cash flow (fire and forget) ----
+    // ---- Background tasks ----
+    // Money integrity + cash flow always run (even passive)
     runMoneyIntegrityCheck(sb, claimId, payment, prevState?.payment_snapshot).catch(console.error);
-    updateDriftAnalytics(sb, feedback).catch(console.error);
-    trackStrategyExecution(sb, claimId, nextAction, payment, resistance).catch(console.error);
-    maybeCreateQuarterlySnapshot(sb, confidenceAdjustments).catch(console.error);
-    updatePerformanceAttribution(sb, claimId, claim, payment, resistance, nextAction, daysOpen).catch(console.error);
     updateCashFlowForecast(sb).catch(console.error);
 
-    return new Response(JSON.stringify({ success: true, state: masterState }), {
+    // Active-only background tasks
+    if (!isPassive) {
+      updateDriftAnalytics(sb, feedback).catch(console.error);
+      trackStrategyExecution(sb, claimId, nextAction, payment, resistance).catch(console.error);
+      maybeCreateQuarterlySnapshot(sb, confidenceAdjustments).catch(console.error);
+      updatePerformanceAttribution(sb, claimId, claim, payment, resistance, nextAction, daysOpen).catch(console.error);
+    }
+
+    return new Response(JSON.stringify({ success: true, state: masterState, automation_mode: automationMode }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e: any) {

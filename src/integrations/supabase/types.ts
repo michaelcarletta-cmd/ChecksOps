@@ -3551,6 +3551,8 @@ export type Database = {
           adjuster_name: string | null
           adjuster_phone: string | null
           ale_limit: number | null
+          automation_mode: Database["public"]["Enums"]["automation_mode"]
+          automation_resume_at: string | null
           claim_amount: number | null
           claim_email_id: string | null
           claim_number: string | null
@@ -3618,6 +3620,8 @@ export type Database = {
           adjuster_name?: string | null
           adjuster_phone?: string | null
           ale_limit?: number | null
+          automation_mode?: Database["public"]["Enums"]["automation_mode"]
+          automation_resume_at?: string | null
           claim_amount?: number | null
           claim_email_id?: string | null
           claim_number?: string | null
@@ -3685,6 +3689,8 @@ export type Database = {
           adjuster_name?: string | null
           adjuster_phone?: string | null
           ale_limit?: number | null
+          automation_mode?: Database["public"]["Enums"]["automation_mode"]
+          automation_resume_at?: string | null
           claim_amount?: number | null
           claim_email_id?: string | null
           claim_number?: string | null
@@ -7233,27 +7239,23 @@ export type Database = {
     Views: {
       portfolio_carrier_analytics: {
         Row: {
-          active_claims: number | null
-          avg_payment_velocity: number | null
-          carrier_name: string | null
-          computed_at: string | null
-          high_resistance_pct: number | null
+          avg_days_open: number | null
+          carrier: string | null
+          denied_count: number | null
+          total_claimed: number | null
           total_claims: number | null
-          total_gap: number | null
+          total_paid: number | null
         }
         Relationships: []
       }
       portfolio_intelligence: {
         Row: {
-          active_claims: number | null
-          at_risk_count: number | null
-          at_risk_pct: number | null
-          avg_payment_velocity: number | null
-          computed_at: string | null
-          total_claimed: number | null
-          total_claims: number | null
+          avg_days_open: number | null
+          denied_claims: number | null
+          pct_at_risk: number | null
+          total_active_claims: number | null
           total_outstanding_gap: number | null
-          total_paid: number | null
+          total_unreleased_depreciation: number | null
         }
         Relationships: []
       }
@@ -7324,6 +7326,8 @@ export type Database = {
           adjuster_name: string | null
           adjuster_phone: string | null
           ale_limit: number | null
+          automation_mode: Database["public"]["Enums"]["automation_mode"]
+          automation_resume_at: string | null
           claim_amount: number | null
           claim_email_id: string | null
           claim_number: string | null
@@ -7576,6 +7580,7 @@ export type Database = {
         | "contractor"
         | "referrer"
         | "read_only"
+      automation_mode: "active" | "passive" | "suspended" | "closed"
       claim_doc_decision:
         | "deny_full"
         | "deny_partial"
@@ -7771,6 +7776,7 @@ export const Constants = {
         "referrer",
         "read_only",
       ],
+      automation_mode: ["active", "passive", "suspended", "closed"],
       claim_doc_decision: [
         "deny_full",
         "deny_partial",
