@@ -55,6 +55,9 @@ interface MasterState {
   days_open: number;
   days_since_carrier: number | null;
   stability_index: StabilityIndex;
+  automation_mode: "active" | "passive" | "suspended" | "closed";
+  automation_reason?: string;
+  automation_resume_at?: string | null;
 }
 
 // ===================== BASELINE PRIORITY WEIGHTS (frozen quarterly) =====================
@@ -113,14 +116,15 @@ Deno.serve(async (req) => {
     if (!claim) throw new Error("Claim not found");
 
     // ===================== AUTOMATION MODE GATE =====================
-    const automationMode: string = claim.automation_mode || "active";
+    let automationMode: string = claim.automation_mode || "active";
+    let automationReason: string | undefined = undefined;
 
     // Check if auto-resume should trigger
     if ((automationMode === "passive" || automationMode === "suspended") && claim.automation_resume_at) {
       const resumeAt = new Date(claim.automation_resume_at);
       if (resumeAt <= new Date()) {
         await sb.from("claims").update({ automation_mode: "active", automation_resume_at: null }).eq("id", claimId);
-        // Continue as active
+        automationMode = "active";
       }
     }
 
@@ -129,18 +133,12 @@ Deno.serve(async (req) => {
       const checks = checksRes.data || [];
       const payment = computePayment(claim, checks, null, 1);
       const closedState: MasterState = {
-        phase: "Closeout",
-        phase_label: "Closed",
-        health: "green",
-        resistance: "low",
+        phase: "Closeout", phase_label: "Closed", health: "green", resistance: "low",
         next_action: { type: "none", summary: "Claim closed", due_at: null, draft_id: null, why: "Automation disabled – claim closed", priority: 0, confidence: "high", bullets: [], tone: "standard", scores: { money_impact: 0, deadline_risk: 0, aging: 0, resistance: 0 } },
-        payment_snapshot: payment,
-        gap_analysis: [],
-        last_contact_at: null,
-        last_payment_at: null,
-        days_open: 0,
-        days_since_carrier: null,
+        payment_snapshot: payment, gap_analysis: [], last_contact_at: null, last_payment_at: null,
+        days_open: 0, days_since_carrier: null,
         stability_index: { score: 100, payment_velocity: 0, carrier_response_consistency: 0, unresolved_gap_ratio: 0, deadline_pressure: 0 },
+        automation_mode: "closed",
       };
       await sb.from("claim_master_state").upsert({ claim_id: claimId, state_json: closedState, updated_at: new Date().toISOString() }, { onConflict: "claim_id" });
       return new Response(JSON.stringify({ success: true, state: closedState, automation_mode: "closed" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -152,21 +150,18 @@ Deno.serve(async (req) => {
       const payment = computePayment(claim, checks, null, 1);
       const prevState = prevStateRes.data?.state_json as MasterState | null;
       const suspendedState: MasterState = {
-        phase: prevState?.phase || "Negotiation",
-        phase_label: "Suspended",
-        health: "green",
+        phase: prevState?.phase || "Negotiation", phase_label: "Suspended", health: "green",
         resistance: prevState?.resistance || "low",
         next_action: { type: "none", summary: "Automation suspended", due_at: null, draft_id: null, why: "Claim is in suspended mode (appraisal, litigation, or hold)", priority: 0, confidence: "high", bullets: [], tone: "standard", scores: { money_impact: 0, deadline_risk: 0, aging: 0, resistance: 0 } },
-        payment_snapshot: payment,
-        gap_analysis: prevState?.gap_analysis || [],
-        last_contact_at: prevState?.last_contact_at || null,
-        last_payment_at: prevState?.last_payment_at || null,
-        days_open: prevState?.days_open || 0,
-        days_since_carrier: prevState?.days_since_carrier || null,
+        payment_snapshot: payment, gap_analysis: prevState?.gap_analysis || [],
+        last_contact_at: prevState?.last_contact_at || null, last_payment_at: prevState?.last_payment_at || null,
+        days_open: prevState?.days_open || 0, days_since_carrier: prevState?.days_since_carrier || null,
         stability_index: prevState?.stability_index || { score: 50, payment_velocity: 0, carrier_response_consistency: 0, unresolved_gap_ratio: 0, deadline_pressure: 0 },
+        automation_mode: "suspended",
+        automation_reason: "Appraisal, litigation, or regulatory hold",
+        automation_resume_at: claim.automation_resume_at || null,
       };
       await sb.from("claim_master_state").upsert({ claim_id: claimId, state_json: suspendedState, updated_at: new Date().toISOString() }, { onConflict: "claim_id" });
-      // Still run money anomaly check for suspended claims (financial integrity)
       runMoneyIntegrityCheck(sb, claimId, payment, prevState?.payment_snapshot).catch(console.error);
       return new Response(JSON.stringify({ success: true, state: suspendedState, automation_mode: "suspended" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -201,6 +196,26 @@ Deno.serve(async (req) => {
     // ---- Phase ----
     const phase = computePhase(claim, checks, files, emails, payment);
 
+    // ===================== AUTO-SWITCHING LOGIC =====================
+    // Auto-switch to PASSIVE when clear waiting conditions exist
+    if (automationMode === "active") {
+      const autoPassiveReason = detectAutoPassiveReason(claim, files, checks, emails, payment, phase);
+      if (autoPassiveReason) {
+        automationMode = "passive";
+        automationReason = autoPassiveReason;
+        await sb.from("claims").update({ automation_mode: "passive" }).eq("id", claimId);
+      }
+    }
+    // Auto-switch PASSIVE → ACTIVE when new carrier activity detected
+    if (automationMode === "passive" && prevState?.automation_mode === "passive") {
+      const autoResumeReason = detectAutoResumeReason(emails, checks, claim, prevState);
+      if (autoResumeReason) {
+        automationMode = "active";
+        automationReason = undefined;
+        await sb.from("claims").update({ automation_mode: "active", automation_resume_at: null }).eq("id", claimId);
+      }
+    }
+
     // ---- PASSIVE MODE: monitor only — no cadence, no escalation, no health degradation ----
     const isPassive = automationMode === "passive";
 
@@ -213,19 +228,8 @@ Deno.serve(async (req) => {
     // ---- Next Action ----
     let nextAction: NextAction;
     if (isPassive) {
-      // Passive: no cadence follow-ups, no escalation — only money anomaly + cash-now detection
-      nextAction = {
-        type: "monitoring",
-        summary: "Monitoring – no active follow-ups",
-        due_at: null,
-        draft_id: null,
-        why: "Claim is in passive mode (waiting on insured, contractor, mortgage, or payment clearing)",
-        priority: 0,
-        confidence: "high",
-        bullets: [],
-        tone: "standard",
-        scores: { money_impact: 0, deadline_risk: 0, aging: 0, resistance: 0 },
-      };
+      // Passive: allow "Cash Now" actions only (collect_payment, RD release, check status, mortgage endorsement)
+      nextAction = computePassiveCashNowAction(claim, payment, checks, phase);
     } else {
       nextAction = computeNextAction(claim, phase, payment, deadlines, emails, files, insights, daysOpen, daysSinceCarrier, resistance, confidenceAdjustments, stability, carrierProfile);
     }
@@ -249,6 +253,9 @@ Deno.serve(async (req) => {
       days_open: daysOpen,
       days_since_carrier: daysSinceCarrier,
       stability_index: stability,
+      automation_mode: automationMode as MasterState["automation_mode"],
+      automation_reason: automationReason,
+      automation_resume_at: claim.automation_resume_at || null,
     };
 
     // ---- Persist state ----
@@ -261,11 +268,9 @@ Deno.serve(async (req) => {
     if (upsertError) throw upsertError;
 
     // ---- Background tasks ----
-    // Money integrity + cash flow always run (even passive)
     runMoneyIntegrityCheck(sb, claimId, payment, prevState?.payment_snapshot).catch(console.error);
     updateCashFlowForecast(sb).catch(console.error);
 
-    // Active-only background tasks
     if (!isPassive) {
       updateDriftAnalytics(sb, feedback).catch(console.error);
       trackStrategyExecution(sb, claimId, nextAction, payment, resistance).catch(console.error);
@@ -802,6 +807,119 @@ function computeNextAction(
 }
 
 // ===================== MONEY INTEGRITY CHECK =====================
+// ===================== AUTO-PASSIVE DETECTION =====================
+function detectAutoPassiveReason(
+  claim: any, files: any[], checks: any[], emails: any[], payment: PaymentSnapshot, phase: string
+): string | null {
+  // Don't auto-passive during intake or closeout
+  if (phase === "Intake" || phase === "Closeout") return null;
+
+  // Payment issued but not received (check issued recently, gap still open)
+  if (checks.length > 0) {
+    const latestCheck = checks.sort((a: any, b: any) => new Date(b.check_date).getTime() - new Date(a.check_date).getTime())[0];
+    const daysSinceCheck = Math.floor((Date.now() - new Date(latestCheck.check_date).getTime()) / 86400000);
+    if (daysSinceCheck < 14 && !latestCheck.received_date && payment.gap > 0) {
+      return "Payment issued but not yet received";
+    }
+  }
+
+  // Check for specific blocker tasks/notes indicating waiting states
+  // (These are detected from claim status or construction status patterns)
+  const status = (claim.status || "").toLowerCase();
+  const constructionStatus = (claim.construction_status || "").toLowerCase();
+  
+  if (constructionStatus.includes("in progress") || constructionStatus.includes("repairs")) {
+    return "Repairs in progress – waiting for completion";
+  }
+
+  if (status.includes("waiting") || status.includes("pending insured") || status.includes("pending docs")) {
+    return "Waiting on insured documentation";
+  }
+
+  return null;
+}
+
+// ===================== AUTO-RESUME DETECTION =====================
+function detectAutoResumeReason(
+  emails: any[], checks: any[], claim: any, prevState: MasterState | null
+): string | null {
+  // New carrier email since last state
+  if (prevState?.last_contact_at && emails.length > 0) {
+    const latestEmail = emails[0];
+    if (latestEmail.direction === "inbound" && new Date(latestEmail.created_at) > new Date(prevState.last_contact_at)) {
+      return "New carrier email received";
+    }
+  }
+
+  // New payment posted
+  if (prevState?.last_payment_at) {
+    const latestPaymentAt = checks.length > 0
+      ? checks.sort((a: any, b: any) => new Date(b.check_date).getTime() - new Date(a.check_date).getTime())[0].check_date
+      : null;
+    if (latestPaymentAt && new Date(latestPaymentAt) > new Date(prevState.last_payment_at)) {
+      return "New payment posted";
+    }
+  }
+
+  // New denial
+  if (claim.status === "Denied" && prevState?.phase !== "Closeout") {
+    return "Denial received – requires active response";
+  }
+
+  return null;
+}
+
+// ===================== PASSIVE CASH NOW ACTIONS =====================
+function computePassiveCashNowAction(
+  claim: any, payment: PaymentSnapshot, checks: any[], phase: string
+): NextAction {
+  const defaultPassive: NextAction = {
+    type: "monitoring",
+    summary: "Monitoring – no active follow-ups",
+    due_at: null, draft_id: null,
+    why: "Claim is in passive mode – Darwin monitors but does not push",
+    priority: 0, confidence: "high", bullets: [], tone: "standard",
+    scores: { money_impact: 0, deadline_risk: 0, aging: 0, resistance: 0 },
+  };
+
+  // Cash Now: RD available to collect
+  if (payment.rd_available > 0 && phase === "Payment") {
+    return {
+      type: "collect_rd",
+      summary: `$${payment.rd_available.toLocaleString()} Recoverable Depreciation Available`,
+      due_at: null, draft_id: null,
+      why: `RD of $${payment.rd_available.toLocaleString()} can be collected now – productive even while passive`,
+      priority: 60, confidence: "high", bullets: [
+        `RD available: $${payment.rd_available.toLocaleString()}`,
+        "Submit completion documentation to release RD",
+        "This action is allowed in passive mode",
+      ], tone: "standard",
+      scores: { money_impact: 40, deadline_risk: 0, aging: 10, resistance: 0 },
+    };
+  }
+
+  // Cash Now: Outstanding payment gap with recent check not yet received
+  if (payment.gap > 0 && checks.length > 0) {
+    const latestCheck = checks.sort((a: any, b: any) => new Date(b.check_date).getTime() - new Date(a.check_date).getTime())[0];
+    if (!latestCheck.received_date) {
+      return {
+        type: "collect_payment",
+        summary: `Check Issued – Confirm Receipt of $${latestCheck.amount?.toLocaleString() || "0"}`,
+        due_at: null, draft_id: null,
+        why: "Check was issued but not marked as received – confirm and deposit",
+        priority: 50, confidence: "high", bullets: [
+          `Check #${latestCheck.check_number || "N/A"}: $${latestCheck.amount?.toLocaleString() || "0"}`,
+          "Confirm receipt and deposit",
+          "This action is allowed in passive mode",
+        ], tone: "standard",
+        scores: { money_impact: 30, deadline_risk: 0, aging: 10, resistance: 0 },
+      };
+    }
+  }
+
+  return defaultPassive;
+}
+
 async function runMoneyIntegrityCheck(
   sb: any, claimId: string, payment: PaymentSnapshot, prevPayment?: PaymentSnapshot | null
 ) {
