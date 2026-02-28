@@ -175,17 +175,15 @@ export function DarwinCockpit({ claimId, claim, onNavigateSection }: DarwinCockp
     const ps = masterState.payment_snapshot;
     const gapPct = ps && ps.claimed > 0 ? Math.round((ps.gap / ps.claimed) * 100) : 0;
     try {
-      await supabase.from("autopilot_action_feedback").insert({
+      const { error } = await supabase.from("autopilot_action_feedback").insert({
         claim_id: claimId,
         action_type: na.type,
         action_summary: na.summary,
-        confidence: na.confidence,
+        confidence: na.confidence || "medium",
         user_action: userAction,
-        priority_score: na.priority,
-        resistance_at_action: masterState.resistance,
-        gap_pct_at_action: gapPct,
-        phase_at_action: masterState.phase,
+        priority_score: na.priority ?? null,
       });
+      if (error) console.error("Feedback insert error:", error);
     } catch (e) {
       console.error("Feedback tracking error:", e);
     }
