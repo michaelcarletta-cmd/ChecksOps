@@ -1,5 +1,6 @@
-import { useState, useEffect, lazy, Suspense, useMemo } from "react";
+import { useState, useEffect, lazy, Suspense, useMemo, useCallback } from "react";
 import { Brain, Loader2, MessageSquare, FileText, Shield, Calculator, Zap, Search, Clock, Sparkles, Swords, Building2, AlertCircle, Eye, Clipboard, Send, type LucideIcon } from "lucide-react";
+import { DarwinCockpit } from "./DarwinCockpit";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -445,20 +446,16 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
     switch (activeWorkspace) {
       case "claim-intelligence":
         return (
-          <>
-            <DarwinInsightsPanel claimId={claimId} claim={claim} />
-            <DarwinEscalationEngine claimId={claimId} claim={claim} />
-            <CarrierScenarioPlaybook claimId={claimId} claim={claim} />
-            <DarwinSecondBrain claimId={claimId} claim={claim} />
-            <div className="grid gap-4 lg:grid-cols-2">
-              <DarwinClaimBriefing claimId={claimId} claim={claim} />
-              <DarwinNextSteps claimId={claimId} claim={claim} />
-            </div>
-            <DarwinButForCausation claimId={claimId} claim={claim} />
-            <DarwinOutcomePredictor claimId={claimId} claim={claim} />
-            <DarwinWeatherHistory claimId={claimId} claim={claim} />
-            <DarwinWeaknessDetection claimId={claimId} claim={claim} />
-          </>
+          <DarwinCockpit
+            claimId={claimId}
+            claim={claim}
+            onNavigateSection={(section) => {
+              const targetWorkspace = section as DarwinWorkspaceKey;
+              if (workspaceSections.some(s => s.key === targetWorkspace)) {
+                setActiveWorkspace(targetWorkspace);
+              }
+            }}
+          />
         );
       case "document-analysis":
         return (

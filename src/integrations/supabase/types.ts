@@ -2185,6 +2185,32 @@ export type Database = {
           },
         ]
       }
+      claim_master_state: {
+        Row: {
+          claim_id: string
+          state_json: Json
+          updated_at: string
+        }
+        Insert: {
+          claim_id: string
+          state_json?: Json
+          updated_at?: string
+        }
+        Update: {
+          claim_id?: string
+          state_json?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_master_state_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_outcome_events: {
         Row: {
           carrier: string
