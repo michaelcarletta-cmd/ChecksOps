@@ -19,8 +19,12 @@ import {
   CheckSquare, 
   TrendingUp,
   History,
-  Settings2
+  Settings2,
+  Pause,
+  Ban,
+  Power
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -36,6 +40,7 @@ interface ClaimAutonomySettingsProps {
 }
 
 type AutonomyLevel = 'supervised' | 'semi_autonomous' | 'fully_autonomous';
+type AutomationMode = 'active' | 'passive' | 'suspended' | 'closed';
 
 interface ClaimAutomation {
   id: string;
@@ -65,6 +70,62 @@ export const ClaimAutonomySettings = ({ claimId }: ClaimAutonomySettingsProps) =
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showActionLog, setShowActionLog] = useState(false);
+  const [automationReason, setAutomationReason] = useState("");
+
+  // Fetch automation_mode from claims table
+  const { data: claimScope } = useQuery({
+    queryKey: ["claim-automation-mode", claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claims")
+        .select("automation_mode, automation_resume_at")
+        .eq("id", claimId)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { automation_mode: AutomationMode; automation_resume_at: string | null } | null;
+    },
+  });
+
+  const updateModeMutation = useMutation({
+    mutationFn: async (mode: AutomationMode) => {
+      const updates: Record<string, any> = { automation_mode: mode };
+      if (mode === 'active') {
+        updates.automation_resume_at = null;
+      }
+      const { error } = await supabase
+        .from("claims")
+        .update(updates)
+        .eq("id", claimId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["claim-automation-mode", claimId] });
+      toast({ title: "Automation Scope Updated" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const currentMode = claimScope?.automation_mode || 'active';
+
+  const getModeBadgeColor = (mode: AutomationMode) => {
+    switch (mode) {
+      case 'active': return 'bg-green-500/20 text-green-500';
+      case 'passive': return 'bg-amber-500/20 text-amber-500';
+      case 'suspended': return 'bg-red-500/20 text-red-500';
+      case 'closed': return 'bg-muted text-muted-foreground';
+    }
+  };
+
+  const getModeIcon = (mode: AutomationMode) => {
+    switch (mode) {
+      case 'active': return <Power className="h-3 w-3" />;
+      case 'passive': return <Eye className="h-3 w-3" />;
+      case 'suspended': return <Pause className="h-3 w-3" />;
+      case 'closed': return <Ban className="h-3 w-3" />;
+    }
+  };
 
   const { data: automation, isLoading } = useQuery({
     queryKey: ["claim-automation-autonomy", claimId],
@@ -205,12 +266,79 @@ export const ClaimAutonomySettings = ({ claimId }: ClaimAutonomySettingsProps) =
               </CardDescription>
             </div>
           </div>
-          {automation && getAutonomyBadge(autonomyLevel as AutonomyLevel)}
+          <Badge className={`flex items-center gap-1 ${getModeBadgeColor(currentMode)}`}>
+            {getModeIcon(currentMode)}
+            {currentMode.charAt(0).toUpperCase() + currentMode.slice(1)}
+          </Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Autonomy Level Selector */}
+        {/* Automation Scope Control */}
         <div className="space-y-3">
+          <Label className="text-sm font-medium">Automation Scope</Label>
+          <p className="text-xs text-muted-foreground">
+            Controls whether Darwin pushes actions, monitors quietly, or is fully paused.
+          </p>
+          <Select
+            value={currentMode}
+            onValueChange={(v) => updateModeMutation.mutate(v as AutomationMode)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">
+                <div className="flex items-center gap-2">
+                  <Power className="h-4 w-4 text-green-500" />
+                  <div>
+                    <div className="font-medium">Active</div>
+                    <div className="text-xs text-muted-foreground">Full autopilot — cadence, escalations, health aging</div>
+                  </div>
+                </div>
+              </SelectItem>
+              <SelectItem value="passive">
+                <div className="flex items-center gap-2">
+                  <Eye className="h-4 w-4 text-amber-500" />
+                  <div>
+                    <div className="font-medium">Passive</div>
+                    <div className="text-xs text-muted-foreground">Monitors only — no follow-ups, Cash Now still works</div>
+                  </div>
+                </div>
+              </SelectItem>
+              <SelectItem value="suspended">
+                <div className="flex items-center gap-2">
+                  <Pause className="h-4 w-4 text-red-500" />
+                  <div>
+                    <div className="font-medium">Suspended</div>
+                    <div className="text-xs text-muted-foreground">Hard pause — appraisal, litigation, or reg complaint</div>
+                  </div>
+                </div>
+              </SelectItem>
+              <SelectItem value="closed">
+                <div className="flex items-center gap-2">
+                  <Ban className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <div className="font-medium">Closed</div>
+                    <div className="text-xs text-muted-foreground">Autopilot fully disabled</div>
+                  </div>
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+
+          {currentMode !== 'active' && (
+            <div className="p-3 rounded-lg border border-border bg-muted/30 space-y-2">
+              <p className="text-xs text-muted-foreground">
+                {currentMode === 'passive' && "Darwin will monitor this claim but won't generate follow-ups or escalations. Cash Now actions (RD release, check status) remain active."}
+                {currentMode === 'suspended' && "All autopilot logic is frozen. No next actions, no health degradation, no escalations. Used for appraisal or litigation holds."}
+                {currentMode === 'closed' && "Autopilot is fully disabled. This claim is excluded from forecasts and active portfolio metrics."}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Autonomy Level Selector */}
+        <div className="space-y-3 pt-4 border-t border-border">
           <Label className="text-sm font-medium">Autonomy Level</Label>
           <Select
             value={autonomyLevel}
