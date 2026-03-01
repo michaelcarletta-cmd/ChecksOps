@@ -497,7 +497,7 @@ export const InventoryPhotoScanner = ({ claimId, onItemsAdded }: InventoryPhotoS
                       />
                     </div>
 
-                    <div className="flex items-center gap-3 text-xs">
+                    <div className="flex items-center gap-3 text-xs flex-wrap">
                       <div>
                         <span className="text-muted-foreground">RCV:</span>{" "}
                         <span className="font-bold text-green-700 dark:text-green-400">${item.rcv.toLocaleString()}</span>
@@ -505,6 +505,10 @@ export const InventoryPhotoScanner = ({ claimId, onItemsAdded }: InventoryPhotoS
                       <div>
                         <span className="text-muted-foreground">ACV:</span>{" "}
                         <span className="font-medium">${item.acv.toLocaleString()}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Age:</span>{" "}
+                        <span className="font-medium">{item.age_years != null ? `~${item.age_years} yr${item.age_years !== 1 ? "s" : ""}` : "N/A"}</span>
                       </div>
                     </div>
 
