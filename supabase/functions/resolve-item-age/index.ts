@@ -11,12 +11,13 @@ const WEIGHTS = {
   receipt: 60,
   warranty: 50,
   serial_decode: 45,
+  document_match: 35,
   model_release: 20,
   user_confirmed: 15,
   visual_only: 10,
 };
 
-// Category lifecycle priors (average useful life in years)
+// Category lifecycle priors
 const CATEGORY_LIFECYCLE: Record<string, { avg: number; min: number; max: number }> = {
   Electronics: { avg: 4, min: 1, max: 8 },
   Furniture: { avg: 10, min: 3, max: 25 },
@@ -31,7 +32,6 @@ const CATEGORY_LIFECYCLE: Record<string, { avg: number; min: number; max: number
   Other: { avg: 5, min: 1, max: 15 },
 };
 
-// Categories likely to have labels/serials
 const LABEL_CATEGORIES = new Set([
   "Electronics", "Appliances", "Tools", "HVAC", "Plumbing", "Water Heater",
 ]);
@@ -58,6 +58,18 @@ interface ResolveResult {
   age_confidence_score: number;
   evidence_json: EvidenceEntry[];
   needs_age_review: boolean;
+}
+
+interface DocumentMatch {
+  file_id: string;
+  file_name: string;
+  purchase_date: string | null;
+  serial_number: string | null;
+  model_number: string | null;
+  vendor: string | null;
+  amount: number | null;
+  match_type: string;
+  snippet: string;
 }
 
 async function callAI(
@@ -88,15 +100,13 @@ async function callAI(
   return resp.json();
 }
 
-// Try to decode serial number for manufacture date
+// Serial decode logic
 function trySerialDecode(brand: string | null, serial: string | null): { mfgDate: string | null; rule: string } | null {
   if (!serial || !brand) return null;
   const b = brand.toLowerCase();
   const s = serial.trim();
 
-  // Whirlpool/Maytag/KitchenAid: Year letter + week pattern
   if (["whirlpool", "maytag", "kitchenaid", "amana"].includes(b)) {
-    // Format: YWwwwwwww where Y is year letter
     const yearLetters: Record<string, number> = {
       C: 2002, D: 2003, E: 2004, F: 2005, G: 2006, H: 2007, J: 2008,
       K: 2009, L: 2010, M: 2011, N: 2012, P: 2013, R: 2014, S: 2015,
@@ -104,18 +114,15 @@ function trySerialDecode(brand: string | null, serial: string | null): { mfgDate
     };
     const firstChar = s.charAt(0).toUpperCase();
     if (yearLetters[firstChar]) {
-      const weekStr = s.substring(1, 3);
-      const week = parseInt(weekStr);
+      const week = parseInt(s.substring(1, 3));
       if (week >= 1 && week <= 52) {
         const year = yearLetters[firstChar];
-        // Approximate month from week
         const month = Math.min(12, Math.ceil(week / 4.33));
         return { mfgDate: `${year}-${String(month).padStart(2, "0")}-01`, rule: "whirlpool_serial_decode" };
       }
     }
   }
 
-  // GE: Two-letter date code
   if (["ge", "general electric", "hotpoint"].includes(b)) {
     const monthLetters = "ABCDEFGHJKLM";
     const yearLetters = "ABCDEFGHJKLMNPRSTUVWXYZ";
@@ -131,42 +138,153 @@ function trySerialDecode(brand: string | null, serial: string | null): { mfgDate
     }
   }
 
-  // Samsung: Year digit in 5th position
-  if (b === "samsung") {
-    if (s.length >= 5) {
-      const digitChar = s.charAt(4);
-      const digit = parseInt(digitChar);
-      if (!isNaN(digit)) {
-        // Cycle repeats every 10 years; assume 2010s-2020s
-        const currentDecade = Math.floor(new Date().getFullYear() / 10) * 10;
-        let year = currentDecade + digit;
-        if (year > new Date().getFullYear()) year -= 10;
-        return { mfgDate: `${year}-06-01`, rule: "samsung_serial_decode" };
-      }
+  if (b === "samsung" && s.length >= 5) {
+    const digit = parseInt(s.charAt(4));
+    if (!isNaN(digit)) {
+      const currentDecade = Math.floor(new Date().getFullYear() / 10) * 10;
+      let year = currentDecade + digit;
+      if (year > new Date().getFullYear()) year -= 10;
+      return { mfgDate: `${year}-06-01`, rule: "samsung_serial_decode" };
     }
   }
 
-  // LG: Year digit in 3rd position
-  if (b === "lg") {
-    if (s.length >= 4) {
-      const digit = parseInt(s.charAt(2));
-      if (!isNaN(digit)) {
-        const currentDecade = Math.floor(new Date().getFullYear() / 10) * 10;
-        let year = currentDecade + digit;
-        if (year > new Date().getFullYear()) year -= 10;
-        const monthCode = s.charAt(3).toUpperCase();
-        const monthLetters = "ABCDEFGHJKLM";
-        const month = monthLetters.indexOf(monthCode);
-        return {
-          mfgDate: `${year}-${String((month >= 0 ? month : 5) + 1).padStart(2, "0")}-01`,
-          rule: "lg_serial_decode",
-        };
-      }
+  if (b === "lg" && s.length >= 4) {
+    const digit = parseInt(s.charAt(2));
+    if (!isNaN(digit)) {
+      const currentDecade = Math.floor(new Date().getFullYear() / 10) * 10;
+      let year = currentDecade + digit;
+      if (year > new Date().getFullYear()) year -= 10;
+      const monthLetters = "ABCDEFGHJKLM";
+      const month = monthLetters.indexOf(s.charAt(3).toUpperCase());
+      return {
+        mfgDate: `${year}-${String((month >= 0 ? month : 5) + 1).padStart(2, "0")}-01`,
+        rule: "lg_serial_decode",
+      };
     }
   }
 
   return null;
 }
+
+// ========== DOCUMENT MINING ==========
+
+async function mineDocumentsForItem(
+  apiKey: string,
+  item: any,
+  claimFiles: any[]
+): Promise<DocumentMatch[]> {
+  if (!claimFiles.length) return [];
+
+  // Filter to files likely to contain purchase info
+  const relevantFiles = claimFiles.filter(f => {
+    const cls = f.document_classification || "";
+    const name = (f.file_name || "").toLowerCase();
+    return (
+      cls === "invoice" ||
+      cls === "receipt" ||
+      cls === "correspondence" ||
+      name.includes("receipt") ||
+      name.includes("invoice") ||
+      name.includes("order") ||
+      name.includes("purchase") ||
+      name.includes("confirmation") ||
+      name.includes("warranty") ||
+      (f.extracted_text && f.extracted_text.length > 100)
+    );
+  });
+
+  if (!relevantFiles.length) return [];
+
+  // Build search terms for this item
+  const searchTerms: string[] = [item.item_name];
+  if (item.manufacturer) searchTerms.push(item.manufacturer);
+  if (item.model_number) searchTerms.push(item.model_number);
+  if (item.serial_number) searchTerms.push(item.serial_number);
+  if (item.category) searchTerms.push(item.category);
+
+  const matches: DocumentMatch[] = [];
+
+  // Quick text search first — only send to AI if we find keyword hits
+  for (const file of relevantFiles) {
+    const text = file.extracted_text || "";
+    if (!text) continue;
+
+    const textLower = text.toLowerCase();
+    const hasMatch = searchTerms.some(term =>
+      term && textLower.includes(term.toLowerCase())
+    );
+
+    if (!hasMatch) continue;
+
+    // Found a keyword match — use AI to extract structured purchase info
+    try {
+      const extractTool = {
+        type: "function",
+        function: {
+          name: "report_purchase_info",
+          description: "Extract purchase information for a specific item from document text",
+          parameters: {
+            type: "object",
+            properties: {
+              found: { type: "boolean", description: "Whether this document contains purchase info for the item" },
+              purchase_date: { type: "string", description: "Purchase date in YYYY-MM-DD format, null if not found" },
+              serial_number: { type: "string", description: "Serial number if found, null otherwise" },
+              model_number: { type: "string", description: "Model number if found, null otherwise" },
+              vendor: { type: "string", description: "Vendor/store name if found" },
+              amount: { type: "number", description: "Purchase amount if found" },
+              match_confidence: { type: "number", description: "0-1 confidence this document is about this specific item" },
+              relevant_snippet: { type: "string", description: "The 1-2 sentence excerpt that contains the match" },
+            },
+            required: ["found", "match_confidence"],
+          },
+        },
+      };
+
+      // Truncate text to avoid token limits
+      const truncatedText = text.substring(0, 8000);
+
+      const result = await callAI(
+        apiKey,
+        [
+          {
+            role: "system",
+            content: `You are a forensic document analyst for insurance claims. Given a document's text and an inventory item, determine if the document contains purchase information (date, price, serial, model) for that specific item. Be strict about matching — the item must be clearly referenced, not just a similar category.`,
+          },
+          {
+            role: "user",
+            content: `ITEM TO FIND:\n- Name: ${item.item_name}\n- Brand: ${item.manufacturer || "unknown"}\n- Model: ${item.model_number || "unknown"}\n- Category: ${item.category || "unknown"}\n\nDOCUMENT TEXT (from "${file.file_name}"):\n${truncatedText}`,
+          },
+        ],
+        [extractTool],
+        { type: "function", function: { name: "report_purchase_info" } }
+      );
+
+      const tc = result.choices?.[0]?.message?.tool_calls?.[0];
+      if (tc) {
+        const info = JSON.parse(tc.function.arguments);
+        if (info.found && info.match_confidence > 0.5) {
+          matches.push({
+            file_id: file.id,
+            file_name: file.file_name,
+            purchase_date: info.purchase_date || null,
+            serial_number: info.serial_number || null,
+            model_number: info.model_number || null,
+            vendor: info.vendor || null,
+            amount: info.amount || null,
+            match_type: info.purchase_date ? "purchase_date" : "item_reference",
+            snippet: info.relevant_snippet || "",
+          });
+        }
+      }
+    } catch (e) {
+      console.error(`Document mining failed for file ${file.id}:`, e);
+    }
+  }
+
+  return matches;
+}
+
+// ========== CORE RESOLVER ==========
 
 async function resolveAge(
   apiKey: string,
@@ -196,9 +314,7 @@ async function resolveAge(
     totalWeight += WEIGHTS.user_confirmed;
   }
 
-  // Check for receipt file
   if (item.receipt_file_path) {
-    // We have a receipt on file — assume its date matches purchase date
     evidence.push({
       type: "receipt",
       weight: WEIGHTS.receipt,
@@ -212,12 +328,11 @@ async function resolveAge(
   const serialResult = trySerialDecode(item.manufacturer, item.serial_number);
   if (serialResult) {
     const mfgDate = new Date(serialResult.mfgDate);
-    // Purchase typically 0–12 months after manufacture
     const purchaseLow = new Date(mfgDate);
     const purchaseHigh = new Date(mfgDate);
     purchaseHigh.setMonth(purchaseHigh.getMonth() + 12);
     const purchaseBest = new Date(mfgDate);
-    purchaseBest.setMonth(purchaseBest.getMonth() + 3); // typical 3mo lag
+    purchaseBest.setMonth(purchaseBest.getMonth() + 3);
 
     if (!bestDate || totalWeight < WEIGHTS.serial_decode) {
       bestDate = purchaseBest;
@@ -237,8 +352,77 @@ async function resolveAge(
     totalWeight += WEIGHTS.serial_decode;
   }
 
+  // --- Tier A/B: Document mining ---
+  const docMatches = await mineDocumentsForItem(apiKey, item, claimFiles);
+  for (const match of docMatches) {
+    if (match.purchase_date) {
+      const docDate = new Date(match.purchase_date);
+      if (!isNaN(docDate.getTime()) && docDate <= now) {
+        // Document with purchase date is strong evidence
+        const weight = match.match_type === "purchase_date" ? WEIGHTS.receipt : WEIGHTS.document_match;
+
+        if (!bestDate || weight > totalWeight) {
+          bestDate = docDate;
+          lowDate = docDate;
+          highDate = docDate;
+        }
+
+        evidence.push({
+          type: "document_match",
+          weight,
+          date: match.purchase_date,
+          file_id: match.file_id,
+          source: `Purchase date found in "${match.file_name}"${match.vendor ? ` from ${match.vendor}` : ""}`,
+          snippet: match.snippet,
+        });
+        totalWeight += weight;
+      }
+    }
+
+    // Serial from document
+    if (match.serial_number && !item.serial_number) {
+      evidence.push({
+        type: "document_serial",
+        weight: 5,
+        serial: match.serial_number,
+        file_id: match.file_id,
+        source: `Serial number found in "${match.file_name}": ${match.serial_number}`,
+      });
+      // Try to decode this serial too
+      const docSerialResult = trySerialDecode(item.manufacturer, match.serial_number);
+      if (docSerialResult && !bestDate) {
+        const mfgDate = new Date(docSerialResult.mfgDate);
+        bestDate = new Date(mfgDate);
+        bestDate.setMonth(bestDate.getMonth() + 3);
+        lowDate = mfgDate;
+        highDate = new Date(mfgDate);
+        highDate.setMonth(highDate.getMonth() + 12);
+        evidence.push({
+          type: "serial_decode",
+          weight: WEIGHTS.serial_decode,
+          date: docSerialResult.mfgDate,
+          rule_used: docSerialResult.rule,
+          source: `Serial from doc decoded: mfg ${docSerialResult.mfgDate}`,
+        });
+        totalWeight += WEIGHTS.serial_decode;
+      }
+    }
+
+    // Model from document
+    if (match.model_number && !item.model_number) {
+      evidence.push({
+        type: "document_model",
+        weight: 5,
+        model: match.model_number,
+        file_id: match.file_id,
+        source: `Model number found in "${match.file_name}": ${match.model_number}`,
+      });
+    }
+  }
+
   // --- Tier B: Model release year (use AI) ---
-  if (item.manufacturer && item.model_number && totalWeight < 60) {
+  const modelNum = item.model_number || docMatches.find(m => m.model_number)?.model_number;
+  if (item.manufacturer && modelNum && totalWeight < 60) {
     try {
       const modelTool = {
         type: "function",
@@ -248,9 +432,9 @@ async function resolveAge(
           parameters: {
             type: "object",
             properties: {
-              release_year: { type: "integer", description: "Year the model was first released/sold" },
-              discontinued_year: { type: "integer", description: "Year the model was discontinued, null if still sold" },
-              confidence: { type: "number", description: "0-1 confidence in these dates" },
+              release_year: { type: "integer" },
+              discontinued_year: { type: "integer" },
+              confidence: { type: "number" },
             },
             required: ["release_year", "confidence"],
           },
@@ -262,11 +446,11 @@ async function resolveAge(
         [
           {
             role: "system",
-            content: "You are a product database. Given a brand and model number, report the year range it was available for sale. Only report if you are reasonably confident. If unknown, set confidence to 0.",
+            content: "You are a product database. Given a brand and model number, report the year range it was available for sale. Only report if reasonably confident.",
           },
           {
             role: "user",
-            content: `Brand: ${item.manufacturer}\nModel: ${item.model_number}\nWhat years was this model sold?`,
+            content: `Brand: ${item.manufacturer}\nModel: ${modelNum}\nWhat years was this model sold?`,
           },
         ],
         [modelTool],
@@ -288,7 +472,6 @@ async function resolveAge(
             lowDate = modelLow;
             highDate = modelHigh;
           } else {
-            // Narrow existing range
             if (lowDate && modelLow > lowDate) lowDate = modelLow;
             if (highDate && modelHigh < highDate) highDate = modelHigh;
           }
@@ -296,7 +479,7 @@ async function resolveAge(
           evidence.push({
             type: "model_release",
             weight: WEIGHTS.model_release,
-            model: item.model_number,
+            model: modelNum,
             brand: item.manufacturer,
             release_year: relYear,
             source: `Model released ~${relYear}${info.discontinued_year ? `, discontinued ~${info.discontinued_year}` : ""}`,
@@ -314,7 +497,6 @@ async function resolveAge(
   const lifecycle = CATEGORY_LIFECYCLE[cat] || CATEGORY_LIFECYCLE.Other;
 
   if (!bestDate) {
-    // Fall back to condition-based estimate
     const conditionAge: Record<string, number> = { new: 0.5, good: 2, fair: 5, poor: 8 };
     const estAge = conditionAge[item.condition_before_loss] || lifecycle.avg;
     const refDate = lossDate ? new Date(lossDate) : now;
@@ -333,13 +515,9 @@ async function resolveAge(
     totalWeight += WEIGHTS.visual_only;
   }
 
-  // Clamp confidence to 100
   const confidence = Math.min(100, totalWeight);
-
-  // Calculate age
   const refDate = lossDate ? new Date(lossDate) : now;
   const ageYears = Math.max(0, (refDate.getTime() - bestDate.getTime()) / (365.25 * 24 * 3600 * 1000));
-
   const needsReview = confidence < 60 && LABEL_CATEGORIES.has(cat);
 
   return {
@@ -374,7 +552,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Fetch claim for loss_date
     const { data: claim } = await supabase
       .from("claims")
       .select("loss_date")
@@ -383,7 +560,6 @@ Deno.serve(async (req) => {
 
     const lossDate = claim?.loss_date || null;
 
-    // Fetch items to resolve
     let query = supabase
       .from("claim_home_inventory")
       .select("*")
@@ -401,10 +577,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Fetch claim files for receipt matching (future use)
+    // Fetch ALL claim files with extracted text for document mining
     const { data: claimFiles } = await supabase
       .from("claim_files")
-      .select("id, file_name, file_path, category, extracted_text")
+      .select("id, file_name, file_path, category, extracted_text, document_classification")
       .eq("claim_id", claim_id);
 
     const results: any[] = [];
@@ -413,7 +589,6 @@ Deno.serve(async (req) => {
       console.log(`Resolving age for: ${item.item_name}`);
       const result = await resolveAge(LOVABLE_API_KEY, item, claimFiles || [], lossDate);
 
-      // Update the item in the database
       const { error: updateErr } = await supabase
         .from("claim_home_inventory")
         .update({
