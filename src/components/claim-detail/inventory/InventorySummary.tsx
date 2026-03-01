@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Copy, DollarSign, FileSpreadsheet, Loader2 } from "lucide-react";
+import { Copy, DollarSign, FileSpreadsheet, Loader2, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import * as XLSX from "xlsx";
@@ -33,6 +33,29 @@ interface InventorySummaryProps {
 
 export const InventorySummary = ({ items, claimId }: InventorySummaryProps) => {
   const [exporting, setExporting] = useState(false);
+  const [resolvingAges, setResolvingAges] = useState(false);
+
+  const resolveAllAges = async () => {
+    if (!claimId) {
+      toast.error("No claim ID available");
+      return;
+    }
+    setResolvingAges(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("resolve-item-age", {
+        body: { claim_id: claimId },
+      });
+      if (error) throw error;
+      toast.success(`Resolved ages for ${data?.resolved || 0} items`);
+      // Trigger a page refresh to show updated data
+      window.location.reload();
+    } catch (err: any) {
+      console.error("Age resolve error:", err);
+      toast.error("Failed to resolve ages: " + (err.message || "Unknown error"));
+    } finally {
+      setResolvingAges(false);
+    }
+  };
 
   const totalRCV = items.reduce((sum, i) => sum + (i.replacement_cost || 0) * i.quantity, 0);
   const totalACV = items.reduce((sum, i) => sum + (i.actual_cash_value || 0) * i.quantity, 0);
@@ -245,6 +268,14 @@ export const InventorySummary = ({ items, claimId }: InventorySummaryProps) => {
       {/* Export buttons */}
       {items.length > 0 && (
         <div className="pt-2 flex flex-wrap gap-2">
+          <Button variant="outline" onClick={resolveAllAges} disabled={resolvingAges}>
+            {resolvingAges ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <Clock className="h-4 w-4 mr-1" />
+            )}
+            {resolvingAges ? "Resolving Ages…" : "Resolve All Ages"}
+          </Button>
           <Button variant="outline" onClick={exportInventory}>
             <Copy className="h-4 w-4 mr-1" /> Copy CSV
           </Button>

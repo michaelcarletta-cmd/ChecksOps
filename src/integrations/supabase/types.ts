@@ -2264,6 +2264,7 @@ export type Database = {
       claim_home_inventory: {
         Row: {
           actual_cash_value: number | null
+          age_confidence_score: number | null
           age_years: number | null
           ai_confidence: number | null
           attributes: Json | null
@@ -2276,13 +2277,16 @@ export type Database = {
           created_by: string | null
           damage_description: string | null
           depreciation_rate: number | null
+          evidence_json: Json | null
           id: string
           is_total_loss: boolean | null
           item_description: string | null
           item_name: string
+          label_photo_path: string | null
           manufacturer: string | null
           model_confirmed: boolean
           model_number: string | null
+          needs_age_review: boolean | null
           needs_review: boolean
           notes: string | null
           original_purchase_date: string | null
@@ -2291,6 +2295,9 @@ export type Database = {
           price_confirmed: boolean
           pricing_rationale: string | null
           pricing_source: string | null
+          purchase_date_best: string | null
+          purchase_date_high: string | null
+          purchase_date_low: string | null
           quantity: number | null
           receipt_file_path: string | null
           replacement_cost: number | null
@@ -2303,6 +2310,7 @@ export type Database = {
         }
         Insert: {
           actual_cash_value?: number | null
+          age_confidence_score?: number | null
           age_years?: number | null
           ai_confidence?: number | null
           attributes?: Json | null
@@ -2315,13 +2323,16 @@ export type Database = {
           created_by?: string | null
           damage_description?: string | null
           depreciation_rate?: number | null
+          evidence_json?: Json | null
           id?: string
           is_total_loss?: boolean | null
           item_description?: string | null
           item_name: string
+          label_photo_path?: string | null
           manufacturer?: string | null
           model_confirmed?: boolean
           model_number?: string | null
+          needs_age_review?: boolean | null
           needs_review?: boolean
           notes?: string | null
           original_purchase_date?: string | null
@@ -2330,6 +2341,9 @@ export type Database = {
           price_confirmed?: boolean
           pricing_rationale?: string | null
           pricing_source?: string | null
+          purchase_date_best?: string | null
+          purchase_date_high?: string | null
+          purchase_date_low?: string | null
           quantity?: number | null
           receipt_file_path?: string | null
           replacement_cost?: number | null
@@ -2342,6 +2356,7 @@ export type Database = {
         }
         Update: {
           actual_cash_value?: number | null
+          age_confidence_score?: number | null
           age_years?: number | null
           ai_confidence?: number | null
           attributes?: Json | null
@@ -2354,13 +2369,16 @@ export type Database = {
           created_by?: string | null
           damage_description?: string | null
           depreciation_rate?: number | null
+          evidence_json?: Json | null
           id?: string
           is_total_loss?: boolean | null
           item_description?: string | null
           item_name?: string
+          label_photo_path?: string | null
           manufacturer?: string | null
           model_confirmed?: boolean
           model_number?: string | null
+          needs_age_review?: boolean | null
           needs_review?: boolean
           notes?: string | null
           original_purchase_date?: string | null
@@ -2369,6 +2387,9 @@ export type Database = {
           price_confirmed?: boolean
           pricing_rationale?: string | null
           pricing_source?: string | null
+          purchase_date_best?: string | null
+          purchase_date_high?: string | null
+          purchase_date_low?: string | null
           quantity?: number | null
           receipt_file_path?: string | null
           replacement_cost?: number | null
