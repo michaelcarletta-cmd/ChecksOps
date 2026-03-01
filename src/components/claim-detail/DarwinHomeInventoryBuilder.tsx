@@ -263,7 +263,7 @@ export const DarwinHomeInventoryBuilder = ({ claimId, claim }: DarwinHomeInvento
               </TabsContent>
 
               <TabsContent value="inventory" className="mt-0">
-                <InventoryTable items={items} loading={loading} onRefresh={fetchItems} />
+                <InventoryTable items={items} loading={loading} onRefresh={fetchItems} claimId={claimId} />
               </TabsContent>
 
               <TabsContent value="summary" className="mt-0">

@@ -324,6 +324,110 @@ async function resolveAge(
     totalWeight += WEIGHTS.receipt;
   }
 
+  // --- Tier A: Label photo analysis (OCR for serial/model extraction) ---
+  if (item.label_photo_path) {
+    try {
+      const { data: labelData } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(item.label_photo_path, 300);
+
+      if (labelData?.signedUrl) {
+        const labelTool = {
+          type: "function",
+          function: {
+            name: "report_label_info",
+            description: "Extract information from a product label/serial plate photo",
+            parameters: {
+              type: "object",
+              properties: {
+                serial_number: { type: "string", description: "Serial number if readable" },
+                model_number: { type: "string", description: "Model number if readable" },
+                brand: { type: "string", description: "Brand name if readable" },
+                manufacture_date: { type: "string", description: "Manufacture date if shown (YYYY-MM-DD or YYYY-MM)" },
+                wattage_or_specs: { type: "string", description: "Any specs visible" },
+                raw_text: { type: "string", description: "All text visible on label" },
+              },
+              required: ["raw_text"],
+            },
+          },
+        };
+
+        const labelResult = await callAI(
+          apiKey,
+          [
+            {
+              role: "system",
+              content: "You are an expert at reading product labels, serial plates, and rating plates. Extract all visible text, especially serial numbers, model numbers, manufacture dates, and brand names.",
+            },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: `Read all text from this product label. The item is: ${item.item_name} (brand: ${item.manufacturer || "unknown"})` },
+                { type: "image_url", image_url: { url: labelData.signedUrl } },
+              ],
+            },
+          ],
+          [labelTool],
+          { type: "function", function: { name: "report_label_info" } }
+        );
+
+        const tc = labelResult.choices?.[0]?.message?.tool_calls?.[0];
+        if (tc) {
+          const labelInfo = JSON.parse(tc.function.arguments);
+
+          // If label has a manufacture date, that's Tier A evidence
+          if (labelInfo.manufacture_date) {
+            const mfgDate = new Date(labelInfo.manufacture_date + (labelInfo.manufacture_date.length <= 7 ? "-01" : ""));
+            if (!isNaN(mfgDate.getTime())) {
+              const purchaseBest = new Date(mfgDate);
+              purchaseBest.setMonth(purchaseBest.getMonth() + 3);
+              bestDate = purchaseBest;
+              lowDate = mfgDate;
+              highDate = new Date(mfgDate);
+              highDate.setMonth(highDate.getMonth() + 12);
+
+              evidence.push({
+                type: "label_photo",
+                weight: WEIGHTS.serial_decode,
+                date: labelInfo.manufacture_date,
+                source: `Manufacture date read from label photo: ${labelInfo.manufacture_date}`,
+              });
+              totalWeight += WEIGHTS.serial_decode;
+            }
+          }
+
+          // Extract serial for decode
+          if (labelInfo.serial_number && !item.serial_number) {
+            item.serial_number = labelInfo.serial_number;
+            evidence.push({
+              type: "label_serial_ocr",
+              weight: 5,
+              serial: labelInfo.serial_number,
+              source: `Serial extracted from label photo: ${labelInfo.serial_number}`,
+            });
+          }
+
+          // Extract model for lookup
+          if (labelInfo.model_number && !item.model_number) {
+            item.model_number = labelInfo.model_number;
+            evidence.push({
+              type: "label_model_ocr",
+              weight: 5,
+              model: labelInfo.model_number,
+              source: `Model extracted from label photo: ${labelInfo.model_number}`,
+            });
+          }
+
+          if (labelInfo.brand && !item.manufacturer) {
+            item.manufacturer = labelInfo.brand;
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Label photo analysis failed:", e);
+    }
+  }
+
   // --- Tier A: Serial decode ---
   const serialResult = trySerialDecode(item.manufacturer, item.serial_number);
   if (serialResult) {
