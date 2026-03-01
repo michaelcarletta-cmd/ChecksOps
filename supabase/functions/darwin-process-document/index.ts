@@ -271,6 +271,32 @@ Deno.serve(async (req) => {
       ).catch(err => console.error('Deep analysis trigger error:', err));
     }
 
+    // Auto-trigger inventory age resolution when invoices/receipts are processed
+    if (
+      classificationResult.confidence >= 0.6 &&
+      ['invoice', 'receipt'].includes(classificationResult.classification) ||
+      (file?.file_name || '').toLowerCase().match(/receipt|invoice|order|purchase|confirmation|warranty/)
+    ) {
+      // Check if claim has inventory items
+      const { count: inventoryCount } = await supabase
+        .from('claim_home_inventory')
+        .select('id', { count: 'exact', head: true })
+        .eq('claim_id', targetClaimId);
+
+      if (inventoryCount && inventoryCount > 0) {
+        console.log(`[AgeResolve] Invoice/receipt detected, triggering age resolution for ${inventoryCount} inventory items`);
+        // Fire and forget
+        fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/resolve-item-age`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ claim_id: targetClaimId }),
+        }).catch(err => console.error('Age resolve trigger error:', err));
+      }
+    }
+
     // Process automation actions if enabled
     if (automation && classificationResult.confidence >= 0.8) {
       await processDocumentActions(
