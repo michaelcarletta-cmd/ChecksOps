@@ -169,7 +169,7 @@ export const InventoryTable = ({ items, loading, onRefresh }: InventoryTableProp
               <TableHead className="text-right">RCV</TableHead>
               <TableHead className="text-right">ACV</TableHead>
               <TableHead>Condition</TableHead>
-              <TableHead>Confirmed</TableHead>
+              <TableHead>Age</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
@@ -284,22 +284,9 @@ export const InventoryTable = ({ items, loading, onRefresh }: InventoryTableProp
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {item.source === "ai_photo_scan" && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="flex gap-0.5">
-                            {item.brand_confirmed ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
-                            {item.price_confirmed ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Brand: {item.brand_confirmed ? "Confirmed" : "Unconfirmed"}</p>
-                          <p>Price: {item.price_confirmed ? "Confirmed" : "Unconfirmed"}</p>
-                          {item.pricing_source && <p>Source: {item.pricing_source}</p>}
-                          {item.pricing_rationale && <p className="max-w-xs">{item.pricing_rationale}</p>}
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
+                    <span className="text-sm">
+                      {item.age_years != null ? `~${item.age_years} yr${item.age_years !== 1 ? "s" : ""}` : "—"}
+                    </span>
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
