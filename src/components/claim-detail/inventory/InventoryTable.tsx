@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Trash2, CheckCircle2, AlertTriangle, Bot, User, Pencil, Save, X, Search, ShieldQuestion, Camera, ShieldCheck } from "lucide-react";
+import { Trash2, CheckCircle2, AlertTriangle, Bot, User, Pencil, Save, X, Search, ShieldQuestion, Camera, ShieldCheck, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { BoostAgeConfidenceDialog } from "./BoostAgeConfidenceDialog";
@@ -82,6 +82,7 @@ export const InventoryTable = ({ items, loading, onRefresh, claimId }: Inventory
   const [detailItem, setDetailItem] = useState<InventoryItem | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [resolvingAll, setResolvingAll] = useState(false);
   const [editData, setEditData] = useState<{
     item_name: string;
     room_name: string;
@@ -148,6 +149,24 @@ export const InventoryTable = ({ items, loading, onRefresh, claimId }: Inventory
     }
   };
 
+  const resolveAllAges = async () => {
+    if (!claimId) return;
+    setResolvingAll(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("resolve-item-age", {
+        body: { claim_id: claimId },
+      });
+      if (error) throw error;
+      toast.success(`Age resolved for ${data?.resolved || 0} items`);
+      onRefresh();
+    } catch (err: any) {
+      toast.error("Failed to resolve ages: " + (err.message || "Unknown error"));
+      console.error(err);
+    } finally {
+      setResolvingAll(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -168,14 +187,28 @@ export const InventoryTable = ({ items, loading, onRefresh, claimId }: Inventory
   return (
     <TooltipProvider>
       <div className="space-y-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search items, rooms, manufacturers..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search items, rooms, manufacturers..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          {claimId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={resolveAllAges}
+              disabled={resolvingAll}
+              className="shrink-0 gap-1.5"
+            >
+              <RefreshCw className={`h-4 w-4 ${resolvingAll ? "animate-spin" : ""}`} />
+              {resolvingAll ? "Resolving..." : "Resolve All Ages"}
+            </Button>
+          )}
         </div>
         {searchQuery && (
           <p className="text-xs text-muted-foreground">
