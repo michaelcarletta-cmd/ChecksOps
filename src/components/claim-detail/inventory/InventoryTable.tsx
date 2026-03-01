@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Trash2, CheckCircle2, AlertTriangle, Bot, User, Pencil, Save, X, Search, ShieldQuestion, Camera } from "lucide-react";
+import { Trash2, CheckCircle2, AlertTriangle, Bot, User, Pencil, Save, X, Search, ShieldQuestion, Camera, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { BoostAgeConfidenceDialog } from "./BoostAgeConfidenceDialog";
 
 interface EvidenceEntry {
   type: string;
@@ -72,9 +73,11 @@ interface InventoryTableProps {
   items: InventoryItem[];
   loading: boolean;
   onRefresh: () => void;
+  claimId?: string;
 }
 
-export const InventoryTable = ({ items, loading, onRefresh }: InventoryTableProps) => {
+export const InventoryTable = ({ items, loading, onRefresh, claimId }: InventoryTableProps) => {
+  const [boostItem, setBoostItem] = useState<InventoryItem | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<{
@@ -353,6 +356,10 @@ export const InventoryTable = ({ items, loading, onRefresh }: InventoryTableProp
                                  ev.type === "user_entered" ? "✏️ User" :
                                  ev.type === "warranty" ? "🛡️ Warranty" :
                                  ev.type === "category_prior" ? "📊 Estimate" :
+                                 ev.type === "document_match" ? "📄 Document" :
+                                 ev.type === "label_photo" ? "🏷️ Label" :
+                                 ev.type === "label_serial_ocr" ? "🔍 Label Serial" :
+                                 ev.type === "label_model_ocr" ? "🔍 Label Model" :
                                  ev.type}
                               </Badge>
                             </TooltipTrigger>
@@ -364,16 +371,23 @@ export const InventoryTable = ({ items, loading, onRefresh }: InventoryTableProp
                         ))
                       ) : (
                         item.needs_age_review ? (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Badge variant="outline" className="text-[10px] gap-0.5 text-amber-600 border-amber-300">
-                                <Camera className="h-3 w-3" /> Label photo needed
-                              </Badge>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="text-xs">Take a photo of the label/serial plate to boost accuracy</p>
-                            </TooltipContent>
-                          </Tooltip>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-6 text-[10px] gap-1 text-amber-600 border-amber-300 hover:bg-amber-50"
+                            onClick={() => setBoostItem(item)}
+                          >
+                            <ShieldCheck className="h-3 w-3" /> Boost
+                          </Button>
+                        ) : item.age_confidence_score != null && item.age_confidence_score < 60 ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-[10px] gap-1 text-muted-foreground"
+                            onClick={() => setBoostItem(item)}
+                          >
+                            <Camera className="h-3 w-3" /> Add evidence
+                          </Button>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
                         )
@@ -409,6 +423,16 @@ export const InventoryTable = ({ items, loading, onRefresh }: InventoryTableProp
           </TableBody>
         </Table>
       </div>
+
+      {boostItem && claimId && (
+        <BoostAgeConfidenceDialog
+          open={!!boostItem}
+          onOpenChange={(open) => !open && setBoostItem(null)}
+          item={{ ...boostItem, claim_id: claimId }}
+          claimId={claimId}
+          onBoosted={onRefresh}
+        />
+      )}
       </div>
     </TooltipProvider>
   );
