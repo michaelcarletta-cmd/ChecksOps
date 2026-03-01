@@ -5,9 +5,23 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Trash2, CheckCircle2, AlertTriangle, Bot, User, Pencil, Save, X, Search } from "lucide-react";
+import { Trash2, CheckCircle2, AlertTriangle, Bot, User, Pencil, Save, X, Search, ShieldQuestion, Camera } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+
+interface EvidenceEntry {
+  type: string;
+  weight: number;
+  date?: string;
+  source?: string;
+  snippet?: string;
+  file_id?: string;
+  brand?: string;
+  serial?: string;
+  model?: string;
+  rule_used?: string;
+  release_year?: number;
+}
 
 interface InventoryItem {
   id: string;
@@ -33,6 +47,12 @@ interface InventoryItem {
   needs_review?: boolean;
   depreciation_rate?: number;
   age_years?: number;
+  purchase_date_best?: string | null;
+  purchase_date_low?: string | null;
+  purchase_date_high?: string | null;
+  age_confidence_score?: number;
+  evidence_json?: EvidenceEntry[];
+  needs_age_review?: boolean;
 }
 
 const CONDITIONS: Record<string, string> = {
@@ -161,7 +181,7 @@ export const InventoryTable = ({ items, loading, onRefresh }: InventoryTableProp
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Source</TableHead>
+             <TableHead>Source</TableHead>
               <TableHead>Room</TableHead>
               <TableHead>Item</TableHead>
               <TableHead>Category</TableHead>
@@ -170,6 +190,8 @@ export const InventoryTable = ({ items, loading, onRefresh }: InventoryTableProp
               <TableHead className="text-right">ACV</TableHead>
               <TableHead>Condition</TableHead>
               <TableHead>Age</TableHead>
+              <TableHead>Confidence</TableHead>
+              <TableHead>Evidence</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
@@ -284,9 +306,79 @@ export const InventoryTable = ({ items, loading, onRefresh }: InventoryTableProp
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <span className="text-sm">
-                      {item.age_years != null ? `~${item.age_years} yr${item.age_years !== 1 ? "s" : ""}` : "—"}
-                    </span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="text-sm whitespace-nowrap">
+                          {item.age_years != null ? (
+                            <>
+                              <span className="font-medium">~{item.age_years} yr{item.age_years !== 1 ? "s" : ""}</span>
+                              {item.purchase_date_best && (
+                                <p className="text-xs text-muted-foreground">
+                                  ~{new Date(item.purchase_date_best).getFullYear()}
+                                </p>
+                              )}
+                            </>
+                          ) : "—"}
+                        </div>
+                      </TooltipTrigger>
+                      {item.purchase_date_low && item.purchase_date_high && (
+                        <TooltipContent>
+                          <p>Range: {new Date(item.purchase_date_low).getFullYear()}–{new Date(item.purchase_date_high).getFullYear()}</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell>
+                    {item.age_confidence_score != null ? (
+                      <Badge
+                        variant={item.age_confidence_score >= 60 ? "default" : "destructive"}
+                        className="text-xs"
+                      >
+                        {item.age_confidence_score}%
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1 max-w-[180px]">
+                      {item.evidence_json && (item.evidence_json as EvidenceEntry[]).length > 0 ? (
+                        (item.evidence_json as EvidenceEntry[]).map((ev, i) => (
+                          <Tooltip key={i}>
+                            <TooltipTrigger asChild>
+                              <Badge variant="outline" className="text-[10px] cursor-help">
+                                {ev.type === "receipt" ? "📄 Receipt" :
+                                 ev.type === "serial_decode" ? "🔢 Serial" :
+                                 ev.type === "model_release" ? "📅 Model Year" :
+                                 ev.type === "user_entered" ? "✏️ User" :
+                                 ev.type === "warranty" ? "🛡️ Warranty" :
+                                 ev.type === "category_prior" ? "📊 Estimate" :
+                                 ev.type}
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <p className="text-xs">{ev.source}</p>
+                              {ev.date && <p className="text-xs text-muted-foreground">Date: {ev.date}</p>}
+                            </TooltipContent>
+                          </Tooltip>
+                        ))
+                      ) : (
+                        item.needs_age_review ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge variant="outline" className="text-[10px] gap-0.5 text-amber-600 border-amber-300">
+                                <Camera className="h-3 w-3" /> Label photo needed
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">Take a photo of the label/serial plate to boost accuracy</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
