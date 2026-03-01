@@ -9,6 +9,7 @@ import { Trash2, CheckCircle2, AlertTriangle, Bot, User, Pencil, Save, X, Search
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { BoostAgeConfidenceDialog } from "./BoostAgeConfidenceDialog";
+import { InventoryItemDetailDrawer } from "./InventoryItemDetailDrawer";
 
 interface EvidenceEntry {
   type: string;
@@ -78,6 +79,7 @@ interface InventoryTableProps {
 
 export const InventoryTable = ({ items, loading, onRefresh, claimId }: InventoryTableProps) => {
   const [boostItem, setBoostItem] = useState<InventoryItem | null>(null);
+  const [detailItem, setDetailItem] = useState<InventoryItem | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<{
@@ -238,8 +240,11 @@ export const InventoryTable = ({ items, loading, onRefresh, claimId }: Inventory
                         className="h-7 text-xs w-40"
                       />
                     ) : (
-                      <div>
-                        <p className="text-sm">{item.item_name}</p>
+                      <div
+                        className="cursor-pointer hover:text-primary transition-colors"
+                        onClick={() => setDetailItem(item)}
+                      >
+                        <p className="text-sm font-medium underline-offset-2 hover:underline">{item.item_name}</p>
                         {item.manufacturer && (
                           <p className="text-xs text-muted-foreground">
                             {item.manufacturer} {item.model_number}
@@ -433,6 +438,18 @@ export const InventoryTable = ({ items, loading, onRefresh, claimId }: Inventory
           onBoosted={onRefresh}
         />
       )}
+
+      <InventoryItemDetailDrawer
+        open={!!detailItem}
+        onOpenChange={(open) => !open && setDetailItem(null)}
+        item={detailItem}
+        onBoostClick={() => {
+          if (detailItem) {
+            setDetailItem(null);
+            setBoostItem(detailItem);
+          }
+        }}
+      />
       </div>
     </TooltipProvider>
   );
