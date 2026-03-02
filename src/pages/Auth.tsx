@@ -152,8 +152,8 @@ export default function Auth() {
     setPendingApproval(false);
 
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+      email: email.trim(),
+      password: password.trim(),
     });
 
     if (error) {
