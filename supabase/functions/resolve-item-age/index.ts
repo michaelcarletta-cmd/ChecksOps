@@ -564,9 +564,9 @@ async function resolveAge(
       const tc = result.choices?.[0]?.message?.tool_calls?.[0];
       if (tc) {
         const info = JSON.parse(tc.function.arguments);
-        if (info.confidence > 0.3 && info.release_year) {
+        if (info.confidence > 0.3 && info.release_year && info.release_year >= 1900 && info.release_year <= new Date().getFullYear() + 1) {
           const relYear = info.release_year;
-          const discYear = info.discontinued_year || relYear + 5;
+          const discYear = Math.min(info.discontinued_year || relYear + 5, new Date().getFullYear() + 1);
           const modelLow = new Date(`${relYear}-01-01`);
           const modelHigh = new Date(`${discYear}-12-31`);
           const modelBest = new Date(`${Math.round((relYear + Math.min(discYear, relYear + 3)) / 2)}-06-01`);
@@ -621,6 +621,21 @@ async function resolveAge(
 
   const confidence = Math.min(100, totalWeight);
   const refDate = lossDate ? new Date(lossDate) : now;
+
+  // Clamp dates to valid range to prevent RangeError on toISOString()
+  const MIN_YEAR = 1900;
+  const MAX_YEAR = now.getFullYear() + 1;
+  const clampDate = (d: Date | null): Date | null => {
+    if (!d || isNaN(d.getTime())) return null;
+    const y = d.getFullYear();
+    if (y < MIN_YEAR || y > MAX_YEAR) return null;
+    return d;
+  };
+
+  bestDate = clampDate(bestDate) || refDate;
+  lowDate = clampDate(lowDate);
+  highDate = clampDate(highDate);
+
   const ageYears = Math.max(0, (refDate.getTime() - bestDate.getTime()) / (365.25 * 24 * 3600 * 1000));
   const needsReview = confidence < 60 && LABEL_CATEGORIES.has(cat);
 
@@ -690,31 +705,36 @@ Deno.serve(async (req) => {
     const results: any[] = [];
 
     for (const item of items) {
-      console.log(`Resolving age for: ${item.item_name}`);
-      const result = await resolveAge(LOVABLE_API_KEY, item, claimFiles || [], lossDate);
+      try {
+        console.log(`Resolving age for: ${item.item_name}`);
+        const result = await resolveAge(LOVABLE_API_KEY, item, claimFiles || [], lossDate);
 
-      const { error: updateErr } = await supabase
-        .from("claim_home_inventory")
-        .update({
-          purchase_date_best: result.purchase_date_best,
-          purchase_date_low: result.purchase_date_low,
-          purchase_date_high: result.purchase_date_high,
-          age_years: result.age_years_best,
-          age_confidence_score: result.age_confidence_score,
-          evidence_json: result.evidence_json,
-          needs_age_review: result.needs_age_review,
-        } as any)
-        .eq("id", item.id);
+        const { error: updateErr } = await supabase
+          .from("claim_home_inventory")
+          .update({
+            purchase_date_best: result.purchase_date_best,
+            purchase_date_low: result.purchase_date_low,
+            purchase_date_high: result.purchase_date_high,
+            age_years: result.age_years_best,
+            age_confidence_score: result.age_confidence_score,
+            evidence_json: result.evidence_json,
+            needs_age_review: result.needs_age_review,
+          } as any)
+          .eq("id", item.id);
 
-      if (updateErr) {
-        console.error(`Failed to update item ${item.id}:`, updateErr);
+        if (updateErr) {
+          console.error(`Failed to update item ${item.id}:`, updateErr);
+        }
+
+        results.push({
+          item_id: item.id,
+          item_name: item.item_name,
+          ...result,
+        });
+      } catch (itemErr) {
+        console.error(`Error resolving item ${item.id} (${item.item_name}):`, itemErr);
+        results.push({ item_id: item.id, item_name: item.item_name, error: String(itemErr) });
       }
-
-      results.push({
-        item_id: item.id,
-        item_name: item.item_name,
-        ...result,
-      });
     }
 
     return new Response(
