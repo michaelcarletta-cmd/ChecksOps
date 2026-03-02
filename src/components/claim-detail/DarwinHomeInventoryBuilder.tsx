@@ -238,18 +238,18 @@ export const DarwinHomeInventoryBuilder = ({ claimId, claim }: DarwinHomeInvento
       <CardContent>
         <Tabs defaultValue="scan" className="w-full" orientation="vertical">
           <div className="flex flex-col md:flex-row gap-4">
-            <TabsList className="flex flex-col h-auto items-stretch bg-muted/50 p-1 rounded-lg md:w-48 shrink-0 gap-1">
-              <TabsTrigger value="scan" className="justify-start gap-2 w-full">
-                <Camera className="h-4 w-4" /> Scan Photos
+            <TabsList className="flex md:flex-col flex-row h-auto items-stretch bg-muted/50 p-1 rounded-lg md:w-44 shrink-0 gap-1 overflow-x-auto">
+              <TabsTrigger value="scan" className="justify-start gap-2 w-full text-xs md:text-sm">
+                <Camera className="h-4 w-4 shrink-0" /> <span className="hidden md:inline">Scan Photos</span><span className="md:hidden">Scan</span>
               </TabsTrigger>
-              <TabsTrigger value="pdf" className="justify-start gap-2 w-full">
-                <FileUp className="h-4 w-4" /> Import PDF
+              <TabsTrigger value="pdf" className="justify-start gap-2 w-full text-xs md:text-sm">
+                <FileUp className="h-4 w-4 shrink-0" /> <span className="hidden md:inline">Import PDF</span><span className="md:hidden">PDF</span>
               </TabsTrigger>
-              <TabsTrigger value="inventory" className="justify-start gap-2 w-full">
-                <ClipboardList className="h-4 w-4" /> Inventory ({items.length})
+              <TabsTrigger value="inventory" className="justify-start gap-2 w-full text-xs md:text-sm">
+                <ClipboardList className="h-4 w-4 shrink-0" /> <span className="hidden md:inline">Inventory ({items.length})</span><span className="md:hidden">({items.length})</span>
               </TabsTrigger>
-              <TabsTrigger value="summary" className="justify-start gap-2 w-full">
-                <BarChart3 className="h-4 w-4" /> Summary
+              <TabsTrigger value="summary" className="justify-start gap-2 w-full text-xs md:text-sm">
+                <BarChart3 className="h-4 w-4 shrink-0" /> Summary
               </TabsTrigger>
             </TabsList>
 
