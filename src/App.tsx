@@ -22,6 +22,7 @@ const Templates = lazy(() => import("./pages/Templates"));
 const Sales = lazy(() => import("./pages/Sales"));
 const Auth = lazy(() => import("./pages/Auth"));
 const ClientPortal = lazy(() => import("./pages/ClientPortal"));
+const ClientPortalHelp = lazy(() => import("./pages/ClientPortalHelp"));
 const ContractorPortal = lazy(() => import("./pages/ContractorPortal"));
 const Sign = lazy(() => import("./pages/Sign"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -102,6 +103,7 @@ function AppRoutes() {
       <Routes>
         {publicRoutes}
         <Route path="/client-portal" element={<Suspense fallback={<PageLoader />}><ClientPortal /></Suspense>} />
+        <Route path="/client-portal/help" element={<Suspense fallback={<PageLoader />}><ClientPortalHelp /></Suspense>} />
         <Route path="/claims/:id" element={<Suspense fallback={<PageLoader />}><ClaimDetail /></Suspense>} />
         <Route path="*" element={<Navigate to="/client-portal" replace />} />
       </Routes>
