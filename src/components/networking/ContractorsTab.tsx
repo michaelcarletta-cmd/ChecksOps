@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { generateClientPassword } from "@/lib/generateClientPassword";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -80,7 +81,7 @@ export const ContractorsTab = () => {
 
     setSendingInvite(contractor.id);
     // Generate a new temporary password
-    const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
+    const tempPassword = generateClientPassword(contractor.full_name || "Contractor");
     
     try {
       // Update the user's password first
@@ -199,7 +200,7 @@ export const ContractorsTab = () => {
     }
 
     // Create a temporary password for the contractor
-    const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
+    const tempPassword = generateClientPassword(formData.full_name || "Contractor");
 
     // Use edge function to create user without auto-login
     const { data: funcData, error: funcError } = await supabase.functions.invoke(

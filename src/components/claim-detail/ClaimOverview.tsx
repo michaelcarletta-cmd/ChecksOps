@@ -8,6 +8,7 @@ import { SendForSignatureButton } from "./SendForSignatureButton";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { generateClientPassword } from "@/lib/generateClientPassword";
 
 
 interface ClaimOverviewProps {
@@ -62,7 +63,7 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
 
     setCreatingPortal(true);
     try {
-      const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
+      const tempPassword = generateClientPassword(claim.policyholder_name || "Client");
 
       // Create portal user via edge function
       const { data: userData, error: userError } = await supabase.functions.invoke(
@@ -192,7 +193,7 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
     setResendingInvite(true);
     try {
       // Generate a new password for the resend
-      const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
+      const tempPassword = generateClientPassword(claim.policyholder_name || "Client");
       
       // Update the user's password via edge function
       const { data, error } = await supabase.functions.invoke("create-portal-user", {
