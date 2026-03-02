@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { generateClientPassword } from "@/lib/generateClientPassword";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
@@ -49,7 +50,7 @@ export const NewClientDialog = ({
 
       // Create user account if email is provided
       if (formData.email) {
-        tempPassword = Math.random().toString(36).slice(-8) + "A1!";
+        tempPassword = generateClientPassword(formData.name || "Client");
         
         // Use edge function to create user without auto-login
         const { data: funcData, error: funcError } = await supabase.functions.invoke(
