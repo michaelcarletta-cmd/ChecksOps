@@ -30,7 +30,7 @@ const AppLayoutContent = ({ children }: AppLayoutProps) => {
           </div>
           <QuickTaskBar />
         </header>
-        <main className="flex-1 p-6 animate-fade-in">
+        <main className="flex-1 p-3 md:p-6 animate-fade-in">
           {children}
         </main>
       </div>
