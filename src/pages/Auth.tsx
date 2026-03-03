@@ -19,11 +19,17 @@ export default function Auth() {
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [pendingApproval, setPendingApproval] = useState(false);
-  const [resetMode, setResetMode] = useState(() =>
-    window.location.hash.includes("type=recovery") ||
-    new URLSearchParams(window.location.search).get("type") === "recovery" ||
-    new URLSearchParams(window.location.search).get("reset") === "1"
-  );
+  const [resetMode, setResetMode] = useState(() => {
+    const isRecovery =
+      window.location.hash.includes("type=recovery") ||
+      new URLSearchParams(window.location.search).get("type") === "recovery" ||
+      new URLSearchParams(window.location.search).get("reset") === "1" ||
+      sessionStorage.getItem("password_reset_mode") === "true";
+    if (isRecovery) {
+      sessionStorage.setItem("password_reset_mode", "true");
+    }
+    return isRecovery;
+  });
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -31,9 +37,11 @@ export default function Auth() {
     const inRecoveryFlow =
       window.location.hash.includes("type=recovery") ||
       new URLSearchParams(window.location.search).get("type") === "recovery" ||
-      new URLSearchParams(window.location.search).get("reset") === "1";
+      new URLSearchParams(window.location.search).get("reset") === "1" ||
+      sessionStorage.getItem("password_reset_mode") === "true";
     if (inRecoveryFlow) {
       setResetMode(true);
+      sessionStorage.setItem("password_reset_mode", "true");
     }
 
     // Check if user is already logged in
@@ -47,9 +55,12 @@ export default function Auth() {
       const recoveryInUrl =
         window.location.hash.includes("type=recovery") ||
         new URLSearchParams(window.location.search).get("type") === "recovery" ||
-        new URLSearchParams(window.location.search).get("reset") === "1";
+        new URLSearchParams(window.location.search).get("reset") === "1" ||
+        sessionStorage.getItem("password_reset_mode") === "true";
+
       if (event === "PASSWORD_RECOVERY" || recoveryInUrl) {
         setResetMode(true);
+        sessionStorage.setItem("password_reset_mode", "true");
         return;
       }
 
@@ -235,6 +246,7 @@ export default function Auth() {
 
     await supabase.auth.signOut();
     window.history.replaceState({}, document.title, "/auth");
+    sessionStorage.removeItem("password_reset_mode");
     setResetMode(false);
     setNewPassword("");
     setConfirmNewPassword("");
