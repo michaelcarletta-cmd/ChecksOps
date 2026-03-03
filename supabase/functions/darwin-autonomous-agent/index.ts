@@ -34,6 +34,7 @@ Deno.serve(async (req) => {
           claim_number,
           policyholder_name,
           status,
+          is_closed,
           insurance_company
         )
       `)
@@ -64,9 +65,17 @@ Deno.serve(async (req) => {
       await processUnclassifiedDocuments(supabase, claimIds, results);
     }
 
+    const CLOSED_STATUSES = ['Claim Settled', 'Dead File', 'Closed'];
+
     for (const automation of automatedClaims || []) {
       const claim = automation.claims;
       if (!claim) continue;
+
+      // Skip closed/settled claims entirely
+      if (claim.is_closed || CLOSED_STATUSES.includes(claim.status)) {
+        console.log(`Skipping claim ${claim.claim_number} - status: ${claim.status} (closed/settled)`);
+        continue;
+      }
 
       try {
         console.log(`Processing claim ${claim.claim_number}...`);
