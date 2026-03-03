@@ -11,26 +11,51 @@ const corsHeaders = {
 interface PortalInviteRequest {
   email: string;
   password: string;
+  pin?: string;
   userType: string;
   userName?: string;
   appUrl?: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
-  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { email, password, userType, userName, appUrl }: PortalInviteRequest = await req.json();
+    const { email, password, pin, userType, userName, appUrl }: PortalInviteRequest = await req.json();
 
     console.log(`Sending portal invite to ${email} for ${userType}`);
 
-    // Use the app URL passed from frontend, or fall back to a default
-    const loginUrl = appUrl ? `${appUrl}/auth` : "https://freedomclaims.work/auth";
+    const loginUrl = appUrl ? `${appUrl}/portal` : "https://freedomclaims.lovable.app/portal";
+    const isClient = userType.toLowerCase() === "client" && pin;
     
     console.log(`Using login URL: ${loginUrl}`);
+
+    const credentialsSection = isClient ? `
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 20px; margin: 24px 0;">
+              <h3 style="margin: 0 0 15px 0; color: #1e3a5f; font-size: 16px;">Your Portal PIN</h3>
+              
+              <div style="text-align: center;">
+                <div style="background: white; border: 2px solid #1e3a5f; border-radius: 8px; padding: 16px 24px; display: inline-block; margin: 8px 0;">
+                  <span style="font-family: monospace; font-size: 32px; font-weight: bold; letter-spacing: 12px; color: #1e3a5f;">${pin}</span>
+                </div>
+                <p style="color: #64748b; font-size: 13px; margin: 8px 0 0 0;">Use this 4-digit PIN to log in — no email or password needed.</p>
+              </div>
+            </div>` : `
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 20px; margin: 24px 0;">
+              <h3 style="margin: 0 0 15px 0; color: #1e3a5f; font-size: 16px;">Your Login Credentials</h3>
+              
+              <div style="margin-bottom: 12px;">
+                <span style="color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Email</span>
+                <div style="background: white; border: 1px solid #e2e8f0; border-radius: 4px; padding: 10px 12px; margin-top: 4px; font-family: monospace; font-size: 14px;">${email}</div>
+              </div>
+              
+              <div>
+                <span style="color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Temporary Password</span>
+                <div style="background: white; border: 1px solid #e2e8f0; border-radius: 4px; padding: 10px 12px; margin-top: 4px; font-family: monospace; font-size: 14px; letter-spacing: 1px;">${password}</div>
+              </div>
+            </div>`;
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -50,23 +75,7 @@ const handler = async (req: Request): Promise<Response> => {
           
           <p>Your ${userType.toLowerCase()} portal account has been created. You can now access your claims and documents through our secure portal.</p>
           
-          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 20px; margin: 24px 0;">
-            <h3 style="margin: 0 0 15px 0; color: #1e3a5f; font-size: 16px;">Your Login Credentials</h3>
-            
-            <div style="margin-bottom: 12px;">
-              <span style="color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Email</span>
-              <div style="background: white; border: 1px solid #e2e8f0; border-radius: 4px; padding: 10px 12px; margin-top: 4px; font-family: monospace; font-size: 14px;">${email}</div>
-            </div>
-            
-            <div>
-              <span style="color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Temporary Password</span>
-              <div style="background: white; border: 1px solid #e2e8f0; border-radius: 4px; padding: 10px 12px; margin-top: 4px; font-family: monospace; font-size: 14px; letter-spacing: 1px;">${password}</div>
-            </div>
-          </div>
-          
-          <p style="color: #dc2626; font-size: 14px; margin: 16px 0;">
-            <strong>Important:</strong> Please save your password securely. For security reasons, we recommend changing your password after your first login.
-          </p>
+          ${credentialsSection}
           
           <div style="text-align: center; margin: 30px 0;">
             <a href="${loginUrl}" style="background: #1e3a5f; color: white; padding: 14px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; display: inline-block;">Access Your Portal</a>

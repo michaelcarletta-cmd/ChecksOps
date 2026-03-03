@@ -4194,6 +4194,33 @@ export type Database = {
           },
         ]
       }
+      client_portal_pins: {
+        Row: {
+          client_name: string | null
+          created_at: string
+          id: string
+          pin: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          client_name?: string | null
+          created_at?: string
+          id?: string
+          pin: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          client_name?: string | null
+          created_at?: string
+          id?: string
+          pin?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       clients: {
         Row: {
           city: string | null

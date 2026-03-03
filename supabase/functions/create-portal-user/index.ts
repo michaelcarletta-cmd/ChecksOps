@@ -13,6 +13,40 @@ interface CreatePortalUserRequest {
   phone?: string;
 }
 
+function generatePin(phone?: string): string {
+  if (phone) {
+    // Extract last 4 digits from phone number
+    const digitsOnly = phone.replace(/\D/g, "");
+    if (digitsOnly.length >= 4) {
+      return digitsOnly.slice(-4);
+    }
+  }
+  // Generate random 4-digit PIN
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+async function getUniquePin(supabaseAdmin: any, phone?: string): Promise<string> {
+  let pin = generatePin(phone);
+  let attempts = 0;
+  const maxAttempts = 50;
+
+  while (attempts < maxAttempts) {
+    const { data: existing } = await supabaseAdmin
+      .from("client_portal_pins")
+      .select("id")
+      .eq("pin", pin)
+      .maybeSingle();
+
+    if (!existing) return pin;
+
+    // If collision, generate a random PIN instead
+    pin = String(Math.floor(1000 + Math.random() * 9000));
+    attempts++;
+  }
+
+  throw new Error("Unable to generate unique PIN");
+}
+
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -69,7 +103,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
         .maybeSingle();
 
       if (!existingRole) {
-        // Add the role if they don't have it
         await supabaseAdmin
           .from("user_roles")
           .insert({ user_id: existingUser.id, role });
@@ -84,8 +117,28 @@ Deno.serve(async (req: Request): Promise<Response> => {
           .eq("id", existingUser.id);
       }
 
+      // For client role, ensure they have a PIN
+      let pin: string | null = null;
+      if (role === "client") {
+        const { data: existingPin } = await supabaseAdmin
+          .from("client_portal_pins")
+          .select("pin")
+          .eq("user_id", existingUser.id)
+          .maybeSingle();
+
+        if (existingPin) {
+          pin = existingPin.pin;
+        } else {
+          pin = await getUniquePin(supabaseAdmin, phone);
+          await supabaseAdmin
+            .from("client_portal_pins")
+            .insert({ user_id: existingUser.id, pin, client_name: fullName });
+          console.log("Created PIN for existing user:", pin);
+        }
+      }
+
       return new Response(
-        JSON.stringify({ success: true, userId: existingUser.id, existingUser: true, passwordUpdated: true }),
+        JSON.stringify({ success: true, userId: existingUser.id, existingUser: true, passwordUpdated: true, pin }),
         { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
@@ -128,8 +181,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
         .eq("id", userData.user.id);
     }
 
+    // For client role, generate and store a PIN
+    let pin: string | null = null;
+    if (role === "client" && userData.user) {
+      pin = await getUniquePin(supabaseAdmin, phone);
+      await supabaseAdmin
+        .from("client_portal_pins")
+        .insert({ user_id: userData.user.id, pin, client_name: fullName });
+      console.log("Created PIN for new user:", pin);
+    }
+
     return new Response(
-      JSON.stringify({ success: true, userId: userData.user?.id }),
+      JSON.stringify({ success: true, userId: userData.user?.id, pin }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   } catch (error: any) {
