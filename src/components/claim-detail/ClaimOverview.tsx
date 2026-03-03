@@ -35,7 +35,7 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
   const [creatingPortal, setCreatingPortal] = useState(false);
   const [hasPortalAccess, setHasPortalAccess] = useState(false);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
-  const [credentials, setCredentials] = useState({ email: "", password: "" });
+  const [credentials, setCredentials] = useState({ email: "", password: "", pin: "" });
   const [resendingInvite, setResendingInvite] = useState(false);
 
   // Check if client already has portal access
@@ -155,7 +155,8 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
           const { error: emailError } = await supabase.functions.invoke("send-portal-invite", {
             body: { 
               email: claim.policyholder_email, 
-              password: tempPassword, 
+              password: tempPassword,
+              pin: userData?.pin,
               userType: "Client", 
               userName: claim.policyholder_name || undefined,
               appUrl 
@@ -173,7 +174,7 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
           toast.warning("Portal created but email failed to send");
         }
 
-        setCredentials({ email: claim.policyholder_email, password: tempPassword });
+        setCredentials({ email: claim.policyholder_email, password: tempPassword, pin: userData?.pin || "" });
         setCredentialsOpen(true);
       }
     } catch (error: any) {
@@ -213,7 +214,8 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
       const { error: emailError } = await supabase.functions.invoke("send-portal-invite", {
         body: { 
           email: claim.policyholder_email, 
-          password: tempPassword, 
+          password: tempPassword,
+          pin: data?.pin,
           userType: "Client", 
           userName: claim.policyholder_name || undefined,
           appUrl 
@@ -223,11 +225,11 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
       if (emailError) {
         console.error("Failed to send invite email:", emailError);
         toast.warning("Password reset but email failed to send");
-        setCredentials({ email: claim.policyholder_email, password: tempPassword });
+        setCredentials({ email: claim.policyholder_email, password: tempPassword, pin: data?.pin || "" });
         setCredentialsOpen(true);
       } else {
         toast.success("New invite email sent successfully");
-        setCredentials({ email: claim.policyholder_email, password: tempPassword });
+        setCredentials({ email: claim.policyholder_email, password: tempPassword, pin: data?.pin || "" });
         setCredentialsOpen(true);
       }
     } catch (error: any) {
@@ -390,6 +392,7 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
         onClose={() => setCredentialsOpen(false)}
         email={credentials.email}
         password={credentials.password}
+        pin={credentials.pin}
         userType="Client"
         userName={claim.policyholder_name}
       />

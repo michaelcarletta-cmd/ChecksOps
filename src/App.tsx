@@ -21,6 +21,7 @@ const Networking = lazy(() => import("./pages/Networking"));
 const Templates = lazy(() => import("./pages/Templates"));
 const Sales = lazy(() => import("./pages/Sales"));
 const Auth = lazy(() => import("./pages/Auth"));
+const PortalLogin = lazy(() => import("./pages/PortalLogin"));
 const ClientPortal = lazy(() => import("./pages/ClientPortal"));
 const ClientPortalHelp = lazy(() => import("./pages/ClientPortalHelp"));
 const ContractorPortal = lazy(() => import("./pages/ContractorPortal"));
@@ -94,6 +95,7 @@ function AppRoutes() {
         }
       />
       <Route path="/sign" element={<Suspense fallback={<PageLoader />}><Sign /></Suspense>} />
+      <Route path="/portal" element={<Suspense fallback={<PageLoader />}><PortalLogin /></Suspense>} />
     </>
   );
 
