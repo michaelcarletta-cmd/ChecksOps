@@ -50,8 +50,10 @@ export default function PortalLogin() {
             variant: "destructive",
           });
           setPin("");
+        } else {
+          // Navigate to client portal after successful auth
+          navigate("/client-portal", { replace: true });
         }
-        // Auth state change listener in App.tsx will handle navigation
       }
     } catch (err: any) {
       console.error("PIN login error:", err);
