@@ -1,1 +1,4 @@
 project_id = "yvagrvfkeuvzjezfsbun"
+
+[functions.portal-pin-login]
+verify_jwt = false
