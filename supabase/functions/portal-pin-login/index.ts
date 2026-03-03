@@ -2,12 +2,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
@@ -26,58 +26,143 @@ Deno.serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    // Look up the PIN
-    const { data: pinRecord, error: pinError } = await supabaseAdmin
+    // Strategy 1: Check client_portal_pins table first
+    const { data: pinRecord } = await supabaseAdmin
       .from("client_portal_pins")
       .select("user_id, client_name")
       .eq("pin", pin)
       .maybeSingle();
 
-    if (pinError || !pinRecord) {
-      console.log("PIN lookup failed:", pin, pinError);
-      return new Response(
-        JSON.stringify({ error: "Invalid PIN. Please check your PIN and try again." }),
-        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+    if (pinRecord) {
+      // Found in PIN table - try to sign them in
+      const result = await signInUser(supabaseAdmin, pinRecord.user_id, pinRecord.client_name);
+      if (result.success) {
+        return new Response(JSON.stringify(result), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+      // If auth user doesn't exist, fall through to Strategy 2
+      console.log("PIN record found but auth user missing, trying phone lookup");
     }
 
-    // Get the user's email
-    const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(pinRecord.user_id);
+    // Strategy 2: Match PIN against last 4 digits of client phone numbers
+    const { data: clients, error: clientsError } = await supabaseAdmin
+      .from("clients")
+      .select("id, name, email, phone, user_id")
+      .not("phone", "is", null);
 
-    if (userError || !userData?.user?.email) {
-      console.error("User lookup failed:", userError);
-      return new Response(
-        JSON.stringify({ error: "Account not found. Please contact support." }),
-        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
-    }
-
-    // Generate a magic link for the user
-    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-      type: "magiclink",
-      email: userData.user.email,
-    });
-
-    if (linkError || !linkData) {
-      console.error("Magic link generation failed:", linkError);
+    if (clientsError) {
+      console.error("Error querying clients:", clientsError);
       return new Response(
         JSON.stringify({ error: "Login failed. Please try again." }),
         { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
-    // Extract the token hash and return it for client-side OTP verification
-    const properties = linkData.properties;
+    // Find client whose phone ends with the PIN
+    const matchingClient = clients?.find((c: any) => {
+      if (!c.phone) return false;
+      const digits = c.phone.replace(/\D/g, "");
+      return digits.length >= 4 && digits.slice(-4) === pin;
+    });
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        token_hash: properties.hashed_token,
-        email: userData.user.email,
-        client_name: pinRecord.client_name,
-      }),
-      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+    if (!matchingClient) {
+      console.log("No client found with phone ending in:", pin);
+      return new Response(
+        JSON.stringify({ error: "Invalid PIN. Please check your PIN and try again." }),
+        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    console.log("Found client by phone match:", matchingClient.name, matchingClient.email);
+
+    // Ensure auth user exists
+    let authUserId = matchingClient.user_id;
+
+    // Check if the auth user actually exists
+    if (authUserId) {
+      const { data: existingUser, error: getUserErr } = await supabaseAdmin.auth.admin.getUserById(authUserId);
+      if (getUserErr || !existingUser?.user) {
+        console.log("user_id in clients table doesn't exist in auth, will create new");
+        authUserId = null;
+      }
+    }
+
+    // Create auth user if needed
+    if (!authUserId) {
+      const tempPassword = `Pin${pin}${Date.now()}!`;
+      const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+        email: matchingClient.email,
+        password: tempPassword,
+        email_confirm: true,
+        user_metadata: {
+          full_name: matchingClient.name,
+          role: "client",
+        },
+      });
+
+      if (createErr) {
+        // If user already exists in auth with this email, find them
+        if (createErr.message?.includes("already been registered") || createErr.message?.includes("already exists")) {
+          const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+          const existing = listData?.users?.find(
+            (u: any) => u.email?.toLowerCase() === matchingClient.email.toLowerCase()
+          );
+          if (existing) {
+            authUserId = existing.id;
+            console.log("Found existing auth user by email:", authUserId);
+          } else {
+            console.error("Cannot find or create auth user for:", matchingClient.email);
+            return new Response(
+              JSON.stringify({ error: "Account setup issue. Please contact support." }),
+              { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+            );
+          }
+        } else {
+          console.error("Error creating auth user:", createErr);
+          return new Response(
+            JSON.stringify({ error: "Account setup issue. Please contact support." }),
+            { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+          );
+        }
+      } else {
+        authUserId = newUser.user.id;
+        console.log("Created new auth user:", authUserId);
+      }
+
+      // Ensure client role exists
+      await supabaseAdmin.from("user_roles").upsert(
+        { user_id: authUserId, role: "client" },
+        { onConflict: "user_id,role" }
+      );
+
+      // Update clients table with auth user_id
+      await supabaseAdmin
+        .from("clients")
+        .update({ user_id: authUserId })
+        .eq("id", matchingClient.id);
+    }
+
+    // Save PIN to client_portal_pins for faster lookup next time
+    await supabaseAdmin.from("client_portal_pins").upsert(
+      { user_id: authUserId, pin, client_name: matchingClient.name },
+      { onConflict: "pin" }
     );
+
+    // Sign them in
+    const result = await signInUser(supabaseAdmin, authUserId, matchingClient.name);
+    if (!result.success) {
+      return new Response(
+        JSON.stringify({ error: result.error || "Login failed" }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    return new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
   } catch (error: any) {
     console.error("Error in portal-pin-login:", error);
     return new Response(
@@ -86,3 +171,34 @@ Deno.serve(async (req: Request): Promise<Response> => {
     );
   }
 });
+
+async function signInUser(supabaseAdmin: any, userId: string, clientName: string) {
+  try {
+    const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId);
+
+    if (userError || !userData?.user?.email) {
+      console.error("User lookup failed for sign-in:", userId, userError);
+      return { success: false, error: "Account not found" };
+    }
+
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: "magiclink",
+      email: userData.user.email,
+    });
+
+    if (linkError || !linkData) {
+      console.error("Magic link generation failed:", linkError);
+      return { success: false, error: "Login failed" };
+    }
+
+    return {
+      success: true,
+      token_hash: linkData.properties.hashed_token,
+      email: userData.user.email,
+      client_name: clientName,
+    };
+  } catch (err: any) {
+    console.error("signInUser error:", err);
+    return { success: false, error: err.message };
+  }
+}
