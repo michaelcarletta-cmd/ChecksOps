@@ -47,6 +47,16 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Skip notifications for closed/settled claims
+    const closedStatuses = ['Claim Settled', 'Dead File', 'Closed'];
+    if (claim.is_closed || closedStatuses.includes(claim.status)) {
+      console.log(`Skipping notification - claim ${claimId} is closed/settled (status: ${claim.status})`);
+      return new Response(
+        JSON.stringify({ success: true, skipped: true, reason: 'claim_closed' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Check if claim has client notification enabled
     const { data: automation } = await supabase
       .from('claim_automations')

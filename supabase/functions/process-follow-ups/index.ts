@@ -50,7 +50,9 @@ Deno.serve(async (req) => {
       .eq('is_enabled', true)
       .eq('follow_up_enabled', true)
       .is('follow_up_stopped_at', null)
-      .lte('follow_up_next_at', new Date().toISOString());
+      .lte('follow_up_next_at', new Date().toISOString())
+      .not('claims.status', 'in', '("Claim Settled","Dead File","Closed")')
+      .not('claims.is_closed', 'eq', 'true');
 
     if (fetchError) {
       console.error("Failed to fetch due follow-ups:", fetchError);
