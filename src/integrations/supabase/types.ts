@@ -2435,9 +2435,11 @@ export type Database = {
           expense_category: string
           expense_date: string
           id: string
+          is_paid: boolean | null
           is_reimbursed: boolean | null
           is_submitted_to_insurer: boolean | null
           notes: string | null
+          paid_date: string | null
           receipt_file_path: string | null
           reimbursed_amount: number | null
           reimbursed_date: string | null
@@ -2455,9 +2457,11 @@ export type Database = {
           expense_category: string
           expense_date: string
           id?: string
+          is_paid?: boolean | null
           is_reimbursed?: boolean | null
           is_submitted_to_insurer?: boolean | null
           notes?: string | null
+          paid_date?: string | null
           receipt_file_path?: string | null
           reimbursed_amount?: number | null
           reimbursed_date?: string | null
@@ -2475,9 +2479,11 @@ export type Database = {
           expense_category?: string
           expense_date?: string
           id?: string
+          is_paid?: boolean | null
           is_reimbursed?: boolean | null
           is_submitted_to_insurer?: boolean | null
           notes?: string | null
+          paid_date?: string | null
           receipt_file_path?: string | null
           reimbursed_amount?: number | null
           reimbursed_date?: string | null

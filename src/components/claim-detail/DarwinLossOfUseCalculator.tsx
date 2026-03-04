@@ -8,12 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { Home, Plus, DollarSign, Receipt, Upload, CheckCircle } from "lucide-react";
+import { Home, Plus, DollarSign, Receipt, Upload, CheckCircle, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ReceiptUploadDialog } from "./ReceiptUploadDialog";
-
 interface LossOfUseExpense {
   id: string;
   expense_category: string;
@@ -27,6 +27,8 @@ interface LossOfUseExpense {
   is_reimbursed: boolean;
   reimbursed_amount: number | null;
   notes: string | null;
+  is_paid: boolean;
+  paid_date: string | null;
 }
 
 interface DarwinLossOfUseCalculatorProps {
@@ -148,12 +150,51 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
     }
   };
 
+  const markAsPaid = async (id: string) => {
+    const { error } = await supabase
+      .from("claim_loss_of_use_expenses")
+      .update({
+        is_paid: true,
+        paid_date: format(new Date(), "yyyy-MM-dd"),
+      } as any)
+      .eq("id", id);
+
+    if (error) {
+      toast.error("Failed to update");
+    } else {
+      toast.success("Marked as paid");
+      fetchExpenses();
+    }
+  };
+
+  const markAsUnpaid = async (id: string) => {
+    const { error } = await supabase
+      .from("claim_loss_of_use_expenses")
+      .update({
+        is_paid: false,
+        paid_date: null,
+      } as any)
+      .eq("id", id);
+
+    if (error) {
+      toast.error("Failed to update");
+    } else {
+      toast.success("Marked as unpaid");
+      fetchExpenses();
+    }
+  };
+
   // Calculate totals
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
   const totalSubmitted = expenses.filter(e => e.is_submitted_to_insurer).reduce((sum, e) => sum + e.amount, 0);
   const totalReimbursed = expenses.filter(e => e.is_reimbursed).reduce((sum, e) => sum + (e.reimbursed_amount || 0), 0);
   const totalPending = totalSubmitted - totalReimbursed;
   const totalUnsubmitted = totalExpenses - totalSubmitted;
+  const totalPaid = expenses.filter(e => (e as any).is_paid).reduce((sum, e) => sum + e.amount, 0);
+  const totalUnpaid = totalExpenses - totalPaid;
+
+  const paidExpenses = expenses.filter(e => (e as any).is_paid);
+  const unpaidExpenses = expenses.filter(e => !(e as any).is_paid);
 
   // Group by category for summary
   const categoryTotals = expenses.reduce((acc, e) => {
@@ -260,22 +301,26 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
       </CardHeader>
       <CardContent>
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-muted/50 rounded-lg p-4 text-center">
             <p className="text-sm text-muted-foreground">Total Expenses</p>
             <p className="text-2xl font-bold">${totalExpenses.toLocaleString()}</p>
           </div>
-          <div className="bg-amber-50 dark:bg-amber-950/30 rounded-lg p-4 text-center">
-            <p className="text-sm text-amber-700 dark:text-amber-400">Not Submitted</p>
-            <p className="text-2xl font-bold text-amber-700 dark:text-amber-400">${totalUnsubmitted.toLocaleString()}</p>
+          <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-4 text-center">
+            <p className="text-sm text-green-700 dark:text-green-400">Paid</p>
+            <p className="text-2xl font-bold text-green-700 dark:text-green-400">${totalPaid.toLocaleString()}</p>
+          </div>
+          <div className="bg-red-50 dark:bg-red-950/30 rounded-lg p-4 text-center">
+            <p className="text-sm text-red-700 dark:text-red-400">Not Paid</p>
+            <p className="text-2xl font-bold text-red-700 dark:text-red-400">${totalUnpaid.toLocaleString()}</p>
           </div>
           <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 text-center">
-            <p className="text-sm text-blue-700 dark:text-blue-400">Pending Payment</p>
+            <p className="text-sm text-blue-700 dark:text-blue-400">Pending Reimb.</p>
             <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">${totalPending.toLocaleString()}</p>
           </div>
-          <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-4 text-center">
-            <p className="text-sm text-green-700 dark:text-green-400">Reimbursed</p>
-            <p className="text-2xl font-bold text-green-700 dark:text-green-400">${totalReimbursed.toLocaleString()}</p>
+          <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-lg p-4 text-center">
+            <p className="text-sm text-emerald-700 dark:text-emerald-400">Reimbursed</p>
+            <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">${totalReimbursed.toLocaleString()}</p>
           </div>
         </div>
 
@@ -296,7 +341,6 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
           </div>
         )}
 
-        {/* Expenses Table */}
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
@@ -308,73 +352,130 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
             <p className="text-sm">Add ALE expenses to track reimbursements</p>
           </div>
         ) : (
-          <div className="border rounded-lg overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {expenses.map((expense) => {
-                  const catInfo = EXPENSE_CATEGORIES.find(c => c.value === expense.expense_category);
-                  return (
-                    <TableRow key={expense.id}>
-                      <TableCell>{format(new Date(expense.expense_date), "MMM d")}</TableCell>
-                      <TableCell>
-                        <span>{catInfo?.icon}</span> {catInfo?.label || expense.expense_category}
-                      </TableCell>
-                      <TableCell>
-                        {expense.vendor_name && <span className="font-medium">{expense.vendor_name}: </span>}
-                        {expense.description}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        ${expense.amount.toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        {expense.is_reimbursed ? (
-                          <Badge className="bg-green-100 text-green-800">
-                            <CheckCircle className="h-3 w-3 mr-1" /> Reimbursed
-                          </Badge>
-                        ) : expense.is_submitted_to_insurer ? (
-                          <Badge className="bg-blue-100 text-blue-800">Submitted</Badge>
-                        ) : (
-                          <Badge variant="secondary">Not Submitted</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {!expense.is_submitted_to_insurer && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => markAsSubmitted(expense.id)}
-                          >
-                            <Upload className="h-4 w-4" />
-                          </Button>
-                        )}
-                        {expense.is_submitted_to_insurer && !expense.is_reimbursed && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => markAsReimbursed(expense.id, expense.amount)}
-                          >
-                            <DollarSign className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+          <Tabs defaultValue="not_paid" className="w-full">
+            <TabsList className="mb-4">
+              <TabsTrigger value="not_paid">
+                Not Paid ({unpaidExpenses.length})
+              </TabsTrigger>
+              <TabsTrigger value="paid">
+                Paid ({paidExpenses.length})
+              </TabsTrigger>
+              <TabsTrigger value="all">
+                All ({expenses.length})
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="not_paid">
+              {unpaidExpenses.length === 0 ? (
+                <p className="text-center py-4 text-muted-foreground text-sm">All expenses are paid!</p>
+              ) : (
+                <ExpenseTable expenses={unpaidExpenses} categories={EXPENSE_CATEGORIES} markAsSubmitted={markAsSubmitted} markAsReimbursed={markAsReimbursed} markAsPaid={markAsPaid} markAsUnpaid={markAsUnpaid} />
+              )}
+            </TabsContent>
+            <TabsContent value="paid">
+              {paidExpenses.length === 0 ? (
+                <p className="text-center py-4 text-muted-foreground text-sm">No paid expenses yet</p>
+              ) : (
+                <ExpenseTable expenses={paidExpenses} categories={EXPENSE_CATEGORIES} markAsSubmitted={markAsSubmitted} markAsReimbursed={markAsReimbursed} markAsPaid={markAsPaid} markAsUnpaid={markAsUnpaid} />
+              )}
+            </TabsContent>
+            <TabsContent value="all">
+              <ExpenseTable expenses={expenses} categories={EXPENSE_CATEGORIES} markAsSubmitted={markAsSubmitted} markAsReimbursed={markAsReimbursed} markAsPaid={markAsPaid} markAsUnpaid={markAsUnpaid} />
+            </TabsContent>
+          </Tabs>
         )}
       </CardContent>
     </Card>
   );
 };
+
+/* Extracted table to keep things clean */
+function ExpenseTable({ expenses, categories, markAsSubmitted, markAsReimbursed, markAsPaid, markAsUnpaid }: {
+  expenses: LossOfUseExpense[];
+  categories: typeof EXPENSE_CATEGORIES;
+  markAsSubmitted: (id: string) => void;
+  markAsReimbursed: (id: string, amount: number) => void;
+  markAsPaid: (id: string) => void;
+  markAsUnpaid: (id: string) => void;
+}) {
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Date</TableHead>
+            <TableHead>Category</TableHead>
+            <TableHead>Description</TableHead>
+            <TableHead className="text-right">Amount</TableHead>
+            <TableHead>Paid</TableHead>
+            <TableHead>Insurer Status</TableHead>
+            <TableHead>Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {expenses.map((expense) => {
+            const catInfo = categories.find(c => c.value === expense.expense_category);
+            const isPaid = (expense as any).is_paid;
+            const paidDate = (expense as any).paid_date;
+            return (
+              <TableRow key={expense.id}>
+                <TableCell>{format(new Date(expense.expense_date), "MMM d")}</TableCell>
+                <TableCell>
+                  <span>{catInfo?.icon}</span> {catInfo?.label || expense.expense_category}
+                </TableCell>
+                <TableCell>
+                  {expense.vendor_name && <span className="font-medium">{expense.vendor_name}: </span>}
+                  {expense.description}
+                </TableCell>
+                <TableCell className="text-right font-medium">
+                  ${expense.amount.toLocaleString()}
+                </TableCell>
+                <TableCell>
+                  {isPaid ? (
+                    <Badge className="bg-green-100 text-green-800 cursor-pointer" onClick={() => markAsUnpaid(expense.id)}>
+                      <CheckCircle className="h-3 w-3 mr-1" /> Paid {paidDate ? format(new Date(paidDate), "M/d") : ""}
+                    </Badge>
+                  ) : (
+                    <Badge variant="destructive" className="cursor-pointer opacity-80" onClick={() => markAsPaid(expense.id)}>
+                      Not Paid
+                    </Badge>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {expense.is_reimbursed ? (
+                    <Badge className="bg-emerald-100 text-emerald-800">
+                      <CheckCircle className="h-3 w-3 mr-1" /> Reimbursed
+                    </Badge>
+                  ) : expense.is_submitted_to_insurer ? (
+                    <Badge className="bg-blue-100 text-blue-800">Submitted</Badge>
+                  ) : (
+                    <Badge variant="secondary">Not Submitted</Badge>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <div className="flex gap-1">
+                    {!isPaid && (
+                      <Button variant="ghost" size="sm" onClick={() => markAsPaid(expense.id)} title="Mark as paid">
+                        <CreditCard className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {!expense.is_submitted_to_insurer && (
+                      <Button variant="ghost" size="sm" onClick={() => markAsSubmitted(expense.id)} title="Mark as submitted">
+                        <Upload className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {expense.is_submitted_to_insurer && !expense.is_reimbursed && (
+                      <Button variant="ghost" size="sm" onClick={() => markAsReimbursed(expense.id, expense.amount)} title="Mark as reimbursed">
+                        <DollarSign className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
