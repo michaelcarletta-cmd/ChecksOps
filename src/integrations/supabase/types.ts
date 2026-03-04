@@ -1913,7 +1913,9 @@ export type Database = {
           description: string
           expense_date: string
           id: string
+          is_paid: boolean | null
           notes: string | null
+          paid_date: string | null
           paid_to: string | null
           payment_method: string | null
           updated_at: string | null
@@ -1927,7 +1929,9 @@ export type Database = {
           description: string
           expense_date: string
           id?: string
+          is_paid?: boolean | null
           notes?: string | null
+          paid_date?: string | null
           paid_to?: string | null
           payment_method?: string | null
           updated_at?: string | null
@@ -1941,7 +1945,9 @@ export type Database = {
           description?: string
           expense_date?: string
           id?: string
+          is_paid?: boolean | null
           notes?: string | null
+          paid_date?: string | null
           paid_to?: string | null
           payment_method?: string | null
           updated_at?: string | null
