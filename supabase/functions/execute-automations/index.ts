@@ -467,14 +467,27 @@ async function sendSms(supabase: any, config: any, execution: any) {
     throw new Error('Telnyx credentials not configured');
   }
 
+  const telnyxMessagingProfileId = Deno.env.get('TELNYX_MESSAGING_PROFILE_ID');
+
   // Helper function to send SMS to a single phone number
   const sendToPhone = async (phone: string) => {
     // Normalize phone number to E.164 format
     let normalizedPhone = phone.replace(/\D/g, '');
     if (normalizedPhone.length === 10) {
       normalizedPhone = '+1' + normalizedPhone;
+    } else if (normalizedPhone.length === 11 && normalizedPhone.startsWith('1')) {
+      normalizedPhone = '+' + normalizedPhone;
     } else if (!normalizedPhone.startsWith('+')) {
       normalizedPhone = '+' + normalizedPhone;
+    }
+
+    const smsPayload: Record<string, string> = {
+      from: telnyxPhoneNumber,
+      to: normalizedPhone,
+      text: messageBody,
+    };
+    if (telnyxMessagingProfileId) {
+      smsPayload.messaging_profile_id = telnyxMessagingProfileId;
     }
 
     const response = await fetch('https://api.telnyx.com/v2/messages', {
@@ -483,11 +496,7 @@ async function sendSms(supabase: any, config: any, execution: any) {
         'Authorization': `Bearer ${telnyxApiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        from: telnyxPhoneNumber,
-        to: normalizedPhone,
-        text: messageBody,
-      }),
+      body: JSON.stringify(smsPayload),
     });
 
     if (!response.ok) {
