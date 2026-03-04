@@ -89,7 +89,11 @@ function AppRoutes() {
       <Route
         path="/auth"
         element={
-          user && !inPasswordRecoveryFlow
+          user && userRole === "client"
+            ? <Navigate to="/client-portal" replace />
+            : user && userRole === "contractor"
+            ? <Navigate to="/contractor-portal" replace />
+            : user && !inPasswordRecoveryFlow
             ? <Navigate to="/" replace />
             : <Suspense fallback={<PageLoader />}><Auth /></Suspense>
         }
