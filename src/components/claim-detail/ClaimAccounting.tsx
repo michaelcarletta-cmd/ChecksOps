@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy, FileOutput, Home, Warehouse, Package, Pencil, Trash2, Sofa, Upload } from "lucide-react";
+import { DollarSign, Plus, FileText, Receipt, Building2, TrendingUp, ExternalLink, Copy, FileOutput, Home, Warehouse, Package, Pencil, Trash2, Sofa, Upload, CheckCircle } from "lucide-react";
 import { format } from "date-fns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -1077,6 +1078,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
 function ExpensesSection({ claimId, expenses, isAdmin }: any) {
   const [open, setOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<any>(null);
+  const [expenseTab, setExpenseTab] = useState("not_paid");
   const [formData, setFormData] = useState({
     expense_date: "",
     description: "",
@@ -1088,6 +1090,37 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
   });
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const paidExpenses = expenses.filter((e: any) => e.is_paid);
+  const unpaidExpenses = expenses.filter((e: any) => !e.is_paid);
+  const totalPaid = paidExpenses.reduce((sum: number, e: any) => sum + Number(e.amount), 0);
+  const totalUnpaid = unpaidExpenses.reduce((sum: number, e: any) => sum + Number(e.amount), 0);
+
+  const markExpenseAsPaid = async (expenseId: string) => {
+    const { error } = await supabase
+      .from("claim_expenses")
+      .update({ is_paid: true, paid_date: format(new Date(), "yyyy-MM-dd") } as any)
+      .eq("id", expenseId);
+    if (error) {
+      toast({ title: "Error", description: "Failed to update", variant: "destructive" });
+    } else {
+      toast({ title: "Marked as paid" });
+      queryClient.invalidateQueries({ queryKey: ["claim-expenses", claimId] });
+    }
+  };
+
+  const markExpenseAsUnpaid = async (expenseId: string) => {
+    const { error } = await supabase
+      .from("claim_expenses")
+      .update({ is_paid: false, paid_date: null } as any)
+      .eq("id", expenseId);
+    if (error) {
+      toast({ title: "Error", description: "Failed to update", variant: "destructive" });
+    } else {
+      toast({ title: "Marked as unpaid" });
+      queryClient.invalidateQueries({ queryKey: ["claim-expenses", claimId] });
+    }
+  };
 
   const resetForm = () => {
     setEditingExpense(null);
@@ -1182,7 +1215,15 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
     <Card>
       <CardHeader>
         <div className="flex justify-between items-center">
-          <CardTitle>Expenses</CardTitle>
+          <div>
+            <CardTitle>Expenses</CardTitle>
+            {expenses.length > 0 && (
+              <div className="flex gap-4 mt-1 text-sm">
+                <span className="text-green-700 dark:text-green-400 font-medium">Paid: ${totalPaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                <span className="text-destructive font-medium">Not Paid: ${totalUnpaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
+            )}
+          </div>
           {isAdmin && (
             <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) resetForm(); }}>
               <DialogTrigger asChild>
@@ -1272,53 +1313,101 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
       </CardHeader>
       <CardContent>
         {expenses.length > 0 ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Paid To</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                {isAdmin && <TableHead className="w-[80px]"></TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {expenses.map((expense: any) => (
-                <TableRow key={expense.id}>
-                  <TableCell>{format(new Date(expense.expense_date), "MMM dd, yyyy")}</TableCell>
-                  <TableCell>{expense.description}</TableCell>
-                  <TableCell className="capitalize">{expense.category}</TableCell>
-                  <TableCell>{expense.paid_to || "—"}</TableCell>
-                  <TableCell className="text-right font-semibold text-rose-600 dark:text-rose-400">
-                    ${Number(expense.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </TableCell>
-                  {isAdmin && (
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(expense)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => deleteMutation.mutate(expense.id)}
-                          disabled={deleteMutation.isPending}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <Tabs value={expenseTab} onValueChange={setExpenseTab}>
+            <TabsList className="mb-4">
+              <TabsTrigger value="not_paid">Not Paid ({unpaidExpenses.length})</TabsTrigger>
+              <TabsTrigger value="paid">Paid ({paidExpenses.length})</TabsTrigger>
+              <TabsTrigger value="all">All ({expenses.length})</TabsTrigger>
+            </TabsList>
+            <TabsContent value="not_paid">
+              {unpaidExpenses.length === 0 ? (
+                <p className="text-center py-4 text-muted-foreground text-sm">All expenses are paid!</p>
+              ) : (
+                <ExpenseTableInner expenses={unpaidExpenses} isAdmin={isAdmin} handleEdit={handleEdit} deleteMutation={deleteMutation} markAsPaid={markExpenseAsPaid} markAsUnpaid={markExpenseAsUnpaid} />
+              )}
+            </TabsContent>
+            <TabsContent value="paid">
+              {paidExpenses.length === 0 ? (
+                <p className="text-center py-4 text-muted-foreground text-sm">No paid expenses yet</p>
+              ) : (
+                <ExpenseTableInner expenses={paidExpenses} isAdmin={isAdmin} handleEdit={handleEdit} deleteMutation={deleteMutation} markAsPaid={markExpenseAsPaid} markAsUnpaid={markExpenseAsUnpaid} />
+              )}
+            </TabsContent>
+            <TabsContent value="all">
+              <ExpenseTableInner expenses={expenses} isAdmin={isAdmin} handleEdit={handleEdit} deleteMutation={deleteMutation} markAsPaid={markExpenseAsPaid} markAsUnpaid={markExpenseAsUnpaid} />
+            </TabsContent>
+          </Tabs>
         ) : (
           <p className="text-muted-foreground text-center py-8">No expenses recorded yet</p>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function ExpenseTableInner({ expenses, isAdmin, handleEdit, deleteMutation, markAsPaid, markAsUnpaid }: {
+  expenses: any[];
+  isAdmin: boolean;
+  handleEdit: (expense: any) => void;
+  deleteMutation: any;
+  markAsPaid: (id: string) => void;
+  markAsUnpaid: (id: string) => void;
+}) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Date</TableHead>
+          <TableHead>Description</TableHead>
+          <TableHead>Category</TableHead>
+          <TableHead>Paid To</TableHead>
+          <TableHead className="text-right">Amount</TableHead>
+          <TableHead>Status</TableHead>
+          {isAdmin && <TableHead className="w-[80px]"></TableHead>}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {expenses.map((expense: any) => (
+          <TableRow key={expense.id}>
+            <TableCell>{format(new Date(expense.expense_date), "MMM dd, yyyy")}</TableCell>
+            <TableCell>{expense.description}</TableCell>
+            <TableCell className="capitalize">{expense.category}</TableCell>
+            <TableCell>{expense.paid_to || "—"}</TableCell>
+            <TableCell className="text-right font-semibold text-rose-600 dark:text-rose-400">
+              ${Number(expense.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            </TableCell>
+            <TableCell>
+              {expense.is_paid ? (
+                <Badge className="bg-green-100 text-green-800 cursor-pointer" onClick={() => markAsUnpaid(expense.id)}>
+                  <CheckCircle className="h-3 w-3 mr-1" /> Paid {expense.paid_date ? format(new Date(expense.paid_date), "M/d") : ""}
+                </Badge>
+              ) : (
+                <Badge variant="destructive" className="cursor-pointer opacity-80" onClick={() => markAsPaid(expense.id)}>
+                  Not Paid
+                </Badge>
+              )}
+            </TableCell>
+            {isAdmin && (
+              <TableCell>
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="icon" onClick={() => handleEdit(expense)}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => deleteMutation.mutate(expense.id)}
+                    disabled={deleteMutation.isPending}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              </TableCell>
+            )}
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
 
