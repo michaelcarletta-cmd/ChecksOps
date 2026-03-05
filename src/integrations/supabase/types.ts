@@ -516,6 +516,64 @@ export type Database = {
         }
         Relationships: []
       }
+      carrier_argument_queue: {
+        Row: {
+          claim_id: string
+          created_at: string
+          error_message: string | null
+          extracted_text: string
+          file_id: string | null
+          file_name: string | null
+          id: string
+          processed_at: string | null
+          status: string
+        }
+        Insert: {
+          claim_id: string
+          created_at?: string
+          error_message?: string | null
+          extracted_text: string
+          file_id?: string | null
+          file_name?: string | null
+          id?: string
+          processed_at?: string | null
+          status?: string
+        }
+        Update: {
+          claim_id?: string
+          created_at?: string
+          error_message?: string | null
+          extracted_text?: string
+          file_id?: string | null
+          file_name?: string | null
+          id?: string
+          processed_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "carrier_argument_queue_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "carrier_argument_queue_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "carrier_argument_queue_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "claim_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       carrier_argument_rebuttals: {
         Row: {
           argument_type: string
