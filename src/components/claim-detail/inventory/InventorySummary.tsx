@@ -1,4 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Copy, DollarSign, FileSpreadsheet, Loader2, Clock } from "lucide-react";
@@ -242,25 +244,63 @@ export const InventorySummary = ({ items, claimId }: InventorySummaryProps) => {
       {Object.keys(categoryTotals).length > 0 && (
         <div>
           <h4 className="text-sm font-medium mb-2">By Category</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2">
             {Object.entries(categoryTotals)
               .sort((a, b) => b[1].rcv - a[1].rcv)
-              .map(([cat, data]) => (
-                <div key={cat} className="flex items-center justify-between border rounded-lg p-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs">{cat}</Badge>
-                    <span className="text-muted-foreground">{data.count} items</span>
-                  </div>
-                  <div className="flex gap-3">
-                    <span className="text-green-700 dark:text-green-400 font-medium">
-                      RCV ${data.rcv.toLocaleString()}
-                    </span>
-                    <span className="text-blue-700 dark:text-blue-400">
-                      ACV ${data.acv.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              ))}
+              .map(([cat, data]) => {
+                const categoryItems = items.filter(i => (i.category || "Uncategorized") === cat);
+                return (
+                  <Collapsible key={cat}>
+                    <CollapsibleTrigger className="w-full">
+                      <div className="flex items-center justify-between border rounded-lg p-2 text-sm hover:bg-muted/50 transition-colors cursor-pointer">
+                        <div className="flex items-center gap-2">
+                          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform [&[data-state=open]]:rotate-180" />
+                          <Badge variant="outline" className="text-xs">{cat}</Badge>
+                          <span className="text-muted-foreground">{data.count} items</span>
+                        </div>
+                        <div className="flex gap-3">
+                          <span className="text-green-700 dark:text-green-400 font-medium">
+                            RCV ${data.rcv.toLocaleString()}
+                          </span>
+                          <span className="text-blue-700 dark:text-blue-400">
+                            ACV ${data.acv.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="border border-t-0 rounded-b-lg overflow-hidden">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-muted/30">
+                              <th className="text-left p-2 font-medium text-muted-foreground">Item</th>
+                              <th className="text-left p-2 font-medium text-muted-foreground">Room</th>
+                              <th className="text-right p-2 font-medium text-muted-foreground">Qty</th>
+                              <th className="text-right p-2 font-medium text-muted-foreground">RCV</th>
+                              <th className="text-right p-2 font-medium text-muted-foreground">ACV</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {categoryItems.map(item => (
+                              <tr key={item.id} className="border-t border-border/50">
+                                <td className="p-2">{item.item_name}</td>
+                                <td className="p-2 text-muted-foreground">{item.room_name}</td>
+                                <td className="p-2 text-right">{item.quantity}</td>
+                                <td className="p-2 text-right text-green-700 dark:text-green-400">
+                                  {item.replacement_cost ? `$${(item.replacement_cost * item.quantity).toLocaleString()}` : "—"}
+                                </td>
+                                <td className="p-2 text-right text-blue-700 dark:text-blue-400">
+                                  {item.actual_cash_value ? `$${(item.actual_cash_value * item.quantity).toLocaleString()}` : "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                );
+              })}
           </div>
         </div>
       )}
