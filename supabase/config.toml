@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.darwin-carrier-argument-detection]
 verify_jwt = false
+
+[functions.darwin-carrier-argument-worker]
+verify_jwt = false
