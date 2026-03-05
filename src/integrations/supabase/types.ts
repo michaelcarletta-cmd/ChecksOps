@@ -516,6 +516,109 @@ export type Database = {
         }
         Relationships: []
       }
+      carrier_argument_rebuttals: {
+        Row: {
+          argument_type: string
+          carrier_position: string
+          carrier_ready_paragraph: string
+          citations: Json
+          claim_id: string
+          collateral_hits: string | null
+          confidence: number | null
+          created_at: string
+          damage_mechanism: string | null
+          documentation_checklist: Json
+          exclusion_invoked: string | null
+          expert_support: string | null
+          id: string
+          loss_trigger: string | null
+          needs_review: boolean | null
+          pattern_notes: string | null
+          principle: string
+          source_file_id: string | null
+          source_file_name: string | null
+          storm_date: string | null
+          updated_at: string
+          warranty_scope: string | null
+          what_proves_damage: string
+          why_different: string
+        }
+        Insert: {
+          argument_type: string
+          carrier_position: string
+          carrier_ready_paragraph: string
+          citations?: Json
+          claim_id: string
+          collateral_hits?: string | null
+          confidence?: number | null
+          created_at?: string
+          damage_mechanism?: string | null
+          documentation_checklist?: Json
+          exclusion_invoked?: string | null
+          expert_support?: string | null
+          id?: string
+          loss_trigger?: string | null
+          needs_review?: boolean | null
+          pattern_notes?: string | null
+          principle: string
+          source_file_id?: string | null
+          source_file_name?: string | null
+          storm_date?: string | null
+          updated_at?: string
+          warranty_scope?: string | null
+          what_proves_damage: string
+          why_different: string
+        }
+        Update: {
+          argument_type?: string
+          carrier_position?: string
+          carrier_ready_paragraph?: string
+          citations?: Json
+          claim_id?: string
+          collateral_hits?: string | null
+          confidence?: number | null
+          created_at?: string
+          damage_mechanism?: string | null
+          documentation_checklist?: Json
+          exclusion_invoked?: string | null
+          expert_support?: string | null
+          id?: string
+          loss_trigger?: string | null
+          needs_review?: boolean | null
+          pattern_notes?: string | null
+          principle?: string
+          source_file_id?: string | null
+          source_file_name?: string | null
+          storm_date?: string | null
+          updated_at?: string
+          warranty_scope?: string | null
+          what_proves_damage?: string
+          why_different?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "carrier_argument_rebuttals_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "carrier_argument_rebuttals_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "carrier_argument_rebuttals_source_file_id_fkey"
+            columns: ["source_file_id"]
+            isOneToOne: false
+            referencedRelation: "claim_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       carrier_behavior_analytics: {
         Row: {
           avg_days_to_deny: number | null
@@ -6571,6 +6674,51 @@ export type Database = {
           template_text?: string
           template_type?: string
           usage_context?: string | null
+        }
+        Relationships: []
+      }
+      rebuttal_playbook_cards: {
+        Row: {
+          argument_type: string
+          carrier_ready_template: string
+          created_at: string
+          display_name: string
+          documentation_checklist: Json
+          id: string
+          last_used_at: string | null
+          principle: string
+          updated_at: string
+          usage_count: number | null
+          what_proves_damage: string
+          why_different: string
+        }
+        Insert: {
+          argument_type: string
+          carrier_ready_template: string
+          created_at?: string
+          display_name: string
+          documentation_checklist?: Json
+          id?: string
+          last_used_at?: string | null
+          principle: string
+          updated_at?: string
+          usage_count?: number | null
+          what_proves_damage: string
+          why_different: string
+        }
+        Update: {
+          argument_type?: string
+          carrier_ready_template?: string
+          created_at?: string
+          display_name?: string
+          documentation_checklist?: Json
+          id?: string
+          last_used_at?: string | null
+          principle?: string
+          updated_at?: string
+          usage_count?: number | null
+          what_proves_damage?: string
+          why_different?: string
         }
         Relationships: []
       }
