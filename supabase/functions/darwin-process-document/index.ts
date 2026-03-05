@@ -271,6 +271,26 @@ Deno.serve(async (req) => {
       ).catch(err => console.error('Deep analysis trigger error:', err));
     }
 
+    // === CARRIER ARGUMENT DETECTION: Automatically detect denial arguments in document text ===
+    if (textContent && textContent.length >= 200 && targetClaimId &&
+        classificationResult.confidence >= 0.6 &&
+        ['denial', 'correspondence', 'engineering_report', 'estimate'].includes(classificationResult.classification)) {
+      console.log(`[CarrierArgDetect] Triggering carrier argument detection for ${file?.file_name || fileId}`);
+      fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/darwin-carrier-argument-detection`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          claimId: targetClaimId,
+          fileId,
+          fileName: file?.file_name || fileName || '',
+          extractedText: textContent.substring(0, 30000),
+        }),
+      }).catch(err => console.error('Carrier argument detection error:', err));
+    }
+
     // Auto-trigger inventory age resolution when invoices/receipts are processed
     if (
       classificationResult.confidence >= 0.6 &&

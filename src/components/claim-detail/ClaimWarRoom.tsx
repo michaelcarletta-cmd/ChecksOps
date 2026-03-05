@@ -21,6 +21,7 @@ import { ScenarioSimulator } from "./war-room/ScenarioSimulator";
 import { StrategicMemo } from "./war-room/StrategicMemo";
 import { GapIntelligenceEngine } from "./war-room/GapIntelligenceEngine";
 import { AdaptiveCounterTactics } from "./war-room/AdaptiveCounterTactics";
+import { CarrierArgumentRebuttals } from "./war-room/CarrierArgumentRebuttals";
 
 const CausalityTimeline = lazy(() => import("./CausalityTimeline").then(m => ({ default: m.CausalityTimeline })));
 
@@ -322,6 +323,19 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
                 </CardContent>
               </Card>
             </div>
+
+            {/* === CARRIER ARGUMENT REBUTTALS === */}
+            <Card className="border-2">
+              <CardHeader className="py-3 px-4 bg-muted/30">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-destructive" />
+                  Carrier Argument Detection & Rebuttals
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4">
+                <CarrierArgumentRebuttals claimId={claimId} />
+              </CardContent>
+            </Card>
 
             {/* === SCENARIO SIMULATION === */}
             <ScenarioSimulator scenarios={scenarioSims} confidenceLevel={confidenceScores?.scenarios?.level} />
