@@ -32,9 +32,8 @@ Deno.serve(async (req) => {
     const userClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    if (userError || !user) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -85,8 +84,8 @@ Deno.serve(async (req) => {
     if (storagePath.startsWith("/")) storagePath = storagePath.slice(1);
     const bucketPrefix = "claim-files/";
     if (storagePath.startsWith(bucketPrefix)) storagePath = storagePath.slice(bucketPrefix.length);
-    // Reject if it looks like a full URL rather than a storage key
-    if (/^https?:\/\//i.test(storagePath)) {
+    // Reject unsafe or empty paths
+    if (!storagePath || storagePath.includes("..") || /^https?:\/\//i.test(storagePath)) {
       return new Response(
         JSON.stringify({ error: "Invalid storage path" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
