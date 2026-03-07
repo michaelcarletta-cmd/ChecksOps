@@ -446,10 +446,10 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
       const { data, error } = await supabase.functions.invoke("generate-file-share-link", {
         body: { file_id: file.id },
       });
-      if (error || !data?.url) {
+      if (error || !data?.signed_url) {
         throw new Error(data?.error || error?.message || "Failed to generate share link");
       }
-      await navigator.clipboard.writeText(data.url);
+      await navigator.clipboard.writeText(data.signed_url);
       toast({
         title: "Share link copied",
         description: `Link for "${file.file_name}" copied to clipboard. Expires in 24 hours.`,
