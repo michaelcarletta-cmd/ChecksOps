@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2, ExternalLink, Copy, Calculator, Bot, RefreshCw, Loader2, Share2 } from "lucide-react";
+import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2, ExternalLink, Copy, Calculator, Bot, RefreshCw, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -320,59 +320,6 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
     URL.revokeObjectURL(url);
   };
 
-  const handleShare = async (file: any) => {
-    try {
-      // Use signed URL approach - more reliable than download
-      const { data: urlData, error: urlError } = await supabase.storage
-        .from("claim-files")
-        .createSignedUrl(file.file_path, 3600);
-
-      console.log("Share: signedUrl result:", { url: urlData?.signedUrl ? "obtained" : "missing", error: urlError });
-
-      if (urlError || !urlData?.signedUrl) {
-        toast({ title: "Error", description: "Failed to generate share link.", variant: "destructive" });
-        return;
-      }
-
-      // Try native share with the URL first
-      if (navigator.share) {
-        try {
-          // Try to fetch the file and share as a File object
-          const response = await fetch(urlData.signedUrl);
-          if (response.ok) {
-            const blob = await response.blob();
-            const shareFile = new File([blob], file.file_name, { type: file.file_type || blob.type });
-            
-            if (navigator.canShare?.({ files: [shareFile] })) {
-              await navigator.share({ title: file.file_name, files: [shareFile] });
-              return;
-            }
-          }
-        } catch (fetchErr) {
-          console.log("Share: file fetch failed, falling back to URL share", fetchErr);
-        }
-
-        // Fallback: share the URL itself
-        try {
-          await navigator.share({ title: file.file_name, url: urlData.signedUrl });
-          return;
-        } catch (shareErr: any) {
-          if (shareErr.name === "AbortError") return;
-          console.log("Share: URL share failed, copying to clipboard", shareErr);
-        }
-      }
-
-      // Final fallback: copy link to clipboard
-      await navigator.clipboard.writeText(urlData.signedUrl);
-      toast({ title: "Link copied", description: "A shareable link (valid 1 hour) has been copied to your clipboard." });
-    } catch (err: any) {
-      if (err.name !== "AbortError") {
-        console.error("Share error:", err);
-        toast({ title: "Share failed", description: err.message || "Could not share file.", variant: "destructive" });
-      }
-    }
-  };
-
   const handleView = async (file: any) => {
     const { data, error } = await supabase.storage
       .from("claim-files")
@@ -675,14 +622,6 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                                   >
                                     <Download className="h-3 w-3 mr-1" />
                                     Download
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleShare(file)}
-                                  >
-                                    <Share2 className="h-3 w-3 mr-1" />
-                                    Share
                                   </Button>
                                   {(file.file_name.toLowerCase().endsWith('.docx') || file.file_name.toLowerCase().endsWith('.pdf')) && (
                                     <Button
