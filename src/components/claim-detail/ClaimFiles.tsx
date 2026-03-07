@@ -650,7 +650,7 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                                     <Download className="h-3 w-3 mr-1" />
                                     Download
                                   </Button>
-                                  {(file.file_name.toLowerCase().endsWith('.docx') || file.file_name.toLowerCase().endsWith('.pdf')) && (
+                                   {(file.file_name.toLowerCase().endsWith('.docx') || file.file_name.toLowerCase().endsWith('.pdf')) && (
                                     <Button
                                       variant="outline"
                                       size="sm"
@@ -660,6 +660,19 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                                       Save as Template
                                     </Button>
                                   )}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleShareLink(file)}
+                                    disabled={sharingFileId === file.id}
+                                  >
+                                    {sharingFileId === file.id ? (
+                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                    ) : (
+                                      <Share2 className="h-3 w-3 mr-1" />
+                                    )}
+                                    {sharingFileId === file.id ? "Sharing..." : "Share Link"}
+                                  </Button>
                                   <TooltipProvider>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
