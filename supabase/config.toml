@@ -8,6 +8,3 @@ verify_jwt = false
 
 [functions.darwin-carrier-argument-worker]
 verify_jwt = false
-
-[functions.generate-file-share-link]
-verify_jwt = false
