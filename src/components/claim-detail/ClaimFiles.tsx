@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2, ExternalLink, Copy, Calculator, Bot, RefreshCw, Loader2 } from "lucide-react";
+import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2, ExternalLink, Copy, Calculator, Bot, RefreshCw, Loader2, Share2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -320,6 +320,45 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
     URL.revokeObjectURL(url);
   };
 
+  const handleShare = async (file: any) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from("claim-files")
+        .download(file.file_path);
+
+      if (error || !data) {
+        toast({ title: "Error", description: "Failed to load file for sharing.", variant: "destructive" });
+        return;
+      }
+
+      const shareFile = new File([data], file.file_name, { type: file.file_type || data.type });
+
+      if (navigator.share && navigator.canShare?.({ files: [shareFile] })) {
+        await navigator.share({
+          title: file.file_name,
+          files: [shareFile],
+        });
+      } else {
+        // Fallback: copy a temporary signed URL
+        const { data: urlData } = await supabase.storage
+          .from("claim-files")
+          .createSignedUrl(file.file_path, 3600);
+
+        if (urlData?.signedUrl) {
+          await navigator.clipboard.writeText(urlData.signedUrl);
+          toast({ title: "Link copied", description: "A shareable link (valid 1 hour) has been copied to your clipboard." });
+        } else {
+          toast({ title: "Share not supported", description: "Your browser doesn't support direct file sharing. Please download the file instead.", variant: "destructive" });
+        }
+      }
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        console.error("Share error:", err);
+        toast({ title: "Share failed", description: err.message || "Could not share file.", variant: "destructive" });
+      }
+    }
+  };
+
   const handleView = async (file: any) => {
     const { data, error } = await supabase.storage
       .from("claim-files")
@@ -622,6 +661,14 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                                   >
                                     <Download className="h-3 w-3 mr-1" />
                                     Download
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleShare(file)}
+                                  >
+                                    <Share2 className="h-3 w-3 mr-1" />
+                                    Share
                                   </Button>
                                   {(file.file_name.toLowerCase().endsWith('.docx') || file.file_name.toLowerCase().endsWith('.pdf')) && (
                                     <Button
