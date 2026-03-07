@@ -322,12 +322,24 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
 
   const handleShare = async (file: any) => {
     try {
+      console.log("Share: attempting download for path:", file.file_path);
       const { data, error } = await supabase.storage
         .from("claim-files")
         .download(file.file_path);
 
       if (error || !data) {
-        toast({ title: "Error", description: "Failed to load file for sharing.", variant: "destructive" });
+        console.error("Share download error:", error);
+        // Fallback to signed URL if download fails
+        const { data: urlData } = await supabase.storage
+          .from("claim-files")
+          .createSignedUrl(file.file_path, 3600);
+
+        if (urlData?.signedUrl) {
+          await navigator.clipboard.writeText(urlData.signedUrl);
+          toast({ title: "Link copied", description: "A shareable link (valid 1 hour) has been copied to your clipboard." });
+        } else {
+          toast({ title: "Error", description: "Failed to load file for sharing.", variant: "destructive" });
+        }
         return;
       }
 
@@ -354,6 +366,17 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
     } catch (err: any) {
       if (err.name !== "AbortError") {
         console.error("Share error:", err);
+        // Last resort fallback to signed URL
+        try {
+          const { data: urlData } = await supabase.storage
+            .from("claim-files")
+            .createSignedUrl(file.file_path, 3600);
+          if (urlData?.signedUrl) {
+            await navigator.clipboard.writeText(urlData.signedUrl);
+            toast({ title: "Link copied", description: "A shareable link (valid 1 hour) has been copied to your clipboard." });
+            return;
+          }
+        } catch {}
         toast({ title: "Share failed", description: err.message || "Could not share file.", variant: "destructive" });
       }
     }
