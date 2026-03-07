@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Verify user can access this claim (use user's RLS-scoped client)
+    // Verify user can access this claim (use user's client so RLS applies)
     const { data: claim, error: claimError } = await userClient
       .from("claims")
       .select("id")
@@ -81,8 +81,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Generate signed URL
-    const { data: signedUrlData, error: signedUrlError } = await adminClient.storage
+    // Generate signed URL using the user's client (matches how View works in the frontend)
+    const { data: signedUrlData, error: signedUrlError } = await userClient.storage
       .from("claim-files")
       .createSignedUrl(file.file_path, expiresInSeconds);
 
