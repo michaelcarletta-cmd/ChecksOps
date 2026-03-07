@@ -84,8 +84,8 @@ Deno.serve(async (req) => {
     if (storagePath.startsWith("/")) storagePath = storagePath.slice(1);
     const bucketPrefix = "claim-files/";
     if (storagePath.startsWith(bucketPrefix)) storagePath = storagePath.slice(bucketPrefix.length);
-    // Reject if it looks like a full URL rather than a storage key
-    if (/^https?:\/\//i.test(storagePath)) {
+    // Reject unsafe or empty paths
+    if (!storagePath || storagePath.includes("..") || /^https?:\/\//i.test(storagePath)) {
       return new Response(
         JSON.stringify({ error: "Invalid storage path" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
