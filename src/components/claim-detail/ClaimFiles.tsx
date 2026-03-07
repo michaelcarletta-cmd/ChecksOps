@@ -438,6 +438,33 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
     }
   };
 
+  const [sharingFileId, setSharingFileId] = useState<string | null>(null);
+
+  const handleShareLink = async (file: any) => {
+    setSharingFileId(file.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-file-share-link", {
+        body: { file_id: file.id },
+      });
+      if (error || !data?.url) {
+        throw new Error(data?.error || error?.message || "Failed to generate share link");
+      }
+      await navigator.clipboard.writeText(data.url);
+      toast({
+        title: "Share link copied",
+        description: `Link for "${file.file_name}" copied to clipboard. Expires in 24 hours.`,
+      });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to generate share link.",
+        variant: "destructive",
+      });
+    } finally {
+      setSharingFileId(null);
+    }
+  };
+
   return (
     <Tabs defaultValue="files" className="w-full">
       <TabsList className="flex flex-row w-full bg-muted/40 p-2 gap-1 overflow-x-auto scrollbar-hide">
