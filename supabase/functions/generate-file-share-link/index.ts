@@ -108,14 +108,24 @@ Deno.serve(async (req) => {
     }
 
     // Generate signed URL using service-role client (bypasses storage RLS)
+    console.log("Attempting signed URL for bucket=claim-files, path=", storagePath);
+
+    // First check if the object exists
+    const { data: listData, error: listError } = await adminClient.storage
+      .from("claim-files")
+      .list(storagePath.split("/").slice(0, -1).join("/"), {
+        search: storagePath.split("/").pop(),
+      });
+    console.log("Storage list check:", JSON.stringify({ listData, listError }));
+
     const { data: signedUrlData, error: signedUrlError } = await adminClient.storage
       .from("claim-files")
       .createSignedUrl(storagePath, expiresIn);
 
     if (signedUrlError || !signedUrlData?.signedUrl) {
-      console.error("Signed URL error:", signedUrlError);
+      console.error("Signed URL error:", signedUrlError, "storagePath:", storagePath);
       return new Response(
-        JSON.stringify({ error: "Failed to generate share link" }),
+        JSON.stringify({ error: "Failed to generate share link", debug_path: storagePath }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
