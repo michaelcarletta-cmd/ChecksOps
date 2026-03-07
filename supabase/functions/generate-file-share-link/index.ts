@@ -106,8 +106,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Generate signed URL using user's client (matches existing View behaviour)
-    const { data: signedUrlData, error: signedUrlError } = await userClient.storage
+    // Generate signed URL using service-role client (bypasses storage RLS)
+    const { data: signedUrlData, error: signedUrlError } = await adminClient.storage
       .from("claim-files")
       .createSignedUrl(storagePath, expiresIn);
 
