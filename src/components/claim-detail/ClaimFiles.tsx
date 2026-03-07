@@ -322,61 +322,52 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
 
   const handleShare = async (file: any) => {
     try {
-      console.log("Share: attempting download for path:", file.file_path);
-      const { data, error } = await supabase.storage
+      // Use signed URL approach - more reliable than download
+      const { data: urlData, error: urlError } = await supabase.storage
         .from("claim-files")
-        .download(file.file_path);
+        .createSignedUrl(file.file_path, 3600);
 
-      if (error || !data) {
-        console.error("Share download error:", error);
-        // Fallback to signed URL if download fails
-        const { data: urlData } = await supabase.storage
-          .from("claim-files")
-          .createSignedUrl(file.file_path, 3600);
+      console.log("Share: signedUrl result:", { url: urlData?.signedUrl ? "obtained" : "missing", error: urlError });
 
-        if (urlData?.signedUrl) {
-          await navigator.clipboard.writeText(urlData.signedUrl);
-          toast({ title: "Link copied", description: "A shareable link (valid 1 hour) has been copied to your clipboard." });
-        } else {
-          toast({ title: "Error", description: "Failed to load file for sharing.", variant: "destructive" });
-        }
+      if (urlError || !urlData?.signedUrl) {
+        toast({ title: "Error", description: "Failed to generate share link.", variant: "destructive" });
         return;
       }
 
-      const shareFile = new File([data], file.file_name, { type: file.file_type || data.type });
+      // Try native share with the URL first
+      if (navigator.share) {
+        try {
+          // Try to fetch the file and share as a File object
+          const response = await fetch(urlData.signedUrl);
+          if (response.ok) {
+            const blob = await response.blob();
+            const shareFile = new File([blob], file.file_name, { type: file.file_type || blob.type });
+            
+            if (navigator.canShare?.({ files: [shareFile] })) {
+              await navigator.share({ title: file.file_name, files: [shareFile] });
+              return;
+            }
+          }
+        } catch (fetchErr) {
+          console.log("Share: file fetch failed, falling back to URL share", fetchErr);
+        }
 
-      if (navigator.share && navigator.canShare?.({ files: [shareFile] })) {
-        await navigator.share({
-          title: file.file_name,
-          files: [shareFile],
-        });
-      } else {
-        // Fallback: copy a temporary signed URL
-        const { data: urlData } = await supabase.storage
-          .from("claim-files")
-          .createSignedUrl(file.file_path, 3600);
-
-        if (urlData?.signedUrl) {
-          await navigator.clipboard.writeText(urlData.signedUrl);
-          toast({ title: "Link copied", description: "A shareable link (valid 1 hour) has been copied to your clipboard." });
-        } else {
-          toast({ title: "Share not supported", description: "Your browser doesn't support direct file sharing. Please download the file instead.", variant: "destructive" });
+        // Fallback: share the URL itself
+        try {
+          await navigator.share({ title: file.file_name, url: urlData.signedUrl });
+          return;
+        } catch (shareErr: any) {
+          if (shareErr.name === "AbortError") return;
+          console.log("Share: URL share failed, copying to clipboard", shareErr);
         }
       }
+
+      // Final fallback: copy link to clipboard
+      await navigator.clipboard.writeText(urlData.signedUrl);
+      toast({ title: "Link copied", description: "A shareable link (valid 1 hour) has been copied to your clipboard." });
     } catch (err: any) {
       if (err.name !== "AbortError") {
         console.error("Share error:", err);
-        // Last resort fallback to signed URL
-        try {
-          const { data: urlData } = await supabase.storage
-            .from("claim-files")
-            .createSignedUrl(file.file_path, 3600);
-          if (urlData?.signedUrl) {
-            await navigator.clipboard.writeText(urlData.signedUrl);
-            toast({ title: "Link copied", description: "A shareable link (valid 1 hour) has been copied to your clipboard." });
-            return;
-          }
-        } catch {}
         toast({ title: "Share failed", description: err.message || "Could not share file.", variant: "destructive" });
       }
     }
