@@ -199,9 +199,9 @@ export function LossDraftDashboard() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
-                              {d.is_stale && <AlertTriangle className="h-3.5 w-3.5 text-red-400" title="Stale — no contact 14+ days" />}
-                              {d.missing_docs_count > 0 && <FileWarning className="h-3.5 w-3.5 text-amber-400" title={`${d.missing_docs_count} missing docs`} />}
-                              {overdue && <Clock className="h-3.5 w-3.5 text-orange-400" title="Overdue follow-up" />}
+                              {d.is_stale && <span title="Stale — no contact 14+ days"><AlertTriangle className="h-3.5 w-3.5 text-red-400" /></span>}
+                              {d.missing_docs_count > 0 && <span title={`${d.missing_docs_count} missing docs`}><FileWarning className="h-3.5 w-3.5 text-amber-400" /></span>}
+                              {overdue && <span title="Overdue follow-up"><Clock className="h-3.5 w-3.5 text-orange-400" /></span>}
                             </div>
                           </TableCell>
                         </TableRow>
