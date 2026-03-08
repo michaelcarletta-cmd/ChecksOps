@@ -155,6 +155,7 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
       field_type: field.field_type,
       options: field.options || [],
       is_required: field.is_required,
+      visible_on_statuses: field.visible_on_statuses || [],
     });
     setIsEditDialogOpen(true);
   };
