@@ -600,6 +600,9 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* Diagnostics Section */}
+      <SignatureDiagnostics claimId={claimId} claim={claim} />
     </div>
   );
 }
