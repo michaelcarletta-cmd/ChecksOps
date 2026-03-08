@@ -51,10 +51,6 @@ const STALE_LOCK_MS = 2 * 60 * 1000;
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-async function safeBase64(blob: Blob): Promise<string> {
-  const buf = new Uint8Array(await blob.arrayBuffer());
-  return base64Encode(buf);
-}
 
 function logAudit(
   supabase: ReturnType<typeof createClient>,
