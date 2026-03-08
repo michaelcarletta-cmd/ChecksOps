@@ -9156,6 +9156,24 @@ export type Database = {
         }
         Relationships: []
       }
+      deposit_reconciliation_summary: {
+        Row: {
+          cleared_amount: number | null
+          exceptions: number | null
+          failed: number | null
+          failed_amount: number | null
+          in_flight_amount: number | null
+          pending_assignment: number | null
+          provider_assigned: number | null
+          reconciled: number | null
+          reconciled_amount: number | null
+          returned: number | null
+          submitted: number | null
+          succeeded: number | null
+          unreconciled_amount: number | null
+        }
+        Relationships: []
+      }
       loss_draft_dashboard: {
         Row: {
           check_received_date: string | null
@@ -9362,12 +9380,27 @@ export type Database = {
         Args: { p_ciphertext: string; p_key_name?: string }
         Returns: string
       }
+      deposit_action: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_amount?: number
+          p_batch_id?: string
+          p_check_id?: string
+          p_deposit_item_id?: string
+          p_extra?: Json
+          p_notes?: string
+          p_provider?: string
+        }
+        Returns: Json
+      }
       encrypt_pii: {
         Args: { p_key_name?: string; p_plaintext: string }
         Returns: string
       }
       get_check_dashboard_counts: { Args: never; Returns: Json }
       get_claim_money_snapshot: { Args: { p_claim_id: string }; Returns: Json }
+      get_deposit_reconciliation_summary: { Args: never; Returns: Json }
       get_expiring_licenses: {
         Args: { p_days_ahead?: number; p_user_id: string }
         Returns: {
@@ -9534,6 +9567,16 @@ export type Database = {
           p_reasons: Json
           p_recommendation: string
           p_rules: Json
+        }
+        Returns: Json
+      }
+      process_deposit_webhook: {
+        Args: {
+          p_deposit_item_id?: string
+          p_event_id: string
+          p_event_type: string
+          p_payload: Json
+          p_provider: string
         }
         Returns: Json
       }
