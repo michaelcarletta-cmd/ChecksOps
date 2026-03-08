@@ -1026,7 +1026,7 @@ export const AutomationsSettings = () => {
                             Keep under 160 characters for best delivery.
                             {(triggerType === 'inspection_scheduled' || triggerType === 'inspection_upcoming_24h') && (
                               <>
-                                {' '}Use {'{inspection.date}'}, {'{inspection.time}'}, {'{inspection.type}'} for inspection details.
+                                {' '}Use {'${inspection.date}'}, {'${inspection.time}'}, {'${inspection.type}'} for inspection details.
                               </>
                             )}
                           </p>
