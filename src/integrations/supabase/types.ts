@@ -9098,6 +9098,15 @@ export type Database = {
         }
         Returns: Json
       }
+      loss_draft_toggle_document: {
+        Args: {
+          p_actor_id: string
+          p_doc_id: string
+          p_is_submitted: boolean
+          p_notes?: string
+        }
+        Returns: Json
+      }
       match_claim_document_chunks: {
         Args: {
           exclude_claim_id?: string
