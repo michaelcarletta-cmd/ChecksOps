@@ -348,6 +348,46 @@ export function DepositOwnerQueue() {
     onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 
+  // Approval-aware bulk action handler
+  const submitApprovalMutation = useMutation({
+    mutationFn: async ({ type, description }: { type: string; description: string }) => {
+      const totalAmt = Array.from(selected).reduce((sum, id) => {
+        const item = items.find((i) => i.id === id);
+        return sum + (item?.amount ?? 0);
+      }, 0);
+      const { error } = await supabase.rpc("submit_manager_approval", {
+        p_approval_type: type,
+        p_actor_id: user!.id,
+        p_payload: { item_ids: Array.from(selected) },
+        p_item_count: selected.size,
+        p_total_amount: totalAmt,
+        p_description: description,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Approval request submitted for manager review" });
+      setSelected(new Set());
+    },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+
+  const handleApprovalAwareAction = async (actionType: string, directAction: () => void) => {
+    try {
+      const { data } = await supabase.rpc("is_approval_required", { p_action_type: actionType });
+      if (data === true) {
+        submitApprovalMutation.mutate({
+          type: actionType === "bulk_closeout" ? "bulk_closeout" : "bulk_resolve",
+          description: `${actionType.replace(/_/g, " ")} for ${selected.size} items`,
+        });
+      } else {
+        directAction();
+      }
+    } catch {
+      directAction();
+    }
+  };
+
   const toggleAll = () => {
     if (selected.size === filteredItems.length) setSelected(new Set());
     else setSelected(new Set(filteredItems.map((i) => i.id)));
