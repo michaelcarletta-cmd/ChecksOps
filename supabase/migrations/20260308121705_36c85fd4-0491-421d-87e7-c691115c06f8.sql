@@ -1,0 +1,1 @@
+ALTER TABLE public.signature_requests ADD COLUMN IF NOT EXISTS delivery_mode text;
