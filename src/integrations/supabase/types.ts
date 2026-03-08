@@ -5477,6 +5477,13 @@ export type Database = {
             foreignKeyName: "deposit_attachments_deposit_item_id_fkey"
             columns: ["deposit_item_id"]
             isOneToOne: false
+            referencedRelation: "deposit_queue_scored"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_attachments_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
             referencedRelation: "deposit_reminder_queue"
             referencedColumns: ["deposit_item_id"]
           },
@@ -5545,6 +5552,13 @@ export type Database = {
             foreignKeyName: "deposit_audit_log_deposit_item_id_fkey"
             columns: ["deposit_item_id"]
             isOneToOne: false
+            referencedRelation: "deposit_queue_scored"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_audit_log_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
             referencedRelation: "deposit_reminder_queue"
             referencedColumns: ["deposit_item_id"]
           },
@@ -5598,6 +5612,57 @@ export type Database = {
           total_amount?: number
           total_items?: number
           updated_at?: string
+        }
+        Relationships: []
+      }
+      deposit_daily_digest: {
+        Row: {
+          closeout_ready_count: number | null
+          digest_date: string
+          digest_type: string
+          generated_at: string
+          generated_by: string | null
+          id: string
+          open_exceptions_count: number | null
+          owner_workloads: Json | null
+          sla_breaches_count: number | null
+          summary: Json
+          total_open_amount: number | null
+          total_open_items: number | null
+          unreconciled_cash: number | null
+          unsynced_count: number | null
+        }
+        Insert: {
+          closeout_ready_count?: number | null
+          digest_date?: string
+          digest_type?: string
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          open_exceptions_count?: number | null
+          owner_workloads?: Json | null
+          sla_breaches_count?: number | null
+          summary?: Json
+          total_open_amount?: number | null
+          total_open_items?: number | null
+          unreconciled_cash?: number | null
+          unsynced_count?: number | null
+        }
+        Update: {
+          closeout_ready_count?: number | null
+          digest_date?: string
+          digest_type?: string
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          open_exceptions_count?: number | null
+          owner_workloads?: Json | null
+          sla_breaches_count?: number | null
+          summary?: Json
+          total_open_amount?: number | null
+          total_open_items?: number | null
+          unreconciled_cash?: number | null
+          unsynced_count?: number | null
         }
         Relationships: []
       }
@@ -5669,6 +5734,13 @@ export type Database = {
             columns: ["deposit_item_id"]
             isOneToOne: false
             referencedRelation: "deposit_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_exceptions_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_queue_scored"
             referencedColumns: ["id"]
           },
           {
@@ -5886,6 +5958,13 @@ export type Database = {
             foreignKeyName: "deposit_provider_attempts_deposit_item_id_fkey"
             columns: ["deposit_item_id"]
             isOneToOne: false
+            referencedRelation: "deposit_queue_scored"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_provider_attempts_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
             referencedRelation: "deposit_reminder_queue"
             referencedColumns: ["deposit_item_id"]
           },
@@ -5980,6 +6059,13 @@ export type Database = {
             columns: ["deposit_item_id"]
             isOneToOne: false
             referencedRelation: "deposit_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_webhook_events_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_queue_scored"
             referencedColumns: ["id"]
           },
           {
@@ -9486,6 +9572,19 @@ export type Database = {
         }
         Relationships: []
       }
+      deposit_manager_rollup: {
+        Row: {
+          active_owners: number | null
+          closed_amount: number | null
+          items_closed: number | null
+          items_created: number | null
+          nsf_count: number | null
+          period_date: string | null
+          total_amount: number | null
+          variance_count: number | null
+        }
+        Relationships: []
+      }
       deposit_ops_kpis: {
         Row: {
           avg_days_to_bank_confirm: number | null
@@ -9503,6 +9602,92 @@ export type Database = {
           total_nsf_amount: number | null
           total_open_amount: number | null
           variance_rate_pct: number | null
+        }
+        Relationships: []
+      }
+      deposit_owner_performance: {
+        Row: {
+          avg_days_to_closeout: number | null
+          avg_days_to_confirm: number | null
+          avg_days_to_reconcile: number | null
+          closed_amount: number | null
+          nsf_count: number | null
+          open_amount: number | null
+          open_items: number | null
+          owner_id: string | null
+          sla_breaches: number | null
+          total_assigned: number | null
+          total_closed: number | null
+          variance_count: number | null
+        }
+        Relationships: []
+      }
+      deposit_queue_scored: {
+        Row: {
+          accounting_synced_at: string | null
+          amount: number | null
+          bank_confirmed_at: string | null
+          carrier_name: string | null
+          check_number: string | null
+          claim_id: string | null
+          cleared_at: string | null
+          closeout_complete: boolean | null
+          created_at: string | null
+          id: string | null
+          next_action: string | null
+          next_action_reason: string | null
+          nsf_flag: boolean | null
+          open_exception_count: number | null
+          owner_id: string | null
+          priority_score: number | null
+          provider: Database["public"]["Enums"]["deposit_provider"] | null
+          reconciled_at: string | null
+          status: Database["public"]["Enums"]["deposit_item_status"] | null
+          variance_amount: number | null
+        }
+        Insert: {
+          accounting_synced_at?: string | null
+          amount?: number | null
+          bank_confirmed_at?: string | null
+          carrier_name?: string | null
+          check_number?: string | null
+          claim_id?: string | null
+          cleared_at?: string | null
+          closeout_complete?: boolean | null
+          created_at?: string | null
+          id?: string | null
+          next_action?: string | null
+          next_action_reason?: string | null
+          nsf_flag?: boolean | null
+          open_exception_count?: never
+          owner_id?: string | null
+          priority_score?: never
+          provider?: Database["public"]["Enums"]["deposit_provider"] | null
+          reconciled_at?: string | null
+          status?: Database["public"]["Enums"]["deposit_item_status"] | null
+          variance_amount?: number | null
+        }
+        Update: {
+          accounting_synced_at?: string | null
+          amount?: number | null
+          bank_confirmed_at?: string | null
+          carrier_name?: string | null
+          check_number?: string | null
+          claim_id?: string | null
+          cleared_at?: string | null
+          closeout_complete?: boolean | null
+          created_at?: string | null
+          id?: string | null
+          next_action?: string | null
+          next_action_reason?: string | null
+          nsf_flag?: boolean | null
+          open_exception_count?: never
+          owner_id?: string | null
+          priority_score?: never
+          provider?: Database["public"]["Enums"]["deposit_provider"] | null
+          reconciled_at?: string | null
+          status?: Database["public"]["Enums"]["deposit_item_status"] | null
+          variance_amount?: number | null
         }
         Relationships: []
       }
@@ -9816,6 +10001,10 @@ export type Database = {
         Args: { p_key_name?: string; p_plaintext: string }
         Returns: string
       }
+      generate_deposit_daily_digest: {
+        Args: { p_actor_id: string; p_digest_type?: string }
+        Returns: Json
+      }
       generate_next_deposit_action: {
         Args: { p_deposit_item_id: string }
         Returns: Json
@@ -10011,6 +10200,14 @@ export type Database = {
           p_payload: Json
           p_provider: string
         }
+        Returns: Json
+      }
+      rebalance_deposit_workload: {
+        Args: { p_actor_id: string; p_max_per_owner?: number }
+        Returns: Json
+      }
+      refresh_all_deposit_next_actions: {
+        Args: { p_actor_id?: string }
         Returns: Json
       }
       refresh_portfolio_views: { Args: never; Returns: undefined }
