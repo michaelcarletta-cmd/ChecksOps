@@ -716,24 +716,22 @@ ${photoCardsHtml}
       if (error) throw error;
       if (data.error) throw new Error(data.error);
 
-      // Use html2pdf to convert HTML to PDF on client side
+      // Use jsPDF + html2canvas to convert HTML to PDF on client side
       const container = document.createElement("div");
       container.innerHTML = data.html;
       document.body.appendChild(container);
 
-      await html2pdf()
-        .set({
-          margin: 0,
+      try {
+        await htmlElementToPdf(container, {
           filename: `${reportTitle.replace(/[^a-z0-9]/gi, "_")}_photos.pdf`,
-          image: { type: "jpeg", quality: 0.85 },
-          html2canvas: { scale: 2, useCORS: true, logging: false, scrollY: 0 },
-          jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
-          pagebreak: { mode: ['css', 'legacy'], before: '.page-break' },
-        } as any)
-        .from(container)
-        .save();
-
-      document.body.removeChild(container);
+          margin: 0,
+          format: "letter",
+          orientation: "portrait",
+          imageQuality: 0.85,
+        });
+      } finally {
+        document.body.removeChild(container);
+      }
 
       toast({ title: "Photo PDF generated successfully" });
     } catch (error: any) {

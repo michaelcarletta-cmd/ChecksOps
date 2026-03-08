@@ -147,20 +147,13 @@ export function InvoiceDialog({
     document.body.appendChild(container);
 
     try {
-      const worker = (html2pdf() as any)
-        .set({
-          margin: 0.35,
-          filename: fileName,
-          image: { type: "jpeg", quality: 0.95 },
-          html2canvas: { scale: 2, useCORS: true, logging: false, scrollY: 0 },
-          jsPDF: { unit: "in", format: "letter", orientation: "portrait" },
-          pagebreak: { mode: ["css", "legacy"] },
-        } as any)
-        .from(container)
-        .toPdf();
-
-      const jsPdfDoc = await worker.get("pdf");
-      const blob = jsPdfDoc.output("blob");
+      const blob = await htmlElementToPdfBlob(container, {
+        filename: fileName,
+        margin: 0.35,
+        format: "letter",
+        orientation: "portrait",
+        imageQuality: 0.95,
+      });
       if (!blob || !(blob instanceof Blob)) {
         throw new Error("Failed to convert invoice to PDF.");
       }
