@@ -140,11 +140,13 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
       </tr>`
     ).join("");
 
+    const reviewerName = reviewerProfile?.full_name || reviewerProfile?.email || "Staff";
     const latestDecision = reviewDecisions[0];
     const decisionHtml = latestDecision ? `
       <h2>Reviewer Decision</h2>
       <div class="notes">
         <p><strong>Decision:</strong> ${esc(latestDecision.deposit_path?.replace(/_/g, " "))}</p>
+        <p><strong>Reviewed by:</strong> ${esc(reviewerName)}</p>
         ${latestDecision.reviewer_notes ? `<p><strong>Notes:</strong> ${esc(latestDecision.reviewer_notes)}</p>` : ""}
         <p style="font-size:0.7rem;color:#888;margin-top:0.3rem">Reviewed ${esc(fmtDate(latestDecision.created_at))}</p>
       </div>
