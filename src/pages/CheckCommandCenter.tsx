@@ -24,6 +24,9 @@ import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review
 import { DepositPacketGenerator } from "@/components/check-review/DepositPacketGenerator";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards";
 import { LossDraftDashboard } from "@/components/loss-draft/LossDraftDashboard";
+import { DepositOperationsConsole, BranchDepositManifest } from "@/components/deposit-ops/DepositOperationsConsole";
+import { ReconciliationDashboard } from "@/components/deposit-ops/ReconciliationDashboard";
+import { ArrowDownToLine, Scale } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
