@@ -62,6 +62,10 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
   // Load template state
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   
+  // DOCX HTML rendering
+  const [docxHtml, setDocxHtml] = useState<string | null>(null);
+  const docxContainerRef = useRef<HTMLDivElement>(null);
+
   // Field picker popup
   const [pendingClickPos, setPendingClickPos] = useState<{x: number, y: number} | null>(null);
   
