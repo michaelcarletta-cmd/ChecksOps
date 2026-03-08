@@ -996,6 +996,75 @@ function CheckDetailPanel({
 /*  Small sub-components                                               */
 /* ------------------------------------------------------------------ */
 
+function EndorsementPacketCard({ checkId, packetPath }: { checkId: string; packetPath: string }) {
+  const { toast } = useToast();
+  const [generating, setGenerating] = useState(false);
+
+  const handleDownload = async () => {
+    const { data } = await supabase.storage
+      .from("endorsement-packets")
+      .createSignedUrl(packetPath, 300);
+    if (data?.signedUrl) {
+      const a = document.createElement("a");
+      a.href = data.signedUrl;
+      a.download = packetPath.split("/").pop() ?? "endorsement-packet.svg";
+      a.click();
+    }
+  };
+
+  const handlePreview = async () => {
+    const { data } = await supabase.storage
+      .from("endorsement-packets")
+      .createSignedUrl(packetPath, 300);
+    if (data?.signedUrl) {
+      window.open(data.signedUrl, "_blank");
+    }
+  };
+
+  const handleRegenerate = async () => {
+    setGenerating(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session?.access_token) throw new Error("Not authenticated");
+      const { error } = await supabase.functions.invoke("generate-endorsement-packet", {
+        body: { checkId, force: true },
+        headers: { Authorization: `Bearer ${session.session.access_token}` },
+      });
+      if (error) throw new Error(error.message);
+      toast({ title: "Endorsement packet regenerated" });
+    } catch (e: unknown) {
+      toast({
+        title: "Generation failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <div className="mt-2 border border-emerald-500/30 bg-emerald-500/10 rounded-lg p-3 space-y-2">
+      <div className="flex items-center gap-2 text-emerald-400 font-semibold text-sm">
+        <FileImage className="h-4 w-4 shrink-0" />
+        Endorsement Packet Ready
+      </div>
+      <div className="flex gap-1">
+        <Button size="sm" variant="outline" className="text-xs h-7 flex-1" onClick={handlePreview}>
+          <Eye className="h-3 w-3 mr-1" />Preview
+        </Button>
+        <Button size="sm" variant="outline" className="text-xs h-7 flex-1" onClick={handleDownload}>
+          <Download className="h-3 w-3 mr-1" />Download
+        </Button>
+        <Button size="sm" variant="ghost" className="text-xs h-7" onClick={handleRegenerate} disabled={generating}>
+          <RefreshCw className={`h-3 w-3 mr-1 ${generating ? "animate-spin" : ""}`} />
+          Regen
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function DetailRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
     <div className="flex justify-between text-sm">
