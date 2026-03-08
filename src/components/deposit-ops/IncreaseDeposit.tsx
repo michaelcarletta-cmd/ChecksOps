@@ -77,7 +77,9 @@ export function IncreaseAccountSelector() {
         .eq("setting_key", "target_account_id")
         .maybeSingle();
       if (error) throw error;
-      return data?.setting_value as string | null;
+      // setting_value is Json — Supabase returns it parsed already
+      const raw = data?.setting_value;
+      return typeof raw === 'string' ? raw : raw ? String(raw) : null;
     },
   });
 
@@ -87,7 +89,7 @@ export function IncreaseAccountSelector() {
         .from("increase_settings")
         .upsert({
           setting_key: "target_account_id",
-          setting_value: JSON.stringify(accountId),
+          setting_value: accountId,
           updated_at: new Date().toISOString(),
         }, { onConflict: "setting_key" });
       if (error) throw error;
@@ -99,7 +101,7 @@ export function IncreaseAccountSelector() {
     onError: (e: Error) => toast({ title: "Failed to save", description: e.message, variant: "destructive" }),
   });
 
-  const currentAccountId = currentSetting ? JSON.parse(currentSetting as string) : null;
+  const currentAccountId = currentSetting ?? null;
   const currentAccount = accounts?.find((a) => a.id === currentAccountId);
 
   return (
@@ -196,7 +198,8 @@ export function DepositToIncreaseButton({
         .eq("setting_key", "target_account_id")
         .maybeSingle();
       if (error) throw error;
-      return data?.setting_value ? JSON.parse(data.setting_value as string) : null;
+      const raw = data?.setting_value;
+      return typeof raw === 'string' ? raw : raw ? String(raw) : null;
     },
   });
 

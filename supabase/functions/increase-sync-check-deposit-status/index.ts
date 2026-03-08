@@ -163,15 +163,25 @@ async function syncSingleDeposit(
   const { error: updateErr } = await query;
   if (updateErr) throw new Error(`Failed to update deposit: ${updateErr.message}`);
 
-  // Update check status if needed (for returns/rejections)
-  if (checkStatus) {
-    // Get the check_id from deposit_items
-    const lookupQuery = itemId
-      ? supabase.from("deposit_items").select("check_id").eq("id", itemId).single()
-      : supabase.from("deposit_items").select("check_id").eq("increase_check_deposit_id", incId).single();
+  // Get the check_id from deposit_items for cross-record sync
+  const lookupQuery = itemId
+    ? supabase.from("deposit_items").select("check_id").eq("id", itemId).single()
+    : supabase.from("deposit_items").select("check_id").eq("increase_check_deposit_id", incId).single();
 
-    const { data: depositItem } = await lookupQuery;
-    if (depositItem?.check_id) {
+  const { data: depositItem } = await lookupQuery;
+
+  if (depositItem?.check_id) {
+    // Sync check_intake_items status based on Increase lifecycle
+    let checkStatus: string | null = null;
+    if (deposit.deposit_acceptance) {
+      checkStatus = "deposited";
+    } else if (deposit.status === "rejected") {
+      checkStatus = "needs_review";
+    } else if (deposit.status === "returned") {
+      checkStatus = "needs_review";
+    }
+
+    if (checkStatus) {
       await supabase
         .from("check_intake_items")
         .update({ status: checkStatus, updated_at: new Date().toISOString() })
