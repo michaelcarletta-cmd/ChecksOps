@@ -285,6 +285,20 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
+        {/* KPIs Tab */}
+        {activeTab === "kpis" && (
+          <div className="mt-3">
+            <DepositKPIDashboard />
+          </div>
+        )}
+
+        {/* Work Queue Tab */}
+        {activeTab === "workqueue" && (
+          <div className="mt-3">
+            <DepositOwnerQueue />
+          </div>
+        )}
+
         {/* Loss Draft Tab */}
         {activeTab === "lossdraft" && (
           <div className="mt-3">
