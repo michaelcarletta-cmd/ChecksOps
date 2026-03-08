@@ -83,13 +83,15 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         ? docData.content 
         : docData.content?.data || docData.content;
       
+      const contentUint8 = new Uint8Array(contentArray);
+      
       const mimeType = isPDF 
         ? "application/pdf" 
         : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
       // Upload to storage
       const fileName = `signatures/${claimId}/${Date.now()}-${docData.fileName}`;
-      const blob = new Blob([new Uint8Array(contentArray)], { type: mimeType });
+      const blob = new Blob([contentUint8], { type: mimeType });
       
       const { error: uploadError } = await supabase.storage
         .from("claim-files")
@@ -102,22 +104,22 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         .createSignedUrl(fileName, 3600);
 
       setGeneratedDocPath(fileName);
-      setGeneratedDocUrl(isPDF ? (urlData?.signedUrl || null) : null);
+      
+      if (isPDF) {
+        setGeneratedDocUrl(urlData?.signedUrl || null);
+        setGeneratedDocxData(null);
+      } else {
+        // For DOCX, store the raw data for client-side rendering
+        setGeneratedDocUrl(null);
+        setGeneratedDocxData(contentUint8);
+      }
       
       return { fileName, url: urlData?.signedUrl, isPDF };
     },
-    onSuccess: (data) => {
-      if (data?.isPDF) {
-        setCurrentStep(2);
-        toast({ title: "Document generated! Now place signature fields." });
-      } else {
-        // For Word documents, skip field placement and go directly to signers
-        setCurrentStep(3);
-        toast({ 
-          title: "Word document generated", 
-          description: "Field placement is only available for PDF templates. Proceeding to signer configuration." 
-        });
-      }
+    onSuccess: () => {
+      // Always go to field placement step
+      setCurrentStep(2);
+      toast({ title: "Document generated! Now place signature fields." });
     },
     onError: (error: Error) => {
       toast({ title: "Failed to generate document", description: error.message, variant: "destructive" });
