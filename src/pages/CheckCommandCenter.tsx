@@ -257,6 +257,27 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
+        {/* Exceptions Tab */}
+        {activeTab === "exceptions" && (
+          <div className="mt-3">
+            <ExceptionResolutionPanel />
+          </div>
+        )}
+
+        {/* Aging/SLA Tab */}
+        {activeTab === "aging" && (
+          <div className="mt-3">
+            <DepositAgingDashboard />
+          </div>
+        )}
+
+        {/* Reports Tab */}
+        {activeTab === "reports" && (
+          <div className="mt-3">
+            <DepositReports />
+          </div>
+        )}
+
         {/* Loss Draft Tab */}
         {activeTab === "lossdraft" && (
           <div className="mt-3">
