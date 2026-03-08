@@ -481,7 +481,7 @@ Rules:
         p_carrier_name: parsed.carrier_name,
         p_check_number: parsed.check_number,
         p_amount: parsedAmount,
-        p_issue_date: parsed.issue_date,
+        p_issue_date: normalizedIssueDate,
         p_claim_number: parsed.claim_number,
         p_payee_line: parsed.payee_line,
         p_is_multi_payee: isMultiPayee,
