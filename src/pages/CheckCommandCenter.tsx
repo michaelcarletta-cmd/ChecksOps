@@ -74,6 +74,7 @@ interface CheckItem {
   reviewed_by: string | null;
   reviewed_at: string | null;
   review_notes: string | null;
+  endorsement_packet_path: string | null;
   check_payees?: CheckPayee[];
 }
 
