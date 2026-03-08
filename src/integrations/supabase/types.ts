@@ -1157,6 +1157,7 @@ export type Database = {
           id: string
           is_multi_payee: boolean | null
           issue_date: string | null
+          ocr_heartbeat_at: string | null
           ocr_status: string | null
           payee_line: string | null
           raw_ocr_back: Json | null
@@ -1179,6 +1180,7 @@ export type Database = {
           id?: string
           is_multi_payee?: boolean | null
           issue_date?: string | null
+          ocr_heartbeat_at?: string | null
           ocr_status?: string | null
           payee_line?: string | null
           raw_ocr_back?: Json | null
@@ -1201,6 +1203,7 @@ export type Database = {
           id?: string
           is_multi_payee?: boolean | null
           issue_date?: string | null
+          ocr_heartbeat_at?: string | null
           ocr_status?: string | null
           payee_line?: string | null
           raw_ocr_back?: Json | null
