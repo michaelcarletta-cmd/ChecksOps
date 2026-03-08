@@ -139,8 +139,9 @@ export function DepositOperationsConsole() {
   });
 
   // Fetch approved checks not yet in pipeline
+  const existingCheckIds = new Set(items.map((i) => i.check_id));
   const { data: approvedChecks = [] } = useQuery({
-    queryKey: ["approved-checks-for-deposit"],
+    queryKey: ["approved-checks-for-deposit", existingCheckIds.size],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
@@ -148,10 +149,9 @@ export function DepositOperationsConsole() {
         .eq("status", "approved_for_deposit")
         .order("reviewed_at", { ascending: false });
       if (error) throw error;
-      const existingCheckIds = new Set(items.map((i) => i.check_id));
       return ((data ?? []) as ApprovedCheck[]).filter((c) => !existingCheckIds.has(c.id));
     },
-    enabled: items !== undefined,
+    enabled: !isLoading,
   });
 
   // Reconciliation summary
