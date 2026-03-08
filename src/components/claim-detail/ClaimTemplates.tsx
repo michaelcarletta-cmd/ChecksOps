@@ -187,41 +187,53 @@ export function ClaimTemplates({ claimId, claim }: ClaimTemplatesProps) {
       </TabsList>
 
       <TabsContent value="templates" className="space-y-6">
-      <Alert>
-        <Info className="h-4 w-4" />
-        <AlertTitle>Available Merge Fields</AlertTitle>
-        <AlertDescription>
-          <p className="mb-2">Use these fields in your Word templates with dollar sign and curly braces:</p>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm font-mono">
-            <div>{`\${policyholder}`}</div>
-            <div>{`\${policyholder_email}`}</div>
-            <div>{`\${policyholder_phone}`}</div>
-            <div>{`\${property_address}`}</div>
-            <div>{`\${street}`}</div>
-            <div>{`\${city}`}</div>
-            <div>{`\${state}`}</div>
-            <div>{`\${zip}`}</div>
-            <div>{`\${policy_number}`}</div>
-            <div>{`\${claim_number}`}</div>
-            <div>{`\${loss_date}`}</div>
-            <div>{`\${loss_type}`}</div>
-            <div>{`\${loss_description}`}</div>
-            <div>{`\${insurance_company}`}</div>
-            <div>{`\${insurance_phone}`}</div>
-            <div>{`\${insurance_email}`}</div>
-            <div>{`\${adjuster_name}`}</div>
-            <div>{`\${adjuster_phone}`}</div>
-            <div>{`\${adjuster_email}`}</div>
-            <div>{`\${mortgage_company}`}</div>
-            <div>{`\${loan_number}`}</div>
-            <div>{`\${ssn_last_four}`}</div>
-            <div>{`\${referrer_name}`}</div>
-            <div>{`\${referrer_company}`}</div>
-            <div>{`\${date}`}</div>
-            <div>{`\${today}`}</div>
-          </div>
-        </AlertDescription>
-      </Alert>
+      <Collapsible>
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertTitle className="flex items-center justify-between">
+            <span>Available Merge Fields</span>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
+                Show Fields
+                <ChevronDown className="h-3 w-3" />
+              </Button>
+            </CollapsibleTrigger>
+          </AlertTitle>
+          <CollapsibleContent>
+            <AlertDescription className="mt-2">
+              <p className="mb-2">Use these fields in your Word templates with dollar sign and curly braces:</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm font-mono">
+                <div>{`\${policyholder}`}</div>
+                <div>{`\${policyholder_email}`}</div>
+                <div>{`\${policyholder_phone}`}</div>
+                <div>{`\${property_address}`}</div>
+                <div>{`\${street}`}</div>
+                <div>{`\${city}`}</div>
+                <div>{`\${state}`}</div>
+                <div>{`\${zip}`}</div>
+                <div>{`\${policy_number}`}</div>
+                <div>{`\${claim_number}`}</div>
+                <div>{`\${loss_date}`}</div>
+                <div>{`\${loss_type}`}</div>
+                <div>{`\${loss_description}`}</div>
+                <div>{`\${insurance_company}`}</div>
+                <div>{`\${insurance_phone}`}</div>
+                <div>{`\${insurance_email}`}</div>
+                <div>{`\${adjuster_name}`}</div>
+                <div>{`\${adjuster_phone}`}</div>
+                <div>{`\${adjuster_email}`}</div>
+                <div>{`\${mortgage_company}`}</div>
+                <div>{`\${loan_number}`}</div>
+                <div>{`\${ssn_last_four}`}</div>
+                <div>{`\${referrer_name}`}</div>
+                <div>{`\${referrer_company}`}</div>
+                <div>{`\${date}`}</div>
+                <div>{`\${today}`}</div>
+              </div>
+            </AlertDescription>
+          </CollapsibleContent>
+        </Alert>
+      </Collapsible>
 
       <div className="flex justify-between items-center">
         <div>
