@@ -408,12 +408,13 @@ const ClaimDetail = () => {
           </TabsList>
         )}
 
-        <TabsContent value="overview" className="mt-6">
+        <TabsContent value="overview" className="mt-6 space-y-6">
           <ClaimOverview 
             claim={claim} 
             isPortalUser={isPortalUser} 
             onClaimUpdated={handleClaimUpdated}
           />
+          {isStaffOrAdmin && <ClaimCashFlowCard claimId={id || ""} />}
         </TabsContent>
 
         {isStaffOrAdmin && (
