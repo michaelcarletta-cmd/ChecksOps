@@ -333,10 +333,11 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
               </div>
             )}
 
-            {/* Step 2: Field Placement */}
-            {currentStep === 2 && generatedDocUrl && (
+            {/* Step 2: Field Placement (works for both PDF and DOCX) */}
+            {currentStep === 2 && (generatedDocUrl || generatedDocxData) && (
               <FieldPlacementEditor
-                documentUrl={generatedDocUrl}
+                documentUrl={generatedDocUrl || undefined}
+                docxData={generatedDocxData || undefined}
                 onFieldsChange={setPlacedFields}
                 signerCount={signers.length}
               />
