@@ -29,8 +29,22 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
     field_type: "text",
     options: [] as string[],
     is_required: false,
+    visible_on_statuses: [] as string[],
   });
   const [optionInput, setOptionInput] = useState("");
+
+  const { data: claimStatuses } = useQuery({
+    queryKey: ["claim-statuses-for-fields"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_statuses")
+        .select("id, name")
+        .eq("is_active", true)
+        .order("display_order");
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const { data: customFields, isLoading } = useQuery({
     queryKey: ["custom-fields"],
