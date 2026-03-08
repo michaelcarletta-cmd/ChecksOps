@@ -828,6 +828,13 @@ function CheckDetailPanel({
               )}
             </TabsContent>
 
+            <TabsContent value="endorsements" className="p-4 mt-0">
+              <EndorsementChecklist
+                checkId={checkId}
+                onRefresh={onRefresh}
+              />
+            </TabsContent>
+
             <TabsContent value="payees" className="p-4 space-y-3 mt-0">
               {check.check_payees?.map((payee) => (
                 <PayeeCard key={payee.id} payee={payee} checkId={checkId} onRefresh={onRefresh} />
