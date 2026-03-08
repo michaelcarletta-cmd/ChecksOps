@@ -338,6 +338,17 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
               </Badge>
             </TableCell>
             <TableCell>
+              {(field as any).visible_on_statuses?.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {(field as any).visible_on_statuses.map((s: string) => (
+                    <Badge key={s} variant="outline" className="text-xs">{s}</Badge>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-xs text-muted-foreground">All statuses</span>
+              )}
+            </TableCell>
+            <TableCell>
               {field.is_required ? (
                 <Badge variant="destructive">Required</Badge>
               ) : (
