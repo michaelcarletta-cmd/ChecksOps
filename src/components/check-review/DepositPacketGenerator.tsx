@@ -2,10 +2,8 @@ import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Printer, FileText, CheckCircle2, AlertTriangle, Building2, Users, Shield, FileCheck } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Printer, FileText } from "lucide-react";
 import { format } from "date-fns";
 
 /* ------------------------------------------------------------------ */
@@ -46,20 +44,30 @@ const payeeTypeLabels: Record<string, string> = {
   unknown: "Unknown",
 };
 
-const payeeTypeIcons: Record<string, typeof Users> = {
-  insured: Users,
-  mortgage_company: Building2,
-  contractor: Shield,
-  public_adjuster: FileCheck,
-  unknown: AlertTriangle,
-};
+/* ------------------------------------------------------------------ */
+/*  HTML escape for print-safe output                                  */
+/* ------------------------------------------------------------------ */
 
-const endorsementBadge: Record<string, { color: string; label: string }> = {
-  pending: { color: "bg-muted text-muted-foreground", label: "Pending" },
-  signed: { color: "bg-emerald-500/20 text-emerald-400", label: "Signed" },
-  rejected: { color: "bg-red-500/20 text-red-400", label: "Rejected" },
-  expired: { color: "bg-muted text-muted-foreground", label: "Expired" },
-};
+function esc(value: unknown): string {
+  if (value == null) return "—";
+  const str = String(value);
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function fmtAmount(amount: number | null): string {
+  if (amount == null) return "—";
+  return `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+}
+
+function fmtDate(dateStr: string | null): string {
+  if (!dateStr) return "—";
+  try { return format(new Date(dateStr), "MMM d, yyyy"); } catch { return "—"; }
+}
 
 /* ------------------------------------------------------------------ */
 /*  Deposit Packet Generator                                           */
@@ -105,41 +113,77 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
   });
 
   const handlePrint = () => {
-    if (!printRef.current) return;
+    if (!check) return;
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Deposit Packet — Check #${check?.check_number ?? "Unknown"}</title>
-        <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 2rem; color: #1a1a2e; }
-          h1 { font-size: 1.25rem; margin-bottom: 0.25rem; }
-          h2 { font-size: 1rem; color: #444; margin-top: 1.5rem; margin-bottom: 0.5rem; border-bottom: 1px solid #ddd; padding-bottom: 0.25rem; }
-          .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-          .meta-item label { font-size: 0.7rem; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
-          .meta-item p { font-size: 0.9rem; margin: 0.15rem 0 0 0; font-weight: 500; }
-          .payee-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
-          .payee-table th, .payee-table td { border: 1px solid #ddd; padding: 0.4rem 0.6rem; text-align: left; font-size: 0.85rem; }
-          .payee-table th { background: #f5f5f5; font-weight: 600; }
-          .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 500; }
-          .badge-signed { background: #d1fae5; color: #065f46; }
-          .badge-pending { background: #f3f4f6; color: #6b7280; }
-          .badge-rejected { background: #fee2e2; color: #991b1b; }
-          .notes { background: #f9f9f9; padding: 0.75rem; border-radius: 0.25rem; font-size: 0.85rem; margin-top: 0.5rem; }
-          .check-img { max-width: 100%; max-height: 300px; border: 1px solid #ddd; border-radius: 0.25rem; }
-          .footer { margin-top: 2rem; padding-top: 0.75rem; border-top: 1px solid #ddd; font-size: 0.7rem; color: #999; }
-          @media print { body { padding: 1rem; } }
-        </style>
-      </head>
-      <body>${printRef.current.innerHTML}
-        <div class="footer">
-          Generated ${new Date().toLocaleString()} · Freedom Adjustment Deposit Packet
-        </div>
-      </body>
-      </html>
-    `);
+
+    const payeeRows = (check.check_payees ?? []).map((p) =>
+      `<tr>
+        <td style="border:1px solid #ddd;padding:0.4rem;font-size:0.8rem">${esc(p.payee_name)}</td>
+        <td style="border:1px solid #ddd;padding:0.4rem;font-size:0.8rem">${esc(payeeTypeLabels[p.payee_type] ?? p.payee_type)}</td>
+        <td style="border:1px solid #ddd;padding:0.4rem;font-size:0.8rem">${esc(p.endorsement_status)}</td>
+        <td style="border:1px solid #ddd;padding:0.4rem;font-size:0.8rem">${p.endorsed_at ? esc(fmtDate(p.endorsed_at)) : "—"}</td>
+      </tr>`
+    ).join("");
+
+    const latestDecision = reviewDecisions[0];
+    const decisionHtml = latestDecision ? `
+      <h2>Reviewer Decision</h2>
+      <div class="notes">
+        <p><strong>Decision:</strong> ${esc(latestDecision.deposit_path?.replace(/_/g, " "))}</p>
+        ${latestDecision.reviewer_notes ? `<p><strong>Notes:</strong> ${esc(latestDecision.reviewer_notes)}</p>` : ""}
+        <p style="font-size:0.7rem;color:#888;margin-top:0.3rem">Reviewed ${esc(fmtDate(latestDecision.created_at))}</p>
+      </div>
+    ` : "";
+
+    const reviewNotesHtml = check.review_notes && !latestDecision ? `
+      <h2>Reviewer Notes</h2>
+      <div class="notes">${esc(check.review_notes)}</div>
+    ` : "";
+
+    const imgHtml = imageUrl ? `
+      <h2>Check Image</h2>
+      <img src="${esc(imageUrl)}" alt="Check front" class="check-img" />
+    ` : "";
+
+    printWindow.document.write(`<!DOCTYPE html><html><head>
+      <title>Deposit Packet — Check #${esc(check.check_number ?? "Unknown")}</title>
+      <style>
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:2rem;color:#1a1a2e}
+        h1{font-size:1.25rem;margin-bottom:0.25rem}
+        h2{font-size:1rem;color:#444;margin-top:1.5rem;margin-bottom:0.5rem;border-bottom:1px solid #ddd;padding-bottom:0.25rem}
+        .meta{display:grid;grid-template-columns:1fr 1fr;gap:0.5rem}
+        .meta-item label{font-size:0.7rem;color:#888;text-transform:uppercase;letter-spacing:0.5px}
+        .meta-item p{font-size:0.9rem;margin:0.15rem 0 0;font-weight:500}
+        .notes{background:#f9f9f9;padding:0.75rem;border-radius:0.25rem;font-size:0.85rem;margin-top:0.5rem}
+        .check-img{max-width:100%;max-height:300px;border:1px solid #ddd;border-radius:0.25rem}
+        .footer{margin-top:2rem;padding-top:0.75rem;border-top:1px solid #ddd;font-size:0.7rem;color:#999}
+        table{width:100%;border-collapse:collapse;margin-top:0.5rem}
+        th{border:1px solid #ddd;padding:0.4rem;background:#f5f5f5;font-weight:600;font-size:0.8rem;text-align:left}
+        @media print{body{padding:1rem}}
+      </style>
+    </head><body>
+      <h1>Deposit Packet</h1>
+      <p style="color:#888;font-size:0.8rem">Check #${esc(check.check_number ?? "Unknown")} · ${esc(check.carrier_name ?? "Unknown Carrier")}</p>
+      <h2>Check Details</h2>
+      <div class="meta">
+        <div class="meta-item"><label>Carrier</label><p>${esc(check.carrier_name)}</p></div>
+        <div class="meta-item"><label>Amount</label><p style="font-weight:700">${esc(fmtAmount(check.amount))}</p></div>
+        <div class="meta-item"><label>Check #</label><p style="font-family:monospace">${esc(check.check_number)}</p></div>
+        <div class="meta-item"><label>Claim #</label><p>${esc(check.detected_claim_number)}</p></div>
+        <div class="meta-item"><label>Issue Date</label><p>${esc(fmtDate(check.issue_date))}</p></div>
+        <div class="meta-item"><label>Recommendation</label><p>${esc(check.deposit_recommendation?.replace(/_/g, " "))}</p></div>
+      </div>
+      <h2>Payees &amp; Endorsements</h2>
+      <table>
+        <thead><tr><th>Payee</th><th>Type</th><th>Status</th><th>Date</th></tr></thead>
+        <tbody>${payeeRows}</tbody>
+      </table>
+      ${decisionHtml}
+      ${reviewNotesHtml}
+      ${imgHtml}
+      <div class="footer">Generated ${esc(new Date().toLocaleString())} · Freedom Adjustment Deposit Packet</div>
+    </body></html>`);
     printWindow.document.close();
     printWindow.print();
   };
@@ -159,88 +203,47 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
         </Button>
       </div>
 
-      {/* Visible preview */}
       <Card>
         <CardContent className="p-4 text-sm space-y-3">
           <div ref={printRef}>
-            <h1>Deposit Packet</h1>
-            <p style={{ color: "#888", fontSize: "0.8rem" }}>
+            <h1 className="text-base font-bold">Deposit Packet</h1>
+            <p className="text-xs text-muted-foreground">
               Check #{check.check_number ?? "Unknown"} · {check.carrier_name ?? "Unknown Carrier"}
             </p>
 
-            <h2>Check Details</h2>
-            <div className="meta" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
-              <div className="meta-item">
-                <label style={{ fontSize: "0.65rem", color: "#888", textTransform: "uppercase" }}>Carrier</label>
-                <p style={{ fontSize: "0.85rem", fontWeight: 500, margin: "0.1rem 0 0" }}>{check.carrier_name ?? "—"}</p>
-              </div>
-              <div className="meta-item">
-                <label style={{ fontSize: "0.65rem", color: "#888", textTransform: "uppercase" }}>Amount</label>
-                <p style={{ fontSize: "0.85rem", fontWeight: 700, margin: "0.1rem 0 0" }}>
-                  {check.amount != null ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}
-                </p>
-              </div>
-              <div className="meta-item">
-                <label style={{ fontSize: "0.65rem", color: "#888", textTransform: "uppercase" }}>Check #</label>
-                <p style={{ fontSize: "0.85rem", fontWeight: 500, margin: "0.1rem 0 0", fontFamily: "monospace" }}>{check.check_number ?? "—"}</p>
-              </div>
-              <div className="meta-item">
-                <label style={{ fontSize: "0.65rem", color: "#888", textTransform: "uppercase" }}>Claim #</label>
-                <p style={{ fontSize: "0.85rem", fontWeight: 500, margin: "0.1rem 0 0" }}>{check.detected_claim_number ?? "—"}</p>
-              </div>
-              <div className="meta-item">
-                <label style={{ fontSize: "0.65rem", color: "#888", textTransform: "uppercase" }}>Issue Date</label>
-                <p style={{ fontSize: "0.85rem", margin: "0.1rem 0 0" }}>
-                  {check.issue_date ? format(new Date(check.issue_date), "MMM d, yyyy") : "—"}
-                </p>
-              </div>
-              <div className="meta-item">
-                <label style={{ fontSize: "0.65rem", color: "#888", textTransform: "uppercase" }}>Recommendation</label>
-                <p style={{ fontSize: "0.85rem", fontWeight: 500, margin: "0.1rem 0 0" }}>
-                  {check.deposit_recommendation?.replace(/_/g, " ") ?? "—"}
-                </p>
-              </div>
+            <h2 className="text-sm font-semibold mt-3 mb-1 border-b border-border pb-1">Check Details</h2>
+            <div className="grid grid-cols-2 gap-2">
+              <div><p className="text-[10px] text-muted-foreground uppercase">Carrier</p><p className="text-xs font-medium">{check.carrier_name ?? "—"}</p></div>
+              <div><p className="text-[10px] text-muted-foreground uppercase">Amount</p><p className="text-xs font-bold">{fmtAmount(check.amount)}</p></div>
+              <div><p className="text-[10px] text-muted-foreground uppercase">Check #</p><p className="text-xs font-mono">{check.check_number ?? "—"}</p></div>
+              <div><p className="text-[10px] text-muted-foreground uppercase">Claim #</p><p className="text-xs">{check.detected_claim_number ?? "—"}</p></div>
+              <div><p className="text-[10px] text-muted-foreground uppercase">Issue Date</p><p className="text-xs">{fmtDate(check.issue_date)}</p></div>
+              <div><p className="text-[10px] text-muted-foreground uppercase">Recommendation</p><p className="text-xs">{check.deposit_recommendation?.replace(/_/g, " ") ?? "—"}</p></div>
             </div>
 
-            <h2>Payees & Endorsements</h2>
-            <table className="payee-table" style={{ width: "100%", borderCollapse: "collapse", marginTop: "0.5rem" }}>
-              <thead>
-                <tr>
-                  <th style={{ border: "1px solid #ddd", padding: "0.4rem", background: "#f5f5f5", fontSize: "0.8rem" }}>Payee</th>
-                  <th style={{ border: "1px solid #ddd", padding: "0.4rem", background: "#f5f5f5", fontSize: "0.8rem" }}>Type</th>
-                  <th style={{ border: "1px solid #ddd", padding: "0.4rem", background: "#f5f5f5", fontSize: "0.8rem" }}>Status</th>
-                  <th style={{ border: "1px solid #ddd", padding: "0.4rem", background: "#f5f5f5", fontSize: "0.8rem" }}>Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(check.check_payees ?? []).map((p) => (
-                  <tr key={p.id}>
-                    <td style={{ border: "1px solid #ddd", padding: "0.4rem", fontSize: "0.8rem" }}>{p.payee_name}</td>
-                    <td style={{ border: "1px solid #ddd", padding: "0.4rem", fontSize: "0.8rem" }}>{payeeTypeLabels[p.payee_type] ?? p.payee_type}</td>
-                    <td style={{ border: "1px solid #ddd", padding: "0.4rem", fontSize: "0.8rem" }}>
-                      <span className={`badge badge-${p.endorsement_status}`}>{p.endorsement_status}</span>
-                    </td>
-                    <td style={{ border: "1px solid #ddd", padding: "0.4rem", fontSize: "0.8rem" }}>
-                      {p.endorsed_at ? format(new Date(p.endorsed_at), "MMM d, yyyy") : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <h2 className="text-sm font-semibold mt-3 mb-1 border-b border-border pb-1">Payees & Endorsements</h2>
+            <div className="space-y-1">
+              {(check.check_payees ?? []).map((p) => (
+                <div key={p.id} className="flex items-center justify-between text-xs py-1 border-b border-border/50 last:border-0">
+                  <span className="font-medium">{p.payee_name}</span>
+                  <span className="text-muted-foreground">{payeeTypeLabels[p.payee_type] ?? p.payee_type}</span>
+                  <span className={
+                    p.endorsement_status === "signed" ? "text-emerald-400" :
+                    p.endorsement_status === "rejected" ? "text-red-400" :
+                    "text-muted-foreground"
+                  }>{p.endorsement_status}</span>
+                  <span className="text-muted-foreground">{p.endorsed_at ? fmtDate(p.endorsed_at) : "—"}</span>
+                </div>
+              ))}
+            </div>
 
             {latestDecision && (
               <>
-                <h2>Reviewer Decision</h2>
-                <div className="notes" style={{ background: "#f9f9f9", padding: "0.75rem", borderRadius: "0.25rem" }}>
-                  <p style={{ fontSize: "0.8rem", margin: 0 }}>
-                    <strong>Decision:</strong> {latestDecision.deposit_path?.replace(/_/g, " ")}
-                  </p>
-                  {latestDecision.reviewer_notes && (
-                    <p style={{ fontSize: "0.8rem", marginTop: "0.3rem" }}>
-                      <strong>Notes:</strong> {latestDecision.reviewer_notes}
-                    </p>
-                  )}
-                  <p style={{ fontSize: "0.7rem", color: "#888", marginTop: "0.3rem" }}>
+                <h2 className="text-sm font-semibold mt-3 mb-1 border-b border-border pb-1">Reviewer Decision</h2>
+                <div className="bg-muted/50 p-2 rounded text-xs space-y-1">
+                  <p><strong>Decision:</strong> {latestDecision.deposit_path?.replace(/_/g, " ")}</p>
+                  {latestDecision.reviewer_notes && <p><strong>Notes:</strong> {latestDecision.reviewer_notes}</p>}
+                  <p className="text-muted-foreground text-[10px]">
                     Reviewed {format(new Date(latestDecision.created_at), "MMM d, yyyy h:mm a")}
                   </p>
                 </div>
@@ -249,17 +252,15 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
 
             {check.review_notes && !latestDecision && (
               <>
-                <h2>Reviewer Notes</h2>
-                <div className="notes" style={{ background: "#f9f9f9", padding: "0.75rem", borderRadius: "0.25rem", fontSize: "0.85rem" }}>
-                  {check.review_notes}
-                </div>
+                <h2 className="text-sm font-semibold mt-3 mb-1 border-b border-border pb-1">Reviewer Notes</h2>
+                <div className="bg-muted/50 p-2 rounded text-xs">{check.review_notes}</div>
               </>
             )}
 
             {imageUrl && (
               <>
-                <h2>Check Image</h2>
-                <img src={imageUrl} alt="Check front" className="check-img" style={{ maxWidth: "100%", maxHeight: "300px", border: "1px solid #ddd", borderRadius: "0.25rem" }} />
+                <h2 className="text-sm font-semibold mt-3 mb-1 border-b border-border pb-1">Check Image</h2>
+                <img src={imageUrl} alt="Check front" className="max-w-full max-h-[300px] border border-border rounded" />
               </>
             )}
           </div>

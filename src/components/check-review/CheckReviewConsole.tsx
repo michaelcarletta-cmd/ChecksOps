@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -12,9 +12,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertTriangle, CheckCircle2, Building2, Edit3, Save,
-  RotateCcw, Shield, Users, FileCheck, Loader2,
+  RotateCcw, Shield, Users, FileCheck, Loader2, Merge,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -63,6 +64,16 @@ const DEPOSIT_PATHS = [
 ];
 
 const PAYEE_TYPES = ["insured", "mortgage_company", "contractor", "public_adjuster", "unknown"];
+
+const REISSUE_REASON_CATEGORIES = [
+  { value: "payee_error", label: "Payee Error" },
+  { value: "amount_mismatch", label: "Amount Mismatch" },
+  { value: "stale_dated", label: "Stale Dated" },
+  { value: "damaged_check", label: "Damaged Check" },
+  { value: "wrong_claim", label: "Wrong Claim" },
+  { value: "missing_payee", label: "Missing Payee" },
+  { value: "other", label: "Other" },
+];
 
 const payeeTypeIcons: Record<string, typeof Users> = {
   insured: Users,
@@ -175,7 +186,7 @@ export function CheckReviewQueue({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Review Decision Panel                                              */
+/*  Review Decision Panel — uses transactional RPC                     */
 /* ------------------------------------------------------------------ */
 
 export function ReviewDecisionPanel({
@@ -189,6 +200,9 @@ export function ReviewDecisionPanel({
   const { user } = useAuth();
   const qc = useQueryClient();
 
+  // Track whether user has started editing to prevent refetch overwrites
+  const formDirtyRef = useRef(false);
+
   const { data: check } = useQuery({
     queryKey: ["review-check-detail", checkId],
     queryFn: async () => {
@@ -200,6 +214,9 @@ export function ReviewDecisionPanel({
       if (error) throw error;
       return data as ReviewCheck;
     },
+    // Don't refetch while user is editing
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
   });
 
   const [editing, setEditing] = useState(false);
@@ -209,10 +226,11 @@ export function ReviewDecisionPanel({
   const [payeeLine, setPayeeLine] = useState("");
   const [depositPath, setDepositPath] = useState("");
   const [notes, setNotes] = useState("");
+  const [reissueCategory, setReissueCategory] = useState("other");
 
-  // Sync form when check loads
+  // Only sync form from server when form is NOT dirty
   useEffect(() => {
-    if (check) {
+    if (check && !formDirtyRef.current) {
       setCarrierName(check.carrier_name ?? "");
       setCheckNumber(check.check_number ?? "");
       setAmount(check.amount?.toString() ?? "");
@@ -220,115 +238,60 @@ export function ReviewDecisionPanel({
     }
   }, [check]);
 
+  // Reset dirty flag when checkId changes
+  useEffect(() => {
+    formDirtyRef.current = false;
+    setEditing(false);
+    setDepositPath("");
+    setNotes("");
+    setReissueCategory("other");
+  }, [checkId]);
+
+  const markDirty = useCallback(() => { formDirtyRef.current = true; }, []);
+
   const submitDecision = useMutation({
     mutationFn: async () => {
       if (!user?.id) throw new Error("Not authenticated");
       if (!depositPath) throw new Error("Select a deposit path");
       if (!check) throw new Error("Check not loaded");
 
-      const changes: { field: string; old_value: string | null; new_value: string | null }[] = [];
+      const fieldChanges: { field: string; old_value: string | null; new_value: string | null }[] = [];
 
       if (editing) {
-        if (carrierName !== (check.carrier_name ?? "")) {
-          changes.push({ field: "carrier_name", old_value: check.carrier_name, new_value: carrierName || null });
-        }
-        if (checkNumber !== (check.check_number ?? "")) {
-          changes.push({ field: "check_number", old_value: check.check_number, new_value: checkNumber || null });
-        }
-        if (amount !== (check.amount?.toString() ?? "")) {
-          changes.push({ field: "amount", old_value: check.amount?.toString() ?? null, new_value: amount || null });
-        }
-        if (payeeLine !== (check.payee_line ?? "")) {
-          changes.push({ field: "payee_line", old_value: check.payee_line, new_value: payeeLine || null });
-        }
+        if (carrierName !== (check.carrier_name ?? ""))
+          fieldChanges.push({ field: "carrier_name", old_value: check.carrier_name, new_value: carrierName || null });
+        if (checkNumber !== (check.check_number ?? ""))
+          fieldChanges.push({ field: "check_number", old_value: check.check_number, new_value: checkNumber || null });
+        if (amount !== (check.amount?.toString() ?? ""))
+          fieldChanges.push({ field: "amount", old_value: check.amount?.toString() ?? null, new_value: amount || null });
+        if (payeeLine !== (check.payee_line ?? ""))
+          fieldChanges.push({ field: "payee_line", old_value: check.payee_line, new_value: payeeLine || null });
       }
 
-      // Update check fields if edited
-      const updatePayload: Record<string, unknown> = {
-        status: depositPath === "reissue_requested" ? "reissue_requested" : depositPath,
-        deposit_recommendation: depositPath === "hold_for_claim_review" 
-          ? check.deposit_recommendation 
-          : depositPath === "approved_for_deposit" 
-            ? "ready_for_deposit" 
-            : depositPath,
-        reviewed_by: user.id,
-        reviewed_at: new Date().toISOString(),
-        review_notes: notes || null,
-      };
-
-      if (editing) {
-        if (carrierName) updatePayload.carrier_name = carrierName;
-        if (checkNumber) updatePayload.check_number = checkNumber;
-        if (amount) updatePayload.amount = parseFloat(amount);
-        if (payeeLine) updatePayload.payee_line = payeeLine;
-      }
-
-      const { error: updateErr } = await supabase
-        .from("check_intake_items")
-        .update(updatePayload)
-        .eq("id", checkId);
-      if (updateErr) throw updateErr;
-
-      // Save review decision record
-      const { error: decErr } = await supabase
-        .from("check_review_decisions")
-        .insert({
-          check_id: checkId,
-          reviewer_id: user.id,
-          decision: depositPath,
-          confirmed_carrier_name: carrierName || null,
-          confirmed_check_number: checkNumber || null,
-          confirmed_amount: amount ? parseFloat(amount) : null,
-          confirmed_payee_line: payeeLine || null,
-          deposit_path: depositPath,
-          reviewer_notes: notes || null,
-        });
-      if (decErr) throw decErr;
-
-      // Audit each field change
-      for (const change of changes) {
-        await supabase.from("check_audit_log").insert({
-          check_id: checkId,
-          event_type: "manual_field_edit",
-          event_description: `Reviewer changed ${change.field}: "${change.old_value ?? ""}" → "${change.new_value ?? ""}"`,
-          event_data: {
-            field: change.field,
-            old_value: change.old_value,
-            new_value: change.new_value,
-            reason: notes || "Review decision",
-          },
-          actor_id: user.id,
-        });
-      }
-
-      // Audit the decision itself
-      await supabase.from("check_audit_log").insert({
-        check_id: checkId,
-        event_type: "review_decision",
-        event_description: `Reviewer set deposit path: ${depositPath}`,
-        event_data: {
-          deposit_path: depositPath,
-          fields_edited: changes.length,
-          notes: notes || null,
-        },
-        actor_id: user.id,
+      const { data, error } = await supabase.rpc("submit_check_review_decision", {
+        p_check_id: checkId,
+        p_reviewer_id: user.id,
+        p_deposit_path: depositPath,
+        p_reviewer_notes: notes || null,
+        p_confirmed_carrier_name: editing ? (carrierName || null) : null,
+        p_confirmed_check_number: editing ? (checkNumber || null) : null,
+        p_confirmed_amount: editing && amount ? parseFloat(amount) : null,
+        p_confirmed_payee_line: editing ? (payeeLine || null) : null,
+        p_field_changes: fieldChanges,
+        p_reissue_reason: depositPath === "reissue_requested" ? (notes || "Check not practically depositable") : null,
+        p_reissue_reason_category: depositPath === "reissue_requested" ? reissueCategory : "other",
       });
 
-      // If reissue requested, create reissue record
-      if (depositPath === "reissue_requested") {
-        await supabase.from("check_reissue_requests").insert({
-          check_id: checkId,
-          requested_by: user.id,
-          reason: notes || "Check not practically depositable",
-          reason_category: "payee_error",
-        });
-      }
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
+      formDirtyRef.current = false;
       toast({ title: "Review decision saved" });
       qc.invalidateQueries({ queryKey: ["check-review-queue"] });
       qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+      qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
       onComplete();
     },
     onError: (err) => {
@@ -359,6 +322,7 @@ export function ReviewDecisionPanel({
                 setCheckNumber(check.check_number ?? "");
                 setAmount(check.amount?.toString() ?? "");
                 setPayeeLine(check.payee_line ?? "");
+                markDirty();
               }
               setEditing(!editing);
             }}
@@ -390,25 +354,19 @@ export function ReviewDecisionPanel({
             <>
               <div>
                 <Label className="text-xs">Carrier Name</Label>
-                <Input value={carrierName} onChange={(e) => setCarrierName(e.target.value)} className="h-8 text-sm" />
+                <Input value={carrierName} onChange={(e) => { setCarrierName(e.target.value); markDirty(); }} className="h-8 text-sm" />
               </div>
               <div>
                 <Label className="text-xs">Check Number</Label>
-                <Input value={checkNumber} onChange={(e) => setCheckNumber(e.target.value)} className="h-8 text-sm" />
+                <Input value={checkNumber} onChange={(e) => { setCheckNumber(e.target.value); markDirty(); }} className="h-8 text-sm" />
               </div>
               <div>
                 <Label className="text-xs">Amount</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="h-8 text-sm"
-                />
+                <Input type="number" step="0.01" value={amount} onChange={(e) => { setAmount(e.target.value); markDirty(); }} className="h-8 text-sm" />
               </div>
               <div>
                 <Label className="text-xs">Payee Line</Label>
-                <Input value={payeeLine} onChange={(e) => setPayeeLine(e.target.value)} className="h-8 text-sm" />
+                <Input value={payeeLine} onChange={(e) => { setPayeeLine(e.target.value); markDirty(); }} className="h-8 text-sm" />
               </div>
             </>
           ) : (
@@ -454,7 +412,7 @@ export function ReviewDecisionPanel({
                   className={`cursor-pointer transition-all p-2.5 text-center hover:bg-accent/30 ${
                     depositPath === path.value ? "ring-1 ring-primary bg-accent/50" : ""
                   }`}
-                  onClick={() => setDepositPath(path.value)}
+                  onClick={() => { setDepositPath(path.value); markDirty(); }}
                 >
                   <PathIcon className={`h-5 w-5 mx-auto mb-1 ${path.color}`} />
                   <p className="text-[11px] font-medium leading-tight">{path.label}</p>
@@ -464,12 +422,29 @@ export function ReviewDecisionPanel({
           </div>
         </div>
 
+        {/* Reissue reason category - only when reissue selected */}
+        {depositPath === "reissue_requested" && (
+          <div>
+            <Label className="text-xs">Reissue Reason Category</Label>
+            <Select value={reissueCategory} onValueChange={(v) => { setReissueCategory(v); markDirty(); }}>
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {REISSUE_REASON_CATEGORIES.map((c) => (
+                  <SelectItem key={c.value} value={c.value} className="text-xs">{c.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         {/* Notes */}
         <div>
           <Label className="text-xs">Reviewer Notes</Label>
           <Textarea
             value={notes}
-            onChange={(e) => setNotes(e.target.value)}
+            onChange={(e) => { setNotes(e.target.value); markDirty(); }}
             placeholder="Optional notes about this decision..."
             className="text-sm min-h-[60px]"
           />
@@ -494,7 +469,7 @@ export function ReviewDecisionPanel({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Payee Reconciliation                                               */
+/*  Payee Reconciliation with merge support                            */
 /* ------------------------------------------------------------------ */
 
 function PayeeReconciliation({
@@ -510,23 +485,21 @@ function PayeeReconciliation({
   const [editingPayee, setEditingPayee] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editType, setEditType] = useState("");
+  const [mergeMode, setMergeMode] = useState(false);
+  const [mergeSelection, setMergeSelection] = useState<string[]>([]);
+  const [mergedName, setMergedName] = useState("");
 
   const updatePayee = useMutation({
     mutationFn: async ({ payeeId, name, type }: { payeeId: string; name: string; type: string }) => {
       const original = payees.find((p) => p.id === payeeId);
       if (!original) throw new Error("Payee not found");
 
-      // Update payee without regenerating token
       const { error } = await supabase
         .from("check_payees")
-        .update({
-          payee_name: name,
-          payee_type: type,
-        })
+        .update({ payee_name: name, payee_type: type })
         .eq("id", payeeId);
       if (error) throw error;
 
-      // Audit the change
       const changes: string[] = [];
       if (name !== original.payee_name) changes.push(`name: "${original.payee_name}" → "${name}"`);
       if (type !== original.payee_type) changes.push(`type: "${original.payee_type}" → "${type}"`);
@@ -558,11 +531,110 @@ function PayeeReconciliation({
     },
   });
 
+  const mergePayees = useMutation({
+    mutationFn: async () => {
+      if (mergeSelection.length < 2) throw new Error("Select at least 2 payees to merge");
+      if (!user?.id) throw new Error("Not authenticated");
+
+      // Target = first selected (or the one with endorsement activity)
+      const sorted = [...mergeSelection].sort((a, b) => {
+        const pa = payees.find((p) => p.id === a);
+        const pb = payees.find((p) => p.id === b);
+        // Prefer the one with endorsement activity as target
+        const aActive = pa && pa.endorsement_status !== "pending" ? 0 : 1;
+        const bActive = pb && pb.endorsement_status !== "pending" ? 0 : 1;
+        return aActive - bActive;
+      });
+
+      const targetId = sorted[0];
+      const sourceIds = sorted.slice(1);
+
+      // Only merge sources that have no endorsement activity
+      const mergeable = sourceIds.filter((id) => {
+        const p = payees.find((py) => py.id === id);
+        return p?.endorsement_status === "pending";
+      });
+
+      if (mergeable.length === 0) {
+        throw new Error("Cannot merge: all selected payees have active endorsement activity");
+      }
+
+      const mergeOps = mergeable.map((sourceId) => ({
+        source_payee_id: sourceId,
+        target_payee_id: targetId,
+        merged_name: mergedName || null,
+      }));
+
+      // Use the transactional RPC with just the merge part
+      const { error } = await supabase.rpc("submit_check_review_decision", {
+        p_check_id: checkId,
+        p_reviewer_id: user.id,
+        p_deposit_path: "hold_for_claim_review", // no-op path for merge-only
+        p_reviewer_notes: `Merged ${mergeable.length} duplicate payee(s)`,
+        p_merge_payees: mergeOps,
+        p_field_changes: [],
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Payees merged" });
+      setMergeMode(false);
+      setMergeSelection([]);
+      setMergedName("");
+      qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+    },
+    onError: (err) => {
+      toast({ title: "Merge failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const toggleMergeSelection = (id: string) => {
+    setMergeSelection((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
   return (
     <div className="space-y-2">
-      <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-        Payee Reconciliation
-      </h4>
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          Payee Reconciliation
+        </h4>
+        {payees.length >= 2 && (
+          <Button
+            size="sm"
+            variant={mergeMode ? "default" : "ghost"}
+            className="h-6 text-[10px]"
+            onClick={() => { setMergeMode(!mergeMode); setMergeSelection([]); setMergedName(""); }}
+          >
+            <Merge className="h-3 w-3 mr-1" />
+            {mergeMode ? "Cancel Merge" : "Merge Payees"}
+          </Button>
+        )}
+      </div>
+
+      {mergeMode && mergeSelection.length >= 2 && (
+        <Card className="p-2.5 border-primary/30 bg-primary/5 space-y-2">
+          <p className="text-[10px] text-muted-foreground">
+            {mergeSelection.length} payees selected. Payees with active endorsements will be kept as the target.
+          </p>
+          <Input
+            value={mergedName}
+            onChange={(e) => setMergedName(e.target.value)}
+            placeholder="Merged payee name (optional)"
+            className="h-7 text-xs"
+          />
+          <Button
+            size="sm"
+            className="w-full h-6 text-[10px]"
+            disabled={mergePayees.isPending}
+            onClick={() => mergePayees.mutate()}
+          >
+            <Merge className="h-3 w-3 mr-1" />Merge Selected
+          </Button>
+        </Card>
+      )}
+
       {payees.length === 0 ? (
         <p className="text-xs text-muted-foreground">No payees detected</p>
       ) : (
@@ -582,14 +654,10 @@ function PayeeReconciliation({
                     placeholder="Payee name"
                   />
                   <Select value={editType} onValueChange={setEditType}>
-                    <SelectTrigger className="h-7 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {PAYEE_TYPES.map((t) => (
-                        <SelectItem key={t} value={t} className="text-xs">
-                          {t.replace(/_/g, " ")}
-                        </SelectItem>
+                        <SelectItem key={t} value={t} className="text-xs">{t.replace(/_/g, " ")}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -608,12 +676,7 @@ function PayeeReconciliation({
                     >
                       <Save className="h-3 w-3 mr-1" />Save
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 text-[10px]"
-                      onClick={() => setEditingPayee(null)}
-                    >
+                    <Button size="sm" variant="outline" className="h-6 text-[10px]" onClick={() => setEditingPayee(null)}>
                       Cancel
                     </Button>
                   </div>
@@ -621,6 +684,13 @@ function PayeeReconciliation({
               ) : (
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 min-w-0">
+                    {mergeMode && (
+                      <Checkbox
+                        checked={mergeSelection.includes(payee.id)}
+                        onCheckedChange={() => toggleMergeSelection(payee.id)}
+                        className="shrink-0"
+                      />
+                    )}
                     <PayeeIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     <div className="min-w-0">
                       <p className="text-xs font-medium truncate">{payee.payee_name}</p>
@@ -638,18 +708,20 @@ function PayeeReconciliation({
                       </p>
                     </div>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 w-6 p-0"
-                    onClick={() => {
-                      setEditingPayee(payee.id);
-                      setEditName(payee.payee_name);
-                      setEditType(payee.payee_type);
-                    }}
-                  >
-                    <Edit3 className="h-3 w-3" />
-                  </Button>
+                  {!mergeMode && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0"
+                      onClick={() => {
+                        setEditingPayee(payee.id);
+                        setEditName(payee.payee_name);
+                        setEditType(payee.payee_type);
+                      }}
+                    >
+                      <Edit3 className="h-3 w-3" />
+                    </Button>
+                  )}
                 </div>
               )}
             </Card>
