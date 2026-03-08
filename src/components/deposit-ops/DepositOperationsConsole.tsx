@@ -440,9 +440,10 @@ export function DepositOperationsConsole() {
                           )}
                         </TableCell>
                         <TableCell>
+                          <span className="text-xs text-muted-foreground">
+                            {item.bank_reference || (item.bank_confirmed_at ? "Confirmed" : "—")}
                           </span>
                         </TableCell>
-                        <TableCell>
                           <div className="flex gap-1 flex-wrap">
                             {item.status === "pending_assignment" && (
                               <Button size="sm" variant="outline" className="text-xs h-7"
