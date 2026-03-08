@@ -180,10 +180,7 @@ export const DarwinAutoSummary = ({ claimId, claim }: DarwinAutoSummaryProps) =>
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [autoRefresh, claimId]);
+  }, [claimId]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
