@@ -11,6 +11,11 @@ const corsHeaders = {
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
+interface OcrPayee {
+  name: string;
+  type: string;
+}
+
 interface OcrParsedResult {
   carrier_name: string | null;
   check_number: string | null;
@@ -18,8 +23,9 @@ interface OcrParsedResult {
   issue_date: string | null;
   claim_number: string | null;
   payee_line: string | null;
-  payees: Array<{ name: string; type: string }>;
-  confidence: number | null; // 0-100 from AI
+  payees: OcrPayee[];
+  confidence: number | null;
+  field_confidence: Record<string, number>;
   low_confidence_fields: string[];
 }
 
@@ -28,6 +34,19 @@ interface EligibilityResult {
   reasons: string[];
   rules: Record<string, unknown>;
 }
+
+const VALID_PAYEE_TYPES = new Set([
+  "insured", "mortgage_company", "contractor", "public_adjuster", "unknown",
+]);
+
+const CRITICAL_FIELDS = ["amount", "check_number", "payee_line"] as const;
+const CRITICAL_CONFIDENCE_THRESHOLD = 60;
+const OVERALL_CONFIDENCE_THRESHOLD = 50;
+
+/* ------------------------------------------------------------------ */
+/*  Stale lock timeout (2 minutes)                                     */
+/* ------------------------------------------------------------------ */
+const STALE_LOCK_MS = 2 * 60 * 1000;
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -38,7 +57,7 @@ async function safeBase64(blob: Blob): Promise<string> {
   return base64Encode(buf);
 }
 
-async function logAuditIdempotent(
+function logAudit(
   supabase: ReturnType<typeof createClient>,
   checkId: string,
   eventType: string,
@@ -46,18 +65,8 @@ async function logAuditIdempotent(
   data: Record<string, unknown>,
   actorId: string | null,
 ) {
-  // Use upsert-like approach: only insert if no matching recent entry exists
-  const { data: existing } = await supabase
-    .from("check_audit_log")
-    .select("id")
-    .eq("check_id", checkId)
-    .eq("event_type", eventType)
-    .gte("created_at", new Date(Date.now() - 5000).toISOString())
-    .limit(1);
-
-  if (existing && existing.length > 0) return;
-
-  await supabase.from("check_audit_log").insert({
+  // Fire-and-forget, accept duplicate audit rows — they are append-only history
+  return supabase.from("check_audit_log").insert({
     check_id: checkId,
     event_type: eventType,
     event_description: description,
@@ -66,27 +75,114 @@ async function logAuditIdempotent(
   });
 }
 
+/** Schema-validate + coerce the raw AI output into a typed result */
+function validateOcrOutput(raw: unknown): OcrParsedResult {
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error("OCR output is not an object");
+  }
+  const obj = raw as Record<string, unknown>;
+
+  const str = (k: string): string | null => {
+    const v = obj[k];
+    return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+  };
+
+  // Validate payees array
+  const rawPayees = Array.isArray(obj.payees) ? obj.payees : [];
+  const payees: OcrPayee[] = rawPayees
+    .filter((p): p is Record<string, unknown> => typeof p === "object" && p !== null)
+    .map((p) => ({
+      name: typeof p.name === "string" ? p.name.trim() : "",
+      type: typeof p.type === "string" && VALID_PAYEE_TYPES.has(p.type) ? p.type : "unknown",
+    }))
+    .filter((p) => p.name.length > 0);
+
+  // Validate amount is numeric
+  const rawAmount = str("amount");
+  let amount: string | null = null;
+  if (rawAmount !== null) {
+    const cleaned = rawAmount.replace(/[$,\s]/g, "");
+    if (!isNaN(Number(cleaned)) && Number(cleaned) > 0) {
+      amount = cleaned;
+    }
+  }
+
+  // Validate issue_date is YYYY-MM-DD
+  const rawDate = str("issue_date");
+  let issueDate: string | null = null;
+  if (rawDate !== null && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+    issueDate = rawDate;
+  }
+
+  // Validate confidence
+  const rawConf = typeof obj.confidence === "number" ? obj.confidence : null;
+  const confidence = rawConf !== null ? Math.max(0, Math.min(100, Math.round(rawConf))) : null;
+
+  // Field-level confidence
+  const rawFieldConf = typeof obj.field_confidence === "object" && obj.field_confidence !== null
+    ? obj.field_confidence as Record<string, unknown>
+    : {};
+  const fieldConfidence: Record<string, number> = {};
+  for (const [k, v] of Object.entries(rawFieldConf)) {
+    if (typeof v === "number") fieldConfidence[k] = Math.max(0, Math.min(100, Math.round(v)));
+  }
+
+  const lowConfidenceFields = Array.isArray(obj.low_confidence_fields)
+    ? obj.low_confidence_fields.filter((f): f is string => typeof f === "string")
+    : [];
+
+  return {
+    carrier_name: str("carrier_name"),
+    check_number: str("check_number"),
+    amount,
+    issue_date: issueDate,
+    claim_number: str("claim_number"),
+    payee_line: str("payee_line"),
+    payees,
+    confidence,
+    field_confidence: fieldConfidence,
+    low_confidence_fields: lowConfidenceFields,
+  };
+}
+
 function evaluateEligibility(
-  payees: Array<{ name: string; type: string }>,
+  payees: OcrPayee[],
   isMultiPayee: boolean,
   ocrConfidence: number | null,
+  fieldConfidence: Record<string, number>,
 ): EligibilityResult {
   const rules: Record<string, unknown> = {};
   const reasons: string[] = [];
 
   rules.payee_count = payees.length;
   const hasMortgage = payees.some((p) => p.type === "mortgage_company");
-  rules.mortgage_involved = hasMortgage;
-
   const hasInsured = payees.some((p) => p.type === "insured");
   const hasPa = payees.some((p) => p.type === "public_adjuster");
+  rules.mortgage_involved = hasMortgage;
   rules.has_insured = hasInsured;
   rules.has_pa = hasPa;
 
-  // Low OCR confidence triggers manual review
-  if (ocrConfidence !== null && ocrConfidence < 70) {
-    reasons.push("OCR confidence below 70% — manual verification recommended");
+  // Per-field critical confidence gating
+  let criticalFieldFailed = false;
+  for (const field of CRITICAL_FIELDS) {
+    const fc = fieldConfidence[field];
+    if (fc !== undefined && fc < CRITICAL_CONFIDENCE_THRESHOLD) {
+      reasons.push(`Critical field "${field}" has low confidence (${fc}%) — manual review needed`);
+      criticalFieldFailed = true;
+    }
+  }
+  if (criticalFieldFailed) {
+    rules.critical_field_low_confidence = true;
+  }
+
+  // Overall confidence
+  if (ocrConfidence !== null && ocrConfidence < OVERALL_CONFIDENCE_THRESHOLD) {
+    reasons.push(`Overall OCR confidence ${ocrConfidence}% is below threshold — manual review`);
     rules.low_ocr_confidence = true;
+  }
+
+  if (criticalFieldFailed || (ocrConfidence !== null && ocrConfidence < OVERALL_CONFIDENCE_THRESHOLD)) {
+    return { recommendation: "manual_review_required", reasons, rules };
   }
 
   if (payees.length === 0) {
@@ -105,25 +201,18 @@ function evaluateEligibility(
     return { recommendation: "endorsements_pending", reasons, rules };
   }
 
-  // Single-payee logic: insured-only check is fine for deposit
-  // PA not being listed is NOT a blocker for single-payee insured checks
+  // Single payee
   if (payees.length === 1 && hasInsured) {
-    // Single insured payee — straightforward
-    if (ocrConfidence !== null && ocrConfidence < 70) {
-      return { recommendation: "manual_review_required", reasons, rules };
-    }
     return { recommendation: "ready_for_deposit", reasons, rules };
   }
-
-  if (payees.length === 1 && !hasInsured && !hasPa) {
-    reasons.push("Single payee is not insured or PA — verify deposit authority");
+  if (payees.length === 1 && hasPa) {
+    return { recommendation: "ready_for_deposit", reasons, rules };
+  }
+  if (payees.length === 1) {
+    reasons.push("Single payee type unclear — verify deposit authority");
     return { recommendation: "manual_review_required", reasons, rules };
   }
 
-  // Default single-payee
-  if (ocrConfidence !== null && ocrConfidence < 70) {
-    return { recommendation: "manual_review_required", reasons, rules };
-  }
   return { recommendation: "ready_for_deposit", reasons, rules };
 }
 
@@ -142,7 +231,7 @@ Deno.serve(async (req) => {
   const lovableKey = Deno.env.get("LOVABLE_API_KEY");
 
   try {
-    /* ---- Auth (anon client, not service-role) ---- */
+    /* ---- Auth ---- */
     const authHeader = req.headers.get("authorization");
     const token = authHeader?.replace("Bearer ", "");
     if (!token) return err("Unauthorized", 401);
@@ -150,18 +239,14 @@ Deno.serve(async (req) => {
     const anonClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
     });
-    const { data: claimsData, error: authErr } =
-      await anonClient.auth.getUser(token);
-    if (authErr || !claimsData?.user) return err("Unauthorized", 401);
-    const userId = claimsData.user.id;
+    const { data: authData, error: authErr } = await anonClient.auth.getUser(token);
+    if (authErr || !authData?.user) return err("Unauthorized", 401);
+    const userId = authData.user.id;
 
-    /* ---- Service client for storage / writes ---- */
     const supabase = createClient(supabaseUrl, serviceKey);
 
     /* ---- Body ---- */
-    const { checkId } = (await req.json().catch(() => ({}))) as {
-      checkId?: string;
-    };
+    const { checkId } = (await req.json().catch(() => ({}))) as { checkId?: string };
     if (!checkId) return err("checkId required", 400);
 
     /* ---- Fetch check ---- */
@@ -173,22 +258,36 @@ Deno.serve(async (req) => {
 
     if (checkErr || !check) return err("Check not found", 404);
 
-    // Prevent concurrent processing
+    /* ---- Stale lock handling ---- */
     if (check.ocr_status === "processing") {
-      return err("OCR already in progress for this check", 409);
+      const updatedAt = check.updated_at ? new Date(check.updated_at).getTime() : 0;
+      if (Date.now() - updatedAt < STALE_LOCK_MS) {
+        return err("OCR already in progress for this check", 409);
+      }
+      // Stale lock — allow reprocessing
+      await logAudit(supabase, checkId, "stale_lock_cleared",
+        "Stale OCR processing lock cleared after timeout", { stale_since: check.updated_at }, userId);
     }
+
+    /* ---- Check if endorsement workflow already started ---- */
+    const { data: activePayees } = await supabase
+      .from("check_payees")
+      .select("id, endorsement_status")
+      .eq("check_id", checkId)
+      .neq("endorsement_status", "pending");
+
+    const hasActiveEndorsements = (activePayees?.length ?? 0) > 0;
 
     /* ---- Mark processing ---- */
     await supabase
       .from("check_intake_items")
-      .update({ ocr_status: "processing" })
+      .update({ ocr_status: "processing", updated_at: new Date().toISOString() })
       .eq("id", checkId);
 
-    // Wrap everything in try/catch for compensating rollback on failure
-    try {
-      await logAuditIdempotent(supabase, checkId, "ocr_started", "OCR processing initiated", {}, userId);
+    await logAudit(supabase, checkId, "ocr_started", "OCR processing initiated", {}, userId);
 
-      /* ---- Download front image ---- */
+    try {
+      /* ---- Download images ---- */
       const { data: frontBlob, error: frontErr } = await supabase.storage
         .from("claim-files")
         .download(check.front_image_path);
@@ -197,7 +296,6 @@ Deno.serve(async (req) => {
       }
       const frontBase64 = await safeBase64(frontBlob);
 
-      /* ---- Download back image (optional) ---- */
       let backBase64: string | null = null;
       if (check.back_image_path) {
         const { data: backBlob, error: backErr } = await supabase.storage
@@ -212,38 +310,37 @@ Deno.serve(async (req) => {
       if (!lovableKey) throw new Error("LOVABLE_API_KEY not configured");
 
       const ocrPrompt = `You are an insurance check OCR specialist. Analyze this check image and extract structured data.
-Return ONLY valid JSON with these fields:
+Return ONLY valid JSON with these exact fields:
 {
-  "carrier_name": "the insurance company name on the check",
-  "check_number": "the check number",
-  "amount": "numeric amount (no $ or commas)",
-  "issue_date": "YYYY-MM-DD format",
-  "claim_number": "claim/policy number if visible, null if not",
-  "payee_line": "the full payee/pay-to-the-order-of line exactly as written",
+  "carrier_name": "the insurance company name on the check or null",
+  "check_number": "the check number or null",
+  "amount": "numeric amount only, no $ or commas, or null",
+  "issue_date": "YYYY-MM-DD format or null",
+  "claim_number": "claim/policy number if visible or null",
+  "payee_line": "the full pay-to-the-order-of line exactly as written or null",
   "payees": [
     { "name": "payee name", "type": "insured|mortgage_company|contractor|public_adjuster|unknown" }
   ],
   "confidence": 85,
-  "low_confidence_fields": ["amount"]
+  "field_confidence": { "amount": 95, "check_number": 90, "payee_line": 80, "carrier_name": 70 },
+  "low_confidence_fields": ["carrier_name"]
 }
-Set "confidence" 0-100 reflecting how sure you are about the overall extraction.
-List any fields where text was unclear or partially readable in "low_confidence_fields".
-Classify: mortgage (banks, lending, mortgage), contractor (construction, roofing, restoration), public_adjuster (adjusting, PA), insured (individuals/homeowners), unknown otherwise.`;
+
+Rules:
+- "confidence" is 0-100 for overall extraction quality.
+- "field_confidence" gives per-field confidence for: amount, check_number, payee_line, carrier_name, issue_date.
+- "low_confidence_fields" lists fields where text was unclear.
+- Payee type: mortgage_company (banks/lending/mortgage), contractor (construction/roofing/restoration), public_adjuster (adjusting/PA), insured (individuals/homeowners), unknown otherwise.
+- Amount must be numeric only. Date must be YYYY-MM-DD.`;
 
       const content: Array<Record<string, unknown>> = [
         { type: "text", text: ocrPrompt },
-        {
-          type: "image_url",
-          image_url: { url: `data:image/jpeg;base64,${frontBase64}` },
-        },
+        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${frontBase64}` } },
       ];
       if (backBase64) {
         content.push(
           { type: "text", text: "Here is the back of the check:" },
-          {
-            type: "image_url",
-            image_url: { url: `data:image/jpeg;base64,${backBase64}` },
-          },
+          { type: "image_url", image_url: { url: `data:image/jpeg;base64,${backBase64}` } },
         );
       }
 
@@ -267,166 +364,98 @@ Classify: mortgage (banks, lending, mortgage), contractor (construction, roofing
       const aiData = (await aiResp.json()) as {
         choices?: Array<{ message?: { content?: string } }>;
       };
-      const raw = aiData.choices?.[0]?.message?.content ?? "";
-      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      const rawText = aiData.choices?.[0]?.message?.content ?? "";
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        await supabase
-          .from("check_intake_items")
-          .update({ ocr_status: "failed", raw_ocr_front: { raw } })
+        await supabase.from("check_intake_items")
+          .update({ ocr_status: "failed", raw_ocr_front: { raw: rawText } })
           .eq("id", checkId);
         return err("Could not parse OCR output", 500);
       }
 
-      let parsed: OcrParsedResult;
+      let rawObj: unknown;
       try {
-        parsed = JSON.parse(jsonMatch[0]) as OcrParsedResult;
+        rawObj = JSON.parse(jsonMatch[0]);
       } catch {
-        await supabase
-          .from("check_intake_items")
-          .update({ ocr_status: "failed", raw_ocr_front: { raw } })
+        await supabase.from("check_intake_items")
+          .update({ ocr_status: "failed", raw_ocr_front: { raw: rawText } })
           .eq("id", checkId);
         return err("Invalid JSON in OCR output", 500);
       }
 
-      const payees = parsed.payees ?? [];
+      /* ---- Schema-validated parsing ---- */
+      const parsed = validateOcrOutput(rawObj);
+
+      const payees = parsed.payees;
       const isMultiPayee = payees.length > 1;
       const parsedAmount = parsed.amount ? Number(parsed.amount) : null;
-      const ocrConfidence = typeof parsed.confidence === "number" ? parsed.confidence : null;
-      const lowConfidenceFields = Array.isArray(parsed.low_confidence_fields) ? parsed.low_confidence_fields : [];
-      const needsManualReview = ocrConfidence !== null && ocrConfidence < 70;
+      const ocrConfidence = parsed.confidence;
+      const fieldConfidence = parsed.field_confidence;
 
-      /* ---- Step 1: Update check record ---- */
-      await supabase
-        .from("check_intake_items")
-        .update({
-          carrier_name: parsed.carrier_name ?? null,
-          check_number: parsed.check_number ?? null,
-          amount: parsedAmount,
-          issue_date: parsed.issue_date ?? null,
-          detected_claim_number: parsed.claim_number ?? null,
-          payee_line: parsed.payee_line ?? null,
-          is_multi_payee: isMultiPayee,
-          raw_ocr_front: {
-            ...(parsed as unknown as Record<string, unknown>),
-            ocr_confidence: ocrConfidence,
-            low_confidence_fields: lowConfidenceFields,
-            needs_manual_review: needsManualReview,
-          },
-          ocr_status: "completed",
-          status: needsManualReview ? "needs_review" : "ocr_complete",
-        })
-        .eq("id", checkId);
+      // Determine if critical fields failed confidence
+      const criticalFailed = CRITICAL_FIELDS.some((f) => {
+        const fc = fieldConfidence[f];
+        return fc !== undefined && fc < CRITICAL_CONFIDENCE_THRESHOLD;
+      });
+      const overallFailed = ocrConfidence !== null && ocrConfidence < OVERALL_CONFIDENCE_THRESHOLD;
+      const needsManualReview = criticalFailed || overallFailed;
 
-      /* ---- Step 2: Replace payees (delete + insert for idempotency) ---- */
-      await supabase.from("check_payees").delete().eq("check_id", checkId);
+      /* ---- Eligibility ---- */
+      const eligibility = evaluateEligibility(payees, isMultiPayee, ocrConfidence, fieldConfidence);
 
-      for (const p of payees) {
-        const endorseToken = crypto.randomUUID();
-        await supabase.from("check_payees").insert({
-          check_id: checkId,
-          payee_name: p.name,
-          payee_type: p.type || "unknown",
-          endorsement_token: endorseToken,
-          endorsement_token_expires_at: new Date(
-            Date.now() + 30 * 24 * 60 * 60 * 1000,
-          ).toISOString(),
-        });
-      }
+      const checkStatus = needsManualReview ? "needs_review" : "ocr_complete";
 
-      await logAuditIdempotent(
-        supabase, checkId, "ocr_completed",
-        `OCR extracted ${payees.length} payee(s), amount: $${parsedAmount ?? "N/A"}, confidence: ${ocrConfidence ?? "N/A"}%`,
-        { ...(parsed as unknown as Record<string, unknown>), ocr_confidence: ocrConfidence },
-        userId,
-      );
-
-      /* ---- Step 3: Eligibility ---- */
-      const eligibility = evaluateEligibility(payees, isMultiPayee, ocrConfidence);
-
-      // Upsert eligibility: delete old results for this check then insert
-      await supabase.from("check_eligibility_results").delete().eq("check_id", checkId);
-      await supabase.from("check_eligibility_results").insert({
-        check_id: checkId,
-        recommendation: eligibility.recommendation,
-        reasons: eligibility.reasons,
-        rule_results: eligibility.rules,
-        evaluated_by: userId,
+      /* ---- Transactional commit via RPC ---- */
+      const { data: rpcResult, error: rpcErr } = await supabase.rpc("ocr_commit_results", {
+        p_check_id: checkId,
+        p_carrier_name: parsed.carrier_name,
+        p_check_number: parsed.check_number,
+        p_amount: parsedAmount,
+        p_issue_date: parsed.issue_date,
+        p_claim_number: parsed.claim_number,
+        p_payee_line: parsed.payee_line,
+        p_is_multi_payee: isMultiPayee,
+        p_raw_ocr: {
+          ...parsed,
+          ocr_confidence: ocrConfidence,
+          field_confidence: fieldConfidence,
+          needs_manual_review: needsManualReview,
+        },
+        p_ocr_status: "completed",
+        p_check_status: checkStatus,
+        p_payees: JSON.stringify(payees),
+        p_recommendation: eligibility.recommendation,
+        p_reasons: JSON.stringify(eligibility.reasons),
+        p_rules: JSON.stringify(eligibility.rules),
+        p_evaluated_by: userId,
+        p_claim_id: check.claim_id ?? null,
+        p_has_active_endorsements: hasActiveEndorsements,
       });
 
-      await supabase
-        .from("check_intake_items")
-        .update({
-          deposit_recommendation: eligibility.recommendation,
-          deposit_recommendation_reasons: eligibility.reasons,
-        })
-        .eq("id", checkId);
-
-      await logAuditIdempotent(
-        supabase, checkId, "eligibility_evaluated",
-        `Recommendation: ${eligibility.recommendation}`,
-        eligibility as unknown as Record<string, unknown>,
-        userId,
-      );
-
-      /* ---- Step 4: Claim wallet insertion (idempotent via check_number) ---- */
-      if (check.claim_id && parsedAmount && parsedAmount > 0) {
-        const checkNum = parsed.check_number ?? `intake-${checkId}`;
-        const { data: existingPayment } = await supabase
-          .from("claim_payments")
-          .select("id")
-          .eq("claim_id", check.claim_id)
-          .eq("check_number", checkNum)
-          .eq("payment_method", "insurance_check")
-          .limit(1);
-
-        if (!existingPayment || existingPayment.length === 0) {
-          await supabase.from("claim_payments").insert({
-            claim_id: check.claim_id,
-            amount: parsedAmount,
-            payment_method: "insurance_check",
-            check_number: checkNum,
-            notes: `Insurance check from ${parsed.carrier_name ?? "Unknown carrier"}`,
-            payment_date: parsed.issue_date ?? new Date().toISOString().split("T")[0],
-            recipient_type: "insured",
-            direction: "inbound",
-          });
-          await logAuditIdempotent(
-            supabase, checkId, "claim_wallet_entry_created",
-            `Payment of $${parsedAmount} linked to claim`,
-            { claim_id: check.claim_id, amount: parsedAmount },
-            userId,
-          );
-        } else {
-          // Update existing payment amount if changed on rerun
-          await supabase
-            .from("claim_payments")
-            .update({
-              amount: parsedAmount,
-              notes: `Insurance check from ${parsed.carrier_name ?? "Unknown carrier"}`,
-            })
-            .eq("id", existingPayment[0].id);
-        }
+      if (rpcErr) {
+        throw new Error(`Transaction failed: ${rpcErr.message}`);
       }
 
       return new Response(
         JSON.stringify({
           success: true,
-          parsed: { ...parsed, ocr_confidence: ocrConfidence, needs_manual_review: needsManualReview },
+          parsed: { ...parsed, needs_manual_review: needsManualReview },
           payees,
           eligibility,
+          payees_preserved: hasActiveEndorsements,
+          transaction: rpcResult,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     } catch (innerErr) {
-      // Compensating logic: reset check to previous state on failure
+      // Compensating rollback on failure
       await supabase
         .from("check_intake_items")
         .update({ ocr_status: "failed", status: check.status ?? "uploaded" })
         .eq("id", checkId);
 
-      await logAuditIdempotent(
-        supabase, checkId, "ocr_failed",
-        `OCR processing failed: ${innerErr instanceof Error ? innerErr.message : "Unknown"}`,
+      await logAudit(supabase, checkId, "ocr_failed",
+        `OCR failed: ${innerErr instanceof Error ? innerErr.message : "Unknown"}`,
         { error: innerErr instanceof Error ? innerErr.message : String(innerErr) },
         userId,
       );

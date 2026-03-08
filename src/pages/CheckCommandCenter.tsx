@@ -92,7 +92,6 @@ const statusColors: Record<string, string> = {
 const recommendationConfig: Record<string, { label: string; icon: typeof CheckCircle2; color: string }> = {
   ready_for_deposit: { label: "Ready for Deposit", icon: CheckCircle2, color: "text-emerald-400" },
   endorsements_pending: { label: "Endorsements Pending", icon: Clock, color: "text-amber-400" },
-  endorsements_complete: { label: "Endorsements Complete", icon: Eye, color: "text-emerald-300" },
   manual_review_required: { label: "Manual Review Required", icon: AlertTriangle, color: "text-orange-400" },
   branch_deposit_recommended: { label: "Branch Deposit", icon: Building2, color: "text-blue-400" },
   request_reissue: { label: "Request Reissue", icon: AlertTriangle, color: "text-red-400" },

@@ -21,6 +21,7 @@ interface CheckPayee {
   endorsement_image_path: string | null;
   contact_email: string | null;
   contact_phone: string | null;
+  notification_delivery_status: string | null;
   check_intake_items?: {
     carrier_name: string | null;
     check_number: string | null;
@@ -48,6 +49,16 @@ function htmlResp(body: string, status = 200) {
   });
 }
 
+function escHtml(s: string | null | undefined): string {
+  if (s == null) return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
 async function reEvaluateAfterEndorsement(
   supabase: ReturnType<typeof createClient>,
   checkId: string,
@@ -67,15 +78,13 @@ async function reEvaluateAfterEndorsement(
   );
 
   if (anyRejected) {
-    await supabase
-      .from("check_intake_items")
+    await supabase.from("check_intake_items")
       .update({ status: "needs_review" })
       .eq("id", checkId);
     return { allSigned: false, newStatus: "needs_review" };
   }
 
   if (allSigned) {
-    // Fetch the check to see original deposit recommendation
     const { data: check } = await supabase
       .from("check_intake_items")
       .select("is_multi_payee, deposit_recommendation")
@@ -85,32 +94,22 @@ async function reEvaluateAfterEndorsement(
     const originalRec = check?.deposit_recommendation;
 
     if (check?.is_multi_payee) {
-      // PRESERVE stricter original recommendation
-      // branch_deposit_recommended should NOT be downgraded to manual_review_required
-      const preserveStricter = originalRec === "branch_deposit_recommended";
-      const newRec = preserveStricter ? "branch_deposit_recommended" : "endorsements_complete";
-
-      await supabase
-        .from("check_intake_items")
-        .update({
-          status: "endorsements_complete",
-          deposit_recommendation: newRec,
-        })
+      // endorsements_complete is a STATUS — preserve the original deposit_recommendation
+      // Do NOT overwrite branch_deposit_recommended or any stricter recommendation
+      await supabase.from("check_intake_items")
+        .update({ status: "endorsements_complete" })
         .eq("id", checkId);
 
       await supabase.from("check_audit_log").insert({
         check_id: checkId,
         event_type: "all_endorsements_complete",
-        event_description: preserveStricter
-          ? "All payees endorsed — branch deposit still required per original eligibility"
-          : "All payees endorsed — multi-payee check awaiting final review",
+        event_description: `All payees endorsed — deposit recommendation unchanged: ${originalRec}`,
       });
 
       return { allSigned: true, newStatus: "endorsements_complete" };
     } else {
-      // Single payee: safe to mark ready
-      await supabase
-        .from("check_intake_items")
+      // Single payee endorsed
+      await supabase.from("check_intake_items")
         .update({
           status: "ready",
           deposit_recommendation: "ready_for_deposit",
@@ -183,13 +182,13 @@ function renderEndorsementPage(
     <div class="amount">${escHtml(amountStr)}</div>
     ${
     payee.endorsement_status === "signed"
-      ? '<div class="status signed">✓ You have already endorsed this check.</div>'
+      ? '<div class="status signed">&#x2713; You have already endorsed this check.</div>'
       : payee.endorsement_status === "rejected"
-      ? '<div class="status rejected">✗ You have rejected this endorsement.</div>'
+      ? '<div class="status rejected">&#x2717; You have rejected this endorsement.</div>'
       : payee.endorsement_status === "expired"
       ? '<div class="status expired">This endorsement link has expired.</div>'
       : `
-    <p style="font-size:13px;color:#94a3b8;margin-bottom:8px;">By clicking "Endorse", you confirm your identity and acknowledge this check payment.</p>
+    <p style="font-size:13px;color:#94a3b8;margin-bottom:8px;">By clicking &quot;Endorse&quot;, you confirm your identity and acknowledge this check payment.</p>
     <div class="actions">
       <button class="btn btn-approve" id="approveBtn" onclick="submitEndorsement('approve')">Endorse Check</button>
       <button class="btn btn-reject" id="rejectBtn" onclick="submitEndorsement('reject')">Reject</button>
@@ -197,26 +196,25 @@ function renderEndorsementPage(
     <div id="msg"></div>
     <script>
     async function submitEndorsement(type) {
-      const msg = document.getElementById('msg');
-      const approveBtn = document.getElementById('approveBtn');
-      const rejectBtn = document.getElementById('rejectBtn');
+      var msg = document.getElementById('msg');
+      var approveBtn = document.getElementById('approveBtn');
+      var rejectBtn = document.getElementById('rejectBtn');
       approveBtn.disabled = true;
       rejectBtn.disabled = true;
       msg.textContent = 'Processing...';
       msg.className = '';
       try {
-        const action = type === 'approve' ? 'submit_endorsement' : 'reject_endorsement';
-        const resp = await fetch('${fnUrl}', {
+        var action = type === 'approve' ? 'submit_endorsement' : 'reject_endorsement';
+        var resp = await fetch('${escHtml(fnUrl)}', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action, token: '${token}', reason: type === 'reject' ? 'Payee declined' : undefined })
+          body: JSON.stringify({ action: action, token: '${escHtml(token)}', reason: type === 'reject' ? 'Payee declined' : undefined })
         });
-        const data = await resp.json();
+        var data = await resp.json();
         if (!resp.ok) throw new Error(data.error || 'Request failed');
         msg.className = type === 'approve' ? 'success' : 'error';
-        msg.textContent = type === 'approve' ? '✓ Endorsement submitted successfully.' : '✗ Endorsement rejected.';
-        // Reload after short delay to show updated status
-        setTimeout(() => location.reload(), 1500);
+        msg.textContent = type === 'approve' ? 'Endorsement submitted successfully.' : 'Endorsement rejected.';
+        setTimeout(function() { location.reload(); }, 1500);
       } catch(e) {
         msg.className = 'error';
         msg.textContent = 'Error: ' + e.message;
@@ -229,14 +227,6 @@ function renderEndorsementPage(
   </div>
 </body>
 </html>`;
-}
-
-function escHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 function buildEndorsementEmailHtml(
@@ -278,7 +268,7 @@ function buildEndorsementEmailHtml(
           </table>
           <table width="100%" cellpadding="0" cellspacing="0">
             <tr><td align="center" style="padding:8px 0 24px;">
-              <a href="${endorsementUrl}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">Review &amp; Endorse Check</a>
+              <a href="${escHtml(endorsementUrl)}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">Review &amp; Endorse Check</a>
             </td></tr>
           </table>
           <p style="color:#94a3b8;font-size:12px;margin:0;text-align:center;">This link expires in 30 days. If you did not expect this, please disregard.</p>
@@ -305,7 +295,6 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceKey);
 
   try {
-    // GET request with token = public endorsement page
     const url = new URL(req.url);
     const tokenParam = url.searchParams.get("token");
     if (req.method === "GET" && tokenParam) {
@@ -338,7 +327,7 @@ Deno.serve(async (req) => {
 
         if (pErr || !payee) return json({ error: "Payee not found" }, 404);
 
-        // Rate-limit: don't send if last notification was < 5 minutes ago
+        // Rate-limit: 5 min cooldown
         if (payee.notification_sent_at) {
           const lastSent = new Date(payee.notification_sent_at).getTime();
           if (Date.now() - lastSent < 5 * 60 * 1000) {
@@ -351,61 +340,93 @@ Deno.serve(async (req) => {
         const carrier = payee.check_intake_items?.carrier_name ?? "Unknown";
         const amount = payee.check_intake_items?.amount ?? null;
 
+        let emailSent = false;
+        let smsSent = false;
+        let emailError: string | null = null;
+        let smsError: string | null = null;
+
         if ((method === "email" || method === "both") && payee.contact_email) {
           try {
-            await supabase.functions.invoke("send-email", {
+            const { error: invokeErr } = await supabase.functions.invoke("send-email", {
               body: {
                 to: payee.contact_email,
                 subject: `Endorsement Required — Check #${checkNum}`,
                 html: buildEndorsementEmailHtml(payee.payee_name, checkNum, carrier, amount, endorsementUrl),
               },
             });
+            if (invokeErr) throw invokeErr;
+            emailSent = true;
           } catch (e) {
-            console.error("Email send failed:", e);
+            emailError = e instanceof Error ? e.message : String(e);
+            console.error("Email send failed:", emailError);
           }
         }
 
         if ((method === "sms" || method === "both") && payee.contact_phone) {
           try {
-            await supabase.functions.invoke("send-sms", {
+            const { error: invokeErr } = await supabase.functions.invoke("send-sms", {
               body: {
                 to: payee.contact_phone,
                 message: `Endorsement needed for check #${checkNum} ($${amount ?? "N/A"}) from ${carrier}. Review & sign: ${endorsementUrl}`,
               },
             });
+            if (invokeErr) throw invokeErr;
+            smsSent = true;
           } catch (e) {
-            console.error("SMS send failed:", e);
+            smsError = e instanceof Error ? e.message : String(e);
+            console.error("SMS send failed:", smsError);
           }
         }
 
+        // Only mark notification as sent if at least one delivery succeeded
+        const anyDelivered = emailSent || smsSent;
+        const deliveryStatus = anyDelivered
+          ? (emailSent && smsSent ? "delivered_both" : emailSent ? "delivered_email" : "delivered_sms")
+          : "failed";
+        const deliveryError = !anyDelivered
+          ? [emailError, smsError].filter(Boolean).join("; ")
+          : null;
+
         await supabase.from("check_payees").update({
-          notification_sent_via: method,
-          notification_sent_at: new Date().toISOString(),
+          notification_sent_via: anyDelivered ? method : null,
+          notification_sent_at: anyDelivered ? new Date().toISOString() : payee.notification_sent_at,
+          notification_delivery_status: deliveryStatus,
+          notification_error: deliveryError,
         }).eq("id", payeeId);
 
         await supabase.from("check_endorsement_events").insert({
           check_id: payee.check_id,
           payee_id: payeeId,
-          event_type: "endorsement_request_sent",
-          event_data: { method },
+          event_type: anyDelivered ? "endorsement_request_sent" : "endorsement_request_failed",
+          event_data: { method, emailSent, smsSent, emailError, smsError },
           actor_id: ud.user.id,
         });
 
         await supabase.from("check_audit_log").insert({
           check_id: payee.check_id,
-          event_type: "endorsement_request_sent",
-          event_description: `Endorsement request sent to ${payee.payee_name} via ${method}`,
-          event_data: { payee_id: payeeId, method },
+          event_type: anyDelivered ? "endorsement_request_sent" : "endorsement_request_failed",
+          event_description: anyDelivered
+            ? `Endorsement request sent to ${payee.payee_name} via ${method}`
+            : `Endorsement delivery to ${payee.payee_name} failed: ${deliveryError}`,
+          event_data: { payee_id: payeeId, method, emailSent, smsSent },
           actor_id: ud.user.id,
         });
 
-        // Update check status to endorsements_in_progress
-        await supabase
-          .from("check_intake_items")
-          .update({ status: "endorsements_in_progress" })
-          .eq("id", payee.check_id);
+        if (anyDelivered) {
+          await supabase.from("check_intake_items")
+            .update({ status: "endorsements_in_progress" })
+            .eq("id", payee.check_id);
+        }
 
-        return json({ success: true, endorsementUrl });
+        if (!anyDelivered) {
+          return json({
+            success: false,
+            error: "All delivery methods failed",
+            details: { emailError, smsError },
+          }, 502);
+        }
+
+        return json({ success: true, endorsementUrl, emailSent, smsSent });
       }
 
       case "submit_endorsement": {
@@ -433,14 +454,14 @@ Deno.serve(async (req) => {
           return json({ success: true, message: "Already endorsed" });
         }
 
-        // Rotate token after successful use — invalidate old token
+        // Rotate token after use
         const newToken = crypto.randomUUID();
         await supabase.from("check_payees").update({
           endorsement_status: "signed",
           endorsement_image_path: endorsementImagePath ?? null,
           endorsed_at: new Date().toISOString(),
-          endorsement_token: newToken, // Rotate: old token no longer valid
-          endorsement_token_expires_at: null, // No longer needed
+          endorsement_token: newToken,
+          endorsement_token_expires_at: null,
         }).eq("id", payee.id);
 
         await supabase.from("check_endorsement_events").insert({
@@ -474,7 +495,6 @@ Deno.serve(async (req) => {
 
         if (pErr || !payee) return json({ error: "Invalid or already-used token" }, 404);
 
-        // Rotate token after rejection too
         const newToken = crypto.randomUUID();
         await supabase.from("check_payees").update({
           endorsement_status: "rejected",
@@ -501,7 +521,7 @@ Deno.serve(async (req) => {
       }
 
       default:
-        return json({ error: "Unknown action", supported: ["send_endorsement_request", "submit_endorsement", "reject_endorsement"] }, 400);
+        return json({ error: "Unknown action" }, 400);
     }
   } catch (e) {
     console.error("check-endorsement error:", e);
@@ -522,7 +542,7 @@ async function handlePublicEndorsementPage(
 
   if (error || !payee) {
     return htmlResp(
-      `<html><body style="background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif"><h1>Invalid or expired endorsement link.</h1></body></html>`,
+      `<!DOCTYPE html><html><body style="background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif"><h1>Invalid or expired endorsement link.</h1></body></html>`,
       404,
     );
   }
@@ -535,7 +555,6 @@ async function handlePublicEndorsementPage(
     (payee as CheckPayee).endorsement_status = "expired";
   }
 
-  // Mark as viewed if pending
   if (payee.endorsement_status === "pending") {
     await supabase.from("check_payees").update({ endorsement_status: "viewed" }).eq("id", payee.id);
     await supabase.from("check_endorsement_events").insert({
