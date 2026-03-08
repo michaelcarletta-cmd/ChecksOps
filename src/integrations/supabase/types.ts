@@ -5490,6 +5490,71 @@ export type Database = {
         }
         Relationships: []
       }
+      esign_event_logs: {
+        Row: {
+          claim_id: string | null
+          created_at: string | null
+          id: string
+          message: string | null
+          payload: Json | null
+          request_id: string | null
+          signer_id: string | null
+          stage: string
+          status: string
+        }
+        Insert: {
+          claim_id?: string | null
+          created_at?: string | null
+          id?: string
+          message?: string | null
+          payload?: Json | null
+          request_id?: string | null
+          signer_id?: string | null
+          stage: string
+          status: string
+        }
+        Update: {
+          claim_id?: string | null
+          created_at?: string | null
+          id?: string
+          message?: string | null
+          payload?: Json | null
+          request_id?: string | null
+          signer_id?: string | null
+          stage?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "esign_event_logs_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "esign_event_logs_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "esign_event_logs_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "signature_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "esign_event_logs_signer_id_fkey"
+            columns: ["signer_id"]
+            isOneToOne: false
+            referencedRelation: "signature_signers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       evidence_effectiveness: {
         Row: {
           carrier_response: string | null
@@ -6959,6 +7024,11 @@ export type Database = {
           document_path: string
           field_data: Json | null
           id: string
+          last_error: string | null
+          last_provider_response: string | null
+          provider_message_id: string | null
+          provider_status: string | null
+          sent_at: string | null
           status: string
           updated_at: string | null
         }
@@ -6971,6 +7041,11 @@ export type Database = {
           document_path: string
           field_data?: Json | null
           id?: string
+          last_error?: string | null
+          last_provider_response?: string | null
+          provider_message_id?: string | null
+          provider_status?: string | null
+          sent_at?: string | null
           status?: string
           updated_at?: string | null
         }
@@ -6983,6 +7058,11 @@ export type Database = {
           document_path?: string
           field_data?: Json | null
           id?: string
+          last_error?: string | null
+          last_provider_response?: string | null
+          provider_message_id?: string | null
+          provider_status?: string | null
+          sent_at?: string | null
           status?: string
           updated_at?: string | null
         }
@@ -7007,6 +7087,10 @@ export type Database = {
         Row: {
           access_token: string
           created_at: string | null
+          delivery_error: string | null
+          delivery_status: string | null
+          email_provider_message_id: string | null
+          email_sent_at: string | null
           field_values: Json | null
           id: string
           signature_data: string | null
@@ -7021,6 +7105,10 @@ export type Database = {
         Insert: {
           access_token?: string
           created_at?: string | null
+          delivery_error?: string | null
+          delivery_status?: string | null
+          email_provider_message_id?: string | null
+          email_sent_at?: string | null
           field_values?: Json | null
           id?: string
           signature_data?: string | null
@@ -7035,6 +7123,10 @@ export type Database = {
         Update: {
           access_token?: string
           created_at?: string | null
+          delivery_error?: string | null
+          delivery_status?: string | null
+          email_provider_message_id?: string | null
+          email_sent_at?: string | null
           field_values?: Json | null
           id?: string
           signature_data?: string | null
