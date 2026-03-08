@@ -763,6 +763,62 @@ function CheckDetailPanel({
     ? recommendationConfig[check.deposit_recommendation]
     : null;
 
+  // Fetch endorsements for blocking banner
+  const { data: endorsements = [] } = useQuery({
+    queryKey: ["check-endorsements-summary", checkId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("check_endorsements")
+        .select("id, payee_name, payee_type, status")
+        .eq("check_id", checkId);
+      return data ?? [];
+    },
+  });
+
+  // Fetch linked accounting entry
+  const { data: accountingEntry } = useQuery({
+    queryKey: ["check-accounting-link", checkId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("claim_checks")
+        .select("id, deposit_status, eligibility_status, mortgage_flag, source")
+        .eq("check_intake_item_id", checkId)
+        .maybeSingle();
+      return data;
+    },
+  });
+
+  const pendingEndorsements = endorsements.filter(
+    (e) => e.status === "pending" || e.status === "sent",
+  );
+  const rejectedEndorsements = endorsements.filter((e) => e.status === "rejected");
+  const mortgageEndorsements = endorsements.filter(
+    (e) => e.payee_type === "mortgage_company" && e.status === "manual_required",
+  );
+  const allEndorsementsComplete = endorsements.length > 0 && endorsements.every(
+    (e) => e.status === "signed" || e.status === "waived" ||
+      (e.payee_type === "mortgage_company" && e.status === "manual_required"),
+  );
+
+  // Build blocking reasons
+  const blockingReasons: string[] = [];
+  if (pendingEndorsements.length > 0) {
+    blockingReasons.push(
+      `${pendingEndorsements.length} unsigned endorsement(s): ${pendingEndorsements.map((e) => e.payee_name).join(", ")}`,
+    );
+  }
+  if (rejectedEndorsements.length > 0) {
+    blockingReasons.push(
+      `${rejectedEndorsements.length} rejected endorsement(s): ${rejectedEndorsements.map((e) => e.payee_name).join(", ")} — requires resolution`,
+    );
+  }
+  if (mortgageEndorsements.length > 0) {
+    blockingReasons.push(
+      `${mortgageEndorsements.length} mortgage payee(s) routed to loss draft workflow`,
+    );
+  }
+  const isDepositBlocked = endorsements.length > 0 && !allEndorsementsComplete;
+
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-2">
@@ -780,6 +836,33 @@ function CheckDetailPanel({
             ${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
           </p>
         )}
+
+        {/* Single Source of Truth Blocking Banner */}
+        {isDepositBlocked && (
+          <div className="mt-2 border border-amber-500/30 bg-amber-500/10 rounded-lg p-3 space-y-1.5">
+            <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              Deposit Blocked
+            </div>
+            {blockingReasons.map((reason, i) => (
+              <p key={i} className="text-xs text-amber-300/80 pl-6">• {reason}</p>
+            ))}
+          </div>
+        )}
+
+        {/* Accounting Link */}
+        {accountingEntry && (
+          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded px-2.5 py-1.5">
+            <FileCheck className="h-3 w-3 shrink-0 text-primary" />
+            <span>Accounting entry auto-posted</span>
+            <Badge variant="outline" className="text-[9px] px-1 ml-auto">
+              {accountingEntry.source === "uploaded_check_ocr" ? "OCR" : "Manual"}
+            </Badge>
+            {accountingEntry.mortgage_flag && (
+              <Badge className="bg-blue-500/20 text-blue-400 text-[9px] px-1">Mortgage</Badge>
+            )}
+          </div>
+        )}
       </CardHeader>
       <CardContent className="p-0">
         <Tabs value={detailTab} onValueChange={setDetailTab}>
@@ -787,6 +870,11 @@ function CheckDetailPanel({
             <TabsTrigger value="overview" className="flex-1 text-xs">Overview</TabsTrigger>
             <TabsTrigger value="endorsements" className="flex-1 text-xs">
               Endorsements
+              {pendingEndorsements.length > 0 && (
+                <span className="ml-1 bg-amber-500/30 text-amber-400 rounded-full text-[9px] px-1.5">
+                  {pendingEndorsements.length}
+                </span>
+              )}
             </TabsTrigger>
             <TabsTrigger value="payees" className="flex-1 text-xs">
               Payees ({check.check_payees?.length ?? 0})
