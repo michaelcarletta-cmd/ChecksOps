@@ -1,16 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { DollarSign, Landmark, ArrowRightLeft, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { DollarSign, ArrowRightLeft, CheckCircle2 } from "lucide-react";
 
 interface Props {
   claimId: string;
 }
 
+// Only these payment methods count as insurance proceeds
+const INSURANCE_METHODS = ["insurance_check", "insurance_payment", "check"];
+
 export function ClaimCashFlowCard({ claimId }: Props) {
-  // Insurance payments received
   const { data: payments = [] } = useQuery({
     queryKey: ["claim-payments-cashflow", claimId],
     queryFn: async () => {
@@ -23,33 +24,34 @@ export function ClaimCashFlowCard({ claimId }: Props) {
     },
   });
 
-  // Loss draft data
   const { data: drafts = [] } = useQuery({
     queryKey: ["claim-loss-drafts", claimId],
     queryFn: async () => {
       const { data } = await supabase
         .from("loss_draft_tracking")
-        .select("*")
+        .select("total_escrowed, draw_amount_released, holdback_amount, escrow_status")
         .eq("claim_id", claimId);
       return data ?? [];
     },
   });
 
-  const totalReceived = payments.reduce((s, p) => s + (p.amount ?? 0), 0);
-  const totalEscrowed = drafts.reduce((s, d) => s + ((d as any).total_escrowed ?? 0), 0);
-  const totalReleased = drafts.reduce((s, d) => s + ((d as any).draw_amount_released ?? 0), 0);
-  const totalHoldback = drafts.reduce((s, d) => s + ((d as any).holdback_amount ?? 0), 0);
-  const unreleased = totalEscrowed - totalReleased;
+  // Filter to insurance-only payments
+  const insurancePayments = payments.filter(
+    p => !p.payment_method || INSURANCE_METHODS.includes(p.payment_method)
+  );
+  const totalReceived = insurancePayments.reduce((s, p) => s + (p.amount ?? 0), 0);
+  const totalEscrowed = drafts.reduce((s, d) => s + (d.total_escrowed ?? 0), 0);
+  const totalReleased = drafts.reduce((s, d) => s + (d.draw_amount_released ?? 0), 0);
+  const totalHoldback = drafts.reduce((s, d) => s + (d.holdback_amount ?? 0), 0);
   const releasePercent = totalEscrowed > 0 ? (totalReleased / totalEscrowed) * 100 : 0;
 
-  // Determine next action
-  const activeDrafts = drafts.filter(d => (d as any).escrow_status !== "final_release_complete");
+  const activeDrafts = drafts.filter(d => d.escrow_status !== "final_release_complete");
   const nextAction = activeDrafts.length === 0
     ? totalEscrowed > 0 ? "All funds released" : "No mortgage escrow"
-    : activeDrafts.some(d => (d as any).escrow_status === "pending_send") ? "Send check to lender"
-    : activeDrafts.some(d => (d as any).escrow_status === "escrowed") ? "Request first draw"
-    : activeDrafts.some(d => (d as any).escrow_status === "first_draw_requested") ? "Waiting on draw release"
-    : activeDrafts.some(d => (d as any).escrow_status === "partial_release") ? "Request next draw"
+    : activeDrafts.some(d => d.escrow_status === "pending_send") ? "Send check to lender"
+    : activeDrafts.some(d => d.escrow_status === "escrowed") ? "Request first draw"
+    : activeDrafts.some(d => d.escrow_status === "first_draw_requested") ? "Waiting on draw release"
+    : activeDrafts.some(d => d.escrow_status === "partial_release") ? "Request next draw"
     : "Follow up with lender";
 
   if (totalReceived === 0 && drafts.length === 0) return null;

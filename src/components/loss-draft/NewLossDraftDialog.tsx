@@ -47,11 +47,26 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
     }
     setSaving(true);
     try {
+      // Check for existing active draft for same claim + servicer (idempotent guard)
+      const { data: existing } = await supabase
+        .from("loss_draft_tracking")
+        .select("id")
+        .eq("claim_id", claimId)
+        .ilike("mortgage_servicer", servicer.trim())
+        .neq("escrow_status", "final_release_complete")
+        .limit(1);
+
+      if (existing && existing.length > 0) {
+        toast({ title: "Already exists", description: "An active loss draft already exists for this claim and servicer.", variant: "destructive" });
+        setSaving(false);
+        return;
+      }
+
       const { data: inserted, error } = await supabase
         .from("loss_draft_tracking")
         .insert({
           claim_id: claimId,
-          mortgage_servicer: servicer,
+          mortgage_servicer: servicer.trim(),
           loss_draft_contact: contact || null,
           loss_draft_phone: phone || null,
           loss_draft_email: email || null,
