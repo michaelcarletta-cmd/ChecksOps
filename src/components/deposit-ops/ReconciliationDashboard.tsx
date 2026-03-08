@@ -148,7 +148,7 @@ export function ReconciliationDashboard() {
                 <TableBody>
                   {batches.map((b: Record<string, unknown>) => (
                     <TableRow key={b.id as string}>
-                      <TableCell className="font-mono text-xs">{(b.batch_number as string).slice(0, 20)}</TableCell>
+                      <TableCell className="font-mono text-xs">{String(b.batch_number ?? "").slice(0, 20)}</TableCell>
                       <TableCell className="text-xs">{providerLabels[(b.provider as string)] ?? b.provider}</TableCell>
                       <TableCell className="text-sm">{b.total_items as number}</TableCell>
                       <TableCell className="text-right text-sm tabular-nums">{fmtMoney(b.total_amount as number)}</TableCell>

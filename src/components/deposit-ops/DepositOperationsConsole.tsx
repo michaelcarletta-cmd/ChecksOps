@@ -155,7 +155,7 @@ export function DepositOperationsConsole() {
         p_provider: params.provider ?? null,
         p_amount: params.amount ?? null,
         p_notes: params.notes ?? null,
-        p_extra: params.extra ?? {},
+        p_extra: (params.extra ?? {}) as Record<string, string>,
       });
       if (error) throw error;
       return data;
