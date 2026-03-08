@@ -1,6 +1,6 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import PizZip from "https://esm.sh/pizzip@3.1.7";
-import Docxtemplater from "https://esm.sh/docxtemplater@3.44.0";
+import { createClient } from "@supabase/supabase-js";
+import PizZip from "pizzip";
+import Docxtemplater from "docxtemplater";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
