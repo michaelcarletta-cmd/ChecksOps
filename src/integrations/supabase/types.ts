@@ -6605,6 +6605,283 @@ export type Database = {
           },
         ]
       }
+      loss_draft_audit_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          amount: number | null
+          created_at: string
+          id: string
+          loss_draft_id: string
+          new_values: Json | null
+          notes: string | null
+          old_values: Json | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          amount?: number | null
+          created_at?: string
+          id?: string
+          loss_draft_id: string
+          new_values?: Json | null
+          notes?: string | null
+          old_values?: Json | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          amount?: number | null
+          created_at?: string
+          id?: string
+          loss_draft_id?: string
+          new_values?: Json | null
+          notes?: string | null
+          old_values?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loss_draft_audit_log_loss_draft_id_fkey"
+            columns: ["loss_draft_id"]
+            isOneToOne: false
+            referencedRelation: "loss_draft_dashboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loss_draft_audit_log_loss_draft_id_fkey"
+            columns: ["loss_draft_id"]
+            isOneToOne: false
+            referencedRelation: "loss_draft_tracking"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      loss_draft_documents: {
+        Row: {
+          created_at: string
+          document_label: string
+          document_type: string
+          file_id: string | null
+          id: string
+          is_required: boolean
+          is_submitted: boolean
+          loss_draft_id: string
+          notes: string | null
+          submitted_at: string | null
+          submitted_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          document_label: string
+          document_type: string
+          file_id?: string | null
+          id?: string
+          is_required?: boolean
+          is_submitted?: boolean
+          loss_draft_id: string
+          notes?: string | null
+          submitted_at?: string | null
+          submitted_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          document_label?: string
+          document_type?: string
+          file_id?: string | null
+          id?: string
+          is_required?: boolean
+          is_submitted?: boolean
+          loss_draft_id?: string
+          notes?: string | null
+          submitted_at?: string | null
+          submitted_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loss_draft_documents_loss_draft_id_fkey"
+            columns: ["loss_draft_id"]
+            isOneToOne: false
+            referencedRelation: "loss_draft_dashboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loss_draft_documents_loss_draft_id_fkey"
+            columns: ["loss_draft_id"]
+            isOneToOne: false
+            referencedRelation: "loss_draft_tracking"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      loss_draft_releases: {
+        Row: {
+          amount_released: number | null
+          amount_requested: number
+          created_at: string
+          created_by: string | null
+          draw_number: number
+          holdback_amount: number | null
+          id: string
+          loss_draft_id: string
+          notes: string | null
+          release_date: string | null
+          released_at: string | null
+          requested_at: string
+          status: string
+        }
+        Insert: {
+          amount_released?: number | null
+          amount_requested?: number
+          created_at?: string
+          created_by?: string | null
+          draw_number: number
+          holdback_amount?: number | null
+          id?: string
+          loss_draft_id: string
+          notes?: string | null
+          release_date?: string | null
+          released_at?: string | null
+          requested_at?: string
+          status?: string
+        }
+        Update: {
+          amount_released?: number | null
+          amount_requested?: number
+          created_at?: string
+          created_by?: string | null
+          draw_number?: number
+          holdback_amount?: number | null
+          id?: string
+          loss_draft_id?: string
+          notes?: string | null
+          release_date?: string | null
+          released_at?: string | null
+          requested_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loss_draft_releases_loss_draft_id_fkey"
+            columns: ["loss_draft_id"]
+            isOneToOne: false
+            referencedRelation: "loss_draft_dashboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loss_draft_releases_loss_draft_id_fkey"
+            columns: ["loss_draft_id"]
+            isOneToOne: false
+            referencedRelation: "loss_draft_tracking"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      loss_draft_tracking: {
+        Row: {
+          check_intake_item_id: string | null
+          check_received_date: string | null
+          check_sent_date: string | null
+          claim_id: string
+          created_at: string
+          created_by: string | null
+          draw_amount_released: number | null
+          draw_amount_requested: number | null
+          draw_stage: number
+          escrow_status: string
+          follow_up_count: number | null
+          follow_up_date: string | null
+          holdback_amount: number | null
+          id: string
+          last_contact_at: string | null
+          loan_number: string | null
+          loss_draft_contact: string | null
+          loss_draft_email: string | null
+          loss_draft_fax: string | null
+          loss_draft_phone: string | null
+          mortgage_servicer: string
+          notes: string | null
+          total_escrowed: number | null
+          updated_at: string
+        }
+        Insert: {
+          check_intake_item_id?: string | null
+          check_received_date?: string | null
+          check_sent_date?: string | null
+          claim_id: string
+          created_at?: string
+          created_by?: string | null
+          draw_amount_released?: number | null
+          draw_amount_requested?: number | null
+          draw_stage?: number
+          escrow_status?: string
+          follow_up_count?: number | null
+          follow_up_date?: string | null
+          holdback_amount?: number | null
+          id?: string
+          last_contact_at?: string | null
+          loan_number?: string | null
+          loss_draft_contact?: string | null
+          loss_draft_email?: string | null
+          loss_draft_fax?: string | null
+          loss_draft_phone?: string | null
+          mortgage_servicer: string
+          notes?: string | null
+          total_escrowed?: number | null
+          updated_at?: string
+        }
+        Update: {
+          check_intake_item_id?: string | null
+          check_received_date?: string | null
+          check_sent_date?: string | null
+          claim_id?: string
+          created_at?: string
+          created_by?: string | null
+          draw_amount_released?: number | null
+          draw_amount_requested?: number | null
+          draw_stage?: number
+          escrow_status?: string
+          follow_up_count?: number | null
+          follow_up_date?: string | null
+          holdback_amount?: number | null
+          id?: string
+          last_contact_at?: string | null
+          loan_number?: string | null
+          loss_draft_contact?: string | null
+          loss_draft_email?: string | null
+          loss_draft_fax?: string | null
+          loss_draft_phone?: string | null
+          mortgage_servicer?: string
+          notes?: string | null
+          total_escrowed?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loss_draft_tracking_check_intake_item_id_fkey"
+            columns: ["check_intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loss_draft_tracking_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "loss_draft_tracking_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       loss_types: {
         Row: {
           created_at: string
@@ -8521,6 +8798,48 @@ export type Database = {
         }
         Relationships: []
       }
+      loss_draft_dashboard: {
+        Row: {
+          check_received_date: string | null
+          check_sent_date: string | null
+          claim_id: string | null
+          claim_number: string | null
+          created_at: string | null
+          days_in_escrow: number | null
+          draw_amount_released: number | null
+          draw_stage: number | null
+          escrow_status: string | null
+          follow_up_count: number | null
+          follow_up_date: string | null
+          holdback_amount: number | null
+          id: string | null
+          insurance_company: string | null
+          is_stale: boolean | null
+          last_contact_at: string | null
+          missing_docs_count: number | null
+          mortgage_servicer: string | null
+          policyholder_name: string | null
+          total_escrowed: number | null
+          unreleased_amount: number | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loss_draft_tracking_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "loss_draft_tracking_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portfolio_carrier_analytics: {
         Row: {
           avg_days_open: number | null
@@ -8702,6 +9021,7 @@ export type Database = {
           license_type: string
         }[]
       }
+      get_loss_draft_dashboard_counts: { Args: never; Returns: Json }
       get_or_create_notification_preferences: {
         Args: { p_user_id: string }
         Returns: {
@@ -8742,6 +9062,10 @@ export type Database = {
         Args: { p_claimed_by: string; p_job_type: string }
         Returns: boolean
       }
+      init_loss_draft_documents: {
+        Args: { p_loss_draft_id: string }
+        Returns: undefined
+      }
       invalidate_all_sessions: { Args: { p_user_id?: string }; Returns: number }
       invalidate_session: {
         Args: { p_session_token: string }
@@ -8762,6 +9086,17 @@ export type Database = {
           p_record_type: string
         }
         Returns: string
+      }
+      loss_draft_action: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_amount?: number
+          p_extra?: Json
+          p_loss_draft_id: string
+          p_notes?: string
+        }
+        Returns: Json
       }
       match_claim_document_chunks: {
         Args: {
