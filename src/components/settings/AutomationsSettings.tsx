@@ -1014,7 +1014,7 @@ export const AutomationsSettings = () => {
                         <div className="space-y-2">
                           <Label>Message</Label>
                           <Textarea 
-                            placeholder="Use {claim.field} for merge fields..."
+                            placeholder="Use ${field} for merge fields..."
                             rows={3}
                             value={currentAction.config.message || ''}
                             onChange={(e) => setCurrentAction({
