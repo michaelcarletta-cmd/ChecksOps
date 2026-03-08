@@ -874,7 +874,7 @@ export const AutomationsSettings = () => {
                         <div className="space-y-2">
                           <Label>Email Body</Label>
                           <RichTextEditor
-                            placeholder="Use {claim.field} for merge fields..."
+                            placeholder="Use ${field} for merge fields..."
                             rows={4}
                             value={currentAction.config.message || ''}
                             onChange={(value) => setCurrentAction({
