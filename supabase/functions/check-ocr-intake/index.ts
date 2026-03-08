@@ -1,9 +1,9 @@
-import { createClient } from "npm:@supabase/supabase-js@2.39.3";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 /* ------------------------------------------------------------------ */
@@ -41,16 +41,12 @@ const VALID_PAYEE_TYPES = new Set([
 const CRITICAL_FIELDS = ["amount", "check_number", "payee_line"] as const;
 const CRITICAL_CONFIDENCE_THRESHOLD = 60;
 const OVERALL_CONFIDENCE_THRESHOLD = 50;
-
-/* ------------------------------------------------------------------ */
-/*  Stale lock timeout (2 minutes) — uses dedicated heartbeat field    */
-/* ------------------------------------------------------------------ */
 const STALE_LOCK_MS = 2 * 60 * 1000;
+const OCR_TIMEOUT_MS = 45_000;
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
-
 
 function logAudit(
   supabase: ReturnType<typeof createClient>,
@@ -69,7 +65,6 @@ function logAudit(
   });
 }
 
-/** Schema-validate + coerce the raw AI output into a typed result */
 function validateOcrOutput(raw: unknown): OcrParsedResult {
   if (typeof raw !== "object" || raw === null) {
     throw new Error("OCR output is not an object");
@@ -81,7 +76,6 @@ function validateOcrOutput(raw: unknown): OcrParsedResult {
     return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
   };
 
-  // Validate payees array
   const rawPayees = Array.isArray(obj.payees) ? obj.payees : [];
   const payees: OcrPayee[] = rawPayees
     .filter((p): p is Record<string, unknown> => typeof p === "object" && p !== null)
@@ -91,7 +85,6 @@ function validateOcrOutput(raw: unknown): OcrParsedResult {
     }))
     .filter((p) => p.name.length > 0);
 
-  // Validate amount is numeric
   const rawAmount = str("amount");
   let amount: string | null = null;
   if (rawAmount !== null) {
@@ -101,18 +94,15 @@ function validateOcrOutput(raw: unknown): OcrParsedResult {
     }
   }
 
-  // Validate issue_date is YYYY-MM-DD
   const rawDate = str("issue_date");
   let issueDate: string | null = null;
   if (rawDate !== null && /^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
     issueDate = rawDate;
   }
 
-  // Validate confidence
   const rawConf = typeof obj.confidence === "number" ? obj.confidence : null;
   const confidence = rawConf !== null ? Math.max(0, Math.min(100, Math.round(rawConf))) : null;
 
-  // Field-level confidence
   const rawFieldConf = typeof obj.field_confidence === "object" && obj.field_confidence !== null
     ? obj.field_confidence as Record<string, unknown>
     : {};
@@ -156,7 +146,6 @@ function evaluateEligibility(
   rules.has_insured = hasInsured;
   rules.has_pa = hasPa;
 
-  // Per-field critical confidence gating
   let criticalFieldFailed = false;
   for (const field of CRITICAL_FIELDS) {
     const fc = fieldConfidence[field];
@@ -169,7 +158,6 @@ function evaluateEligibility(
     rules.critical_field_low_confidence = true;
   }
 
-  // Overall confidence
   if (ocrConfidence !== null && ocrConfidence < OVERALL_CONFIDENCE_THRESHOLD) {
     reasons.push(`Overall OCR confidence ${ocrConfidence}% is below threshold — manual review`);
     rules.low_ocr_confidence = true;
@@ -195,13 +183,8 @@ function evaluateEligibility(
     return { recommendation: "endorsements_pending", reasons, rules };
   }
 
-  // Single payee
-  if (payees.length === 1 && hasInsured) {
-    return { recommendation: "ready_for_deposit", reasons, rules };
-  }
-  if (payees.length === 1 && hasPa) {
-    return { recommendation: "ready_for_deposit", reasons, rules };
-  }
+  if (payees.length === 1 && hasInsured) return { recommendation: "ready_for_deposit", reasons, rules };
+  if (payees.length === 1 && hasPa) return { recommendation: "ready_for_deposit", reasons, rules };
   if (payees.length === 1) {
     reasons.push("Single payee type unclear — verify deposit authority");
     return { recommendation: "manual_review_required", reasons, rules };
@@ -210,27 +193,14 @@ function evaluateEligibility(
   return { recommendation: "ready_for_deposit", reasons, rules };
 }
 
-/* ------------------------------------------------------------------ */
-/*  Strict JSON parsing — no regex fallback                            */
-/* ------------------------------------------------------------------ */
-
-/**
- * Parse the AI response as strict JSON. The AI is instructed to return
- * response_format: json_object, so the content should be pure JSON.
- * We try JSON.parse directly first; only if that fails do we attempt
- * to find a JSON block in markdown fences (```json ... ```).
- * No greedy regex fallback — if neither works, we fail explicitly.
- */
 function parseStrictJson(rawText: string): unknown {
-  // Attempt 1: direct parse (ideal for json_object response_format)
   const trimmed = rawText.trim();
   if (trimmed.startsWith("{")) {
     try {
       return JSON.parse(trimmed);
-    } catch { /* fall through to fence extraction */ }
+    } catch { /* fall through */ }
   }
 
-  // Attempt 2: extract from markdown code fence (```json\n{...}\n```)
   const fenceMatch = trimmed.match(/```(?:json)?\s*\n(\{[\s\S]*?\})\s*\n```/);
   if (fenceMatch) {
     try {
@@ -238,98 +208,127 @@ function parseStrictJson(rawText: string): unknown {
     } catch { /* fall through */ }
   }
 
-  // No greedy regex — fail explicitly
   throw new Error("AI response is not valid JSON and contains no fenced JSON block");
 }
 
+function errResponse(message: string, status: number, stage?: string) {
+  return new Response(
+    JSON.stringify({ success: false, error: message, stage: stage ?? null }),
+    { status, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
+}
+
 /* ------------------------------------------------------------------ */
-/*  Main handler                                                       */
+/*  Main handler — everything inside Deno.serve, no top-level throws  */
 /* ------------------------------------------------------------------ */
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders });
   }
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+  let stage = "init";
 
   try {
-    /* ---- Auth ---- */
+    console.log("check-ocr-intake: entered handler");
+
+    // ---- Env ----
+    stage = "env";
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+
+    if (!supabaseUrl || !serviceKey || !anonKey) {
+      console.error("check-ocr-intake: missing env vars", {
+        SUPABASE_URL: !!supabaseUrl,
+        SUPABASE_SERVICE_ROLE_KEY: !!serviceKey,
+        SUPABASE_ANON_KEY: !!anonKey,
+      });
+      return errResponse("Missing required environment variables", 500, stage);
+    }
+    if (!lovableKey) {
+      console.error("check-ocr-intake: LOVABLE_API_KEY missing");
+      return errResponse("Missing LOVABLE_API_KEY", 500, stage);
+    }
+    console.log("check-ocr-intake: env ok");
+
+    // ---- Auth ----
+    stage = "auth";
     const authHeader = req.headers.get("authorization");
     const token = authHeader?.replace("Bearer ", "");
-    if (!token) return err("Unauthorized", 401);
+    if (!token) return errResponse("Unauthorized", 401, stage);
 
     const anonClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
     });
     const { data: authData, error: authErr } = await anonClient.auth.getUser(token);
-    if (authErr || !authData?.user) return err("Unauthorized", 401);
+    if (authErr || !authData?.user) return errResponse("Unauthorized", 401, stage);
     const userId = authData.user.id;
 
+    // ---- Supabase service client ----
+    stage = "supabase_client";
     const supabase = createClient(supabaseUrl, serviceKey);
+    console.log("check-ocr-intake: supabase client created");
 
-    /* ---- Body ---- */
+    // ---- Parse request ----
+    stage = "parse_request";
     const { checkId } = (await req.json().catch(() => ({}))) as { checkId?: string };
-    if (!checkId) return err("checkId required", 400);
+    if (!checkId) return errResponse("checkId required", 400, stage);
+    console.log("check-ocr-intake: request parsed, checkId=" + checkId);
 
-    /* ---- Fetch check ---- */
+    // ---- Fetch check ----
+    stage = "fetch_check";
     const { data: check, error: checkErr } = await supabase
       .from("check_intake_items")
       .select("*")
       .eq("id", checkId)
       .single();
+    if (checkErr || !check) return errResponse("Check not found", 404, stage);
 
-    if (checkErr || !check) return err("Check not found", 404);
-
-    /* ---- Stale lock handling — uses dedicated ocr_heartbeat_at ---- */
+    // ---- Stale lock handling ----
+    stage = "stale_lock";
     if (check.ocr_status === "processing") {
       const heartbeat = (check as Record<string, unknown>).ocr_heartbeat_at;
       const heartbeatMs = heartbeat ? new Date(heartbeat as string).getTime() : 0;
       const lockAge = Date.now() - heartbeatMs;
       if (heartbeatMs > 0 && lockAge < STALE_LOCK_MS) {
-        return err("OCR already in progress for this check", 409);
+        return errResponse("OCR already in progress for this check", 409, stage);
       }
-      // Stale lock — allow reprocessing
       await logAudit(supabase, checkId, "stale_lock_cleared",
         "Stale OCR processing lock cleared after timeout",
-        { stale_since: heartbeat, lock_age_ms: lockAge },
-        userId);
+        { stale_since: heartbeat, lock_age_ms: lockAge }, userId);
     }
 
-    /* ---- Check if endorsement workflow already started ---- */
+    // ---- Check active endorsements ----
+    stage = "check_endorsements";
     const { data: activePayees } = await supabase
       .from("check_payees")
       .select("id, endorsement_status")
       .eq("check_id", checkId)
       .neq("endorsement_status", "pending");
-
     const hasActiveEndorsements = (activePayees?.length ?? 0) > 0;
 
-    /* ---- Mark processing with dedicated heartbeat ---- */
+    // ---- Mark processing ----
+    stage = "mark_processing";
     const now = new Date().toISOString();
     await supabase
       .from("check_intake_items")
-      .update({
-        ocr_status: "processing",
-        ocr_heartbeat_at: now,
-        updated_at: now,
-      })
+      .update({ ocr_status: "processing", ocr_heartbeat_at: now, updated_at: now })
       .eq("id", checkId);
-
     await logAudit(supabase, checkId, "ocr_started", "OCR processing initiated", {}, userId);
 
     try {
-      /* ---- Get signed URLs for images (avoids loading into memory) ---- */
+      // ---- Signed URLs ----
+      stage = "signed_url";
       const { data: frontUrlData, error: frontUrlErr } = await supabase.storage
         .from("claim-files")
-        .createSignedUrl(check.front_image_path, 300); // 5 min expiry
+        .createSignedUrl(check.front_image_path, 300);
       if (frontUrlErr || !frontUrlData?.signedUrl) {
         throw new Error("Could not create signed URL for front image: " + (frontUrlErr?.message ?? "no URL"));
       }
       const frontImageUrl = frontUrlData.signedUrl;
+      console.log("check-ocr-intake: signed url created");
 
       let backImageUrl: string | null = null;
       if (check.back_image_path) {
@@ -341,9 +340,8 @@ Deno.serve(async (req) => {
         }
       }
 
-      /* ---- AI OCR with structured JSON response ---- */
-      if (!lovableKey) throw new Error("LOVABLE_API_KEY not configured");
-
+      // ---- AI OCR request ----
+      stage = "ocr_request";
       const ocrPrompt = `You are an insurance check OCR specialist. Analyze this check image and extract structured data.
 Return ONLY a valid JSON object with these exact fields:
 {
@@ -380,54 +378,74 @@ Rules:
         );
       }
 
-      const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${lovableKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          response_format: { type: "json_object" },
-          messages: [{ role: "user", content }],
-        }),
-      });
+      console.log("check-ocr-intake: lovable request starting");
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), OCR_TIMEOUT_MS);
+
+      let aiResp: Response;
+      try {
+        aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${lovableKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash",
+            response_format: { type: "json_object" },
+            messages: [{ role: "user", content }],
+          }),
+          signal: controller.signal,
+        });
+      } catch (fetchErr) {
+        clearTimeout(timeout);
+        const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+        const isTimeout = msg.includes("abort");
+        throw new Error(isTimeout ? `OCR request timed out after ${OCR_TIMEOUT_MS / 1000}s` : `OCR fetch failed: ${msg}`);
+      }
+      clearTimeout(timeout);
+
+      console.log("check-ocr-intake: lovable response received, status=" + aiResp.status);
 
       if (!aiResp.ok) {
         const detail = await aiResp.text().catch(() => "");
         throw new Error(`AI OCR failed [${aiResp.status}]: ${detail}`);
       }
 
-      const aiData = (await aiResp.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
+      stage = "ocr_parse";
+      let aiData: { choices?: Array<{ message?: { content?: string } }> };
+      try {
+        aiData = await aiResp.json();
+      } catch {
+        throw new Error("AI response is not valid JSON");
+      }
       const rawText = aiData.choices?.[0]?.message?.content ?? "";
 
-      /* ---- Strict JSON parsing — no greedy regex ---- */
       let rawObj: unknown;
       try {
         rawObj = parseStrictJson(rawText);
       } catch (parseErr) {
+        console.error("check-ocr-intake: JSON parse failed", rawText.substring(0, 500));
         await supabase.from("check_intake_items")
           .update({
             ocr_status: "failed",
             ocr_heartbeat_at: null,
-            raw_ocr_front: { raw: rawText, parse_error: (parseErr as Error).message },
+            raw_ocr_front: { raw: rawText.substring(0, 2000), parse_error: (parseErr as Error).message },
           })
           .eq("id", checkId);
-        return err("Could not parse OCR output as valid JSON", 500);
+        return errResponse("Could not parse OCR output as valid JSON", 500, stage);
       }
 
-      /* ---- Schema-validated parsing ---- */
+      // ---- Validate & process ----
+      stage = "ocr_validate";
       const parsed = validateOcrOutput(rawObj);
-
       const payees = parsed.payees;
       const isMultiPayee = payees.length > 1;
       const parsedAmount = parsed.amount ? Number(parsed.amount) : null;
       const ocrConfidence = parsed.confidence;
       const fieldConfidence = parsed.field_confidence;
 
-      // Determine if critical fields failed confidence
       const criticalFailed = CRITICAL_FIELDS.some((f) => {
         const fc = fieldConfidence[f];
         return fc !== undefined && fc < CRITICAL_CONFIDENCE_THRESHOLD;
@@ -435,12 +453,11 @@ Rules:
       const overallFailed = ocrConfidence !== null && ocrConfidence < OVERALL_CONFIDENCE_THRESHOLD;
       const needsManualReview = criticalFailed || overallFailed;
 
-      /* ---- Eligibility ---- */
       const eligibility = evaluateEligibility(payees, isMultiPayee, ocrConfidence, fieldConfidence);
-
       const checkStatus = needsManualReview ? "needs_review" : "ocr_complete";
 
-      /* ---- Transactional commit via RPC ---- */
+      // ---- Commit via RPC ----
+      stage = "rpc_commit";
       const { data: rpcResult, error: rpcErr } = await supabase.rpc("ocr_commit_results", {
         p_check_id: checkId,
         p_carrier_name: parsed.carrier_name,
@@ -471,7 +488,7 @@ Rules:
         throw new Error(`Transaction failed: ${rpcErr.message}`);
       }
 
-      // Heartbeat is cleared transactionally inside ocr_commit_results RPC
+      console.log("check-ocr-intake: completed successfully");
 
       return new Response(
         JSON.stringify({
@@ -485,33 +502,38 @@ Rules:
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     } catch (innerErr) {
-      // Compensating rollback on failure — clear heartbeat
+      // OCR failed — mark as failed but don't crash the upload
+      console.error("check-ocr-intake: OCR inner error at stage=" + stage, innerErr);
       await supabase
         .from("check_intake_items")
         .update({
           ocr_status: "failed",
           ocr_heartbeat_at: null,
           status: check.status ?? "uploaded",
+          raw_ocr_front: { ocr_error: innerErr instanceof Error ? innerErr.message : String(innerErr), stage },
         })
         .eq("id", checkId);
 
       await logAudit(supabase, checkId, "ocr_failed",
         `OCR failed: ${innerErr instanceof Error ? innerErr.message : "Unknown"}`,
-        { error: innerErr instanceof Error ? innerErr.message : String(innerErr) },
-        userId,
-      );
+        { error: innerErr instanceof Error ? innerErr.message : String(innerErr), stage },
+        userId);
 
-      throw innerErr;
+      // Return success for the upload, but indicate OCR failed
+      return new Response(
+        JSON.stringify({
+          success: true,
+          ocr_success: false,
+          stage,
+          error: innerErr instanceof Error ? innerErr.message : String(innerErr),
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
   } catch (e) {
-    console.error("check-ocr-intake error:", e);
-    return err(e instanceof Error ? e.message : "Unknown error", 500);
+    const message = e instanceof Error ? e.message : String(e);
+    const stack = e instanceof Error ? e.stack : null;
+    console.error("check-ocr-intake fatal:", { stage, message, stack });
+    return errResponse(message, 500, stage);
   }
 });
-
-function err(message: string, status: number) {
-  return new Response(JSON.stringify({ error: message }), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
