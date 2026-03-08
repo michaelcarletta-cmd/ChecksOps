@@ -101,7 +101,7 @@ export function IncreaseAccountSelector() {
     onError: (e: Error) => toast({ title: "Failed to save", description: e.message, variant: "destructive" }),
   });
 
-  const currentAccountId = currentSetting ? JSON.parse(currentSetting as string) : null;
+  const currentAccountId = currentSetting ?? null;
   const currentAccount = accounts?.find((a) => a.id === currentAccountId);
 
   return (
