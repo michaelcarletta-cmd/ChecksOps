@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Plus, Trash2, GripVertical, Loader2, Pencil } from "lucide-react";
 
@@ -28,8 +29,22 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
     field_type: "text",
     options: [] as string[],
     is_required: false,
+    visible_on_statuses: [] as string[],
   });
   const [optionInput, setOptionInput] = useState("");
+
+  const { data: claimStatuses } = useQuery({
+    queryKey: ["claim-statuses-for-fields"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_statuses")
+        .select("id, name")
+        .eq("is_active", true)
+        .order("display_order");
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const { data: customFields, isLoading } = useQuery({
     queryKey: ["custom-fields"],
@@ -51,8 +66,9 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
         field_type: fieldForm.field_type,
         options: fieldForm.options,
         is_required: fieldForm.is_required,
+        visible_on_statuses: fieldForm.visible_on_statuses.length > 0 ? fieldForm.visible_on_statuses : null,
         display_order: (customFields?.length || 0) + 1,
-      });
+      } as any);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -77,7 +93,8 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
           field_type: fieldForm.field_type,
           options: fieldForm.options,
           is_required: fieldForm.is_required,
-        })
+          visible_on_statuses: fieldForm.visible_on_statuses.length > 0 ? fieldForm.visible_on_statuses : null,
+        } as any)
         .eq("id", editingField.id);
       if (error) throw error;
     },
@@ -127,6 +144,7 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
       field_type: "text",
       options: [],
       is_required: false,
+      visible_on_statuses: [],
     });
     setOptionInput("");
   };
@@ -139,6 +157,7 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
       field_type: field.field_type,
       options: field.options || [],
       is_required: field.is_required,
+      visible_on_statuses: field.visible_on_statuses || [],
     });
     setIsEditDialogOpen(true);
   };
@@ -243,6 +262,48 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
         />
         <Label>Required field</Label>
       </div>
+
+      <div>
+        <Label>Show on Claim Statuses</Label>
+        <p className="text-xs text-muted-foreground mb-2">
+          Leave empty to show on all statuses. Select specific statuses to only show this field when a claim is in one of those statuses.
+        </p>
+        <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
+          {claimStatuses?.map((status) => (
+            <div key={status.id} className="flex items-center gap-2">
+              <Checkbox
+                id={`status-${status.id}`}
+                checked={fieldForm.visible_on_statuses.includes(status.name)}
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    setFieldForm({
+                      ...fieldForm,
+                      visible_on_statuses: [...fieldForm.visible_on_statuses, status.name],
+                    });
+                  } else {
+                    setFieldForm({
+                      ...fieldForm,
+                      visible_on_statuses: fieldForm.visible_on_statuses.filter((s) => s !== status.name),
+                    });
+                  }
+                }}
+              />
+              <Label htmlFor={`status-${status.id}`} className="text-sm font-normal cursor-pointer">
+                {status.name}
+              </Label>
+            </div>
+          ))}
+        </div>
+        {fieldForm.visible_on_statuses.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {fieldForm.visible_on_statuses.map((s) => (
+              <Badge key={s} variant="secondary" className="text-xs">
+                {s}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -253,6 +314,7 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
           <TableHead className="w-12"></TableHead>
           <TableHead>Label</TableHead>
           <TableHead>Type</TableHead>
+          <TableHead>Visible On</TableHead>
           <TableHead>Required</TableHead>
           <TableHead>Status</TableHead>
           <TableHead className="text-right">Actions</TableHead>
@@ -274,6 +336,17 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
                 {field.field_type === 'date' && 'Date'}
                 {field.field_type === 'checkbox' && 'Checkbox'}
               </Badge>
+            </TableCell>
+            <TableCell>
+              {(field as any).visible_on_statuses?.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {(field as any).visible_on_statuses.map((s: string) => (
+                    <Badge key={s} variant="outline" className="text-xs">{s}</Badge>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-xs text-muted-foreground">All statuses</span>
+              )}
             </TableCell>
             <TableCell>
               {field.is_required ? (

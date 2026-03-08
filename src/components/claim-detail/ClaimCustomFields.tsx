@@ -17,9 +17,10 @@ import { toast } from "sonner";
 
 interface ClaimCustomFieldsProps {
   claimId: string;
+  claimStatus?: string;
 }
 
-export function ClaimCustomFields({ claimId }: ClaimCustomFieldsProps) {
+export function ClaimCustomFields({ claimId, claimStatus }: ClaimCustomFieldsProps) {
   const queryClient = useQueryClient();
   const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
   const [hasChanges, setHasChanges] = useState(false);
@@ -186,7 +187,15 @@ export function ClaimCustomFields({ claimId }: ClaimCustomFieldsProps) {
     }
   };
 
-  if (!customFields || customFields.length === 0) {
+  // Filter fields by claim status visibility
+  const visibleFields = customFields?.filter((field: any) => {
+    if (!field.visible_on_statuses || field.visible_on_statuses.length === 0) {
+      return true; // null/empty = show on all statuses
+    }
+    return claimStatus && field.visible_on_statuses.includes(claimStatus);
+  });
+
+  if (!visibleFields || visibleFields.length === 0) {
     return null;
   }
 
@@ -209,7 +218,7 @@ export function ClaimCustomFields({ claimId }: ClaimCustomFieldsProps) {
       </CardHeader>
       <CardContent>
         <div className="grid gap-4 md:grid-cols-2">
-          {customFields.map((field) => (
+          {visibleFields.map((field: any) => (
             <div key={field.id} className="space-y-2">
               <Label>
                 {field.label}

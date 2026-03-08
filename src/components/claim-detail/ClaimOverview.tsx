@@ -378,7 +378,7 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
       </Card>
 
       {/* Custom Fields */}
-      <ClaimCustomFields claimId={claim.id} />
+      <ClaimCustomFields claimId={claim.id} claimStatus={claim.status} />
 
       {/* Credentials Dialog */}
       <CredentialsDialog

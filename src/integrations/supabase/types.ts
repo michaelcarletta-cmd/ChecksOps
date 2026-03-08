@@ -4640,6 +4640,7 @@ export type Database = {
           name: string
           options: Json | null
           updated_at: string
+          visible_on_statuses: string[] | null
         }
         Insert: {
           created_at?: string
@@ -4653,6 +4654,7 @@ export type Database = {
           name: string
           options?: Json | null
           updated_at?: string
+          visible_on_statuses?: string[] | null
         }
         Update: {
           created_at?: string
@@ -4666,6 +4668,7 @@ export type Database = {
           name?: string
           options?: Json | null
           updated_at?: string
+          visible_on_statuses?: string[] | null
         }
         Relationships: []
       }
