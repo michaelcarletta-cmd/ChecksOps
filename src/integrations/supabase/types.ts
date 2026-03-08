@@ -2021,44 +2021,72 @@ export type Database = {
       claim_checks: {
         Row: {
           amount: number
+          carrier_name: string | null
           check_date: string
+          check_intake_item_id: string | null
           check_number: string | null
           check_type: string
           claim_id: string
           created_at: string | null
           created_by: string | null
+          deposit_status: string | null
+          eligibility_status: string | null
           id: string
+          mortgage_flag: boolean | null
           notes: string | null
+          payee_line: string | null
           received_date: string | null
+          source: string | null
           updated_at: string | null
         }
         Insert: {
           amount: number
+          carrier_name?: string | null
           check_date: string
+          check_intake_item_id?: string | null
           check_number?: string | null
           check_type: string
           claim_id: string
           created_at?: string | null
           created_by?: string | null
+          deposit_status?: string | null
+          eligibility_status?: string | null
           id?: string
+          mortgage_flag?: boolean | null
           notes?: string | null
+          payee_line?: string | null
           received_date?: string | null
+          source?: string | null
           updated_at?: string | null
         }
         Update: {
           amount?: number
+          carrier_name?: string | null
           check_date?: string
+          check_intake_item_id?: string | null
           check_number?: string | null
           check_type?: string
           claim_id?: string
           created_at?: string | null
           created_by?: string | null
+          deposit_status?: string | null
+          eligibility_status?: string | null
           id?: string
+          mortgage_flag?: boolean | null
           notes?: string | null
+          payee_line?: string | null
           received_date?: string | null
+          source?: string | null
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_checks_check_intake_item_id_fkey"
+            columns: ["check_intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "claim_checks_claim_id_fkey"
             columns: ["claim_id"]
@@ -6923,6 +6951,13 @@ export type Database = {
             referencedRelation: "check_endorsements"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "endorsement_audit_log_endorsement_id_fkey"
+            columns: ["endorsement_id"]
+            isOneToOne: false
+            referencedRelation: "stale_endorsements"
+            referencedColumns: ["endorsement_id"]
+          },
         ]
       }
       endorsement_requests: {
@@ -6979,6 +7014,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "check_endorsements"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "endorsement_requests_endorsement_id_fkey"
+            columns: ["endorsement_id"]
+            isOneToOne: false
+            referencedRelation: "stale_endorsements"
+            referencedColumns: ["endorsement_id"]
           },
         ]
       }
@@ -10435,6 +10477,50 @@ export type Database = {
           total_claims: number | null
         }
         Relationships: []
+      }
+      stale_endorsements: {
+        Row: {
+          amount: number | null
+          carrier_name: string | null
+          check_id: string | null
+          check_number: string | null
+          claim_id: string | null
+          contact_email: string | null
+          contact_phone: string | null
+          created_at: string | null
+          endorsement_id: string | null
+          hours_since_last_contact: number | null
+          last_reminder_at: string | null
+          payee_name: string | null
+          payee_type: string | null
+          reminder_count: number | null
+          request_sent_at: string | null
+          staleness_status: string | null
+          status: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_endorsements_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "check_intake_items_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "check_intake_items_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {
