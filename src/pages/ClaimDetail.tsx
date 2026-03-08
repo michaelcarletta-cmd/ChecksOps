@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClaimStatusSelect } from "@/components/ClaimStatusSelect";
 
 import { ClaimOverview } from "@/components/claim-detail/ClaimOverview";
+import { ClaimCashFlowCard } from "@/components/loss-draft/ClaimCashFlowCard";
 import { ClaimActivity } from "@/components/claim-detail/ClaimActivity";
 import { ClaimFiles } from "@/components/claim-detail/ClaimFiles";
 import { ClaimAccounting } from "@/components/claim-detail/ClaimAccounting";
@@ -407,12 +408,13 @@ const ClaimDetail = () => {
           </TabsList>
         )}
 
-        <TabsContent value="overview" className="mt-6">
+        <TabsContent value="overview" className="mt-6 space-y-6">
           <ClaimOverview 
             claim={claim} 
             isPortalUser={isPortalUser} 
             onClaimUpdated={handleClaimUpdated}
           />
+          {isStaffOrAdmin && <ClaimCashFlowCard claimId={id || ""} />}
         </TabsContent>
 
         {isStaffOrAdmin && (

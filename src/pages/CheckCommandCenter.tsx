@@ -17,12 +17,13 @@ import { Separator } from "@/components/ui/separator";
 import {
   Upload, FileCheck, Clock, AlertTriangle, CheckCircle2,
   Send, Eye, Users, Building2, Shield, ChevronRight,
-  RefreshCw, Banknote, ClipboardCheck, RotateCcw, Printer,
+  RefreshCw, Banknote, ClipboardCheck, RotateCcw, Printer, Landmark,
 } from "lucide-react";
 import { format } from "date-fns";
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
 import { DepositPacketGenerator } from "@/components/check-review/DepositPacketGenerator";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards";
+import { LossDraftDashboard } from "@/components/loss-draft/LossDraftDashboard";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -215,7 +216,17 @@ export default function CheckCommandCenter() {
           <TabsTrigger value="ready" className="text-xs">Ready ({readyForDeposit.length})</TabsTrigger>
           <TabsTrigger value="branch" className="text-xs">Branch ({branchDeposit.length})</TabsTrigger>
           <TabsTrigger value="reissue" className="text-xs">Reissue ({reissueRequested.length})</TabsTrigger>
+          <TabsTrigger value="lossdraft" className="text-xs flex items-center gap-1">
+            <Landmark className="h-3 w-3" />Loss Draft
+          </TabsTrigger>
         </TabsList>
+
+        {/* Loss Draft Tab */}
+        {activeTab === "lossdraft" && (
+          <div className="mt-3">
+            <LossDraftDashboard />
+          </div>
+        )}
 
         {/* Review Tab — only renders when active */}
         {activeTab === "review" && (
@@ -274,7 +285,7 @@ export default function CheckCommandCenter() {
         )}
 
         {/* All other tabs — only render the active one */}
-        {activeTab !== "review" && (
+        {activeTab !== "review" && activeTab !== "lossdraft" && (
           <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_26rem]">
             <Card>
               <CardContent className="p-0">
