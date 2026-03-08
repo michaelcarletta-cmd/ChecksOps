@@ -228,6 +228,15 @@ export default function CheckCommandCenter() {
           <TabsTrigger value="reconciliation" className="text-xs flex items-center gap-1">
             <Scale className="h-3 w-3" />Reconciliation
           </TabsTrigger>
+          <TabsTrigger value="exceptions" className="text-xs flex items-center gap-1">
+            <ShieldIcon className="h-3 w-3" />Exceptions
+          </TabsTrigger>
+          <TabsTrigger value="aging" className="text-xs flex items-center gap-1">
+            <Timer className="h-3 w-3" />Aging/SLA
+          </TabsTrigger>
+          <TabsTrigger value="reports" className="text-xs flex items-center gap-1">
+            <FileBarChart className="h-3 w-3" />Reports
+          </TabsTrigger>
           <TabsTrigger value="lossdraft" className="text-xs flex items-center gap-1">
             <Landmark className="h-3 w-3" />Loss Draft
           </TabsTrigger>
