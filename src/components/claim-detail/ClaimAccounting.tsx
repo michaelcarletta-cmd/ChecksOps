@@ -1045,12 +1045,31 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
             <TableBody>
               {checks.map((check: any) => (
                 <TableRow key={check.id}>
-                  <TableCell className="font-medium">{check.check_number}</TableCell>
+                  <TableCell className="font-medium">{check.check_number || "—"}</TableCell>
                   <TableCell className="capitalize">{check.check_type.replace("_", " ")}</TableCell>
                   <TableCell>{format(new Date(check.check_date), "MMM dd, yyyy")}</TableCell>
                   <TableCell>{check.received_date ? format(new Date(check.received_date), "MMM dd, yyyy") : "—"}</TableCell>
                   <TableCell className="text-right font-semibold text-primary">
                     ${Number(check.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </TableCell>
+                  <TableCell>
+                    {check.source === "uploaded_check_ocr" ? (
+                      <Badge variant="outline" className="text-[10px] px-1.5">
+                        <CheckCircle className="h-3 w-3 mr-1 text-emerald-400" />OCR
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Manual</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {check.deposit_status ? (
+                      <Badge variant="outline" className="text-[10px] px-1.5 capitalize">
+                        {check.deposit_status.replace(/_/g, " ")}
+                      </Badge>
+                    ) : "—"}
+                    {check.mortgage_flag && (
+                      <Badge className="ml-1 bg-blue-500/20 text-blue-400 text-[9px] px-1">MTG</Badge>
+                    )}
                   </TableCell>
                   {isAdmin && (
                     <TableCell>

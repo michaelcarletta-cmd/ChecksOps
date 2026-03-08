@@ -1,0 +1,125 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+};
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, serviceKey);
+
+    // Fetch stale unsigned endorsements (> 48 hours since last contact, max 5 reminders)
+    const { data: stale, error: staleErr } = await supabase
+      .from("check_endorsements")
+      .select("id, check_id, payee_name, payee_type, status, contact_email, contact_phone, reminder_count, last_reminder_at, request_sent_at, created_at, token, check_intake_items(check_number, carrier_name, amount)")
+      .in("status", ["pending", "sent"])
+      .neq("payee_type", "mortgage_company")
+      .lt("reminder_count", 5);
+
+    if (staleErr) throw staleErr;
+
+    const FORTY_EIGHT_HOURS = 48 * 60 * 60 * 1000;
+    const now = Date.now();
+    let remindersCount = 0;
+    let flaggedCount = 0;
+
+    for (const endorsement of stale ?? []) {
+      const lastContact = endorsement.last_reminder_at || endorsement.request_sent_at || endorsement.created_at;
+      const elapsed = now - new Date(lastContact).getTime();
+
+      if (elapsed < FORTY_EIGHT_HOURS) continue;
+
+      // If no contact info, just flag it
+      if (!endorsement.contact_email && !endorsement.contact_phone) {
+        await supabase.from("endorsement_audit_log").insert({
+          endorsement_id: endorsement.id,
+          check_id: endorsement.check_id,
+          event_type: "stale_flagged",
+          event_description: `${endorsement.payee_name} stale ${Math.round(elapsed / 3600000)}h — no contact info available`,
+        });
+        flaggedCount++;
+        continue;
+      }
+
+      const checkInfo = endorsement.check_intake_items as any;
+      const endorsementUrl = `${supabaseUrl}/functions/v1/check-endorsement?token=${endorsement.token}`;
+      let sent = false;
+
+      // Try email first
+      if (endorsement.contact_email) {
+        try {
+          const { error } = await supabase.functions.invoke("send-email", {
+            body: {
+              to: endorsement.contact_email,
+              subject: `Reminder: Endorsement Required — Check #${checkInfo?.check_number ?? "N/A"}`,
+              html: `<p>Hi ${endorsement.payee_name},</p><p>This is a reminder that your endorsement is still needed for check #${checkInfo?.check_number ?? "N/A"} ($${checkInfo?.amount ?? "N/A"}) from ${checkInfo?.carrier_name ?? "your insurance carrier"}.</p><p><a href="${endorsementUrl}">Click here to review &amp; endorse</a></p><p>This is reminder #${endorsement.reminder_count + 1}.</p>`,
+            },
+          });
+          if (!error) sent = true;
+        } catch { /* continue */ }
+      }
+
+      // Try SMS if email failed or unavailable
+      if (!sent && endorsement.contact_phone) {
+        try {
+          const { error } = await supabase.functions.invoke("send-sms", {
+            body: {
+              to: endorsement.contact_phone,
+              message: `Reminder (${endorsement.reminder_count + 1}): Endorsement needed for check #${checkInfo?.check_number ?? "N/A"} ($${checkInfo?.amount ?? "N/A"}). Sign: ${endorsementUrl}`,
+            },
+          });
+          if (!error) sent = true;
+        } catch { /* continue */ }
+      }
+
+      // Update the endorsement record
+      await supabase.from("check_endorsements").update({
+        last_reminder_at: new Date().toISOString(),
+        reminder_count: endorsement.reminder_count + 1,
+        updated_at: new Date().toISOString(),
+      }).eq("id", endorsement.id);
+
+      // Log
+      await supabase.from("endorsement_audit_log").insert({
+        endorsement_id: endorsement.id,
+        check_id: endorsement.check_id,
+        event_type: sent ? "auto_reminder_sent" : "auto_reminder_failed",
+        event_description: sent
+          ? `Auto-reminder #${endorsement.reminder_count + 1} sent to ${endorsement.payee_name}`
+          : `Auto-reminder #${endorsement.reminder_count + 1} failed for ${endorsement.payee_name}`,
+      });
+
+      // If hit max reminders, flag for escalation
+      if (endorsement.reminder_count + 1 >= 5) {
+        await supabase.from("endorsement_audit_log").insert({
+          endorsement_id: endorsement.id,
+          check_id: endorsement.check_id,
+          event_type: "escalation_needed",
+          event_description: `${endorsement.payee_name} has not responded after 5 reminders — escalation needed`,
+        });
+        flaggedCount++;
+      }
+
+      remindersCount++;
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, reminders_sent: remindersCount, flagged: flaggedCount }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  } catch (e) {
+    console.error("endorsement-reminders error:", e);
+    return new Response(
+      JSON.stringify({ error: e instanceof Error ? e.message : String(e) }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+});
