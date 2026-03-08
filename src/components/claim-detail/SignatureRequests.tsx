@@ -31,6 +31,8 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
   const [generatedDocPath, setGeneratedDocPath] = useState<string | null>(null);
   const [placedFields, setPlacedFields] = useState<any[]>([]);
   const [generatedDocxData, setGeneratedDocxData] = useState<Uint8Array | null>(null);
+  const [sourceType, setSourceType] = useState<"template" | "claim_file">("template");
+  const [selectedClaimFile, setSelectedClaimFile] = useState<any>(null);
 
 
   const { data: templates } = useQuery({
@@ -40,6 +42,21 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         .from("document_templates")
         .select("*")
         .eq("is_active", true);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch claim PDF files for direct signature use
+  const { data: claimPdfFiles } = useQuery({
+    queryKey: ["claim-pdf-files", claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_files")
+        .select("*")
+        .eq("claim_id", claimId)
+        .ilike("file_name", "%.pdf")
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
@@ -126,16 +143,45 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
     },
   });
 
+  const useClaimFileMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedClaimFile) throw new Error("No file selected");
+
+      // Get signed URL for the existing PDF
+      const { data: urlData, error } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(selectedClaimFile.file_path, 3600);
+      if (error) throw error;
+
+      setGeneratedDocPath(selectedClaimFile.file_path);
+      setGeneratedDocUrl(urlData?.signedUrl || null);
+      setGeneratedDocxData(null);
+      setIsDocxTemplate(false);
+
+      return { url: urlData?.signedUrl };
+    },
+    onSuccess: () => {
+      setCurrentStep(2);
+      toast({ title: "PDF loaded! Now place signature fields." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to load file", description: error.message, variant: "destructive" });
+    },
+  });
+
   const createRequestMutation = useMutation({
     mutationFn: async ({ skipEmail = false }: { skipEmail?: boolean }) => {
-      if (!selectedTemplate || !generatedDocPath) throw new Error("Missing required data");
+      if (!generatedDocPath) throw new Error("Missing required data");
+      const docName = sourceType === "claim_file" 
+        ? selectedClaimFile?.file_name || "Document" 
+        : selectedTemplate?.name || "Document";
 
       // Create signature request record
       const { data: request, error: requestError } = await supabase
         .from("signature_requests")
         .insert({
           claim_id: claimId,
-          document_name: selectedTemplate.name,
+          document_name: docName,
           document_path: generatedDocPath,
           field_data: placedFields,
           status: "pending",
@@ -302,35 +348,76 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
             <DialogHeader>
               <DialogTitle>Create Signature Request - Step {currentStep} of 3</DialogTitle>
               <DialogDescription>
-                {currentStep === 1 && "Select a document template"}
+                {currentStep === 1 && "Select a document source"}
                 {currentStep === 2 && "Place signature and date fields on the document"}
                 {currentStep === 3 && "Configure signers"}
               </DialogDescription>
             </DialogHeader>
 
-            {/* Step 1: Template Selection */}
+            {/* Step 1: Source Selection */}
             {currentStep === 1 && (
               <div className="space-y-4">
                 <div>
-                  <Label>Document Template</Label>
-                  <Select
-                    value={selectedTemplate?.id}
-                    onValueChange={(id) =>
-                      setSelectedTemplate(templates?.find((t) => t.id === id))
-                    }
-                  >
+                  <Label>Document Source</Label>
+                  <Select value={sourceType} onValueChange={(v) => { setSourceType(v as any); setSelectedTemplate(null); setSelectedClaimFile(null); }}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select template" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {templates?.map((template) => (
-                        <SelectItem key={template.id} value={template.id}>
-                          {template.name}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="template">Generate from Template</SelectItem>
+                      <SelectItem value="claim_file">Use Existing Claim PDF</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+
+                {sourceType === "template" && (
+                  <div>
+                    <Label>Document Template</Label>
+                    <Select
+                      value={selectedTemplate?.id}
+                      onValueChange={(id) =>
+                        setSelectedTemplate(templates?.find((t) => t.id === id))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {templates?.map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {sourceType === "claim_file" && (
+                  <div>
+                    <Label>Claim PDF File</Label>
+                    <Select
+                      value={selectedClaimFile?.id}
+                      onValueChange={(id) =>
+                        setSelectedClaimFile(claimPdfFiles?.find((f) => f.id === id))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a PDF from claim files" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {claimPdfFiles?.length === 0 && (
+                          <div className="px-3 py-2 text-sm text-muted-foreground">No PDF files found for this claim</div>
+                        )}
+                        {claimPdfFiles?.map((file) => (
+                          <SelectItem key={file.id} value={file.id}>
+                            {file.file_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
             )}
 
@@ -412,7 +499,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                   )}
                 </div>
                 <div className="flex gap-2">
-                  {currentStep === 1 && (
+                  {currentStep === 1 && sourceType === "template" && (
                     <Button
                       onClick={() => generateDocumentMutation.mutate()}
                       disabled={!selectedTemplate || generateDocumentMutation.isPending}
@@ -421,6 +508,24 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                           Generating...
+                        </>
+                      ) : (
+                        <>
+                          Next
+                          <ChevronRight className="w-4 h-4 ml-2" />
+                        </>
+                      )}
+                    </Button>
+                  )}
+                  {currentStep === 1 && sourceType === "claim_file" && (
+                    <Button
+                      onClick={() => useClaimFileMutation.mutate()}
+                      disabled={!selectedClaimFile || useClaimFileMutation.isPending}
+                    >
+                      {useClaimFileMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Loading...
                         </>
                       ) : (
                         <>

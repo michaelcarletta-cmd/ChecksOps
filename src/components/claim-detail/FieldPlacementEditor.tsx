@@ -76,6 +76,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
   const [resizingField, setResizingField] = useState<string | null>(null);
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const wasDraggingRef = useRef(false);
 
   // Fetch available templates
   const { data: templates } = useQuery({
@@ -165,6 +166,11 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
   }, [toast]);
 
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Suppress click if we just finished dragging
+    if (wasDraggingRef.current) {
+      wasDraggingRef.current = false;
+      return;
+    }
     if (!overlayRef.current) return;
     
     // Prevent if clicking on an existing field or picker
@@ -231,46 +237,63 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
     setDraggingField(fieldId);
   };
 
-  const handleOverlayMouseMove = (e: React.MouseEvent) => {
-    if (!overlayRef.current) return;
-    
-    const rect = overlayRef.current.getBoundingClientRect();
-    
-    if (resizingField) {
-      const newWidth = Math.max(20, e.clientX - rect.left - resizeStart.x + resizeStart.width);
-      const newHeight = Math.max(15, e.clientY - rect.top - resizeStart.y + resizeStart.height);
-      
-      setFields(prev => prev.map(f => 
-        f.id === resizingField ? { ...f, width: newWidth, height: newHeight } : f
-      ));
-      return;
-    }
-    
-    if (!draggingField) return;
-    
-    const newX = Math.max(0, e.clientX - rect.left - dragOffset.x);
-    const newY = Math.max(0, e.clientY - rect.top - dragOffset.y);
-    
-    setFields(prev => prev.map(f => 
-      f.id === draggingField ? { ...f, x: newX, y: newY } : f
-    ));
-  };
+  // Use document-level listeners for reliable drag/resize tracking
+  useEffect(() => {
+    const handleDocMouseMove = (e: MouseEvent) => {
+      if (!overlayRef.current) return;
+      if (!draggingField && !resizingField) return;
 
-  const handleOverlayMouseUp = () => {
-    if (draggingField || resizingField) {
-      setDraggingField(null);
-      setResizingField(null);
+      const rect = overlayRef.current.getBoundingClientRect();
+
+      if (resizingField) {
+        const newWidth = Math.max(20, e.clientX - rect.left - resizeStart.x + resizeStart.width);
+        const newHeight = Math.max(15, e.clientY - rect.top - resizeStart.y + resizeStart.height);
+        setFields(prev => prev.map(f =>
+          f.id === resizingField ? { ...f, width: newWidth, height: newHeight } : f
+        ));
+        return;
+      }
+
+      if (draggingField) {
+        const newX = Math.max(0, e.clientX - rect.left - dragOffset.x);
+        const newY = Math.max(0, e.clientY - rect.top - dragOffset.y);
+        setFields(prev => prev.map(f =>
+          f.id === draggingField ? { ...f, x: newX, y: newY } : f
+        ));
+      }
+    };
+
+    const handleDocMouseUp = () => {
+      if (draggingField || resizingField) {
+        wasDraggingRef.current = true;
+        setDraggingField(null);
+        setResizingField(null);
+        // onFieldsChange will be called via the effect below
+      }
+    };
+
+    document.addEventListener('mousemove', handleDocMouseMove);
+    document.addEventListener('mouseup', handleDocMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleDocMouseMove);
+      document.removeEventListener('mouseup', handleDocMouseUp);
+    };
+  }, [draggingField, resizingField, dragOffset, resizeStart]);
+
+  // Sync fields to parent after drag/resize ends
+  useEffect(() => {
+    if (!draggingField && !resizingField) {
       onFieldsChange(fields);
     }
-  };
+  }, [draggingField, resizingField]);
 
   const handleResizeMouseDown = (e: React.MouseEvent, fieldId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     const field = fields.find(f => f.id === fieldId);
     if (!field || !overlayRef.current) return;
-    
+
     setResizeStart({
       x: field.x,
       y: field.y,
@@ -522,11 +545,8 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
             {(!isLoading && (isDocxMode ? docxHtml : !isDocxMode)) && (
               <div
                 ref={overlayRef}
-                className={`absolute inset-0 ${activeTool ? 'cursor-crosshair' : 'cursor-pointer'}`}
+                className={`absolute inset-0 ${draggingField ? 'cursor-grabbing' : activeTool ? 'cursor-crosshair' : 'cursor-pointer'}`}
                 onClick={handleOverlayClick}
-                onMouseMove={handleOverlayMouseMove}
-                onMouseUp={handleOverlayMouseUp}
-                onMouseLeave={handleOverlayMouseUp}
               >
                 {/* Render field indicators for current page */}
                 {fields.filter(f => f.page === currentPage).map((field) => (
