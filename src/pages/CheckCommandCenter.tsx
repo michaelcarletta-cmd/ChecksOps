@@ -29,7 +29,7 @@ import { ReconciliationDashboard } from "@/components/deposit-ops/Reconciliation
 import { ExceptionResolutionPanel } from "@/components/deposit-ops/ExceptionResolutionPanel";
 import { DepositAgingDashboard } from "@/components/deposit-ops/DepositAgingDashboard";
 import { DepositReports } from "@/components/deposit-ops/DepositReports";
-import { ArrowDownToLine, Scale, Timer, FileBarChart, Shield } from "lucide-react";
+import { ArrowDownToLine, Scale, Timer, FileBarChart, Shield as ShieldIcon } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
