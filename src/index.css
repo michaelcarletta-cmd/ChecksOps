@@ -102,3 +102,35 @@ All colors MUST be HSL.
     scrollbar-width: none;  /* Firefox */
   }
 }
+
+/* DOCX preview styling for field placement editor */
+.docx-preview {
+  font-family: 'Calibri', 'Arial', sans-serif;
+  font-size: 11pt;
+  line-height: 1.4;
+  color: #000;
+}
+.docx-preview img {
+  max-width: 100%;
+  height: auto;
+}
+.docx-preview table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+}
+.docx-preview td, .docx-preview th {
+  border: 1px solid #999;
+  padding: 4px 8px;
+  text-align: left;
+}
+.docx-preview p {
+  margin: 4px 0;
+}
+.docx-preview h1, .docx-preview h2, .docx-preview h3 {
+  margin: 12px 0 6px;
+  font-weight: 700;
+}
+.docx-preview h1 { font-size: 18pt; }
+.docx-preview h2 { font-size: 14pt; }
+.docx-preview h3 { font-size: 12pt; }
