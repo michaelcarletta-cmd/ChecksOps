@@ -6162,6 +6162,12 @@ export type Database = {
           exception_reason: string | null
           id: string
           idempotency_key: string
+          increase_account_id: string | null
+          increase_check_deposit_id: string | null
+          increase_last_synced_at: string | null
+          increase_raw_response: Json | null
+          increase_status: string | null
+          increase_submitted_at: string | null
           next_action: string | null
           next_action_generated_at: string | null
           next_action_reason: string | null
@@ -6203,6 +6209,12 @@ export type Database = {
           exception_reason?: string | null
           id?: string
           idempotency_key?: string
+          increase_account_id?: string | null
+          increase_check_deposit_id?: string | null
+          increase_last_synced_at?: string | null
+          increase_raw_response?: Json | null
+          increase_status?: string | null
+          increase_submitted_at?: string | null
           next_action?: string | null
           next_action_generated_at?: string | null
           next_action_reason?: string | null
@@ -6244,6 +6256,12 @@ export type Database = {
           exception_reason?: string | null
           id?: string
           idempotency_key?: string
+          increase_account_id?: string | null
+          increase_check_deposit_id?: string | null
+          increase_last_synced_at?: string | null
+          increase_raw_response?: Json | null
+          increase_status?: string | null
+          increase_submitted_at?: string | null
           next_action?: string | null
           next_action_generated_at?: string | null
           next_action_reason?: string | null
@@ -7548,6 +7566,30 @@ export type Database = {
           item_name?: string
           loss_type?: string
           typical_cost_range?: string | null
+        }
+        Relationships: []
+      }
+      increase_settings: {
+        Row: {
+          id: string
+          setting_key: string
+          setting_value: Json
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          id?: string
+          setting_key: string
+          setting_value: Json
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          id?: string
+          setting_key?: string
+          setting_value?: Json
+          updated_at?: string | null
+          updated_by?: string | null
         }
         Relationships: []
       }
@@ -11084,6 +11126,7 @@ export type Database = {
         | "internal_ready"
         | "synctera"
         | "treasury_prime"
+        | "increase"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -11308,6 +11351,7 @@ export const Constants = {
         "internal_ready",
         "synctera",
         "treasury_prime",
+        "increase",
       ],
     },
   },
