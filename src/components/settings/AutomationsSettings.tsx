@@ -883,11 +883,11 @@ export const AutomationsSettings = () => {
                             })}
                           />
                           <p className="text-xs text-muted-foreground">
-                            Available: {'{claim.policyholder_name}'}, {'{claim.claim_number}'}, {'{claim.status}'}, {'{claim.loss_type}'}
+                            Available: {'${policyholder}'}, {'${claim.claim_number}'}, {'${claim.status}'}, {'${claim.loss_type}'}
                             {(triggerType === 'inspection_scheduled' || triggerType === 'inspection_upcoming_24h') && (
                               <>
                                 <br />
-                                Inspection: {'{inspection.date}'}, {'{inspection.time}'}, {'{inspection.type}'}, {'{inspection.inspector}'}
+                                Inspection: {'${inspection.date}'}, {'${inspection.time}'}, {'${inspection.type}'}, {'${inspection.inspector}'}
                               </>
                             )}
                           </p>
