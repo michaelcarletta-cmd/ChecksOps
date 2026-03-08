@@ -47,6 +47,21 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
     },
   });
 
+  // Fetch claim PDF files for direct signature use
+  const { data: claimPdfFiles } = useQuery({
+    queryKey: ["claim-pdf-files", claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_files")
+        .select("*")
+        .eq("claim_id", claimId)
+        .ilike("file_name", "%.pdf")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const { data: requests, isLoading } = useQuery({
     queryKey: ["signature-requests", claimId],
     queryFn: async () => {
