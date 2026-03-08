@@ -30,7 +30,8 @@ import { ExceptionResolutionPanel } from "@/components/deposit-ops/ExceptionReso
 import { DepositAgingDashboard } from "@/components/deposit-ops/DepositAgingDashboard";
 import { DepositReports } from "@/components/deposit-ops/DepositReports";
 import { DepositKPIDashboard, DepositOwnerQueue } from "@/components/deposit-ops/DepositOwnerQueue";
-import { ArrowDownToLine, Scale, Timer, FileBarChart, Shield as ShieldIcon, BarChart3, Users as UsersIcon } from "lucide-react";
+import { DepositManagerCommandCenter } from "@/components/deposit-ops/DepositManagerCommandCenter";
+import { ArrowDownToLine, Scale, Timer, FileBarChart, Shield as ShieldIcon, BarChart3, Users as UsersIcon, Command } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -247,6 +248,9 @@ export default function CheckCommandCenter() {
           <TabsTrigger value="workqueue" className="text-xs flex items-center gap-1">
             <UsersIcon className="h-3 w-3" />Work Queue
           </TabsTrigger>
+          <TabsTrigger value="manager" className="text-xs flex items-center gap-1">
+            <Command className="h-3 w-3" />Manager
+          </TabsTrigger>
         </TabsList>
 
         {/* Deposit Operations Tab */}
@@ -296,6 +300,13 @@ export default function CheckCommandCenter() {
         {activeTab === "workqueue" && (
           <div className="mt-3">
             <DepositOwnerQueue />
+          </div>
+        )}
+
+        {/* Manager Command Center Tab */}
+        {activeTab === "manager" && (
+          <div className="mt-3">
+            <DepositManagerCommandCenter />
           </div>
         )}
 
@@ -363,7 +374,7 @@ export default function CheckCommandCenter() {
         )}
 
         {/* All other tabs — only render the active one */}
-        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "deposit_ops" && activeTab !== "reconciliation" && activeTab !== "exceptions" && activeTab !== "aging" && activeTab !== "reports" && activeTab !== "kpis" && activeTab !== "workqueue" && (
+        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "deposit_ops" && activeTab !== "reconciliation" && activeTab !== "exceptions" && activeTab !== "aging" && activeTab !== "reports" && activeTab !== "kpis" && activeTab !== "workqueue" && activeTab !== "manager" && (
           <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_26rem]">
             <Card>
               <CardContent className="p-0">
