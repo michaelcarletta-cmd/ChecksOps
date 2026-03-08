@@ -241,6 +241,12 @@ export default function CheckCommandCenter() {
           <TabsTrigger value="lossdraft" className="text-xs flex items-center gap-1">
             <Landmark className="h-3 w-3" />Loss Draft
           </TabsTrigger>
+          <TabsTrigger value="kpis" className="text-xs flex items-center gap-1">
+            <BarChart3 className="h-3 w-3" />KPIs
+          </TabsTrigger>
+          <TabsTrigger value="workqueue" className="text-xs flex items-center gap-1">
+            <UsersIcon className="h-3 w-3" />Work Queue
+          </TabsTrigger>
         </TabsList>
 
         {/* Deposit Operations Tab */}
