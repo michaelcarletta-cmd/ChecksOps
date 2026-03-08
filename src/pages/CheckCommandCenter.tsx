@@ -17,7 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Upload, FileCheck, Clock, AlertTriangle, CheckCircle2,
   Send, Eye, Users, Building2, Shield, ChevronRight,
-  RefreshCw, Banknote, ClipboardCheck, RotateCcw, Printer,
+  RefreshCw, Banknote, ClipboardCheck, RotateCcw, Printer, Landmark,
 } from "lucide-react";
 import { format } from "date-fns";
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
