@@ -526,7 +526,7 @@ function CheckDetailPanel({
 }) {
   const [detailTab, setDetailTab] = useState("overview");
 
-  const { data: check } = useQuery({
+   const { data: check } = useQuery({
     queryKey: ["check-detail", checkId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -536,6 +536,20 @@ function CheckDetailPanel({
         .single();
       if (error) throw error;
       return data as CheckItem;
+    },
+  });
+
+  // Fetch reviewer profile for name display
+  const { data: reviewerProfile } = useQuery({
+    queryKey: ["reviewer-profile", check?.reviewed_by],
+    enabled: !!check?.reviewed_by,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", check!.reviewed_by!)
+        .single();
+      return data;
     },
   });
 
@@ -602,8 +616,17 @@ function CheckDetailPanel({
               <Separator />
               {check.reviewed_by && (
                 <>
-                  <DetailRow label="Reviewed At" value={check.reviewed_at ? format(new Date(check.reviewed_at), "MMM d, yyyy h:mm a") : null} />
-                  {check.review_notes && <DetailRow label="Review Notes" value={check.review_notes} />}
+                  <Separator />
+                  <div className="bg-muted/30 rounded-md p-2.5 space-y-1">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Reviewed By</p>
+                    <p className="text-sm font-medium">{reviewerProfile?.full_name || reviewerProfile?.email || check.reviewed_by.slice(0, 8) + "..."}</p>
+                    {check.reviewed_at && (
+                      <p className="text-xs text-muted-foreground">{format(new Date(check.reviewed_at), "MMM d, yyyy h:mm a")}</p>
+                    )}
+                    {check.review_notes && (
+                      <p className="text-xs text-muted-foreground mt-1 italic">"{check.review_notes}"</p>
+                    )}
+                  </div>
                 </>
               )}
               {check.claim_id && (

@@ -101,6 +101,20 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
     },
   });
 
+  // Fetch reviewer profile for name display
+  const { data: reviewerProfile } = useQuery({
+    queryKey: ["deposit-packet-reviewer", check?.reviewed_by],
+    enabled: !!check?.reviewed_by,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", check!.reviewed_by!)
+        .single();
+      return data;
+    },
+  });
+
   const { data: imageUrl } = useQuery({
     queryKey: ["check-image-url", check?.front_image_path],
     enabled: !!check?.front_image_path,
@@ -126,11 +140,13 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
       </tr>`
     ).join("");
 
+    const reviewerName = reviewerProfile?.full_name || reviewerProfile?.email || "Staff";
     const latestDecision = reviewDecisions[0];
     const decisionHtml = latestDecision ? `
       <h2>Reviewer Decision</h2>
       <div class="notes">
         <p><strong>Decision:</strong> ${esc(latestDecision.deposit_path?.replace(/_/g, " "))}</p>
+        <p><strong>Reviewed by:</strong> ${esc(reviewerName)}</p>
         ${latestDecision.reviewer_notes ? `<p><strong>Notes:</strong> ${esc(latestDecision.reviewer_notes)}</p>` : ""}
         <p style="font-size:0.7rem;color:#888;margin-top:0.3rem">Reviewed ${esc(fmtDate(latestDecision.created_at))}</p>
       </div>
@@ -242,6 +258,7 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
                 <h2 className="text-sm font-semibold mt-3 mb-1 border-b border-border pb-1">Reviewer Decision</h2>
                 <div className="bg-muted/50 p-2 rounded text-xs space-y-1">
                   <p><strong>Decision:</strong> {latestDecision.deposit_path?.replace(/_/g, " ")}</p>
+                  <p><strong>Reviewed by:</strong> {reviewerProfile?.full_name || reviewerProfile?.email || "Staff"}</p>
                   {latestDecision.reviewer_notes && <p><strong>Notes:</strong> {latestDecision.reviewer_notes}</p>}
                   <p className="text-muted-foreground text-[10px]">
                     Reviewed {format(new Date(latestDecision.created_at), "MMM d, yyyy h:mm a")}
