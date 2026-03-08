@@ -124,21 +124,35 @@ async function reEvaluateAfterEndorsement(
         event_type: "all_endorsements_complete",
         event_description: `All endorsements complete — deposit recommendation preserved: ${originalRec}`,
       });
+    } else {
+      await supabase.from("check_intake_items")
+        .update({ status: "ready", deposit_recommendation: "ready_for_deposit" })
+        .eq("id", checkId);
 
-      return { allSigned: true, newStatus: "endorsements_complete" };
+      await supabase.from("check_audit_log").insert({
+        check_id: checkId,
+        event_type: "all_endorsements_complete",
+        event_description: "All endorsements complete — ready for deposit",
+      });
     }
 
-    await supabase.from("check_intake_items")
-      .update({ status: "ready", deposit_recommendation: "ready_for_deposit" })
-      .eq("id", checkId);
+    // Auto-generate endorsement packet
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      await fetch(`${supabaseUrl}/functions/v1/generate-endorsement-packet`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${serviceKey}`,
+        },
+        body: JSON.stringify({ checkId, automatic: true }),
+      });
+    } catch (packetErr) {
+      console.error("Auto packet generation failed (non-blocking):", packetErr);
+    }
 
-    await supabase.from("check_audit_log").insert({
-      check_id: checkId,
-      event_type: "all_endorsements_complete",
-      event_description: "All endorsements complete — ready for deposit",
-    });
-
-    return { allSigned: true, newStatus: "ready" };
+    return { allSigned: true, newStatus: check?.is_multi_payee || RESTRICTED_RECOMMENDATIONS.has(originalRec) ? "endorsements_complete" : "ready" };
   }
 
   return { allSigned: false, newStatus: null };
