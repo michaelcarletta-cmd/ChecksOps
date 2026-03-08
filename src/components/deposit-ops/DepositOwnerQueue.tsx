@@ -447,11 +447,11 @@ export function DepositOwnerQueue() {
                 <CheckCircle2 className="h-3 w-3 mr-1" />Resolve Exceptions
               </Button>
               <Button size="sm" variant="outline" className="text-xs h-7" disabled={selected.size === 0}
-                onClick={() => syncMutation.mutate()}>
+                onClick={() => handleApprovalAwareAction("bulk_closeout", () => syncMutation.mutate())}>
                 <BookCheck className="h-3 w-3 mr-1" />Sync Accounting
               </Button>
               <Button size="sm" variant="outline" className="text-xs h-7" disabled={selected.size === 0}
-                onClick={() => closeoutMutation.mutate()}>
+                onClick={() => handleApprovalAwareAction("bulk_closeout", () => closeoutMutation.mutate())}>
                 <Lock className="h-3 w-3 mr-1" />Bulk Closeout
               </Button>
             </div>
