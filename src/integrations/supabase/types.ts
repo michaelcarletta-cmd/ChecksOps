@@ -9269,15 +9269,20 @@ export type Database = {
           exceptions: number | null
           failed: number | null
           failed_amount: number | null
+          in_flight: number | null
           in_flight_amount: number | null
-          pending_assignment: number | null
-          provider_assigned: number | null
+          nsf_amount: number | null
+          nsf_count: number | null
           reconciled: number | null
           reconciled_amount: number | null
           returned: number | null
-          submitted: number | null
           succeeded: number | null
+          total_variance: number | null
+          unconfirmed_amount: number | null
+          unconfirmed_count: number | null
           unreconciled_amount: number | null
+          unsynced_count: number | null
+          variance_count: number | null
         }
         Relationships: []
       }
