@@ -256,7 +256,7 @@ export const EmailTemplatesSettings = () => {
                   <Input
                     value={form.subject}
                     onChange={(e) => setForm({ ...form, subject: e.target.value })}
-                    placeholder="e.g., Update on Your Claim #{claim.claim_number}"
+                    placeholder="e.g., Update on Your Claim #${claim.claim_number}"
                   />
                 </div>
                 <div className="space-y-2">
