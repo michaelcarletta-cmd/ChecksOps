@@ -10,13 +10,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import {
   Users, RefreshCw, BarChart3, AlertTriangle, Clock,
   ShieldCheck, Download, Zap, Scale, BookCheck, Landmark, Lock,
-  TrendingUp, ArrowUpDown,
+  TrendingUp, ArrowUpDown, Camera, Shield, FileText, Bell,
 } from "lucide-react";
 import { format } from "date-fns";
+import {
+  SnapshotTrends, NotificationPreferences, EscalationRulesConfig,
+  EscalationEventsPanel, PendingApprovalsPanel, ManagerExportBundle,
+} from "./DepositManagerWorkflows";
 
 const fmtMoney = (n: number | null | undefined) =>
   n != null ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "$0.00";
