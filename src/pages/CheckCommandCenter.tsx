@@ -248,6 +248,9 @@ export default function CheckCommandCenter() {
           <TabsTrigger value="workqueue" className="text-xs flex items-center gap-1">
             <UsersIcon className="h-3 w-3" />Work Queue
           </TabsTrigger>
+          <TabsTrigger value="manager" className="text-xs flex items-center gap-1">
+            <Command className="h-3 w-3" />Manager
+          </TabsTrigger>
         </TabsList>
 
         {/* Deposit Operations Tab */}
