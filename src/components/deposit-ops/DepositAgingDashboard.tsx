@@ -169,7 +169,7 @@ export function DepositAgingDashboard() {
           <CardTitle className="text-sm">Deposit Aging Queue ({items.length})</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <ScrollArea className="h-[calc(100vh-700px)] min-h-[200px]">
+          <ScrollArea className="max-h-[500px] min-h-[200px]">
             {isLoading ? (
               <div className="p-8 text-center text-muted-foreground">Loading...</div>
             ) : items.length === 0 ? (

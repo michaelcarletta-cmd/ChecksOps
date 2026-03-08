@@ -508,7 +508,7 @@ export function DepositOwnerQueue() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <ScrollArea className="h-[calc(100vh-600px)] min-h-[300px]">
+          <ScrollArea className="max-h-[500px] min-h-[300px]">
             {isLoading ? (
               <div className="p-8 text-center text-muted-foreground">Loading...</div>
             ) : filteredItems.length === 0 ? (
