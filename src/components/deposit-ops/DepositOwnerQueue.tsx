@@ -483,7 +483,7 @@ export function DepositOwnerQueue() {
                 <Users className="h-3 w-3 mr-1" />Assign Owner
               </Button>
               <Button size="sm" variant="outline" className="text-xs h-7" disabled={selected.size === 0}
-                onClick={() => setBulkDialog("resolve")}>
+                onClick={() => handleApprovalAwareAction("bulk_resolve", () => setBulkDialog("resolve"))}>
                 <CheckCircle2 className="h-3 w-3 mr-1" />Resolve Exceptions
               </Button>
               <Button size="sm" variant="outline" className="text-xs h-7" disabled={selected.size === 0}

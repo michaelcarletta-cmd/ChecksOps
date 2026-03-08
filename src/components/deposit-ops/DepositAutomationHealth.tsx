@@ -396,7 +396,7 @@ export function AutomationSettingsPanel() {
               </div>
               {isBool ? (
                 <Switch
-                  checked={val === true || val === "true"}
+                  checked={boolVal}
                   onCheckedChange={(v) => updateMutation.mutate({ key, value: v })}
                 />
               ) : isNum ? (
