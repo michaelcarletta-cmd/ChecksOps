@@ -510,7 +510,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
             )}
             
             {/* Clickable overlay for field placement */}
-            {!isLoading && (
+            {(!isLoading && (isDocxMode ? docxHtml : !isDocxMode)) && (
               <div
                 ref={overlayRef}
                 className={`absolute inset-0 ${activeTool ? 'cursor-crosshair' : 'cursor-pointer'}`}
