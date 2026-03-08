@@ -361,9 +361,10 @@ Deno.serve(async (req) => {
       }
     }
     
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
+    console.error("Final error message:", errorMessage);
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: errorMessage, details: errorMessage }),
       {
         status: 500,
         headers: {
