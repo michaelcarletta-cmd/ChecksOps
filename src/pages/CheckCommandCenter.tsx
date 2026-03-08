@@ -674,8 +674,9 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
                 <button
                   key={c.id}
                   type="button"
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
-                  onClick={() => {
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors cursor-pointer"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
                     setClaimId(c.id);
                     setClaimSearch("");
                     setClaimDropdownOpen(false);
