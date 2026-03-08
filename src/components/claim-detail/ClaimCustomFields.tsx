@@ -187,7 +187,15 @@ export function ClaimCustomFields({ claimId, claimStatus }: ClaimCustomFieldsPro
     }
   };
 
-  if (!customFields || customFields.length === 0) {
+  // Filter fields by claim status visibility
+  const visibleFields = customFields?.filter((field: any) => {
+    if (!field.visible_on_statuses || field.visible_on_statuses.length === 0) {
+      return true; // null/empty = show on all statuses
+    }
+    return claimStatus && field.visible_on_statuses.includes(claimStatus);
+  });
+
+  if (!visibleFields || visibleFields.length === 0) {
     return null;
   }
 
