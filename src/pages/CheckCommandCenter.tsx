@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,9 +17,12 @@ import { Separator } from "@/components/ui/separator";
 import {
   Upload, FileCheck, Clock, AlertTriangle, CheckCircle2,
   Send, Eye, Users, Building2, Shield, ChevronRight,
-  RefreshCw, Banknote,
+  RefreshCw, Banknote, ClipboardCheck, RotateCcw, Printer,
 } from "lucide-react";
 import { format } from "date-fns";
+import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
+import { DepositPacketGenerator } from "@/components/check-review/DepositPacketGenerator";
+import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -55,6 +59,9 @@ interface CheckItem {
   status: string;
   created_at: string;
   uploaded_by: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_notes: string | null;
   check_payees?: CheckPayee[];
 }
 
@@ -79,14 +86,18 @@ interface ClaimOption {
 
 const statusColors: Record<string, string> = {
   uploaded: "bg-muted text-muted-foreground",
+  processing: "bg-blue-500/20 text-blue-400",
   ocr_complete: "bg-blue-500/20 text-blue-400",
   endorsements_in_progress: "bg-amber-500/20 text-amber-400",
   endorsements_complete: "bg-emerald-500/20 text-emerald-300",
   manual_review_required: "bg-orange-500/20 text-orange-400",
-  ready: "bg-emerald-500/20 text-emerald-400",
   needs_review: "bg-red-500/20 text-red-400",
+  approved_for_deposit: "bg-emerald-500/20 text-emerald-400",
+  branch_deposit_required: "bg-blue-500/20 text-blue-400",
+  reissue_requested: "bg-orange-500/20 text-orange-400",
   deposited: "bg-primary/20 text-primary",
   voided: "bg-destructive/20 text-destructive",
+  ready: "bg-emerald-500/20 text-emerald-400",
 };
 
 const recommendationConfig: Record<string, { label: string; icon: typeof CheckCircle2; color: string }> = {
@@ -94,7 +105,7 @@ const recommendationConfig: Record<string, { label: string; icon: typeof CheckCi
   endorsements_pending: { label: "Endorsements Pending", icon: Clock, color: "text-amber-400" },
   manual_review_required: { label: "Manual Review Required", icon: AlertTriangle, color: "text-orange-400" },
   branch_deposit_recommended: { label: "Branch Deposit", icon: Building2, color: "text-blue-400" },
-  request_reissue: { label: "Request Reissue", icon: AlertTriangle, color: "text-red-400" },
+  request_reissue: { label: "Request Reissue", icon: RotateCcw, color: "text-red-400" },
 };
 
 const payeeTypeIcons: Record<string, typeof Users> = {
@@ -122,6 +133,7 @@ export default function CheckCommandCenter() {
   const [activeTab, setActiveTab] = useState("all");
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
 
   const { data: checks = [], isLoading } = useQuery({
     queryKey: ["check-intake-items"],
@@ -142,21 +154,26 @@ export default function CheckCommandCenter() {
       c.status === "endorsements_in_progress",
   );
   const readyForDeposit = checks.filter(
-    (c) => c.deposit_recommendation === "ready_for_deposit" && c.status === "ready",
+    (c) => c.status === "approved_for_deposit" || (c.deposit_recommendation === "ready_for_deposit" && c.status !== "deposited"),
   );
   const needsReview = checks.filter(
     (c) =>
       c.status === "needs_review" ||
       c.status === "manual_review_required" ||
       c.status === "endorsements_complete" ||
+      c.deposit_recommendation === "branch_deposit_recommended" ||
       c.ocr_status === "failed",
   );
+  const reissueRequested = checks.filter((c) => c.status === "reissue_requested");
+  const branchDeposit = checks.filter((c) => c.status === "branch_deposit_required");
 
   const filteredChecks =
     activeTab === "new" ? newChecks
     : activeTab === "endorsements" ? awaitingEndorsement
     : activeTab === "ready" ? readyForDeposit
     : activeTab === "review" ? needsReview
+    : activeTab === "reissue" ? reissueRequested
+    : activeTab === "branch" ? branchDeposit
     : checks;
 
   return (
@@ -165,7 +182,7 @@ export default function CheckCommandCenter() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Check Command Center</h1>
           <p className="text-sm text-muted-foreground">
-            Insurance check intake, endorsement orchestration & deposit eligibility
+            Insurance check intake, review & deposit readiness
           </p>
         </div>
         <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
@@ -184,115 +201,175 @@ export default function CheckCommandCenter() {
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <SummaryCard label="New Uploads" count={newChecks.length} icon={Upload} color="text-blue-400" />
-        <SummaryCard label="Awaiting Endorsement" count={awaitingEndorsement.length} icon={Clock} color="text-amber-400" />
-        <SummaryCard label="Ready for Deposit" count={readyForDeposit.length} icon={CheckCircle2} color="text-emerald-400" />
-        <SummaryCard label="Needs Review" count={needsReview.length} icon={AlertTriangle} color="text-red-400" />
-      </div>
+      {/* Phase 2 Dashboard Cards */}
+      <CheckDashboardCards />
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_26rem]">
-        <Card>
-          <CardHeader className="pb-2">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="w-full">
-                <TabsTrigger value="all" className="flex-1">All ({checks.length})</TabsTrigger>
-                <TabsTrigger value="new" className="flex-1">New ({newChecks.length})</TabsTrigger>
-                <TabsTrigger value="endorsements" className="flex-1">Endorsing ({awaitingEndorsement.length})</TabsTrigger>
-                <TabsTrigger value="ready" className="flex-1">Ready ({readyForDeposit.length})</TabsTrigger>
-                <TabsTrigger value="review" className="flex-1">Review ({needsReview.length})</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="h-[calc(100vh-340px)]">
-              {isLoading ? (
-                <div className="p-8 text-center text-muted-foreground">Loading checks...</div>
-              ) : filteredChecks.length === 0 ? (
-                <div className="p-8 text-center text-muted-foreground">No checks in this category</div>
+      <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
+        <TabsList className="w-full flex-wrap h-auto gap-1 p-1">
+          <TabsTrigger value="all" className="text-xs">All ({checks.length})</TabsTrigger>
+          <TabsTrigger value="new" className="text-xs">New ({newChecks.length})</TabsTrigger>
+          <TabsTrigger value="endorsements" className="text-xs">Endorsing ({awaitingEndorsement.length})</TabsTrigger>
+          <TabsTrigger value="review" className="text-xs flex items-center gap-1">
+            <ClipboardCheck className="h-3 w-3" />Review ({needsReview.length})
+          </TabsTrigger>
+          <TabsTrigger value="ready" className="text-xs">Ready ({readyForDeposit.length})</TabsTrigger>
+          <TabsTrigger value="branch" className="text-xs">Branch ({branchDeposit.length})</TabsTrigger>
+          <TabsTrigger value="reissue" className="text-xs">Reissue ({reissueRequested.length})</TabsTrigger>
+        </TabsList>
+
+        {/* Review Tab has its own layout */}
+        <TabsContent value="review" className="mt-3">
+          <div className="grid gap-4 lg:grid-cols-[1fr_28rem]">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <ClipboardCheck className="h-4 w-4 text-orange-400" />
+                  Manual Review Queue
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <CheckReviewQueue
+                  onSelectCheck={(id) => setReviewCheckId(id)}
+                  selectedCheckId={reviewCheckId}
+                />
+              </CardContent>
+            </Card>
+
+            {reviewCheckId ? (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Review & Decision</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Tabs defaultValue="review">
+                    <TabsList className="w-full rounded-none">
+                      <TabsTrigger value="review" className="flex-1 text-xs">Review</TabsTrigger>
+                      <TabsTrigger value="packet" className="flex-1 text-xs">Deposit Packet</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="review" className="mt-0">
+                      <ReviewDecisionPanel
+                        checkId={reviewCheckId}
+                        onComplete={() => {
+                          qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                          qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+                          setReviewCheckId(null);
+                        }}
+                      />
+                    </TabsContent>
+                    <TabsContent value="packet" className="mt-0 p-4">
+                      <DepositPacketGenerator checkId={reviewCheckId} />
+                    </TabsContent>
+                  </Tabs>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="flex items-center justify-center h-[calc(100vh-400px)]">
+                <div className="text-center text-muted-foreground">
+                  <ClipboardCheck className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">Select a check to review</p>
+                </div>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* All other tabs use the standard layout */}
+        {["all", "new", "endorsements", "ready", "branch", "reissue"].map((tabKey) => (
+          <TabsContent key={tabKey} value={tabKey} className="mt-3">
+            <div className="grid gap-4 lg:grid-cols-[1fr_26rem]">
+              <Card>
+                <CardContent className="p-0">
+                  <ScrollArea className="h-[calc(100vh-400px)]">
+                    {isLoading ? (
+                      <div className="p-8 text-center text-muted-foreground">Loading checks...</div>
+                    ) : filteredChecks.length === 0 ? (
+                      <div className="p-8 text-center text-muted-foreground">No checks in this category</div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Check</TableHead>
+                            <TableHead>Carrier</TableHead>
+                            <TableHead className="text-right">Amount</TableHead>
+                            <TableHead>Payees</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Deposit</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredChecks.map((check) => {
+                            const rec = check.deposit_recommendation
+                              ? recommendationConfig[check.deposit_recommendation]
+                              : null;
+                            const RecIcon = rec?.icon ?? null;
+                            return (
+                              <TableRow
+                                key={check.id}
+                                className={`cursor-pointer transition-colors ${selectedCheck === check.id ? "bg-accent/50" : ""}`}
+                                onClick={() => setSelectedCheck(check.id)}
+                              >
+                                <TableCell className="font-mono text-sm">
+                                  #{check.check_number || "—"}
+                                </TableCell>
+                                <TableCell className="text-sm max-w-[120px] truncate">
+                                  {check.carrier_name || "Pending OCR"}
+                                </TableCell>
+                                <TableCell className="text-right font-semibold tabular-nums">
+                                  {check.amount != null
+                                    ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                                    : "—"}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs">{check.check_payees?.length ?? 0}</span>
+                                    {check.is_multi_payee && (
+                                      <Badge variant="outline" className="text-[10px] px-1">Multi</Badge>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge className={`text-[10px] ${statusColors[check.status] ?? ""}`}>
+                                    {check.status.replace(/_/g, " ")}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  {RecIcon && (
+                                    <RecIcon className={`h-4 w-4 ${rec!.color}`} />
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+
+              {selectedCheck ? (
+                <CheckDetailPanel
+                  checkId={selectedCheck}
+                  onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                />
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Check</TableHead>
-                      <TableHead>Carrier</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                      <TableHead>Payees</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Deposit</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredChecks.map((check) => {
-                      const rec = check.deposit_recommendation
-                        ? recommendationConfig[check.deposit_recommendation]
-                        : null;
-                      const RecIcon = rec?.icon ?? null;
-                      return (
-                        <TableRow
-                          key={check.id}
-                          className={`cursor-pointer transition-colors ${selectedCheck === check.id ? "bg-accent/50" : ""}`}
-                          onClick={() => setSelectedCheck(check.id)}
-                        >
-                          <TableCell className="font-mono text-sm">
-                            #{check.check_number || "—"}
-                          </TableCell>
-                          <TableCell className="text-sm max-w-[120px] truncate">
-                            {check.carrier_name || "Pending OCR"}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold tabular-nums">
-                            {check.amount != null
-                              ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
-                              : "—"}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
-                              <span className="text-xs">{check.check_payees?.length ?? 0}</span>
-                              {check.is_multi_payee && (
-                                <Badge variant="outline" className="text-[10px] px-1">Multi</Badge>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge className={`text-[10px] ${statusColors[check.status] ?? ""}`}>
-                              {check.status.replace(/_/g, " ")}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {RecIcon && (
-                              <RecIcon className={`h-4 w-4 ${rec!.color}`} />
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+                <Card className="flex items-center justify-center h-[calc(100vh-400px)]">
+                  <div className="text-center text-muted-foreground">
+                    <Banknote className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm">Select a check to view details</p>
+                  </div>
+                </Card>
               )}
-            </ScrollArea>
-          </CardContent>
-        </Card>
-
-        {selectedCheck ? (
-          <CheckDetailPanel
-            checkId={selectedCheck}
-            onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
-          />
-        ) : (
-          <Card className="flex items-center justify-center h-[calc(100vh-340px)]">
-            <div className="text-center text-muted-foreground">
-              <Banknote className="h-12 w-12 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">Select a check to view details</p>
             </div>
-          </Card>
-        )}
-      </div>
+          </TabsContent>
+        ))}
+      </Tabs>
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  Summary card                                                       */
+/*  Summary card (kept for Phase 1 compat)                             */
 /* ------------------------------------------------------------------ */
 
 function SummaryCard({
@@ -354,7 +431,6 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Namespaced path: checks/{userId}/{claimId|unclaimed}/{timestamp}_{filename}
       const ts = Date.now();
       const claimDir = claimId || "unclaimed";
       const prefix = `checks/${user.id}/${claimDir}`;
@@ -387,7 +463,6 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 
       if (insErr || !check) throw new Error(insErr?.message ?? "Insert failed");
 
-      // Trigger OCR
       const { data: session } = await supabase.auth.getSession();
       const { error: fnErr } = await supabase.functions.invoke("check-ocr-intake", {
         body: { checkId: check.id },
@@ -510,6 +585,7 @@ function CheckDetailPanel({
               Payees ({check.check_payees?.length ?? 0})
             </TabsTrigger>
             <TabsTrigger value="eligibility" className="flex-1 text-xs">Eligibility</TabsTrigger>
+            <TabsTrigger value="packet" className="flex-1 text-xs">Packet</TabsTrigger>
             <TabsTrigger value="audit" className="flex-1 text-xs">Audit</TabsTrigger>
           </TabsList>
 
@@ -526,6 +602,12 @@ function CheckDetailPanel({
               <DetailRow label="Multi-Payee" value={check.is_multi_payee ? "Yes" : "No"} />
               <DetailRow label="OCR Status" value={check.ocr_status} />
               <Separator />
+              {check.reviewed_by && (
+                <>
+                  <DetailRow label="Reviewed At" value={check.reviewed_at ? format(new Date(check.reviewed_at), "MMM d, yyyy h:mm a") : null} />
+                  {check.review_notes && <DetailRow label="Review Notes" value={check.review_notes} />}
+                </>
+              )}
               {check.claim_id && (
                 <DetailRow label="Linked Claim" value={check.claim_id.slice(0, 8) + "..."} />
               )}
@@ -561,6 +643,10 @@ function CheckDetailPanel({
                   Eligibility not yet evaluated
                 </p>
               )}
+            </TabsContent>
+
+            <TabsContent value="packet" className="p-4 mt-0">
+              <DepositPacketGenerator checkId={checkId} />
             </TabsContent>
 
             <TabsContent value="audit" className="p-4 space-y-2 mt-0">
