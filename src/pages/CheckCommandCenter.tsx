@@ -26,7 +26,10 @@ import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCar
 import { LossDraftDashboard } from "@/components/loss-draft/LossDraftDashboard";
 import { DepositOperationsConsole, BranchDepositManifest } from "@/components/deposit-ops/DepositOperationsConsole";
 import { ReconciliationDashboard } from "@/components/deposit-ops/ReconciliationDashboard";
-import { ArrowDownToLine, Scale } from "lucide-react";
+import { ExceptionResolutionPanel } from "@/components/deposit-ops/ExceptionResolutionPanel";
+import { DepositAgingDashboard } from "@/components/deposit-ops/DepositAgingDashboard";
+import { DepositReports } from "@/components/deposit-ops/DepositReports";
+import { ArrowDownToLine, Scale, Timer, FileBarChart, Shield as ShieldIcon } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -225,6 +228,15 @@ export default function CheckCommandCenter() {
           <TabsTrigger value="reconciliation" className="text-xs flex items-center gap-1">
             <Scale className="h-3 w-3" />Reconciliation
           </TabsTrigger>
+          <TabsTrigger value="exceptions" className="text-xs flex items-center gap-1">
+            <ShieldIcon className="h-3 w-3" />Exceptions
+          </TabsTrigger>
+          <TabsTrigger value="aging" className="text-xs flex items-center gap-1">
+            <Timer className="h-3 w-3" />Aging/SLA
+          </TabsTrigger>
+          <TabsTrigger value="reports" className="text-xs flex items-center gap-1">
+            <FileBarChart className="h-3 w-3" />Reports
+          </TabsTrigger>
           <TabsTrigger value="lossdraft" className="text-xs flex items-center gap-1">
             <Landmark className="h-3 w-3" />Loss Draft
           </TabsTrigger>
@@ -242,6 +254,27 @@ export default function CheckCommandCenter() {
         {activeTab === "reconciliation" && (
           <div className="mt-3">
             <ReconciliationDashboard />
+          </div>
+        )}
+
+        {/* Exceptions Tab */}
+        {activeTab === "exceptions" && (
+          <div className="mt-3">
+            <ExceptionResolutionPanel />
+          </div>
+        )}
+
+        {/* Aging/SLA Tab */}
+        {activeTab === "aging" && (
+          <div className="mt-3">
+            <DepositAgingDashboard />
+          </div>
+        )}
+
+        {/* Reports Tab */}
+        {activeTab === "reports" && (
+          <div className="mt-3">
+            <DepositReports />
           </div>
         )}
 
@@ -309,7 +342,7 @@ export default function CheckCommandCenter() {
         )}
 
         {/* All other tabs — only render the active one */}
-        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "deposit_ops" && activeTab !== "reconciliation" && (
+        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "deposit_ops" && activeTab !== "reconciliation" && activeTab !== "exceptions" && activeTab !== "aging" && activeTab !== "reports" && (
           <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_26rem]">
             <Card>
               <CardContent className="p-0">

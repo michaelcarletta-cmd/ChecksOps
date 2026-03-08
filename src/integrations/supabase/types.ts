@@ -5463,6 +5463,13 @@ export type Database = {
             foreignKeyName: "deposit_attachments_deposit_item_id_fkey"
             columns: ["deposit_item_id"]
             isOneToOne: false
+            referencedRelation: "deposit_aging_dashboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_attachments_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
             referencedRelation: "deposit_items"
             referencedColumns: ["id"]
           },
@@ -5511,6 +5518,13 @@ export type Database = {
             columns: ["batch_id"]
             isOneToOne: false
             referencedRelation: "deposit_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_audit_log_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_aging_dashboard"
             referencedColumns: ["id"]
           },
           {
@@ -5575,45 +5589,67 @@ export type Database = {
       }
       deposit_exceptions: {
         Row: {
+          assigned_at: string | null
           created_at: string
           deposit_item_id: string
           description: string
           exception_code: string | null
           exception_type: string
           id: string
+          owner_id: string | null
           provider: Database["public"]["Enums"]["deposit_provider"] | null
+          reopen_reason: string | null
+          reopened_at: string | null
+          reopened_by: string | null
           resolution_notes: string | null
           resolved_at: string | null
           resolved_by: string | null
           severity: string
         }
         Insert: {
+          assigned_at?: string | null
           created_at?: string
           deposit_item_id: string
           description: string
           exception_code?: string | null
           exception_type: string
           id?: string
+          owner_id?: string | null
           provider?: Database["public"]["Enums"]["deposit_provider"] | null
+          reopen_reason?: string | null
+          reopened_at?: string | null
+          reopened_by?: string | null
           resolution_notes?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
           severity?: string
         }
         Update: {
+          assigned_at?: string | null
           created_at?: string
           deposit_item_id?: string
           description?: string
           exception_code?: string | null
           exception_type?: string
           id?: string
+          owner_id?: string | null
           provider?: Database["public"]["Enums"]["deposit_provider"] | null
+          reopen_reason?: string | null
+          reopened_at?: string | null
+          reopened_by?: string | null
           resolution_notes?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
           severity?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "deposit_exceptions_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_aging_dashboard"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "deposit_exceptions_deposit_item_id_fkey"
             columns: ["deposit_item_id"]
@@ -5636,6 +5672,9 @@ export type Database = {
           check_number: string | null
           claim_id: string | null
           cleared_at: string | null
+          closeout_at: string | null
+          closeout_by: string | null
+          closeout_complete: boolean
           created_at: string
           deposit_slip_number: string | null
           exception_code: string | null
@@ -5669,6 +5708,9 @@ export type Database = {
           check_number?: string | null
           claim_id?: string | null
           cleared_at?: string | null
+          closeout_at?: string | null
+          closeout_by?: string | null
+          closeout_complete?: boolean
           created_at?: string
           deposit_slip_number?: string | null
           exception_code?: string | null
@@ -5702,6 +5744,9 @@ export type Database = {
           check_number?: string | null
           claim_id?: string | null
           cleared_at?: string | null
+          closeout_at?: string | null
+          closeout_by?: string | null
+          closeout_complete?: boolean
           created_at?: string
           deposit_slip_number?: string | null
           exception_code?: string | null
@@ -5791,6 +5836,13 @@ export type Database = {
             foreignKeyName: "deposit_provider_attempts_deposit_item_id_fkey"
             columns: ["deposit_item_id"]
             isOneToOne: false
+            referencedRelation: "deposit_aging_dashboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_provider_attempts_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
             referencedRelation: "deposit_items"
             referencedColumns: ["id"]
           },
@@ -5873,6 +5925,13 @@ export type Database = {
           replay_of?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "deposit_webhook_events_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_aging_dashboard"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "deposit_webhook_events_deposit_item_id_fkey"
             columns: ["deposit_item_id"]
@@ -9263,6 +9322,109 @@ export type Database = {
         }
         Relationships: []
       }
+      deposit_aging_dashboard: {
+        Row: {
+          accounting_synced_at: string | null
+          aging_bucket: string | null
+          amount: number | null
+          bank_confirmation_count: number | null
+          bank_confirmed_at: string | null
+          carrier_name: string | null
+          check_number: string | null
+          cleared_at: string | null
+          closeout_complete: boolean | null
+          created_at: string | null
+          days_in_state: number | null
+          deposit_slip_count: number | null
+          id: string | null
+          open_exception_count: number | null
+          provider: Database["public"]["Enums"]["deposit_provider"] | null
+          reconciled_at: string | null
+          sla_confirm_breach: boolean | null
+          sla_deposit_breach: boolean | null
+          sla_sync_breach: boolean | null
+          stamped_receipt_count: number | null
+          status: Database["public"]["Enums"]["deposit_item_status"] | null
+        }
+        Insert: {
+          accounting_synced_at?: string | null
+          aging_bucket?: never
+          amount?: number | null
+          bank_confirmation_count?: never
+          bank_confirmed_at?: string | null
+          carrier_name?: string | null
+          check_number?: string | null
+          cleared_at?: string | null
+          closeout_complete?: boolean | null
+          created_at?: string | null
+          days_in_state?: never
+          deposit_slip_count?: never
+          id?: string | null
+          open_exception_count?: never
+          provider?: Database["public"]["Enums"]["deposit_provider"] | null
+          reconciled_at?: string | null
+          sla_confirm_breach?: never
+          sla_deposit_breach?: never
+          sla_sync_breach?: never
+          stamped_receipt_count?: never
+          status?: Database["public"]["Enums"]["deposit_item_status"] | null
+        }
+        Update: {
+          accounting_synced_at?: string | null
+          aging_bucket?: never
+          amount?: number | null
+          bank_confirmation_count?: never
+          bank_confirmed_at?: string | null
+          carrier_name?: string | null
+          check_number?: string | null
+          cleared_at?: string | null
+          closeout_complete?: boolean | null
+          created_at?: string | null
+          days_in_state?: never
+          deposit_slip_count?: never
+          id?: string | null
+          open_exception_count?: never
+          provider?: Database["public"]["Enums"]["deposit_provider"] | null
+          reconciled_at?: string | null
+          sla_confirm_breach?: never
+          sla_deposit_breach?: never
+          sla_sync_breach?: never
+          stamped_receipt_count?: never
+          status?: Database["public"]["Enums"]["deposit_item_status"] | null
+        }
+        Relationships: []
+      }
+      deposit_aging_summary: {
+        Row: {
+          awaiting_accounting_sync: number | null
+          awaiting_bank_confirm: number | null
+          awaiting_deposit: number | null
+          awaiting_reconciliation: number | null
+          complete: number | null
+          items_with_open_exceptions: number | null
+          missing_deposit_slip: number | null
+          open_exceptions: number | null
+          sla_confirm_breaches: number | null
+          sla_deposit_breaches: number | null
+          sla_sync_breaches: number | null
+          unreconciled_amount: number | null
+          unsynced_amount: number | null
+        }
+        Relationships: []
+      }
+      deposit_daily_log: {
+        Row: {
+          confirmed_amount: number | null
+          deposit_date: string | null
+          item_count: number | null
+          nsf_count: number | null
+          provider: Database["public"]["Enums"]["deposit_provider"] | null
+          reconciled_amount: number | null
+          total_amount: number | null
+          total_variance: number | null
+        }
+        Relationships: []
+      }
       deposit_reconciliation_summary: {
         Row: {
           cleared_amount: number | null
@@ -9512,6 +9674,7 @@ export type Database = {
       }
       get_check_dashboard_counts: { Args: never; Returns: Json }
       get_claim_money_snapshot: { Args: { p_claim_id: string }; Returns: Json }
+      get_deposit_aging_summary: { Args: never; Returns: Json }
       get_deposit_reconciliation_summary: { Args: never; Returns: Json }
       get_expiring_licenses: {
         Args: { p_days_ahead?: number; p_user_id: string }
@@ -9610,6 +9773,14 @@ export type Database = {
         }
         Returns: Json
       }
+      mark_deposit_closeout: {
+        Args: {
+          p_actor_id: string
+          p_deposit_item_id: string
+          p_notes?: string
+        }
+        Returns: Json
+      }
       match_claim_document_chunks: {
         Args: {
           exclude_claim_id?: string
@@ -9704,6 +9875,15 @@ export type Database = {
       release_darwin_job: {
         Args: { p_error_message?: string; p_job_type: string }
         Returns: boolean
+      }
+      resolve_deposit_exception: {
+        Args: {
+          p_action?: string
+          p_actor_id: string
+          p_exception_id: string
+          p_resolution_notes: string
+        }
+        Returns: Json
       }
       search_claims_by_proximity: {
         Args: {
