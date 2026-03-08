@@ -12,7 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Upload, FileText, Trash2, Download, Loader2, Info, Layout, Mail, MessageSquare } from "lucide-react";
+import { Upload, FileText, Trash2, Download, Loader2, Info, Layout, Mail, MessageSquare, ChevronDown } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -190,50 +191,62 @@ export const TemplatesSettings = () => {
         </TabsList>
 
         <TabsContent value="documents" className="space-y-6">
-      <Alert>
-        <Info className="h-4 w-4" />
-        <AlertTitle>Template Merge Fields</AlertTitle>
-        <AlertDescription>
-          <p className="mb-2">Use these fields in your Word templates with dollar sign and curly braces:</p>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm font-mono">
-            <div>{`\${policyholder}`}</div>
-            <div>{`\${policy}`}</div>
-            <div>{`\${insurance_company}`}</div>
-            <div>{`\${address.street}`}</div>
-            <div>{`\${address.city}`}</div>
-            <div>{`\${claim.loss_date}`}</div>
-            <div>{`\${claim.loss_type}`}</div>
-            <div>{`\${mortgage_company}`}</div>
-            <div>{`\${loan_number}`}</div>
-            <div>{`\${ssn_last_four}`}</div>
-          </div>
-          <p className="mt-3 mb-2 font-medium">Settlement/Accounting Fields:</p>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm font-mono">
-            <div>{`\${settlement.total_rcv}`}</div>
-            <div>{`\${settlement.total_net}`}</div>
-            <div>{`\${settlement.total_deductible}`}</div>
-            <div>{`\${settlement.dwelling_rcv}`}</div>
-            <div>{`\${settlement.dwelling_acv}`}</div>
-            <div>{`\${settlement.dwelling_net}`}</div>
-            <div>{`\${settlement.other_structures_rcv}`}</div>
-            <div>{`\${settlement.pwi_rcv}`}</div>
-            <div>{`\${settlement.prior_offer}`}</div>
-            <div>{`\${settlement.total_checks}`}</div>
-            <div>{`\${settlement.outstanding}`}</div>
-          </div>
-          <p className="mt-3 mb-2 font-medium">Depreciation Fields:</p>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm font-mono">
-            <div>{`\${settlement.dwelling_recoverable_dep}`}</div>
-            <div>{`\${settlement.dwelling_non_recoverable_dep}`}</div>
-            <div>{`\${settlement.other_structures_recoverable_dep}`}</div>
-            <div>{`\${settlement.other_structures_non_recoverable_dep}`}</div>
-            <div>{`\${settlement.pwi_recoverable_dep}`}</div>
-            <div>{`\${settlement.pwi_non_recoverable_dep}`}</div>
-            <div>{`\${settlement.total_recoverable_dep}`}</div>
-            <div>{`\${settlement.total_non_recoverable_dep}`}</div>
-          </div>
-        </AlertDescription>
-      </Alert>
+      <Collapsible>
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertTitle className="flex items-center justify-between">
+            <span>Template Merge Fields</span>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
+                Show Fields
+                <ChevronDown className="h-3 w-3" />
+              </Button>
+            </CollapsibleTrigger>
+          </AlertTitle>
+          <CollapsibleContent>
+            <AlertDescription className="mt-2">
+              <p className="mb-2 text-sm">Use these fields in your Word templates with dollar sign and curly braces:</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm font-mono">
+                <div>{`\${policyholder}`}</div>
+                <div>{`\${policy}`}</div>
+                <div>{`\${insurance_company}`}</div>
+                <div>{`\${address.street}`}</div>
+                <div>{`\${address.city}`}</div>
+                <div>{`\${claim.loss_date}`}</div>
+                <div>{`\${claim.loss_type}`}</div>
+                <div>{`\${mortgage_company}`}</div>
+                <div>{`\${loan_number}`}</div>
+                <div>{`\${ssn_last_four}`}</div>
+              </div>
+              <p className="mt-3 mb-2 font-medium">Settlement/Accounting Fields:</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm font-mono">
+                <div>{`\${settlement.total_rcv}`}</div>
+                <div>{`\${settlement.total_net}`}</div>
+                <div>{`\${settlement.total_deductible}`}</div>
+                <div>{`\${settlement.dwelling_rcv}`}</div>
+                <div>{`\${settlement.dwelling_acv}`}</div>
+                <div>{`\${settlement.dwelling_net}`}</div>
+                <div>{`\${settlement.other_structures_rcv}`}</div>
+                <div>{`\${settlement.pwi_rcv}`}</div>
+                <div>{`\${settlement.prior_offer}`}</div>
+                <div>{`\${settlement.total_checks}`}</div>
+                <div>{`\${settlement.outstanding}`}</div>
+              </div>
+              <p className="mt-3 mb-2 font-medium">Depreciation Fields:</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm font-mono">
+                <div>{`\${settlement.dwelling_recoverable_dep}`}</div>
+                <div>{`\${settlement.dwelling_non_recoverable_dep}`}</div>
+                <div>{`\${settlement.other_structures_recoverable_dep}`}</div>
+                <div>{`\${settlement.other_structures_non_recoverable_dep}`}</div>
+                <div>{`\${settlement.pwi_recoverable_dep}`}</div>
+                <div>{`\${settlement.pwi_non_recoverable_dep}`}</div>
+                <div>{`\${settlement.total_recoverable_dep}`}</div>
+                <div>{`\${settlement.total_non_recoverable_dep}`}</div>
+              </div>
+            </AlertDescription>
+          </CollapsibleContent>
+        </Alert>
+      </Collapsible>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
