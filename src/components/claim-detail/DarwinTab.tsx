@@ -776,7 +776,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
 
         {/* Right drawer */}
         {showCopilot && (
-          <div className="hidden xl:block w-96 flex-shrink-0 xl:sticky xl:top-4">
+          <div className="hidden xl:block flex-shrink-0 xl:sticky xl:top-4">
             <Card className="h-[calc(100vh-2rem)] flex flex-col border-primary/20">
             <CardHeader className="py-3 border-b bg-gradient-to-r from-primary/5 to-transparent">
               <div className="flex items-center justify-between gap-2">
