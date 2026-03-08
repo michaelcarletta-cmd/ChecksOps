@@ -211,14 +211,14 @@ export function ReviewDecisionPanel({
   const [notes, setNotes] = useState("");
 
   // Sync form when check loads
-  useState(() => {
+  useEffect(() => {
     if (check) {
       setCarrierName(check.carrier_name ?? "");
       setCheckNumber(check.check_number ?? "");
       setAmount(check.amount?.toString() ?? "");
       setPayeeLine(check.payee_line ?? "");
     }
-  });
+  }, [check]);
 
   const submitDecision = useMutation({
     mutationFn: async () => {
