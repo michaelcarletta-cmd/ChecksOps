@@ -462,7 +462,7 @@ function PendingApprovalsPanel() {
                 <TableBody>
                   {resolved.map((a) => (
                     <TableRow key={a.id as string} className="opacity-60">
-                      <TableCell><Badge variant="outline" className="text-[9px]">{typeLabels[a.approval_type as string] ?? a.approval_type}</Badge></TableCell>
+                      <TableCell><Badge variant="outline" className="text-[9px]">{typeLabels[a.approval_type as string] ?? (a.approval_type as string)}</Badge></TableCell>
                       <TableCell className="text-xs">{(a.description as string) || "—"}</TableCell>
                       <TableCell><Badge variant={a.status === "approved" ? "default" : "destructive"} className="text-[9px]">{a.status as string}</Badge></TableCell>
                       <TableCell className="text-xs text-muted-foreground">{format(new Date(a.created_at as string), "MMM d")}</TableCell>
