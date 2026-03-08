@@ -31,6 +31,7 @@ const Workspaces = lazy(() => import("./pages/Workspaces"));
 const WorkspaceDetailPage = lazy(() => import("./pages/WorkspaceDetailPage"));
 
 const DarwinOperations = lazy(() => import("./pages/DarwinOperations"));
+const CheckCommandCenter = lazy(() => import("./pages/CheckCommandCenter"));
 
 export const queryClient = new QueryClient();
 
