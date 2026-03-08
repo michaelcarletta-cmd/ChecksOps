@@ -219,10 +219,31 @@ export default function CheckCommandCenter() {
           <TabsTrigger value="ready" className="text-xs">Ready ({readyForDeposit.length})</TabsTrigger>
           <TabsTrigger value="branch" className="text-xs">Branch ({branchDeposit.length})</TabsTrigger>
           <TabsTrigger value="reissue" className="text-xs">Reissue ({reissueRequested.length})</TabsTrigger>
+          <TabsTrigger value="deposit_ops" className="text-xs flex items-center gap-1">
+            <ArrowDownToLine className="h-3 w-3" />Deposit Ops
+          </TabsTrigger>
+          <TabsTrigger value="reconciliation" className="text-xs flex items-center gap-1">
+            <Scale className="h-3 w-3" />Reconciliation
+          </TabsTrigger>
           <TabsTrigger value="lossdraft" className="text-xs flex items-center gap-1">
             <Landmark className="h-3 w-3" />Loss Draft
           </TabsTrigger>
         </TabsList>
+
+        {/* Deposit Operations Tab */}
+        {activeTab === "deposit_ops" && (
+          <div className="mt-3 space-y-4">
+            <DepositOperationsConsole />
+            <BranchDepositManifest />
+          </div>
+        )}
+
+        {/* Reconciliation Tab */}
+        {activeTab === "reconciliation" && (
+          <div className="mt-3">
+            <ReconciliationDashboard />
+          </div>
+        )}
 
         {/* Loss Draft Tab */}
         {activeTab === "lossdraft" && (
