@@ -660,6 +660,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
                 if (!e.target.value) setClaimId("");
               }}
               onFocus={() => setClaimDropdownOpen(true)}
+              onBlur={() => setTimeout(() => setClaimDropdownOpen(false), 200)}
               className="border-0 focus-visible:ring-0 shadow-none"
             />
             {claimId && (
