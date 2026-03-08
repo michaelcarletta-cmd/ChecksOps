@@ -1,7 +1,8 @@
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import "react-pdf/dist/esm/Page/TextLayer.css";
+import mammoth from "mammoth";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
@@ -32,12 +33,13 @@ interface Field {
 }
 
 interface FieldPlacementEditorProps {
-  documentUrl: string;
+  documentUrl?: string;
+  docxData?: Uint8Array;
   onFieldsChange: (fields: Field[]) => void;
   signerCount: number;
 }
 
-export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount }: FieldPlacementEditorProps) {
+export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, signerCount }: FieldPlacementEditorProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const [fields, setFields] = useState<Field[]>([]);
   const [activeTool, setActiveTool] = useState<"signature" | "date" | "text" | "checkbox" | null>(null);
@@ -60,6 +62,10 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
   // Load template state
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   
+  // DOCX HTML rendering
+  const [docxHtml, setDocxHtml] = useState<string | null>(null);
+  const docxContainerRef = useRef<HTMLDivElement>(null);
+
   // Field picker popup
   const [pendingClickPos, setPendingClickPos] = useState<{x: number, y: number} | null>(null);
   
@@ -84,6 +90,25 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
       return data;
     },
   });
+
+  // Convert DOCX to HTML using mammoth when docxData is provided
+  useEffect(() => {
+    if (!docxData) return;
+    setIsLoading(true);
+    mammoth.convertToHtml({ arrayBuffer: docxData.buffer as ArrayBuffer })
+      .then((result) => {
+        setDocxHtml(result.value);
+        setIsLoading(false);
+        toast({ title: "Document loaded. Click on the document to place fields." });
+      })
+      .catch((err) => {
+        console.error("Mammoth conversion error:", err);
+        setIsLoading(false);
+        toast({ title: "Failed to render document", description: err.message, variant: "destructive" });
+      });
+  }, [docxData, toast]);
+
+  const isDocxMode = !!docxData;
 
   // Save template mutation
   const saveTemplateMutation = useMutation({
@@ -435,7 +460,7 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
           </div>
         )}
 
-        {/* PDF Document with overlay */}
+        {/* Document rendering with overlay */}
         <div className="border rounded overflow-auto bg-muted/30 flex justify-center p-4">
           {isLoading && (
             <div className="flex items-center justify-center h-96 w-full">
@@ -444,35 +469,48 @@ export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount 
           )}
           
           <div className="relative inline-block">
-            <Document
-              file={documentUrl}
-              onLoadSuccess={onDocumentLoadSuccess}
-              onLoadError={onDocumentLoadError}
-              loading={
-                <div className="flex items-center justify-center h-96 w-[600px]">
-                  <p className="text-muted-foreground">Loading PDF...</p>
-                </div>
-              }
-              error={
-                <div className="flex flex-col items-center justify-center h-96 w-[600px] bg-muted/20 border rounded">
-                  <p className="text-muted-foreground mb-4">Could not load PDF preview</p>
-                  <Button variant="outline" onClick={() => window.open(documentUrl, '_blank')}>
-                    Open PDF in New Tab
-                  </Button>
-                </div>
-              }
-            >
-              <Page
-                pageNumber={currentPage}
-                width={600}
-                onLoadSuccess={onPageLoadSuccess}
-                renderTextLayer={false}
-                renderAnnotationLayer={false}
+            {/* DOCX rendered as HTML */}
+            {isDocxMode && docxHtml && (
+              <div
+                ref={docxContainerRef}
+                className="bg-white text-black shadow-md"
+                style={{ width: 600, minHeight: 800, padding: '40px 50px', boxSizing: 'border-box' }}
+                dangerouslySetInnerHTML={{ __html: docxHtml }}
               />
-            </Document>
+            )}
+
+            {/* PDF rendered via react-pdf */}
+            {!isDocxMode && documentUrl && (
+              <Document
+                file={documentUrl}
+                onLoadSuccess={onDocumentLoadSuccess}
+                onLoadError={onDocumentLoadError}
+                loading={
+                  <div className="flex items-center justify-center h-96 w-[600px]">
+                    <p className="text-muted-foreground">Loading PDF...</p>
+                  </div>
+                }
+                error={
+                  <div className="flex flex-col items-center justify-center h-96 w-[600px] bg-muted/20 border rounded">
+                    <p className="text-muted-foreground mb-4">Could not load PDF preview</p>
+                    <Button variant="outline" onClick={() => window.open(documentUrl, '_blank')}>
+                      Open PDF in New Tab
+                    </Button>
+                  </div>
+                }
+              >
+                <Page
+                  pageNumber={currentPage}
+                  width={600}
+                  onLoadSuccess={onPageLoadSuccess}
+                  renderTextLayer={false}
+                  renderAnnotationLayer={false}
+                />
+              </Document>
+            )}
             
             {/* Clickable overlay for field placement */}
-            {!isLoading && (
+            {(!isLoading && (isDocxMode ? docxHtml : !isDocxMode)) && (
               <div
                 ref={overlayRef}
                 className={`absolute inset-0 ${activeTool ? 'cursor-crosshair' : 'cursor-pointer'}`}

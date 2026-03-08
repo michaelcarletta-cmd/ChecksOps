@@ -30,7 +30,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
   const [generatedDocUrl, setGeneratedDocUrl] = useState<string | null>(null);
   const [generatedDocPath, setGeneratedDocPath] = useState<string | null>(null);
   const [placedFields, setPlacedFields] = useState<any[]>([]);
-
+  const [generatedDocxData, setGeneratedDocxData] = useState<Uint8Array | null>(null);
 
 
   const { data: templates } = useQuery({
@@ -83,13 +83,15 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         ? docData.content 
         : docData.content?.data || docData.content;
       
+      const contentUint8 = new Uint8Array(contentArray);
+      
       const mimeType = isPDF 
         ? "application/pdf" 
         : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
       // Upload to storage
       const fileName = `signatures/${claimId}/${Date.now()}-${docData.fileName}`;
-      const blob = new Blob([new Uint8Array(contentArray)], { type: mimeType });
+      const blob = new Blob([contentUint8], { type: mimeType });
       
       const { error: uploadError } = await supabase.storage
         .from("claim-files")
@@ -102,22 +104,22 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         .createSignedUrl(fileName, 3600);
 
       setGeneratedDocPath(fileName);
-      setGeneratedDocUrl(isPDF ? (urlData?.signedUrl || null) : null);
+      
+      if (isPDF) {
+        setGeneratedDocUrl(urlData?.signedUrl || null);
+        setGeneratedDocxData(null);
+      } else {
+        // For DOCX, store the raw data for client-side rendering
+        setGeneratedDocUrl(null);
+        setGeneratedDocxData(contentUint8);
+      }
       
       return { fileName, url: urlData?.signedUrl, isPDF };
     },
-    onSuccess: (data) => {
-      if (data?.isPDF) {
-        setCurrentStep(2);
-        toast({ title: "Document generated! Now place signature fields." });
-      } else {
-        // For Word documents, skip field placement and go directly to signers
-        setCurrentStep(3);
-        toast({ 
-          title: "Word document generated", 
-          description: "Field placement is only available for PDF templates. Proceeding to signer configuration." 
-        });
-      }
+    onSuccess: () => {
+      // Always go to field placement step
+      setCurrentStep(2);
+      toast({ title: "Document generated! Now place signature fields." });
     },
     onError: (error: Error) => {
       toast({ title: "Failed to generate document", description: error.message, variant: "destructive" });
@@ -186,6 +188,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
       setGeneratedDocPath(null);
       setPlacedFields([]);
       setIsDocxTemplate(false);
+      setGeneratedDocxData(null);
       setSigners([{ name: claim.policyholder_name || "", email: claim.policyholder_email || "", type: "policyholder", order: 1 }]);
       queryClient.invalidateQueries({ queryKey: ["signature-requests"] });
       queryClient.invalidateQueries({ queryKey: ["sig-diagnostics"] });
@@ -331,10 +334,11 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
               </div>
             )}
 
-            {/* Step 2: Field Placement */}
-            {currentStep === 2 && generatedDocUrl && (
+            {/* Step 2: Field Placement (works for both PDF and DOCX) */}
+            {currentStep === 2 && (generatedDocUrl || generatedDocxData) && (
               <FieldPlacementEditor
-                documentUrl={generatedDocUrl}
+                documentUrl={generatedDocUrl || undefined}
+                docxData={generatedDocxData || undefined}
                 onFieldsChange={setPlacedFields}
                 signerCount={signers.length}
               />
@@ -426,10 +430,9 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                       )}
                     </Button>
                   )}
-                  {currentStep === 2 && !isDocxTemplate && (
+                  {currentStep === 2 && (
                     <Button
                       onClick={() => setCurrentStep(3)}
-                      disabled={placedFields.length === 0}
                     >
                       Next
                       <ChevronRight className="w-4 h-4 ml-2" />
