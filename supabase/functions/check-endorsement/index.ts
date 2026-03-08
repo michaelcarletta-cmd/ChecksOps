@@ -31,6 +31,12 @@ interface CheckPayee {
   } | null;
 }
 
+/** Recommendations that should NEVER be auto-promoted to ready_for_deposit */
+const RESTRICTED_RECOMMENDATIONS = new Set([
+  "manual_review_required",
+  "branch_deposit_recommended",
+]);
+
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
@@ -49,7 +55,7 @@ function htmlResp(body: string, status = 200) {
   });
 }
 
-function escHtml(s: string | null | undefined): string {
+function escHtml(s: string | number | null | undefined): string {
   if (s == null) return "";
   return String(s)
     .replace(/&/g, "&amp;")
@@ -57,6 +63,18 @@ function escHtml(s: string | null | undefined): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#x27;");
+}
+
+/** Build a forensic evidence object from the HTTP request */
+function signerForensics(req: Request): Record<string, string | null> {
+  return {
+    ip_address: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+      ?? req.headers.get("cf-connecting-ip")
+      ?? null,
+    user_agent: req.headers.get("user-agent") ?? null,
+    consent_text: "By clicking Endorse/Reject, the signer confirms their identity and acknowledges this check payment action.",
+    signed_at_utc: new Date().toISOString(),
+  };
 }
 
 async function reEvaluateAfterEndorsement(
@@ -91,11 +109,10 @@ async function reEvaluateAfterEndorsement(
       .eq("id", checkId)
       .single();
 
-    const originalRec = check?.deposit_recommendation;
+    const originalRec = check?.deposit_recommendation ?? "";
 
     if (check?.is_multi_payee) {
-      // endorsements_complete is a STATUS — preserve the original deposit_recommendation
-      // Do NOT overwrite branch_deposit_recommended or any stricter recommendation
+      // Multi-payee: endorsements_complete is a STATUS — never touch deposit_recommendation
       await supabase.from("check_intake_items")
         .update({ status: "endorsements_complete" })
         .eq("id", checkId);
@@ -103,12 +120,27 @@ async function reEvaluateAfterEndorsement(
       await supabase.from("check_audit_log").insert({
         check_id: checkId,
         event_type: "all_endorsements_complete",
-        event_description: `All payees endorsed — deposit recommendation unchanged: ${originalRec}`,
+        event_description: `All payees endorsed — deposit recommendation preserved: ${originalRec}`,
       });
 
       return { allSigned: true, newStatus: "endorsements_complete" };
     } else {
-      // Single payee endorsed
+      // Single-payee: ONLY promote to ready_for_deposit if the original
+      // recommendation is not a restricted/stricter one
+      if (RESTRICTED_RECOMMENDATIONS.has(originalRec)) {
+        await supabase.from("check_intake_items")
+          .update({ status: "endorsements_complete" })
+          .eq("id", checkId);
+
+        await supabase.from("check_audit_log").insert({
+          check_id: checkId,
+          event_type: "all_endorsements_complete",
+          event_description: `Single-payee endorsed but original recommendation "${originalRec}" preserved — manual review still required`,
+        });
+
+        return { allSigned: true, newStatus: "endorsements_complete" };
+      }
+
       await supabase.from("check_intake_items")
         .update({
           status: "ready",
@@ -170,6 +202,7 @@ function renderEndorsementPage(
     #msg{text-align:center;margin-top:12px;font-size:13px;min-height:20px}
     .error{color:#ef4444}
     .success{color:#22c55e}
+    .consent{font-size:11px;color:#64748b;margin-top:12px;text-align:center}
   </style>
 </head>
 <body>
@@ -194,6 +227,7 @@ function renderEndorsementPage(
       <button class="btn btn-reject" id="rejectBtn" onclick="submitEndorsement('reject')">Reject</button>
     </div>
     <div id="msg"></div>
+    <p class="consent">By taking action you agree: &quot;I confirm my identity as the named payee and acknowledge this endorsement action.&quot;</p>
     <script>
     async function submitEndorsement(type) {
       var msg = document.getElementById('msg');
@@ -454,6 +488,9 @@ Deno.serve(async (req) => {
           return json({ success: true, message: "Already endorsed" });
         }
 
+        // Capture signer forensics
+        const forensics = signerForensics(req);
+
         // Rotate token after use
         const newToken = crypto.randomUUID();
         await supabase.from("check_payees").update({
@@ -468,14 +505,20 @@ Deno.serve(async (req) => {
           check_id: payee.check_id,
           payee_id: payee.id,
           event_type: "endorsement_signed",
-          event_data: { has_image: !!endorsementImagePath },
+          event_data: {
+            has_image: !!endorsementImagePath,
+            ...forensics,
+          },
         });
 
         await supabase.from("check_audit_log").insert({
           check_id: payee.check_id,
           event_type: "endorsement_completed",
           event_description: `${payee.payee_name} endorsed the check`,
-          event_data: { payee_id: payee.id },
+          event_data: {
+            payee_id: payee.id,
+            ...forensics,
+          },
         });
 
         const result = await reEvaluateAfterEndorsement(supabase, payee.check_id);
@@ -495,6 +538,9 @@ Deno.serve(async (req) => {
 
         if (pErr || !payee) return json({ error: "Invalid or already-used token" }, 404);
 
+        // Capture signer forensics
+        const forensics = signerForensics(req);
+
         const newToken = crypto.randomUUID();
         await supabase.from("check_payees").update({
           endorsement_status: "rejected",
@@ -506,14 +552,21 @@ Deno.serve(async (req) => {
           check_id: payee.check_id,
           payee_id: payee.id,
           event_type: "endorsement_rejected",
-          event_data: { reason },
+          event_data: {
+            reason,
+            ...forensics,
+          },
         });
 
         await supabase.from("check_audit_log").insert({
           check_id: payee.check_id,
           event_type: "endorsement_rejected",
           event_description: `${payee.payee_name} rejected endorsement: ${reason ?? "No reason"}`,
-          event_data: { payee_id: payee.id, reason },
+          event_data: {
+            payee_id: payee.id,
+            reason,
+            ...forensics,
+          },
         });
 
         await reEvaluateAfterEndorsement(supabase, payee.check_id);

@@ -44,7 +44,7 @@ const CRITICAL_CONFIDENCE_THRESHOLD = 60;
 const OVERALL_CONFIDENCE_THRESHOLD = 50;
 
 /* ------------------------------------------------------------------ */
-/*  Stale lock timeout (2 minutes)                                     */
+/*  Stale lock timeout (2 minutes) — uses dedicated heartbeat field    */
 /* ------------------------------------------------------------------ */
 const STALE_LOCK_MS = 2 * 60 * 1000;
 
@@ -65,7 +65,6 @@ function logAudit(
   data: Record<string, unknown>,
   actorId: string | null,
 ) {
-  // Fire-and-forget, accept duplicate audit rows — they are append-only history
   return supabase.from("check_audit_log").insert({
     check_id: checkId,
     event_type: eventType,
@@ -217,6 +216,38 @@ function evaluateEligibility(
 }
 
 /* ------------------------------------------------------------------ */
+/*  Strict JSON parsing — no regex fallback                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Parse the AI response as strict JSON. The AI is instructed to return
+ * response_format: json_object, so the content should be pure JSON.
+ * We try JSON.parse directly first; only if that fails do we attempt
+ * to find a JSON block in markdown fences (```json ... ```).
+ * No greedy regex fallback — if neither works, we fail explicitly.
+ */
+function parseStrictJson(rawText: string): unknown {
+  // Attempt 1: direct parse (ideal for json_object response_format)
+  const trimmed = rawText.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      return JSON.parse(trimmed);
+    } catch { /* fall through to fence extraction */ }
+  }
+
+  // Attempt 2: extract from markdown code fence (```json\n{...}\n```)
+  const fenceMatch = trimmed.match(/```(?:json)?\s*\n(\{[\s\S]*?\})\s*\n```/);
+  if (fenceMatch) {
+    try {
+      return JSON.parse(fenceMatch[1]);
+    } catch { /* fall through */ }
+  }
+
+  // No greedy regex — fail explicitly
+  throw new Error("AI response is not valid JSON and contains no fenced JSON block");
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main handler                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -258,15 +289,19 @@ Deno.serve(async (req) => {
 
     if (checkErr || !check) return err("Check not found", 404);
 
-    /* ---- Stale lock handling ---- */
+    /* ---- Stale lock handling — uses dedicated ocr_heartbeat_at ---- */
     if (check.ocr_status === "processing") {
-      const updatedAt = check.updated_at ? new Date(check.updated_at).getTime() : 0;
-      if (Date.now() - updatedAt < STALE_LOCK_MS) {
+      const heartbeat = (check as Record<string, unknown>).ocr_heartbeat_at;
+      const heartbeatMs = heartbeat ? new Date(heartbeat as string).getTime() : 0;
+      const lockAge = Date.now() - heartbeatMs;
+      if (heartbeatMs > 0 && lockAge < STALE_LOCK_MS) {
         return err("OCR already in progress for this check", 409);
       }
       // Stale lock — allow reprocessing
       await logAudit(supabase, checkId, "stale_lock_cleared",
-        "Stale OCR processing lock cleared after timeout", { stale_since: check.updated_at }, userId);
+        "Stale OCR processing lock cleared after timeout",
+        { stale_since: heartbeat, lock_age_ms: lockAge },
+        userId);
     }
 
     /* ---- Check if endorsement workflow already started ---- */
@@ -278,10 +313,15 @@ Deno.serve(async (req) => {
 
     const hasActiveEndorsements = (activePayees?.length ?? 0) > 0;
 
-    /* ---- Mark processing ---- */
+    /* ---- Mark processing with dedicated heartbeat ---- */
+    const now = new Date().toISOString();
     await supabase
       .from("check_intake_items")
-      .update({ ocr_status: "processing", updated_at: new Date().toISOString() })
+      .update({
+        ocr_status: "processing",
+        ocr_heartbeat_at: now,
+        updated_at: now,
+      })
       .eq("id", checkId);
 
     await logAudit(supabase, checkId, "ocr_started", "OCR processing initiated", {}, userId);
@@ -306,11 +346,11 @@ Deno.serve(async (req) => {
         }
       }
 
-      /* ---- AI OCR ---- */
+      /* ---- AI OCR with structured JSON response ---- */
       if (!lovableKey) throw new Error("LOVABLE_API_KEY not configured");
 
       const ocrPrompt = `You are an insurance check OCR specialist. Analyze this check image and extract structured data.
-Return ONLY valid JSON with these exact fields:
+Return ONLY a valid JSON object with these exact fields:
 {
   "carrier_name": "the insurance company name on the check or null",
   "check_number": "the check number or null",
@@ -331,7 +371,8 @@ Rules:
 - "field_confidence" gives per-field confidence for: amount, check_number, payee_line, carrier_name, issue_date.
 - "low_confidence_fields" lists fields where text was unclear.
 - Payee type: mortgage_company (banks/lending/mortgage), contractor (construction/roofing/restoration), public_adjuster (adjusting/PA), insured (individuals/homeowners), unknown otherwise.
-- Amount must be numeric only. Date must be YYYY-MM-DD.`;
+- Amount must be numeric only. Date must be YYYY-MM-DD.
+- Return ONLY the JSON object, no markdown, no explanation.`;
 
       const content: Array<Record<string, unknown>> = [
         { type: "text", text: ocrPrompt },
@@ -352,6 +393,7 @@ Rules:
         },
         body: JSON.stringify({
           model: "google/gemini-2.5-flash",
+          response_format: { type: "json_object" },
           messages: [{ role: "user", content }],
         }),
       });
@@ -365,22 +407,20 @@ Rules:
         choices?: Array<{ message?: { content?: string } }>;
       };
       const rawText = aiData.choices?.[0]?.message?.content ?? "";
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        await supabase.from("check_intake_items")
-          .update({ ocr_status: "failed", raw_ocr_front: { raw: rawText } })
-          .eq("id", checkId);
-        return err("Could not parse OCR output", 500);
-      }
 
+      /* ---- Strict JSON parsing — no greedy regex ---- */
       let rawObj: unknown;
       try {
-        rawObj = JSON.parse(jsonMatch[0]);
-      } catch {
+        rawObj = parseStrictJson(rawText);
+      } catch (parseErr) {
         await supabase.from("check_intake_items")
-          .update({ ocr_status: "failed", raw_ocr_front: { raw: rawText } })
+          .update({
+            ocr_status: "failed",
+            ocr_heartbeat_at: null,
+            raw_ocr_front: { raw: rawText, parse_error: (parseErr as Error).message },
+          })
           .eq("id", checkId);
-        return err("Invalid JSON in OCR output", 500);
+        return err("Could not parse OCR output as valid JSON", 500);
       }
 
       /* ---- Schema-validated parsing ---- */
@@ -436,6 +476,11 @@ Rules:
         throw new Error(`Transaction failed: ${rpcErr.message}`);
       }
 
+      // Clear heartbeat on success (RPC already updated the row, but clear heartbeat)
+      await supabase.from("check_intake_items")
+        .update({ ocr_heartbeat_at: null })
+        .eq("id", checkId);
+
       return new Response(
         JSON.stringify({
           success: true,
@@ -448,10 +493,14 @@ Rules:
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     } catch (innerErr) {
-      // Compensating rollback on failure
+      // Compensating rollback on failure — clear heartbeat
       await supabase
         .from("check_intake_items")
-        .update({ ocr_status: "failed", status: check.status ?? "uploaded" })
+        .update({
+          ocr_status: "failed",
+          ocr_heartbeat_at: null,
+          status: check.status ?? "uploaded",
+        })
         .eq("id", checkId);
 
       await logAudit(supabase, checkId, "ocr_failed",
