@@ -95,7 +95,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
   useEffect(() => {
     if (!docxData) return;
     setIsLoading(true);
-    mammoth.convertToHtml({ arrayBuffer: docxData.buffer })
+    mammoth.convertToHtml({ arrayBuffer: docxData.buffer as ArrayBuffer })
       .then((result) => {
         setDocxHtml(result.value);
         setIsLoading(false);
