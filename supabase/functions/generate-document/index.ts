@@ -1,6 +1,6 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import PizZip from "https://esm.sh/pizzip@3.1.7";
-import Docxtemplater from "https://esm.sh/docxtemplater@3.44.0";
+import { createClient } from "@supabase/supabase-js";
+import PizZip from "pizzip";
+import Docxtemplater from "docxtemplater";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -92,11 +92,18 @@ Deno.serve(async (req) => {
     const formatCurrency = (val: number) => `$${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     // Download template file
+    console.log("Downloading template file:", template.file_path);
     const { data: fileData, error: downloadError } = await supabaseClient.storage
       .from("document-templates")
       .download(template.file_path);
 
-    if (downloadError) throw downloadError;
+    if (downloadError) {
+      console.error("Storage download error:", JSON.stringify(downloadError));
+      throw new Error(`Failed to download template: ${downloadError.message || JSON.stringify(downloadError)}`);
+    }
+    if (!fileData) {
+      throw new Error("Template file not found in storage");
+    }
 
     // Check file type based on extension
     const fileName = template.file_name.toLowerCase();
@@ -354,9 +361,10 @@ Deno.serve(async (req) => {
       }
     }
     
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorMessage = error instanceof Error ? error.message : JSON.stringify(error);
+    console.error("Final error message:", errorMessage);
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: errorMessage, details: errorMessage }),
       {
         status: 500,
         headers: {
