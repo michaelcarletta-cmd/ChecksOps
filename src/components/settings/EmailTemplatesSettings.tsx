@@ -256,7 +256,7 @@ export const EmailTemplatesSettings = () => {
                   <Input
                     value={form.subject}
                     onChange={(e) => setForm({ ...form, subject: e.target.value })}
-                    placeholder="e.g., Update on Your Claim #{claim.claim_number}"
+                    placeholder="e.g., Update on Your Claim #${claim.claim_number}"
                   />
                 </div>
                 <div className="space-y-2">
@@ -267,7 +267,7 @@ export const EmailTemplatesSettings = () => {
                   <Textarea
                     value={form.body}
                     onChange={(e) => setForm({ ...form, body: e.target.value })}
-                    placeholder="Dear {claim.policyholder_name},&#10;&#10;We wanted to provide you with an update..."
+                    placeholder="Dear ${policyholder},&#10;&#10;We wanted to provide you with an update..."
                     className="min-h-[200px]"
                   />
                 </div>

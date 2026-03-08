@@ -863,7 +863,7 @@ export const AutomationsSettings = () => {
                         <div className="space-y-2">
                           <Label>Email Subject</Label>
                           <Input 
-                            placeholder="e.g., Claim Status Update - {claim.claim_number}"
+                            placeholder="e.g., Claim Status Update - ${claim.claim_number}"
                             value={currentAction.config.subject || ''}
                             onChange={(e) => setCurrentAction({
                               ...currentAction,
@@ -874,7 +874,7 @@ export const AutomationsSettings = () => {
                         <div className="space-y-2">
                           <Label>Email Body</Label>
                           <RichTextEditor
-                            placeholder="Use {claim.field} for merge fields..."
+                            placeholder="Use ${field} for merge fields..."
                             rows={4}
                             value={currentAction.config.message || ''}
                             onChange={(value) => setCurrentAction({
@@ -883,11 +883,11 @@ export const AutomationsSettings = () => {
                             })}
                           />
                           <p className="text-xs text-muted-foreground">
-                            Available: {'{claim.policyholder_name}'}, {'{claim.claim_number}'}, {'{claim.status}'}, {'{claim.loss_type}'}
+                            Available: {'${policyholder}'}, {'${claim.claim_number}'}, {'${claim.status}'}, {'${claim.loss_type}'}
                             {(triggerType === 'inspection_scheduled' || triggerType === 'inspection_upcoming_24h') && (
                               <>
                                 <br />
-                                Inspection: {'{inspection.date}'}, {'{inspection.time}'}, {'{inspection.type}'}, {'{inspection.inspector}'}
+                                Inspection: {'${inspection.date}'}, {'${inspection.time}'}, {'${inspection.type}'}, {'${inspection.inspector}'}
                               </>
                             )}
                           </p>
@@ -1014,7 +1014,7 @@ export const AutomationsSettings = () => {
                         <div className="space-y-2">
                           <Label>Message</Label>
                           <Textarea 
-                            placeholder="Use {claim.field} for merge fields..."
+                            placeholder="Use ${field} for merge fields..."
                             rows={3}
                             value={currentAction.config.message || ''}
                             onChange={(e) => setCurrentAction({
@@ -1026,7 +1026,7 @@ export const AutomationsSettings = () => {
                             Keep under 160 characters for best delivery.
                             {(triggerType === 'inspection_scheduled' || triggerType === 'inspection_upcoming_24h') && (
                               <>
-                                {' '}Use {'{inspection.date}'}, {'{inspection.time}'}, {'{inspection.type}'} for inspection details.
+                                {' '}Use {'${inspection.date}'}, {'${inspection.time}'}, {'${inspection.type}'} for inspection details.
                               </>
                             )}
                           </p>

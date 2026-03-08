@@ -778,52 +778,77 @@ function formatTimeTo12Hour(time24: string): string {
 function replaceVariables(template: string, claim: any, triggerData: any, inspection?: any): string {
   let result = template;
   
-  // Replace claim variables - support both {claim.field} and {{field}} patterns
+  // Build a flat lookup map for all merge fields
+  const mergeMap: Record<string, string> = {};
+  
+  if (claim) {
+    // Policyholder shortcuts
+    mergeMap['policyholder'] = claim.policyholder_name || '';
+    mergeMap['policyholder_email'] = claim.policyholder_email || '';
+    mergeMap['policyholder_phone'] = claim.policyholder_phone || '';
+    mergeMap['property_address'] = claim.policyholder_address || '';
+    mergeMap['policy'] = claim.policy_number || '';
+    mergeMap['insurance_company'] = claim.insurance_company || '';
+    mergeMap['mortgage_company'] = claim.mortgage_company || '';
+    mergeMap['loan_number'] = claim.loan_number || '';
+    mergeMap['ssn_last_four'] = claim.ssn_last_four || '';
+    // Nested claim fields
+    mergeMap['claim.claim_number'] = claim.claim_number || '';
+    mergeMap['claim.loss_type'] = claim.loss_type || '';
+    mergeMap['claim.loss_date'] = claim.loss_date || '';
+    mergeMap['claim.status'] = claim.status || '';
+    // Address parts
+    mergeMap['address.street'] = claim.policyholder_address?.split(',')[0]?.trim() || '';
+    mergeMap['address.city'] = claim.policyholder_address?.split(',')[1]?.trim() || '';
+  }
+
+  // Inspection fields
+  const inspSource = inspection || triggerData;
+  if (inspSource) {
+    mergeMap['inspection.date'] = inspSource.inspection_date || triggerData?.inspection_date || '';
+    mergeMap['inspection.time'] = (inspSource.inspection_time || triggerData?.inspection_time) 
+      ? formatTimeTo12Hour(inspSource.inspection_time || triggerData?.inspection_time) : '';
+    mergeMap['inspection.type'] = inspSource.inspection_type || triggerData?.inspection_type || '';
+    mergeMap['inspection.inspector'] = inspSource.inspector_name || triggerData?.inspector_name || '';
+  }
+
+  // Replace ${field} format (new standard)
+  result = result.replace(/\$\{([^}]+)\}/g, (match, field) => {
+    if (mergeMap[field] !== undefined) return mergeMap[field];
+    // Fallback: check claim directly
+    if (claim && claim[field] !== undefined && claim[field] !== null) return String(claim[field]);
+    return '';
+  });
+
+  // Legacy: replace {claim.field} format for backward compatibility
   if (claim) {
     result = result.replace(/\{claim\.(\w+)\}/g, (_, field) => claim[field] || '');
-    // Also support {{claim_number}}, {{policyholder_name}}, etc.
     result = result.replace(/\{\{(\w+)\}\}/g, (match, field) => {
-      // Check claim fields first
       if (claim[field] !== undefined && claim[field] !== null) return claim[field];
-      // Check trigger data
       if (triggerData && triggerData[field] !== undefined && triggerData[field] !== null) {
-        // Format times nicely
-        if (field === 'inspection_time' && triggerData[field]) {
-          return formatTimeTo12Hour(triggerData[field]);
-        }
+        if (field === 'inspection_time' && triggerData[field]) return formatTimeTo12Hour(triggerData[field]);
         return triggerData[field];
       }
-      // Check inspection data
       if (inspection && inspection[field] !== undefined && inspection[field] !== null) {
-        if (field === 'inspection_time' && inspection[field]) {
-          return formatTimeTo12Hour(inspection[field]);
-        }
+        if (field === 'inspection_time' && inspection[field]) return formatTimeTo12Hour(inspection[field]);
         return inspection[field];
       }
-      return ''; // return empty string if not found
+      return '';
     });
   }
   
-  // Replace trigger variables (including inspection data)
+  // Legacy: replace {trigger.field} and {inspection.field}
   if (triggerData) {
     result = result.replace(/\{trigger\.(\w+)\}/g, (_, field) => triggerData[field] || '');
-    
-    // Replace inspection-specific variables for inspection_scheduled triggers
-    const inspDate = triggerData.inspection_date || '';
-    const inspTime = triggerData.inspection_time ? formatTimeTo12Hour(triggerData.inspection_time) : '';
-    result = result.replace(/\{inspection\.date\}/g, inspDate);
-    result = result.replace(/\{inspection\.time\}/g, inspTime);
+    result = result.replace(/\{inspection\.date\}/g, triggerData.inspection_date || '');
+    result = result.replace(/\{inspection\.time\}/g, triggerData.inspection_time ? formatTimeTo12Hour(triggerData.inspection_time) : '');
     result = result.replace(/\{inspection\.type\}/g, triggerData.inspection_type || '');
     result = result.replace(/\{inspection\.inspector\}/g, triggerData.inspector_name || '');
     result = result.replace(/\{inspection\.notes\}/g, triggerData.notes || '');
   }
-  
-  // Also replace from inspection parameter (for SMS with fetched inspection)
   if (inspection) {
-    const inspDate = inspection.inspection_date || '';
-    const inspTime = inspection.inspection_time ? formatTimeTo12Hour(inspection.inspection_time) : '';
-    result = result.replace(/\{inspection\.date\}/g, inspDate);
-    result = result.replace(/\{inspection\.time\}/g, inspTime);
+    result = result.replace(/\{inspection\.date\}/g, inspection.inspection_date || '');
+    result = result.replace(/\{inspection\.time\}/g, inspection.inspection_time ? formatTimeTo12Hour(inspection.inspection_time) : '');
     result = result.replace(/\{inspection\.type\}/g, inspection.inspection_type || '');
     result = result.replace(/\{inspection\.inspector\}/g, inspection.inspector_name || '');
   }
