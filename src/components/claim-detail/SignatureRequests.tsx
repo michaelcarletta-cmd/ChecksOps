@@ -497,22 +497,32 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                     </Button>
                   )}
                   {currentStep === 3 && (
-                    <Button
-                      onClick={() => createRequestMutation.mutate()}
-                      disabled={signers.some(s => !s.name || !s.email) || createRequestMutation.isPending}
-                    >
-                      {createRequestMutation.isPending ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Sending...
-                        </>
-                      ) : (
-                        <>
-                          <Mail className="w-4 h-4 mr-2" />
-                          Send for Signature
-                        </>
-                      )}
-                    </Button>
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={() => createRequestMutation.mutate({ skipEmail: true })}
+                        disabled={signers.some(s => !s.name || !s.email) || createRequestMutation.isPending}
+                      >
+                        <Link2 className="w-4 h-4 mr-2" />
+                        Generate Link Only
+                      </Button>
+                      <Button
+                        onClick={() => createRequestMutation.mutate({ skipEmail: false })}
+                        disabled={signers.some(s => !s.name || !s.email) || createRequestMutation.isPending}
+                      >
+                        {createRequestMutation.isPending ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Sending...
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="w-4 h-4 mr-2" />
+                            Send for Signature
+                          </>
+                        )}
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
