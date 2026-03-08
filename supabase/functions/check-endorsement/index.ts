@@ -26,6 +26,7 @@ interface CheckPayee {
     check_number: string | null;
     amount: number | null;
     is_multi_payee: boolean;
+    deposit_recommendation: string | null;
   } | null;
 }
 
@@ -40,7 +41,7 @@ function json(data: unknown, status = 200) {
   });
 }
 
-function html(body: string, status = 200) {
+function htmlResp(body: string, status = 200) {
   return new Response(body, {
     status,
     headers: { ...corsHeaders, "Content-Type": "text/html; charset=utf-8" },
@@ -74,29 +75,35 @@ async function reEvaluateAfterEndorsement(
   }
 
   if (allSigned) {
-    // Fetch the check to see if it's multi-payee
+    // Fetch the check to see original deposit recommendation
     const { data: check } = await supabase
       .from("check_intake_items")
       .select("is_multi_payee, deposit_recommendation")
       .eq("id", checkId)
       .single();
 
+    const originalRec = check?.deposit_recommendation;
+
     if (check?.is_multi_payee) {
-      // Multi-payee: NEVER auto-mark ready_for_deposit.
-      // Move to endorsements_complete / manual_review_required
+      // PRESERVE stricter original recommendation
+      // branch_deposit_recommended should NOT be downgraded to manual_review_required
+      const preserveStricter = originalRec === "branch_deposit_recommended";
+      const newRec = preserveStricter ? "branch_deposit_recommended" : "endorsements_complete";
+
       await supabase
         .from("check_intake_items")
         .update({
           status: "endorsements_complete",
-          deposit_recommendation: "manual_review_required",
+          deposit_recommendation: newRec,
         })
         .eq("id", checkId);
 
       await supabase.from("check_audit_log").insert({
         check_id: checkId,
         event_type: "all_endorsements_complete",
-        event_description:
-          "All payees endorsed — multi-payee check requires manual review before deposit",
+        event_description: preserveStricter
+          ? "All payees endorsed — branch deposit still required per original eligibility"
+          : "All payees endorsed — multi-payee check awaiting final review",
       });
 
       return { allSigned: true, newStatus: "endorsements_complete" };
@@ -113,8 +120,7 @@ async function reEvaluateAfterEndorsement(
       await supabase.from("check_audit_log").insert({
         check_id: checkId,
         event_type: "all_endorsements_complete",
-        event_description:
-          "Single-payee check — all endorsements complete, ready for deposit",
+        event_description: "Single-payee check — endorsement complete, ready for deposit",
       });
 
       return { allSigned: true, newStatus: "ready" };
@@ -141,7 +147,7 @@ function renderEndorsementPage(
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Endorsement — Check #${checkNum}</title>
+  <title>Endorsement — Check #${escHtml(checkNum)}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
@@ -209,6 +215,8 @@ function renderEndorsementPage(
         if (!resp.ok) throw new Error(data.error || 'Request failed');
         msg.className = type === 'approve' ? 'success' : 'error';
         msg.textContent = type === 'approve' ? '✓ Endorsement submitted successfully.' : '✗ Endorsement rejected.';
+        // Reload after short delay to show updated status
+        setTimeout(() => location.reload(), 1500);
       } catch(e) {
         msg.className = 'error';
         msg.textContent = 'Error: ' + e.message;
@@ -231,6 +239,57 @@ function escHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function buildEndorsementEmailHtml(
+  payeeName: string,
+  checkNum: string,
+  carrier: string,
+  amount: number | null,
+  endorsementUrl: string,
+): string {
+  const amountStr = amount != null
+    ? `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+    : "N/A";
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <tr><td style="background:#1e293b;padding:24px 32px;text-align:center;">
+          <h1 style="color:#ffffff;margin:0;font-size:20px;">Insurance Check Endorsement</h1>
+        </td></tr>
+        <tr><td style="padding:32px;">
+          <p style="color:#334155;font-size:16px;margin:0 0 20px;">Hello ${escHtml(payeeName)},</p>
+          <p style="color:#475569;font-size:14px;margin:0 0 24px;">An insurance check requires your endorsement before it can be processed.</p>
+          <table width="100%" style="margin:0 0 24px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+            <tr style="background:#f8fafc;">
+              <td style="padding:12px 16px;color:#64748b;font-size:13px;border-bottom:1px solid #e2e8f0;">Carrier</td>
+              <td style="padding:12px 16px;font-weight:600;color:#1e293b;font-size:13px;border-bottom:1px solid #e2e8f0;text-align:right;">${escHtml(carrier)}</td>
+            </tr>
+            <tr>
+              <td style="padding:12px 16px;color:#64748b;font-size:13px;border-bottom:1px solid #e2e8f0;">Check #</td>
+              <td style="padding:12px 16px;font-weight:600;color:#1e293b;font-size:13px;border-bottom:1px solid #e2e8f0;text-align:right;">${escHtml(checkNum)}</td>
+            </tr>
+            <tr style="background:#f8fafc;">
+              <td style="padding:12px 16px;color:#64748b;font-size:13px;">Amount</td>
+              <td style="padding:12px 16px;font-weight:700;color:#16a34a;font-size:16px;text-align:right;">${escHtml(amountStr)}</td>
+            </tr>
+          </table>
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr><td align="center" style="padding:8px 0 24px;">
+              <a href="${endorsementUrl}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">Review &amp; Endorse Check</a>
+            </td></tr>
+          </table>
+          <p style="color:#94a3b8;font-size:12px;margin:0;text-align:center;">This link expires in 30 days. If you did not expect this, please disregard.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Main handler                                                       */
 /* ------------------------------------------------------------------ */
@@ -246,7 +305,7 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, serviceKey);
 
   try {
-    // Check if this is a GET request with token param — render public page
+    // GET request with token = public endorsement page
     const url = new URL(req.url);
     const tokenParam = url.searchParams.get("token");
     if (req.method === "GET" && tokenParam) {
@@ -273,14 +332,24 @@ Deno.serve(async (req) => {
 
         const { data: payee, error: pErr } = await supabase
           .from("check_payees")
-          .select("*, check_intake_items(check_number, carrier_name)")
+          .select("*, check_intake_items(check_number, carrier_name, amount)")
           .eq("id", payeeId)
           .single();
 
         if (pErr || !payee) return json({ error: "Payee not found" }, 404);
 
+        // Rate-limit: don't send if last notification was < 5 minutes ago
+        if (payee.notification_sent_at) {
+          const lastSent = new Date(payee.notification_sent_at).getTime();
+          if (Date.now() - lastSent < 5 * 60 * 1000) {
+            return json({ error: "Endorsement request was sent recently. Please wait before resending." }, 429);
+          }
+        }
+
         const endorsementUrl = `${supabaseUrl}/functions/v1/check-endorsement?token=${payee.endorsement_token}`;
         const checkNum = payee.check_intake_items?.check_number ?? "N/A";
+        const carrier = payee.check_intake_items?.carrier_name ?? "Unknown";
+        const amount = payee.check_intake_items?.amount ?? null;
 
         if ((method === "email" || method === "both") && payee.contact_email) {
           try {
@@ -288,10 +357,7 @@ Deno.serve(async (req) => {
               body: {
                 to: payee.contact_email,
                 subject: `Endorsement Required — Check #${checkNum}`,
-                html: `<p>Hello ${payee.payee_name},</p>
-                  <p>An insurance check requires your endorsement.</p>
-                  <p><a href="${endorsementUrl}" style="background:#2563eb;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;">Review & Endorse</a></p>
-                  <p>This link expires in 30 days.</p>`,
+                html: buildEndorsementEmailHtml(payee.payee_name, checkNum, carrier, amount, endorsementUrl),
               },
             });
           } catch (e) {
@@ -304,7 +370,7 @@ Deno.serve(async (req) => {
             await supabase.functions.invoke("send-sms", {
               body: {
                 to: payee.contact_phone,
-                message: `Endorsement needed for check #${checkNum}. Review: ${endorsementUrl}`,
+                message: `Endorsement needed for check #${checkNum} ($${amount ?? "N/A"}) from ${carrier}. Review & sign: ${endorsementUrl}`,
               },
             });
           } catch (e) {
@@ -353,7 +419,7 @@ Deno.serve(async (req) => {
           .eq("endorsement_token", eToken)
           .single();
 
-        if (pErr || !payee) return json({ error: "Invalid token" }, 404);
+        if (pErr || !payee) return json({ error: "Invalid or already-used token" }, 404);
 
         if (
           payee.endorsement_token_expires_at &&
@@ -367,10 +433,14 @@ Deno.serve(async (req) => {
           return json({ success: true, message: "Already endorsed" });
         }
 
+        // Rotate token after successful use — invalidate old token
+        const newToken = crypto.randomUUID();
         await supabase.from("check_payees").update({
           endorsement_status: "signed",
           endorsement_image_path: endorsementImagePath ?? null,
           endorsed_at: new Date().toISOString(),
+          endorsement_token: newToken, // Rotate: old token no longer valid
+          endorsement_token_expires_at: null, // No longer needed
         }).eq("id", payee.id);
 
         await supabase.from("check_endorsement_events").insert({
@@ -402,9 +472,15 @@ Deno.serve(async (req) => {
           .eq("endorsement_token", rToken)
           .single();
 
-        if (pErr || !payee) return json({ error: "Invalid token" }, 404);
+        if (pErr || !payee) return json({ error: "Invalid or already-used token" }, 404);
 
-        await supabase.from("check_payees").update({ endorsement_status: "rejected" }).eq("id", payee.id);
+        // Rotate token after rejection too
+        const newToken = crypto.randomUUID();
+        await supabase.from("check_payees").update({
+          endorsement_status: "rejected",
+          endorsement_token: newToken,
+          endorsement_token_expires_at: null,
+        }).eq("id", payee.id);
 
         await supabase.from("check_endorsement_events").insert({
           check_id: payee.check_id,
@@ -440,12 +516,12 @@ async function handlePublicEndorsementPage(
 ) {
   const { data: payee, error } = await supabase
     .from("check_payees")
-    .select("*, check_intake_items(carrier_name, check_number, amount, is_multi_payee)")
+    .select("*, check_intake_items(carrier_name, check_number, amount, is_multi_payee, deposit_recommendation)")
     .eq("endorsement_token", token)
     .single();
 
   if (error || !payee) {
-    return html(
+    return htmlResp(
       `<html><body style="background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif"><h1>Invalid or expired endorsement link.</h1></body></html>`,
       404,
     );
@@ -470,5 +546,5 @@ async function handlePublicEndorsementPage(
     (payee as CheckPayee).endorsement_status = "viewed";
   }
 
-  return html(renderEndorsementPage(payee as CheckPayee, supabaseUrl));
+  return htmlResp(renderEndorsementPage(payee as CheckPayee, supabaseUrl));
 }
