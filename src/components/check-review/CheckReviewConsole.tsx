@@ -565,11 +565,11 @@ function PayeeReconciliation({
         merged_name: mergedName || null,
       }));
 
-      // Use the transactional RPC with just the merge part
+      // Use the transactional RPC with merge_only mode
       const { error } = await supabase.rpc("submit_check_review_decision", {
         p_check_id: checkId,
         p_reviewer_id: user.id,
-        p_deposit_path: "hold_for_claim_review", // no-op path for merge-only
+        p_deposit_path: "merge_only",
         p_reviewer_notes: `Merged ${mergeable.length} duplicate payee(s)`,
         p_merge_payees: mergeOps,
         p_field_changes: [],
