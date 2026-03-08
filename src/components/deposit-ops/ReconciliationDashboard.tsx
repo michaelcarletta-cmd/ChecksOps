@@ -146,19 +146,22 @@ export function ReconciliationDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {batches.map((b: Record<string, unknown>) => (
-                    <TableRow key={b.id as string}>
-                      <TableCell className="font-mono text-xs">{String(b.batch_number ?? "").slice(0, 20)}</TableCell>
-                      <TableCell className="text-xs">{providerLabels[(b.provider as string)] ?? b.provider}</TableCell>
-                      <TableCell className="text-sm">{b.total_items as number}</TableCell>
-                      <TableCell className="text-right text-sm tabular-nums">{fmtMoney(b.total_amount as number)}</TableCell>
-                      <TableCell className="text-right text-sm tabular-nums text-emerald-400">{fmtMoney(b.cleared_amount as number)}</TableCell>
-                      <TableCell className="text-right text-sm tabular-nums text-destructive">{fmtMoney(b.failed_amount as number)}</TableCell>
+                  {batches.map((b) => {
+                    const batch = b as Record<string, string | number | null>;
+                    return (
+                    <TableRow key={String(batch.id)}>
+                      <TableCell className="font-mono text-xs">{String(batch.batch_number ?? "").slice(0, 20)}</TableCell>
+                      <TableCell className="text-xs">{providerLabels[String(batch.provider)] ?? String(batch.provider)}</TableCell>
+                      <TableCell className="text-sm">{Number(batch.total_items)}</TableCell>
+                      <TableCell className="text-right text-sm tabular-nums">{fmtMoney(Number(batch.total_amount))}</TableCell>
+                      <TableCell className="text-right text-sm tabular-nums text-emerald-400">{fmtMoney(Number(batch.cleared_amount))}</TableCell>
+                      <TableCell className="text-right text-sm tabular-nums text-destructive">{fmtMoney(Number(batch.failed_amount))}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className="text-[10px]">{(b.status as string).replace(/_/g, " ")}</Badge>
+                        <Badge variant="outline" className="text-[10px]">{String(batch.status ?? "").replace(/_/g, " ")}</Badge>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
