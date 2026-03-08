@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { FileText, Download, Grid, Columns, Sparkles, Loader2, Cloud, Wind, Droplets, Thermometer, File, FolderOpen, Image, Brain } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import html2pdf from "html2pdf.js";
+import { htmlElementToPdf } from "@/utils/htmlToPdf";
 
 interface ClaimPhoto {
   id: string;
