@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { FileText, Plus, Trash2, Download, Send, Loader2, Link, Copy, CheckCircle } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import html2pdf from "html2pdf.js";
+import { htmlElementToPdfBlob } from "@/utils/htmlToPdf";
 
 interface InvoiceLineItem {
   description: string;
