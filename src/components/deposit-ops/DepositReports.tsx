@@ -41,7 +41,7 @@ function DailyDepositLog() {
     queryKey: ["deposit-daily-log"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("deposit_daily_log" as string)
+        .from("deposit_daily_log")
         .select("*")
         .order("deposit_date", { ascending: false })
         .limit(60);

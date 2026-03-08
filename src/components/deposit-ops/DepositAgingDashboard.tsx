@@ -67,7 +67,7 @@ export function DepositAgingDashboard() {
     queryKey: ["deposit-aging-items"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("deposit_aging_dashboard" as string)
+        .from("deposit_aging_dashboard")
         .select("*")
         .neq("aging_bucket", "complete")
         .order("days_in_state", { ascending: false })
