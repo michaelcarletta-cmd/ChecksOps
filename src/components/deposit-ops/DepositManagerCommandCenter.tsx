@@ -14,12 +14,16 @@ import {
   Users, RefreshCw, BarChart3, AlertTriangle, Clock,
   ShieldCheck, Download, Zap, Scale, BookCheck, Landmark, Lock,
   TrendingUp, ArrowUpDown, Camera, Shield, FileText, Bell,
+  Activity, Mail,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
   SnapshotTrends, NotificationPreferences, EscalationRulesConfig,
   EscalationEventsPanel, PendingApprovalsPanel, ManagerExportBundle,
 } from "./DepositManagerWorkflows";
+import {
+  AutomationHealthCard, AutomationRunHistory, DigestDeliveryCenter, AutomationSettingsPanel,
+} from "./DepositAutomationHealth";
 
 const fmtMoney = (n: number | null | undefined) =>
   n != null ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "$0.00";
