@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FileDown, Shield, AlertTriangle } from "lucide-react";
 import { useRef } from "react";
+import { htmlElementToPdf } from "@/utils/htmlToPdf";
 
 interface StrategicMemoData {
   executive_summary: string;
