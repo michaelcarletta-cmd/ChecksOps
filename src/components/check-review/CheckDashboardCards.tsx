@@ -21,7 +21,7 @@ export function CheckDashboardCards() {
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_check_dashboard_counts");
       if (error) throw error;
-      return data as DashboardCounts;
+      return data as unknown as DashboardCounts;
     },
     refetchInterval: 30000,
   });
