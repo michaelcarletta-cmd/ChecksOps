@@ -166,6 +166,11 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
   }, [toast]);
 
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Suppress click if we just finished dragging
+    if (wasDraggingRef.current) {
+      wasDraggingRef.current = false;
+      return;
+    }
     if (!overlayRef.current) return;
     
     // Prevent if clicking on an existing field or picker
