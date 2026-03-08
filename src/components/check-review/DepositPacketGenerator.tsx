@@ -101,6 +101,20 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
     },
   });
 
+  // Fetch reviewer profile for name display
+  const { data: reviewerProfile } = useQuery({
+    queryKey: ["deposit-packet-reviewer", check?.reviewed_by],
+    enabled: !!check?.reviewed_by,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", check!.reviewed_by!)
+        .single();
+      return data;
+    },
+  });
+
   const { data: imageUrl } = useQuery({
     queryKey: ["check-image-url", check?.front_image_path],
     enabled: !!check?.front_image_path,
