@@ -91,6 +91,25 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
     },
   });
 
+  // Convert DOCX to HTML using mammoth when docxData is provided
+  useEffect(() => {
+    if (!docxData) return;
+    setIsLoading(true);
+    mammoth.convertToHtml({ arrayBuffer: docxData.buffer })
+      .then((result) => {
+        setDocxHtml(result.value);
+        setIsLoading(false);
+        toast({ title: "Document loaded. Click on the document to place fields." });
+      })
+      .catch((err) => {
+        console.error("Mammoth conversion error:", err);
+        setIsLoading(false);
+        toast({ title: "Failed to render document", description: err.message, variant: "destructive" });
+      });
+  }, [docxData, toast]);
+
+  const isDocxMode = !!docxData;
+
   // Save template mutation
   const saveTemplateMutation = useMutation({
     mutationFn: async () => {
