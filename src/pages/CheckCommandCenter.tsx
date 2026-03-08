@@ -139,10 +139,33 @@ const endorsementColors: Record<string, string> = {
 
 export default function CheckCommandCenter() {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("all");
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
+
+  const DELETABLE_STATUSES = ["uploaded", "ocr_complete", "needs_review", "manual_review_required"];
+
+  const deleteCheckMutation = useMutation({
+    mutationFn: async (checkId: string) => {
+      // Delete related records first, then the check
+      await supabase.from("check_eligibility_results").delete().eq("check_id", checkId);
+      await supabase.from("check_audit_log").delete().eq("check_id", checkId);
+      await supabase.from("check_payees").delete().eq("check_id", checkId);
+      const { error } = await supabase.from("check_intake_items").delete().eq("id", checkId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Check deleted" });
+      setSelectedCheck(null);
+      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+      qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+    },
+    onError: (e) => {
+      toast({ title: "Delete failed", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
+    },
+  });
 
   const { data: checks = [], isLoading } = useQuery({
     queryKey: ["check-intake-items"],
