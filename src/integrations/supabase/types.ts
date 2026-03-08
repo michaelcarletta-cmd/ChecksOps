@@ -5666,6 +5666,177 @@ export type Database = {
         }
         Relationships: []
       }
+      deposit_digest_delivery_log: {
+        Row: {
+          delivered_at: string | null
+          delivery_method: string
+          digest_id: string | null
+          error_message: string | null
+          id: string
+          read_at: string | null
+          recipient_id: string
+        }
+        Insert: {
+          delivered_at?: string | null
+          delivery_method?: string
+          digest_id?: string | null
+          error_message?: string | null
+          id?: string
+          read_at?: string | null
+          recipient_id: string
+        }
+        Update: {
+          delivered_at?: string | null
+          delivery_method?: string
+          digest_id?: string | null
+          error_message?: string | null
+          id?: string
+          read_at?: string | null
+          recipient_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deposit_digest_delivery_log_digest_id_fkey"
+            columns: ["digest_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_daily_digest"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deposit_escalation_events: {
+        Row: {
+          created_at: string | null
+          deposit_item_id: string | null
+          escalated_to: string | null
+          escalation_type: string
+          exception_id: string | null
+          id: string
+          is_resolved: boolean | null
+          message: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          rule_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          deposit_item_id?: string | null
+          escalated_to?: string | null
+          escalation_type: string
+          exception_id?: string | null
+          id?: string
+          is_resolved?: boolean | null
+          message?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          rule_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          deposit_item_id?: string | null
+          escalated_to?: string | null
+          escalation_type?: string
+          exception_id?: string | null
+          id?: string
+          is_resolved?: boolean | null
+          message?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          rule_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deposit_escalation_events_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_aging_dashboard"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_escalation_events_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_escalation_events_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_queue_scored"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_escalation_events_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_reminder_queue"
+            referencedColumns: ["deposit_item_id"]
+          },
+          {
+            foreignKeyName: "deposit_escalation_events_exception_id_fkey"
+            columns: ["exception_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_exceptions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_escalation_events_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_escalation_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deposit_escalation_rules: {
+        Row: {
+          auto_flag: boolean | null
+          auto_reassign: boolean | null
+          created_at: string | null
+          escalate_to_role: string | null
+          id: string
+          is_active: boolean | null
+          notification_message: string | null
+          priority: number | null
+          rule_name: string
+          threshold_amount: number | null
+          threshold_days: number | null
+          trigger_type: string
+          updated_at: string | null
+        }
+        Insert: {
+          auto_flag?: boolean | null
+          auto_reassign?: boolean | null
+          created_at?: string | null
+          escalate_to_role?: string | null
+          id?: string
+          is_active?: boolean | null
+          notification_message?: string | null
+          priority?: number | null
+          rule_name: string
+          threshold_amount?: number | null
+          threshold_days?: number | null
+          trigger_type: string
+          updated_at?: string | null
+        }
+        Update: {
+          auto_flag?: boolean | null
+          auto_reassign?: boolean | null
+          created_at?: string | null
+          escalate_to_role?: string | null
+          id?: string
+          is_active?: boolean | null
+          notification_message?: string | null
+          priority?: number | null
+          rule_name?: string
+          threshold_amount?: number | null
+          threshold_days?: number | null
+          trigger_type?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       deposit_exceptions: {
         Row: {
           assigned_at: string | null
@@ -5892,6 +6063,123 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      deposit_manager_snapshots: {
+        Row: {
+          created_at: string
+          exception_data: Json
+          id: string
+          kpi_data: Json
+          owner_data: Json
+          queue_data: Json
+          snapshot_date: string
+          snapshot_type: string
+        }
+        Insert: {
+          created_at?: string
+          exception_data?: Json
+          id?: string
+          kpi_data?: Json
+          owner_data?: Json
+          queue_data?: Json
+          snapshot_date?: string
+          snapshot_type?: string
+        }
+        Update: {
+          created_at?: string
+          exception_data?: Json
+          id?: string
+          kpi_data?: Json
+          owner_data?: Json
+          queue_data?: Json
+          snapshot_date?: string
+          snapshot_type?: string
+        }
+        Relationships: []
+      }
+      deposit_notification_prefs: {
+        Row: {
+          created_at: string | null
+          digest_frequency: string
+          id: string
+          notify_closeout_ready: boolean | null
+          notify_exception_assigned: boolean | null
+          notify_rebalance: boolean | null
+          notify_sla_breach: boolean | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          digest_frequency?: string
+          id?: string
+          notify_closeout_ready?: boolean | null
+          notify_exception_assigned?: boolean | null
+          notify_rebalance?: boolean | null
+          notify_sla_breach?: boolean | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          digest_frequency?: string
+          id?: string
+          notify_closeout_ready?: boolean | null
+          notify_exception_assigned?: boolean | null
+          notify_rebalance?: boolean | null
+          notify_sla_breach?: boolean | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      deposit_pending_approvals: {
+        Row: {
+          approval_type: string
+          created_at: string | null
+          description: string | null
+          id: string
+          item_count: number | null
+          payload: Json
+          requested_at: string | null
+          requested_by: string
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          total_amount: number | null
+        }
+        Insert: {
+          approval_type: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          item_count?: number | null
+          payload?: Json
+          requested_at?: string | null
+          requested_by: string
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          total_amount?: number | null
+        }
+        Update: {
+          approval_type?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          item_count?: number | null
+          payload?: Json
+          requested_at?: string | null
+          requested_by?: string
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          total_amount?: number | null
+        }
+        Relationships: []
       }
       deposit_provider_attempts: {
         Row: {
@@ -10002,7 +10290,7 @@ export type Database = {
         Returns: string
       }
       generate_deposit_daily_digest: {
-        Args: { p_actor_id: string; p_digest_type?: string }
+        Args: { p_actor_id?: string; p_digest_type?: string }
         Returns: Json
       }
       generate_next_deposit_action: {
@@ -10232,6 +10520,23 @@ export type Database = {
         }
         Returns: Json
       }
+      review_manager_approval: {
+        Args: {
+          p_approval_id: string
+          p_decision: string
+          p_notes?: string
+          p_reviewer_id: string
+        }
+        Returns: Json
+      }
+      run_deposit_escalation_check: {
+        Args: { p_actor_id?: string }
+        Returns: Json
+      }
+      save_deposit_manager_snapshot: {
+        Args: { p_actor_id?: string }
+        Returns: Json
+      }
       search_claims_by_proximity: {
         Args: {
           exclude_claim_id?: string
@@ -10269,6 +10574,17 @@ export type Database = {
           p_reissue_reason_category?: string
           p_reviewer_id: string
           p_reviewer_notes?: string
+        }
+        Returns: Json
+      }
+      submit_manager_approval: {
+        Args: {
+          p_actor_id: string
+          p_approval_type: string
+          p_description?: string
+          p_item_count?: number
+          p_payload: Json
+          p_total_amount?: number
         }
         Returns: Json
       }

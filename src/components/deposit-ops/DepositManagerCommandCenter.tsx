@@ -10,13 +10,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import {
   Users, RefreshCw, BarChart3, AlertTriangle, Clock,
   ShieldCheck, Download, Zap, Scale, BookCheck, Landmark, Lock,
-  TrendingUp, ArrowUpDown,
+  TrendingUp, ArrowUpDown, Camera, Shield, FileText, Bell,
 } from "lucide-react";
 import { format } from "date-fns";
+import {
+  SnapshotTrends, NotificationPreferences, EscalationRulesConfig,
+  EscalationEventsPanel, PendingApprovalsPanel, ManagerExportBundle,
+} from "./DepositManagerWorkflows";
 
 const fmtMoney = (n: number | null | undefined) =>
   n != null ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "$0.00";
@@ -378,6 +381,33 @@ export function DepositManagerCommandCenter() {
     onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 
+  const snapshotMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.rpc("save_deposit_manager_snapshot", { p_actor_id: user!.id });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: "Snapshot saved" });
+      qc.invalidateQueries({ queryKey: ["deposit-manager-snapshots"] });
+    },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+
+  const escalationMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.rpc("run_deposit_escalation_check", { p_actor_id: user!.id });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      const result = data as Record<string, number>;
+      toast({ title: `Escalation check: ${result?.escalations_created ?? 0} new` });
+      qc.invalidateQueries({ queryKey: ["deposit-escalation-events"] });
+    },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+
   return (
     <div className="space-y-4">
       {/* Action bar */}
@@ -387,11 +417,19 @@ export function DepositManagerCommandCenter() {
             <div className="flex items-center gap-2">
               <Button size="sm" onClick={() => refreshMutation.mutate()} disabled={refreshMutation.isPending}>
                 <RefreshCw className={`h-3 w-3 mr-1 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
-                Refresh All Next Actions
+                Refresh Actions
               </Button>
               <Button size="sm" variant="outline" onClick={() => rebalanceMutation.mutate()} disabled={rebalanceMutation.isPending}>
                 <ArrowUpDown className="h-3 w-3 mr-1" />
-                Rebalance Workload
+                Rebalance
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => snapshotMutation.mutate()} disabled={snapshotMutation.isPending}>
+                <Camera className="h-3 w-3 mr-1" />
+                Save Snapshot
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => escalationMutation.mutate()} disabled={escalationMutation.isPending}>
+                <Shield className="h-3 w-3 mr-1" />
+                Run Escalations
               </Button>
             </div>
           </div>
@@ -399,11 +437,16 @@ export function DepositManagerCommandCenter() {
       </Card>
 
       <Tabs defaultValue="queue" className="space-y-3">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto gap-1 p-1">
           <TabsTrigger value="queue" className="text-xs">Priority Queue</TabsTrigger>
-          <TabsTrigger value="owners" className="text-xs">Owner Performance</TabsTrigger>
-          <TabsTrigger value="digest" className="text-xs">Daily Digest</TabsTrigger>
-          <TabsTrigger value="rollup" className="text-xs">Rollup Reports</TabsTrigger>
+          <TabsTrigger value="owners" className="text-xs">Owners</TabsTrigger>
+          <TabsTrigger value="approvals" className="text-xs">Approvals</TabsTrigger>
+          <TabsTrigger value="escalations" className="text-xs">Escalations</TabsTrigger>
+          <TabsTrigger value="digest" className="text-xs">Digest</TabsTrigger>
+          <TabsTrigger value="trends" className="text-xs">Trends</TabsTrigger>
+          <TabsTrigger value="rollup" className="text-xs">Rollup</TabsTrigger>
+          <TabsTrigger value="settings" className="text-xs">Settings</TabsTrigger>
+          <TabsTrigger value="export" className="text-xs">Export</TabsTrigger>
         </TabsList>
 
         <TabsContent value="queue">
@@ -434,6 +477,14 @@ export function DepositManagerCommandCenter() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="approvals">
+          <PendingApprovalsPanel />
+        </TabsContent>
+
+        <TabsContent value="escalations">
+          <EscalationEventsPanel />
+        </TabsContent>
+
         <TabsContent value="digest">
           <Card>
             <CardHeader className="pb-2">
@@ -443,6 +494,19 @@ export function DepositManagerCommandCenter() {
             </CardHeader>
             <CardContent>
               <DailyDigestPanel />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="trends">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-primary" />KPI Trends (Day-over-Day)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <SnapshotTrends />
             </CardContent>
           </Card>
         </TabsContent>
@@ -458,6 +522,17 @@ export function DepositManagerCommandCenter() {
               <RollupReport />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="settings">
+          <div className="grid md:grid-cols-2 gap-4">
+            <NotificationPreferences />
+            <EscalationRulesConfig />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="export">
+          <ManagerExportBundle />
         </TabsContent>
       </Tabs>
     </div>
