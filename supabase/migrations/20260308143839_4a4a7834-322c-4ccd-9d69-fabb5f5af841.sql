@@ -1,0 +1,1 @@
+ALTER TABLE public.custom_fields ADD COLUMN visible_on_statuses text[] DEFAULT NULL;
