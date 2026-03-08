@@ -137,7 +137,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
   });
 
   const createRequestMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ skipEmail }: { skipEmail?: boolean } = {}) => {
       if (!selectedTemplate || !generatedDocPath) throw new Error("Missing required data");
 
       const webhookUrl = companyBranding?.signnow_make_webhook_url;
@@ -177,6 +177,19 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         .insert(signersData);
       if (signersError) throw signersError;
 
+      if (skipEmail) {
+        // Manual bypass — generate links without sending email
+        const { data, error } = await supabase.functions.invoke("send-signature-request", {
+          body: { requestId: request.id, skipEmail: true },
+        });
+        if (error) throw error;
+        if (data?.signerLinks) {
+          const links = data.signerLinks.map((l: any) => l.sign_url).join("\n");
+          navigator.clipboard.writeText(links);
+        }
+        return { ...request, mode: "manual_bypass" };
+      }
+
       // If Make webhook is configured, send to SignNow via Make
       if (webhookUrl) {
         const response = await fetch(webhookUrl, {
@@ -211,17 +224,22 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         });
       } else {
         // Fall back to built-in email notification
-        await supabase.functions.invoke("send-signature-request", {
+        const { data, error } = await supabase.functions.invoke("send-signature-request", {
           body: { requestId: request.id },
         });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
       }
 
       return request;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      const mode = data?.mode;
       const usedMake = !!companyBranding?.signnow_make_webhook_url;
       toast({ 
-        title: usedMake ? "Sent to SignNow via Make.com" : "Signature request created and emails sent" 
+        title: mode === "manual_bypass"
+          ? "Sign links generated & copied to clipboard"
+          : usedMake ? "Sent to SignNow via Make.com" : "Signature request created and emails sent" 
       });
       setIsCreateOpen(false);
       setCurrentStep(1);
@@ -232,6 +250,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
       setIsDocxTemplate(false);
       setSigners([{ name: claim.policyholder_name || "", email: claim.policyholder_email || "", type: "policyholder", order: 1 }]);
       queryClient.invalidateQueries({ queryKey: ["signature-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["sig-diagnostics"] });
       queryClient.invalidateQueries({ queryKey: ["claim-updates"] });
     },
     onError: (error: Error) => {
