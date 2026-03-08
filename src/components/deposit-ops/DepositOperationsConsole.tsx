@@ -139,8 +139,9 @@ export function DepositOperationsConsole() {
   });
 
   // Fetch approved checks not yet in pipeline
+  const existingCheckIds = new Set(items.map((i) => i.check_id));
   const { data: approvedChecks = [] } = useQuery({
-    queryKey: ["approved-checks-for-deposit"],
+    queryKey: ["approved-checks-for-deposit", existingCheckIds.size],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("check_intake_items")
@@ -148,10 +149,9 @@ export function DepositOperationsConsole() {
         .eq("status", "approved_for_deposit")
         .order("reviewed_at", { ascending: false });
       if (error) throw error;
-      const existingCheckIds = new Set(items.map((i) => i.check_id));
       return ((data ?? []) as ApprovedCheck[]).filter((c) => !existingCheckIds.has(c.id));
     },
-    enabled: items !== undefined,
+    enabled: !isLoading,
   });
 
   // Reconciliation summary
@@ -348,7 +348,7 @@ export function DepositOperationsConsole() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <ScrollArea className="h-[calc(100vh-700px)] min-h-[300px]">
+          <ScrollArea className="max-h-[500px] min-h-[300px]">
             {isLoading ? (
               <div className="p-8 text-center text-muted-foreground">Loading...</div>
             ) : filteredItems.length === 0 ? (

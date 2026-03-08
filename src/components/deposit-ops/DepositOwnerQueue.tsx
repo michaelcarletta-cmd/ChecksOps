@@ -483,7 +483,7 @@ export function DepositOwnerQueue() {
                 <Users className="h-3 w-3 mr-1" />Assign Owner
               </Button>
               <Button size="sm" variant="outline" className="text-xs h-7" disabled={selected.size === 0}
-                onClick={() => setBulkDialog("resolve")}>
+                onClick={() => handleApprovalAwareAction("bulk_resolve", () => setBulkDialog("resolve"))}>
                 <CheckCircle2 className="h-3 w-3 mr-1" />Resolve Exceptions
               </Button>
               <Button size="sm" variant="outline" className="text-xs h-7" disabled={selected.size === 0}
@@ -508,7 +508,7 @@ export function DepositOwnerQueue() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <ScrollArea className="h-[calc(100vh-600px)] min-h-[300px]">
+          <ScrollArea className="max-h-[500px] min-h-[300px]">
             {isLoading ? (
               <div className="p-8 text-center text-muted-foreground">Loading...</div>
             ) : filteredItems.length === 0 ? (
