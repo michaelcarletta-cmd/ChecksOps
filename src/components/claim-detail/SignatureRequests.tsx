@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { FileSignature, Plus, Loader2, Mail, Check, Clock, X, ChevronRight, ChevronLeft, ExternalLink } from "lucide-react";
+import { FileSignature, Plus, Loader2, Mail, Check, Clock, X, ChevronRight, ChevronLeft, ExternalLink, Link2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { FieldPlacementEditor } from "./FieldPlacementEditor";
+import { SignatureDiagnostics } from "./SignatureDiagnostics";
 
 interface SignatureRequestsProps {
   claimId: string;
@@ -136,7 +137,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
   });
 
   const createRequestMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ skipEmail }: { skipEmail?: boolean } = {}) => {
       if (!selectedTemplate || !generatedDocPath) throw new Error("Missing required data");
 
       const webhookUrl = companyBranding?.signnow_make_webhook_url;
@@ -176,6 +177,19 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         .insert(signersData);
       if (signersError) throw signersError;
 
+      if (skipEmail) {
+        // Manual bypass — generate links without sending email
+        const { data, error } = await supabase.functions.invoke("send-signature-request", {
+          body: { requestId: request.id, skipEmail: true },
+        });
+        if (error) throw error;
+        if (data?.signerLinks) {
+          const links = data.signerLinks.map((l: any) => l.sign_url).join("\n");
+          navigator.clipboard.writeText(links);
+        }
+        return { ...request, mode: "manual_bypass" };
+      }
+
       // If Make webhook is configured, send to SignNow via Make
       if (webhookUrl) {
         const response = await fetch(webhookUrl, {
@@ -210,17 +224,22 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         });
       } else {
         // Fall back to built-in email notification
-        await supabase.functions.invoke("send-signature-request", {
+        const { data, error } = await supabase.functions.invoke("send-signature-request", {
           body: { requestId: request.id },
         });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
       }
 
       return request;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      const mode = (data as any)?.mode;
       const usedMake = !!companyBranding?.signnow_make_webhook_url;
       toast({ 
-        title: usedMake ? "Sent to SignNow via Make.com" : "Signature request created and emails sent" 
+        title: mode === "manual_bypass"
+          ? "Sign links generated & copied to clipboard"
+          : usedMake ? "Sent to SignNow via Make.com" : "Signature request created and emails sent" 
       });
       setIsCreateOpen(false);
       setCurrentStep(1);
@@ -231,6 +250,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
       setIsDocxTemplate(false);
       setSigners([{ name: claim.policyholder_name || "", email: claim.policyholder_email || "", type: "policyholder", order: 1 }]);
       queryClient.invalidateQueries({ queryKey: ["signature-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["sig-diagnostics"] });
       queryClient.invalidateQueries({ queryKey: ["claim-updates"] });
     },
     onError: (error: Error) => {
@@ -477,22 +497,32 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                     </Button>
                   )}
                   {currentStep === 3 && (
-                    <Button
-                      onClick={() => createRequestMutation.mutate()}
-                      disabled={signers.some(s => !s.name || !s.email) || createRequestMutation.isPending}
-                    >
-                      {createRequestMutation.isPending ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Sending...
-                        </>
-                      ) : (
-                        <>
-                          <Mail className="w-4 h-4 mr-2" />
-                          Send for Signature
-                        </>
-                      )}
-                    </Button>
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={() => createRequestMutation.mutate({ skipEmail: true })}
+                        disabled={signers.some(s => !s.name || !s.email) || createRequestMutation.isPending}
+                      >
+                        <Link2 className="w-4 h-4 mr-2" />
+                        Generate Link Only
+                      </Button>
+                      <Button
+                        onClick={() => createRequestMutation.mutate({ skipEmail: false })}
+                        disabled={signers.some(s => !s.name || !s.email) || createRequestMutation.isPending}
+                      >
+                        {createRequestMutation.isPending ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Sending...
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="w-4 h-4 mr-2" />
+                            Send for Signature
+                          </>
+                        )}
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
@@ -570,6 +600,9 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* Diagnostics Section */}
+      <SignatureDiagnostics claimId={claimId} claim={claim} />
     </div>
   );
 }
