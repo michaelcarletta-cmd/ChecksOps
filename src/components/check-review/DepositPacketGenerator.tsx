@@ -258,6 +258,7 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
                 <h2 className="text-sm font-semibold mt-3 mb-1 border-b border-border pb-1">Reviewer Decision</h2>
                 <div className="bg-muted/50 p-2 rounded text-xs space-y-1">
                   <p><strong>Decision:</strong> {latestDecision.deposit_path?.replace(/_/g, " ")}</p>
+                  <p><strong>Reviewed by:</strong> {reviewerProfile?.full_name || reviewerProfile?.email || "Staff"}</p>
                   {latestDecision.reviewer_notes && <p><strong>Notes:</strong> {latestDecision.reviewer_notes}</p>}
                   <p className="text-muted-foreground text-[10px]">
                     Reviewed {format(new Date(latestDecision.created_at), "MMM d, yyyy h:mm a")}
