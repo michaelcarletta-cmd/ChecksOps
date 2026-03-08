@@ -1037,6 +1037,8 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                 <TableHead>Check Date</TableHead>
                 <TableHead>Received</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Status</TableHead>
                 {isAdmin && <TableHead className="w-[80px]"></TableHead>}
               </TableRow>
             </TableHeader>
