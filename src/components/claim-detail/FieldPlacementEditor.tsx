@@ -33,12 +33,13 @@ interface Field {
 }
 
 interface FieldPlacementEditorProps {
-  documentUrl: string;
+  documentUrl?: string;
+  docxData?: Uint8Array;
   onFieldsChange: (fields: Field[]) => void;
   signerCount: number;
 }
 
-export function FieldPlacementEditor({ documentUrl, onFieldsChange, signerCount }: FieldPlacementEditorProps) {
+export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, signerCount }: FieldPlacementEditorProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const [fields, setFields] = useState<Field[]>([]);
   const [activeTool, setActiveTool] = useState<"signature" | "date" | "text" | "checkbox" | null>(null);
