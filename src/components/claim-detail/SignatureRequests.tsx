@@ -234,7 +234,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
       return request;
     },
     onSuccess: (data) => {
-      const mode = data?.mode;
+      const mode = (data as any)?.mode;
       const usedMake = !!companyBranding?.signnow_make_webhook_url;
       toast({ 
         title: mode === "manual_bypass"
