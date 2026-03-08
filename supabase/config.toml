@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.darwin-carrier-argument-worker]
 verify_jwt = false
+
+[functions.check-ocr-intake]
+verify_jwt = false
+
+[functions.check-endorsement]
+verify_jwt = false
