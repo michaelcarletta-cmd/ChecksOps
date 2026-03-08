@@ -171,14 +171,17 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
 
   const createRequestMutation = useMutation({
     mutationFn: async ({ skipEmail = false }: { skipEmail?: boolean }) => {
-      if (!selectedTemplate || !generatedDocPath) throw new Error("Missing required data");
+      if (!generatedDocPath) throw new Error("Missing required data");
+      const docName = sourceType === "claim_file" 
+        ? selectedClaimFile?.file_name || "Document" 
+        : selectedTemplate?.name || "Document";
 
       // Create signature request record
       const { data: request, error: requestError } = await supabase
         .from("signature_requests")
         .insert({
           claim_id: claimId,
-          document_name: selectedTemplate.name,
+          document_name: docName,
           document_path: generatedDocPath,
           field_data: placedFields,
           status: "pending",
