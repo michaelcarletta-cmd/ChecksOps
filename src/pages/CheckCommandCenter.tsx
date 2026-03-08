@@ -548,19 +548,30 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
   const [frontFile, setFrontFile] = useState<File | null>(null);
   const [backFile, setBackFile] = useState<File | null>(null);
   const [claimId, setClaimId] = useState<string>("");
+  const [claimSearch, setClaimSearch] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [claimDropdownOpen, setClaimDropdownOpen] = useState(false);
 
   const { data: claims = [] } = useQuery({
-    queryKey: ["claims-for-check-link"],
+    queryKey: ["claims-for-check-link", claimSearch],
     queryFn: async () => {
-      const { data } = await supabase
+      let q = supabase
         .from("claims")
         .select("id, claim_number, policyholder_name")
         .order("created_at", { ascending: false })
-        .limit(100);
+        .limit(50);
+      if (claimSearch.trim()) {
+        q = q.or(`claim_number.ilike.%${claimSearch.trim()}%,policyholder_name.ilike.%${claimSearch.trim()}%`);
+      }
+      const { data } = await q;
       return (data ?? []) as ClaimOption[];
     },
   });
+
+  const selectedClaim = useMemo(
+    () => claims.find((c) => c.id === claimId) ?? null,
+    [claims, claimId],
+  );
 
   const handleUpload = async () => {
     if (!frontFile) {
