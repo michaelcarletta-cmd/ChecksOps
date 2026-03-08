@@ -385,8 +385,9 @@ export function DepositOperationsConsole() {
                     <TableHead>Check #</TableHead>
                     <TableHead>Carrier</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
-                    <TableHead>Provider</TableHead>
+                     <TableHead>Provider</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Increase</TableHead>
                     <TableHead>Bank Ref</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
