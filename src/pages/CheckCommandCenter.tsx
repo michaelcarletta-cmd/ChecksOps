@@ -416,6 +416,7 @@ export default function CheckCommandCenter() {
                           <TableHead>Payees</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Deposit</TableHead>
+                          <TableHead className="w-10"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -424,6 +425,7 @@ export default function CheckCommandCenter() {
                             ? recommendationConfig[check.deposit_recommendation]
                             : null;
                           const RecIcon = rec?.icon ?? null;
+                          const canDelete = DELETABLE_STATUSES.includes(check.status);
                           return (
                             <TableRow
                               key={check.id}
@@ -457,6 +459,24 @@ export default function CheckCommandCenter() {
                               <TableCell>
                                 {RecIcon && (
                                   <RecIcon className={`h-4 w-4 ${rec!.color}`} />
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {canDelete && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (confirm("Delete this check? This cannot be undone.")) {
+                                        deleteCheckMutation.mutate(check.id);
+                                      }
+                                    }}
+                                    disabled={deleteCheckMutation.isPending}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
                                 )}
                               </TableCell>
                             </TableRow>
