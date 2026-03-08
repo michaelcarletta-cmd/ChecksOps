@@ -648,16 +648,46 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       </div>
       <div>
         <Label>Link to Claim (optional)</Label>
-        <Select value={claimId} onValueChange={setClaimId}>
-          <SelectTrigger><SelectValue placeholder="Select claim..." /></SelectTrigger>
-          <SelectContent>
-            {claims.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.claim_number ?? "—"} — {c.policyholder_name ?? "Unknown"}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="relative">
+          <div className="flex items-center border rounded-md bg-background">
+            <Search className="h-4 w-4 ml-2 text-muted-foreground shrink-0" />
+            <Input
+              placeholder="Search by claim # or policyholder name..."
+              value={claimDropdownOpen ? claimSearch : (selectedClaim ? `${selectedClaim.claim_number ?? "—"} — ${selectedClaim.policyholder_name ?? "Unknown"}` : claimSearch)}
+              onChange={(e) => {
+                setClaimSearch(e.target.value);
+                setClaimDropdownOpen(true);
+                if (!e.target.value) setClaimId("");
+              }}
+              onFocus={() => setClaimDropdownOpen(true)}
+              className="border-0 focus-visible:ring-0 shadow-none"
+            />
+            {claimId && (
+              <Button variant="ghost" size="icon" className="h-7 w-7 mr-1 shrink-0" onClick={() => { setClaimId(""); setClaimSearch(""); }}>
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+          {claimDropdownOpen && claims.length > 0 && (
+            <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover shadow-md">
+              {claims.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
+                  onClick={() => {
+                    setClaimId(c.id);
+                    setClaimSearch("");
+                    setClaimDropdownOpen(false);
+                  }}
+                >
+                  <span className="font-mono">{c.claim_number ?? "—"}</span>
+                  <span className="text-muted-foreground"> — {c.policyholder_name ?? "Unknown"}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       <Button onClick={handleUpload} disabled={uploading || !frontFile} className="w-full">
         {uploading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
