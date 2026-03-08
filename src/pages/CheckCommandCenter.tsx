@@ -785,11 +785,13 @@ function CheckDetailPanel({
         <Tabs value={detailTab} onValueChange={setDetailTab}>
           <TabsList className="w-full rounded-none">
             <TabsTrigger value="overview" className="flex-1 text-xs">Overview</TabsTrigger>
+            <TabsTrigger value="endorsements" className="flex-1 text-xs">
+              Endorsements
+            </TabsTrigger>
             <TabsTrigger value="payees" className="flex-1 text-xs">
               Payees ({check.check_payees?.length ?? 0})
             </TabsTrigger>
             <TabsTrigger value="eligibility" className="flex-1 text-xs">Eligibility</TabsTrigger>
-            <TabsTrigger value="packet" className="flex-1 text-xs">Packet</TabsTrigger>
             <TabsTrigger value="audit" className="flex-1 text-xs">Audit</TabsTrigger>
           </TabsList>
 
