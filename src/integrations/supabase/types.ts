@@ -10290,7 +10290,7 @@ export type Database = {
         Returns: string
       }
       generate_deposit_daily_digest: {
-        Args: { p_actor_id: string; p_digest_type?: string }
+        Args: { p_actor_id?: string; p_digest_type?: string }
         Returns: Json
       }
       generate_next_deposit_action: {
@@ -10534,7 +10534,7 @@ export type Database = {
         Returns: Json
       }
       save_deposit_manager_snapshot: {
-        Args: { p_actor_id: string }
+        Args: { p_actor_id?: string }
         Returns: Json
       }
       search_claims_by_proximity: {
