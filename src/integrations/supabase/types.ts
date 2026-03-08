@@ -5564,6 +5564,93 @@ export type Database = {
           },
         ]
       }
+      deposit_automation_runs: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          deliveries_sent: number | null
+          digests_generated: number | null
+          duration_ms: number | null
+          error_summary: string | null
+          escalations_created: number | null
+          id: string
+          idempotency_key: string | null
+          overload_flags: Json | null
+          refresh_count: number | null
+          run_date: string
+          run_type: string
+          started_at: string
+          status: string
+          steps_completed: Json | null
+          steps_failed: Json | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          deliveries_sent?: number | null
+          digests_generated?: number | null
+          duration_ms?: number | null
+          error_summary?: string | null
+          escalations_created?: number | null
+          id?: string
+          idempotency_key?: string | null
+          overload_flags?: Json | null
+          refresh_count?: number | null
+          run_date?: string
+          run_type?: string
+          started_at?: string
+          status?: string
+          steps_completed?: Json | null
+          steps_failed?: Json | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          deliveries_sent?: number | null
+          digests_generated?: number | null
+          duration_ms?: number | null
+          error_summary?: string | null
+          escalations_created?: number | null
+          id?: string
+          idempotency_key?: string | null
+          overload_flags?: Json | null
+          refresh_count?: number | null
+          run_date?: string
+          run_type?: string
+          started_at?: string
+          status?: string
+          steps_completed?: Json | null
+          steps_failed?: Json | null
+        }
+        Relationships: []
+      }
+      deposit_automation_settings: {
+        Row: {
+          description: string | null
+          id: string
+          setting_key: string
+          setting_value: Json
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          description?: string | null
+          id?: string
+          setting_key: string
+          setting_value: Json
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          description?: string | null
+          id?: string
+          setting_key?: string
+          setting_value?: Json
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       deposit_batches: {
         Row: {
           batch_number: string
@@ -5675,6 +5762,8 @@ export type Database = {
           id: string
           read_at: string | null
           recipient_id: string
+          resent_at: string | null
+          resent_by: string | null
         }
         Insert: {
           delivered_at?: string | null
@@ -5684,6 +5773,8 @@ export type Database = {
           id?: string
           read_at?: string | null
           recipient_id: string
+          resent_at?: string | null
+          resent_by?: string | null
         }
         Update: {
           delivered_at?: string | null
@@ -5693,6 +5784,8 @@ export type Database = {
           id?: string
           read_at?: string | null
           recipient_id?: string
+          resent_at?: string | null
+          resent_by?: string | null
         }
         Relationships: [
           {
@@ -10303,6 +10396,7 @@ export type Database = {
       get_deposit_exception_kpis: { Args: never; Returns: Json }
       get_deposit_ops_kpis: { Args: never; Returns: Json }
       get_deposit_reconciliation_summary: { Args: never; Returns: Json }
+      get_deposit_setting: { Args: { p_key: string }; Returns: Json }
       get_expiring_licenses: {
         Args: { p_days_ahead?: number; p_user_id: string }
         Returns: {
@@ -10362,6 +10456,10 @@ export type Database = {
       invalidate_all_sessions: { Args: { p_user_id?: string }; Returns: number }
       invalidate_session: {
         Args: { p_session_token: string }
+        Returns: boolean
+      }
+      is_approval_required: {
+        Args: { p_action_type: string }
         Returns: boolean
       }
       is_org_admin: {

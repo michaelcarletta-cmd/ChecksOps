@@ -14,12 +14,16 @@ import {
   Users, RefreshCw, BarChart3, AlertTriangle, Clock,
   ShieldCheck, Download, Zap, Scale, BookCheck, Landmark, Lock,
   TrendingUp, ArrowUpDown, Camera, Shield, FileText, Bell,
+  Activity, Mail,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
   SnapshotTrends, NotificationPreferences, EscalationRulesConfig,
   EscalationEventsPanel, PendingApprovalsPanel, ManagerExportBundle,
 } from "./DepositManagerWorkflows";
+import {
+  AutomationHealthCard, AutomationRunHistory, DigestDeliveryCenter, AutomationSettingsPanel,
+} from "./DepositAutomationHealth";
 
 const fmtMoney = (n: number | null | undefined) =>
   n != null ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "$0.00";
@@ -408,8 +412,35 @@ export function DepositManagerCommandCenter() {
     onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 
+  // Approval-aware rebalance
+  const handleRebalance = async () => {
+    try {
+      const { data } = await supabase.rpc("is_approval_required", { p_action_type: "rebalance" });
+      if (data === true) {
+        const { error } = await supabase.rpc("submit_manager_approval", {
+          p_approval_type: "rebalance",
+          p_actor_id: user!.id,
+          p_payload: {},
+          p_item_count: 0,
+          p_total_amount: 0,
+          p_description: "Workload rebalance request",
+        });
+        if (error) throw error;
+        toast({ title: "Rebalance submitted for approval" });
+        qc.invalidateQueries({ queryKey: ["deposit-pending-approvals"] });
+      } else {
+        rebalanceMutation.mutate();
+      }
+    } catch {
+      rebalanceMutation.mutate();
+    }
+  };
+
   return (
     <div className="space-y-4">
+      {/* Automation Health Card */}
+      <AutomationHealthCard />
+
       {/* Action bar */}
       <Card>
         <CardContent className="p-3">
@@ -419,7 +450,7 @@ export function DepositManagerCommandCenter() {
                 <RefreshCw className={`h-3 w-3 mr-1 ${refreshMutation.isPending ? "animate-spin" : ""}`} />
                 Refresh Actions
               </Button>
-              <Button size="sm" variant="outline" onClick={() => rebalanceMutation.mutate()} disabled={rebalanceMutation.isPending}>
+              <Button size="sm" variant="outline" onClick={handleRebalance} disabled={rebalanceMutation.isPending}>
                 <ArrowUpDown className="h-3 w-3 mr-1" />
                 Rebalance
               </Button>
@@ -443,6 +474,8 @@ export function DepositManagerCommandCenter() {
           <TabsTrigger value="approvals" className="text-xs">Approvals</TabsTrigger>
           <TabsTrigger value="escalations" className="text-xs">Escalations</TabsTrigger>
           <TabsTrigger value="digest" className="text-xs">Digest</TabsTrigger>
+          <TabsTrigger value="delivery" className="text-xs">Delivery</TabsTrigger>
+          <TabsTrigger value="automation" className="text-xs">Automation</TabsTrigger>
           <TabsTrigger value="trends" className="text-xs">Trends</TabsTrigger>
           <TabsTrigger value="rollup" className="text-xs">Rollup</TabsTrigger>
           <TabsTrigger value="settings" className="text-xs">Settings</TabsTrigger>
@@ -498,6 +531,34 @@ export function DepositManagerCommandCenter() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="delivery">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Mail className="h-4 w-4 text-primary" />Digest Delivery Center
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DigestDeliveryCenter />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="automation">
+          <div className="space-y-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-primary" />Automation Run History
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <AutomationRunHistory />
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
         <TabsContent value="trends">
           <Card>
             <CardHeader className="pb-2">
@@ -526,6 +587,7 @@ export function DepositManagerCommandCenter() {
 
         <TabsContent value="settings">
           <div className="grid md:grid-cols-2 gap-4">
+            <AutomationSettingsPanel />
             <NotificationPreferences />
             <EscalationRulesConfig />
           </div>
