@@ -242,6 +242,9 @@ export function DepositOperationsConsole() {
 
   return (
     <div className="space-y-4">
+      {/* Increase Account Selector */}
+      <IncreaseAccountSelector />
+
       {/* Provider Status Banner */}
       {stubbedProviders.length > 0 && (
         <Card className="border-amber-500/30 bg-amber-500/5">
