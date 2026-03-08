@@ -378,11 +378,6 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
         </CardContent>
       </Card>
 
-      {/* E-Signature */}
-      {!isPortalUser && (
-        <SendForSignatureButton claim={claim} onUpdate={() => onClaimUpdated?.(claim)} />
-      )}
-
       {/* Custom Fields */}
       <ClaimCustomFields claimId={claim.id} />
 
