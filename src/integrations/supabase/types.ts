@@ -7020,6 +7020,7 @@ export type Database = {
           completed_at: string | null
           created_at: string | null
           created_by: string | null
+          delivery_mode: string | null
           document_name: string
           document_path: string
           field_data: Json | null
@@ -7037,6 +7038,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string | null
           created_by?: string | null
+          delivery_mode?: string | null
           document_name: string
           document_path: string
           field_data?: Json | null
@@ -7054,6 +7056,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string | null
           created_by?: string | null
+          delivery_mode?: string | null
           document_name?: string
           document_path?: string
           field_data?: Json | null
