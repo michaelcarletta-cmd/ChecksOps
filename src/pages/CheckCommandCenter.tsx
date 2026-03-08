@@ -216,7 +216,17 @@ export default function CheckCommandCenter() {
           <TabsTrigger value="ready" className="text-xs">Ready ({readyForDeposit.length})</TabsTrigger>
           <TabsTrigger value="branch" className="text-xs">Branch ({branchDeposit.length})</TabsTrigger>
           <TabsTrigger value="reissue" className="text-xs">Reissue ({reissueRequested.length})</TabsTrigger>
+          <TabsTrigger value="lossdraft" className="text-xs flex items-center gap-1">
+            <Landmark className="h-3 w-3" />Loss Draft
+          </TabsTrigger>
         </TabsList>
+
+        {/* Loss Draft Tab */}
+        {activeTab === "lossdraft" && (
+          <div className="mt-3">
+            <LossDraftDashboard />
+          </div>
+        )}
 
         {/* Review Tab — only renders when active */}
         {activeTab === "review" && (
