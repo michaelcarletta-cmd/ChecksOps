@@ -345,35 +345,76 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
             <DialogHeader>
               <DialogTitle>Create Signature Request - Step {currentStep} of 3</DialogTitle>
               <DialogDescription>
-                {currentStep === 1 && "Select a document template"}
+                {currentStep === 1 && "Select a document source"}
                 {currentStep === 2 && "Place signature and date fields on the document"}
                 {currentStep === 3 && "Configure signers"}
               </DialogDescription>
             </DialogHeader>
 
-            {/* Step 1: Template Selection */}
+            {/* Step 1: Source Selection */}
             {currentStep === 1 && (
               <div className="space-y-4">
                 <div>
-                  <Label>Document Template</Label>
-                  <Select
-                    value={selectedTemplate?.id}
-                    onValueChange={(id) =>
-                      setSelectedTemplate(templates?.find((t) => t.id === id))
-                    }
-                  >
+                  <Label>Document Source</Label>
+                  <Select value={sourceType} onValueChange={(v) => { setSourceType(v as any); setSelectedTemplate(null); setSelectedClaimFile(null); }}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select template" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {templates?.map((template) => (
-                        <SelectItem key={template.id} value={template.id}>
-                          {template.name}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="template">Generate from Template</SelectItem>
+                      <SelectItem value="claim_file">Use Existing Claim PDF</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+
+                {sourceType === "template" && (
+                  <div>
+                    <Label>Document Template</Label>
+                    <Select
+                      value={selectedTemplate?.id}
+                      onValueChange={(id) =>
+                        setSelectedTemplate(templates?.find((t) => t.id === id))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {templates?.map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {sourceType === "claim_file" && (
+                  <div>
+                    <Label>Claim PDF File</Label>
+                    <Select
+                      value={selectedClaimFile?.id}
+                      onValueChange={(id) =>
+                        setSelectedClaimFile(claimPdfFiles?.find((f) => f.id === id))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a PDF from claim files" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {claimPdfFiles?.length === 0 && (
+                          <div className="px-3 py-2 text-sm text-muted-foreground">No PDF files found for this claim</div>
+                        )}
+                        {claimPdfFiles?.map((file) => (
+                          <SelectItem key={file.id} value={file.id}>
+                            {file.file_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
             )}
 
