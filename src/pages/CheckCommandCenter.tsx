@@ -29,7 +29,8 @@ import { ReconciliationDashboard } from "@/components/deposit-ops/Reconciliation
 import { ExceptionResolutionPanel } from "@/components/deposit-ops/ExceptionResolutionPanel";
 import { DepositAgingDashboard } from "@/components/deposit-ops/DepositAgingDashboard";
 import { DepositReports } from "@/components/deposit-ops/DepositReports";
-import { ArrowDownToLine, Scale, Timer, FileBarChart, Shield as ShieldIcon } from "lucide-react";
+import { DepositKPIDashboard, DepositOwnerQueue } from "@/components/deposit-ops/DepositOwnerQueue";
+import { ArrowDownToLine, Scale, Timer, FileBarChart, Shield as ShieldIcon, BarChart3, Users as UsersIcon } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -240,6 +241,12 @@ export default function CheckCommandCenter() {
           <TabsTrigger value="lossdraft" className="text-xs flex items-center gap-1">
             <Landmark className="h-3 w-3" />Loss Draft
           </TabsTrigger>
+          <TabsTrigger value="kpis" className="text-xs flex items-center gap-1">
+            <BarChart3 className="h-3 w-3" />KPIs
+          </TabsTrigger>
+          <TabsTrigger value="workqueue" className="text-xs flex items-center gap-1">
+            <UsersIcon className="h-3 w-3" />Work Queue
+          </TabsTrigger>
         </TabsList>
 
         {/* Deposit Operations Tab */}
@@ -275,6 +282,20 @@ export default function CheckCommandCenter() {
         {activeTab === "reports" && (
           <div className="mt-3">
             <DepositReports />
+          </div>
+        )}
+
+        {/* KPIs Tab */}
+        {activeTab === "kpis" && (
+          <div className="mt-3">
+            <DepositKPIDashboard />
+          </div>
+        )}
+
+        {/* Work Queue Tab */}
+        {activeTab === "workqueue" && (
+          <div className="mt-3">
+            <DepositOwnerQueue />
           </div>
         )}
 
@@ -342,7 +363,7 @@ export default function CheckCommandCenter() {
         )}
 
         {/* All other tabs — only render the active one */}
-        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "deposit_ops" && activeTab !== "reconciliation" && activeTab !== "exceptions" && activeTab !== "aging" && activeTab !== "reports" && (
+        {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "deposit_ops" && activeTab !== "reconciliation" && activeTab !== "exceptions" && activeTab !== "aging" && activeTab !== "reports" && activeTab !== "kpis" && activeTab !== "workqueue" && (
           <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_26rem]">
             <Card>
               <CardContent className="p-0">
