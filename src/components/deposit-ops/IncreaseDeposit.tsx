@@ -198,7 +198,8 @@ export function DepositToIncreaseButton({
         .eq("setting_key", "target_account_id")
         .maybeSingle();
       if (error) throw error;
-      return data?.setting_value ? JSON.parse(data.setting_value as string) : null;
+      const raw = data?.setting_value;
+      return typeof raw === 'string' ? raw : raw ? String(raw) : null;
     },
   });
 

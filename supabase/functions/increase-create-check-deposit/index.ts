@@ -188,14 +188,12 @@ Deno.serve(async (req) => {
 });
 
 async function downloadImage(supabase: ReturnType<typeof createClient>, path: string): Promise<Uint8Array> {
-  // Try check-images bucket first, then claim-files
-  for (const bucket of ["check-images", "claim-files"]) {
-    const { data, error } = await supabase.storage.from(bucket).download(path);
-    if (!error && data) {
-      return new Uint8Array(await data.arrayBuffer());
-    }
+  // Check images are uploaded to claim-files bucket in CheckCommandCenter
+  const { data, error } = await supabase.storage.from("claim-files").download(path);
+  if (error || !data) {
+    throw new Error(`Could not download image from claim-files: ${path} — ${error?.message}`);
   }
-  throw new Error(`Could not download image: ${path}`);
+  return new Uint8Array(await data.arrayBuffer());
 }
 
 async function uploadFileToIncrease(
