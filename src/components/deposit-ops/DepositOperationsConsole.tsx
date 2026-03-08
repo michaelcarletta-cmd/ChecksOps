@@ -11,11 +11,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 import {
   ArrowRight, Building2, CheckCircle2, AlertTriangle, Clock,
   Send, RefreshCw, Banknote, XCircle, RotateCcw, FileCheck,
-  Printer, ArrowDownToLine,
+  Printer, ArrowDownToLine, Upload, ShieldAlert, Landmark,
+  CircleDollarSign, BookCheck, Ban, FileWarning,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -41,6 +44,14 @@ interface DepositItem {
   reconciled_at: string | null;
   submitted_at: string | null;
   cleared_at: string | null;
+  bank_reference: string | null;
+  bank_confirmed_at: string | null;
+  deposit_slip_number: string | null;
+  variance_amount: number | null;
+  variance_reason: string | null;
+  return_reason: string | null;
+  nsf_flag: boolean | null;
+  accounting_synced_at: string | null;
   created_at: string;
 }
 
@@ -52,6 +63,13 @@ interface ApprovedCheck {
   claim_id: string | null;
   status: string;
   reviewed_at: string | null;
+}
+
+interface ProviderConfig {
+  provider: string;
+  display_name: string;
+  is_active: boolean;
+  is_stubbed: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -68,13 +86,6 @@ const statusConfig: Record<string, { label: string; color: string; icon: typeof 
   returned: { label: "Returned", color: "bg-orange-500/20 text-orange-400", icon: RotateCcw },
   reconciled: { label: "Reconciled", color: "bg-primary/20 text-primary", icon: FileCheck },
   exception: { label: "Exception", color: "bg-destructive/20 text-destructive", icon: AlertTriangle },
-};
-
-const providerLabels: Record<string, string> = {
-  manual_branch: "Manual / Branch",
-  internal_ready: "Internal Ready",
-  synctera: "Synctera",
-  treasury_prime: "Treasury Prime",
 };
 
 /* ------------------------------------------------------------------ */
@@ -94,7 +105,25 @@ export function DepositOperationsConsole() {
   const [actionNotes, setActionNotes] = useState("");
   const [actionProvider, setActionProvider] = useState<string>("");
   const [actionAmount, setActionAmount] = useState("");
+  const [actionBankRef, setActionBankRef] = useState("");
+  const [actionSlipNumber, setActionSlipNumber] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  // Fetch provider configs
+  const { data: providerConfigs = [] } = useQuery({
+    queryKey: ["deposit-provider-configs"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("deposit_provider_config")
+        .select("*")
+        .order("provider");
+      if (error) throw error;
+      return (data ?? []) as ProviderConfig[];
+    },
+  });
+
+  const activeProviders = providerConfigs.filter((p) => p.is_active);
+  const stubbedProviders = providerConfigs.filter((p) => p.is_stubbed);
 
   // Fetch deposit items
   const { data: items = [], isLoading } = useQuery({
@@ -119,7 +148,6 @@ export function DepositOperationsConsole() {
         .eq("status", "approved_for_deposit")
         .order("reviewed_at", { ascending: false });
       if (error) throw error;
-      // Exclude checks already in pipeline
       const existingCheckIds = new Set(items.map((i) => i.check_id));
       return ((data ?? []) as ApprovedCheck[]).filter((c) => !existingCheckIds.has(c.id));
     },
@@ -166,20 +194,31 @@ export function DepositOperationsConsole() {
       qc.invalidateQueries({ queryKey: ["deposit-recon-summary"] });
       qc.invalidateQueries({ queryKey: ["approved-checks-for-deposit"] });
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-      setActionDialog(null);
-      setActionNotes("");
-      setActionProvider("");
-      setActionAmount("");
+      qc.invalidateQueries({ queryKey: ["deposit-attachments"] });
+      resetDialog();
     },
     onError: (e: Error) => {
       toast({ title: "Action failed", description: e.message, variant: "destructive" });
     },
   });
 
+  const resetDialog = () => {
+    setActionDialog(null);
+    setActionNotes("");
+    setActionProvider("");
+    setActionAmount("");
+    setActionBankRef("");
+    setActionSlipNumber("");
+  };
+
   const filteredItems = statusFilter === "all" ? items : items.filter((i) => i.status === statusFilter);
 
   const handleExecuteAction = () => {
     if (!actionDialog) return;
+    const extra: Record<string, unknown> = {};
+    if (actionBankRef) extra.bank_reference = actionBankRef;
+    if (actionSlipNumber) extra.deposit_slip_number = actionSlipNumber;
+
     actionMutation.mutate({
       action: actionDialog.action,
       deposit_item_id: actionDialog.itemId,
@@ -187,24 +226,54 @@ export function DepositOperationsConsole() {
       provider: actionProvider || undefined,
       amount: actionAmount ? parseFloat(actionAmount) : undefined,
       notes: actionNotes || undefined,
+      extra: Object.keys(extra).length > 0 ? extra : undefined,
     });
   };
 
   const fmtMoney = (n: number | null) =>
     n != null ? `$${n.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—";
 
+  const providerLabel = (p: string | null) => {
+    if (!p) return "—";
+    const cfg = providerConfigs.find((c) => c.provider === p);
+    return cfg?.display_name ?? p;
+  };
+
   return (
     <div className="space-y-4">
-      {/* Reconciliation Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+      {/* Provider Status Banner */}
+      {stubbedProviders.length > 0 && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardContent className="p-3 flex items-center gap-3">
+            <ShieldAlert className="h-5 w-5 text-amber-400 shrink-0" />
+            <div className="text-xs">
+              <span className="font-medium text-amber-400">Provider Status: </span>
+              {activeProviders.map((p) => (
+                <Badge key={p.provider} variant="outline" className="mr-1 text-[10px] border-emerald-500/50 text-emerald-400">
+                  {p.display_name} ✓
+                </Badge>
+              ))}
+              {stubbedProviders.map((p) => (
+                <Badge key={p.provider} variant="outline" className="mr-1 text-[10px] border-muted text-muted-foreground">
+                  {p.display_name} (not configured)
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2">
         {[
           { label: "In Flight", value: reconSummary?.in_flight_amount, color: "text-amber-400" },
           { label: "Cleared", value: reconSummary?.cleared_amount, color: "text-emerald-400" },
           { label: "Reconciled", value: reconSummary?.reconciled_amount, color: "text-primary" },
           { label: "Failed", value: reconSummary?.failed_amount, color: "text-destructive" },
-          { label: "Unreconciled", value: reconSummary?.unreconciled_amount, color: "text-orange-400" },
-          { label: "Exceptions", value: reconSummary?.exceptions, color: "text-destructive", isCount: true },
-          { label: "Returned", value: reconSummary?.returned, color: "text-orange-400", isCount: true },
+          { label: "Unconfirmed", value: reconSummary?.unconfirmed_amount, color: "text-orange-400" },
+          { label: "Variance", value: reconSummary?.total_variance, color: "text-amber-400" },
+          { label: "NSF", value: reconSummary?.nsf_count, color: "text-destructive", isCount: true },
+          { label: "Unsynced", value: reconSummary?.unsynced_count, color: "text-muted-foreground", isCount: true },
         ].map((card) => (
           <Card key={card.label}>
             <CardContent className="p-3 text-center">
@@ -244,10 +313,7 @@ export function DepositOperationsConsole() {
                       <TableCell className="text-sm">{c.carrier_name || "—"}</TableCell>
                       <TableCell className="text-right font-semibold tabular-nums">{fmtMoney(c.amount)}</TableCell>
                       <TableCell>
-                        <Button
-                          size="sm"
-                          onClick={() => setActionDialog({ action: "prepare_deposit", checkId: c.id })}
-                        >
+                        <Button size="sm" onClick={() => setActionDialog({ action: "prepare_deposit", checkId: c.id })}>
                           <ArrowRight className="h-3 w-3 mr-1" />Prepare
                         </Button>
                       </TableCell>
@@ -282,7 +348,7 @@ export function DepositOperationsConsole() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <ScrollArea className="h-[calc(100vh-600px)] min-h-[300px]">
+          <ScrollArea className="h-[calc(100vh-700px)] min-h-[300px]">
             {isLoading ? (
               <div className="p-8 text-center text-muted-foreground">Loading...</div>
             ) : filteredItems.length === 0 ? (
@@ -296,7 +362,7 @@ export function DepositOperationsConsole() {
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead>Provider</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Idempotency</TableHead>
+                    <TableHead>Bank Ref</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -314,32 +380,40 @@ export function DepositOperationsConsole() {
                         <TableCell className="text-sm max-w-[120px] truncate">{item.carrier_name || "—"}</TableCell>
                         <TableCell className="text-right font-semibold tabular-nums">{fmtMoney(item.amount)}</TableCell>
                         <TableCell>
-                          <span className="text-xs">{item.provider ? providerLabels[item.provider] || item.provider : "—"}</span>
+                          <span className="text-xs">{providerLabel(item.provider)}</span>
                         </TableCell>
                         <TableCell>
-                          <Badge className={`text-[10px] gap-1 ${sc?.color ?? ""}`}>
-                            <Icon className="h-3 w-3" />
-                            {sc?.label ?? item.status}
-                          </Badge>
+                          <div className="flex items-center gap-1">
+                            <Badge className={`text-[10px] gap-1 ${sc?.color ?? ""}`}>
+                              <Icon className="h-3 w-3" />
+                              {sc?.label ?? item.status}
+                            </Badge>
+                            {item.nsf_flag && <Badge variant="destructive" className="text-[10px]">NSF</Badge>}
+                            {item.variance_amount != null && item.variance_amount !== 0 && (
+                              <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-400">Δ</Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
-                          <code className="text-[10px] text-muted-foreground">{item.idempotency_key.slice(0, 8)}</code>
+                          <span className="text-xs text-muted-foreground">
+                            {item.bank_reference || (item.bank_confirmed_at ? "Confirmed" : "—")}
+                          </span>
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-1">
+                          <div className="flex gap-1 flex-wrap">
                             {item.status === "pending_assignment" && (
                               <Button size="sm" variant="outline" className="text-xs h-7"
                                 onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "assign_provider", itemId: item.id }); }}>
                                 Assign
                               </Button>
                             )}
-                            {item.status === "provider_assigned" && item.provider === "manual_branch" && (
+                            {item.status === "provider_assigned" && (item.provider === "manual_branch" || item.provider === "internal_ready") && (
                               <Button size="sm" variant="outline" className="text-xs h-7"
                                 onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "mark_manual_deposit", itemId: item.id }); }}>
                                 <Building2 className="h-3 w-3 mr-1" />Deposited
                               </Button>
                             )}
-                            {item.status === "provider_assigned" && item.provider !== "manual_branch" && (
+                            {item.status === "provider_assigned" && item.provider !== "manual_branch" && item.provider !== "internal_ready" && (
                               <Button size="sm" variant="outline" className="text-xs h-7"
                                 onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "record_submission", itemId: item.id }); }}>
                                 <Send className="h-3 w-3 mr-1" />Submit
@@ -357,10 +431,28 @@ export function DepositOperationsConsole() {
                                 </Button>
                               </>
                             )}
-                            {item.status === "succeeded" && (
+                            {item.status === "succeeded" && !item.bank_confirmed_at && (
                               <Button size="sm" variant="outline" className="text-xs h-7"
-                                onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "reconcile", itemId: item.id }); }}>
-                                <FileCheck className="h-3 w-3 mr-1" />Reconcile
+                                onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "bank_confirm", itemId: item.id }); }}>
+                                <Landmark className="h-3 w-3 mr-1" />Confirm
+                              </Button>
+                            )}
+                            {item.status === "succeeded" && (
+                              <>
+                                <Button size="sm" variant="outline" className="text-xs h-7"
+                                  onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "reconcile", itemId: item.id }); }}>
+                                  <FileCheck className="h-3 w-3 mr-1" />Reconcile
+                                </Button>
+                                <Button size="sm" variant="outline" className="text-xs h-7 border-destructive/50 text-destructive"
+                                  onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "record_nsf", itemId: item.id }); }}>
+                                  <Ban className="h-3 w-3 mr-1" />NSF
+                                </Button>
+                              </>
+                            )}
+                            {(item.status === "succeeded" || item.status === "reconciled") && !item.accounting_synced_at && (
+                              <Button size="sm" variant="outline" className="text-xs h-7"
+                                onClick={(e) => { e.stopPropagation(); setActionDialog({ action: "sync_accounting", itemId: item.id }); }}>
+                                <BookCheck className="h-3 w-3 mr-1" />Sync
                               </Button>
                             )}
                           </div>
@@ -376,47 +468,64 @@ export function DepositOperationsConsole() {
       </Card>
 
       {/* Detail panel for selected item */}
-      {selectedItemId && (
-        <DepositItemDetail itemId={selectedItemId} />
-      )}
+      {selectedItemId && <DepositItemDetail itemId={selectedItemId} onAction={setActionDialog} />}
 
       {/* Action Dialog */}
-      <Dialog open={!!actionDialog} onOpenChange={() => setActionDialog(null)}>
+      <Dialog open={!!actionDialog} onOpenChange={() => resetDialog()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="capitalize">{actionDialog?.action.replace(/_/g, " ")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             {actionDialog?.action === "assign_provider" && (
-              <Select value={actionProvider} onValueChange={setActionProvider}>
-                <SelectTrigger><SelectValue placeholder="Select provider" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="manual_branch">Manual / Branch</SelectItem>
-                  <SelectItem value="internal_ready">Internal Ready</SelectItem>
-                  <SelectItem value="synctera">Synctera</SelectItem>
-                  <SelectItem value="treasury_prime">Treasury Prime</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="space-y-2">
+                <Label className="text-xs">Deposit Route</Label>
+                <Select value={actionProvider} onValueChange={setActionProvider}>
+                  <SelectTrigger><SelectValue placeholder="Select deposit route" /></SelectTrigger>
+                  <SelectContent>
+                    {activeProviders.map((p) => (
+                      <SelectItem key={p.provider} value={p.provider}>
+                        {p.display_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {stubbedProviders.length > 0 && (
+                  <p className="text-[10px] text-muted-foreground">
+                    {stubbedProviders.map((p) => p.display_name).join(", ")} — not configured yet
+                  </p>
+                )}
+              </div>
+            )}
+            {actionDialog?.action === "mark_manual_deposit" && (
+              <div className="space-y-2">
+                <Label className="text-xs">Deposit Slip #</Label>
+                <Input placeholder="Slip number (optional)" value={actionSlipNumber} onChange={(e) => setActionSlipNumber(e.target.value)} />
+              </div>
+            )}
+            {actionDialog?.action === "bank_confirm" && (
+              <div className="space-y-2">
+                <Label className="text-xs">Bank Reference / Confirmation #</Label>
+                <Input placeholder="Bank reference" value={actionBankRef} onChange={(e) => setActionBankRef(e.target.value)} />
+                <Label className="text-xs">Confirmed Amount (leave blank if exact match)</Label>
+                <Input type="number" step="0.01" placeholder="Confirmed amount" value={actionAmount} onChange={(e) => setActionAmount(e.target.value)} />
+              </div>
             )}
             {(actionDialog?.action === "reconcile" || actionDialog?.action === "record_success") && (
-              <Input
-                type="number"
-                step="0.01"
-                placeholder="Confirmed amount (optional)"
-                value={actionAmount}
-                onChange={(e) => setActionAmount(e.target.value)}
-              />
+              <div className="space-y-2">
+                <Label className="text-xs">Confirmed Amount (leave blank if exact match)</Label>
+                <Input type="number" step="0.01" placeholder="Confirmed amount (optional)" value={actionAmount} onChange={(e) => setActionAmount(e.target.value)} />
+              </div>
             )}
-            <Textarea
-              placeholder="Notes (optional)"
-              value={actionNotes}
-              onChange={(e) => setActionNotes(e.target.value)}
-              rows={2}
-            />
+            <Textarea placeholder="Notes (optional)" value={actionNotes} onChange={(e) => setActionNotes(e.target.value)} rows={2} />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setActionDialog(null)}>Cancel</Button>
-            <Button onClick={handleExecuteAction} disabled={actionMutation.isPending}>
+            <Button variant="outline" onClick={() => resetDialog()}>Cancel</Button>
+            <Button
+              onClick={handleExecuteAction}
+              disabled={actionMutation.isPending}
+              variant={actionDialog?.action === "record_nsf" ? "destructive" : "default"}
+            >
               {actionMutation.isPending ? "Processing..." : "Confirm"}
             </Button>
           </DialogFooter>
@@ -427,18 +536,24 @@ export function DepositOperationsConsole() {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Deposit Item Detail                                                */
+/*  Deposit Item Detail with attachments                               */
 /* ------------------------------------------------------------------ */
 
-function DepositItemDetail({ itemId }: { itemId: string }) {
+function DepositItemDetail({
+  itemId,
+  onAction,
+}: {
+  itemId: string;
+  onAction: (d: { action: string; itemId: string }) => void;
+}) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
   const { data: attempts = [] } = useQuery({
     queryKey: ["deposit-attempts", itemId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("deposit_provider_attempts")
-        .select("*")
-        .eq("deposit_item_id", itemId)
-        .order("attempt_number", { ascending: false });
+      const { data, error } = await supabase.from("deposit_provider_attempts").select("*").eq("deposit_item_id", itemId).order("attempt_number", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
@@ -447,11 +562,7 @@ function DepositItemDetail({ itemId }: { itemId: string }) {
   const { data: exceptions = [] } = useQuery({
     queryKey: ["deposit-exceptions", itemId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("deposit_exceptions")
-        .select("*")
-        .eq("deposit_item_id", itemId)
-        .order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("deposit_exceptions").select("*").eq("deposit_item_id", itemId).order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
@@ -460,103 +571,187 @@ function DepositItemDetail({ itemId }: { itemId: string }) {
   const { data: auditLog = [] } = useQuery({
     queryKey: ["deposit-audit", itemId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("deposit_audit_log")
-        .select("*")
-        .eq("deposit_item_id", itemId)
-        .order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("deposit_audit_log").select("*").eq("deposit_item_id", itemId).order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
   });
 
-  return (
-    <div className="grid gap-4 md:grid-cols-3">
-      {/* Provider Attempts */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-xs">Provider Attempts ({attempts.length})</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <ScrollArea className="max-h-48">
-            {attempts.length === 0 ? (
-              <p className="p-4 text-xs text-muted-foreground">No attempts yet</p>
-            ) : (
-              <div className="divide-y">
-                {attempts.map((a: Record<string, unknown>) => (
-                  <div key={a.id as string} className="p-3 text-xs space-y-1">
-                    <div className="flex justify-between">
-                      <span className="font-medium">Attempt #{a.attempt_number as number}</span>
-                      <Badge variant="outline" className="text-[10px]">{a.status as string}</Badge>
-                    </div>
-                    <p className="text-muted-foreground">Key: <code>{(a.idempotency_key as string).slice(0, 12)}</code></p>
-                    {a.response_code && <p>Response: {a.response_code as number}</p>}
-                    {a.error_message && <p className="text-destructive">{a.error_message as string}</p>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
-        </CardContent>
-      </Card>
+  const { data: attachments = [] } = useQuery({
+    queryKey: ["deposit-attachments", itemId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("deposit_attachments").select("*").eq("deposit_item_id", itemId).order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
-      {/* Exceptions */}
+  const handleUpload = async (file: File, type: string) => {
+    if (!user) return;
+    const path = `${itemId}/${Date.now()}_${file.name}`;
+    const { error: upErr } = await supabase.storage.from("deposit-attachments").upload(path, file);
+    if (upErr) { toast({ title: "Upload failed", description: upErr.message, variant: "destructive" }); return; }
+    const { error: dbErr } = await supabase.from("deposit_attachments").insert({
+      deposit_item_id: itemId,
+      attachment_type: type,
+      file_name: file.name,
+      file_path: path,
+      file_size: file.size,
+      uploaded_by: user.id,
+    });
+    if (dbErr) { toast({ title: "Save failed", description: dbErr.message, variant: "destructive" }); return; }
+    toast({ title: "Uploaded" });
+    qc.invalidateQueries({ queryKey: ["deposit-attachments", itemId] });
+  };
+
+  const attachmentTypes = [
+    { value: "deposit_slip", label: "Deposit Slip", icon: FileCheck },
+    { value: "stamped_receipt", label: "Stamped Receipt", icon: CheckCircle2 },
+    { value: "bank_confirmation", label: "Bank Confirmation", icon: Landmark },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {/* Attachment uploads */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-xs flex items-center gap-1">
-            <AlertTriangle className="h-3 w-3 text-destructive" />
-            Exceptions ({exceptions.length})
+            <Upload className="h-3 w-3" />
+            Deposit Attachments ({attachments.length})
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-0">
-          <ScrollArea className="max-h-48">
-            {exceptions.length === 0 ? (
-              <p className="p-4 text-xs text-muted-foreground">No exceptions</p>
-            ) : (
-              <div className="divide-y">
-                {exceptions.map((e: Record<string, unknown>) => (
-                  <div key={e.id as string} className="p-3 text-xs space-y-1">
-                    <div className="flex justify-between">
-                      <Badge variant="outline" className={`text-[10px] ${(e.severity as string) === "critical" ? "border-destructive text-destructive" : ""}`}>
-                        {e.exception_code as string}
-                      </Badge>
-                      <span className="text-muted-foreground">{format(new Date(e.created_at as string), "MMM d HH:mm")}</span>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-3 gap-2">
+            {attachmentTypes.map((at) => {
+              const existing = attachments.filter((a) => (a as Record<string, unknown>).attachment_type === at.value);
+              return (
+                <div key={at.value} className="space-y-1">
+                  <Label className="text-[10px] flex items-center gap-1">
+                    <at.icon className="h-3 w-3" />
+                    {at.label}
+                    {existing.length > 0 && <Badge variant="outline" className="text-[9px] ml-1">{existing.length}</Badge>}
+                  </Label>
+                  <Input
+                    type="file"
+                    className="h-7 text-[10px]"
+                    accept="image/*,.pdf"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleUpload(f, at.value);
+                      e.target.value = "";
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          {attachments.length > 0 && (
+            <div className="divide-y">
+              {attachments.map((a) => {
+                const att = a as Record<string, unknown>;
+                return (
+                  <div key={att.id as string} className="py-1 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[9px]">{(att.attachment_type as string).replace(/_/g, " ")}</Badge>
+                      <span className="truncate max-w-[200px]">{att.file_name as string}</span>
                     </div>
-                    <p>{e.description as string}</p>
+                    <span className="text-muted-foreground">{format(new Date(att.created_at as string), "MMM d HH:mm")}</span>
                   </div>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Audit Log */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-xs">Audit Trail ({auditLog.length})</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <ScrollArea className="max-h-48">
-            {auditLog.length === 0 ? (
-              <p className="p-4 text-xs text-muted-foreground">No entries</p>
-            ) : (
-              <div className="divide-y">
-                {auditLog.map((entry: Record<string, unknown>) => (
-                  <div key={entry.id as string} className="p-3 text-xs space-y-1">
-                    <div className="flex justify-between">
-                      <span className="font-medium capitalize">{(entry.action as string).replace(/_/g, " ")}</span>
-                      <span className="text-muted-foreground">{format(new Date(entry.created_at as string), "MMM d HH:mm")}</span>
+      <div className="grid gap-4 md:grid-cols-3">
+        {/* Provider Attempts */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs">Provider Attempts ({attempts.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ScrollArea className="max-h-48">
+              {attempts.length === 0 ? (
+                <p className="p-4 text-xs text-muted-foreground">No attempts yet</p>
+              ) : (
+                <div className="divide-y">
+                  {attempts.map((a: Record<string, unknown>) => (
+                    <div key={a.id as string} className="p-3 text-xs space-y-1">
+                      <div className="flex justify-between">
+                        <span className="font-medium">Attempt #{a.attempt_number as number}</span>
+                        <Badge variant="outline" className="text-[10px]">{a.status as string}</Badge>
+                      </div>
+                      <p className="text-muted-foreground">Key: <code>{(a.idempotency_key as string)?.slice(0, 12)}</code></p>
+                      {a.response_code && <p>Response: {a.response_code as number}</p>}
+                      {a.error_message && <p className="text-destructive">{a.error_message as string}</p>}
                     </div>
-                    {entry.amount && <p className="text-muted-foreground">Amount: ${(entry.amount as number).toLocaleString()}</p>}
-                    {entry.notes && <p className="text-muted-foreground">{entry.notes as string}</p>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
-        </CardContent>
-      </Card>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </CardContent>
+        </Card>
+
+        {/* Exceptions */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3 text-destructive" />
+              Exceptions ({exceptions.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ScrollArea className="max-h-48">
+              {exceptions.length === 0 ? (
+                <p className="p-4 text-xs text-muted-foreground">No exceptions</p>
+              ) : (
+                <div className="divide-y">
+                  {exceptions.map((e: Record<string, unknown>) => (
+                    <div key={e.id as string} className="p-3 text-xs space-y-1">
+                      <div className="flex justify-between">
+                        <Badge variant="outline" className={`text-[10px] ${(e.severity as string) === "critical" ? "border-destructive text-destructive" : ""}`}>
+                          {e.exception_code as string}
+                        </Badge>
+                        <span className="text-muted-foreground">{format(new Date(e.created_at as string), "MMM d HH:mm")}</span>
+                      </div>
+                      <p>{e.description as string}</p>
+                      {e.resolved_at && <Badge variant="outline" className="text-[9px] text-emerald-400">Resolved</Badge>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </CardContent>
+        </Card>
+
+        {/* Audit Log */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs">Audit Trail ({auditLog.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ScrollArea className="max-h-48">
+              {auditLog.length === 0 ? (
+                <p className="p-4 text-xs text-muted-foreground">No entries</p>
+              ) : (
+                <div className="divide-y">
+                  {auditLog.map((entry: Record<string, unknown>) => (
+                    <div key={entry.id as string} className="p-3 text-xs space-y-1">
+                      <div className="flex justify-between">
+                        <span className="font-medium capitalize">{(entry.action as string).replace(/_/g, " ")}</span>
+                        <span className="text-muted-foreground">{format(new Date(entry.created_at as string), "MMM d HH:mm")}</span>
+                      </div>
+                      {entry.amount && <p className="text-muted-foreground">Amount: ${(entry.amount as number).toLocaleString()}</p>}
+                      {entry.notes && <p className="text-muted-foreground">{entry.notes as string}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -572,15 +767,17 @@ export function BranchDepositManifest() {
       const { data, error } = await supabase
         .from("deposit_items")
         .select("*")
-        .eq("provider", "manual_branch")
+        .in("provider", ["manual_branch", "internal_ready"])
         .in("status", ["pending_assignment", "provider_assigned"])
         .order("created_at", { ascending: true });
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as DepositItem[];
     },
   });
 
   const total = branchItems.reduce((sum, i) => sum + (i.amount ?? 0), 0);
+
+  const handlePrint = () => window.print();
 
   return (
     <Card>
@@ -590,9 +787,16 @@ export function BranchDepositManifest() {
             <Printer className="h-4 w-4" />
             Branch Deposit Manifest
           </CardTitle>
-          <span className="font-bold tabular-nums">
-            Total: ${total.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="font-bold tabular-nums">
+              Total: ${total.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+            </span>
+            {branchItems.length > 0 && (
+              <Button size="sm" variant="outline" className="text-xs h-7" onClick={handlePrint}>
+                <Printer className="h-3 w-3 mr-1" />Print
+              </Button>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="p-0">
@@ -605,6 +809,7 @@ export function BranchDepositManifest() {
                 <TableHead>#</TableHead>
                 <TableHead>Check #</TableHead>
                 <TableHead>Carrier</TableHead>
+                <TableHead>Route</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
@@ -615,6 +820,7 @@ export function BranchDepositManifest() {
                   <TableCell className="text-xs">{idx + 1}</TableCell>
                   <TableCell className="font-mono text-sm">#{item.check_number || "—"}</TableCell>
                   <TableCell className="text-sm">{item.carrier_name || "—"}</TableCell>
+                  <TableCell className="text-xs">{item.provider === "internal_ready" ? "Internal" : "Branch"}</TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">
                     ${(item.amount ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                   </TableCell>
@@ -623,6 +829,11 @@ export function BranchDepositManifest() {
                   </TableCell>
                 </TableRow>
               ))}
+              <TableRow className="font-bold">
+                <TableCell colSpan={4}>Total ({branchItems.length} items)</TableCell>
+                <TableCell className="text-right tabular-nums">${total.toLocaleString("en-US", { minimumFractionDigits: 2 })}</TableCell>
+                <TableCell />
+              </TableRow>
             </TableBody>
           </Table>
         )}

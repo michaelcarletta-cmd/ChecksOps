@@ -5424,6 +5424,50 @@ export type Database = {
         }
         Relationships: []
       }
+      deposit_attachments: {
+        Row: {
+          attachment_type: string
+          created_at: string
+          deposit_item_id: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          id: string
+          notes: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          attachment_type: string
+          created_at?: string
+          deposit_item_id: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          id?: string
+          notes?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          attachment_type?: string
+          created_at?: string
+          deposit_item_id?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          id?: string
+          notes?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deposit_attachments_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deposit_audit_log: {
         Row: {
           action: string
@@ -5581,7 +5625,11 @@ export type Database = {
       }
       deposit_items: {
         Row: {
+          accounting_synced_at: string | null
           amount: number
+          bank_confirmed_at: string | null
+          bank_confirmed_by: string | null
+          bank_reference: string | null
           batch_id: string | null
           carrier_name: string | null
           check_id: string
@@ -5589,10 +5637,12 @@ export type Database = {
           claim_id: string | null
           cleared_at: string | null
           created_at: string
+          deposit_slip_number: string | null
           exception_code: string | null
           exception_reason: string | null
           id: string
           idempotency_key: string
+          nsf_flag: boolean | null
           provider: Database["public"]["Enums"]["deposit_provider"] | null
           provider_payload: Json | null
           provider_reference: string | null
@@ -5600,12 +5650,19 @@ export type Database = {
           reconciled_amount: number | null
           reconciled_at: string | null
           reconciled_by: string | null
+          return_reason: string | null
           status: Database["public"]["Enums"]["deposit_item_status"]
           submitted_at: string | null
           updated_at: string
+          variance_amount: number | null
+          variance_reason: string | null
         }
         Insert: {
+          accounting_synced_at?: string | null
           amount: number
+          bank_confirmed_at?: string | null
+          bank_confirmed_by?: string | null
+          bank_reference?: string | null
           batch_id?: string | null
           carrier_name?: string | null
           check_id: string
@@ -5613,10 +5670,12 @@ export type Database = {
           claim_id?: string | null
           cleared_at?: string | null
           created_at?: string
+          deposit_slip_number?: string | null
           exception_code?: string | null
           exception_reason?: string | null
           id?: string
           idempotency_key?: string
+          nsf_flag?: boolean | null
           provider?: Database["public"]["Enums"]["deposit_provider"] | null
           provider_payload?: Json | null
           provider_reference?: string | null
@@ -5624,12 +5683,19 @@ export type Database = {
           reconciled_amount?: number | null
           reconciled_at?: string | null
           reconciled_by?: string | null
+          return_reason?: string | null
           status?: Database["public"]["Enums"]["deposit_item_status"]
           submitted_at?: string | null
           updated_at?: string
+          variance_amount?: number | null
+          variance_reason?: string | null
         }
         Update: {
+          accounting_synced_at?: string | null
           amount?: number
+          bank_confirmed_at?: string | null
+          bank_confirmed_by?: string | null
+          bank_reference?: string | null
           batch_id?: string | null
           carrier_name?: string | null
           check_id?: string
@@ -5637,10 +5703,12 @@ export type Database = {
           claim_id?: string | null
           cleared_at?: string | null
           created_at?: string
+          deposit_slip_number?: string | null
           exception_code?: string | null
           exception_reason?: string | null
           id?: string
           idempotency_key?: string
+          nsf_flag?: boolean | null
           provider?: Database["public"]["Enums"]["deposit_provider"] | null
           provider_payload?: Json | null
           provider_reference?: string | null
@@ -5648,9 +5716,12 @@ export type Database = {
           reconciled_amount?: number | null
           reconciled_at?: string | null
           reconciled_by?: string | null
+          return_reason?: string | null
           status?: Database["public"]["Enums"]["deposit_item_status"]
           submitted_at?: string | null
           updated_at?: string
+          variance_amount?: number | null
+          variance_reason?: string | null
         }
         Relationships: [
           {
@@ -5724,6 +5795,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      deposit_provider_config: {
+        Row: {
+          capabilities: Json | null
+          config: Json | null
+          created_at: string
+          display_name: string
+          id: string
+          is_active: boolean
+          is_stubbed: boolean
+          provider: string
+          updated_at: string
+        }
+        Insert: {
+          capabilities?: Json | null
+          config?: Json | null
+          created_at?: string
+          display_name: string
+          id?: string
+          is_active?: boolean
+          is_stubbed?: boolean
+          provider: string
+          updated_at?: string
+        }
+        Update: {
+          capabilities?: Json | null
+          config?: Json | null
+          created_at?: string
+          display_name?: string
+          id?: string
+          is_active?: boolean
+          is_stubbed?: boolean
+          provider?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       deposit_webhook_events: {
         Row: {
@@ -9162,15 +9269,20 @@ export type Database = {
           exceptions: number | null
           failed: number | null
           failed_amount: number | null
+          in_flight: number | null
           in_flight_amount: number | null
-          pending_assignment: number | null
-          provider_assigned: number | null
+          nsf_amount: number | null
+          nsf_count: number | null
           reconciled: number | null
           reconciled_amount: number | null
           returned: number | null
-          submitted: number | null
           succeeded: number | null
+          total_variance: number | null
+          unconfirmed_amount: number | null
+          unconfirmed_count: number | null
           unreconciled_amount: number | null
+          unsynced_count: number | null
+          variance_count: number | null
         }
         Relationships: []
       }
