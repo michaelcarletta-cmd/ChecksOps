@@ -303,6 +303,13 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
+        {/* Manager Command Center Tab */}
+        {activeTab === "manager" && (
+          <div className="mt-3">
+            <DepositManagerCommandCenter />
+          </div>
+        )}
+
         {/* Loss Draft Tab */}
         {activeTab === "lossdraft" && (
           <div className="mt-3">
