@@ -106,10 +106,8 @@ export const DarwinAutoSummary = ({ claimId, claim }: DarwinAutoSummaryProps) =>
     },
   });
 
-  // Auto-refresh effect - listen for new files, emails, notes, communications
+  // Always listen for real-time changes
   useEffect(() => {
-    if (!autoRefresh) return;
-
     const triggerRefresh = (source: string) => {
       toast({
         title: `New ${source} detected`,
