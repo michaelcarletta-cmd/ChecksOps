@@ -218,7 +218,7 @@ export function ClaimCustomFields({ claimId, claimStatus }: ClaimCustomFieldsPro
       </CardHeader>
       <CardContent>
         <div className="grid gap-4 md:grid-cols-2">
-          {customFields.map((field) => (
+          {visibleFields.map((field: any) => (
             <div key={field.id} className="space-y-2">
               <Label>
                 {field.label}
