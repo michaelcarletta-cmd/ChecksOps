@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { User, Calendar, MapPin, Mail, UserPlus, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { ClaimCustomFields } from "./ClaimCustomFields";
-import { SendForSignatureButton } from "./SendForSignatureButton";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -377,11 +376,6 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
           </div>
         </CardContent>
       </Card>
-
-      {/* E-Signature */}
-      {!isPortalUser && (
-        <SendForSignatureButton claim={claim} onUpdate={() => onClaimUpdated?.(claim)} />
-      )}
 
       {/* Custom Fields */}
       <ClaimCustomFields claimId={claim.id} />
