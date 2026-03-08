@@ -1,0 +1,525 @@
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import {
+  Upload, FileCheck, Clock, AlertTriangle, CheckCircle2, Ban,
+  Send, Eye, DollarSign, Users, Building2, Shield, ChevronRight,
+  RefreshCw, Banknote, FileText, History,
+} from "lucide-react";
+import { format } from "date-fns";
+
+// Types
+interface CheckItem {
+  id: string;
+  claim_id: string | null;
+  front_image_path: string;
+  back_image_path: string | null;
+  carrier_name: string | null;
+  check_number: string | null;
+  amount: number | null;
+  issue_date: string | null;
+  detected_claim_number: string | null;
+  payee_line: string | null;
+  is_multi_payee: boolean;
+  ocr_status: string;
+  deposit_recommendation: string | null;
+  deposit_recommendation_reasons: any;
+  status: string;
+  created_at: string;
+  check_payees?: CheckPayee[];
+}
+
+interface CheckPayee {
+  id: string;
+  check_id: string;
+  payee_name: string;
+  payee_type: string;
+  endorsement_status: string;
+  contact_email: string | null;
+  contact_phone: string | null;
+  notification_sent_via: string | null;
+  notification_sent_at: string | null;
+  endorsed_at: string | null;
+}
+
+interface AuditEntry {
+  id: string;
+  event_type: string;
+  event_description: string;
+  event_data: any;
+  created_at: string;
+  actor_id: string | null;
+}
+
+const statusColors: Record<string, string> = {
+  uploaded: "bg-muted text-muted-foreground",
+  ocr_complete: "bg-blue-500/20 text-blue-400",
+  endorsements_in_progress: "bg-amber-500/20 text-amber-400",
+  ready: "bg-emerald-500/20 text-emerald-400",
+  needs_review: "bg-red-500/20 text-red-400",
+  deposited: "bg-primary/20 text-primary",
+  voided: "bg-destructive/20 text-destructive",
+};
+
+const recommendationConfig: Record<string, { label: string; icon: any; color: string }> = {
+  ready_for_deposit: { label: "Ready for Deposit", icon: CheckCircle2, color: "text-emerald-400" },
+  endorsements_pending: { label: "Endorsements Pending", icon: Clock, color: "text-amber-400" },
+  branch_deposit_recommended: { label: "Branch Deposit", icon: Building2, color: "text-blue-400" },
+  request_reissue: { label: "Request Reissue", icon: AlertTriangle, color: "text-red-400" },
+};
+
+const payeeTypeIcons: Record<string, any> = {
+  insured: Users,
+  mortgage_company: Building2,
+  contractor: Shield,
+  public_adjuster: FileCheck,
+  unknown: AlertTriangle,
+};
+
+const endorsementColors: Record<string, string> = {
+  pending: "bg-muted text-muted-foreground",
+  viewed: "bg-blue-500/20 text-blue-400",
+  signed: "bg-emerald-500/20 text-emerald-400",
+  rejected: "bg-red-500/20 text-red-400",
+  expired: "bg-muted text-muted-foreground line-through",
+};
+
+export default function CheckCommandCenter() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [activeTab, setActiveTab] = useState("all");
+  const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+
+  // Fetch all checks
+  const { data: checks = [], isLoading } = useQuery({
+    queryKey: ["check-intake-items"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("check_intake_items")
+        .select("*, check_payees(*)")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as CheckItem[];
+    },
+  });
+
+  // Filtered lists
+  const newChecks = checks.filter((c) => c.status === "uploaded" || c.ocr_status === "pending");
+  const awaitingEndorsement = checks.filter((c) => c.deposit_recommendation === "endorsements_pending" || c.status === "endorsements_in_progress");
+  const readyForDeposit = checks.filter((c) => c.deposit_recommendation === "ready_for_deposit" && c.status === "ready");
+  const needsReview = checks.filter((c) => c.status === "needs_review" || c.ocr_status === "failed");
+
+  const filteredChecks = activeTab === "new" ? newChecks
+    : activeTab === "endorsements" ? awaitingEndorsement
+    : activeTab === "ready" ? readyForDeposit
+    : activeTab === "review" ? needsReview
+    : checks;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Check Command Center</h1>
+          <p className="text-sm text-muted-foreground">Insurance check intake, endorsement orchestration & deposit eligibility</p>
+        </div>
+        <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+          <DialogTrigger asChild>
+            <Button><Upload className="h-4 w-4 mr-2" />Upload Check</Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-lg">
+            <DialogHeader><DialogTitle>Upload Insurance Check</DialogTitle></DialogHeader>
+            <CheckUploadForm onSuccess={() => { setUploadDialogOpen(false); qc.invalidateQueries({ queryKey: ["check-intake-items"] }); }} />
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <SummaryCard label="New Uploads" count={newChecks.length} icon={Upload} color="text-blue-400" />
+        <SummaryCard label="Awaiting Endorsement" count={awaitingEndorsement.length} icon={Clock} color="text-amber-400" />
+        <SummaryCard label="Ready for Deposit" count={readyForDeposit.length} icon={CheckCircle2} color="text-emerald-400" />
+        <SummaryCard label="Needs Review" count={needsReview.length} icon={AlertTriangle} color="text-red-400" />
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_26rem]">
+        {/* Left: Check List */}
+        <Card>
+          <CardHeader className="pb-2">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="w-full">
+                <TabsTrigger value="all" className="flex-1">All ({checks.length})</TabsTrigger>
+                <TabsTrigger value="new" className="flex-1">New ({newChecks.length})</TabsTrigger>
+                <TabsTrigger value="endorsements" className="flex-1">Endorsements ({awaitingEndorsement.length})</TabsTrigger>
+                <TabsTrigger value="ready" className="flex-1">Ready ({readyForDeposit.length})</TabsTrigger>
+                <TabsTrigger value="review" className="flex-1">Review ({needsReview.length})</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ScrollArea className="h-[calc(100vh-340px)]">
+              {isLoading ? (
+                <div className="p-8 text-center text-muted-foreground">Loading checks...</div>
+              ) : filteredChecks.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">No checks in this category</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Check</TableHead>
+                      <TableHead>Carrier</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead>Payees</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Deposit</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredChecks.map((check) => {
+                      const RecIcon = check.deposit_recommendation ? recommendationConfig[check.deposit_recommendation]?.icon : null;
+                      return (
+                        <TableRow
+                          key={check.id}
+                          className={`cursor-pointer transition-colors ${selectedCheck === check.id ? "bg-accent/50" : ""}`}
+                          onClick={() => setSelectedCheck(check.id)}
+                        >
+                          <TableCell className="font-mono text-sm">#{check.check_number || "—"}</TableCell>
+                          <TableCell className="text-sm max-w-[120px] truncate">{check.carrier_name || "Pending OCR"}</TableCell>
+                          <TableCell className="text-right font-semibold tabular-nums">
+                            {check.amount != null ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—"}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs">{check.check_payees?.length || 0}</span>
+                              {check.is_multi_payee && <Badge variant="outline" className="text-[10px] px-1">Multi</Badge>}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={`text-[10px] ${statusColors[check.status] || ""}`}>{check.status.replace(/_/g, " ")}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            {RecIcon && (
+                              <RecIcon className={`h-4 w-4 ${recommendationConfig[check.deposit_recommendation!].color}`} />
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </ScrollArea>
+          </CardContent>
+        </Card>
+
+        {/* Right: Detail Panel */}
+        {selectedCheck ? (
+          <CheckDetailPanel checkId={selectedCheck} onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })} />
+        ) : (
+          <Card className="flex items-center justify-center h-[calc(100vh-340px)]">
+            <div className="text-center text-muted-foreground">
+              <Banknote className="h-12 w-12 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">Select a check to view details</p>
+            </div>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- Sub-Components ---
+
+function SummaryCard({ label, count, icon: Icon, color }: { label: string; count: number; icon: any; color: string }) {
+  return (
+    <Card>
+      <CardContent className="p-4 flex items-center gap-3">
+        <div className={`p-2 rounded-lg bg-accent/50 ${color}`}><Icon className="h-5 w-5" /></div>
+        <div>
+          <p className="text-2xl font-bold">{count}</p>
+          <p className="text-xs text-muted-foreground">{label}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
+  const { toast } = useToast();
+  const [frontFile, setFrontFile] = useState<File | null>(null);
+  const [backFile, setBackFile] = useState<File | null>(null);
+  const [claimId, setClaimId] = useState<string>("");
+  const [uploading, setUploading] = useState(false);
+
+  // Fetch claims for linking
+  const { data: claims = [] } = useQuery({
+    queryKey: ["claims-for-check-link"],
+    queryFn: async () => {
+      const { data } = await supabase.from("claims").select("id, claim_number, policyholder_name").order("created_at", { ascending: false }).limit(100);
+      return data || [];
+    },
+  });
+
+  const handleUpload = async () => {
+    if (!frontFile) { toast({ title: "Front image required", variant: "destructive" }); return; }
+    setUploading(true);
+    try {
+      const ts = Date.now();
+      const frontPath = `checks/${ts}_front_${frontFile.name}`;
+      const { error: fErr } = await supabase.storage.from("claim-files").upload(frontPath, frontFile);
+      if (fErr) throw fErr;
+
+      let backPath: string | null = null;
+      if (backFile) {
+        backPath = `checks/${ts}_back_${backFile.name}`;
+        const { error: bErr } = await supabase.storage.from("claim-files").upload(backPath, backFile);
+        if (bErr) throw bErr;
+      }
+
+      const { data: check, error: insErr } = await supabase.from("check_intake_items").insert({
+        front_image_path: frontPath,
+        back_image_path: backPath,
+        claim_id: claimId || null,
+        uploaded_by: (await supabase.auth.getUser()).data.user?.id,
+      }).select().single();
+
+      if (insErr) throw insErr;
+
+      // Trigger OCR
+      const { data: session } = await supabase.auth.getSession();
+      await supabase.functions.invoke("check-ocr-intake", {
+        body: { checkId: check.id },
+        headers: { Authorization: `Bearer ${session.session?.access_token}` },
+      });
+
+      toast({ title: "Check uploaded & OCR started" });
+      onSuccess();
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: e.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <Label>Front of Check *</Label>
+        <Input type="file" accept="image/*" onChange={(e) => setFrontFile(e.target.files?.[0] || null)} />
+      </div>
+      <div>
+        <Label>Back of Check</Label>
+        <Input type="file" accept="image/*" onChange={(e) => setBackFile(e.target.files?.[0] || null)} />
+      </div>
+      <div>
+        <Label>Link to Claim (optional)</Label>
+        <Select value={claimId} onValueChange={setClaimId}>
+          <SelectTrigger><SelectValue placeholder="Select claim..." /></SelectTrigger>
+          <SelectContent>
+            {claims.map((c: any) => (
+              <SelectItem key={c.id} value={c.id}>{c.claim_number} — {c.policyholder_name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <Button onClick={handleUpload} disabled={uploading || !frontFile} className="w-full">
+        {uploading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+        {uploading ? "Processing..." : "Upload & Analyze"}
+      </Button>
+    </div>
+  );
+}
+
+function CheckDetailPanel({ checkId, onRefresh }: { checkId: string; onRefresh: () => void }) {
+  const { toast } = useToast();
+  const [detailTab, setDetailTab] = useState("overview");
+
+  const { data: check } = useQuery({
+    queryKey: ["check-detail", checkId],
+    queryFn: async () => {
+      const { data } = await supabase.from("check_intake_items").select("*, check_payees(*)").eq("id", checkId).single();
+      return data as CheckItem;
+    },
+  });
+
+  const { data: auditLog = [] } = useQuery({
+    queryKey: ["check-audit", checkId],
+    queryFn: async () => {
+      const { data } = await supabase.from("check_audit_log").select("*").eq("check_id", checkId).order("created_at", { ascending: false });
+      return data as AuditEntry[];
+    },
+  });
+
+  if (!check) return null;
+  const rec = check.deposit_recommendation ? recommendationConfig[check.deposit_recommendation] : null;
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">Check #{check.check_number || "Pending"}</CardTitle>
+          <Badge className={statusColors[check.status]}>{check.status.replace(/_/g, " ")}</Badge>
+        </div>
+        {check.carrier_name && <p className="text-sm text-muted-foreground">{check.carrier_name}</p>}
+        {check.amount != null && (
+          <p className="text-xl font-bold tabular-nums">${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}</p>
+        )}
+      </CardHeader>
+      <CardContent className="p-0">
+        <Tabs value={detailTab} onValueChange={setDetailTab}>
+          <TabsList className="w-full rounded-none">
+            <TabsTrigger value="overview" className="flex-1 text-xs">Overview</TabsTrigger>
+            <TabsTrigger value="payees" className="flex-1 text-xs">Payees ({check.check_payees?.length || 0})</TabsTrigger>
+            <TabsTrigger value="eligibility" className="flex-1 text-xs">Eligibility</TabsTrigger>
+            <TabsTrigger value="audit" className="flex-1 text-xs">Audit</TabsTrigger>
+          </TabsList>
+
+          <ScrollArea className="h-[calc(100vh-520px)]">
+            <TabsContent value="overview" className="p-4 space-y-3 mt-0">
+              <DetailRow label="Check #" value={check.check_number} />
+              <DetailRow label="Carrier" value={check.carrier_name} />
+              <DetailRow label="Issue Date" value={check.issue_date ? format(new Date(check.issue_date), "MMM d, yyyy") : null} />
+              <DetailRow label="Detected Claim #" value={check.detected_claim_number} />
+              <DetailRow label="Payee Line" value={check.payee_line} />
+              <DetailRow label="Multi-Payee" value={check.is_multi_payee ? "Yes" : "No"} />
+              <DetailRow label="OCR Status" value={check.ocr_status} />
+              <Separator />
+              {check.claim_id && <DetailRow label="Linked Claim" value={check.claim_id.slice(0, 8) + "..."} />}
+            </TabsContent>
+
+            <TabsContent value="payees" className="p-4 space-y-3 mt-0">
+              {check.check_payees?.map((payee) => (
+                <PayeeCard key={payee.id} payee={payee} checkId={checkId} onRefresh={onRefresh} />
+              ))}
+              {(!check.check_payees || check.check_payees.length === 0) && (
+                <p className="text-sm text-muted-foreground text-center py-4">No payees detected yet</p>
+              )}
+            </TabsContent>
+
+            <TabsContent value="eligibility" className="p-4 space-y-3 mt-0">
+              {rec ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <rec.icon className={`h-5 w-5 ${rec.color}`} />
+                    <span className={`font-semibold ${rec.color}`}>{rec.label}</span>
+                  </div>
+                  <Separator />
+                  {Array.isArray(check.deposit_recommendation_reasons) && check.deposit_recommendation_reasons.map((r: string, i: number) => (
+                    <div key={i} className="flex items-start gap-2 text-sm">
+                      <ChevronRight className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
+                      <span>{r}</span>
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">Eligibility not yet evaluated</p>
+              )}
+            </TabsContent>
+
+            <TabsContent value="audit" className="p-4 space-y-2 mt-0">
+              {auditLog.map((entry) => (
+                <div key={entry.id} className="flex gap-3 text-sm">
+                  <div className="w-1 rounded-full bg-primary/30 shrink-0" />
+                  <div>
+                    <p className="font-medium">{entry.event_type.replace(/_/g, " ")}</p>
+                    <p className="text-muted-foreground text-xs">{entry.event_description}</p>
+                    <p className="text-muted-foreground text-[10px]">{format(new Date(entry.created_at), "MMM d, yyyy h:mm a")}</p>
+                  </div>
+                </div>
+              ))}
+              {auditLog.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No audit events</p>}
+            </TabsContent>
+          </ScrollArea>
+        </Tabs>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div className="flex justify-between text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium text-right max-w-[60%] truncate">{value || "—"}</span>
+    </div>
+  );
+}
+
+function PayeeCard({ payee, checkId, onRefresh }: { payee: CheckPayee; checkId: string; onRefresh: () => void }) {
+  const { toast } = useToast();
+  const [email, setEmail] = useState(payee.contact_email || "");
+  const [phone, setPhone] = useState(payee.contact_phone || "");
+  const [sending, setSending] = useState(false);
+  const PayeeIcon = payeeTypeIcons[payee.payee_type] || AlertTriangle;
+
+  const sendEndorsementRequest = async (method: "email" | "sms" | "both") => {
+    setSending(true);
+    try {
+      // Update contact info first
+      await supabase.from("check_payees").update({
+        contact_email: email || null,
+        contact_phone: phone || null,
+      }).eq("id", payee.id);
+
+      const { data: session } = await supabase.auth.getSession();
+      const { data, error } = await supabase.functions.invoke("check-endorsement", {
+        body: { action: "send_endorsement_request", payeeId: payee.id, method },
+        headers: { Authorization: `Bearer ${session.session?.access_token}` },
+      });
+
+      if (error) throw error;
+      toast({ title: `Endorsement request sent via ${method}` });
+      onRefresh();
+    } catch (e: any) {
+      toast({ title: "Failed to send", description: e.message, variant: "destructive" });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Card className="p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <PayeeIcon className="h-4 w-4 text-muted-foreground" />
+          <span className="font-medium text-sm">{payee.payee_name}</span>
+        </div>
+        <Badge className={`text-[10px] ${endorsementColors[payee.endorsement_status]}`}>
+          {payee.endorsement_status}
+        </Badge>
+      </div>
+      <p className="text-xs text-muted-foreground capitalize">{payee.payee_type.replace(/_/g, " ")}</p>
+
+      {payee.endorsement_status !== "signed" && payee.endorsement_status !== "rejected" && (
+        <div className="space-y-2 pt-1">
+          <Input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-8 text-xs" />
+          <Input placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} className="h-8 text-xs" />
+          <div className="flex gap-1">
+            <Button size="sm" variant="outline" className="flex-1 text-xs h-7" disabled={sending || !email} onClick={() => sendEndorsementRequest("email")}>
+              <Send className="h-3 w-3 mr-1" />Email
+            </Button>
+            <Button size="sm" variant="outline" className="flex-1 text-xs h-7" disabled={sending || !phone} onClick={() => sendEndorsementRequest("sms")}>
+              <Send className="h-3 w-3 mr-1" />SMS
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {payee.endorsed_at && (
+        <p className="text-[10px] text-muted-foreground">Endorsed {format(new Date(payee.endorsed_at), "MMM d, yyyy h:mm a")}</p>
+      )}
+    </Card>
+  );
+}

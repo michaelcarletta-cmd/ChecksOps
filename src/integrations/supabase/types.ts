@@ -1021,6 +1021,273 @@ export type Database = {
         }
         Relationships: []
       }
+      check_audit_log: {
+        Row: {
+          actor_id: string | null
+          check_id: string
+          created_at: string | null
+          event_data: Json | null
+          event_description: string | null
+          event_type: string
+          id: string
+        }
+        Insert: {
+          actor_id?: string | null
+          check_id: string
+          created_at?: string | null
+          event_data?: Json | null
+          event_description?: string | null
+          event_type: string
+          id?: string
+        }
+        Update: {
+          actor_id?: string | null
+          check_id?: string
+          created_at?: string | null
+          event_data?: Json | null
+          event_description?: string | null
+          event_type?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_audit_log_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      check_eligibility_results: {
+        Row: {
+          check_id: string
+          evaluated_at: string | null
+          evaluated_by: string | null
+          id: string
+          reasons: Json | null
+          recommendation: string
+          rule_results: Json | null
+        }
+        Insert: {
+          check_id: string
+          evaluated_at?: string | null
+          evaluated_by?: string | null
+          id?: string
+          reasons?: Json | null
+          recommendation: string
+          rule_results?: Json | null
+        }
+        Update: {
+          check_id?: string
+          evaluated_at?: string | null
+          evaluated_by?: string | null
+          id?: string
+          reasons?: Json | null
+          recommendation?: string
+          rule_results?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_eligibility_results_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      check_endorsement_events: {
+        Row: {
+          actor_id: string | null
+          check_id: string
+          created_at: string | null
+          event_data: Json | null
+          event_type: string
+          id: string
+          payee_id: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          check_id: string
+          created_at?: string | null
+          event_data?: Json | null
+          event_type: string
+          id?: string
+          payee_id?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          check_id?: string
+          created_at?: string | null
+          event_data?: Json | null
+          event_type?: string
+          id?: string
+          payee_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_endorsement_events_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "check_endorsement_events_payee_id_fkey"
+            columns: ["payee_id"]
+            isOneToOne: false
+            referencedRelation: "check_payees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      check_intake_items: {
+        Row: {
+          amount: number | null
+          back_image_path: string | null
+          carrier_name: string | null
+          check_number: string | null
+          claim_id: string | null
+          created_at: string | null
+          deposit_recommendation: string | null
+          deposit_recommendation_reasons: Json | null
+          detected_claim_number: string | null
+          front_image_path: string
+          id: string
+          is_multi_payee: boolean | null
+          issue_date: string | null
+          ocr_status: string | null
+          payee_line: string | null
+          raw_ocr_back: Json | null
+          raw_ocr_front: Json | null
+          status: string | null
+          updated_at: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          amount?: number | null
+          back_image_path?: string | null
+          carrier_name?: string | null
+          check_number?: string | null
+          claim_id?: string | null
+          created_at?: string | null
+          deposit_recommendation?: string | null
+          deposit_recommendation_reasons?: Json | null
+          detected_claim_number?: string | null
+          front_image_path: string
+          id?: string
+          is_multi_payee?: boolean | null
+          issue_date?: string | null
+          ocr_status?: string | null
+          payee_line?: string | null
+          raw_ocr_back?: Json | null
+          raw_ocr_front?: Json | null
+          status?: string | null
+          updated_at?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          amount?: number | null
+          back_image_path?: string | null
+          carrier_name?: string | null
+          check_number?: string | null
+          claim_id?: string | null
+          created_at?: string | null
+          deposit_recommendation?: string | null
+          deposit_recommendation_reasons?: Json | null
+          detected_claim_number?: string | null
+          front_image_path?: string
+          id?: string
+          is_multi_payee?: boolean | null
+          issue_date?: string | null
+          ocr_status?: string | null
+          payee_line?: string | null
+          raw_ocr_back?: Json | null
+          raw_ocr_front?: Json | null
+          status?: string | null
+          updated_at?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_intake_items_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "check_intake_items_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      check_payees: {
+        Row: {
+          check_id: string
+          contact_email: string | null
+          contact_phone: string | null
+          created_at: string | null
+          endorsed_at: string | null
+          endorsement_image_path: string | null
+          endorsement_status: string | null
+          endorsement_token: string | null
+          endorsement_token_expires_at: string | null
+          id: string
+          notification_sent_at: string | null
+          notification_sent_via: string | null
+          payee_name: string
+          payee_type: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          check_id: string
+          contact_email?: string | null
+          contact_phone?: string | null
+          created_at?: string | null
+          endorsed_at?: string | null
+          endorsement_image_path?: string | null
+          endorsement_status?: string | null
+          endorsement_token?: string | null
+          endorsement_token_expires_at?: string | null
+          id?: string
+          notification_sent_at?: string | null
+          notification_sent_via?: string | null
+          payee_name: string
+          payee_type?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          check_id?: string
+          contact_email?: string | null
+          contact_phone?: string | null
+          created_at?: string | null
+          endorsed_at?: string | null
+          endorsement_image_path?: string | null
+          endorsement_status?: string | null
+          endorsement_token?: string | null
+          endorsement_token_expires_at?: string | null
+          id?: string
+          notification_sent_at?: string | null
+          notification_sent_via?: string | null
+          payee_name?: string
+          payee_type?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_payees_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_adjusters: {
         Row: {
           adjuster_email: string | null
