@@ -368,27 +368,27 @@ Classify: mortgage (banks, lending, mortgage), contractor (construction, roofing
         userId,
       );
 
-      /* ---- Step 4: Claim wallet insertion (idempotent via upsert) ---- */
+      /* ---- Step 4: Claim wallet insertion (idempotent via check_number) ---- */
       if (check.claim_id && parsedAmount && parsedAmount > 0) {
-        // Check for existing payment linked to this check
-        const refNum = parsed.check_number ?? `check-${checkId}`;
+        const checkNum = parsed.check_number ?? `intake-${checkId}`;
         const { data: existingPayment } = await supabase
           .from("claim_payments")
           .select("id")
           .eq("claim_id", check.claim_id)
-          .eq("reference_number", refNum)
+          .eq("check_number", checkNum)
+          .eq("payment_method", "insurance_check")
           .limit(1);
 
         if (!existingPayment || existingPayment.length === 0) {
           await supabase.from("claim_payments").insert({
             claim_id: check.claim_id,
             amount: parsedAmount,
-            payment_type: "check",
             payment_method: "insurance_check",
-            description: `Insurance check #${parsed.check_number ?? "N/A"} from ${parsed.carrier_name ?? "Unknown carrier"}`,
-            reference_number: refNum,
+            check_number: checkNum,
+            notes: `Insurance check from ${parsed.carrier_name ?? "Unknown carrier"}`,
             payment_date: parsed.issue_date ?? new Date().toISOString().split("T")[0],
-            status: "pending",
+            recipient_type: "insured",
+            direction: "inbound",
           });
           await logAuditIdempotent(
             supabase, checkId, "claim_wallet_entry_created",
@@ -397,12 +397,12 @@ Classify: mortgage (banks, lending, mortgage), contractor (construction, roofing
             userId,
           );
         } else {
-          // Update existing payment amount if changed
+          // Update existing payment amount if changed on rerun
           await supabase
             .from("claim_payments")
             .update({
               amount: parsedAmount,
-              description: `Insurance check #${parsed.check_number ?? "N/A"} from ${parsed.carrier_name ?? "Unknown carrier"}`,
+              notes: `Insurance check from ${parsed.carrier_name ?? "Unknown carrier"}`,
             })
             .eq("id", existingPayment[0].id);
         }
