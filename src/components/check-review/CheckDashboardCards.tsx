@@ -3,55 +3,25 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   AlertTriangle, CheckCircle2, Building2, RotateCcw,
-  ClipboardCheck, Banknote,
 } from "lucide-react";
 
-interface StatusCounts {
+interface DashboardCounts {
   manual_review: number;
   branch_deposit: number;
   reissue_requested: number;
   approved_for_deposit: number;
   total_deposited: number;
-  total_value: number;
+  total_deposited_value: number;
+  total_checks: number;
 }
 
 export function CheckDashboardCards() {
   const { data: counts } = useQuery({
     queryKey: ["check-dashboard-counts"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("check_intake_items")
-        .select("status, deposit_recommendation, amount");
+      const { data, error } = await supabase.rpc("get_check_dashboard_counts");
       if (error) throw error;
-
-      const result: StatusCounts = {
-        manual_review: 0,
-        branch_deposit: 0,
-        reissue_requested: 0,
-        approved_for_deposit: 0,
-        total_deposited: 0,
-        total_value: 0,
-      };
-
-      for (const row of data ?? []) {
-        const s = row.status as string;
-        const rec = row.deposit_recommendation as string | null;
-
-        if (s === "needs_review" || s === "manual_review_required" || s === "endorsements_complete" || rec === "manual_review_required") {
-          result.manual_review++;
-        }
-        if (s === "branch_deposit_required" || rec === "branch_deposit_recommended") {
-          result.branch_deposit++;
-        }
-        if (s === "reissue_requested") result.reissue_requested++;
-        if (s === "approved_for_deposit") result.approved_for_deposit++;
-        if (s === "deposited") {
-          result.total_deposited++;
-          result.total_value += (row.amount as number) ?? 0;
-        }
-      }
-
-      return result;
+      return data as DashboardCounts;
     },
     refetchInterval: 30000,
   });
