@@ -380,7 +380,7 @@ Rules:
         );
       }
 
-      const aiResp = await fetch("https://ai.lovable.dev/api/chat", {
+      const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${lovableKey}`,
