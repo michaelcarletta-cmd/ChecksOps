@@ -1,9 +1,7 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { FileText, Loader2, RefreshCw, Zap, Clock, CheckCircle2 } from "lucide-react";
@@ -31,14 +29,6 @@ interface ClaimSummary {
 export const DarwinAutoSummary = ({ claimId, claim }: DarwinAutoSummaryProps) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [autoRefresh, setAutoRefresh] = useState(() => {
-    const saved = localStorage.getItem(`darwin-auto-refresh-${claimId}`);
-    return saved === "true";
-  });
-
-  useEffect(() => {
-    localStorage.setItem(`darwin-auto-refresh-${claimId}`, String(autoRefresh));
-  }, [autoRefresh, claimId]);
 
   // Fetch existing summary
   const { data: existingSummary, isLoading: isLoadingSummary } = useQuery({
@@ -114,10 +104,8 @@ export const DarwinAutoSummary = ({ claimId, claim }: DarwinAutoSummaryProps) =>
     },
   });
 
-  // Auto-refresh effect - listen for new files, emails, notes, communications
+  // Always listen for real-time changes
   useEffect(() => {
-    if (!autoRefresh) return;
-
     const triggerRefresh = (source: string) => {
       toast({
         title: `New ${source} detected`,
@@ -190,10 +178,7 @@ export const DarwinAutoSummary = ({ claimId, claim }: DarwinAutoSummaryProps) =>
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [autoRefresh, claimId]);
+  }, [claimId]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -211,18 +196,6 @@ export const DarwinAutoSummary = ({ claimId, claim }: DarwinAutoSummaryProps) =>
             <Zap className="h-5 w-5 text-primary" />
             Auto Claim Summary
           </CardTitle>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Switch
-                id="auto-refresh"
-                checked={autoRefresh}
-                onCheckedChange={setAutoRefresh}
-              />
-              <Label htmlFor="auto-refresh" className="text-sm">
-                Auto-refresh on updates
-              </Label>
-            </div>
-          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
