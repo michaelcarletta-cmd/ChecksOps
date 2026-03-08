@@ -77,7 +77,9 @@ export function IncreaseAccountSelector() {
         .eq("setting_key", "target_account_id")
         .maybeSingle();
       if (error) throw error;
-      return data?.setting_value as string | null;
+      // setting_value is Json — Supabase returns it parsed already
+      const raw = data?.setting_value;
+      return typeof raw === 'string' ? raw : raw ? String(raw) : null;
     },
   });
 
