@@ -76,6 +76,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
   const [resizingField, setResizingField] = useState<string | null>(null);
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const wasDraggingRef = useRef(false);
 
   // Fetch available templates
   const { data: templates } = useQuery({
