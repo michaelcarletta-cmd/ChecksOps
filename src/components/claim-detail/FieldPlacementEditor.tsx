@@ -95,7 +95,16 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
   useEffect(() => {
     if (!docxData) return;
     setIsLoading(true);
-    mammoth.convertToHtml({ arrayBuffer: docxData.buffer as ArrayBuffer })
+    mammoth.convertToHtml(
+      { arrayBuffer: docxData.buffer as ArrayBuffer },
+      {
+        convertImage: mammoth.images.imgElement(function(image: any) {
+          return image.read("base64").then(function(imageBuffer: string) {
+            return { src: `data:${image.contentType};base64,${imageBuffer}` };
+          });
+        }),
+      }
+    )
       .then((result) => {
         setDocxHtml(result.value);
         setIsLoading(false);
@@ -473,8 +482,8 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
             {isDocxMode && docxHtml && (
               <div
                 ref={docxContainerRef}
-                className="bg-white text-black shadow-md"
-                style={{ width: 600, minHeight: 800, padding: '40px 50px', boxSizing: 'border-box' }}
+                className="bg-white text-black shadow-md docx-preview"
+                style={{ width: 650, minHeight: 800, padding: '48px 56px', boxSizing: 'border-box' }}
                 dangerouslySetInnerHTML={{ __html: docxHtml }}
               />
             )}
