@@ -31,19 +31,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
   const [generatedDocPath, setGeneratedDocPath] = useState<string | null>(null);
   const [placedFields, setPlacedFields] = useState<any[]>([]);
 
-  // Fetch Make webhook URL from company branding
-  const { data: companyBranding } = useQuery({
-    queryKey: ["company-branding"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("company_branding")
-        .select("*")
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
+
 
   const { data: templates } = useQuery({
     queryKey: ["document-templates"],
