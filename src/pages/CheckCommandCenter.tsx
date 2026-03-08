@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, useMemo, useCallback } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -17,7 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Upload, FileCheck, Clock, AlertTriangle, CheckCircle2,
   Send, Eye, Users, Building2, Shield, ChevronRight,
-  RefreshCw, Banknote, ClipboardCheck, RotateCcw, Printer, Landmark,
+  RefreshCw, Banknote, ClipboardCheck, RotateCcw, Printer, Landmark, Trash2, Search,
 } from "lucide-react";
 import { format } from "date-fns";
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
@@ -139,10 +139,33 @@ const endorsementColors: Record<string, string> = {
 
 export default function CheckCommandCenter() {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("all");
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
+
+  const DELETABLE_STATUSES = ["uploaded", "ocr_complete", "needs_review", "manual_review_required"];
+
+  const deleteCheckMutation = useMutation({
+    mutationFn: async (checkId: string) => {
+      // Delete related records first, then the check
+      await supabase.from("check_eligibility_results").delete().eq("check_id", checkId);
+      await supabase.from("check_audit_log").delete().eq("check_id", checkId);
+      await supabase.from("check_payees").delete().eq("check_id", checkId);
+      const { error } = await supabase.from("check_intake_items").delete().eq("id", checkId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Check deleted" });
+      setSelectedCheck(null);
+      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+      qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+    },
+    onError: (e) => {
+      toast({ title: "Delete failed", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
+    },
+  });
 
   const { data: checks = [], isLoading } = useQuery({
     queryKey: ["check-intake-items"],
@@ -393,6 +416,7 @@ export default function CheckCommandCenter() {
                           <TableHead>Payees</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Deposit</TableHead>
+                          <TableHead className="w-10"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -401,6 +425,7 @@ export default function CheckCommandCenter() {
                             ? recommendationConfig[check.deposit_recommendation]
                             : null;
                           const RecIcon = rec?.icon ?? null;
+                          const canDelete = DELETABLE_STATUSES.includes(check.status);
                           return (
                             <TableRow
                               key={check.id}
@@ -434,6 +459,24 @@ export default function CheckCommandCenter() {
                               <TableCell>
                                 {RecIcon && (
                                   <RecIcon className={`h-4 w-4 ${rec!.color}`} />
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {canDelete && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (confirm("Delete this check? This cannot be undone.")) {
+                                        deleteCheckMutation.mutate(check.id);
+                                      }
+                                    }}
+                                    disabled={deleteCheckMutation.isPending}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
                                 )}
                               </TableCell>
                             </TableRow>
@@ -505,19 +548,30 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
   const [frontFile, setFrontFile] = useState<File | null>(null);
   const [backFile, setBackFile] = useState<File | null>(null);
   const [claimId, setClaimId] = useState<string>("");
+  const [claimSearch, setClaimSearch] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [claimDropdownOpen, setClaimDropdownOpen] = useState(false);
 
   const { data: claims = [] } = useQuery({
-    queryKey: ["claims-for-check-link"],
+    queryKey: ["claims-for-check-link", claimSearch],
     queryFn: async () => {
-      const { data } = await supabase
+      let q = supabase
         .from("claims")
         .select("id, claim_number, policyholder_name")
         .order("created_at", { ascending: false })
-        .limit(100);
+        .limit(50);
+      if (claimSearch.trim()) {
+        q = q.or(`claim_number.ilike.%${claimSearch.trim()}%,policyholder_name.ilike.%${claimSearch.trim()}%`);
+      }
+      const { data } = await q;
       return (data ?? []) as ClaimOption[];
     },
   });
+
+  const selectedClaim = useMemo(
+    () => claims.find((c) => c.id === claimId) ?? null,
+    [claims, claimId],
+  );
 
   const handleUpload = async () => {
     if (!frontFile) {
@@ -594,16 +648,46 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       </div>
       <div>
         <Label>Link to Claim (optional)</Label>
-        <Select value={claimId} onValueChange={setClaimId}>
-          <SelectTrigger><SelectValue placeholder="Select claim..." /></SelectTrigger>
-          <SelectContent>
-            {claims.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
-                {c.claim_number ?? "—"} — {c.policyholder_name ?? "Unknown"}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="relative">
+          <div className="flex items-center border rounded-md bg-background">
+            <Search className="h-4 w-4 ml-2 text-muted-foreground shrink-0" />
+            <Input
+              placeholder="Search by claim # or policyholder name..."
+              value={claimDropdownOpen ? claimSearch : (selectedClaim ? `${selectedClaim.claim_number ?? "—"} — ${selectedClaim.policyholder_name ?? "Unknown"}` : claimSearch)}
+              onChange={(e) => {
+                setClaimSearch(e.target.value);
+                setClaimDropdownOpen(true);
+                if (!e.target.value) setClaimId("");
+              }}
+              onFocus={() => setClaimDropdownOpen(true)}
+              className="border-0 focus-visible:ring-0 shadow-none"
+            />
+            {claimId && (
+              <Button variant="ghost" size="icon" className="h-7 w-7 mr-1 shrink-0" onClick={() => { setClaimId(""); setClaimSearch(""); }}>
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+          {claimDropdownOpen && claims.length > 0 && (
+            <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover shadow-md">
+              {claims.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
+                  onClick={() => {
+                    setClaimId(c.id);
+                    setClaimSearch("");
+                    setClaimDropdownOpen(false);
+                  }}
+                >
+                  <span className="font-mono">{c.claim_number ?? "—"}</span>
+                  <span className="text-muted-foreground"> — {c.policyholder_name ?? "Unknown"}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       <Button onClick={handleUpload} disabled={uploading || !frontFile} className="w-full">
         {uploading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
