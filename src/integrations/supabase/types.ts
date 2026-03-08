@@ -5473,6 +5473,13 @@ export type Database = {
             referencedRelation: "deposit_items"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "deposit_attachments_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_reminder_queue"
+            referencedColumns: ["deposit_item_id"]
+          },
         ]
       }
       deposit_audit_log: {
@@ -5533,6 +5540,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "deposit_items"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_audit_log_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_reminder_queue"
+            referencedColumns: ["deposit_item_id"]
           },
         ]
       }
@@ -5657,6 +5671,13 @@ export type Database = {
             referencedRelation: "deposit_items"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "deposit_exceptions_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_reminder_queue"
+            referencedColumns: ["deposit_item_id"]
+          },
         ]
       }
       deposit_items: {
@@ -5681,7 +5702,12 @@ export type Database = {
           exception_reason: string | null
           id: string
           idempotency_key: string
+          next_action: string | null
+          next_action_generated_at: string | null
+          next_action_reason: string | null
           nsf_flag: boolean | null
+          owner_assigned_at: string | null
+          owner_id: string | null
           provider: Database["public"]["Enums"]["deposit_provider"] | null
           provider_payload: Json | null
           provider_reference: string | null
@@ -5717,7 +5743,12 @@ export type Database = {
           exception_reason?: string | null
           id?: string
           idempotency_key?: string
+          next_action?: string | null
+          next_action_generated_at?: string | null
+          next_action_reason?: string | null
           nsf_flag?: boolean | null
+          owner_assigned_at?: string | null
+          owner_id?: string | null
           provider?: Database["public"]["Enums"]["deposit_provider"] | null
           provider_payload?: Json | null
           provider_reference?: string | null
@@ -5753,7 +5784,12 @@ export type Database = {
           exception_reason?: string | null
           id?: string
           idempotency_key?: string
+          next_action?: string | null
+          next_action_generated_at?: string | null
+          next_action_reason?: string | null
           nsf_flag?: boolean | null
+          owner_assigned_at?: string | null
+          owner_id?: string | null
           provider?: Database["public"]["Enums"]["deposit_provider"] | null
           provider_payload?: Json | null
           provider_reference?: string | null
@@ -5845,6 +5881,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "deposit_items"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_provider_attempts_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_reminder_queue"
+            referencedColumns: ["deposit_item_id"]
           },
         ]
       }
@@ -5938,6 +5981,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "deposit_items"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_webhook_events_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_reminder_queue"
+            referencedColumns: ["deposit_item_id"]
           },
           {
             foreignKeyName: "deposit_webhook_events_replay_of_fkey"
@@ -9425,6 +9475,37 @@ export type Database = {
         }
         Relationships: []
       }
+      deposit_exception_kpis: {
+        Row: {
+          avg_hours_to_resolve: number | null
+          critical_open: number | null
+          open_count: number | null
+          reopen_count: number | null
+          resolved_count: number | null
+          total_exceptions: number | null
+        }
+        Relationships: []
+      }
+      deposit_ops_kpis: {
+        Row: {
+          avg_days_to_bank_confirm: number | null
+          avg_days_to_closeout: number | null
+          avg_days_to_deposit: number | null
+          avg_days_to_reconcile: number | null
+          avg_days_to_sync: number | null
+          cleared_pending: number | null
+          closed_out: number | null
+          in_pipeline: number | null
+          nsf_rate_pct: number | null
+          reconciled_pending: number | null
+          total_closed_amount: number | null
+          total_items: number | null
+          total_nsf_amount: number | null
+          total_open_amount: number | null
+          variance_rate_pct: number | null
+        }
+        Relationships: []
+      }
       deposit_reconciliation_summary: {
         Row: {
           cleared_amount: number | null
@@ -9445,6 +9526,45 @@ export type Database = {
           unreconciled_amount: number | null
           unsynced_count: number | null
           variance_count: number | null
+        }
+        Relationships: []
+      }
+      deposit_reminder_queue: {
+        Row: {
+          amount: number | null
+          carrier_name: string | null
+          check_number: string | null
+          created_at: string | null
+          deposit_item_id: string | null
+          open_exception_count: number | null
+          owner_id: string | null
+          provider: Database["public"]["Enums"]["deposit_provider"] | null
+          reminder_type: string | null
+          status: Database["public"]["Enums"]["deposit_item_status"] | null
+        }
+        Insert: {
+          amount?: number | null
+          carrier_name?: string | null
+          check_number?: string | null
+          created_at?: string | null
+          deposit_item_id?: string | null
+          open_exception_count?: never
+          owner_id?: string | null
+          provider?: Database["public"]["Enums"]["deposit_provider"] | null
+          reminder_type?: never
+          status?: Database["public"]["Enums"]["deposit_item_status"] | null
+        }
+        Update: {
+          amount?: number | null
+          carrier_name?: string | null
+          check_number?: string | null
+          created_at?: string | null
+          deposit_item_id?: string | null
+          open_exception_count?: never
+          owner_id?: string | null
+          provider?: Database["public"]["Enums"]["deposit_provider"] | null
+          reminder_type?: never
+          status?: Database["public"]["Enums"]["deposit_item_status"] | null
         }
         Relationships: []
       }
@@ -9554,6 +9674,30 @@ export type Database = {
           p_job_type: string
           p_ttl_seconds?: number
         }
+        Returns: Json
+      }
+      assign_deposit_owner: {
+        Args: {
+          p_actor_id: string
+          p_deposit_item_ids: string[]
+          p_owner_id: string
+        }
+        Returns: Json
+      }
+      bulk_deposit_closeout: {
+        Args: { p_actor_id: string; p_deposit_item_ids: string[] }
+        Returns: Json
+      }
+      bulk_resolve_deposit_exceptions: {
+        Args: {
+          p_actor_id: string
+          p_exception_ids: string[]
+          p_resolution_notes: string
+        }
+        Returns: Json
+      }
+      bulk_sync_deposit_accounting: {
+        Args: { p_actor_id: string; p_deposit_item_ids: string[] }
         Returns: Json
       }
       can_manage_roles: { Args: { _user_id: string }; Returns: boolean }
@@ -9672,9 +9816,15 @@ export type Database = {
         Args: { p_key_name?: string; p_plaintext: string }
         Returns: string
       }
+      generate_next_deposit_action: {
+        Args: { p_deposit_item_id: string }
+        Returns: Json
+      }
       get_check_dashboard_counts: { Args: never; Returns: Json }
       get_claim_money_snapshot: { Args: { p_claim_id: string }; Returns: Json }
       get_deposit_aging_summary: { Args: never; Returns: Json }
+      get_deposit_exception_kpis: { Args: never; Returns: Json }
+      get_deposit_ops_kpis: { Args: never; Returns: Json }
       get_deposit_reconciliation_summary: { Args: never; Returns: Json }
       get_expiring_licenses: {
         Args: { p_days_ahead?: number; p_user_id: string }
