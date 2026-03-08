@@ -1162,6 +1162,9 @@ export type Database = {
           payee_line: string | null
           raw_ocr_back: Json | null
           raw_ocr_front: Json | null
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
           status: string | null
           updated_at: string | null
           uploaded_by: string | null
@@ -1185,6 +1188,9 @@ export type Database = {
           payee_line?: string | null
           raw_ocr_back?: Json | null
           raw_ocr_front?: Json | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           status?: string | null
           updated_at?: string | null
           uploaded_by?: string | null
@@ -1208,6 +1214,9 @@ export type Database = {
           payee_line?: string | null
           raw_ocr_back?: Json | null
           raw_ocr_front?: Json | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           status?: string | null
           updated_at?: string | null
           uploaded_by?: string | null
@@ -1290,6 +1299,109 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "check_payees_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      check_reissue_requests: {
+        Row: {
+          check_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          reason: string
+          reason_category: string
+          requested_by: string
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          check_id: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          reason: string
+          reason_category?: string
+          requested_by: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          check_id?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          reason?: string
+          reason_category?: string
+          requested_by?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_reissue_requests_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      check_review_decisions: {
+        Row: {
+          check_id: string
+          confirmed_amount: number | null
+          confirmed_carrier_name: string | null
+          confirmed_check_number: string | null
+          confirmed_payee_line: string | null
+          confirmed_payees: Json | null
+          created_at: string
+          decision: string
+          deposit_path: string
+          id: string
+          reviewer_id: string
+          reviewer_notes: string | null
+        }
+        Insert: {
+          check_id: string
+          confirmed_amount?: number | null
+          confirmed_carrier_name?: string | null
+          confirmed_check_number?: string | null
+          confirmed_payee_line?: string | null
+          confirmed_payees?: Json | null
+          created_at?: string
+          decision: string
+          deposit_path: string
+          id?: string
+          reviewer_id: string
+          reviewer_notes?: string | null
+        }
+        Update: {
+          check_id?: string
+          confirmed_amount?: number | null
+          confirmed_carrier_name?: string | null
+          confirmed_check_number?: string | null
+          confirmed_payee_line?: string | null
+          confirmed_payees?: Json | null
+          created_at?: string
+          decision?: string
+          deposit_path?: string
+          id?: string
+          reviewer_id?: string
+          reviewer_notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_review_decisions_check_id_fkey"
             columns: ["check_id"]
             isOneToOne: false
             referencedRelation: "check_intake_items"
