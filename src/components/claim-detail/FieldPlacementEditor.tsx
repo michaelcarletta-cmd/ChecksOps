@@ -545,11 +545,8 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
             {(!isLoading && (isDocxMode ? docxHtml : !isDocxMode)) && (
               <div
                 ref={overlayRef}
-                className={`absolute inset-0 ${activeTool ? 'cursor-crosshair' : 'cursor-pointer'}`}
+                className={`absolute inset-0 ${draggingField ? 'cursor-grabbing' : activeTool ? 'cursor-crosshair' : 'cursor-pointer'}`}
                 onClick={handleOverlayClick}
-                onMouseMove={handleOverlayMouseMove}
-                onMouseUp={handleOverlayMouseUp}
-                onMouseLeave={handleOverlayMouseUp}
               >
                 {/* Render field indicators for current page */}
                 {fields.filter(f => f.page === currentPage).map((field) => (
