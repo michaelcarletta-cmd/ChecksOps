@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FileDown, Shield, AlertTriangle } from "lucide-react";
 import { useRef } from "react";
+import { htmlElementToPdf } from "@/utils/htmlToPdf";
 
 interface StrategicMemoData {
   executive_summary: string;
@@ -52,16 +53,12 @@ export const StrategicMemo = ({ memo, claimNumber, driftDetected, driftReason }:
   const exportPDF = async () => {
     if (!memoRef.current) return;
     try {
-      const html2pdf = (await import("html2pdf.js")).default;
-      html2pdf()
-        .set({
-          margin: [10, 10],
-          filename: `Strategic-Memo-${claimNumber || "claim"}.pdf`,
-          html2canvas: { scale: 2 },
-          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-        })
-        .from(memoRef.current)
-        .save();
+      await htmlElementToPdf(memoRef.current, {
+        filename: `Strategic-Memo-${claimNumber || "claim"}.pdf`,
+        margin: 0.4,
+        format: "a4",
+        orientation: "portrait",
+      });
     } catch (e) {
       console.error("PDF export failed:", e);
     }
