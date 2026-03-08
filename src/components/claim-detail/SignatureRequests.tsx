@@ -30,7 +30,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
   const [generatedDocUrl, setGeneratedDocUrl] = useState<string | null>(null);
   const [generatedDocPath, setGeneratedDocPath] = useState<string | null>(null);
   const [placedFields, setPlacedFields] = useState<any[]>([]);
-
+  const [generatedDocxData, setGeneratedDocxData] = useState<Uint8Array | null>(null);
 
 
   const { data: templates } = useQuery({
