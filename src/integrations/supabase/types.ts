@@ -5424,6 +5424,364 @@ export type Database = {
         }
         Relationships: []
       }
+      deposit_audit_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          amount: number | null
+          batch_id: string | null
+          created_at: string
+          deposit_item_id: string | null
+          id: string
+          new_values: Json | null
+          notes: string | null
+          old_values: Json | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          amount?: number | null
+          batch_id?: string | null
+          created_at?: string
+          deposit_item_id?: string | null
+          id?: string
+          new_values?: Json | null
+          notes?: string | null
+          old_values?: Json | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          amount?: number | null
+          batch_id?: string | null
+          created_at?: string
+          deposit_item_id?: string | null
+          id?: string
+          new_values?: Json | null
+          notes?: string | null
+          old_values?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deposit_audit_log_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_audit_log_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deposit_batches: {
+        Row: {
+          batch_number: string
+          cleared_amount: number
+          cleared_at: string | null
+          created_at: string
+          created_by: string | null
+          failed_amount: number
+          id: string
+          notes: string | null
+          provider: Database["public"]["Enums"]["deposit_provider"]
+          status: Database["public"]["Enums"]["deposit_batch_status"]
+          submitted_at: string | null
+          total_amount: number
+          total_items: number
+          updated_at: string
+        }
+        Insert: {
+          batch_number?: string
+          cleared_amount?: number
+          cleared_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          failed_amount?: number
+          id?: string
+          notes?: string | null
+          provider: Database["public"]["Enums"]["deposit_provider"]
+          status?: Database["public"]["Enums"]["deposit_batch_status"]
+          submitted_at?: string | null
+          total_amount?: number
+          total_items?: number
+          updated_at?: string
+        }
+        Update: {
+          batch_number?: string
+          cleared_amount?: number
+          cleared_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          failed_amount?: number
+          id?: string
+          notes?: string | null
+          provider?: Database["public"]["Enums"]["deposit_provider"]
+          status?: Database["public"]["Enums"]["deposit_batch_status"]
+          submitted_at?: string | null
+          total_amount?: number
+          total_items?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      deposit_exceptions: {
+        Row: {
+          created_at: string
+          deposit_item_id: string
+          description: string
+          exception_code: string | null
+          exception_type: string
+          id: string
+          provider: Database["public"]["Enums"]["deposit_provider"] | null
+          resolution_notes: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          severity: string
+        }
+        Insert: {
+          created_at?: string
+          deposit_item_id: string
+          description: string
+          exception_code?: string | null
+          exception_type: string
+          id?: string
+          provider?: Database["public"]["Enums"]["deposit_provider"] | null
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+        }
+        Update: {
+          created_at?: string
+          deposit_item_id?: string
+          description?: string
+          exception_code?: string | null
+          exception_type?: string
+          id?: string
+          provider?: Database["public"]["Enums"]["deposit_provider"] | null
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deposit_exceptions_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deposit_items: {
+        Row: {
+          amount: number
+          batch_id: string | null
+          carrier_name: string | null
+          check_id: string
+          check_number: string | null
+          claim_id: string | null
+          cleared_at: string | null
+          created_at: string
+          exception_code: string | null
+          exception_reason: string | null
+          id: string
+          idempotency_key: string
+          provider: Database["public"]["Enums"]["deposit_provider"] | null
+          provider_payload: Json | null
+          provider_reference: string | null
+          provider_response: Json | null
+          reconciled_amount: number | null
+          reconciled_at: string | null
+          reconciled_by: string | null
+          status: Database["public"]["Enums"]["deposit_item_status"]
+          submitted_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          batch_id?: string | null
+          carrier_name?: string | null
+          check_id: string
+          check_number?: string | null
+          claim_id?: string | null
+          cleared_at?: string | null
+          created_at?: string
+          exception_code?: string | null
+          exception_reason?: string | null
+          id?: string
+          idempotency_key?: string
+          provider?: Database["public"]["Enums"]["deposit_provider"] | null
+          provider_payload?: Json | null
+          provider_reference?: string | null
+          provider_response?: Json | null
+          reconciled_amount?: number | null
+          reconciled_at?: string | null
+          reconciled_by?: string | null
+          status?: Database["public"]["Enums"]["deposit_item_status"]
+          submitted_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          batch_id?: string | null
+          carrier_name?: string | null
+          check_id?: string
+          check_number?: string | null
+          claim_id?: string | null
+          cleared_at?: string | null
+          created_at?: string
+          exception_code?: string | null
+          exception_reason?: string | null
+          id?: string
+          idempotency_key?: string
+          provider?: Database["public"]["Enums"]["deposit_provider"] | null
+          provider_payload?: Json | null
+          provider_reference?: string | null
+          provider_response?: Json | null
+          reconciled_amount?: number | null
+          reconciled_at?: string | null
+          reconciled_by?: string | null
+          status?: Database["public"]["Enums"]["deposit_item_status"]
+          submitted_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deposit_items_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_items_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: true
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deposit_provider_attempts: {
+        Row: {
+          attempt_number: number
+          completed_at: string | null
+          created_at: string
+          deposit_item_id: string
+          error_message: string | null
+          id: string
+          idempotency_key: string
+          provider: Database["public"]["Enums"]["deposit_provider"]
+          request_payload: Json | null
+          response_code: number | null
+          response_payload: Json | null
+          started_at: string
+          status: string
+        }
+        Insert: {
+          attempt_number?: number
+          completed_at?: string | null
+          created_at?: string
+          deposit_item_id: string
+          error_message?: string | null
+          id?: string
+          idempotency_key: string
+          provider: Database["public"]["Enums"]["deposit_provider"]
+          request_payload?: Json | null
+          response_code?: number | null
+          response_payload?: Json | null
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          attempt_number?: number
+          completed_at?: string | null
+          created_at?: string
+          deposit_item_id?: string
+          error_message?: string | null
+          id?: string
+          idempotency_key?: string
+          provider?: Database["public"]["Enums"]["deposit_provider"]
+          request_payload?: Json | null
+          response_code?: number | null
+          response_payload?: Json | null
+          started_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deposit_provider_attempts_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deposit_webhook_events: {
+        Row: {
+          created_at: string
+          deposit_item_id: string | null
+          event_id: string | null
+          event_type: string
+          id: string
+          idempotency_key: string | null
+          payload: Json
+          processed: boolean
+          processed_at: string | null
+          provider: Database["public"]["Enums"]["deposit_provider"]
+          replay_of: string | null
+        }
+        Insert: {
+          created_at?: string
+          deposit_item_id?: string | null
+          event_id?: string | null
+          event_type: string
+          id?: string
+          idempotency_key?: string | null
+          payload?: Json
+          processed?: boolean
+          processed_at?: string | null
+          provider: Database["public"]["Enums"]["deposit_provider"]
+          replay_of?: string | null
+        }
+        Update: {
+          created_at?: string
+          deposit_item_id?: string | null
+          event_id?: string | null
+          event_type?: string
+          id?: string
+          idempotency_key?: string | null
+          payload?: Json
+          processed?: boolean
+          processed_at?: string | null
+          provider?: Database["public"]["Enums"]["deposit_provider"]
+          replay_of?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deposit_webhook_events_deposit_item_id_fkey"
+            columns: ["deposit_item_id"]
+            isOneToOne: false
+            referencedRelation: "deposit_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deposit_webhook_events_replay_of_fkey"
+            columns: ["replay_of"]
+            isOneToOne: false
+            referencedRelation: "deposit_webhook_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       document_analysis_results: {
         Row: {
           carrier_name: string | null
@@ -9311,6 +9669,28 @@ export type Database = {
         | "contents"
         | "other"
       darwin_source_mode: "internal_only" | "hybrid"
+      deposit_batch_status:
+        | "open"
+        | "sealed"
+        | "submitted"
+        | "partially_cleared"
+        | "cleared"
+        | "exception"
+      deposit_item_status:
+        | "pending_assignment"
+        | "provider_assigned"
+        | "submitted"
+        | "processing"
+        | "succeeded"
+        | "failed"
+        | "returned"
+        | "reconciled"
+        | "exception"
+      deposit_provider:
+        | "manual_branch"
+        | "internal_ready"
+        | "synctera"
+        | "treasury_prime"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -9511,6 +9891,31 @@ export const Constants = {
         "other",
       ],
       darwin_source_mode: ["internal_only", "hybrid"],
+      deposit_batch_status: [
+        "open",
+        "sealed",
+        "submitted",
+        "partially_cleared",
+        "cleared",
+        "exception",
+      ],
+      deposit_item_status: [
+        "pending_assignment",
+        "provider_assigned",
+        "submitted",
+        "processing",
+        "succeeded",
+        "failed",
+        "returned",
+        "reconciled",
+        "exception",
+      ],
+      deposit_provider: [
+        "manual_branch",
+        "internal_ready",
+        "synctera",
+        "treasury_prime",
+      ],
     },
   },
 } as const
