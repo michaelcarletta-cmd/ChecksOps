@@ -143,6 +143,32 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
     },
   });
 
+  const useClaimFileMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedClaimFile) throw new Error("No file selected");
+
+      // Get signed URL for the existing PDF
+      const { data: urlData, error } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(selectedClaimFile.file_path, 3600);
+      if (error) throw error;
+
+      setGeneratedDocPath(selectedClaimFile.file_path);
+      setGeneratedDocUrl(urlData?.signedUrl || null);
+      setGeneratedDocxData(null);
+      setIsDocxTemplate(false);
+
+      return { url: urlData?.signedUrl };
+    },
+    onSuccess: () => {
+      setCurrentStep(2);
+      toast({ title: "PDF loaded! Now place signature fields." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to load file", description: error.message, variant: "destructive" });
+    },
+  });
+
   const createRequestMutation = useMutation({
     mutationFn: async ({ skipEmail = false }: { skipEmail?: boolean }) => {
       if (!selectedTemplate || !generatedDocPath) throw new Error("Missing required data");
