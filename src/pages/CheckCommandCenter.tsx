@@ -217,9 +217,9 @@ export default function CheckCommandCenter() {
           <TabsTrigger value="reissue" className="text-xs">Reissue ({reissueRequested.length})</TabsTrigger>
         </TabsList>
 
-        {/* Review Tab has its own layout */}
-        <TabsContent value="review" className="mt-3">
-          <div className="grid gap-4 lg:grid-cols-[1fr_28rem]">
+        {/* Review Tab — only renders when active */}
+        {activeTab === "review" && (
+          <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_28rem]">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
@@ -271,98 +271,96 @@ export default function CheckCommandCenter() {
               </Card>
             )}
           </div>
-        </TabsContent>
+        )}
 
-        {/* All other tabs use the standard layout */}
-        {["all", "new", "endorsements", "ready", "branch", "reissue"].map((tabKey) => (
-          <TabsContent key={tabKey} value={tabKey} className="mt-3">
-            <div className="grid gap-4 lg:grid-cols-[1fr_26rem]">
-              <Card>
-                <CardContent className="p-0">
-                  <ScrollArea className="h-[calc(100vh-400px)]">
-                    {isLoading ? (
-                      <div className="p-8 text-center text-muted-foreground">Loading checks...</div>
-                    ) : filteredChecks.length === 0 ? (
-                      <div className="p-8 text-center text-muted-foreground">No checks in this category</div>
-                    ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Check</TableHead>
-                            <TableHead>Carrier</TableHead>
-                            <TableHead className="text-right">Amount</TableHead>
-                            <TableHead>Payees</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Deposit</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredChecks.map((check) => {
-                            const rec = check.deposit_recommendation
-                              ? recommendationConfig[check.deposit_recommendation]
-                              : null;
-                            const RecIcon = rec?.icon ?? null;
-                            return (
-                              <TableRow
-                                key={check.id}
-                                className={`cursor-pointer transition-colors ${selectedCheck === check.id ? "bg-accent/50" : ""}`}
-                                onClick={() => setSelectedCheck(check.id)}
-                              >
-                                <TableCell className="font-mono text-sm">
-                                  #{check.check_number || "—"}
-                                </TableCell>
-                                <TableCell className="text-sm max-w-[120px] truncate">
-                                  {check.carrier_name || "Pending OCR"}
-                                </TableCell>
-                                <TableCell className="text-right font-semibold tabular-nums">
-                                  {check.amount != null
-                                    ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
-                                    : "—"}
-                                </TableCell>
-                                <TableCell>
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs">{check.check_payees?.length ?? 0}</span>
-                                    {check.is_multi_payee && (
-                                      <Badge variant="outline" className="text-[10px] px-1">Multi</Badge>
-                                    )}
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <Badge className={`text-[10px] ${statusColors[check.status] ?? ""}`}>
-                                    {check.status.replace(/_/g, " ")}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>
-                                  {RecIcon && (
-                                    <RecIcon className={`h-4 w-4 ${rec!.color}`} />
+        {/* All other tabs — only render the active one */}
+        {activeTab !== "review" && (
+          <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_26rem]">
+            <Card>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[calc(100vh-400px)]">
+                  {isLoading ? (
+                    <div className="p-8 text-center text-muted-foreground">Loading checks...</div>
+                  ) : filteredChecks.length === 0 ? (
+                    <div className="p-8 text-center text-muted-foreground">No checks in this category</div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Check</TableHead>
+                          <TableHead>Carrier</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead>Payees</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Deposit</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredChecks.map((check) => {
+                          const rec = check.deposit_recommendation
+                            ? recommendationConfig[check.deposit_recommendation]
+                            : null;
+                          const RecIcon = rec?.icon ?? null;
+                          return (
+                            <TableRow
+                              key={check.id}
+                              className={`cursor-pointer transition-colors ${selectedCheck === check.id ? "bg-accent/50" : ""}`}
+                              onClick={() => setSelectedCheck(check.id)}
+                            >
+                              <TableCell className="font-mono text-sm">
+                                #{check.check_number || "—"}
+                              </TableCell>
+                              <TableCell className="text-sm max-w-[120px] truncate">
+                                {check.carrier_name || "Pending OCR"}
+                              </TableCell>
+                              <TableCell className="text-right font-semibold tabular-nums">
+                                {check.amount != null
+                                  ? `$${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+                                  : "—"}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs">{check.check_payees?.length ?? 0}</span>
+                                  {check.is_multi_payee && (
+                                    <Badge variant="outline" className="text-[10px] px-1">Multi</Badge>
                                   )}
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    )}
-                  </ScrollArea>
-                </CardContent>
-              </Card>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge className={`text-[10px] ${statusColors[check.status] ?? ""}`}>
+                                  {check.status.replace(/_/g, " ")}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {RecIcon && (
+                                  <RecIcon className={`h-4 w-4 ${rec!.color}`} />
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
+                </ScrollArea>
+              </CardContent>
+            </Card>
 
-              {selectedCheck ? (
-                <CheckDetailPanel
-                  checkId={selectedCheck}
-                  onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
-                />
-              ) : (
-                <Card className="flex items-center justify-center h-[calc(100vh-400px)]">
-                  <div className="text-center text-muted-foreground">
-                    <Banknote className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                    <p className="text-sm">Select a check to view details</p>
-                  </div>
-                </Card>
-              )}
-            </div>
-          </TabsContent>
-        ))}
+            {selectedCheck ? (
+              <CheckDetailPanel
+                checkId={selectedCheck}
+                onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+              />
+            ) : (
+              <Card className="flex items-center justify-center h-[calc(100vh-400px)]">
+                <div className="text-center text-muted-foreground">
+                  <Banknote className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">Select a check to view details</p>
+                </div>
+              </Card>
+            )}
+          </div>
+        )}
       </Tabs>
     </div>
   );
