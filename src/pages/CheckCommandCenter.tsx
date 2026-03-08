@@ -23,6 +23,7 @@ import { format } from "date-fns";
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
 import { DepositPacketGenerator } from "@/components/check-review/DepositPacketGenerator";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards";
+import { LossDraftDashboard } from "@/components/loss-draft/LossDraftDashboard";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
