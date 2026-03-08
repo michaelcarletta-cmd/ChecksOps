@@ -8858,6 +8858,23 @@ export type Database = {
           status: string
         }[]
       }
+      submit_check_review_decision: {
+        Args: {
+          p_check_id: string
+          p_confirmed_amount?: number
+          p_confirmed_carrier_name?: string
+          p_confirmed_check_number?: string
+          p_confirmed_payee_line?: string
+          p_deposit_path: string
+          p_field_changes?: Json
+          p_merge_payees?: Json
+          p_reissue_reason?: string
+          p_reissue_reason_category?: string
+          p_reviewer_id: string
+          p_reviewer_notes?: string
+        }
+        Returns: Json
+      }
       user_org_id: { Args: { _user_id: string }; Returns: string }
       validate_session: {
         Args: { p_session_token: string }
