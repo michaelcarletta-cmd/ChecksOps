@@ -8490,6 +8490,18 @@ export type Database = {
       }
     }
     Views: {
+      check_dashboard_counts: {
+        Row: {
+          approved_for_deposit: number | null
+          branch_deposit: number | null
+          manual_review: number | null
+          reissue_requested: number | null
+          total_checks: number | null
+          total_deposited: number | null
+          total_deposited_value: number | null
+        }
+        Relationships: []
+      }
       claim_money_snapshot: {
         Row: {
           acv_value: number | null
@@ -8677,6 +8689,7 @@ export type Database = {
         Args: { p_key_name?: string; p_plaintext: string }
         Returns: string
       }
+      get_check_dashboard_counts: { Args: never; Returns: Json }
       get_claim_money_snapshot: { Args: { p_claim_id: string }; Returns: Json }
       get_expiring_licenses: {
         Args: { p_days_ahead?: number; p_user_id: string }
