@@ -496,7 +496,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                   )}
                 </div>
                 <div className="flex gap-2">
-                  {currentStep === 1 && (
+                  {currentStep === 1 && sourceType === "template" && (
                     <Button
                       onClick={() => generateDocumentMutation.mutate()}
                       disabled={!selectedTemplate || generateDocumentMutation.isPending}
@@ -505,6 +505,24 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                           Generating...
+                        </>
+                      ) : (
+                        <>
+                          Next
+                          <ChevronRight className="w-4 h-4 ml-2" />
+                        </>
+                      )}
+                    </Button>
+                  )}
+                  {currentStep === 1 && sourceType === "claim_file" && (
+                    <Button
+                      onClick={() => useClaimFileMutation.mutate()}
+                      disabled={!selectedClaimFile || useClaimFileMutation.isPending}
+                    >
+                      {useClaimFileMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Loading...
                         </>
                       ) : (
                         <>
