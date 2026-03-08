@@ -30,7 +30,8 @@ import { ExceptionResolutionPanel } from "@/components/deposit-ops/ExceptionReso
 import { DepositAgingDashboard } from "@/components/deposit-ops/DepositAgingDashboard";
 import { DepositReports } from "@/components/deposit-ops/DepositReports";
 import { DepositKPIDashboard, DepositOwnerQueue } from "@/components/deposit-ops/DepositOwnerQueue";
-import { ArrowDownToLine, Scale, Timer, FileBarChart, Shield as ShieldIcon, BarChart3, Users as UsersIcon } from "lucide-react";
+import { DepositManagerCommandCenter } from "@/components/deposit-ops/DepositManagerCommandCenter";
+import { ArrowDownToLine, Scale, Timer, FileBarChart, Shield as ShieldIcon, BarChart3, Users as UsersIcon, Command } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
