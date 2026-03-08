@@ -526,7 +526,7 @@ function CheckDetailPanel({
 }) {
   const [detailTab, setDetailTab] = useState("overview");
 
-  const { data: check } = useQuery({
+   const { data: check } = useQuery({
     queryKey: ["check-detail", checkId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -536,6 +536,20 @@ function CheckDetailPanel({
         .single();
       if (error) throw error;
       return data as CheckItem;
+    },
+  });
+
+  // Fetch reviewer profile for name display
+  const { data: reviewerProfile } = useQuery({
+    queryKey: ["reviewer-profile", check?.reviewed_by],
+    enabled: !!check?.reviewed_by,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", check!.reviewed_by!)
+        .single();
+      return data;
     },
   });
 
