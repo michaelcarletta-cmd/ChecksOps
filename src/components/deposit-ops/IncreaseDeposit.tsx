@@ -87,7 +87,7 @@ export function IncreaseAccountSelector() {
         .from("increase_settings")
         .upsert({
           setting_key: "target_account_id",
-          setting_value: JSON.stringify(accountId),
+          setting_value: accountId,
           updated_at: new Date().toISOString(),
         }, { onConflict: "setting_key" });
       if (error) throw error;
