@@ -89,9 +89,11 @@ async function sendMake(
   claim: any,
   documentSignedUrl: string,
   callbackUrl: string,
+  traceId: string,
 ) {
   const payload = {
     request_id: request.id,
+    trace_id: traceId,
     claim_id: request.claim_id,
     claim_number: claim.claim_number,
     policy_number: claim.policy_number,
@@ -126,39 +128,107 @@ async function sendMake(
   return { ok: res.ok, status: res.status, body: json ?? text };
 }
 
+/** Extract a provider-side ID from Make/SignNow response */
+function extractProviderId(body: any): string | null {
+  if (!body || typeof body !== "object") return null;
+  // Common SignNow / Make response fields
+  const candidates = [
+    body.envelope_id,
+    body.envelopeId,
+    body.document_id,
+    body.documentId,
+    body.request_id,
+    body.requestId,
+    body.workflow_id,
+    body.workflowId,
+    body.id,
+  ];
+  for (const v of candidates) {
+    if (v && typeof v === "string") return v;
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
-// Email HTML builder
+// Email HTML builder — full valid HTML with CTA button
 // ---------------------------------------------------------------------------
 
 function emailHtml(signer: any, request: any, signUrl: string): string {
-  return `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#fff">
-      <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:30px;border-radius:10px 10px 0 0;text-align:center">
-        <h1 style="color:#fff;margin:0;font-size:28px">📝 Signature Required</h1>
-      </div>
-      <div style="background:#f8f9fa;padding:30px;border-radius:0 0 10px 10px">
-        <p style="font-size:16px;color:#333;margin-bottom:20px">Hello <strong>${signer.signer_name}</strong>,</p>
-        <p style="font-size:16px;color:#333;margin-bottom:25px">
-          You have been requested to electronically sign a document. This will only take a moment.
-        </p>
-        <div style="background:#fff;border-left:4px solid #667eea;padding:20px;margin:25px 0;border-radius:5px;box-shadow:0 2px 8px rgba(0,0,0,.1)">
-          <p style="margin:8px 0;color:#555"><strong style="color:#333">📋 Claim:</strong> ${request.claims?.claim_number || "N/A"}</p>
-          <p style="margin:8px 0;color:#555"><strong style="color:#333">📄 Document:</strong> ${request.document_name}</p>
-          <p style="margin:8px 0;color:#555"><strong style="color:#333">👤 Policyholder:</strong> ${request.claims?.policyholder_name || "N/A"}</p>
-        </div>
-        <div style="text-align:center;margin:35px 0">
-          <a href="${signUrl}" style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;padding:16px 40px;text-decoration:none;border-radius:50px;display:inline-block;font-size:18px;font-weight:bold;box-shadow:0 4px 15px rgba(102,126,234,.4)">✍️ Click Here to Sign</a>
-        </div>
-        <div style="background:#e9ecef;padding:15px;border-radius:5px;margin:25px 0">
-          <p style="margin:0;font-size:13px;color:#666"><strong>Can't click?</strong> Copy this link:</p>
-          <p style="margin:10px 0 0"><a href="${signUrl}" style="color:#667eea;word-break:break-all;font-size:12px">${signUrl}</a></p>
-        </div>
-        <div style="border-top:2px solid #dee2e6;margin-top:30px;padding-top:20px">
-          <p style="color:#6c757d;font-size:13px;margin:5px 0">📧 Questions? Contact Freedom Claims support</p>
-          <p style="color:#adb5bd;font-size:11px;margin:15px 0 0">Automated message — do not reply.</p>
-        </div>
-      </div>
-    </div>`;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Signature Required</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f4f5f7;">
+    <tr>
+      <td align="center" style="padding:40px 20px;">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:30px 40px;text-align:center;">
+              <h1 style="color:#ffffff;margin:0;font-size:26px;font-weight:700;">&#128221; Signature Required</h1>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:30px 40px;">
+              <p style="font-size:16px;color:#333333;margin:0 0 16px;">Hello <strong>${signer.signer_name}</strong>,</p>
+              <p style="font-size:16px;color:#333333;margin:0 0 24px;">
+                You have been requested to electronically sign a document. This will only take a moment.
+              </p>
+              <!-- Document info card -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f8f9fa;border-left:4px solid #667eea;border-radius:6px;margin:0 0 28px;">
+                <tr>
+                  <td style="padding:18px 20px;">
+                    <p style="margin:6px 0;color:#555555;font-size:14px;"><strong style="color:#333333;">&#128203; Claim:</strong> ${request.claims?.claim_number || "N/A"}</p>
+                    <p style="margin:6px 0;color:#555555;font-size:14px;"><strong style="color:#333333;">&#128196; Document:</strong> ${request.document_name}</p>
+                    <p style="margin:6px 0;color:#555555;font-size:14px;"><strong style="color:#333333;">&#128100; Policyholder:</strong> ${request.claims?.policyholder_name || "N/A"}</p>
+                  </td>
+                </tr>
+              </table>
+              <!-- CTA Button -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td align="center" style="padding:8px 0 28px;">
+                    <!--[if mso]>
+                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${signUrl}" style="height:52px;v-text-anchor:middle;width:280px;" arcsize="50%" fillcolor="#667eea">
+                      <w:anchorlock/>
+                      <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:18px;font-weight:bold;">✍️ Click Here to Sign</center>
+                    </v:roundrect>
+                    <![endif]-->
+                    <!--[if !mso]><!-->
+                    <a href="${signUrl}" target="_blank" style="display:inline-block;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#ffffff;padding:14px 40px;text-decoration:none;border-radius:50px;font-size:18px;font-weight:bold;box-shadow:0 4px 15px rgba(102,126,234,0.4);">&#9997;&#65039; Click Here to Sign</a>
+                    <!--<![endif]-->
+                  </td>
+                </tr>
+              </table>
+              <!-- Fallback link -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#e9ecef;border-radius:6px;">
+                <tr>
+                  <td style="padding:14px 18px;">
+                    <p style="margin:0 0 8px;font-size:13px;color:#666666;"><strong>Can&#39;t click the button?</strong> Copy and paste this link into your browser:</p>
+                    <p style="margin:0;"><a href="${signUrl}" style="color:#667eea;word-break:break-all;font-size:12px;">${signUrl}</a></p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="padding:20px 40px;border-top:1px solid #dee2e6;">
+              <p style="color:#6c757d;font-size:13px;margin:0 0 6px;">&#128231; Questions? Contact Freedom Claims support</p>
+              <p style="color:#adb5bd;font-size:11px;margin:0;">Automated message — do not reply directly to this email.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -208,13 +278,21 @@ Deno.serve(async (req) => {
 
     claimId = request.claim_id;
     const claim = request.claims;
+    const signersArr: any[] = request.signature_signers || [];
 
     await log(sb, {
       request_id: requestId, signer_id: null, claim_id: claimId,
       stage: "request_loaded", status: "ok",
-      message: `${request.document_name} — ${request.signature_signers?.length ?? 0} signers`,
+      message: `${request.document_name} — ${signersArr.length} signers`,
       payload: { document_name: request.document_name },
     });
+
+    // ── load company branding ONCE ──
+    const { data: branding } = await sb
+      .from("company_branding")
+      .select("signnow_make_webhook_url")
+      .limit(1)
+      .maybeSingle();
 
     // ── determine delivery mode ──
     let deliveryMode: "manual_bypass" | "make_signnow" | "mailjet_direct";
@@ -222,13 +300,6 @@ Deno.serve(async (req) => {
     if (skipEmail) {
       deliveryMode = "manual_bypass";
     } else {
-      // Check company branding for Make webhook
-      const { data: branding } = await sb
-        .from("company_branding")
-        .select("signnow_make_webhook_url")
-        .limit(1)
-        .maybeSingle();
-
       deliveryMode = branding?.signnow_make_webhook_url
         ? "make_signnow"
         : "mailjet_direct";
@@ -243,7 +314,21 @@ Deno.serve(async (req) => {
 
     // ── manual bypass ──
     if (deliveryMode === "manual_bypass") {
-      const signerLinks = (request.signature_signers || []).map((s: any) => ({
+      // Validate every signer has an access_token
+      const missingTokenSigners = signersArr.filter((s: any) => !s.access_token);
+      if (missingTokenSigners.length > 0) {
+        const msg = `${missingTokenSigners.length} signer(s) missing access_token`;
+        await log(sb, {
+          request_id: requestId, signer_id: null, claim_id: claimId,
+          stage: "manual_bypass_validation", status: "error",
+          message: msg,
+          payload: { missing_signer_ids: missingTokenSigners.map((s: any) => s.id) },
+        });
+        await failRequest(sb, requestId, msg);
+        throw new Error(msg);
+      }
+
+      const signerLinks = signersArr.map((s: any) => ({
         signer_id: s.id,
         signer_name: s.signer_name,
         signer_email: s.signer_email,
@@ -268,18 +353,12 @@ Deno.serve(async (req) => {
 
     // ── make_signnow ──
     if (deliveryMode === "make_signnow") {
-      const { data: branding } = await sb
-        .from("company_branding")
-        .select("signnow_make_webhook_url")
-        .limit(1)
-        .maybeSingle();
-
       const webhookUrl = branding!.signnow_make_webhook_url!;
 
-      // Generate a signed URL for the document
+      // Generate a signed URL for the document — 72h for Make ingestion + retries
       const { data: urlData } = await sb.storage
         .from("claim-files")
-        .createSignedUrl(request.document_path, 86400);
+        .createSignedUrl(request.document_path, 259200); // 72 hours
 
       if (!urlData?.signedUrl) {
         const msg = "Could not generate signed URL for document";
@@ -288,21 +367,24 @@ Deno.serve(async (req) => {
       }
 
       const callbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/signature-webhook`;
+      const traceId = `esign-${requestId}`;
 
       await log(sb, {
         request_id: requestId, signer_id: null, claim_id: claimId,
         stage: "make_webhook_sending", status: "in_progress",
         message: `POSTing to Make webhook`,
-        payload: { webhookUrl: webhookUrl.substring(0, 60) + "..." },
+        payload: { webhookUrl: webhookUrl.substring(0, 60) + "...", traceId },
       });
 
-      const makeResult = await sendMake(webhookUrl, request, claim, urlData.signedUrl, callbackUrl);
+      const makeResult = await sendMake(webhookUrl, request, claim, urlData.signedUrl, callbackUrl, traceId);
+
+      const providerId = extractProviderId(makeResult.body);
 
       await log(sb, {
         request_id: requestId, signer_id: null, claim_id: claimId,
         stage: "make_webhook_response", status: makeResult.ok ? "ok" : "error",
         message: `Make responded ${makeResult.status}`,
-        payload: { status: makeResult.status, body: makeResult.body },
+        payload: { status: makeResult.status, body: makeResult.body, provider_id: providerId },
       });
 
       if (!makeResult.ok) {
@@ -320,32 +402,33 @@ Deno.serve(async (req) => {
         status: "pending",
         delivery_mode: "make_signnow",
         sent_at: new Date().toISOString(),
-        provider_status: "sent_to_make",
+        provider_status: "submitted_to_provider",
+        provider_message_id: providerId,
         last_provider_response: typeof makeResult.body === "string" ? makeResult.body : JSON.stringify(makeResult.body),
       }).eq("id", requestId);
 
-      // Mark signers
-      for (const signer of request.signature_signers || []) {
+      // Mark signers as queued — not yet delivered
+      for (const signer of signersArr) {
         await sb.from("signature_signers").update({
-          delivery_status: "sent_via_make",
+          delivery_status: "submitted_to_provider",
         }).eq("id", signer.id);
       }
 
       await log(sb, {
         request_id: requestId, signer_id: null, claim_id: claimId,
         stage: "function_complete", status: "ok",
-        message: "Sent via Make/SignNow",
-        payload: null,
+        message: "Submitted to Make/SignNow",
+        payload: { provider_id: providerId },
       });
 
-      return respond({ success: true, mode: "make_signnow" });
+      return respond({ success: true, mode: "make_signnow", provider_id: providerId });
     }
 
     // ── mailjet_direct ──
     const appUrl = "https://freedomclaims.lovable.app";
     const results: { signer_id: string; success: boolean; error?: string }[] = [];
 
-    for (const signer of request.signature_signers || []) {
+    for (const signer of signersArr) {
       const signUrl = `${appUrl}/sign?token=${signer.access_token}`;
       const traceId = `esign-${requestId}-${signer.id}`;
 
@@ -403,19 +486,31 @@ Deno.serve(async (req) => {
 
     const allFailed = results.every((r) => !r.success);
     const someFailed = results.some((r) => !r.success);
+    const allSucceeded = results.every((r) => r.success);
+
+    // Determine correct provider_status
+    let providerStatus: string;
+    if (allSucceeded) {
+      providerStatus = "emails_sent";
+    } else if (allFailed) {
+      providerStatus = "emails_failed";
+    } else {
+      providerStatus = "emails_partially_failed";
+    }
 
     await sb.from("signature_requests").update({
       status: allFailed ? "failed" : "pending",
       delivery_mode: "mailjet_direct",
-      sent_at: new Date().toISOString(),
+      // Only set sent_at when at least one email succeeded
+      sent_at: allFailed ? null : new Date().toISOString(),
       last_error: allFailed ? "All emails failed" : someFailed ? "Some emails failed" : null,
-      provider_status: "emails_sent",
+      provider_status: providerStatus,
     }).eq("id", requestId);
 
     await log(sb, {
       request_id: requestId, signer_id: null, claim_id: claimId,
       stage: "function_complete", status: allFailed ? "error" : "ok",
-      message: `${results.filter((r) => r.success).length}/${results.length} emails sent`,
+      message: `${results.filter((r) => r.success).length}/${results.length} emails sent — ${providerStatus}`,
       payload: { results },
     });
 
