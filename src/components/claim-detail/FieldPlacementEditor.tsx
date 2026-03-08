@@ -460,7 +460,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
           </div>
         )}
 
-        {/* PDF Document with overlay */}
+        {/* Document rendering with overlay */}
         <div className="border rounded overflow-auto bg-muted/30 flex justify-center p-4">
           {isLoading && (
             <div className="flex items-center justify-center h-96 w-full">
@@ -469,32 +469,45 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
           )}
           
           <div className="relative inline-block">
-            <Document
-              file={documentUrl}
-              onLoadSuccess={onDocumentLoadSuccess}
-              onLoadError={onDocumentLoadError}
-              loading={
-                <div className="flex items-center justify-center h-96 w-[600px]">
-                  <p className="text-muted-foreground">Loading PDF...</p>
-                </div>
-              }
-              error={
-                <div className="flex flex-col items-center justify-center h-96 w-[600px] bg-muted/20 border rounded">
-                  <p className="text-muted-foreground mb-4">Could not load PDF preview</p>
-                  <Button variant="outline" onClick={() => window.open(documentUrl, '_blank')}>
-                    Open PDF in New Tab
-                  </Button>
-                </div>
-              }
-            >
-              <Page
-                pageNumber={currentPage}
-                width={600}
-                onLoadSuccess={onPageLoadSuccess}
-                renderTextLayer={false}
-                renderAnnotationLayer={false}
+            {/* DOCX rendered as HTML */}
+            {isDocxMode && docxHtml && (
+              <div
+                ref={docxContainerRef}
+                className="bg-white text-black shadow-md"
+                style={{ width: 600, minHeight: 800, padding: '40px 50px', boxSizing: 'border-box' }}
+                dangerouslySetInnerHTML={{ __html: docxHtml }}
               />
-            </Document>
+            )}
+
+            {/* PDF rendered via react-pdf */}
+            {!isDocxMode && documentUrl && (
+              <Document
+                file={documentUrl}
+                onLoadSuccess={onDocumentLoadSuccess}
+                onLoadError={onDocumentLoadError}
+                loading={
+                  <div className="flex items-center justify-center h-96 w-[600px]">
+                    <p className="text-muted-foreground">Loading PDF...</p>
+                  </div>
+                }
+                error={
+                  <div className="flex flex-col items-center justify-center h-96 w-[600px] bg-muted/20 border rounded">
+                    <p className="text-muted-foreground mb-4">Could not load PDF preview</p>
+                    <Button variant="outline" onClick={() => window.open(documentUrl, '_blank')}>
+                      Open PDF in New Tab
+                    </Button>
+                  </div>
+                }
+              >
+                <Page
+                  pageNumber={currentPage}
+                  width={600}
+                  onLoadSuccess={onPageLoadSuccess}
+                  renderTextLayer={false}
+                  renderAnnotationLayer={false}
+                />
+              </Document>
+            )}
             
             {/* Clickable overlay for field placement */}
             {!isLoading && (
