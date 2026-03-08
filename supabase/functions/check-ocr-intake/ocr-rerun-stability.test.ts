@@ -15,8 +15,13 @@ import "https://deno.land/std@0.224.0/dotenv/load.ts";
 import { assertEquals, assertNotEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
-const SUPABASE_URL = Deno.env.get("VITE_SUPABASE_URL") ?? Deno.env.get("SUPABASE_URL")!;
-const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SUPABASE_URL = Deno.env.get("VITE_SUPABASE_URL") ?? Deno.env.get("SUPABASE_URL");
+const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("VITE_SUPABASE_PUBLISHABLE_KEY");
+
+if (!SUPABASE_URL || !SERVICE_KEY) {
+  console.warn("⚠️  Skipping OCR rerun tests — SUPABASE_URL or SERVICE_ROLE_KEY not set");
+  Deno.exit(0);
+}
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
