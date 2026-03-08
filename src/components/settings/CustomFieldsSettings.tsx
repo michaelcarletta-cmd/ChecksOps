@@ -93,7 +93,8 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
           field_type: fieldForm.field_type,
           options: fieldForm.options,
           is_required: fieldForm.is_required,
-        })
+          visible_on_statuses: fieldForm.visible_on_statuses.length > 0 ? fieldForm.visible_on_statuses : null,
+        } as any)
         .eq("id", editingField.id);
       if (error) throw error;
     },
