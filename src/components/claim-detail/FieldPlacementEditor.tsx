@@ -95,7 +95,16 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
   useEffect(() => {
     if (!docxData) return;
     setIsLoading(true);
-    mammoth.convertToHtml({ arrayBuffer: docxData.buffer as ArrayBuffer })
+    mammoth.convertToHtml(
+      { arrayBuffer: docxData.buffer as ArrayBuffer },
+      {
+        convertImage: mammoth.images.imgElement(function(image: any) {
+          return image.read("base64").then(function(imageBuffer: string) {
+            return { src: `data:${image.contentType};base64,${imageBuffer}` };
+          });
+        }),
+      }
+    )
       .then((result) => {
         setDocxHtml(result.value);
         setIsLoading(false);
