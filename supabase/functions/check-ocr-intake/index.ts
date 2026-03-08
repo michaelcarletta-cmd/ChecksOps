@@ -1,5 +1,4 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
-import { encode as base64Encode } from "https://deno.land/std@0.208.0/encoding/base64.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
