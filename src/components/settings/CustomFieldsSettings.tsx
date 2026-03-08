@@ -314,6 +314,7 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
           <TableHead className="w-12"></TableHead>
           <TableHead>Label</TableHead>
           <TableHead>Type</TableHead>
+          <TableHead>Visible On</TableHead>
           <TableHead>Required</TableHead>
           <TableHead>Status</TableHead>
           <TableHead className="text-right">Actions</TableHead>
