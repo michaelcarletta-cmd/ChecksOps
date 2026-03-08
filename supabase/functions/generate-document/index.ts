@@ -92,11 +92,18 @@ Deno.serve(async (req) => {
     const formatCurrency = (val: number) => `$${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     // Download template file
+    console.log("Downloading template file:", template.file_path);
     const { data: fileData, error: downloadError } = await supabaseClient.storage
       .from("document-templates")
       .download(template.file_path);
 
-    if (downloadError) throw downloadError;
+    if (downloadError) {
+      console.error("Storage download error:", JSON.stringify(downloadError));
+      throw new Error(`Failed to download template: ${downloadError.message || JSON.stringify(downloadError)}`);
+    }
+    if (!fileData) {
+      throw new Error("Template file not found in storage");
+    }
 
     // Check file type based on extension
     const fileName = template.file_name.toLowerCase();
