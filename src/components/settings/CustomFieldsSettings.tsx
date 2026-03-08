@@ -262,6 +262,48 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
         />
         <Label>Required field</Label>
       </div>
+
+      <div>
+        <Label>Show on Claim Statuses</Label>
+        <p className="text-xs text-muted-foreground mb-2">
+          Leave empty to show on all statuses. Select specific statuses to only show this field when a claim is in one of those statuses.
+        </p>
+        <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
+          {claimStatuses?.map((status) => (
+            <div key={status.id} className="flex items-center gap-2">
+              <Checkbox
+                id={`status-${status.id}`}
+                checked={fieldForm.visible_on_statuses.includes(status.name)}
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    setFieldForm({
+                      ...fieldForm,
+                      visible_on_statuses: [...fieldForm.visible_on_statuses, status.name],
+                    });
+                  } else {
+                    setFieldForm({
+                      ...fieldForm,
+                      visible_on_statuses: fieldForm.visible_on_statuses.filter((s) => s !== status.name),
+                    });
+                  }
+                }}
+              />
+              <Label htmlFor={`status-${status.id}`} className="text-sm font-normal cursor-pointer">
+                {status.name}
+              </Label>
+            </div>
+          ))}
+        </div>
+        {fieldForm.visible_on_statuses.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {fieldForm.visible_on_statuses.map((s) => (
+              <Badge key={s} variant="secondary" className="text-xs">
+                {s}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 
