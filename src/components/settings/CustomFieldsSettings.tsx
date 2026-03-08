@@ -142,6 +142,7 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
       field_type: "text",
       options: [],
       is_required: false,
+      visible_on_statuses: [],
     });
     setOptionInput("");
   };
