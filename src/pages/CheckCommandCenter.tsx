@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
+import { EndorsementChecklist } from "@/components/check-review/EndorsementChecklist";
 import { DepositPacketGenerator } from "@/components/check-review/DepositPacketGenerator";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards";
 import { LossDraftDashboard } from "@/components/loss-draft/LossDraftDashboard";
@@ -784,11 +785,13 @@ function CheckDetailPanel({
         <Tabs value={detailTab} onValueChange={setDetailTab}>
           <TabsList className="w-full rounded-none">
             <TabsTrigger value="overview" className="flex-1 text-xs">Overview</TabsTrigger>
+            <TabsTrigger value="endorsements" className="flex-1 text-xs">
+              Endorsements
+            </TabsTrigger>
             <TabsTrigger value="payees" className="flex-1 text-xs">
               Payees ({check.check_payees?.length ?? 0})
             </TabsTrigger>
             <TabsTrigger value="eligibility" className="flex-1 text-xs">Eligibility</TabsTrigger>
-            <TabsTrigger value="packet" className="flex-1 text-xs">Packet</TabsTrigger>
             <TabsTrigger value="audit" className="flex-1 text-xs">Audit</TabsTrigger>
           </TabsList>
 
@@ -823,6 +826,13 @@ function CheckDetailPanel({
               {check.claim_id && (
                 <DetailRow label="Linked Claim" value={check.claim_id.slice(0, 8) + "..."} />
               )}
+            </TabsContent>
+
+            <TabsContent value="endorsements" className="p-4 mt-0">
+              <EndorsementChecklist
+                checkId={checkId}
+                onRefresh={onRefresh}
+              />
             </TabsContent>
 
             <TabsContent value="payees" className="p-4 space-y-3 mt-0">

@@ -506,6 +506,23 @@ Rules:
         throw new Error(`Transaction failed: ${rpcErr.message}`);
       }
 
+      // ---- Auto-create endorsement records from payees ----
+      if (!hasActiveEndorsements && payees.length > 0) {
+        try {
+          const { data: endorsementResult, error: endorseErr } = await supabase.rpc(
+            "create_endorsements_from_payees",
+            { p_check_id: checkId },
+          );
+          if (endorseErr) {
+            console.error("check-ocr-intake: endorsement creation failed:", endorseErr.message);
+          } else {
+            console.log("check-ocr-intake: endorsements created:", endorsementResult);
+          }
+        } catch (endorseEx) {
+          console.error("check-ocr-intake: endorsement creation exception:", endorseEx);
+        }
+      }
+
       console.log("check-ocr-intake: completed successfully");
 
       return new Response(

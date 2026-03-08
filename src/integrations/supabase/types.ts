@@ -1142,6 +1142,99 @@ export type Database = {
           },
         ]
       }
+      check_endorsements: {
+        Row: {
+          check_id: string
+          consent_text: string | null
+          contact_email: string | null
+          contact_phone: string | null
+          created_at: string
+          id: string
+          ip_address: string | null
+          last_reminder_at: string | null
+          loss_draft_task_created: boolean
+          notes: string | null
+          payee_id: string | null
+          payee_name: string
+          payee_type: string
+          reminder_count: number
+          request_sent_at: string | null
+          signature_image_url: string | null
+          signature_method: string | null
+          signed_at: string | null
+          status: string
+          token: string | null
+          token_expires_at: string | null
+          updated_at: string
+          user_agent: string | null
+        }
+        Insert: {
+          check_id: string
+          consent_text?: string | null
+          contact_email?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          last_reminder_at?: string | null
+          loss_draft_task_created?: boolean
+          notes?: string | null
+          payee_id?: string | null
+          payee_name: string
+          payee_type?: string
+          reminder_count?: number
+          request_sent_at?: string | null
+          signature_image_url?: string | null
+          signature_method?: string | null
+          signed_at?: string | null
+          status?: string
+          token?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Update: {
+          check_id?: string
+          consent_text?: string | null
+          contact_email?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          last_reminder_at?: string | null
+          loss_draft_task_created?: boolean
+          notes?: string | null
+          payee_id?: string | null
+          payee_name?: string
+          payee_type?: string
+          reminder_count?: number
+          request_sent_at?: string | null
+          signature_image_url?: string | null
+          signature_method?: string | null
+          signed_at?: string | null
+          status?: string
+          token?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_endorsements_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "check_endorsements_payee_id_fkey"
+            columns: ["payee_id"]
+            isOneToOne: false
+            referencedRelation: "check_payees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       check_intake_items: {
         Row: {
           amount: number | null
@@ -6778,6 +6871,117 @@ export type Database = {
         }
         Relationships: []
       }
+      endorsement_audit_log: {
+        Row: {
+          actor_id: string | null
+          check_id: string
+          created_at: string
+          endorsement_id: string
+          event_data: Json | null
+          event_description: string | null
+          event_type: string
+          id: string
+          ip_address: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          check_id: string
+          created_at?: string
+          endorsement_id: string
+          event_data?: Json | null
+          event_description?: string | null
+          event_type: string
+          id?: string
+          ip_address?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          check_id?: string
+          created_at?: string
+          endorsement_id?: string
+          event_data?: Json | null
+          event_description?: string | null
+          event_type?: string
+          id?: string
+          ip_address?: string | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "endorsement_audit_log_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "endorsement_audit_log_endorsement_id_fkey"
+            columns: ["endorsement_id"]
+            isOneToOne: false
+            referencedRelation: "check_endorsements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      endorsement_requests: {
+        Row: {
+          check_id: string
+          created_at: string
+          delivery_error: string | null
+          delivery_status: string | null
+          email_address: string | null
+          endorsement_id: string
+          id: string
+          method: string
+          phone_number: string | null
+          sent_at: string
+          sent_by: string | null
+        }
+        Insert: {
+          check_id: string
+          created_at?: string
+          delivery_error?: string | null
+          delivery_status?: string | null
+          email_address?: string | null
+          endorsement_id: string
+          id?: string
+          method: string
+          phone_number?: string | null
+          sent_at?: string
+          sent_by?: string | null
+        }
+        Update: {
+          check_id?: string
+          created_at?: string
+          delivery_error?: string | null
+          delivery_status?: string | null
+          email_address?: string | null
+          endorsement_id?: string
+          id?: string
+          method?: string
+          phone_number?: string | null
+          sent_at?: string
+          sent_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "endorsement_requests_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "endorsement_requests_endorsement_id_fkey"
+            columns: ["endorsement_id"]
+            isOneToOne: false
+            referencedRelation: "check_endorsements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       escalation_actions: {
         Row: {
           artifact_document_id: string | null
@@ -10359,6 +10563,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      create_endorsements_from_payees: {
+        Args: { p_check_id: string }
+        Returns: Json
       }
       decrypt_pii: {
         Args: { p_ciphertext: string; p_key_name?: string }
