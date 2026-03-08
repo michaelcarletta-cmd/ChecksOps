@@ -327,22 +327,22 @@ Deno.serve(async (req) => {
     await logAudit(supabase, checkId, "ocr_started", "OCR processing initiated", {}, userId);
 
     try {
-      /* ---- Download images ---- */
-      const { data: frontBlob, error: frontErr } = await supabase.storage
+      /* ---- Get signed URLs for images (avoids loading into memory) ---- */
+      const { data: frontUrlData, error: frontUrlErr } = await supabase.storage
         .from("claim-files")
-        .download(check.front_image_path);
-      if (frontErr || !frontBlob) {
-        throw new Error("Could not download front image: " + (frontErr?.message ?? "blob null"));
+        .createSignedUrl(check.front_image_path, 300); // 5 min expiry
+      if (frontUrlErr || !frontUrlData?.signedUrl) {
+        throw new Error("Could not create signed URL for front image: " + (frontUrlErr?.message ?? "no URL"));
       }
-      const frontBase64 = await safeBase64(frontBlob);
+      const frontImageUrl = frontUrlData.signedUrl;
 
-      let backBase64: string | null = null;
+      let backImageUrl: string | null = null;
       if (check.back_image_path) {
-        const { data: backBlob, error: backErr } = await supabase.storage
+        const { data: backUrlData, error: backUrlErr } = await supabase.storage
           .from("claim-files")
-          .download(check.back_image_path);
-        if (!backErr && backBlob) {
-          backBase64 = await safeBase64(backBlob);
+          .createSignedUrl(check.back_image_path, 300);
+        if (!backUrlErr && backUrlData?.signedUrl) {
+          backImageUrl = backUrlData.signedUrl;
         }
       }
 
@@ -376,12 +376,12 @@ Rules:
 
       const content: Array<Record<string, unknown>> = [
         { type: "text", text: ocrPrompt },
-        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${frontBase64}` } },
+        { type: "image_url", image_url: { url: frontImageUrl } },
       ];
-      if (backBase64) {
+      if (backImageUrl) {
         content.push(
           { type: "text", text: "Here is the back of the check:" },
-          { type: "image_url", image_url: { url: `data:image/jpeg;base64,${backBase64}` } },
+          { type: "image_url", image_url: { url: backImageUrl } },
         );
       }
 
