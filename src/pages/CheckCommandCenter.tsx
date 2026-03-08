@@ -26,7 +26,10 @@ import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCar
 import { LossDraftDashboard } from "@/components/loss-draft/LossDraftDashboard";
 import { DepositOperationsConsole, BranchDepositManifest } from "@/components/deposit-ops/DepositOperationsConsole";
 import { ReconciliationDashboard } from "@/components/deposit-ops/ReconciliationDashboard";
-import { ArrowDownToLine, Scale } from "lucide-react";
+import { ExceptionResolutionPanel } from "@/components/deposit-ops/ExceptionResolutionPanel";
+import { DepositAgingDashboard } from "@/components/deposit-ops/DepositAgingDashboard";
+import { DepositReports } from "@/components/deposit-ops/DepositReports";
+import { ArrowDownToLine, Scale, Timer, FileBarChart, Shield } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
