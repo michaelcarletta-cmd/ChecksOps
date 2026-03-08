@@ -317,9 +317,21 @@ export function DepositOperationsConsole() {
                       <TableCell className="text-sm">{c.carrier_name || "—"}</TableCell>
                       <TableCell className="text-right font-semibold tabular-nums">{fmtMoney(c.amount)}</TableCell>
                       <TableCell>
-                        <Button size="sm" onClick={() => setActionDialog({ action: "prepare_deposit", checkId: c.id })}>
-                          <ArrowRight className="h-3 w-3 mr-1" />Prepare
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button size="sm" onClick={() => setActionDialog({ action: "prepare_deposit", checkId: c.id })}>
+                            <ArrowRight className="h-3 w-3 mr-1" />Prepare
+                          </Button>
+                          <DepositToIncreaseButton
+                            checkId={c.id}
+                            checkNumber={c.check_number}
+                            amount={c.amount}
+                            carrierName={c.carrier_name}
+                            status={c.status}
+                            isMultiPayee={false}
+                            hasFrontImage={true}
+                            hasBackImage={true}
+                          />
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
