@@ -430,7 +430,7 @@ function PendingApprovalsPanel() {
               <TableBody>
                 {pending.map((a) => (
                   <TableRow key={a.id as string}>
-                    <TableCell><Badge variant="outline" className="text-[10px]">{typeLabels[a.approval_type as string] ?? a.approval_type}</Badge></TableCell>
+                    <TableCell><Badge variant="outline" className="text-[10px]">{typeLabels[a.approval_type as string] ?? (a.approval_type as string)}</Badge></TableCell>
                     <TableCell className="text-xs max-w-[200px] truncate">{(a.description as string) || "—"}</TableCell>
                     <TableCell className="text-right tabular-nums text-sm">{a.item_count as number}</TableCell>
                     <TableCell className="text-right tabular-nums text-sm">{fmtMoney(a.total_amount as number)}</TableCell>
