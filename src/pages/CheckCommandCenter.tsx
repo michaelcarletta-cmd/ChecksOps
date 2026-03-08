@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
+import { watermarkCheckImage } from "@/utils/watermarkCheck";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
