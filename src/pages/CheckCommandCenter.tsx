@@ -660,6 +660,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
                 if (!e.target.value) setClaimId("");
               }}
               onFocus={() => setClaimDropdownOpen(true)}
+              onBlur={() => setTimeout(() => setClaimDropdownOpen(false), 200)}
               className="border-0 focus-visible:ring-0 shadow-none"
             />
             {claimId && (
@@ -674,8 +675,9 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
                 <button
                   key={c.id}
                   type="button"
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors"
-                  onClick={() => {
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-accent transition-colors cursor-pointer"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
                     setClaimId(c.id);
                     setClaimSearch("");
                     setClaimDropdownOpen(false);
