@@ -219,7 +219,7 @@ function EscalationRulesConfig() {
             {rules.map((r) => (
               <TableRow key={r.id as string}>
                 <TableCell className="text-xs font-medium">{r.rule_name as string}</TableCell>
-                <TableCell><Badge variant="outline" className="text-[10px]">{triggerLabels[r.trigger_type as string] ?? r.trigger_type}</Badge></TableCell>
+                <TableCell><Badge variant="outline" className="text-[10px]">{triggerLabels[r.trigger_type as string] ?? (r.trigger_type as string)}</Badge></TableCell>
                 <TableCell className="text-right text-xs tabular-nums">
                   {r.threshold_days as number}d {(r.threshold_amount as number) > 0 && `/ ${fmtMoney(r.threshold_amount as number)}`}
                 </TableCell>
