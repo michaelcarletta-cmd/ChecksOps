@@ -29,9 +29,22 @@ async function log(sb: any, e: LogEntry) {
 }
 
 async function failRequest(sb: any, id: string, error: string) {
+  // Only set status=failed if not already in a deliberate terminal/error state
+  const { data: current } = await sb
+    .from("signature_requests")
+    .select("status, provider_status")
+    .eq("id", id)
+    .single();
+
+  const terminalStatuses = ["failed", "completed", "cancelled", "expired"];
+  const alreadyTerminal = current && terminalStatuses.includes(current.status);
+
   await sb
     .from("signature_requests")
-    .update({ status: "failed", last_error: error })
+    .update({
+      ...(alreadyTerminal ? {} : { status: "failed" }),
+      last_error: error,
+    })
     .eq("id", id);
 }
 
