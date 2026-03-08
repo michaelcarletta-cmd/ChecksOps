@@ -1238,6 +1238,8 @@ export type Database = {
           endorsement_token: string | null
           endorsement_token_expires_at: string | null
           id: string
+          notification_delivery_status: string | null
+          notification_error: string | null
           notification_sent_at: string | null
           notification_sent_via: string | null
           payee_name: string
@@ -1255,6 +1257,8 @@ export type Database = {
           endorsement_token?: string | null
           endorsement_token_expires_at?: string | null
           id?: string
+          notification_delivery_status?: string | null
+          notification_error?: string | null
           notification_sent_at?: string | null
           notification_sent_via?: string | null
           payee_name: string
@@ -1272,6 +1276,8 @@ export type Database = {
           endorsement_token?: string | null
           endorsement_token_expires_at?: string | null
           id?: string
+          notification_delivery_status?: string | null
+          notification_error?: string | null
           notification_sent_at?: string | null
           notification_sent_via?: string | null
           payee_name?: string
@@ -3294,6 +3300,7 @@ export type Database = {
       claim_payments: {
         Row: {
           amount: number
+          check_intake_item_id: string | null
           check_number: string | null
           claim_id: string
           created_at: string
@@ -3309,6 +3316,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          check_intake_item_id?: string | null
           check_number?: string | null
           claim_id: string
           created_at?: string
@@ -3324,6 +3332,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          check_intake_item_id?: string | null
           check_number?: string | null
           claim_id?: string
           created_at?: string
@@ -3338,6 +3347,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_payments_check_intake_item_id_fkey"
+            columns: ["check_intake_item_id"]
+            isOneToOne: false
+            referencedRelation: "check_intake_items"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "claim_payments_claim_id_fkey"
             columns: ["claim_id"]
@@ -8667,6 +8683,29 @@ export type Database = {
           metadata: Json
           similarity: number
         }[]
+      }
+      ocr_commit_results: {
+        Args: {
+          p_amount: number
+          p_carrier_name: string
+          p_check_id: string
+          p_check_number: string
+          p_check_status: string
+          p_claim_id?: string
+          p_claim_number: string
+          p_evaluated_by: string
+          p_has_active_endorsements?: boolean
+          p_is_multi_payee: boolean
+          p_issue_date: string
+          p_ocr_status: string
+          p_payee_line: string
+          p_payees: Json
+          p_raw_ocr: Json
+          p_reasons: Json
+          p_recommendation: string
+          p_rules: Json
+        }
+        Returns: Json
       }
       refresh_portfolio_views: { Args: never; Returns: undefined }
       register_session: {
