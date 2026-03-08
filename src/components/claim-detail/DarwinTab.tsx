@@ -545,7 +545,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Darwin Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -623,14 +623,14 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
       {/* Main Layout: sticky navigator + workspace panel + assistant drawer */}
       <div
         className={cn(
-          "grid gap-6 items-start",
+          "grid gap-4 items-start",
           showCopilot
-            ? "md:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[15rem_minmax(0,1fr)_24rem]"
-            : "md:grid-cols-[15rem_minmax(0,1fr)]",
+            ? "md:grid-cols-[12rem_minmax(0,1fr)] xl:grid-cols-[12rem_minmax(0,1fr)_22rem]"
+            : "md:grid-cols-[12rem_minmax(0,1fr)]",
         )}
       >
         {/* Left rail */}
-        <div className="hidden md:block w-60 flex-shrink-0">
+        <div className="hidden md:block flex-shrink-0">
           <Card className="border-border/50 md:sticky md:top-4">
             <CardHeader className="py-3">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -757,7 +757,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
 
           <Card
             id="darwin-workspace"
-            className="border-primary/20 flex flex-col md:h-[calc(100vh-8.5rem)] md:max-h-[980px]"
+            className="border-primary/20 flex flex-col md:h-[calc(100vh-8.5rem)]"
           >
             <CardHeader className="pb-3 border-b bg-gradient-to-r from-primary/5 to-transparent shrink-0">
               <CardTitle className="text-base flex items-center gap-2">
@@ -776,7 +776,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
 
         {/* Right drawer */}
         {showCopilot && (
-          <div className="hidden xl:block w-96 flex-shrink-0 xl:sticky xl:top-4">
+          <div className="hidden xl:block flex-shrink-0 xl:sticky xl:top-4">
             <Card className="h-[calc(100vh-2rem)] flex flex-col border-primary/20">
             <CardHeader className="py-3 border-b bg-gradient-to-r from-primary/5 to-transparent">
               <div className="flex items-center justify-between gap-2">
