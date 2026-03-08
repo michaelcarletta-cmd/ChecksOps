@@ -757,7 +757,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
 
           <Card
             id="darwin-workspace"
-            className="border-primary/20 flex flex-col md:h-[calc(100vh-8.5rem)] md:max-h-[980px]"
+            className="border-primary/20 flex flex-col md:h-[calc(100vh-8.5rem)]"
           >
             <CardHeader className="pb-3 border-b bg-gradient-to-r from-primary/5 to-transparent shrink-0">
               <CardTitle className="text-base flex items-center gap-2">
