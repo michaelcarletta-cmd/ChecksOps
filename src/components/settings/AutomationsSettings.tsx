@@ -863,7 +863,7 @@ export const AutomationsSettings = () => {
                         <div className="space-y-2">
                           <Label>Email Subject</Label>
                           <Input 
-                            placeholder="e.g., Claim Status Update - {claim.claim_number}"
+                            placeholder="e.g., Claim Status Update - ${claim.claim_number}"
                             value={currentAction.config.subject || ''}
                             onChange={(e) => setCurrentAction({
                               ...currentAction,
