@@ -865,6 +865,11 @@ function CheckDetailPanel({
             )}
           </div>
         )}
+
+        {/* Endorsement Packet */}
+        {check.endorsement_packet_path && (
+          <EndorsementPacketCard checkId={checkId} packetPath={check.endorsement_packet_path} />
+        )}
       </CardHeader>
       <CardContent className="p-0">
         <Tabs value={detailTab} onValueChange={setDetailTab}>
