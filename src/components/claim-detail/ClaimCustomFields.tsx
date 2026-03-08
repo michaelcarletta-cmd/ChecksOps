@@ -17,9 +17,10 @@ import { toast } from "sonner";
 
 interface ClaimCustomFieldsProps {
   claimId: string;
+  claimStatus?: string;
 }
 
-export function ClaimCustomFields({ claimId }: ClaimCustomFieldsProps) {
+export function ClaimCustomFields({ claimId, claimStatus }: ClaimCustomFieldsProps) {
   const queryClient = useQueryClient();
   const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
   const [hasChanges, setHasChanges] = useState(false);
