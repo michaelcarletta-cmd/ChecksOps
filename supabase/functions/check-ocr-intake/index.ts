@@ -442,6 +442,24 @@ Rules:
       const parsed = validateOcrOutput(rawObj);
       const payees = parsed.payees;
       const isMultiPayee = payees.length > 1;
+
+      // Normalize issue_date: must be a valid YYYY-MM-DD string or null
+      let normalizedIssueDate: string | null = null;
+      if (parsed.issue_date) {
+        const dateStr = String(parsed.issue_date).trim();
+        // Accept YYYY-MM-DD format only
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr) && !isNaN(Date.parse(dateStr))) {
+          normalizedIssueDate = dateStr;
+        } else {
+          // Try to parse other formats
+          const d = new Date(dateStr);
+          if (!isNaN(d.getTime())) {
+            normalizedIssueDate = d.toISOString().split("T")[0];
+          } else {
+            console.warn("check-ocr-intake: unparseable issue_date, setting null:", dateStr);
+          }
+        }
+      }
       const parsedAmount = parsed.amount ? Number(parsed.amount) : null;
       const ocrConfidence = parsed.confidence;
       const fieldConfidence = parsed.field_confidence;
