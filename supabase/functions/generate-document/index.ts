@@ -99,7 +99,7 @@ Deno.serve(async (req) => {
 
     if (downloadError) {
       console.error("Storage download error:", JSON.stringify(downloadError));
-      throw new Error(`Failed to download template: ${downloadError.message || JSON.stringify(downloadError)}`);
+      throw new Error(`Template file "${template.file_name}" not found in storage. Please re-upload the template.`);
     }
     if (!fileData) {
       throw new Error("Template file not found in storage");
