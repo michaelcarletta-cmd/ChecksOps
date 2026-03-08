@@ -476,10 +476,7 @@ Rules:
         throw new Error(`Transaction failed: ${rpcErr.message}`);
       }
 
-      // Clear heartbeat on success (RPC already updated the row, but clear heartbeat)
-      await supabase.from("check_intake_items")
-        .update({ ocr_heartbeat_at: null })
-        .eq("id", checkId);
+      // Heartbeat is cleared transactionally inside ocr_commit_results RPC
 
       return new Response(
         JSON.stringify({
