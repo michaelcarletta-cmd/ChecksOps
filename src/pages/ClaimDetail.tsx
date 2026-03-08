@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClaimStatusSelect } from "@/components/ClaimStatusSelect";
 
 import { ClaimOverview } from "@/components/claim-detail/ClaimOverview";
+import { ClaimCashFlowCard } from "@/components/loss-draft/ClaimCashFlowCard";
 import { ClaimActivity } from "@/components/claim-detail/ClaimActivity";
 import { ClaimFiles } from "@/components/claim-detail/ClaimFiles";
 import { ClaimAccounting } from "@/components/claim-detail/ClaimAccounting";
