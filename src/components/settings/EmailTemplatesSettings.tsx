@@ -267,7 +267,7 @@ export const EmailTemplatesSettings = () => {
                   <Textarea
                     value={form.body}
                     onChange={(e) => setForm({ ...form, body: e.target.value })}
-                    placeholder="Dear {claim.policyholder_name},&#10;&#10;We wanted to provide you with an update..."
+                    placeholder="Dear ${policyholder},&#10;&#10;We wanted to provide you with an update..."
                     className="min-h-[200px]"
                   />
                 </div>
