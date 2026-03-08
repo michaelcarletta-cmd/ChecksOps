@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
+import { watermarkCheckImage } from "@/utils/watermarkCheck";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -583,6 +584,10 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
+      // Watermark check images with VOID before storing — prevents fraudulent printing
+      const watermarkedFront = await watermarkCheckImage(frontFile);
+      const watermarkedBack = backFile ? await watermarkCheckImage(backFile) : null;
+
       const ts = Date.now();
       const claimDir = claimId || "unclaimed";
       const prefix = `checks/${user.id}/${claimDir}`;
@@ -590,15 +595,15 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 
       const { error: fErr } = await supabase.storage
         .from("claim-files")
-        .upload(frontPath, frontFile);
+        .upload(frontPath, watermarkedFront);
       if (fErr) throw new Error(`Front upload failed: ${fErr.message}`);
 
       let backPath: string | null = null;
-      if (backFile) {
-        backPath = `${prefix}/${ts}_back_${backFile.name}`;
+      if (watermarkedBack) {
+        backPath = `${prefix}/${ts}_back_${backFile!.name}`;
         const { error: bErr } = await supabase.storage
           .from("claim-files")
-          .upload(backPath, backFile);
+          .upload(backPath, watermarkedBack);
         if (bErr) throw new Error(`Back upload failed: ${bErr.message}`);
       }
 
