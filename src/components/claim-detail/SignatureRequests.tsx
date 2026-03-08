@@ -429,10 +429,9 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                       )}
                     </Button>
                   )}
-                  {currentStep === 2 && !isDocxTemplate && (
+                  {currentStep === 2 && (
                     <Button
                       onClick={() => setCurrentStep(3)}
-                      disabled={placedFields.length === 0}
                     >
                       Next
                       <ChevronRight className="w-4 h-4 ml-2" />
