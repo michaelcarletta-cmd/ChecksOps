@@ -385,7 +385,8 @@ export function AutomationSettingsPanel() {
           const key = s.setting_key as string;
           const val = s.setting_value;
           const isBool = val === true || val === false || val === "true" || val === "false";
-          const isNum = typeof val === "number" || (!isBool && !isNaN(Number(val)));
+          const boolVal = val === true || val === "true";
+          const isNum = !isBool && (typeof val === "number" || !isNaN(Number(val)));
 
           return (
             <div key={key} className="flex items-center justify-between">
