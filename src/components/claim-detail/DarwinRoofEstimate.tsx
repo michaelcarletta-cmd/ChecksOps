@@ -113,6 +113,12 @@ interface RoofEstimate {
   // Phase 2D
   tuning_applied: { key: string; field: string; action: string; before: number; after: number }[] | null;
   pre_tuning_values: Record<string, number> | null;
+  // Evidence-based confirmation
+  confirmation_level: ConfirmationLevel | null;
+  confirmation_basis: ConfirmationBasis | null;
+  confirmation_notes: string | null;
+  confirmation_strength_score: number | null;
+  confirmation_attachments: { name: string; path: string; type: string }[] | null;
   created_at: string;
   updated_at: string;
 }
