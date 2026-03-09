@@ -1053,11 +1053,13 @@ function applyTuningHeuristics(
   explanationChain: ExplanationStep[];
   suppressedHeuristics: { key: string; reason: string }[];
   netImpact: Record<string, { original: number; final: number; pctChange: number }>;
+  shadowMatches: { key: string; field: string; predictedAction: string; predictedBefore: number; predictedAfter: number; evidence: string }[];
 } {
   const applied: { key: string; field: string; action: string; before: number; after: number }[] = [];
   const preTuningValues: Record<string, number> = {};
   const explanationChain: ExplanationStep[] = [];
   const suppressedHeuristics: { key: string; reason: string }[] = [];
+  const shadowMatches: { key: string; field: string; predictedAction: string; predictedBefore: number; predictedAfter: number; evidence: string }[] = [];
   const tuned = { ...estimate };
   const originalValues: Record<string, number> = {};
 
@@ -1073,17 +1075,69 @@ function applyTuningHeuristics(
     confidence_score: "confidence_score",
   };
 
+  // Area fields for global cap enforcement
+  const areaFields = new Set(["footprint_area_sqft", "estimated_roof_area_sqft", "squares"]);
+  const confidenceFields = new Set(["confidence_score", "roof_form_confidence"]);
+
   for (const [, mf] of Object.entries(fieldMap)) {
     originalValues[String(mf)] = Number((estimate as any)[mf] ?? 0);
   }
   if (estimate.roof_form_confidence != null) originalValues["roof_form_confidence"] = estimate.roof_form_confidence;
 
-  // Step 1: Match
-  const matched = heuristics.filter(h => matchesHeuristic(h, roofForm, qualityScore, aspectRatio));
+  // Step 1: Match all (including shadow mode)
+  const allMatched = heuristics.filter(h => matchesHeuristic(h, roofForm, qualityScore, aspectRatio));
+  
+  // Separate shadow from active
+  const shadowHeuristics = allMatched.filter(h => h.shadow_mode);
+  const activeMatched = allMatched.filter(h => !h.shadow_mode);
 
-  // Step 2: Governance
+  // Process shadow mode heuristics (log predicted impact, don't apply)
+  for (const h of shadowHeuristics) {
+    const mf = h.adjustment_field ? (fieldMap[h.adjustment_field] || h.adjustment_field) : (h.suppress_field ? (fieldMap[h.suppress_field] || h.suppress_field) : "?");
+    const before = Number((estimate as any)[mf] ?? 0);
+    let predictedAfter = before;
+    let predictedAction = "shadow_match";
+
+    if (h.action_type === "adjust_value" && h.adjustment_factor != null && before !== 0) {
+      predictedAfter = roundTo(before * h.adjustment_factor, String(mf) === "squares" ? 1 : 0);
+      predictedAction = `would ×${h.adjustment_factor}`;
+    } else if (h.action_type === "adjust_confidence" && h.adjustment_factor != null && before !== 0) {
+      predictedAfter = roundTo(before * h.adjustment_factor, 0);
+      predictedAction = `would ×${h.adjustment_factor}`;
+    } else if (h.action_type === "suppress_field") {
+      predictedAfter = 0;
+      predictedAction = "would suppress";
+    }
+
+    shadowMatches.push({
+      key: h.heuristic_key,
+      field: String(mf),
+      predictedAction,
+      predictedBefore: before,
+      predictedAfter,
+      evidence: h.evidence_summary || "",
+    });
+
+    explanationChain.push({
+      order: explanationChain.length + 1,
+      heuristic_key: h.heuristic_key,
+      action_type: h.action_type,
+      field: String(mf),
+      action: `shadow: ${predictedAction}`,
+      before,
+      after: predictedAfter,
+      segment_match: buildSegmentDesc(h),
+      evidence_basis: h.evidence_summary || "",
+      governance_status: "shadow_mode",
+      was_capped: false,
+      was_suppressed: true,
+      suppression_reason: "Shadow mode — observing only",
+    });
+  }
+
+  // Step 2: Governance check on active heuristics
   const eligible: TuningHeuristic[] = [];
-  for (const h of matched) {
+  for (const h of activeMatched) {
     const { eligible: ok, reason } = isGovernanceEligible(h);
     if (!ok) {
       suppressedHeuristics.push({ key: h.heuristic_key, reason });
@@ -1100,9 +1154,15 @@ function applyTuningHeuristics(
     explanationChain.push({ order: explanationChain.length + 1, heuristic_key: heuristic.heuristic_key, action_type: heuristic.action_type, field: heuristic.adjustment_field || heuristic.suppress_field || "?", action: "conflict_suppressed", before: 0, after: 0, segment_match: buildSegmentDesc(heuristic), evidence_basis: heuristic.evidence_summary || "", governance_status: "conflict_suppressed", was_capped: false, was_suppressed: true, suppression_reason: reason });
   }
 
-  // Step 4: Sort & apply with caps
+  // Step 4: Sort & apply with per-heuristic caps AND global estimate caps
   winners.sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100));
   let stepN = explanationChain.length;
+
+  // Track which fields have already been adjusted (one adjustment per field)
+  const adjustedFields = new Set<string>();
+  // Track cumulative area and confidence changes for global caps
+  let cumulativeAreaPctChange = 0; // tracks net % change across area fields
+  let cumulativeConfidenceReduction = 0; // tracks total % reduction
 
   for (const h of winners) {
     const maxF = h.max_adjustment_factor ?? 1.35;
@@ -1111,54 +1171,120 @@ function applyTuningHeuristics(
 
     if (h.action_type === "adjust_value" && h.adjustment_field && h.adjustment_factor != null) {
       const mf = fieldMap[h.adjustment_field] || h.adjustment_field;
+      const mfStr = String(mf);
+      
+      // One adjustment per field
+      if (ESTIMATE_CAPS.ONE_ADJUSTMENT_PER_FIELD && adjustedFields.has(mfStr)) {
+        suppressedHeuristics.push({ key: h.heuristic_key, reason: `One adjustment per field: "${mfStr}" already adjusted` });
+        stepN++;
+        explanationChain.push({ order: stepN, heuristic_key: h.heuristic_key, action_type: h.action_type, field: mfStr, action: "global_cap_blocked", before: 0, after: 0, segment_match: buildSegmentDesc(h), evidence_basis: h.evidence_summary || "", governance_status: "estimate_cap", was_capped: true, was_suppressed: true, suppression_reason: `Field "${mfStr}" already adjusted by prior heuristic` });
+        continue;
+      }
+
       const before = Number((tuned as any)[mf] ?? 0);
       if (before === 0) continue;
-      preTuningValues[String(mf)] = preTuningValues[String(mf)] ?? before;
+      preTuningValues[mfStr] = preTuningValues[mfStr] ?? before;
       let factor = h.adjustment_factor;
-      const capped = factor < minF || factor > maxF;
+      const cappedByHeuristic = factor < minF || factor > maxF;
       factor = Math.max(minF, Math.min(maxF, factor));
-      const after = roundTo(before * factor, String(mf) === "squares" ? 1 : 0);
+
+      // Check global area cap
+      if (areaFields.has(mfStr)) {
+        const proposedPctChange = Math.abs((factor - 1) * 100);
+        if (cumulativeAreaPctChange + proposedPctChange > ESTIMATE_CAPS.MAX_TOTAL_AREA_ADJUSTMENT_PCT) {
+          const remaining = ESTIMATE_CAPS.MAX_TOTAL_AREA_ADJUSTMENT_PCT - cumulativeAreaPctChange;
+          if (remaining <= 1) {
+            suppressedHeuristics.push({ key: h.heuristic_key, reason: `Global area cap exceeded (${cumulativeAreaPctChange.toFixed(1)}% used of ${ESTIMATE_CAPS.MAX_TOTAL_AREA_ADJUSTMENT_PCT}%)` });
+            stepN++;
+            explanationChain.push({ order: stepN, heuristic_key: h.heuristic_key, action_type: h.action_type, field: mfStr, action: "global_area_cap", before, after: before, segment_match: buildSegmentDesc(h), evidence_basis: h.evidence_summary || "", governance_status: "estimate_cap", was_capped: true, was_suppressed: true, suppression_reason: `Global area adjustment cap (${ESTIMATE_CAPS.MAX_TOTAL_AREA_ADJUSTMENT_PCT}%) exhausted` });
+            continue;
+          }
+          // Clamp factor to remaining budget
+          const maxFactorDelta = remaining / 100;
+          factor = factor > 1 ? Math.min(factor, 1 + maxFactorDelta) : Math.max(factor, 1 - maxFactorDelta);
+        }
+        cumulativeAreaPctChange += Math.abs((factor - 1) * 100);
+      }
+
+      const after = roundTo(before * factor, mfStr === "squares" ? 1 : 0);
       (tuned as any)[mf] = after;
-      applied.push({ key: h.heuristic_key, field: String(mf), action: `×${factor}${capped ? " (capped)" : ""}`, before, after });
+      adjustedFields.add(mfStr);
+      const wasCapped = cappedByHeuristic || factor !== h.adjustment_factor;
+      applied.push({ key: h.heuristic_key, field: mfStr, action: `×${factor}${wasCapped ? " (capped)" : ""}`, before, after });
       stepN++;
-      explanationChain.push({ order: stepN, heuristic_key: h.heuristic_key, action_type: h.action_type, field: String(mf), action: `×${factor}`, before, after, segment_match: buildSegmentDesc(h), evidence_basis: h.evidence_summary || "", governance_status: capped ? "capped" : "active", was_capped: capped, was_suppressed: false, suppression_reason: null });
-      if (String(mf) === "estimated_roof_area_sqft") {
+      explanationChain.push({ order: stepN, heuristic_key: h.heuristic_key, action_type: h.action_type, field: mfStr, action: `×${factor}`, before, after, segment_match: buildSegmentDesc(h), evidence_basis: h.evidence_summary || "", governance_status: wasCapped ? "capped" : "active", was_capped: wasCapped, was_suppressed: false, suppression_reason: null });
+      if (mfStr === "estimated_roof_area_sqft") {
         const oldSq = tuned.squares;
         tuned.squares = roundTo(after / 100, 1);
         if (oldSq !== tuned.squares) {
           preTuningValues["squares"] = preTuningValues["squares"] ?? oldSq;
           applied.push({ key: h.heuristic_key, field: "squares", action: "recalc", before: oldSq, after: tuned.squares });
+          adjustedFields.add("squares");
         }
       }
     } else if (h.action_type === "adjust_confidence" && h.adjustment_field && h.adjustment_factor != null) {
+      const fieldKey = h.adjustment_field;
+      
+      // One adjustment per field
+      if (ESTIMATE_CAPS.ONE_ADJUSTMENT_PER_FIELD && adjustedFields.has(fieldKey)) {
+        suppressedHeuristics.push({ key: h.heuristic_key, reason: `One adjustment per field: "${fieldKey}" already adjusted` });
+        continue;
+      }
+
       let factor = Math.max(maxCP, Math.min(1.0, h.adjustment_factor));
       const capped = factor !== h.adjustment_factor;
-      if (h.adjustment_field === "confidence_score") {
+
+      // Check global confidence cap
+      const proposedReduction = (1 - factor) * 100;
+      if (cumulativeConfidenceReduction + proposedReduction > ESTIMATE_CAPS.MAX_TOTAL_CONFIDENCE_REDUCTION_PCT) {
+        const remaining = ESTIMATE_CAPS.MAX_TOTAL_CONFIDENCE_REDUCTION_PCT - cumulativeConfidenceReduction;
+        if (remaining <= 1) {
+          suppressedHeuristics.push({ key: h.heuristic_key, reason: `Global confidence cap exceeded` });
+          stepN++;
+          explanationChain.push({ order: stepN, heuristic_key: h.heuristic_key, action_type: h.action_type, field: fieldKey, action: "global_confidence_cap", before: 0, after: 0, segment_match: buildSegmentDesc(h), evidence_basis: h.evidence_summary || "", governance_status: "estimate_cap", was_capped: true, was_suppressed: true, suppression_reason: `Global confidence reduction cap (${ESTIMATE_CAPS.MAX_TOTAL_CONFIDENCE_REDUCTION_PCT}%) exhausted` });
+          continue;
+        }
+        factor = Math.max(1 - remaining / 100, factor);
+      }
+      cumulativeConfidenceReduction += (1 - factor) * 100;
+
+      if (fieldKey === "confidence_score") {
         const before = tuned.confidence_score;
         preTuningValues["confidence_score"] = preTuningValues["confidence_score"] ?? before;
         tuned.confidence_score = roundTo(before * factor, 0);
+        adjustedFields.add(fieldKey);
         applied.push({ key: h.heuristic_key, field: "confidence_score", action: `×${factor}${capped ? " (capped)" : ""}`, before, after: tuned.confidence_score });
         stepN++;
         explanationChain.push({ order: stepN, heuristic_key: h.heuristic_key, action_type: h.action_type, field: "confidence_score", action: `×${factor}`, before, after: tuned.confidence_score, segment_match: buildSegmentDesc(h), evidence_basis: h.evidence_summary || "", governance_status: capped ? "capped" : "active", was_capped: capped, was_suppressed: false, suppression_reason: null });
-      } else if (h.adjustment_field === "roof_form_confidence" && tuned.roof_form_confidence != null) {
+      } else if (fieldKey === "roof_form_confidence" && tuned.roof_form_confidence != null) {
         const before = tuned.roof_form_confidence;
         preTuningValues["roof_form_confidence"] = preTuningValues["roof_form_confidence"] ?? before;
         tuned.roof_form_confidence = roundTo(before * factor, 0);
+        adjustedFields.add(fieldKey);
         applied.push({ key: h.heuristic_key, field: "roof_form_confidence", action: `×${factor}${capped ? " (capped)" : ""}`, before, after: tuned.roof_form_confidence });
         stepN++;
         explanationChain.push({ order: stepN, heuristic_key: h.heuristic_key, action_type: h.action_type, field: "roof_form_confidence", action: `×${factor}`, before, after: tuned.roof_form_confidence, segment_match: buildSegmentDesc(h), evidence_basis: h.evidence_summary || "", governance_status: capped ? "capped" : "active", was_capped: capped, was_suppressed: false, suppression_reason: null });
       }
     } else if (h.action_type === "suppress_field" && h.suppress_field && h.suppress_below_confidence != null) {
       const mf = fieldMap[h.suppress_field] || h.suppress_field;
+      const mfStr = String(mf);
+      
+      // One adjustment per field (suppression counts as adjustment)
+      if (ESTIMATE_CAPS.ONE_ADJUSTMENT_PER_FIELD && adjustedFields.has(mfStr)) {
+        suppressedHeuristics.push({ key: h.heuristic_key, reason: `One adjustment per field: "${mfStr}" already adjusted` });
+        continue;
+      }
+
       const fc = (tuned.field_confidence as Record<string, number>)?.[h.suppress_field] ?? 0;
       if (fc < h.suppress_below_confidence) {
         const before = Number((tuned as any)[mf] ?? 0);
         if (before !== 0) {
-          preTuningValues[String(mf)] = preTuningValues[String(mf)] ?? before;
+          preTuningValues[mfStr] = preTuningValues[mfStr] ?? before;
           (tuned as any)[mf] = 0;
-          applied.push({ key: h.heuristic_key, field: String(mf), action: `suppressed (conf ${fc}% < ${h.suppress_below_confidence}%)`, before, after: 0 });
+          adjustedFields.add(mfStr);
+          applied.push({ key: h.heuristic_key, field: mfStr, action: `suppressed (conf ${fc}% < ${h.suppress_below_confidence}%)`, before, after: 0 });
           stepN++;
-          explanationChain.push({ order: stepN, heuristic_key: h.heuristic_key, action_type: h.action_type, field: String(mf), action: "suppressed", before, after: 0, segment_match: buildSegmentDesc(h), evidence_basis: h.evidence_summary || "", governance_status: "active", was_capped: false, was_suppressed: false, suppression_reason: null });
+          explanationChain.push({ order: stepN, heuristic_key: h.heuristic_key, action_type: h.action_type, field: mfStr, action: "suppressed", before, after: 0, segment_match: buildSegmentDesc(h), evidence_basis: h.evidence_summary || "", governance_status: "active", was_capped: false, was_suppressed: false, suppression_reason: null });
         }
       }
     }
@@ -1171,12 +1297,24 @@ function applyTuningHeuristics(
     if (orig !== fin) netImpact[key] = { original: orig, final: fin, pctChange: orig !== 0 ? Math.round(((fin - orig) / orig) * 1000) / 10 : 0 };
   }
 
+  // Notes
+  const parts: string[] = [];
   if (applied.length > 0) {
-    tuned.ai_notes += `\n\n🔧 Tuning Applied (${applied.length} heuristic${applied.length > 1 ? "s" : ""}, ${suppressedHeuristics.length} suppressed): ` +
-      applied.map(a => `${a.field}: ${a.before} → ${a.after} (${a.action})`).join("; ");
+    parts.push(`🔧 Tuning Applied (${applied.length} heuristic${applied.length > 1 ? "s" : ""}, ${suppressedHeuristics.length} suppressed): ` +
+      applied.map(a => `${a.field}: ${a.before} → ${a.after} (${a.action})`).join("; "));
+  }
+  if (shadowMatches.length > 0) {
+    parts.push(`👁 Shadow Mode (${shadowMatches.length} heuristic${shadowMatches.length > 1 ? "s" : ""} observing): ` +
+      shadowMatches.map(s => `${s.field}: ${s.predictedAction} (${s.predictedBefore} → ${s.predictedAfter})`).join("; "));
+  }
+  if (cumulativeAreaPctChange > 0 || cumulativeConfidenceReduction > 0) {
+    parts.push(`📊 Estimate Caps: area adjustment ${cumulativeAreaPctChange.toFixed(1)}%/${ESTIMATE_CAPS.MAX_TOTAL_AREA_ADJUSTMENT_PCT}%, confidence reduction ${cumulativeConfidenceReduction.toFixed(1)}%/${ESTIMATE_CAPS.MAX_TOTAL_CONFIDENCE_REDUCTION_PCT}%`);
+  }
+  if (parts.length > 0) {
+    tuned.ai_notes += "\n\n" + parts.join("\n");
   }
 
-  return { tuned, applied, preTuningValues, explanationChain, suppressedHeuristics, netImpact };
+  return { tuned, applied, preTuningValues, explanationChain, suppressedHeuristics, netImpact, shadowMatches };
 }
 
 // ── Main handler ─────────────────────────────────────────────────────
