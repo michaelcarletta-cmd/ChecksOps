@@ -705,22 +705,36 @@ async function fetchAllCandidateFootprints(
 ): Promise<CandidateFootprint[]> {
   const candidates: CandidateFootprint[] = [];
 
-  const [osmResults, njResult] = await Promise.all([
+  const [osmResults, njResult, esriResult] = await Promise.all([
     fetchOSMBuildingCandidates(lat, lng),
     fetchNJBuildingCandidate(lat, lng),
+    fetchEsriUSAStructuresCandidate(lat, lng),
   ]);
 
   candidates.push(...osmResults);
   if (njResult) candidates.push(njResult);
+  if (esriResult) candidates.push(esriResult);
 
-  candidates.sort((a, b) => b.geometry_quality_score - a.geometry_quality_score);
+  // Deduplicate: if two candidates overlap significantly (>80% area match), keep the higher quality one
+  const deduped: CandidateFootprint[] = [];
+  for (const c of candidates) {
+    const isDuplicate = deduped.some(existing => {
+      const areaRatio = Math.min(c.area_sqft, existing.area_sqft) / Math.max(c.area_sqft, existing.area_sqft);
+      return areaRatio > 0.8 && existing.geometry_quality_score >= c.geometry_quality_score;
+    });
+    if (!isDuplicate) deduped.push(c);
+  }
 
-  return candidates;
+  deduped.sort((a, b) => b.geometry_quality_score - a.geometry_quality_score);
+
+  console.log(`[Darwin Roof] Found ${deduped.length} candidate footprints (${osmResults.length} OSM, ${njResult ? 1 : 0} NJGIN, ${esriResult ? 1 : 0} Esri USA Structures)`);
+
+  return deduped;
 }
 
 async function fetchOSMBuildingCandidates(lat: number, lng: number): Promise<CandidateFootprint[]> {
   try {
-    const radius = 0.0003;
+    const radius = 0.0008; // ~90m radius — increased from 0.0003 for better coverage
     const bbox = `${lat - radius},${lng - radius},${lat + radius},${lng + radius}`;
     const query = `[out:json][timeout:10];way["building"](${bbox});out body geom;`;
     const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
@@ -815,7 +829,78 @@ async function fetchNJBuildingCandidate(lat: number, lng: number): Promise<Candi
   } catch { return null; }
 }
 
-// ── Phase 2F: Satellite vision classification ───────────────────────
+/** Fetch building footprint from Esri USA Structures (AI-extracted, near-universal US coverage). */
+async function fetchEsriUSAStructuresCandidate(lat: number, lng: number): Promise<CandidateFootprint | null> {
+  try {
+    // Esri USA Structures / USA Building Footprints service
+    const url = `https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/MSBFP2/FeatureServer/0/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
+    if (!res.ok) {
+      // Try alternative endpoint (USA Structures)
+      const altUrl = `https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/USA_Structures_Footprints/FeatureServer/0/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json`;
+      const altRes = await fetch(altUrl, { signal: AbortSignal.timeout(12000) });
+      if (!altRes.ok) return null;
+      const altData = await altRes.json();
+      if (!altData.features?.length) return null;
+      return processEsriFeature(altData.features[0], lat, lng, "USA Structures (Esri)");
+    }
+    const data = await res.json();
+    if (!data.features?.length) {
+      // Fallback: try buffer query (50m)
+      const bufferUrl = `https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/MSBFP2/FeatureServer/0/query?geometry=${lng-0.0005},${lat-0.0005},${lng+0.0005},${lat+0.0005}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json&resultRecordCount=5`;
+      const bufRes = await fetch(bufferUrl, { signal: AbortSignal.timeout(10000) });
+      if (!bufRes.ok) return null;
+      const bufData = await bufRes.json();
+      if (!bufData.features?.length) return null;
+      // Find nearest to geocode point
+      let nearest = bufData.features[0];
+      let nearestDist = Infinity;
+      for (const feat of bufData.features) {
+        if (feat.geometry?.rings?.[0]) {
+          const centroid = polygonCentroid(feat.geometry.rings[0]);
+          const dist = haversineDistFt([lng, lat], centroid);
+          if (dist < nearestDist) { nearestDist = dist; nearest = feat; }
+        }
+      }
+      return processEsriFeature(nearest, lat, lng, "Microsoft Building Footprints (Esri)");
+    }
+    return processEsriFeature(data.features[0], lat, lng, "Microsoft Building Footprints (Esri)");
+  } catch (e) {
+    console.log("[Darwin Roof] Esri USA Structures fetch failed:", e);
+    return null;
+  }
+}
+
+function processEsriFeature(feat: any, lat: number, lng: number, sourceName: string): CandidateFootprint | null {
+  const rings = feat.geometry?.rings;
+  if (!rings || rings.length === 0) return null;
+  const ring: number[][] = rings[0];
+  if (ring.length < 4) return null;
+  const areaSqft = polygonAreaSqft(ring);
+  if (areaSqft < 100 || areaSqft > 50000) return null;
+  const perimeterFt = polygonPerimeterFt(ring);
+  const featureId = feat.attributes?.OBJECTID ? String(feat.attributes.OBJECTID) : (feat.attributes?.GlobalID || null);
+  const metadata = buildGeometryMetadata(ring, sourceName, featureId, lat, lng);
+  const qualityScore = computeGeometryQuality(ring, areaSqft, metadata.centroid_offset_ft);
+  const edges = classifyEdges(ring);
+  const geojson = {
+    type: "Feature",
+    properties: { source: sourceName, ...(feat.attributes || {}) },
+    geometry: { type: "Polygon", coordinates: [ring] },
+  };
+  return {
+    polygon: ring,
+    area_sqft: areaSqft,
+    perimeter_ft: perimeterFt,
+    source: sourceName,
+    source_feature_id: featureId,
+    imagery_date: feat.attributes?.CAPTURE_DATE || feat.attributes?.LASTMODDATE || null,
+    geometry_quality_score: qualityScore,
+    geometry_metadata: metadata,
+    edge_classifications: edges,
+    geojson,
+  };
+}
 // Vision is used for CLASSIFICATION only (form, pitch band, facet count, obstructions).
 // Footprint geometry remains the source of truth for area and perimeter-derived values.
 // Vision results refine uncertainty or suppress weak geometry inferences.
@@ -860,6 +945,38 @@ async function fetchSatelliteTileGrid(
   }));
   const successful = results.filter((r): r is NonNullable<typeof r> => r !== null);
   console.log(`[Darwin Roof] Fetched ${successful.length}/${tilePromises.length} tiles successfully`);
+  return successful;
+}
+
+/** Fetch satellite tiles from Google Maps as fallback when ArcGIS has no coverage. */
+async function fetchGoogleSatelliteTiles(
+  lat: number, lng: number,
+): Promise<{ base64: string; row: number; col: number; tileX: number; tileY: number }[]> {
+  const zoom = 19;
+  const tileX = Math.floor((lng + 180) / 360 * Math.pow(2, zoom));
+  const latRad = lat * Math.PI / 180;
+  const tileY = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, zoom));
+  
+  const tiles: { row: number; col: number; url: string; tileX: number; tileY: number }[] = [];
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const tx = tileX + dx;
+      const ty = tileY + dy;
+      tiles.push({
+        row: dy + 1, col: dx + 1, tileX: tx, tileY: ty,
+        url: `https://mt1.google.com/vt/lyrs=s&x=${tx}&y=${ty}&z=${zoom}`,
+      });
+    }
+  }
+  
+  const results = await Promise.all(tiles.map(async (t) => {
+    const b64 = await fetchTileBase64(t.url);
+    return b64 ? { base64: b64, row: t.row, col: t.col, tileX: t.tileX, tileY: t.tileY } : null;
+  }));
+  const successful = results.filter((r): r is NonNullable<typeof r> => r !== null);
+  if (successful.length > 0) {
+    console.log(`[Darwin Roof] Google satellite: fetched ${successful.length}/${tiles.length} tiles`);
+  }
   return successful;
 }
 
@@ -2612,19 +2729,51 @@ Deno.serve(async (req) => {
     }
 
     // Phase 2F: Split-task satellite vision classification
+    // Try multiple zoom levels and imagery sources for best coverage
     console.log("[Darwin Roof] Fetching satellite imagery for vision classification...");
-    const tileGrid = await fetchSatelliteTileGrid(geo.lat, geo.lng, 3, 20);
     let rawVisionResult: SatelliteVisionResult | null = null;
     let visionResult: SatelliteVisionResult | null = null;
     let visionSuppressions: SuppressionRecord[] = [];
 
-    if (tileGrid.length > 0) {
-      console.log(`[Darwin Roof] Classifying roof from ${tileGrid.length} tiles (split-task vision)...`);
+    // Try zoom levels in order: 20 (highest detail), 19, 18
+    let usedTileGrid: typeof tileGrid | null = null;
+    for (const zoom of [20, 19, 18]) {
+      const gridSize = zoom >= 20 ? 3 : zoom >= 19 ? 3 : 1;
+      const tileGrid = await fetchSatelliteTileGrid(geo.lat, geo.lng, gridSize, zoom);
+      if (tileGrid.length > 0) {
+        usedTileGrid = tileGrid;
+        console.log(`[Darwin Roof] Using zoom ${zoom} with ${tileGrid.length} tiles`);
+        break;
+      }
+    }
+
+    if (usedTileGrid && usedTileGrid.length > 0) {
+      console.log(`[Darwin Roof] Classifying roof from ${usedTileGrid.length} tiles (split-task vision)...`);
       rawVisionResult = await classifyRoofFromSatellite(
-        tileGrid, address, selectedCandidate?.area_sqft ?? null,
+        usedTileGrid, address, selectedCandidate?.area_sqft ?? null,
       );
       if (rawVisionResult) {
         console.log(`[Darwin Roof] Raw vision: form=${rawVisionResult.roof_form.value}@${rawVisionResult.roof_form.confidence}%, pitch_band=${rawVisionResult.pitch_band.value}@${rawVisionResult.pitch_band.confidence}%, facets=${rawVisionResult.visible_facets.value}, trees=${rawVisionResult.obstructions.tree_cover_pct}%, quality=${rawVisionResult.overall_image_quality}`);
+
+        // If vision reports all tiles are blank/unavailable, try Google satellite tiles
+        const imageryUnavailable = rawVisionResult.analysis_notes?.toLowerCase().includes("not yet available") ||
+          rawVisionResult.analysis_notes?.toLowerCase().includes("grey") ||
+          rawVisionResult.analysis_notes?.toLowerCase().includes("gray") ||
+          (rawVisionResult.overall_image_quality <= 20 && rawVisionResult.roof_form.abstain && rawVisionResult.pitch_band.abstain);
+
+        if (imageryUnavailable) {
+          console.log("[Darwin Roof] ArcGIS imagery unavailable at this location — trying Google Maps satellite...");
+          // Try Google Maps satellite tiles
+          const googleTiles = await fetchGoogleSatelliteTiles(geo.lat, geo.lng);
+          if (googleTiles.length > 0) {
+            const googleVision = await classifyRoofFromSatellite(googleTiles, address, selectedCandidate?.area_sqft ?? null);
+            if (googleVision && googleVision.overall_image_quality > rawVisionResult.overall_image_quality) {
+              rawVisionResult = googleVision;
+              console.log(`[Darwin Roof] Google satellite vision: form=${rawVisionResult.roof_form.value}@${rawVisionResult.roof_form.confidence}%`);
+            }
+          }
+        }
+
         // Apply suppression rules
         const suppResult = applyVisionSuppressions(
           rawVisionResult,
@@ -2640,19 +2789,7 @@ Deno.serve(async (req) => {
         console.log(`[Darwin Roof] Post-suppression vision: form=${visionResult.roof_form.value}@${visionResult.roof_form.confidence}%${visionResult.roof_form.abstain ? "(abstained)" : ""}, pitch_band=${visionResult.pitch_band.value}@${visionResult.pitch_band.confidence}%${visionResult.pitch_band.abstain ? "(abstained)" : ""}`);
       }
     } else {
-      // Fallback: try zoom 19 single tile
-      console.log("[Darwin Roof] Zoom 20 failed, trying zoom 19 fallback...");
-      const fallbackGrid = await fetchSatelliteTileGrid(geo.lat, geo.lng, 1, 19);
-      if (fallbackGrid.length > 0) {
-        rawVisionResult = await classifyRoofFromSatellite(fallbackGrid, address, selectedCandidate?.area_sqft ?? null);
-        if (rawVisionResult) {
-          const suppResult = applyVisionSuppressions(rawVisionResult, selectedCandidate?.geometry_quality_score ?? null, roofFormInference?.inferred_roof_form ?? null, roofFormInference?.roof_form_confidence ?? null);
-          visionResult = suppResult.refined;
-          visionSuppressions = suppResult.suppressions;
-        }
-      } else {
-        console.log("[Darwin Roof] No satellite imagery available");
-      }
+      console.log("[Darwin Roof] No satellite imagery available at any zoom level");
     }
 
     // Audit log: candidate selection

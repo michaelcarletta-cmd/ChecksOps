@@ -690,6 +690,25 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
         {/* Results */}
         {estimate && !loading && (
           <div className="space-y-4">
+            {/* No footprint + no imagery warning */}
+            {!hasFootprintGeometry && estimate.footprint_area_sqft === 0 && (
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>No building footprint or satellite imagery found for this address.</strong>
+                  <br />
+                  <span className="text-sm text-muted-foreground">
+                    The system searched OpenStreetMap, NJGIN, and Esri USA Structures but found no building geometry at this location.
+                    Satellite imagery may also be unavailable. You can:
+                  </span>
+                  <ul className="list-disc list-inside text-sm text-muted-foreground mt-1 space-y-0.5">
+                    <li>Verify the address is correct and try again</li>
+                    <li>Use "Edit Values" to manually enter measurements from an EagleView or HOVER report</li>
+                    <li>Upload a measurement report to auto-populate</li>
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            )}
             {/* Confirmation Gate */}
             {!estimate.manually_confirmed && (
               <Alert variant="destructive">
