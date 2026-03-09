@@ -1722,7 +1722,7 @@ function deriveLinearMeasurements(
     return { linear, decomposition };
   }
 
-  // Multi-mass aggregation
+  // Multi-mass aggregation with type-based weighting
   const allNotes: string[] = [`Roof decomposed into ${massCount} masses.`];
   const allUnknown: string[] = [];
   const aggConfidence: Record<string, number> = {};
@@ -1733,28 +1733,46 @@ function deriveLinearMeasurements(
   let totalRake: number | null = null;
   let totalFacets: number | null = null;
 
-  // Assign forms: main mass gets resolved form, wings get "gable" default
+  // Assign forms: main_roof mass gets resolved form, others get form based on aspect ratio
   for (let i = 0; i < decomposition.masses.length; i++) {
     const mass = decomposition.masses[i];
-    mass.inferred_form = i === 0 ? resolvedForm : (mass.aspect_ratio >= 1.3 ? "gable" : "hip");
-    mass.form_confidence = i === 0 ? roofForm.roof_form_confidence : 30;
+    const massType = mass.classification?.mass_type ?? "unknown_accessory";
+    const weight = mass.classification?.derivation_weight ?? 1.0;
 
-    const massLinear = deriveLinearForMass(mass, mass.inferred_form, pitchBand, overhang, i === 0 ? roofForm : null);
-    allNotes.push(`── Mass ${mass.id} (${mass.inferred_form}, ${mass.area_sqft}sqft):`);
+    // Main roof gets the resolved form; secondaries infer from aspect ratio
+    if (massType === "main_roof") {
+      mass.inferred_form = resolvedForm;
+      mass.form_confidence = roofForm.roof_form_confidence;
+    } else {
+      mass.inferred_form = mass.aspect_ratio >= 1.3 ? "gable" : "hip";
+      mass.form_confidence = 30;
+    }
+
+    const massLinear = deriveLinearForMass(mass, mass.inferred_form, pitchBand, overhang, massType === "main_roof" ? roofForm : null);
+    allNotes.push(`── Mass ${mass.id} [${massType}] (${mass.inferred_form}, ${mass.area_sqft}sqft, weight=${weight}):`);
     allNotes.push(...massLinear.derivation_notes.map(n => `  ${n}`));
 
-    // Aggregate: null + number = number; null + null = null; number + number = sum
+    // Weighted aggregation: porch/bump-out gets reduced contribution
+    const addWeighted = (a: number | null, b: number | null, w: number): number | null => {
+      if (a === null && b === null) return null;
+      return (a ?? 0) + Math.round((b ?? 0) * w);
+    };
+
+    totalRidge = addWeighted(totalRidge, massLinear.ridge_lf, weight);
+    totalHip = addWeighted(totalHip, massLinear.hip_lf, weight);
+    totalValley = addWeighted(totalValley, massLinear.valley_lf, weight);
+    totalEave = addWeighted(totalEave, massLinear.eave_lf, weight);
+    totalRake = addWeighted(totalRake, massLinear.rake_lf, weight);
+    // Facets are not weighted — each mass contributes its full facet count
     const addNullable = (a: number | null, b: number | null): number | null => {
       if (a === null && b === null) return null;
       return (a ?? 0) + (b ?? 0);
     };
-
-    totalRidge = addNullable(totalRidge, massLinear.ridge_lf);
-    totalHip = addNullable(totalHip, massLinear.hip_lf);
-    totalValley = addNullable(totalValley, massLinear.valley_lf);
-    totalEave = addNullable(totalEave, massLinear.eave_lf);
-    totalRake = addNullable(totalRake, massLinear.rake_lf);
     totalFacets = addNullable(totalFacets, massLinear.facet_count);
+
+    if (weight < 1.0) {
+      allNotes.push(`  ⚖️ Linear values weighted ×${weight} (mass type: ${massType}).`);
+    }
 
     for (const f of massLinear.unknown_fields) {
       if (!allUnknown.includes(f)) allUnknown.push(f);
@@ -1764,18 +1782,43 @@ function deriveLinearMeasurements(
     }
   }
 
-  // Add junction valleys
+  // Junction valleys remain as CANDIDATES — not promoted to measured values.
+  // They only contribute to valley_lf when promoted by roof form + validation evidence.
   for (const jv of decomposition.junction_valleys) {
     const sf = PITCH_BAND_META[pitchBand]?.slope_factor_mid ?? 1.118;
     const junctionValleySloped = roundTo(jv.approx_length_ft * sf, 0);
-    // Each junction produces 2 valley lines (one on each side)
     const junctionTotal = junctionValleySloped * 2;
-    totalValley = (totalValley ?? 0) + junctionTotal;
-    allNotes.push(`Junction valley (${jv.mass_a}↔${jv.mass_b}): 2×${junctionValleySloped}ft = ${junctionTotal}ft.`);
-    // Remove valley from unknown if junction provided it
-    const vIdx = allUnknown.indexOf("valley_lf");
-    if (vIdx >= 0) allUnknown.splice(vIdx, 1);
-    aggConfidence.valley_lf = Math.max(aggConfidence.valley_lf ?? 0, 25);
+
+    if (jv.status === "promoted") {
+      // Promoted junction valleys add to measured total
+      totalValley = (totalValley ?? 0) + junctionTotal;
+      allNotes.push(`Junction valley (${jv.mass_a}↔${jv.mass_b}) [PROMOTED]: 2×${junctionValleySloped}ft = ${junctionTotal}ft. Reason: ${jv.promotion_reason ?? "unknown"}.`);
+      const vIdx = allUnknown.indexOf("valley_lf");
+      if (vIdx >= 0) allUnknown.splice(vIdx, 1);
+      aggConfidence.valley_lf = Math.max(aggConfidence.valley_lf ?? 0, 35);
+    } else {
+      // Candidate junction valleys: logged but NOT added to total
+      allNotes.push(`Junction valley (${jv.mass_a}↔${jv.mass_b}) [CANDIDATE]: 2×${junctionValleySloped}ft = ${junctionTotal}ft. Not promoted — requires roof form confirmation or validation evidence.`);
+      aggConfidence.valley_lf = Math.max(aggConfidence.valley_lf ?? 0, 10);
+    }
+  }
+
+  // Auto-promote junction valleys when cross_gable or complex form is confirmed with >=35% confidence
+  if ((resolvedForm === "cross_gable" || resolvedForm === "complex") && roofForm.roof_form_confidence >= 35) {
+    for (const jv of decomposition.junction_valleys) {
+      if (jv.status === "candidate") {
+        jv.status = "promoted";
+        jv.promotion_reason = `Roof form '${resolvedForm}' confirmed @${roofForm.roof_form_confidence}% confidence — valleys expected at mass junctions.`;
+        const sf = PITCH_BAND_META[pitchBand]?.slope_factor_mid ?? 1.118;
+        const junctionValleySloped = roundTo(jv.approx_length_ft * sf, 0);
+        const junctionTotal = junctionValleySloped * 2;
+        totalValley = (totalValley ?? 0) + junctionTotal;
+        allNotes.push(`  ↑ Auto-promoted junction valley (${jv.mass_a}↔${jv.mass_b}): +${junctionTotal}ft. ${jv.promotion_reason}`);
+        const vIdx = allUnknown.indexOf("valley_lf");
+        if (vIdx >= 0) allUnknown.splice(vIdx, 1);
+        aggConfidence.valley_lf = Math.max(aggConfidence.valley_lf ?? 0, 25);
+      }
+    }
   }
 
   return {
