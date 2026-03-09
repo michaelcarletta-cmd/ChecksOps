@@ -614,7 +614,40 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                   <strong>Unconfirmed Estimate — Blocked from Downstream Use</strong>
                   <br />
                   This estimate <em>cannot</em> feed the estimate builder, material calculator, or supplement engine.
-                  Review per-field confidence and authority, then confirm or override values before production use.
+                  Review per-field confidence and authority, then choose a confirmation level before production use.
+                </AlertDescription>
+              </Alert>
+            )}
+            {estimate.manually_confirmed && estimate.confirmation_level && (
+              <Alert>
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <strong>Confirmed:</strong>{" "}
+                      <span className="capitalize">{estimate.confirmation_level.replace(/_/g, " ")}</span>
+                      {estimate.confirmation_basis && (
+                        <span className="text-muted-foreground"> — {estimate.confirmation_basis.replace(/_/g, " ")}</span>
+                      )}
+                    </div>
+                    {estimate.confirmation_strength_score != null && (
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] ${
+                          estimate.confirmation_strength_score >= 70
+                            ? "border-green-500/50 text-green-600"
+                            : estimate.confirmation_strength_score >= 40
+                            ? "border-yellow-500/50 text-yellow-600"
+                            : "border-red-500/50 text-red-600"
+                        }`}
+                      >
+                        Strength: {estimate.confirmation_strength_score}/100
+                      </Badge>
+                    )}
+                  </div>
+                  {estimate.confirmation_notes && (
+                    <p className="text-xs text-muted-foreground mt-1">{estimate.confirmation_notes}</p>
+                  )}
                 </AlertDescription>
               </Alert>
             )}
