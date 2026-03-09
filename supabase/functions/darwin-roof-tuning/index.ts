@@ -575,6 +575,9 @@ Deno.serve(async (req) => {
         upserted++;
       }
 
+      const shadowCount = allHeuristics.filter(h => h.shadow_mode).length;
+      const promotedCount = allHeuristics.filter(h => h.shadow_mode_promoted_at).length;
+
       await supabase.from("audit_logs").insert({
         user_id: user.id,
         action: "create",
@@ -588,6 +591,8 @@ Deno.serve(async (req) => {
           heuristics_skipped_manual: skipped,
           heuristics_expired: expiredCount,
           heuristics_stale: staleCount,
+          heuristics_shadow: shadowCount,
+          heuristics_promoted: promotedCount,
           governance_applied: true,
         },
       });
@@ -601,6 +606,8 @@ Deno.serve(async (req) => {
         heuristics_skipped_manual: skipped,
         heuristics_expired: expiredCount,
         heuristics_stale: staleCount,
+        heuristics_shadow: shadowCount,
+        heuristics_promoted: promotedCount,
       }), {
         status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
