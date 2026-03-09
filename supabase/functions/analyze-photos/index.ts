@@ -407,6 +407,28 @@ Deno.serve(async (req) => {
 
     // supabase client already initialized above
 
+    // ── State detection for demand packets ────────────────────────────────
+    const stateRegulationsLookup: Record<string, { stateName: string; badFaithStatute: string; adminCode: string; promptPayDays: number; acknowledgmentDays: number; decisionDays: number }> = {
+      PA: { stateName: 'Pennsylvania', badFaithStatute: '42 Pa.C.S. § 8371', adminCode: '31 Pa. Code Chapter 146', promptPayDays: 15, acknowledgmentDays: 10, decisionDays: 30 },
+      NJ: { stateName: 'New Jersey', badFaithStatute: 'N.J.S.A. 17:29B-4', adminCode: 'N.J.A.C. 11:2-17', promptPayDays: 30, acknowledgmentDays: 10, decisionDays: 30 },
+      TX: { stateName: 'Texas', badFaithStatute: 'Texas Insurance Code Chapter 541', adminCode: '28 TAC § 21.203', promptPayDays: 5, acknowledgmentDays: 15, decisionDays: 15 },
+      FL: { stateName: 'Florida', badFaithStatute: 'F.S. § 624.155', adminCode: 'Fla. Admin. Code 69O-166', promptPayDays: 20, acknowledgmentDays: 14, decisionDays: 90 },
+    };
+
+    function detectStateFromAddress(address: string | null): string | null {
+      if (!address) return null;
+      const upper = address.toUpperCase();
+      const zipMatch = upper.match(/[,\s]([A-Z]{2})[,\s]+\d{5}/);
+      if (zipMatch && stateRegulationsLookup[zipMatch[1]]) return zipMatch[1];
+      const boundaryMatch = upper.match(/\b(PA|NJ|TX|FL|NY)\b/);
+      if (boundaryMatch && stateRegulationsLookup[boundaryMatch[1]]) return boundaryMatch[1];
+      if (/PENNSYLVANIA/.test(upper)) return 'PA';
+      if (/NEW\s+JERSEY/.test(upper)) return 'NJ';
+      if (/TEXAS/.test(upper)) return 'TX';
+      if (/FLORIDA/.test(upper)) return 'FL';
+      return null;
+    }
+
     // Fetch claim details
     let claimContext = "";
     let weatherData: any = null;
@@ -414,6 +436,8 @@ Deno.serve(async (req) => {
     let claimData: any = null;
     let supportingDocsContext = "";
     let supportingDocsInfo: { name: string; url: string }[] = [];
+    let detectedStateCode: string | null = null;
+    let stateRegContext = "";
     
     if (claimId) {
       const { data: claim } = await supabase
@@ -424,15 +448,39 @@ Deno.serve(async (req) => {
       
       if (claim) {
         claimData = claim;
+
+        // Detect state: state_code column > address parse > NO default
+        detectedStateCode = (claim as any).state_code || detectStateFromAddress(claim.policyholder_address) || null;
+        console.log(`[analyze-photos] State detection: state_code="${(claim as any).state_code}", parsed="${detectStateFromAddress(claim.policyholder_address)}", final="${detectedStateCode}"`);
+
+        const stateReg = detectedStateCode ? stateRegulationsLookup[detectedStateCode] : null;
+        if (stateReg) {
+          stateRegContext = `
+JURISDICTION: ${stateReg.stateName} (${detectedStateCode})
+- Bad Faith Statute: ${stateReg.badFaithStatute}
+- Administrative Code: ${stateReg.adminCode}
+- Prompt Pay: ${stateReg.promptPayDays} days
+- Acknowledgment Required: ${stateReg.acknowledgmentDays} days
+- Decision Required: ${stateReg.decisionDays} days
+
+CRITICAL: You MUST cite ONLY ${stateReg.stateName} insurance codes and regulations. Do NOT cite regulations from any other state.`;
+        } else {
+          stateRegContext = `
+JURISDICTION: Could not be determined from claim address.
+CRITICAL: Do NOT cite any state-specific insurance codes or regulations. Use only federal/general industry standards until jurisdiction is confirmed.`;
+        }
+
         claimContext = `
 Claim Information:
 - Claim Number: ${claim.claim_number || 'N/A'}
 - Policyholder: ${claim.policyholder_name || 'N/A'}
 - Property Address: ${claim.policyholder_address || 'N/A'}
+- Jurisdiction: ${stateReg ? `${stateReg.stateName} (${detectedStateCode})` : 'UNKNOWN — do not cite state codes'}
 - Loss Date: ${claim.loss_date || 'N/A'}
 - Loss Type: ${claim.loss_type || 'N/A'}
 - Loss Description: ${claim.loss_description || 'N/A'}
 - Insurance Company: ${claim.insurance_company || 'N/A'}
+${stateRegContext}
 `;
 
         // Fetch supporting documents for demand packages
