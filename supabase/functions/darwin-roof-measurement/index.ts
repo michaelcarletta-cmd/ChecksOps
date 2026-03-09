@@ -705,17 +705,31 @@ async function fetchAllCandidateFootprints(
 ): Promise<CandidateFootprint[]> {
   const candidates: CandidateFootprint[] = [];
 
-  const [osmResults, njResult] = await Promise.all([
+  const [osmResults, njResult, esriResult] = await Promise.all([
     fetchOSMBuildingCandidates(lat, lng),
     fetchNJBuildingCandidate(lat, lng),
+    fetchEsriUSAStructuresCandidate(lat, lng),
   ]);
 
   candidates.push(...osmResults);
   if (njResult) candidates.push(njResult);
+  if (esriResult) candidates.push(esriResult);
 
-  candidates.sort((a, b) => b.geometry_quality_score - a.geometry_quality_score);
+  // Deduplicate: if two candidates overlap significantly (>80% area match), keep the higher quality one
+  const deduped: CandidateFootprint[] = [];
+  for (const c of candidates) {
+    const isDuplicate = deduped.some(existing => {
+      const areaRatio = Math.min(c.area_sqft, existing.area_sqft) / Math.max(c.area_sqft, existing.area_sqft);
+      return areaRatio > 0.8 && existing.geometry_quality_score >= c.geometry_quality_score;
+    });
+    if (!isDuplicate) deduped.push(c);
+  }
 
-  return candidates;
+  deduped.sort((a, b) => b.geometry_quality_score - a.geometry_quality_score);
+
+  console.log(`[Darwin Roof] Found ${deduped.length} candidate footprints (${osmResults.length} OSM, ${njResult ? 1 : 0} NJGIN, ${esriResult ? 1 : 0} Esri USA Structures)`);
+
+  return deduped;
 }
 
 async function fetchOSMBuildingCandidates(lat: number, lng: number): Promise<CandidateFootprint[]> {
