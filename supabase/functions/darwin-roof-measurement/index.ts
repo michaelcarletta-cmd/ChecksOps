@@ -9,6 +9,68 @@ const corsHeaders = {
 type DerivationSource = "geometry" | "ai_estimated" | "satellite_imagery";
 type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative";
 type RoofForm = "gable" | "hip" | "cross_gable" | "complex" | "unknown";
+type PitchBand = "flat" | "low" | "moderate" | "steep" | "very_steep" | "unknown";
+type PitchType = "band" | "exact";
+
+interface VisionClassification<T> {
+  value: T;
+  confidence: number;
+  abstain: boolean;
+  reasoning: string;
+}
+
+interface ObstructionDetection {
+  tree_cover_pct: number;
+  shadow_coverage: "none" | "light" | "moderate" | "heavy";
+  rear_slope_visible: boolean;
+  visible_sides: number;
+  obstructions: string[];
+  confidence: number;
+}
+
+interface SatelliteVisionResult {
+  roof_form: VisionClassification<string>;
+  pitch_band: VisionClassification<PitchBand>;
+  visible_facets: VisionClassification<number>;
+  obstructions: ObstructionDetection;
+  roof_color: string | null;
+  overall_image_quality: number;
+  analysis_notes: string;
+}
+
+interface SuppressionRecord {
+  rule: string;
+  field: string;
+  reason: string;
+  action: "confidence_reduced" | "value_suppressed" | "abstain_forced";
+  before_confidence: number;
+  after_confidence: number;
+}
+
+const PITCH_BAND_META: Record<PitchBand, { label: string; range: string; slope_factor_mid: number }> = {
+  flat: { label: "Flat", range: "0-2/12", slope_factor_mid: 1.007 },
+  low: { label: "Low", range: "2-4/12", slope_factor_mid: 1.034 },
+  moderate: { label: "Moderate", range: "5-7/12", slope_factor_mid: 1.118 },
+  steep: { label: "Steep", range: "8-10/12", slope_factor_mid: 1.250 },
+  very_steep: { label: "Very Steep", range: "11+/12", slope_factor_mid: 1.414 },
+  unknown: { label: "Unknown", range: "?", slope_factor_mid: 1.118 },
+};
+
+function exactPitchToBand(pitch: string): PitchBand {
+  const match = pitch.match(/^(\d+)\/12$/);
+  if (!match) return "unknown";
+  const n = parseInt(match[1]);
+  if (n <= 2) return "flat";
+  if (n <= 4) return "low";
+  if (n <= 7) return "moderate";
+  if (n <= 10) return "steep";
+  return "very_steep";
+}
+
+function bandToDisplayPitch(band: PitchBand): string {
+  if (band === "unknown") return "unknown";
+  return `${PITCH_BAND_META[band].label} (${PITCH_BAND_META[band].range})`;
+}
 
 interface EdgeClassification {
   segment_index: number;
