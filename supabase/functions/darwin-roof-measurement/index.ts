@@ -1546,6 +1546,24 @@ Deno.serve(async (req) => {
       roofFormInference = inferRoofForm(selectedCandidate);
     }
 
+    // Phase 2E: Satellite imagery analysis
+    console.log("[Darwin Roof] Fetching satellite imagery...");
+    const satelliteImage = await fetchSatelliteImage(geo.lat, geo.lng);
+    let satelliteAnalysis: SatelliteAnalysis | null = null;
+    if (satelliteImage) {
+      console.log("[Darwin Roof] Analyzing satellite image with AI vision...");
+      satelliteAnalysis = await analyzeRoofFromSatellite(
+        satelliteImage,
+        address,
+        selectedCandidate?.area_sqft ?? null,
+      );
+      if (satelliteAnalysis) {
+        console.log(`[Darwin Roof] Satellite analysis: pitch=${satelliteAnalysis.estimated_pitch}, form=${satelliteAnalysis.roof_form}, confidence=${satelliteAnalysis.confidence}%`);
+      }
+    } else {
+      console.log("[Darwin Roof] No satellite imagery available for this location");
+    }
+
     // Audit log: candidate selection (especially re-selection)
     const isReselection = typeof selected_candidate_index === "number";
     if (selectedCandidate) {
@@ -1563,6 +1581,8 @@ Deno.serve(async (req) => {
           is_reselection: isReselection,
           total_candidates: candidates.length,
           inferred_roof_form: roofFormInference?.inferred_roof_form ?? null,
+          satellite_analysis_available: !!satelliteAnalysis,
+          satellite_pitch: satelliteAnalysis?.estimated_pitch ?? null,
         },
         metadata: {
           event: isReselection ? "footprint_candidate_reselected" : "footprint_candidate_selected",
@@ -1575,7 +1595,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const rawEstimate = await estimateRoofWithAI(address, geo.lat, geo.lng, parcel, elevation, selectedCandidate, candidates, roofFormInference);
+    const rawEstimate = await estimateRoofWithAI(address, geo.lat, geo.lng, parcel, elevation, selectedCandidate, candidates, roofFormInference, satelliteAnalysis);
 
     // Phase 2D: Apply tuning heuristics
     let estimate = rawEstimate;
