@@ -267,12 +267,13 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       setEstimate(data.measurement as RoofEstimate);
       const candidateCount = data.candidateCount || 0;
       const roofForm = data.roofFormInferred ? ` — roof form inferred` : "";
-      const satellite = data.satelliteAnalyzed
-        ? ` — 🛰️ satellite imagery analyzed (pitch: ${data.satellitePitch ?? "?"})`
+      const visionInfo = data.visionClassified
+        ? ` — 🛰️ vision classified (pitch band: ${data.visionPitchBand ?? "?"}, ${data.suppressionCount || 0} suppression${data.suppressionCount !== 1 ? "s" : ""})`
         : "";
+      const abstentions = data.visionAbstentions?.length > 0 ? ` [abstained: ${data.visionAbstentions.join(", ")}]` : "";
       const fpMsg = data.footprintExtracted
-        ? ` — footprint extracted (${candidateCount} candidate${candidateCount > 1 ? "s" : ""} found)${roofForm}${satellite}`
-        : ` — no footprint geometry found, using AI estimation${satellite}`;
+        ? ` — footprint extracted (${candidateCount} candidate${candidateCount > 1 ? "s" : ""})${roofForm}${visionInfo}${abstentions}`
+        : ` — no footprint geometry found${visionInfo}`;
       toast.success("Roof estimate generated" + fpMsg);
     } catch (err: any) {
       setError(err.message || "Estimate failed");
