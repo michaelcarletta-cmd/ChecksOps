@@ -272,6 +272,15 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
       if (data?.result) {
         setRebuttal(data.result);
         setEditableRebuttal(data.result);
+        
+        // Store watchdog results for display
+        if (data?.citation_watchdog) {
+          setCitationWatchdog(data.citation_watchdog);
+        }
+        if (data?.jurisdiction) {
+          setJurisdiction(data.jurisdiction);
+        }
+        
         if (data?.carrierDismantler) {
           publishCarrierDismantler({
             claimId,
@@ -293,7 +302,10 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
 
         toast({
           title: "Rebuttal drafted",
-          description: "Darwin has compiled a comprehensive rebuttal using all available intelligence",
+          description: data?.citation_watchdog 
+            ? `⚠️ Rebuttal ready but ${data.citation_watchdog.wrong_state_citations_found} wrong-state citation(s) detected — review before sending`
+            : "Darwin has compiled a comprehensive rebuttal using all available intelligence",
+          variant: data?.citation_watchdog ? "destructive" : "default",
         });
       }
     } catch (error: any) {
