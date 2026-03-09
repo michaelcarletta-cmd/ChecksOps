@@ -138,7 +138,8 @@ JSON schema:
   "confidence_score": number (0-50, be honest),
   "ai_notes": string (explain methodology, assumptions, limitations),
   "data_sources": string[],
-  "field_sources": object mapping each field name to "geometry" or "ai_estimated"
+  "field_sources": object mapping each field name to "geometry" or "ai_estimated",
+  "field_confidence": object mapping each field name to a 0-100 integer confidence score
 }
 
 Rules:
@@ -147,6 +148,7 @@ Rules:
 - Slope factors: 4/12=1.054, 5/12=1.083, 6/12=1.118, 7/12=1.158, 8/12=1.202
 - Pre-1970 homes: simpler gable roofs. Newer: more hip/valley
 - confidence_score MUST be ≤ 50 (no imagery = low confidence)
+- field_confidence: give each field its own 0-100 confidence score. Fields derived from parcel geometry get higher scores (40-70). Pure AI guesses get lower scores (10-35). Be honest per field.
 - All linear measurements (ridge, hip, valley, eave, rake) are AI_ESTIMATED
 - footprint_area_sqft is "geometry" ONLY if parcel data provides building footprint; otherwise "ai_estimated"
 - estimated_roof_area_sqft, squares are always "ai_estimated" (derived from pitch assumption)
