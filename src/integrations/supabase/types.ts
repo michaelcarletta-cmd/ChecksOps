@@ -3902,6 +3902,7 @@ export type Database = {
         Row: {
           address: string
           ai_notes: string | null
+          aspect_ratio: number | null
           candidate_footprints: Json | null
           claim_id: string
           confidence_score: number | null
@@ -3910,6 +3911,8 @@ export type Database = {
           created_at: string
           created_by: string | null
           data_sources: string[] | null
+          dominant_axis_bearing: number | null
+          dominant_axis_length_ft: number | null
           dominant_pitch: string | null
           eave_lf: number | null
           edge_classifications: Json | null
@@ -3926,15 +3929,21 @@ export type Database = {
           geometry_metadata: Json | null
           geometry_quality_score: number | null
           hip_lf: number | null
+          hip_valley_candidates: Json | null
           id: string
           imagery_date: string | null
           imagery_source: string | null
+          inferred_roof_form: string | null
           manually_confirmed: boolean
           overlay_image_url: string | null
+          perpendicular_axis_length_ft: number | null
           rake_lf: number | null
           raw_geojson: Json | null
           review_required: boolean
+          ridge_candidates: Json | null
           ridge_lf: number | null
+          roof_form_confidence: number | null
+          roof_form_reasoning: string | null
           selected_candidate_index: number | null
           squares: number | null
           updated_at: string
@@ -3943,6 +3952,7 @@ export type Database = {
         Insert: {
           address: string
           ai_notes?: string | null
+          aspect_ratio?: number | null
           candidate_footprints?: Json | null
           claim_id: string
           confidence_score?: number | null
@@ -3951,6 +3961,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           data_sources?: string[] | null
+          dominant_axis_bearing?: number | null
+          dominant_axis_length_ft?: number | null
           dominant_pitch?: string | null
           eave_lf?: number | null
           edge_classifications?: Json | null
@@ -3967,15 +3979,21 @@ export type Database = {
           geometry_metadata?: Json | null
           geometry_quality_score?: number | null
           hip_lf?: number | null
+          hip_valley_candidates?: Json | null
           id?: string
           imagery_date?: string | null
           imagery_source?: string | null
+          inferred_roof_form?: string | null
           manually_confirmed?: boolean
           overlay_image_url?: string | null
+          perpendicular_axis_length_ft?: number | null
           rake_lf?: number | null
           raw_geojson?: Json | null
           review_required?: boolean
+          ridge_candidates?: Json | null
           ridge_lf?: number | null
+          roof_form_confidence?: number | null
+          roof_form_reasoning?: string | null
           selected_candidate_index?: number | null
           squares?: number | null
           updated_at?: string
@@ -3984,6 +4002,7 @@ export type Database = {
         Update: {
           address?: string
           ai_notes?: string | null
+          aspect_ratio?: number | null
           candidate_footprints?: Json | null
           claim_id?: string
           confidence_score?: number | null
@@ -3992,6 +4011,8 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           data_sources?: string[] | null
+          dominant_axis_bearing?: number | null
+          dominant_axis_length_ft?: number | null
           dominant_pitch?: string | null
           eave_lf?: number | null
           edge_classifications?: Json | null
@@ -4008,15 +4029,21 @@ export type Database = {
           geometry_metadata?: Json | null
           geometry_quality_score?: number | null
           hip_lf?: number | null
+          hip_valley_candidates?: Json | null
           id?: string
           imagery_date?: string | null
           imagery_source?: string | null
+          inferred_roof_form?: string | null
           manually_confirmed?: boolean
           overlay_image_url?: string | null
+          perpendicular_axis_length_ft?: number | null
           rake_lf?: number | null
           raw_geojson?: Json | null
           review_required?: boolean
+          ridge_candidates?: Json | null
           ridge_lf?: number | null
+          roof_form_confidence?: number | null
+          roof_form_reasoning?: string | null
           selected_candidate_index?: number | null
           squares?: number | null
           updated_at?: string

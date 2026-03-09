@@ -8,10 +8,11 @@ const corsHeaders = {
 
 type DerivationSource = "geometry" | "ai_estimated";
 type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative";
+type RoofForm = "gable" | "hip" | "cross_gable" | "complex" | "unknown";
 
 interface EdgeClassification {
   segment_index: number;
-  start: [number, number]; // [lng, lat]
+  start: [number, number];
   end: [number, number];
   length_ft: number;
   bearing_deg: number;
@@ -26,6 +27,37 @@ interface GeometryMetadata {
   centroid_offset_ft: number;
   raw_polygon_hash: string;
   vertex_count: number;
+}
+
+interface RidgeCandidate {
+  start: [number, number];
+  end: [number, number];
+  length_ft: number;
+  bearing_deg: number;
+  confidence: number;
+  reasoning: string;
+}
+
+interface HipValleyCandidate {
+  type: "hip" | "valley";
+  start: [number, number];
+  end: [number, number];
+  length_ft: number;
+  bearing_deg: number;
+  confidence: number;
+  reasoning: string;
+}
+
+interface RoofFormInference {
+  inferred_roof_form: RoofForm;
+  roof_form_confidence: number;
+  roof_form_reasoning: string;
+  dominant_axis_bearing: number;
+  dominant_axis_length_ft: number;
+  perpendicular_axis_length_ft: number;
+  aspect_ratio: number;
+  ridge_candidates: RidgeCandidate[];
+  hip_valley_candidates: HipValleyCandidate[];
 }
 
 interface CandidateFootprint {
@@ -70,6 +102,16 @@ interface RoofEstimateResult {
   geometry_metadata: GeometryMetadata | null;
   candidate_footprints: CandidateFootprint[] | null;
   selected_candidate_index: number | null;
+  // Phase 2C
+  inferred_roof_form: RoofForm | null;
+  roof_form_confidence: number | null;
+  roof_form_reasoning: string | null;
+  dominant_axis_bearing: number | null;
+  dominant_axis_length_ft: number | null;
+  perpendicular_axis_length_ft: number | null;
+  aspect_ratio: number | null;
+  ridge_candidates: RidgeCandidate[] | null;
+  hip_valley_candidates: HipValleyCandidate[] | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -160,6 +202,10 @@ function polygonCentroid(ring: number[][]): [number, number] {
   return [lng, lat];
 }
 
+function midpoint(p1: number[], p2: number[]): [number, number] {
+  return [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2];
+}
+
 /** Simple hash of polygon for versioning */
 function polygonHash(ring: number[][]): string {
   const str = ring.map(p => `${p[0].toFixed(7)},${p[1].toFixed(7)}`).join("|");
@@ -172,72 +218,85 @@ function polygonHash(ring: number[][]): string {
 
 // ── Phase 2B: Edge classification ────────────────────────────────────
 
-function classifyEdges(ring: number[][]): EdgeClassification[] {
-  // Close ring check
+interface AxisAnalysis {
+  primaryAxis: number;
+  perpAxis: number;
+  primaryTotalLen: number;
+  perpTotalLen: number;
+  otherTotalLen: number;
+  primarySegments: number[];
+  perpSegments: number[];
+}
+
+function analyzeAxes(ring: number[][]): { segments: { start: [number, number]; end: [number, number]; len: number; bearing: number; normBearing: number }[]; axis: AxisAnalysis } {
   const pts = ring[ring.length - 1][0] === ring[0][0] && ring[ring.length - 1][1] === ring[0][1]
     ? ring.slice(0, -1) : ring;
-  if (pts.length < 3) return [];
+  if (pts.length < 3) return { segments: [], axis: { primaryAxis: 0, perpAxis: 90, primaryTotalLen: 0, perpTotalLen: 0, otherTotalLen: 0, primarySegments: [], perpSegments: [] } };
 
-  // Compute all segment bearings and lengths
-  const segments: { start: [number, number]; end: [number, number]; len: number; bearing: number }[] = [];
+  const segments: { start: [number, number]; end: [number, number]; len: number; bearing: number; normBearing: number }[] = [];
   for (let i = 0; i < pts.length; i++) {
     const j = (i + 1) % pts.length;
+    const b = bearingDeg(pts[i], pts[j]);
     segments.push({
       start: [pts[i][0], pts[i][1]],
       end: [pts[j][0], pts[j][1]],
       len: haversineDistFt(pts[i], pts[j]),
-      bearing: bearingDeg(pts[i], pts[j]),
+      bearing: b,
+      normBearing: b % 180,
     });
   }
 
-  // Find dominant bearing axis — most buildings align to two perpendicular axes
-  // Normalize bearings to 0-180 range (direction-agnostic)
-  const normalizedBearings = segments.map(s => s.bearing % 180);
-
-  // Weighted by length: find dominant direction
+  // Weighted buckets to find dominant axis
   const buckets: Record<number, number> = {};
-  for (let i = 0; i < segments.length; i++) {
-    const b10 = Math.round(normalizedBearings[i] / 10) * 10; // 10-degree buckets
-    buckets[b10] = (buckets[b10] || 0) + segments[i].len;
+  for (const s of segments) {
+    const b10 = Math.round(s.normBearing / 10) * 10;
+    buckets[b10] = (buckets[b10] || 0) + s.len;
   }
-  const sortedBuckets = Object.entries(buckets).sort((a, b) => Number(b[1]) - Number(a[1]));
-  const primaryAxis = Number(sortedBuckets[0]?.[0] ?? 0);
+  const sorted = Object.entries(buckets).sort((a, b) => Number(b[1]) - Number(a[1]));
+  const primaryAxis = Number(sorted[0]?.[0] ?? 0);
+  const perpAxis = (primaryAxis + 90) % 180;
 
-  // Classify: segments aligned with the longer dimension are likely eaves,
-  // perpendicular segments are likely rakes
-  // For a simple gable, eaves run along the longer side
-  const totalByAxis: Record<string, number> = { primary: 0, perp: 0, other: 0 };
-  const classifications: EdgeClassification[] = [];
+  let primaryTotalLen = 0, perpTotalLen = 0, otherTotalLen = 0;
+  const primarySegments: number[] = [];
+  const perpSegments: number[] = [];
 
   for (let i = 0; i < segments.length; i++) {
     const s = segments[i];
-    const normBearing = normalizedBearings[i];
-    const diffFromPrimary = Math.min(
-      Math.abs(normBearing - primaryAxis),
-      Math.abs(normBearing - primaryAxis + 180),
-      Math.abs(normBearing - primaryAxis - 180),
-    );
-    const diffFromPerp = Math.min(
-      Math.abs(normBearing - ((primaryAxis + 90) % 180)),
-      Math.abs(normBearing - ((primaryAxis + 90) % 180) + 180),
-      Math.abs(normBearing - ((primaryAxis + 90) % 180) - 180),
-    );
+    const diffPrimary = Math.min(Math.abs(s.normBearing - primaryAxis), Math.abs(s.normBearing - primaryAxis + 180), Math.abs(s.normBearing - primaryAxis - 180));
+    const diffPerp = Math.min(Math.abs(s.normBearing - perpAxis), Math.abs(s.normBearing - perpAxis + 180), Math.abs(s.normBearing - perpAxis - 180));
+    if (diffPrimary <= 15) { primaryTotalLen += s.len; primarySegments.push(i); }
+    else if (diffPerp <= 15) { perpTotalLen += s.len; perpSegments.push(i); }
+    else { otherTotalLen += s.len; }
+  }
+
+  return { segments, axis: { primaryAxis, perpAxis, primaryTotalLen, perpTotalLen, otherTotalLen, primarySegments, perpSegments } };
+}
+
+function classifyEdges(ring: number[][]): EdgeClassification[] {
+  const { segments, axis } = analyzeAxes(ring);
+  if (segments.length === 0) return [];
+
+  // Determine which axis is eave (longer total) vs rake (shorter total)
+  const swapped = axis.perpTotalLen > axis.primaryTotalLen;
+
+  const classifications: EdgeClassification[] = [];
+  for (let i = 0; i < segments.length; i++) {
+    const s = segments[i];
+    const diffPrimary = Math.min(Math.abs(s.normBearing - axis.primaryAxis), Math.abs(s.normBearing - axis.primaryAxis + 180), Math.abs(s.normBearing - axis.primaryAxis - 180));
+    const diffPerp = Math.min(Math.abs(s.normBearing - axis.perpAxis), Math.abs(s.normBearing - axis.perpAxis + 180), Math.abs(s.normBearing - axis.perpAxis - 180));
 
     let classification: "likely_eave" | "likely_rake" | "unknown";
     let reason: string;
 
-    if (diffFromPrimary <= 15) {
-      totalByAxis.primary += s.len;
-      classification = "likely_eave";
-      reason = `Aligned with primary building axis (${primaryAxis}°±15°). Footprint-proxy — not exact roof edge.`;
-    } else if (diffFromPerp <= 15) {
-      totalByAxis.perp += s.len;
-      classification = "likely_rake";
+    if (diffPrimary <= 15) {
+      classification = swapped ? "likely_rake" : "likely_eave";
+      reason = `Aligned with ${swapped ? "shorter" : "longer"} building axis (${axis.primaryAxis}°±15°). Footprint-proxy — not exact roof edge.`;
+    } else if (diffPerp <= 15) {
+      classification = swapped ? "likely_eave" : "likely_rake";
       reason = `Perpendicular to primary axis. Footprint-proxy — not exact roof edge.`;
     } else {
-      totalByAxis.other += s.len;
       classification = "unknown";
-      reason = `Bearing ${roundTo(normBearing)}° does not align with primary axes. May be offset, wing, or irregular geometry.`;
+      reason = `Bearing ${roundTo(s.normBearing)}° does not align with primary axes. May be offset, wing, or irregular geometry.`;
     }
 
     classifications.push({
@@ -251,49 +310,30 @@ function classifyEdges(ring: number[][]): EdgeClassification[] {
     });
   }
 
-  // If primary axis total > perp total, primary = eave is correct (longer runs)
-  // If perp > primary, swap — the "dominant" bucket might be the gable end
-  if (totalByAxis.perp > totalByAxis.primary) {
-    for (const c of classifications) {
-      if (c.classification === "likely_eave") {
-        c.classification = "likely_rake";
-        c.classification_reason = c.classification_reason.replace("eave", "rake");
-      } else if (c.classification === "likely_rake") {
-        c.classification = "likely_eave";
-        c.classification_reason = c.classification_reason.replace("rake", "eave");
-      }
-    }
-  }
-
   return classifications;
 }
 
 /** Compute a geometry quality score (0-100) for a footprint polygon */
 function computeGeometryQuality(ring: number[][], areaSqft: number, centroidOffsetFt: number): number {
   let score = 100;
-
-  // Vertex count: 4 = perfect rectangle, 3 = triangle (bad), >20 = complex
   const vertexCount = ring[ring.length - 1][0] === ring[0][0] ? ring.length - 1 : ring.length;
   if (vertexCount < 4) score -= 30;
   else if (vertexCount > 20) score -= 10;
-  else if (vertexCount >= 4 && vertexCount <= 8) score += 0; // ideal
+  else if (vertexCount >= 4 && vertexCount <= 8) score += 0;
   else score -= 5;
 
-  // Area sanity: residential 500-10000 sqft = good
   if (areaSqft < 500) score -= 25;
   else if (areaSqft > 10000) score -= 15;
   else if (areaSqft > 5000) score -= 5;
 
-  // Centroid offset from geocode: <30ft = good, >100ft = bad
   if (centroidOffsetFt > 150) score -= 30;
   else if (centroidOffsetFt > 100) score -= 20;
   else if (centroidOffsetFt > 50) score -= 10;
 
-  // Compactness (isoperimetric ratio): 4πA/P² — circle=1, square≈0.785
   const perim = polygonPerimeterFt(ring);
   if (perim > 0) {
     const compactness = (4 * Math.PI * areaSqft) / (perim * perim);
-    if (compactness < 0.3) score -= 20; // very irregular
+    if (compactness < 0.3) score -= 20;
     else if (compactness < 0.5) score -= 10;
   }
 
@@ -318,6 +358,167 @@ function buildGeometryMetadata(
     centroid_offset_ft: roundTo(centroidOffset, 1),
     raw_polygon_hash: polygonHash(ring),
     vertex_count: vertexCount,
+  };
+}
+
+// ── Phase 2C: Roof form inference ────────────────────────────────────
+
+function inferRoofForm(candidate: CandidateFootprint): RoofFormInference {
+  const ring = candidate.polygon;
+  const { segments, axis } = analyzeAxes(ring);
+  const edges = candidate.edge_classifications;
+
+  // Determine dominant (eave) and perpendicular (rake) axis lengths
+  // Eave = longer total, Rake = shorter total
+  const swapped = axis.perpTotalLen > axis.primaryTotalLen;
+  const eaveTotalLen = swapped ? axis.perpTotalLen : axis.primaryTotalLen;
+  const rakeTotalLen = swapped ? axis.primaryTotalLen : axis.perpTotalLen;
+  const eaveAxis = swapped ? axis.perpAxis : axis.primaryAxis;
+  const rakeAxis = swapped ? axis.primaryAxis : axis.perpAxis;
+
+  // Dominant axis = the direction eaves run (the "long" direction of the building)
+  const dominantAxisBearing = eaveAxis;
+
+  // Estimate building dimensions from segment groups
+  // For eave direction: the longest eave-aligned segment pair approximates building length
+  const eaveSegLens = edges.filter(e => e.classification === "likely_eave").map(e => e.length_ft).sort((a, b) => b - a);
+  const rakeSegLens = edges.filter(e => e.classification === "likely_rake").map(e => e.length_ft).sort((a, b) => b - a);
+
+  const dominantAxisLength = eaveSegLens[0] || eaveTotalLen / 2;
+  const perpAxisLength = rakeSegLens[0] || rakeTotalLen / 2;
+
+  const aspectRatio = perpAxisLength > 0 ? roundTo(dominantAxisLength / perpAxisLength, 2) : 1;
+
+  // Count segments by classification
+  const eaveCount = edges.filter(e => e.classification === "likely_eave").length;
+  const rakeCount = edges.filter(e => e.classification === "likely_rake").length;
+  const unknownCount = edges.filter(e => e.classification === "unknown").length;
+  const totalSegments = edges.length;
+  const unknownPct = totalSegments > 0 ? unknownCount / totalSegments : 0;
+
+  // Quality gate: if geometry quality is poor or too many unknowns, classify as unknown
+  const qualityScore = candidate.geometry_quality_score;
+
+  let form: RoofForm = "unknown";
+  let confidence = 0;
+  let reasoning = "";
+
+  if (qualityScore < 30 || unknownPct > 0.4) {
+    form = "unknown";
+    confidence = 10;
+    reasoning = `Geometry quality too low (${qualityScore}/100) or too many unclassified edges (${Math.round(unknownPct * 100)}%) for reliable roof form inference.`;
+  } else if (totalSegments === 4 && unknownCount === 0) {
+    // Simple 4-sided rectangle
+    if (aspectRatio >= 1.3) {
+      form = "gable";
+      confidence = 55;
+      reasoning = `Rectangular footprint (4 vertices, aspect ratio ${aspectRatio}). Elongated shape consistent with simple gable. Ridge would run along dominant axis (${roundTo(dominantAxisBearing)}°).`;
+    } else {
+      form = "hip";
+      confidence = 45;
+      reasoning = `Nearly square footprint (4 vertices, aspect ratio ${aspectRatio}). Low aspect ratio is more consistent with hip roof. However, both gable and hip are plausible at this ratio.`;
+    }
+  } else if (totalSegments >= 5 && totalSegments <= 8 && unknownCount <= 1) {
+    // Slight complexity — L-shape or T-shape possible
+    if (unknownCount === 0 && eaveCount >= 2 && rakeCount >= 2) {
+      if (aspectRatio >= 1.3) {
+        form = "gable";
+        confidence = 45;
+        reasoning = `${totalSegments}-sided footprint with clear axis alignment (${eaveCount} eave, ${rakeCount} rake segments). Elongated shape (aspect ratio ${aspectRatio}) suggests gable.`;
+      } else {
+        form = "hip";
+        confidence = 40;
+        reasoning = `${totalSegments}-sided footprint with clear axis alignment. Low aspect ratio (${aspectRatio}) more consistent with hip roof.`;
+      }
+    } else {
+      form = "cross_gable";
+      confidence = 35;
+      reasoning = `${totalSegments}-sided footprint with ${unknownCount} unclassified segment(s), suggesting wing/extension. May indicate cross-gable or T-shaped roof.`;
+    }
+  } else if (totalSegments > 8) {
+    form = "complex";
+    confidence = 25;
+    reasoning = `Complex footprint with ${totalSegments} segments. Too many edges for simple form classification. May have multiple wings, extensions, or irregular geometry.`;
+  } else {
+    form = "unknown";
+    confidence = 15;
+    reasoning = `Footprint shape (${totalSegments} segments, ${unknownCount} unknown) does not clearly match standard roof form categories.`;
+  }
+
+  // Infer ridge candidates — only when geometry supports it
+  const ridgeCandidates: RidgeCandidate[] = [];
+  if ((form === "gable" || form === "cross_gable") && confidence >= 35) {
+    // For gable: ridge runs along dominant (eave) axis, centered between rake edges
+    // Find rake-classified segment midpoints to estimate ridge endpoints
+    const rakeEdges = edges.filter(e => e.classification === "likely_rake");
+    if (rakeEdges.length >= 2) {
+      const rakeMidpoints = rakeEdges.map(e => midpoint(e.start, e.end));
+      // Ridge connects rake-side midpoints along the eave axis
+      const ridgeLen = roundTo(dominantAxisLength, 0);
+      if (ridgeLen > 5) {
+        ridgeCandidates.push({
+          start: rakeMidpoints[0] as [number, number],
+          end: rakeMidpoints[1] as [number, number],
+          length_ft: ridgeLen,
+          bearing_deg: roundTo(dominantAxisBearing, 1),
+          confidence: Math.min(confidence, 50),
+          reasoning: `Inferred ridge along dominant axis (${roundTo(dominantAxisBearing)}°) between rake midpoints. Length approximated from longest eave segment. Footprint-proxy — actual ridge position depends on roof style and overhang.`,
+        });
+      }
+    }
+  }
+
+  // Infer hip/valley candidates — only when confidence is sufficient
+  const hipValleyCandidates: HipValleyCandidate[] = [];
+  if (form === "hip" && confidence >= 40) {
+    // Hip roof: diagonal lines from corners to ridge endpoints
+    // Approximate: hip lines run from corners at ~45° to ridge
+    const centroid = polygonCentroid(ring);
+    const pts = ring[ring.length - 1][0] === ring[0][0] ? ring.slice(0, -1) : ring;
+    // Each corner produces a hip line to the nearest ridge end
+    // Only add if we have enough confidence
+    const cornerCount = pts.length;
+    if (cornerCount === 4) {
+      // For a 4-sided hip: 4 hip lines from corners to ridge endpoints
+      const hipLen = roundTo(Math.sqrt((dominantAxisLength / 2) ** 2 + (perpAxisLength / 2) ** 2), 0);
+      if (hipLen > 5) {
+        hipValleyCandidates.push({
+          type: "hip",
+          start: [pts[0][0], pts[0][1]] as [number, number],
+          end: centroid,
+          length_ft: hipLen,
+          bearing_deg: roundTo(bearingDeg(pts[0], centroid), 1),
+          confidence: Math.min(confidence - 10, 35),
+          reasoning: `Inferred hip line from corner to approximate ridge end. Length estimated from building dimensions. Low confidence — actual hip geometry depends on roof pitch and overhang.`,
+        });
+      }
+    }
+  } else if (form === "cross_gable" && confidence >= 35) {
+    // Cross gable: valley where wings meet
+    const unknownEdges = edges.filter(e => e.classification === "unknown");
+    for (const ue of unknownEdges) {
+      hipValleyCandidates.push({
+        type: "valley",
+        start: ue.start,
+        end: ue.end,
+        length_ft: ue.length_ft,
+        bearing_deg: ue.bearing_deg,
+        confidence: Math.min(confidence - 10, 30),
+        reasoning: `Potential valley at unclassified edge (segment #${ue.segment_index}). Wing junction often produces valleys. Very low confidence — requires visual confirmation.`,
+      });
+    }
+  }
+
+  return {
+    inferred_roof_form: form,
+    roof_form_confidence: confidence,
+    roof_form_reasoning: reasoning,
+    dominant_axis_bearing: roundTo(dominantAxisBearing, 1),
+    dominant_axis_length_ft: roundTo(dominantAxisLength, 0),
+    perpendicular_axis_length_ft: roundTo(perpAxisLength, 0),
+    aspect_ratio: aspectRatio,
+    ridge_candidates: ridgeCandidates,
+    hip_valley_candidates: hipValleyCandidates,
   };
 }
 
@@ -382,7 +583,6 @@ async function fetchAllCandidateFootprints(
   candidates.push(...osmResults);
   if (njResult) candidates.push(njResult);
 
-  // Sort by quality score descending
   candidates.sort((a, b) => b.geometry_quality_score - a.geometry_quality_score);
 
   return candidates;
@@ -495,12 +695,12 @@ async function estimateRoofWithAI(
   elevation: number | null,
   selectedCandidate: CandidateFootprint | null,
   allCandidates: CandidateFootprint[],
+  roofFormInference: RoofFormInference | null,
 ): Promise<RoofEstimateResult> {
   const LOVABLE_AI_URL = Deno.env.get("LOVABLE_AI_BASE_URL");
   const LOVABLE_AI_KEY = Deno.env.get("LOVABLE_AI_API_KEY");
   if (!LOVABLE_AI_URL || !LOVABLE_AI_KEY) throw new Error("AI service not configured");
 
-  // Derive eave/rake from edge classifications if available
   let geometryEaveLf = 0;
   let geometryRakeLf = 0;
   if (selectedCandidate?.edge_classifications) {
@@ -513,6 +713,10 @@ async function estimateRoofWithAI(
   const footprintContext = selectedCandidate
     ? `\nBuilding Footprint (from ${selectedCandidate.source}, quality: ${selectedCandidate.geometry_quality_score}/100):\n- Footprint area: ${selectedCandidate.area_sqft} sqft (GEOMETRY-DERIVED — use this, do NOT re-estimate)\n- Perimeter: ${selectedCandidate.perimeter_ft} ft (FOOTPRINT-PROXY — not exact roof edge)\n- Edge classification derived eave LF (footprint-proxy): ${roundTo(geometryEaveLf)} ft\n- Edge classification derived rake LF (footprint-proxy): ${roundTo(geometryRakeLf)} ft\n- Imagery date: ${selectedCandidate.imagery_date || "unknown"}\nDo NOT re-estimate footprint_area_sqft — use ${selectedCandidate.area_sqft} exactly.\nEave and rake values are footprint-proxy estimates derived from perimeter segment classification, NOT exact roof-edge measurements. Adjust based on typical overhang and roof style.`
     : "\nNo building footprint geometry available.";
+
+  const roofFormContext = roofFormInference
+    ? `\nRoof Form Inference (Phase 2C — from footprint geometry):\n- Inferred form: ${roofFormInference.inferred_roof_form} (confidence: ${roofFormInference.roof_form_confidence}%)\n- Reasoning: ${roofFormInference.roof_form_reasoning}\n- Dominant axis: ${roofFormInference.dominant_axis_bearing}° bearing, ${roofFormInference.dominant_axis_length_ft} ft\n- Perpendicular axis: ${roofFormInference.perpendicular_axis_length_ft} ft\n- Aspect ratio: ${roofFormInference.aspect_ratio}\n- Ridge candidates: ${roofFormInference.ridge_candidates.length} (${roofFormInference.ridge_candidates.map(r => `${r.length_ft}ft @${r.confidence}%`).join(", ") || "none"})\n- Hip/valley candidates: ${roofFormInference.hip_valley_candidates.length}\nUse these geometry-inferred values to inform your estimates. Ridge and hip/valley candidates are conservative and may be incomplete.`
+    : "\nNo roof form inference available (no valid footprint geometry).";
 
   const systemPrompt = `You are a roof ESTIMATE AI for insurance claims adjusting. You produce PRELIMINARY estimates only — not measurements. Be conservative and honest about uncertainty. Return ONLY valid JSON.
 
@@ -538,6 +742,7 @@ JSON schema:
 Rules:
 - If a geometry-derived footprint area is provided, use it EXACTLY for footprint_area_sqft and mark field_sources.footprint_area_sqft = "geometry"
 - If edge-classified eave/rake values are provided, use them as starting points and adjust for overhang (+1-2ft per side typically). Mark these as "geometry" source but note they are footprint-proxy.
+- If roof form inference is provided, use it to guide hip_lf, valley_lf, ridge_lf, and facet_count estimates. For "gable" forms, hip_lf should be 0. For "hip" forms, rake_lf should be minimal.
 - Footprint is typically 30-50% of lot area for residential (only if no geometry footprint)
 - Standard residential pitches: 4/12-8/12
 - Slope factors: 4/12=1.054, 5/12=1.083, 6/12=1.118, 7/12=1.158, 8/12=1.202
@@ -551,7 +756,7 @@ Rules:
 Address: ${address}
 Coordinates: ${lat}, ${lng}
 Elevation: ${elevation ? `${elevation} ft` : "unknown"}
-Parcel: ${parcel ? JSON.stringify(parcel) : "unavailable"}${footprintContext}
+Parcel: ${parcel ? JSON.stringify(parcel) : "unavailable"}${footprintContext}${roofFormContext}
 
 Return JSON only.`;
 
@@ -612,9 +817,9 @@ Return JSON only.`;
     estimated_roof_area_sqft: hasGeometry ? 40 : 15,
     squares: hasGeometry ? 40 : 15,
     dominant_pitch: 20,
-    ridge_lf: 10,
-    hip_lf: 10,
-    valley_lf: 10,
+    ridge_lf: roofFormInference?.ridge_candidates?.length ? 30 : 10,
+    hip_lf: roofFormInference?.hip_valley_candidates?.length ? 25 : 10,
+    valley_lf: roofFormInference?.hip_valley_candidates?.some(c => c.type === "valley") ? 25 : 10,
     eave_lf: hasGeometry && geometryEaveLf > 0 ? 50 : 10,
     rake_lf: hasGeometry && geometryRakeLf > 0 ? 50 : 10,
     facet_count: 15,
@@ -646,6 +851,12 @@ Return JSON only.`;
       (allCandidates.length > 1 ? `\n📊 ${allCandidates.length} candidate footprints found from multiple sources.` : "")
     : "";
 
+  const roofFormNote = roofFormInference
+    ? `\n\n🏠 Roof Form Inference: ${roofFormInference.inferred_roof_form} (confidence: ${roofFormInference.roof_form_confidence}%). ${roofFormInference.roof_form_reasoning}` +
+      (roofFormInference.ridge_candidates.length > 0 ? `\n📏 ${roofFormInference.ridge_candidates.length} ridge candidate(s) inferred from geometry.` : "") +
+      (roofFormInference.hip_valley_candidates.length > 0 ? `\n📐 ${roofFormInference.hip_valley_candidates.length} hip/valley candidate(s) inferred.` : "")
+    : "";
+
   return {
     footprint_area_sqft: cleaned.footprint_area_sqft,
     estimated_roof_area_sqft: cleaned.estimated_roof_area_sqft,
@@ -662,11 +873,12 @@ Return JSON only.`;
     overlay_image_url: null,
     raw_geojson: selectedCandidate?.geojson || null,
     ai_notes: (parsed.ai_notes ?? "Preliminary AI estimate. Field verification required.") +
-      proxyNote +
+      proxyNote + roofFormNote +
       "\n\n⚠️ This is a PRELIMINARY ESTIMATE, not a measurement. All values are AI-modeled and should not be used without manual confirmation.",
     data_sources: [
       ...(parsed.data_sources ?? ["US Census Geocoder", "AI estimation"]),
       ...(selectedCandidate ? [selectedCandidate.source] : []),
+      ...(roofFormInference ? ["Geometry Roof Form Inference"] : []),
     ],
     field_sources: fieldSources,
     field_confidence: fieldConfidence,
@@ -682,6 +894,16 @@ Return JSON only.`;
     selected_candidate_index: selectedCandidate && allCandidates.length > 0
       ? allCandidates.indexOf(selectedCandidate)
       : null,
+    // Phase 2C
+    inferred_roof_form: roofFormInference?.inferred_roof_form ?? null,
+    roof_form_confidence: roofFormInference?.roof_form_confidence ?? null,
+    roof_form_reasoning: roofFormInference?.roof_form_reasoning ?? null,
+    dominant_axis_bearing: roofFormInference?.dominant_axis_bearing ?? null,
+    dominant_axis_length_ft: roofFormInference?.dominant_axis_length_ft ?? null,
+    perpendicular_axis_length_ft: roofFormInference?.perpendicular_axis_length_ft ?? null,
+    aspect_ratio: roofFormInference?.aspect_ratio ?? null,
+    ridge_candidates: roofFormInference?.ridge_candidates ?? null,
+    hip_valley_candidates: roofFormInference?.hip_valley_candidates ?? null,
   };
 }
 
@@ -744,23 +966,57 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Phase 2B: fetch ALL candidate footprints in parallel with parcel/elevation
     const [parcel, elevation, candidates] = await Promise.all([
       fetchParcelContext(geo.lat, geo.lng),
       getElevation(geo.lat, geo.lng),
       fetchAllCandidateFootprints(geo.lat, geo.lng),
     ]);
 
-    // Select candidate: use requested index or pick best quality
+    // Select candidate
     let selectedCandidate: CandidateFootprint | null = null;
     if (candidates.length > 0) {
       const idx = typeof selected_candidate_index === "number" && selected_candidate_index >= 0 && selected_candidate_index < candidates.length
         ? selected_candidate_index
-        : 0; // default: highest quality (already sorted)
+        : 0;
       selectedCandidate = candidates[idx];
     }
 
-    const estimate = await estimateRoofWithAI(address, geo.lat, geo.lng, parcel, elevation, selectedCandidate, candidates);
+    // Phase 2C: Infer roof form from selected footprint
+    let roofFormInference: RoofFormInference | null = null;
+    if (selectedCandidate) {
+      roofFormInference = inferRoofForm(selectedCandidate);
+    }
+
+    // Audit log: candidate selection (especially re-selection)
+    const isReselection = typeof selected_candidate_index === "number";
+    if (selectedCandidate) {
+      await supabase.from("audit_logs").insert({
+        user_id: user.id,
+        action: isReselection ? "update" : "create",
+        record_type: "roof_footprint_selection",
+        record_id: claim_id,
+        new_values: {
+          selected_candidate_index: candidates.indexOf(selectedCandidate),
+          source: selectedCandidate.source,
+          source_feature_id: selectedCandidate.source_feature_id,
+          area_sqft: selectedCandidate.area_sqft,
+          quality_score: selectedCandidate.geometry_quality_score,
+          is_reselection: isReselection,
+          total_candidates: candidates.length,
+          inferred_roof_form: roofFormInference?.inferred_roof_form ?? null,
+        },
+        metadata: {
+          event: isReselection ? "footprint_candidate_reselected" : "footprint_candidate_selected",
+          note: isReselection
+            ? "Staff re-selected a different footprint candidate. All downstream geometry-derived values have changed."
+            : "Initial footprint candidate auto-selected (highest quality score).",
+        },
+      }).then(({ error }) => {
+        if (error) console.error("Audit log error:", error);
+      });
+    }
+
+    const estimate = await estimateRoofWithAI(address, geo.lat, geo.lng, parcel, elevation, selectedCandidate, candidates, roofFormInference);
 
     const { data: saved, error: saveErr } = await supabase
       .from("claim_roof_measurements")
@@ -798,6 +1054,16 @@ Deno.serve(async (req) => {
         geometry_metadata: estimate.geometry_metadata,
         candidate_footprints: estimate.candidate_footprints,
         selected_candidate_index: estimate.selected_candidate_index,
+        // Phase 2C
+        inferred_roof_form: estimate.inferred_roof_form,
+        roof_form_confidence: estimate.roof_form_confidence,
+        roof_form_reasoning: estimate.roof_form_reasoning,
+        dominant_axis_bearing: estimate.dominant_axis_bearing,
+        dominant_axis_length_ft: estimate.dominant_axis_length_ft,
+        perpendicular_axis_length_ft: estimate.perpendicular_axis_length_ft,
+        aspect_ratio: estimate.aspect_ratio,
+        ridge_candidates: estimate.ridge_candidates,
+        hip_valley_candidates: estimate.hip_valley_candidates,
         created_by: user.id,
       })
       .select()
@@ -819,6 +1085,7 @@ Deno.serve(async (req) => {
         elevation,
         footprintExtracted: !!selectedCandidate,
         candidateCount: candidates.length,
+        roofFormInferred: !!roofFormInference,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

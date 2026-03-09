@@ -11,11 +11,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import {
   Ruler, Loader2, MapPin, AlertTriangle, CheckCircle2, RefreshCw,
-  Lock, Unlock, Pencil, Save, X, Shield, Eye, Layers
+  Lock, Unlock, Pencil, Save, X, Shield, Eye, Layers, Home
 } from "lucide-react";
+import { logAudit } from "@/hooks/useAuditLog";
 
 type DerivationSource = "geometry" | "ai_estimated" | "user_override";
 type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative";
+type RoofForm = "gable" | "hip" | "cross_gable" | "complex" | "unknown";
 
 interface EdgeClassification {
   segment_index: number;
@@ -44,6 +46,21 @@ interface GeometryMetadata {
   centroid_offset_ft: number;
   raw_polygon_hash: string;
   vertex_count: number;
+}
+
+interface RidgeCandidate {
+  length_ft: number;
+  bearing_deg: number;
+  confidence: number;
+  reasoning: string;
+}
+
+interface HipValleyCandidate {
+  type: "hip" | "valley";
+  length_ft: number;
+  bearing_deg: number;
+  confidence: number;
+  reasoning: string;
 }
 
 interface RoofEstimate {
@@ -81,6 +98,16 @@ interface RoofEstimate {
   geometry_metadata: GeometryMetadata | null;
   candidate_footprints: CandidateFootprint[] | null;
   selected_candidate_index: number | null;
+  // Phase 2C
+  inferred_roof_form: RoofForm | null;
+  roof_form_confidence: number | null;
+  roof_form_reasoning: string | null;
+  dominant_axis_bearing: number | null;
+  dominant_axis_length_ft: number | null;
+  perpendicular_axis_length_ft: number | null;
+  aspect_ratio: number | null;
+  ridge_candidates: RidgeCandidate[] | null;
+  hip_valley_candidates: HipValleyCandidate[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -100,6 +127,22 @@ const AUTHORITY_LABELS: Record<FieldAuthority, { label: string; icon: string; co
   geometry_authoritative: { label: "Geometry Auth.", icon: "📐", color: "text-green-700" },
   ai_provisional: { label: "Provisional", icon: "⏳", color: "text-amber-600" },
   user_authoritative: { label: "User Auth.", icon: "✓", color: "text-blue-700" },
+};
+
+const ROOF_FORM_ICONS: Record<RoofForm, string> = {
+  gable: "⛺",
+  hip: "🏠",
+  cross_gable: "✝️",
+  complex: "🏗️",
+  unknown: "❓",
+};
+
+const ROOF_FORM_LABELS: Record<RoofForm, string> = {
+  gable: "Gable",
+  hip: "Hip",
+  cross_gable: "Cross-Gable",
+  complex: "Complex",
+  unknown: "Unknown",
 };
 
 const EDGE_COLORS: Record<string, string> = {
@@ -135,6 +178,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const [editValues, setEditValues] = useState<Partial<RoofEstimate>>({});
   const [error, setError] = useState<string | null>(null);
   const [showEdgeDetail, setShowEdgeDetail] = useState(false);
+  const [showRidgeCandidates, setShowRidgeCandidates] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -184,8 +228,9 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
 
       setEstimate(data.measurement as RoofEstimate);
       const candidateCount = data.candidateCount || 0;
+      const roofForm = data.roofFormInferred ? ` — roof form inferred` : "";
       const fpMsg = data.footprintExtracted
-        ? ` — footprint extracted (${candidateCount} candidate${candidateCount > 1 ? "s" : ""} found)`
+        ? ` — footprint extracted (${candidateCount} candidate${candidateCount > 1 ? "s" : ""} found)${roofForm}`
         : " — no footprint geometry found, using AI estimation";
       toast.success("Roof estimate generated" + fpMsg);
     } catch (err: any) {
@@ -302,6 +347,22 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
 
   const handleCandidateSelect = (indexStr: string) => {
     const idx = parseInt(indexStr, 10);
+    // Log the re-selection audit event client-side
+    logAudit({
+      action: "update",
+      recordType: "roof_footprint_selection",
+      recordId: claimId,
+      oldValues: {
+        selected_candidate_index: estimate?.selected_candidate_index,
+      },
+      newValues: {
+        selected_candidate_index: idx,
+      },
+      metadata: {
+        event: "footprint_candidate_reselected_ui",
+        note: "Staff manually re-selected a footprint candidate from UI. Triggering re-estimation with new geometry.",
+      },
+    });
     runEstimate(idx);
   };
 
@@ -438,8 +499,9 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const candidates = (estimate?.candidate_footprints as CandidateFootprint[] | null) || [];
   const edgeClassifications = (estimate?.edge_classifications as EdgeClassification[] | null) || [];
   const geoMeta = estimate?.geometry_metadata as GeometryMetadata | null;
+  const ridgeCandidates = (estimate?.ridge_candidates as RidgeCandidate[] | null) || [];
+  const hipValleyCandidates = (estimate?.hip_valley_candidates as HipValleyCandidate[] | null) || [];
 
-  // Summarize edge classifications
   const edgeSummary = edgeClassifications.reduce(
     (acc, e) => {
       acc[e.classification] = (acc[e.classification] || 0) + e.length_ft;
@@ -447,6 +509,8 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     },
     {} as Record<string, number>,
   );
+
+  const phaseLabel = estimate?.inferred_roof_form ? "Phase 2C" : hasFootprintGeometry ? "Phase 2B" : "Preliminary";
 
   return (
     <Card>
@@ -456,7 +520,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
             <Ruler className="h-5 w-5 text-primary" />
             <CardTitle className="text-lg">Roof Estimate</CardTitle>
             <Badge variant="outline" className="text-[10px] font-normal">
-              {hasFootprintGeometry ? "Phase 2B" : "Preliminary"}
+              {phaseLabel}
             </Badge>
           </div>
           {estimate && (
@@ -474,7 +538,9 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
           )}
         </div>
         <CardDescription>
-          {hasFootprintGeometry
+          {estimate?.inferred_roof_form
+            ? `Footprint extracted with edge classification and roof form inference (${ROOF_FORM_LABELS[estimate.inferred_roof_form]}). All perimeter-derived values are footprint-proxy estimates.`
+            : hasFootprintGeometry
             ? "Footprint extracted from building geometry with edge classification. Perimeter-derived eave/rake values are footprint-proxy estimates."
             : "AI-estimated roof dimensions from public data. All values are preliminary until manually confirmed."}
         </CardDescription>
@@ -524,7 +590,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
           <div className="rounded-lg border border-dashed p-6 text-center space-y-2">
             <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
             <p className="text-sm text-muted-foreground">
-              Geocoding → Extracting footprints → Classifying edges → AI estimation...
+              Geocoding → Extracting footprints → Classifying edges → Inferring roof form → AI estimation...
             </p>
           </div>
         )}
@@ -579,6 +645,118 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
               </Alert>
             )}
 
+            {/* Phase 2C: Roof Form Inference */}
+            {estimate.inferred_roof_form && (
+              <div className="rounded-lg border p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Home className="h-4 w-4 text-primary" />
+                    Roof Form Inference
+                    <Badge variant="outline" className="text-[9px]">Phase 2C</Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{ROOF_FORM_ICONS[estimate.inferred_roof_form]}</span>
+                    <Badge
+                      variant="outline"
+                      className={`text-xs ${
+                        (estimate.roof_form_confidence ?? 0) >= 45
+                          ? "border-green-500/50 text-green-700"
+                          : (estimate.roof_form_confidence ?? 0) >= 30
+                          ? "border-yellow-500/50 text-yellow-700"
+                          : "border-red-500/50 text-red-600"
+                      }`}
+                    >
+                      {ROOF_FORM_LABELS[estimate.inferred_roof_form]} — {estimate.roof_form_confidence}% confidence
+                    </Badge>
+                  </div>
+                </div>
+
+                <p className="text-xs text-muted-foreground">{estimate.roof_form_reasoning}</p>
+
+                <div className="grid grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <span className="text-muted-foreground">Dominant Axis:</span>{" "}
+                    <span className="font-medium tabular-nums">
+                      {estimate.dominant_axis_bearing ?? "—"}° / {estimate.dominant_axis_length_ft ?? "—"} ft
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Perp. Axis:</span>{" "}
+                    <span className="font-medium tabular-nums">{estimate.perpendicular_axis_length_ft ?? "—"} ft</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Aspect Ratio:</span>{" "}
+                    <span className="font-medium tabular-nums">{estimate.aspect_ratio ?? "—"}</span>
+                  </div>
+                </div>
+
+                {/* Ridge & Hip/Valley candidates */}
+                {(ridgeCandidates.length > 0 || hipValleyCandidates.length > 0) && (
+                  <div className="mt-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 text-xs"
+                      onClick={() => setShowRidgeCandidates(!showRidgeCandidates)}
+                    >
+                      {showRidgeCandidates ? "Hide" : "Show"} {ridgeCandidates.length} ridge + {hipValleyCandidates.length} hip/valley candidate(s)
+                    </Button>
+                    {showRidgeCandidates && (
+                      <div className="mt-2 space-y-2">
+                        {ridgeCandidates.length > 0 && (
+                          <div>
+                            <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-1">Ridge Candidates</div>
+                            {ridgeCandidates.map((r, i) => (
+                              <div key={i} className="flex items-center gap-2 text-[11px] text-muted-foreground py-0.5 border-b border-border/50 last:border-0">
+                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0" />
+                                <span className="tabular-nums w-14">{r.length_ft} ft</span>
+                                <span className="tabular-nums w-12">{r.bearing_deg}°</span>
+                                <span className={`w-10 font-medium ${confidenceDot(r.confidence).replace("bg-", "text-")}`}>
+                                  {r.confidence}%
+                                </span>
+                                <TooltipProvider delayDuration={200}>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="truncate cursor-help">{r.reasoning}</span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="text-xs max-w-[300px]">{r.reasoning}</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {hipValleyCandidates.length > 0 && (
+                          <div>
+                            <div className="text-[10px] font-semibold uppercase text-muted-foreground mb-1">Hip/Valley Candidates</div>
+                            {hipValleyCandidates.map((hv, i) => (
+                              <div key={i} className="flex items-center gap-2 text-[11px] text-muted-foreground py-0.5 border-b border-border/50 last:border-0">
+                                <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${hv.type === "hip" ? "bg-teal-500" : "bg-rose-500"}`} />
+                                <span className="capitalize w-10 font-medium">{hv.type}</span>
+                                <span className="tabular-nums w-14">{hv.length_ft} ft</span>
+                                <span className="tabular-nums w-12">{hv.bearing_deg}°</span>
+                                <span className={`w-10 font-medium ${confidenceDot(hv.confidence).replace("bg-", "text-")}`}>
+                                  {hv.confidence}%
+                                </span>
+                                <TooltipProvider delayDuration={200}>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="truncate cursor-help">{hv.reasoning}</span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="text-xs max-w-[300px]">{hv.reasoning}</TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Candidate Footprint Selector */}
             {candidates.length > 1 && (
               <div className="rounded-lg border p-3 space-y-2">
@@ -587,7 +765,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                   {candidates.length} Candidate Footprints Found
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Multiple building footprints were found from different sources. Select a candidate to re-run the estimate.
+                  Multiple building footprints were found from different sources. Selecting a different candidate will re-run the estimate and change all downstream geometry-derived values. This action is audit-logged.
                 </p>
                 <div className="flex gap-2 items-end">
                   <Select
@@ -693,6 +871,17 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                 </div>
                 <div className="text-xs text-muted-foreground">Facets</div>
               </div>
+              {estimate.inferred_roof_form && estimate.inferred_roof_form !== "unknown" && (
+                <>
+                  <Separator orientation="vertical" className="h-10" />
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">
+                      {ROOF_FORM_ICONS[estimate.inferred_roof_form]}
+                    </div>
+                    <div className="text-xs text-muted-foreground">{ROOF_FORM_LABELS[estimate.inferred_roof_form]}</div>
+                  </div>
+                </>
+              )}
               {hasFootprintGeometry && (
                 <>
                   <Separator orientation="vertical" className="h-10" />
