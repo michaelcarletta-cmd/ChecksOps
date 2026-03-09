@@ -948,6 +948,38 @@ async function fetchSatelliteTileGrid(
   return successful;
 }
 
+/** Fetch satellite tiles from Google Maps as fallback when ArcGIS has no coverage. */
+async function fetchGoogleSatelliteTiles(
+  lat: number, lng: number,
+): Promise<{ base64: string; row: number; col: number; tileX: number; tileY: number }[]> {
+  const zoom = 19;
+  const tileX = Math.floor((lng + 180) / 360 * Math.pow(2, zoom));
+  const latRad = lat * Math.PI / 180;
+  const tileY = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, zoom));
+  
+  const tiles: { row: number; col: number; url: string; tileX: number; tileY: number }[] = [];
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const tx = tileX + dx;
+      const ty = tileY + dy;
+      tiles.push({
+        row: dy + 1, col: dx + 1, tileX: tx, tileY: ty,
+        url: `https://mt1.google.com/vt/lyrs=s&x=${tx}&y=${ty}&z=${zoom}`,
+      });
+    }
+  }
+  
+  const results = await Promise.all(tiles.map(async (t) => {
+    const b64 = await fetchTileBase64(t.url);
+    return b64 ? { base64: b64, row: t.row, col: t.col, tileX: t.tileX, tileY: t.tileY } : null;
+  }));
+  const successful = results.filter((r): r is NonNullable<typeof r> => r !== null);
+  if (successful.length > 0) {
+    console.log(`[Darwin Roof] Google satellite: fetched ${successful.length}/${tiles.length} tiles`);
+  }
+  return successful;
+}
+
 function normalizeVisionResult(parsed: any): SatelliteVisionResult {
   const validBands: PitchBand[] = ["flat", "low", "moderate", "steep", "very_steep", "unknown"];
   const validShadow = ["none", "light", "moderate", "heavy"];
