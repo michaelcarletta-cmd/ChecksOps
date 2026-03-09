@@ -15,6 +15,7 @@ import { useDeclaredPosition } from "@/hooks/useDeclaredPosition";
 import { PositionGateBanner } from "./PositionGateBanner";
 import { publishCarrierDismantler } from "@/lib/darwinDismantlerBus";
 import { DarwinRefinementChat } from "./DarwinRefinementChat";
+import { DarwinCitationWatchdog } from "./DarwinCitationWatchdog";
 
 interface DarwinAutoDraftRebuttalProps {
   claimId: string;
