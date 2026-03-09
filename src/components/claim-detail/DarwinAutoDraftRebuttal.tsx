@@ -463,6 +463,7 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
 
         {rebuttal && (
           <div className="space-y-3 pt-4 border-t">
+            <DarwinCitationWatchdog watchdog={citationWatchdog} jurisdiction={jurisdiction} />
             <div className="flex items-center justify-between">
               <h4 className="font-medium text-foreground">Generated Rebuttal</h4>
               <div className="flex gap-2">
