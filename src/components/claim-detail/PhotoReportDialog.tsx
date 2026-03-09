@@ -1003,6 +1003,7 @@ ${photoCardsHtml}
 
             {aiReport && (
               <div className="space-y-3">
+                <DarwinCitationWatchdog watchdog={citationWatchdog} jurisdiction={jurisdictionInfo} />
                 {aiReferencedPhotos.length > 0 && (
                   <div className="border border-primary/20 bg-primary/5 rounded-lg p-4">
                     <h4 className="font-medium mb-2 flex items-center gap-2 text-primary">
