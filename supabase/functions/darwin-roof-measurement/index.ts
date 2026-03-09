@@ -342,6 +342,7 @@ Deno.serve(async (req) => {
         ai_notes: estimate.ai_notes,
         data_sources: estimate.data_sources,
         field_sources: estimate.field_sources,
+        field_confidence: estimate.field_confidence,
         created_by: user.id,
       })
       .select()
