@@ -18,7 +18,7 @@ import { DarwinRoofValidation } from "./DarwinRoofValidation";
 import { RoofConfirmationDialog, type ConfirmationLevel, type ConfirmationBasis } from "./RoofConfirmationDialog";
 
 type DerivationSource = "geometry" | "ai_estimated" | "user_override";
-type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative";
+type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative" | "unknown_insufficient_geometry";
 type RoofForm = "gable" | "hip" | "cross_gable" | "complex" | "unknown";
 type PitchBand = "flat" | "low" | "moderate" | "steep" | "very_steep" | "unknown";
 type PitchType = "band" | "exact";
@@ -155,6 +155,7 @@ const AUTHORITY_LABELS: Record<FieldAuthority, { label: string; icon: string; co
   geometry_authoritative: { label: "Geometry Auth.", icon: "📐", color: "text-green-700" },
   ai_provisional: { label: "Provisional", icon: "⏳", color: "text-amber-600" },
   user_authoritative: { label: "User Auth.", icon: "✓", color: "text-blue-700" },
+  unknown_insufficient_geometry: { label: "Unknown", icon: "⊘", color: "text-red-500" },
 };
 
 const ROOF_FORM_ICONS: Record<RoofForm, string> = {
@@ -461,6 +462,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
             {auth === "ai_provisional" && " — requires confirmation"}
             {auth === "geometry_authoritative" && " — derived from building geometry"}
             {auth === "user_authoritative" && " — user-overridden, workflow-authoritative"}
+            {auth === "unknown_insufficient_geometry" && " — geometry insufficient; value is null until confirmed by measurement report or manual entry"}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -571,8 +573,10 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
           />
         )
       ) : (
-        <span className="text-sm font-medium tabular-nums">
-          {value != null ? `${typeof value === "number" ? (editKey === "squares" ? (value as number).toFixed(1) : Math.round(value as number)) : value}${unit ? ` ${unit}` : ""}` : "—"}
+        <span className={`text-sm font-medium tabular-nums ${getFieldAuthority(fieldKey) === "unknown_insufficient_geometry" ? "text-muted-foreground italic" : ""}`}>
+          {value != null ? `${typeof value === "number" ? (editKey === "squares" ? (value as number).toFixed(1) : Math.round(value as number)) : value}${unit ? ` ${unit}` : ""}` : (
+            <span className="text-muted-foreground italic text-xs">null — insufficient geometry</span>
+          )}
         </span>
       )}
     </div>
