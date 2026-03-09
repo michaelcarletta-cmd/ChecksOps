@@ -909,6 +909,13 @@ Return JSON only.`;
 
 // ── Phase 2D: Tuning heuristics application with governance ─────────
 
+// Global per-estimate governance caps
+const ESTIMATE_CAPS = {
+  MAX_TOTAL_AREA_ADJUSTMENT_PCT: 25,    // Combined area fields can't shift >25%
+  MAX_TOTAL_CONFIDENCE_REDUCTION_PCT: 50, // Combined confidence can't drop >50%
+  ONE_ADJUSTMENT_PER_FIELD: true,         // Only the highest-priority heuristic adjusts each field
+};
+
 interface TuningHeuristic {
   id: string;
   heuristic_key: string;
@@ -936,6 +943,10 @@ interface TuningHeuristic {
   priority: number | null;
   conflict_group: string | null;
   governance_status: string | null;
+  // Shadow mode
+  shadow_mode: boolean;
+  shadow_mode_hits: number | null;
+  shadow_mode_min_hits: number | null;
 }
 
 interface ExplanationStep {
