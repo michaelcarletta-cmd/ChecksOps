@@ -10916,10 +10916,10 @@ export type Database = {
           p_check_id: string
           p_check_number: string
           p_check_status: string
-          p_claim_id?: string
+          p_claim_id: string
           p_claim_number: string
           p_evaluated_by: string
-          p_has_active_endorsements?: boolean
+          p_has_active_endorsements: boolean
           p_is_multi_payee: boolean
           p_issue_date: string
           p_ocr_status: string
