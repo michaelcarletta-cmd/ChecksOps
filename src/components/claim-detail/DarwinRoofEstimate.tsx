@@ -7,14 +7,44 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
   Ruler, Loader2, MapPin, AlertTriangle, CheckCircle2, RefreshCw,
-  Lock, Unlock, Pencil, Save, X, Shield, Eye
+  Lock, Unlock, Pencil, Save, X, Shield, Eye, Layers
 } from "lucide-react";
 
 type DerivationSource = "geometry" | "ai_estimated" | "user_override";
 type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative";
+
+interface EdgeClassification {
+  segment_index: number;
+  start: [number, number];
+  end: [number, number];
+  length_ft: number;
+  bearing_deg: number;
+  classification: "likely_eave" | "likely_rake" | "unknown";
+  classification_reason: string;
+}
+
+interface CandidateFootprint {
+  polygon: number[][];
+  area_sqft: number;
+  perimeter_ft: number;
+  source: string;
+  source_feature_id: string | null;
+  imagery_date: string | null;
+  geometry_quality_score: number;
+}
+
+interface GeometryMetadata {
+  source_name: string;
+  source_feature_id: string | null;
+  retrieval_time: string;
+  centroid_offset_ft: number;
+  raw_polygon_hash: string;
+  vertex_count: number;
+}
 
 interface RoofEstimate {
   id: string;
@@ -46,6 +76,11 @@ interface RoofEstimate {
   footprint_perimeter_ft: number | null;
   imagery_source: string | null;
   imagery_date: string | null;
+  geometry_quality_score: number | null;
+  edge_classifications: EdgeClassification[] | null;
+  geometry_metadata: GeometryMetadata | null;
+  candidate_footprints: CandidateFootprint[] | null;
+  selected_candidate_index: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -67,6 +102,12 @@ const AUTHORITY_LABELS: Record<FieldAuthority, { label: string; icon: string; co
   user_authoritative: { label: "User Auth.", icon: "✓", color: "text-blue-700" },
 };
 
+const EDGE_COLORS: Record<string, string> = {
+  likely_eave: "bg-blue-500",
+  likely_rake: "bg-orange-500",
+  unknown: "bg-muted-foreground",
+};
+
 const round = (v: number | null | undefined, decimals = 0): number | null => {
   if (v == null || isNaN(v)) return null;
   const factor = 10 ** decimals;
@@ -79,6 +120,12 @@ const confidenceDot = (score: number) => {
   return "bg-red-500";
 };
 
+const qualityColor = (score: number) => {
+  if (score >= 70) return "text-green-600";
+  if (score >= 40) return "text-yellow-600";
+  return "text-red-500";
+};
+
 export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const [address, setAddress] = useState("");
   const [loading, setLoading] = useState(false);
@@ -87,6 +134,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const [editing, setEditing] = useState(false);
   const [editValues, setEditValues] = useState<Partial<RoofEstimate>>({});
   const [error, setError] = useState<string | null>(null);
+  const [showEdgeDetail, setShowEdgeDetail] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -117,7 +165,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     }
   }, [claim]);
 
-  const runEstimate = useCallback(async () => {
+  const runEstimate = useCallback(async (candidateIndex?: number) => {
     if (!address.trim()) {
       toast.error("Enter a property address");
       return;
@@ -126,16 +174,18 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     setError(null);
 
     try {
-      const { data, error: fnErr } = await supabase.functions.invoke("darwin-roof-measurement", {
-        body: { claim_id: claimId, address: address.trim() },
-      });
+      const body: Record<string, any> = { claim_id: claimId, address: address.trim() };
+      if (candidateIndex !== undefined) body.selected_candidate_index = candidateIndex;
+
+      const { data, error: fnErr } = await supabase.functions.invoke("darwin-roof-measurement", { body });
 
       if (fnErr) throw new Error(fnErr.message);
       if (data?.error) throw new Error(data.error);
 
       setEstimate(data.measurement as RoofEstimate);
+      const candidateCount = data.candidateCount || 0;
       const fpMsg = data.footprintExtracted
-        ? " — building footprint extracted from geometry"
+        ? ` — footprint extracted (${candidateCount} candidate${candidateCount > 1 ? "s" : ""} found)`
         : " — no footprint geometry found, using AI estimation";
       toast.success("Roof estimate generated" + fpMsg);
     } catch (err: any) {
@@ -183,7 +233,6 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       if (newVal !== oldVal) {
         updatedSources[key] = "user_override";
         updatedAuth[key] = "user_authoritative";
-        // confidence stays as-is — user authority ≠ automatic 100% confidence
       }
     }
     if (editValues.dominant_pitch !== estimate.dominant_pitch) {
@@ -249,6 +298,11 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
 
     setEstimate({ ...estimate, manually_confirmed: true, review_required: false });
     toast.success("Estimate confirmed — now available for downstream workflows");
+  };
+
+  const handleCandidateSelect = (indexStr: string) => {
+    const idx = parseInt(indexStr, 10);
+    runEstimate(idx);
   };
 
   const overallConfidenceColor = (score: number | null) => {
@@ -329,6 +383,24 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     );
   };
 
+  const ProxyTag = ({ fieldKey }: { fieldKey: string }) => {
+    const source = getFieldSource(fieldKey);
+    if (source !== "geometry") return null;
+    if (!["eave_lf", "rake_lf"].includes(fieldKey)) return null;
+    return (
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="text-[9px] font-medium text-orange-500 ml-1">[Proxy]</span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs max-w-[200px]">
+            Footprint-proxy measurement — derived from perimeter edge classification, not exact roof-edge measurement.
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
   const EstimateField = ({
     label, value, unit, editKey, fieldKey,
   }: {
@@ -338,6 +410,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       <span className="text-sm text-muted-foreground">
         {label}
         {!editing && <SourceTag source={getFieldSource(fieldKey)} />}
+        {!editing && <ProxyTag fieldKey={fieldKey} />}
         {!editing && <AuthorityBadge fieldKey={fieldKey} />}
         {!editing && <ConfidencePip fieldKey={fieldKey} />}
       </span>
@@ -362,6 +435,18 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   );
 
   const hasFootprintGeometry = !!estimate?.footprint_polygon;
+  const candidates = (estimate?.candidate_footprints as CandidateFootprint[] | null) || [];
+  const edgeClassifications = (estimate?.edge_classifications as EdgeClassification[] | null) || [];
+  const geoMeta = estimate?.geometry_metadata as GeometryMetadata | null;
+
+  // Summarize edge classifications
+  const edgeSummary = edgeClassifications.reduce(
+    (acc, e) => {
+      acc[e.classification] = (acc[e.classification] || 0) + e.length_ft;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
   return (
     <Card>
@@ -371,7 +456,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
             <Ruler className="h-5 w-5 text-primary" />
             <CardTitle className="text-lg">Roof Estimate</CardTitle>
             <Badge variant="outline" className="text-[10px] font-normal">
-              {hasFootprintGeometry ? "Phase 2A" : "Preliminary"}
+              {hasFootprintGeometry ? "Phase 2B" : "Preliminary"}
             </Badge>
           </div>
           {estimate && (
@@ -390,7 +475,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
         </div>
         <CardDescription>
           {hasFootprintGeometry
-            ? "Footprint extracted from building geometry. Pitch and linear estimates are AI-modeled."
+            ? "Footprint extracted from building geometry with edge classification. Perimeter-derived eave/rake values are footprint-proxy estimates."
             : "AI-estimated roof dimensions from public data. All values are preliminary until manually confirmed."}
         </CardDescription>
       </CardHeader>
@@ -408,7 +493,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
               disabled={loading}
             />
           </div>
-          <Button onClick={runEstimate} disabled={loading || !address.trim()}>
+          <Button onClick={() => runEstimate()} disabled={loading || !address.trim()}>
             {loading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -439,7 +524,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
           <div className="rounded-lg border border-dashed p-6 text-center space-y-2">
             <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
             <p className="text-sm text-muted-foreground">
-              Geocoding → Extracting footprint → Pulling parcel data → Fetching elevation → AI estimation...
+              Geocoding → Extracting footprints → Classifying edges → AI estimation...
             </p>
           </div>
         )}
@@ -460,16 +545,123 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
               </Alert>
             )}
 
-            {/* Footprint geometry notice */}
+            {/* Footprint geometry + quality notice */}
             {hasFootprintGeometry && (
               <Alert>
                 <Shield className="h-4 w-4" />
                 <AlertDescription>
-                  <strong>Building footprint extracted</strong> from {estimate.imagery_source || "geometry source"}.
-                  Footprint area ({estimate.footprint_area_sqft?.toLocaleString()} sqft) and perimeter ({estimate.footprint_perimeter_ft?.toLocaleString()} ft)
-                  are geometry-derived. {estimate.imagery_date && `Imagery date: ${estimate.imagery_date}.`}
+                  <div className="space-y-1">
+                    <div>
+                      <strong>Building footprint extracted</strong> from {estimate.imagery_source || "geometry source"}.
+                      Footprint area ({estimate.footprint_area_sqft?.toLocaleString()} sqft) and perimeter ({estimate.footprint_perimeter_ft?.toLocaleString()} ft)
+                      are geometry-derived. {estimate.imagery_date && `Imagery date: ${estimate.imagery_date}.`}
+                    </div>
+                    <div className="flex items-center gap-3 text-xs">
+                      <span>
+                        Geometry Quality:{" "}
+                        <strong className={qualityColor(estimate.geometry_quality_score || 0)}>
+                          {estimate.geometry_quality_score ?? "—"}/100
+                        </strong>
+                      </span>
+                      {geoMeta && (
+                        <>
+                          <span>Vertices: {geoMeta.vertex_count}</span>
+                          <span>Offset: {geoMeta.centroid_offset_ft} ft</span>
+                          <span className="text-muted-foreground">Hash: {geoMeta.raw_polygon_hash}</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-1">
+                      ⚠️ Eave and rake values are <strong>footprint-proxy</strong> measurements — they approximate roof edges from perimeter classification but are NOT exact roof-edge measurements.
+                    </div>
+                  </div>
                 </AlertDescription>
               </Alert>
+            )}
+
+            {/* Candidate Footprint Selector */}
+            {candidates.length > 1 && (
+              <div className="rounded-lg border p-3 space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Layers className="h-4 w-4 text-primary" />
+                  {candidates.length} Candidate Footprints Found
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Multiple building footprints were found from different sources. Select a candidate to re-run the estimate.
+                </p>
+                <div className="flex gap-2 items-end">
+                  <Select
+                    defaultValue={String(estimate.selected_candidate_index ?? 0)}
+                    onValueChange={handleCandidateSelect}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select footprint source" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {candidates.map((c, i) => (
+                        <SelectItem key={i} value={String(i)}>
+                          <span className="flex items-center gap-2">
+                            <span className={`inline-block w-2 h-2 rounded-full ${c.geometry_quality_score >= 70 ? "bg-green-500" : c.geometry_quality_score >= 40 ? "bg-yellow-500" : "bg-red-500"}`} />
+                            {c.source} — {c.area_sqft.toLocaleString()} sqft, Q:{c.geometry_quality_score}
+                            {i === (estimate.selected_candidate_index ?? 0) && " ✓"}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            {/* Edge Classification Summary */}
+            {edgeClassifications.length > 0 && (
+              <div className="rounded-lg border p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Eye className="h-4 w-4 text-primary" />
+                    Edge Classification
+                    <Badge variant="outline" className="text-[9px]">Footprint-Proxy</Badge>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 text-xs"
+                    onClick={() => setShowEdgeDetail(!showEdgeDetail)}
+                  >
+                    {showEdgeDetail ? "Hide Segments" : `Show ${edgeClassifications.length} Segments`}
+                  </Button>
+                </div>
+                <div className="flex gap-4 text-xs">
+                  {Object.entries(edgeSummary).map(([cls, totalLf]) => (
+                    <div key={cls} className="flex items-center gap-1.5">
+                      <span className={`inline-block w-2 h-2 rounded-full ${EDGE_COLORS[cls] || "bg-muted-foreground"}`} />
+                      <span className="capitalize">{cls.replace("likely_", "").replace("_", " ")}:</span>
+                      <span className="font-medium tabular-nums">{Math.round(totalLf)} LF</span>
+                    </div>
+                  ))}
+                </div>
+                {showEdgeDetail && (
+                  <div className="max-h-40 overflow-y-auto mt-2 space-y-1">
+                    {edgeClassifications.map((e) => (
+                      <div key={e.segment_index} className="flex items-center gap-2 text-[11px] text-muted-foreground py-0.5 border-b border-border/50 last:border-0">
+                        <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${EDGE_COLORS[e.classification]}`} />
+                        <span className="tabular-nums w-8">#{e.segment_index}</span>
+                        <span className="tabular-nums w-14">{e.length_ft} ft</span>
+                        <span className="tabular-nums w-12">{e.bearing_deg}°</span>
+                        <span className="capitalize font-medium w-16">{e.classification.replace("likely_", "")}</span>
+                        <TooltipProvider delayDuration={200}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="truncate cursor-help">{e.classification_reason}</span>
+                            </TooltipTrigger>
+                            <TooltipContent className="text-xs max-w-[300px]">{e.classification_reason}</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Confidence & Summary */}
@@ -510,6 +702,13 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                     </div>
                     <div className="text-xs text-muted-foreground">Perimeter ft</div>
                   </div>
+                  <Separator orientation="vertical" className="h-10" />
+                  <div className="text-center">
+                    <div className={`text-2xl font-bold tabular-nums ${qualityColor(estimate.geometry_quality_score || 0)}`}>
+                      {estimate.geometry_quality_score ?? "—"}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Geo Quality</div>
+                  </div>
                 </>
               )}
             </div>
@@ -520,6 +719,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
               <span className="text-green-600 font-medium">[Geometry]</span> = measured
               <span className="text-amber-600 font-medium ml-2">[AI Est.]</span> = modeled
               <span className="text-blue-600 font-medium ml-2">[Manual]</span> = user-entered
+              <span className="text-orange-500 font-medium ml-2">[Proxy]</span> = footprint-proxy
               <span className="ml-3"><strong>Authority:</strong></span>
               <span>📐 Geometry Auth.</span>
               <span>⏳ Provisional</span>
