@@ -295,17 +295,25 @@ export const DarwinRoofTuningDashboard = () => {
               <div
                 key={h.id}
                 className={`rounded-lg border p-3 space-y-2 transition-colors ${
+                  h.shadow_mode ? "border-purple-500/30 bg-purple-500/5" :
                   h.is_active ? "border-primary/30 bg-primary/5" : "opacity-60"
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <Icon className={`h-4 w-4 shrink-0 ${h.is_active ? "text-primary" : "text-muted-foreground"}`} />
+                    <Icon className={`h-4 w-4 shrink-0 ${h.shadow_mode ? "text-purple-500" : h.is_active ? "text-primary" : "text-muted-foreground"}`} />
                     <span className="text-sm font-medium truncate">{h.heuristic_key}</span>
                     <Badge variant="outline" className="text-[9px] shrink-0">
                       {ACTION_LABELS[h.action_type] || h.action_type}
                     </Badge>
-                    <GovernanceStatusBadge status={h.governance_status} />
+                    {h.shadow_mode ? (
+                      <Badge variant="outline" className="text-[9px] shrink-0 text-purple-500 border-purple-500/50 gap-0.5">
+                        <Eye className="h-2.5 w-2.5" />
+                        Shadow {h.shadow_mode_hits}/{h.shadow_mode_min_hits}
+                      </Badge>
+                    ) : (
+                      <GovernanceStatusBadge status={h.governance_status} />
+                    )}
                     {h.manually_overridden && (
                       <Badge variant="secondary" className="text-[9px] shrink-0">Manual</Badge>
                     )}
