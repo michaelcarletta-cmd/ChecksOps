@@ -1,9 +1,11 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { 
   FolderOpen, 
   Upload, 
@@ -22,7 +24,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 interface DarwinSmartDocumentSortProps {
   claimId: string;
@@ -62,7 +64,25 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
   const [isClassifying, setIsClassifying] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [classificationProgress, setClassificationProgress] = useState(0);
+  const [selectedParentFolderId, setSelectedParentFolderId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+
+  // Fetch existing folders for parent folder selection
+  const { data: existingFolders } = useQuery({
+    queryKey: ["claim-folders", claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_folders")
+        .select("*")
+        .eq("claim_id", claimId)
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Only show top-level folders as parent options
+  const topLevelFolders = existingFolders?.filter(f => !f.parent_folder_id) || [];
 
   const classifyDocument = async (file: File): Promise<Partial<ClassifiedDocument>> => {
     const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
@@ -202,6 +222,10 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
 
   const uploadDocuments = async () => {
     if (documents.length === 0) return;
+    if (!selectedParentFolderId) {
+      toast.error("Please select a parent folder first");
+      return;
+    }
     
     setIsUploading(true);
     const { data: { user } } = await supabase.auth.getUser();
@@ -217,7 +241,7 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
       );
 
       try {
-        // Find or create folder
+        // Find or create subfolder under the selected parent folder
         let folderId: string;
         
         const { data: existingFolder } = await supabase
@@ -225,7 +249,8 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
           .select("id")
           .eq("claim_id", claimId)
           .eq("name", doc.suggestedFolder)
-          .single();
+          .eq("parent_folder_id", selectedParentFolderId)
+          .maybeSingle();
         
         if (existingFolder) {
           folderId = existingFolder.id;
@@ -237,6 +262,7 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
               name: doc.suggestedFolder,
               is_predefined: false,
               created_by: user?.id,
+              parent_folder_id: selectedParentFolderId,
             })
             .select()
             .single();
@@ -343,8 +369,31 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
         <CollapsibleContent>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Drop documents here and Darwin will automatically classify and organize them into the right folders by type, sender, date, and topic.
+              Drop documents here and Darwin will automatically classify and organize them into subfolders within your selected parent folder.
             </p>
+
+            {/* Parent Folder Selector */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Upload into folder</Label>
+              <Select
+                value={selectedParentFolderId || ""}
+                onValueChange={(val) => setSelectedParentFolderId(val || null)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a parent folder…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {topLevelFolders.map(f => (
+                    <SelectItem key={f.id} value={f.id}>
+                      📁 {f.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!selectedParentFolderId && documents.length > 0 && (
+                <p className="text-xs text-destructive">Please select a folder before uploading</p>
+              )}
+            </div>
 
             {/* Drop Zone */}
             <div
@@ -398,7 +447,7 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
                       <Button 
                         size="sm" 
                         onClick={uploadDocuments}
-                        disabled={isUploading}
+                        disabled={isUploading || !selectedParentFolderId}
                       >
                         {isUploading ? (
                           <>
@@ -408,7 +457,7 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
                         ) : (
                           <>
                             <FolderPlus className="h-4 w-4 mr-2" />
-                            Upload {pendingCount} to Folders
+                            Upload {pendingCount} as Subfolders
                           </>
                         )}
                       </Button>
