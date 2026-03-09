@@ -869,6 +869,43 @@ function CheckDetailPanel({
           </div>
         )}
 
+        {/* Loss Draft Banner & Action */}
+        {check.status === "loss_draft_required" && lossDraftRecord?.id && (
+          <div className="mt-2 border border-blue-500/30 bg-blue-500/10 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-blue-500 font-semibold text-sm">
+                <Landmark className="h-4 w-4 shrink-0" />
+                Loss Draft Active
+              </div>
+              <p className="text-xs text-blue-400/80">
+                This check is being processed by the mortgage servicer. Deposit is blocked until the final release is completed.
+              </p>
+            </div>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline" className="shrink-0 bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30 hover:text-blue-300">
+                  <Landmark className="h-4 w-4 mr-2" />
+                  View Loss Draft
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl max-h-[85vh] p-0 overflow-hidden border-border bg-card">
+                <div className="p-4 bg-muted/30 border-b flex items-center justify-between">
+                  <DialogTitle className="text-lg flex items-center gap-2">
+                    <Landmark className="h-5 w-5 text-amber-400" />
+                    Loss Draft Tracking
+                  </DialogTitle>
+                </div>
+                <div className="p-0 bg-card">
+                  <LossDraftDetailPanel 
+                    lossDraftId={lossDraftRecord.id} 
+                    onUpdate={() => onRefresh()} 
+                  />
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        )}
+
         {/* Accounting Link */}
         {accountingEntry && (
           <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 rounded px-2.5 py-1.5">
