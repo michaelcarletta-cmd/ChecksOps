@@ -48,6 +48,12 @@ const OCR_TIMEOUT_MS = 45_000;
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
+function log(stage: string, msg: string, data?: Record<string, unknown>) {
+  const entry = { stage, msg, ...(data ?? {}), ts: new Date().toISOString() };
+  console.log(`[check-ocr-intake][${stage}] ${msg}`, data ? JSON.stringify(data) : "");
+  return entry;
+}
+
 function logAudit(
   supabase: ReturnType<typeof createClient>,
   checkId: string,
@@ -172,7 +178,6 @@ function evaluateEligibility(
     return { recommendation: "manual_review_required", reasons, rules };
   }
 
-  // Mortgage company detected — route to loss draft workflow
   if (hasMortgage) {
     reasons.push("Mortgage company listed — routing to Loss Draft workflow");
     if (payees.length > 2) reasons.push("Complex multi-payee/mortgage structure");
@@ -217,6 +222,13 @@ function parseStrictJson(rawText: string): unknown {
   throw new Error("AI response is not valid JSON and contains no fenced JSON block");
 }
 
+function okResponse(body: Record<string, unknown>) {
+  return new Response(
+    JSON.stringify(body),
+    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
+}
+
 function errResponse(message: string, status: number, stage?: string) {
   return new Response(
     JSON.stringify({ success: false, error: message, stage: stage ?? null }),
@@ -225,7 +237,7 @@ function errResponse(message: string, status: number, stage?: string) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Main handler — everything inside Deno.serve, no top-level throws  */
+/*  Main handler                                                       */
 /* ------------------------------------------------------------------ */
 
 Deno.serve(async (req) => {
@@ -236,28 +248,24 @@ Deno.serve(async (req) => {
   let stage = "init";
 
   try {
-    console.log("check-ocr-intake: entered handler");
+    log("init", "Handler entered");
 
     // ---- Env ----
-    stage = "env";
+    stage = "env_check";
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
     const lovableKey = Deno.env.get("LOVABLE_API_KEY");
 
     if (!supabaseUrl || !serviceKey || !anonKey) {
-      console.error("check-ocr-intake: missing env vars", {
-        SUPABASE_URL: !!supabaseUrl,
-        SUPABASE_SERVICE_ROLE_KEY: !!serviceKey,
-        SUPABASE_ANON_KEY: !!anonKey,
-      });
+      log("env_check", "MISSING env vars", { url: !!supabaseUrl, svc: !!serviceKey, anon: !!anonKey });
       return errResponse("Missing required environment variables", 500, stage);
     }
     if (!lovableKey) {
-      console.error("check-ocr-intake: LOVABLE_API_KEY missing");
+      log("env_check", "MISSING LOVABLE_API_KEY");
       return errResponse("Missing LOVABLE_API_KEY", 500, stage);
     }
-    console.log("check-ocr-intake: env ok");
+    log("env_check", "All env vars present");
 
     // ---- Auth ----
     stage = "auth";
@@ -271,17 +279,16 @@ Deno.serve(async (req) => {
     const { data: authData, error: authErr } = await anonClient.auth.getUser(token);
     if (authErr || !authData?.user) return errResponse("Unauthorized", 401, stage);
     const userId = authData.user.id;
+    log("auth", "Authenticated", { userId });
 
     // ---- Supabase service client ----
-    stage = "supabase_client";
     const supabase = createClient(supabaseUrl, serviceKey);
-    console.log("check-ocr-intake: supabase client created");
 
     // ---- Parse request ----
     stage = "parse_request";
     const { checkId } = (await req.json().catch(() => ({}))) as { checkId?: string };
     if (!checkId) return errResponse("checkId required", 400, stage);
-    console.log("check-ocr-intake: request parsed, checkId=" + checkId);
+    log("parse_request", "Parsed", { checkId });
 
     // ---- Fetch check ----
     stage = "fetch_check";
@@ -290,17 +297,23 @@ Deno.serve(async (req) => {
       .select("*")
       .eq("id", checkId)
       .single();
-    if (checkErr || !check) return errResponse("Check not found", 404, stage);
+    if (checkErr || !check) {
+      log("fetch_check", "Not found", { error: checkErr?.message });
+      return errResponse("Check not found", 404, stage);
+    }
+    log("fetch_check", "Found", { status: check.status, ocr_status: check.ocr_status, claim_id: check.claim_id });
 
     // ---- Stale lock handling ----
-    stage = "stale_lock";
+    stage = "stale_lock_check";
     if (check.ocr_status === "processing") {
       const heartbeat = (check as Record<string, unknown>).ocr_heartbeat_at;
       const heartbeatMs = heartbeat ? new Date(heartbeat as string).getTime() : 0;
       const lockAge = Date.now() - heartbeatMs;
       if (heartbeatMs > 0 && lockAge < STALE_LOCK_MS) {
+        log("stale_lock_check", "Active lock — rejecting", { lockAge });
         return errResponse("OCR already in progress for this check", 409, stage);
       }
+      log("stale_lock_check", "Stale lock cleared", { lockAge });
       await logAudit(supabase, checkId, "stale_lock_cleared",
         "Stale OCR processing lock cleared after timeout",
         { stale_since: heartbeat, lock_age_ms: lockAge }, userId);
@@ -314,6 +327,7 @@ Deno.serve(async (req) => {
       .eq("check_id", checkId)
       .neq("endorsement_status", "pending");
     const hasActiveEndorsements = (activePayees?.length ?? 0) > 0;
+    log("check_endorsements", "Checked", { hasActiveEndorsements, count: activePayees?.length ?? 0 });
 
     // ---- Mark processing ----
     stage = "mark_processing";
@@ -323,10 +337,18 @@ Deno.serve(async (req) => {
       .update({ ocr_status: "processing", ocr_heartbeat_at: now, updated_at: now })
       .eq("id", checkId);
     await logAudit(supabase, checkId, "ocr_started", "OCR processing initiated", {}, userId);
+    log("mark_processing", "Marked as processing");
+
+    // ======================================================================
+    // OCR PIPELINE — errors here should NOT lose OCR data if we got results
+    // ======================================================================
+
+    let parsed: OcrParsedResult | null = null;
+    let ocrError: string | null = null;
 
     try {
       // ---- Signed URLs ----
-      stage = "signed_url";
+      stage = "signed_url_create";
       const { data: frontUrlData, error: frontUrlErr } = await supabase.storage
         .from("claim-files")
         .createSignedUrl(check.front_image_path, 300);
@@ -334,7 +356,7 @@ Deno.serve(async (req) => {
         throw new Error("Could not create signed URL for front image: " + (frontUrlErr?.message ?? "no URL"));
       }
       const frontImageUrl = frontUrlData.signedUrl;
-      console.log("check-ocr-intake: signed url created");
+      log("signed_url_create", "Front URL created");
 
       let backImageUrl: string | null = null;
       if (check.back_image_path) {
@@ -343,11 +365,12 @@ Deno.serve(async (req) => {
           .createSignedUrl(check.back_image_path, 300);
         if (!backUrlErr && backUrlData?.signedUrl) {
           backImageUrl = backUrlData.signedUrl;
+          log("signed_url_create", "Back URL created");
         }
       }
 
       // ---- AI OCR request ----
-      stage = "ocr_request";
+      stage = "ocr_request_sent";
       const ocrPrompt = `You are an insurance check OCR specialist. Analyze this check image and extract structured data.
 Return ONLY a valid JSON object with these exact fields:
 {
@@ -384,7 +407,7 @@ Rules:
         );
       }
 
-      console.log("check-ocr-intake: lovable request starting");
+      log("ocr_request_sent", "Sending to AI gateway");
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), OCR_TIMEOUT_MS);
@@ -412,7 +435,8 @@ Rules:
       }
       clearTimeout(timeout);
 
-      console.log("check-ocr-intake: lovable response received, status=" + aiResp.status);
+      stage = "ocr_response_received";
+      log("ocr_response_received", "AI responded", { status: aiResp.status });
 
       if (!aiResp.ok) {
         const detail = await aiResp.text().catch(() => "");
@@ -432,7 +456,8 @@ Rules:
       try {
         rawObj = parseStrictJson(rawText);
       } catch (parseErr) {
-        console.error("check-ocr-intake: JSON parse failed", rawText.substring(0, 500));
+        log("ocr_parse", "JSON parse failed", { preview: rawText.substring(0, 300) });
+        // Save raw OCR even though parse failed
         await supabase.from("check_intake_items")
           .update({
             ocr_status: "failed",
@@ -443,51 +468,92 @@ Rules:
         return errResponse("Could not parse OCR output as valid JSON", 500, stage);
       }
 
-      // ---- Validate & process ----
+      // ---- Validate ----
       stage = "ocr_validate";
-      const parsed = validateOcrOutput(rawObj);
-      const payees = parsed.payees;
-      const isMultiPayee = payees.length > 1;
+      parsed = validateOcrOutput(rawObj);
+      log("ocr_validate", "Validated", {
+        carrier: parsed.carrier_name,
+        amount: parsed.amount,
+        payeeCount: parsed.payees.length,
+        confidence: parsed.confidence,
+      });
 
-      // Normalize issue_date: must be a valid YYYY-MM-DD string or null
-      let normalizedIssueDate: string | null = null;
-      if (parsed.issue_date) {
-        const dateStr = String(parsed.issue_date).trim();
-        // Accept YYYY-MM-DD format only
-        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr) && !isNaN(Date.parse(dateStr))) {
-          normalizedIssueDate = dateStr;
-        } else {
-          // Try to parse other formats
-          const d = new Date(dateStr);
-          if (!isNaN(d.getTime())) {
-            normalizedIssueDate = d.toISOString().split("T")[0];
-          } else {
-            console.warn("check-ocr-intake: unparseable issue_date, setting null:", dateStr);
-          }
+    } catch (ocrErr) {
+      // OCR pipeline itself failed (signed URL, AI request, parse)
+      ocrError = ocrErr instanceof Error ? ocrErr.message : String(ocrErr);
+      log(stage, "OCR pipeline error", { error: ocrError });
+    }
+
+    // ======================================================================
+    // If OCR failed (no parsed result), mark failed and return
+    // ======================================================================
+    if (!parsed) {
+      log("ocr_failed", "No OCR result — marking failed");
+      await supabase.from("check_intake_items")
+        .update({
+          ocr_status: "failed",
+          ocr_heartbeat_at: null,
+          status: check.status ?? "uploaded",
+          raw_ocr_front: { ocr_error: ocrError, stage },
+        })
+        .eq("id", checkId);
+      await logAudit(supabase, checkId, "ocr_failed",
+        `OCR failed at ${stage}: ${ocrError}`,
+        { error: ocrError, stage }, userId);
+
+      return okResponse({
+        success: true,
+        ocr_success: false,
+        stage,
+        error: ocrError,
+      });
+    }
+
+    // ======================================================================
+    // OCR SUCCEEDED — now commit results. Post-OCR errors are non-fatal.
+    // ======================================================================
+
+    const payees = parsed.payees;
+    const isMultiPayee = payees.length > 1;
+
+    let normalizedIssueDate: string | null = null;
+    if (parsed.issue_date) {
+      const dateStr = String(parsed.issue_date).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr) && !isNaN(Date.parse(dateStr))) {
+        normalizedIssueDate = dateStr;
+      } else {
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) {
+          normalizedIssueDate = d.toISOString().split("T")[0];
         }
       }
-      const parsedAmount = parsed.amount ? Number(parsed.amount) : null;
-      const ocrConfidence = parsed.confidence;
-      const fieldConfidence = parsed.field_confidence;
+    }
+    const parsedAmount = parsed.amount ? Number(parsed.amount) : null;
+    const ocrConfidence = parsed.confidence;
+    const fieldConfidence = parsed.field_confidence;
 
-      const criticalFailed = CRITICAL_FIELDS.some((f) => {
-        const fc = fieldConfidence[f];
-        return fc !== undefined && fc < CRITICAL_CONFIDENCE_THRESHOLD;
-      });
-      const overallFailed = ocrConfidence !== null && ocrConfidence < OVERALL_CONFIDENCE_THRESHOLD;
-      const needsManualReview = criticalFailed || overallFailed;
+    const criticalFailed = CRITICAL_FIELDS.some((f) => {
+      const fc = fieldConfidence[f];
+      return fc !== undefined && fc < CRITICAL_CONFIDENCE_THRESHOLD;
+    });
+    const overallFailed = ocrConfidence !== null && ocrConfidence < OVERALL_CONFIDENCE_THRESHOLD;
+    const needsManualReview = criticalFailed || overallFailed;
 
-      const eligibility = evaluateEligibility(payees, isMultiPayee, ocrConfidence, fieldConfidence);
-      // Auto-route mortgage checks to loss_draft_required status
-      const checkStatus = needsManualReview
-        ? "needs_review"
-        : eligibility.recommendation === "loss_draft_required"
-          ? "loss_draft_required"
-          : "ocr_complete";
+    const eligibility = evaluateEligibility(payees, isMultiPayee, ocrConfidence, fieldConfidence);
+    const checkStatus = needsManualReview
+      ? "needs_review"
+      : eligibility.recommendation === "loss_draft_required"
+        ? "loss_draft_required"
+        : "ocr_complete";
 
-      // ---- Commit via RPC ----
-      stage = "rpc_commit";
-      const { data: rpcResult, error: rpcErr } = await supabase.rpc("ocr_commit_results", {
+    // ---- Commit via RPC (non-fatal wrapper) ----
+    stage = "rpc_commit";
+    let rpcResult: unknown = null;
+    let rpcError: string | null = null;
+
+    try {
+      log("rpc_commit", "Starting RPC commit");
+      const { data, error: rpcErr } = await supabase.rpc("ocr_commit_results", {
         p_check_id: checkId,
         p_carrier_name: parsed.carrier_name,
         p_check_number: parsed.check_number,
@@ -514,72 +580,99 @@ Rules:
       });
 
       if (rpcErr) {
-        throw new Error(`Transaction failed: ${rpcErr.message}`);
+        rpcError = rpcErr.message;
+        log("rpc_commit", "RPC FAILED — falling back to direct update", { error: rpcError });
+        throw new Error(rpcError);
       }
 
-      // ---- Auto-create endorsement records from payees ----
-      if (!hasActiveEndorsements && payees.length > 0) {
-        try {
-          const { data: endorsementResult, error: endorseErr } = await supabase.rpc(
-            "create_endorsements_from_payees",
-            { p_check_id: checkId },
-          );
-          if (endorseErr) {
-            console.error("check-ocr-intake: endorsement creation failed:", endorseErr.message);
-          } else {
-            console.log("check-ocr-intake: endorsements created:", endorsementResult);
-          }
-        } catch (endorseEx) {
-          console.error("check-ocr-intake: endorsement creation exception:", endorseEx);
-        }
+      rpcResult = data;
+      log("rpc_commit", "RPC committed successfully");
+    } catch (commitErr) {
+      // RPC failed — do a minimal direct update so OCR data is not lost
+      rpcError = commitErr instanceof Error ? commitErr.message : String(commitErr);
+      log("rpc_commit_fallback", "Applying direct fallback update", { error: rpcError });
+
+      try {
+        await supabase.from("check_intake_items")
+          .update({
+            carrier_name: parsed.carrier_name,
+            check_number: parsed.check_number,
+            amount: parsedAmount,
+            issue_date: normalizedIssueDate,
+            payee_line: parsed.payee_line,
+            is_multi_payee: isMultiPayee,
+            raw_ocr_front: {
+              ...parsed,
+              ocr_confidence: ocrConfidence,
+              field_confidence: fieldConfidence,
+              needs_manual_review: needsManualReview,
+              rpc_error: rpcError,
+            },
+            ocr_status: "completed",
+            ocr_heartbeat_at: null,
+            status: needsManualReview ? "needs_review" : "ocr_complete",
+            deposit_recommendation: eligibility.recommendation === "loss_draft_required"
+              ? "loss_draft_required"
+              : eligibility.recommendation,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", checkId);
+        log("rpc_commit_fallback", "Direct update succeeded — OCR data saved");
+      } catch (fallbackErr) {
+        log("rpc_commit_fallback", "Direct update also failed", {
+          error: fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr),
+        });
       }
 
-      console.log("check-ocr-intake: completed successfully");
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          parsed: { ...parsed, needs_manual_review: needsManualReview },
-          payees,
-          eligibility,
-          payees_preserved: hasActiveEndorsements,
-          transaction: rpcResult,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    } catch (innerErr) {
-      // OCR failed — mark as failed but don't crash the upload
-      console.error("check-ocr-intake: OCR inner error at stage=" + stage, innerErr);
-      await supabase
-        .from("check_intake_items")
-        .update({
-          ocr_status: "failed",
-          ocr_heartbeat_at: null,
-          status: check.status ?? "uploaded",
-          raw_ocr_front: { ocr_error: innerErr instanceof Error ? innerErr.message : String(innerErr), stage },
-        })
-        .eq("id", checkId);
-
-      await logAudit(supabase, checkId, "ocr_failed",
-        `OCR failed: ${innerErr instanceof Error ? innerErr.message : "Unknown"}`,
-        { error: innerErr instanceof Error ? innerErr.message : String(innerErr), stage },
-        userId);
-
-      // Return success for the upload, but indicate OCR failed
-      return new Response(
-        JSON.stringify({
-          success: true,
-          ocr_success: false,
-          stage,
-          error: innerErr instanceof Error ? innerErr.message : String(innerErr),
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      await logAudit(supabase, checkId, "ocr_rpc_failed",
+        `RPC commit failed but OCR data saved directly: ${rpcError}`,
+        { error: rpcError, stage: "rpc_commit" }, userId);
     }
+
+    // ---- Auto-create endorsement records (non-fatal) ----
+    stage = "endorsement_create";
+    if (!hasActiveEndorsements && payees.length > 0) {
+      try {
+        const { data: endorsementResult, error: endorseErr } = await supabase.rpc(
+          "create_endorsements_from_payees",
+          { p_check_id: checkId },
+        );
+        if (endorseErr) {
+          log("endorsement_create", "Endorsement creation failed (non-fatal)", { error: endorseErr.message });
+        } else {
+          log("endorsement_create", "Endorsements created", { result: endorsementResult });
+        }
+      } catch (endorseEx) {
+        log("endorsement_create", "Endorsement exception (non-fatal)", {
+          error: endorseEx instanceof Error ? endorseEx.message : String(endorseEx),
+        });
+      }
+    }
+
+    stage = "complete";
+    log("complete", "OCR pipeline finished", {
+      ocr_success: true,
+      rpc_success: !rpcError,
+      checkStatus,
+      recommendation: eligibility.recommendation,
+    });
+
+    return okResponse({
+      success: true,
+      ocr_success: true,
+      rpc_success: !rpcError,
+      rpc_error: rpcError,
+      parsed: { ...parsed, needs_manual_review: needsManualReview },
+      payees,
+      eligibility,
+      payees_preserved: hasActiveEndorsements,
+      transaction: rpcResult,
+    });
+
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     const stack = e instanceof Error ? e.stack : null;
-    console.error("check-ocr-intake fatal:", { stage, message, stack });
+    log(stage, "FATAL unhandled error", { message, stack });
     return errResponse(message, 500, stage);
   }
 });
