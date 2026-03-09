@@ -3902,6 +3902,7 @@ export type Database = {
         Row: {
           address: string
           ai_notes: string | null
+          candidate_footprints: Json | null
           claim_id: string
           confidence_score: number | null
           confirmed_at: string | null
@@ -3911,6 +3912,7 @@ export type Database = {
           data_sources: string[] | null
           dominant_pitch: string | null
           eave_lf: number | null
+          edge_classifications: Json | null
           estimated_roof_area_sqft: number | null
           facet_count: number | null
           field_authority: Json | null
@@ -3921,6 +3923,8 @@ export type Database = {
           footprint_polygon: Json | null
           geocoded_lat: number | null
           geocoded_lng: number | null
+          geometry_metadata: Json | null
+          geometry_quality_score: number | null
           hip_lf: number | null
           id: string
           imagery_date: string | null
@@ -3931,6 +3935,7 @@ export type Database = {
           raw_geojson: Json | null
           review_required: boolean
           ridge_lf: number | null
+          selected_candidate_index: number | null
           squares: number | null
           updated_at: string
           valley_lf: number | null
@@ -3938,6 +3943,7 @@ export type Database = {
         Insert: {
           address: string
           ai_notes?: string | null
+          candidate_footprints?: Json | null
           claim_id: string
           confidence_score?: number | null
           confirmed_at?: string | null
@@ -3947,6 +3953,7 @@ export type Database = {
           data_sources?: string[] | null
           dominant_pitch?: string | null
           eave_lf?: number | null
+          edge_classifications?: Json | null
           estimated_roof_area_sqft?: number | null
           facet_count?: number | null
           field_authority?: Json | null
@@ -3957,6 +3964,8 @@ export type Database = {
           footprint_polygon?: Json | null
           geocoded_lat?: number | null
           geocoded_lng?: number | null
+          geometry_metadata?: Json | null
+          geometry_quality_score?: number | null
           hip_lf?: number | null
           id?: string
           imagery_date?: string | null
@@ -3967,6 +3976,7 @@ export type Database = {
           raw_geojson?: Json | null
           review_required?: boolean
           ridge_lf?: number | null
+          selected_candidate_index?: number | null
           squares?: number | null
           updated_at?: string
           valley_lf?: number | null
@@ -3974,6 +3984,7 @@ export type Database = {
         Update: {
           address?: string
           ai_notes?: string | null
+          candidate_footprints?: Json | null
           claim_id?: string
           confidence_score?: number | null
           confirmed_at?: string | null
@@ -3983,6 +3994,7 @@ export type Database = {
           data_sources?: string[] | null
           dominant_pitch?: string | null
           eave_lf?: number | null
+          edge_classifications?: Json | null
           estimated_roof_area_sqft?: number | null
           facet_count?: number | null
           field_authority?: Json | null
@@ -3993,6 +4005,8 @@ export type Database = {
           footprint_polygon?: Json | null
           geocoded_lat?: number | null
           geocoded_lng?: number | null
+          geometry_metadata?: Json | null
+          geometry_quality_score?: number | null
           hip_lf?: number | null
           id?: string
           imagery_date?: string | null
@@ -4003,6 +4017,7 @@ export type Database = {
           raw_geojson?: Json | null
           review_required?: boolean
           ridge_lf?: number | null
+          selected_candidate_index?: number | null
           squares?: number | null
           updated_at?: string
           valley_lf?: number | null
