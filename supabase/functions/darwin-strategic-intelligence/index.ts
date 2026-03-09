@@ -42,7 +42,12 @@ const stateRegulations: Record<string, any> = {
 };
 
 function getStateInfo(stateCode: string) {
-  return stateRegulations[stateCode?.toUpperCase()] || stateRegulations['PA'];
+  const info = stateRegulations[stateCode?.toUpperCase()];
+  if (!info) {
+    console.warn(`[Darwin] WARNING: No regulations found for state "${stateCode}". Falling back to PA — outputs may cite wrong jurisdiction.`);
+    return { ...stateRegulations['PA'], _fallback: true, _requestedState: stateCode };
+  }
+  return info;
 }
 
 type DiscreteConfidence = 0 | 0.25 | 0.5 | 0.75 | 1;
