@@ -26,6 +26,7 @@ interface RoofEstimateResult {
   ai_notes: string;
   data_sources: string[];
   field_sources: Record<string, DerivationSource>;
+  field_confidence: Record<string, number>;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────

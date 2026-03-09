@@ -3913,6 +3913,7 @@ export type Database = {
           eave_lf: number | null
           estimated_roof_area_sqft: number | null
           facet_count: number | null
+          field_confidence: Json | null
           field_sources: Json | null
           footprint_area_sqft: number | null
           geocoded_lat: number | null
@@ -3943,6 +3944,7 @@ export type Database = {
           eave_lf?: number | null
           estimated_roof_area_sqft?: number | null
           facet_count?: number | null
+          field_confidence?: Json | null
           field_sources?: Json | null
           footprint_area_sqft?: number | null
           geocoded_lat?: number | null
@@ -3973,6 +3975,7 @@ export type Database = {
           eave_lf?: number | null
           estimated_roof_area_sqft?: number | null
           facet_count?: number | null
+          field_confidence?: Json | null
           field_sources?: Json | null
           footprint_area_sqft?: number | null
           geocoded_lat?: number | null
