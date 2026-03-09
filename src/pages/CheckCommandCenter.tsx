@@ -791,6 +791,20 @@ function CheckDetailPanel({
     },
   });
 
+  // Fetch loss draft tracking record if required
+  const { data: lossDraftRecord } = useQuery({
+    queryKey: ["check-loss-draft-link", checkId],
+    enabled: check?.status === "loss_draft_required" || check?.status === "needs_review",
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("loss_draft_tracking")
+        .select("id")
+        .eq("check_intake_item_id", checkId)
+        .maybeSingle();
+      return data;
+    },
+  });
+
   const pendingEndorsements = endorsements.filter(
     (e) => e.status === "pending" || e.status === "sent",
   );
@@ -815,12 +829,14 @@ function CheckDetailPanel({
       `${rejectedEndorsements.length} rejected endorsement(s): ${rejectedEndorsements.map((e) => e.payee_name).join(", ")} — requires resolution`,
     );
   }
-  if (mortgageEndorsements.length > 0) {
+  if (check.status === "loss_draft_required") {
+    blockingReasons.push("Check is in Loss Draft workflow. Deposit is blocked until final release.");
+  } else if (mortgageEndorsements.length > 0) {
     blockingReasons.push(
       `${mortgageEndorsements.length} mortgage payee(s) routed to loss draft workflow`,
     );
   }
-  const isDepositBlocked = endorsements.length > 0 && !allEndorsementsComplete;
+  const isDepositBlocked = (endorsements.length > 0 && !allEndorsementsComplete) || check.status === "loss_draft_required";
 
   return (
     <Card className="overflow-hidden">
