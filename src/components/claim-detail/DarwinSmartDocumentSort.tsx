@@ -369,8 +369,31 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
         <CollapsibleContent>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Drop documents here and Darwin will automatically classify and organize them into the right folders by type, sender, date, and topic.
+              Drop documents here and Darwin will automatically classify and organize them into subfolders within your selected parent folder.
             </p>
+
+            {/* Parent Folder Selector */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Upload into folder</Label>
+              <Select
+                value={selectedParentFolderId || ""}
+                onValueChange={(val) => setSelectedParentFolderId(val || null)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a parent folder…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {topLevelFolders.map(f => (
+                    <SelectItem key={f.id} value={f.id}>
+                      📁 {f.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!selectedParentFolderId && documents.length > 0 && (
+                <p className="text-xs text-destructive">Please select a folder before uploading</p>
+              )}
+            </div>
 
             {/* Drop Zone */}
             <div
