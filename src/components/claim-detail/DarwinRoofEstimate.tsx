@@ -304,6 +304,16 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     if (editValues.dominant_pitch !== estimate.dominant_pitch) {
       updatedSources["dominant_pitch"] = "user_override";
       updatedAuth["dominant_pitch"] = "user_authoritative";
+      // If pitch changed and triggered auto-recalc, also mark area fields
+      if (PITCH_SLOPE_FACTORS[editValues.dominant_pitch as string]) {
+        updatedSources["estimated_roof_area_sqft"] = "user_override";
+        updatedAuth["estimated_roof_area_sqft"] = "user_authoritative";
+        updatedConf["estimated_roof_area_sqft"] = 85;
+        updatedSources["squares"] = "user_override";
+        updatedAuth["squares"] = "user_authoritative";
+        updatedConf["squares"] = 85;
+        updatedConf["dominant_pitch"] = 95;
+      }
     }
 
     const rounded: Record<string, any> = {};
