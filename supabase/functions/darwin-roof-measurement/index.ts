@@ -1028,6 +1028,13 @@ Return JSON only.`;
   if (hasGeometry) fieldSources.footprint_area_sqft = "geometry";
   if (hasGeometry && geometryEaveLf > 0) fieldSources.eave_lf = "geometry";
   if (hasGeometry && geometryRakeLf > 0) fieldSources.rake_lf = "geometry";
+  // Mark satellite-derived fields
+  const hasSatPitch = !!satelliteAnalysis?.estimated_pitch && satelliteAnalysis.confidence > 25;
+  const hasSatForm = !!satelliteAnalysis?.roof_form && satelliteAnalysis.roof_form !== "unknown" && satelliteAnalysis.confidence > 25;
+  const hasSatFacets = !!satelliteAnalysis?.visible_layers && satelliteAnalysis.confidence > 25;
+  if (hasSatPitch) fieldSources.dominant_pitch = "satellite_imagery";
+  if (hasSatForm) { fieldSources.hip_lf = "satellite_imagery"; fieldSources.valley_lf = "satellite_imagery"; fieldSources.ridge_lf = "satellite_imagery"; }
+  if (hasSatFacets) fieldSources.facet_count = "satellite_imagery";
 
   // Build field_confidence — boost when satellite analysis confirms values
   const hasSatellite = !!satelliteAnalysis && satelliteAnalysis.confidence > 30;
