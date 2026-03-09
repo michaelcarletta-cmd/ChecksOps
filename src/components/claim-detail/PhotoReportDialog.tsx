@@ -11,6 +11,7 @@ import { FileText, Download, Grid, Columns, Sparkles, Loader2, Cloud, Wind, Drop
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { htmlElementToPdf } from "@/utils/htmlToPdf";
+import { DarwinCitationWatchdog } from "./DarwinCitationWatchdog";
 
 interface ClaimPhoto {
   id: string;
