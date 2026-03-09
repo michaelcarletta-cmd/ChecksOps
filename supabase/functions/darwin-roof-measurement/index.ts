@@ -135,6 +135,42 @@ interface CandidateFootprint {
   geojson: Record<string, unknown>;
 }
 
+interface OverhangConfig {
+  eave_overhang_ft: number;
+  rake_overhang_ft: number;
+  source: "default" | "user" | "regional";
+}
+
+const DEFAULT_OVERHANG: OverhangConfig = {
+  eave_overhang_ft: 1.0,
+  rake_overhang_ft: 0.75,
+  source: "default",
+};
+
+/** A single rectangular roof mass decomposed from the building footprint. */
+interface RoofMass {
+  id: string;
+  polygon: number[][];
+  area_sqft: number;
+  perimeter_ft: number;
+  dominant_axis_bearing: number;
+  dominant_axis_length_ft: number;
+  perpendicular_axis_length_ft: number;
+  aspect_ratio: number;
+  edge_classifications: EdgeClassification[];
+  inferred_form: RoofForm;
+  form_confidence: number;
+  /** Indices of other masses this one connects to (shared edges → valleys). */
+  connected_mass_ids: string[];
+}
+
+interface RoofMassDecomposition {
+  masses: RoofMass[];
+  junction_valleys: { mass_a: string; mass_b: string; approx_length_ft: number }[];
+  decomposition_method: "axis_split" | "convex_partition" | "single_mass";
+  notes: string[];
+}
+
 interface RoofEstimateResult {
   footprint_area_sqft: number;
   estimated_roof_area_sqft: number;
@@ -142,12 +178,12 @@ interface RoofEstimateResult {
   dominant_pitch: string;
   pitch_band: PitchBand | null;
   pitch_type: PitchType;
-  ridge_lf: number;
-  hip_lf: number;
-  valley_lf: number;
-  eave_lf: number;
-  rake_lf: number;
-  facet_count: number;
+  ridge_lf: number | null;
+  hip_lf: number | null;
+  valley_lf: number | null;
+  eave_lf: number | null;
+  rake_lf: number | null;
+  facet_count: number | null;
   confidence_score: number;
   review_required: boolean;
   overlay_image_url: string | null;
@@ -179,6 +215,9 @@ interface RoofEstimateResult {
   // Phase 2F: Vision classifications
   vision_classifications: SatelliteVisionResult | null;
   suppression_records: SuppressionRecord[] | null;
+  // Phase 2G: Mass decomposition + overhang config
+  roof_mass_decomposition: RoofMassDecomposition | null;
+  overhang_config: OverhangConfig;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
