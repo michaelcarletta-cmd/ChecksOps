@@ -19,7 +19,7 @@ import {
   Upload, FileCheck, Clock, AlertTriangle, CheckCircle2,
   Send, Eye, Users, Building2, Shield, ChevronRight,
   RefreshCw, Banknote, ClipboardCheck, RotateCcw, Printer, Landmark, Trash2, Search,
-  Download, FileImage,
+  Download, FileImage, Undo2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
@@ -108,6 +108,7 @@ const statusColors: Record<string, string> = {
   needs_review: "bg-red-500/20 text-red-400",
   approved_for_deposit: "bg-emerald-500/20 text-emerald-400",
   branch_deposit_required: "bg-blue-500/20 text-blue-400",
+  loss_draft_required: "bg-purple-500/20 text-purple-400",
   reissue_requested: "bg-orange-500/20 text-orange-400",
   deposited: "bg-primary/20 text-primary",
   voided: "bg-destructive/20 text-destructive",
@@ -720,6 +721,10 @@ function CheckDetailPanel({
   onRefresh: () => void;
 }) {
   const [detailTab, setDetailTab] = useState("overview");
+  const [undoing, setUndoing] = useState(false);
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const qc = useQueryClient();
 
    const { data: check } = useQuery({
     queryKey: ["check-detail", checkId],
@@ -759,6 +764,30 @@ function CheckDetailPanel({
       return (data ?? []) as AuditEntry[];
     },
   });
+
+  const canUndo = check && ['branch_deposit_required', 'approved_for_deposit', 'loss_draft_required', 'reissue_requested'].includes(check.status) && check.status !== 'deposited';
+
+  const handleUndoDecision = async () => {
+    if (!user?.id || !check) return;
+    setUndoing(true);
+    try {
+      const { data, error } = await supabase.rpc("submit_check_review_decision", {
+        p_check_id: checkId,
+        p_reviewer_id: user.id,
+        p_deposit_path: "revert_to_review",
+        p_reviewer_notes: `Reverted from ${check.status} back to review`,
+      });
+      if (error) throw error;
+      toast({ title: "Decision reverted", description: "Check returned to review queue." });
+      qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
+      onRefresh();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setUndoing(false);
+    }
+  };
 
   if (!check) return null;
 
@@ -971,6 +1000,18 @@ function CheckDetailPanel({
                     )}
                   </div>
                 </>
+               )}
+              {canUndo && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full mt-2 text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+                  onClick={handleUndoDecision}
+                  disabled={undoing}
+                >
+                  <Undo2 className="h-4 w-4 mr-2" />
+                  {undoing ? "Reverting..." : `Undo Decision (${check.status.replace(/_/g, " ")})`}
+                </Button>
               )}
               {check.claim_id && (
                 <DetailRow label="Linked Claim" value={check.claim_id.slice(0, 8) + "..."} />

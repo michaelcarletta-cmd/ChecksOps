@@ -58,6 +58,7 @@ const REVIEW_STATUSES = [
 
 const DEPOSIT_PATHS = [
   { value: "approved_for_deposit", label: "Approved for Deposit", icon: CheckCircle2, color: "text-emerald-400" },
+  { value: "loss_draft_required", label: "Loss Draft (Mortgage)", icon: Building2, color: "text-purple-400" },
   { value: "branch_deposit_required", label: "Branch Deposit Required", icon: Building2, color: "text-blue-400" },
   { value: "reissue_requested", label: "Request Reissue", icon: RotateCcw, color: "text-orange-400" },
   { value: "hold_for_claim_review", label: "Hold for Claim Review", icon: AlertTriangle, color: "text-amber-400" },
