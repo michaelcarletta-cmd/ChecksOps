@@ -1155,9 +1155,99 @@ function applyVisionSuppressions(
   return { refined, suppressions };
 }
 
-// ── Phase 2G: Roof-mass decomposition ────────────────────────────────
+// ── Phase 2G: Roof-mass decomposition + classification ──────────────
 // Split an L/T/U-shaped footprint into separate rectangular roof masses
 // so each mass gets independent ridge/hip/valley/facet derivation.
+// Each mass is classified by type to weight its contribution.
+
+/** Mass-type derivation weight — controls how much each mass contributes to aggregated totals. */
+const MASS_TYPE_WEIGHTS: Record<MassType, number> = {
+  main_roof: 1.0,
+  attached_garage: 0.9,
+  rear_projection: 0.8,
+  porch_bump_out: 0.5,
+  unknown_accessory: 0.6,
+};
+
+/**
+ * Classify a decomposed roof mass based on size, aspect ratio,
+ * attachment geometry, and relative footprint contribution.
+ */
+function classifyMass(
+  mass: RoofMass,
+  allMasses: RoofMass[],
+  totalFootprintArea: number,
+  massIndex: number,
+): MassClassification {
+  const contribution = totalFootprintArea > 0 ? mass.area_sqft / totalFootprintArea : 0;
+  const isLargest = allMasses.every(m => m.area_sqft <= mass.area_sqft);
+
+  // Single mass → always main_roof
+  if (allMasses.length === 1) {
+    return {
+      mass_type: "main_roof",
+      confidence: 90,
+      reasoning: "Single mass — classified as main roof by default.",
+      footprint_contribution: contribution,
+      derivation_weight: MASS_TYPE_WEIGHTS.main_roof,
+    };
+  }
+
+  // ── Main roof: largest mass, or contribution > 55%
+  if (isLargest && contribution >= 0.45) {
+    return {
+      mass_type: "main_roof",
+      confidence: 80,
+      reasoning: `Largest mass (${Math.round(contribution * 100)}% of footprint). Classified as main roof.`,
+      footprint_contribution: contribution,
+      derivation_weight: MASS_TYPE_WEIGHTS.main_roof,
+    };
+  }
+
+  // ── Attached garage: secondary mass, contribution 20-50%, aspect ratio 1.0-2.5 (squarish-rectangular)
+  if (!isLargest && contribution >= 0.20 && contribution <= 0.50 &&
+      mass.aspect_ratio >= 0.8 && mass.aspect_ratio <= 2.5 &&
+      mass.area_sqft >= 200) {
+    return {
+      mass_type: "attached_garage",
+      confidence: 55,
+      reasoning: `Secondary mass (${Math.round(contribution * 100)}% of footprint, AR=${mass.aspect_ratio}). Size/shape consistent with attached garage.`,
+      footprint_contribution: contribution,
+      derivation_weight: MASS_TYPE_WEIGHTS.attached_garage,
+    };
+  }
+
+  // ── Rear projection: secondary mass, contribution 10-35%, elongated (AR > 1.5)
+  if (!isLargest && contribution >= 0.10 && contribution <= 0.35 && mass.aspect_ratio > 1.5) {
+    return {
+      mass_type: "rear_projection",
+      confidence: 50,
+      reasoning: `Secondary elongated mass (${Math.round(contribution * 100)}% of footprint, AR=${mass.aspect_ratio}). Consistent with rear projection or wing.`,
+      footprint_contribution: contribution,
+      derivation_weight: MASS_TYPE_WEIGHTS.rear_projection,
+    };
+  }
+
+  // ── Porch / bump-out: small mass, contribution < 15%, area < 200 sqft
+  if (contribution < 0.15 || mass.area_sqft < 200) {
+    return {
+      mass_type: "porch_bump_out",
+      confidence: 60,
+      reasoning: `Minor mass (${Math.round(contribution * 100)}% of footprint, ${mass.area_sqft} sqft). Too small for independent ridge/valley — classified as porch or bump-out.`,
+      footprint_contribution: contribution,
+      derivation_weight: MASS_TYPE_WEIGHTS.porch_bump_out,
+    };
+  }
+
+  // ── Fallback: unknown accessory
+  return {
+    mass_type: "unknown_accessory",
+    confidence: 30,
+    reasoning: `Mass #${massIndex} (${Math.round(contribution * 100)}% of footprint, ${mass.area_sqft} sqft, AR=${mass.aspect_ratio}). Does not match known mass type patterns.`,
+    footprint_contribution: contribution,
+    derivation_weight: MASS_TYPE_WEIGHTS.unknown_accessory,
+  };
+}
 
 function decomposeIntoMasses(candidate: CandidateFootprint): RoofMassDecomposition {
   const ring = candidate.polygon;
@@ -1175,21 +1265,26 @@ function decomposeIntoMasses(candidate: CandidateFootprint): RoofMassDecompositi
     const longestRake = Math.max(...edges.filter(e => e.classification === "likely_rake").map(e => e.length_ft), 0);
 
     notes.push(`Simple ${pts.length}-vertex footprint → single roof mass.`);
+    const singleMass: RoofMass = {
+      id: "mass_0",
+      polygon: ring,
+      area_sqft: candidate.area_sqft,
+      perimeter_ft: candidate.perimeter_ft,
+      dominant_axis_bearing: axis.primaryAxis,
+      dominant_axis_length_ft: longestEave || axis.primaryTotalLen / 2,
+      perpendicular_axis_length_ft: longestRake || axis.perpTotalLen / 2,
+      aspect_ratio: (longestRake > 0 ? (longestEave || axis.primaryTotalLen / 2) / longestRake : 1),
+      edge_classifications: edges,
+      inferred_form: "unknown", // will be resolved later
+      form_confidence: 0,
+      connected_mass_ids: [],
+      classification: null, // classified below
+    };
+    singleMass.classification = classifyMass(singleMass, [singleMass], candidate.area_sqft, 0);
+    notes.push(`  Classification: ${singleMass.classification.mass_type} (${singleMass.classification.confidence}% confidence, weight=${singleMass.classification.derivation_weight}).`);
+
     return {
-      masses: [{
-        id: "mass_0",
-        polygon: ring,
-        area_sqft: candidate.area_sqft,
-        perimeter_ft: candidate.perimeter_ft,
-        dominant_axis_bearing: axis.primaryAxis,
-        dominant_axis_length_ft: longestEave || axis.primaryTotalLen / 2,
-        perpendicular_axis_length_ft: longestRake || axis.perpTotalLen / 2,
-        aspect_ratio: (longestRake > 0 ? (longestEave || axis.primaryTotalLen / 2) / longestRake : 1),
-        edge_classifications: edges,
-        inferred_form: "unknown", // will be resolved later
-        form_confidence: 0,
-        connected_mass_ids: [],
-      }],
+      masses: [singleMass],
       junction_valleys: [],
       decomposition_method: "single_mass",
       notes,
@@ -1197,8 +1292,6 @@ function decomposeIntoMasses(candidate: CandidateFootprint): RoofMassDecompositi
   }
 
   // Complex footprint (5+ vertices) → attempt axis-aligned split
-  // Strategy: identify the dominant axis, find recesses/projections by grouping
-  // consecutive edge segments into axis-aligned runs, then split at offsets.
   const { segments, axis } = analyzeAxes(ring);
   const edges = candidate.edge_classifications;
 
@@ -1228,48 +1321,41 @@ function decomposeIntoMasses(candidate: CandidateFootprint): RoofMassDecompositi
   }
   if (currentRun) runs.push(currentRun);
 
-  // Find perpendicular-axis runs that are short (< 40% of longest perp run) → these are step-backs indicating mass boundaries
   const perpRuns = runs.filter(r => r.alignment === "perpendicular");
   if (perpRuns.length <= 1 || pts.length <= 5) {
-    // Not enough structure to split — treat as single mass
     const longestEave = Math.max(...edges.filter(e => e.classification === "likely_eave").map(e => e.length_ft), 0);
     const longestRake = Math.max(...edges.filter(e => e.classification === "likely_rake").map(e => e.length_ft), 0);
     notes.push(`${pts.length}-vertex footprint with ${perpRuns.length} perp run(s) — insufficient for multi-mass decomposition → single mass.`);
+    const singleMass: RoofMass = {
+      id: "mass_0",
+      polygon: ring,
+      area_sqft: candidate.area_sqft,
+      perimeter_ft: candidate.perimeter_ft,
+      dominant_axis_bearing: axis.primaryAxis,
+      dominant_axis_length_ft: longestEave || axis.primaryTotalLen / 2,
+      perpendicular_axis_length_ft: longestRake || axis.perpTotalLen / 2,
+      aspect_ratio: longestRake > 0 ? (longestEave || axis.primaryTotalLen / 2) / longestRake : 1,
+      edge_classifications: edges,
+      inferred_form: "unknown",
+      form_confidence: 0,
+      connected_mass_ids: [],
+      classification: null,
+    };
+    singleMass.classification = classifyMass(singleMass, [singleMass], candidate.area_sqft, 0);
+    notes.push(`  Classification: ${singleMass.classification.mass_type} (${singleMass.classification.confidence}%).`);
     return {
-      masses: [{
-        id: "mass_0",
-        polygon: ring,
-        area_sqft: candidate.area_sqft,
-        perimeter_ft: candidate.perimeter_ft,
-        dominant_axis_bearing: axis.primaryAxis,
-        dominant_axis_length_ft: longestEave || axis.primaryTotalLen / 2,
-        perpendicular_axis_length_ft: longestRake || axis.perpTotalLen / 2,
-        aspect_ratio: longestRake > 0 ? (longestEave || axis.primaryTotalLen / 2) / longestRake : 1,
-        edge_classifications: edges,
-        inferred_form: "unknown",
-        form_confidence: 0,
-        connected_mass_ids: [],
-      }],
+      masses: [singleMass],
       junction_valleys: [],
       decomposition_method: "single_mass",
       notes,
     };
   }
 
-  // Multi-mass: approximate by splitting the footprint bounding box at step-back points
-  // For now, use a simplified approach: find the longest and second-longest perpendicular runs
-  // The step-back between them defines a mass boundary
+  // Multi-mass split
   perpRuns.sort((a, b) => b.totalLength - a.totalLength);
-  const mainPerp = perpRuns[0];
-  const secondPerp = perpRuns.length > 1 ? perpRuns[1] : null;
-
-  // Estimate mass dimensions from edge groups
-  // Mass A: the "main body" (longer section)
-  // Mass B: the "wing/projection" (shorter section)
   const mainEaveEdges = edges.filter(e => e.classification === "likely_eave");
   const mainRakeEdges = edges.filter(e => e.classification === "likely_rake");
 
-  // Sort eave edges by length descending — longest pair is main body
   const eaveSorted = [...mainEaveEdges].sort((a, b) => b.length_ft - a.length_ft);
   const rakeSorted = [...mainRakeEdges].sort((a, b) => b.length_ft - a.length_ft);
 
@@ -1279,23 +1365,26 @@ function decomposeIntoMasses(candidate: CandidateFootprint): RoofMassDecompositi
   const massBWidth = rakeSorted.length > 1 ? (rakeSorted[1]?.length_ft ?? 0) : 0;
 
   if (massBLength < 5 || massBWidth < 5) {
-    // Second mass is too small — probably not a real wing
     notes.push(`Potential wing too small (${roundTo(massBLength)}×${roundTo(massBWidth)}ft) — single mass.`);
+    const singleMass: RoofMass = {
+      id: "mass_0",
+      polygon: ring,
+      area_sqft: candidate.area_sqft,
+      perimeter_ft: candidate.perimeter_ft,
+      dominant_axis_bearing: axis.primaryAxis,
+      dominant_axis_length_ft: massALength,
+      perpendicular_axis_length_ft: massAWidth,
+      aspect_ratio: massAWidth > 0 ? massALength / massAWidth : 1,
+      edge_classifications: edges,
+      inferred_form: "unknown",
+      form_confidence: 0,
+      connected_mass_ids: [],
+      classification: null,
+    };
+    singleMass.classification = classifyMass(singleMass, [singleMass], candidate.area_sqft, 0);
+    notes.push(`  Classification: ${singleMass.classification.mass_type} (${singleMass.classification.confidence}%).`);
     return {
-      masses: [{
-        id: "mass_0",
-        polygon: ring,
-        area_sqft: candidate.area_sqft,
-        perimeter_ft: candidate.perimeter_ft,
-        dominant_axis_bearing: axis.primaryAxis,
-        dominant_axis_length_ft: massALength,
-        perpendicular_axis_length_ft: massAWidth,
-        aspect_ratio: massAWidth > 0 ? massALength / massAWidth : 1,
-        edge_classifications: edges,
-        inferred_form: "unknown",
-        form_confidence: 0,
-        connected_mass_ids: [],
-      }],
+      masses: [singleMass],
       junction_valleys: [],
       decomposition_method: "single_mass",
       notes,
@@ -1316,40 +1405,53 @@ function decomposeIntoMasses(candidate: CandidateFootprint): RoofMassDecompositi
   const slopeFactor = 1.118; // moderate default for valley slope-adjustment
   const valleyAtJunction = roundTo(junctionLength * slopeFactor, 0);
 
-  const masses: RoofMass[] = [
-    {
-      id: "mass_0",
-      polygon: ring, // approximation — actual sub-polygon not computed
-      area_sqft: massAArea,
-      perimeter_ft: roundTo((massALength + massAWidth) * 2, 0),
-      dominant_axis_bearing: axis.primaryAxis,
-      dominant_axis_length_ft: massALength,
-      perpendicular_axis_length_ft: massAWidth,
-      aspect_ratio: massAWidth > 0 ? roundTo(massALength / massAWidth, 2) : 1,
-      edge_classifications: edges.filter(e => e.length_ft >= massAWidth * 0.5),
-      inferred_form: "unknown",
-      form_confidence: 0,
-      connected_mass_ids: ["mass_1"],
-    },
-    {
-      id: "mass_1",
-      polygon: ring,
-      area_sqft: massBArea,
-      perimeter_ft: roundTo((massBLength + massBWidth) * 2, 0),
-      dominant_axis_bearing: (axis.primaryAxis + 90) % 180, // wing is typically perpendicular
-      dominant_axis_length_ft: massBLength,
-      perpendicular_axis_length_ft: massBWidth,
-      aspect_ratio: massBWidth > 0 ? roundTo(massBLength / massBWidth, 2) : 1,
-      edge_classifications: edges.filter(e => e.length_ft < massAWidth * 0.5 || e.classification === "unknown"),
-      inferred_form: "unknown",
-      form_confidence: 0,
-      connected_mass_ids: ["mass_0"],
-    },
-  ];
+  const massA: RoofMass = {
+    id: "mass_0",
+    polygon: ring, // approximation — actual sub-polygon not computed
+    area_sqft: massAArea,
+    perimeter_ft: roundTo((massALength + massAWidth) * 2, 0),
+    dominant_axis_bearing: axis.primaryAxis,
+    dominant_axis_length_ft: massALength,
+    perpendicular_axis_length_ft: massAWidth,
+    aspect_ratio: massAWidth > 0 ? roundTo(massALength / massAWidth, 2) : 1,
+    edge_classifications: edges.filter(e => e.length_ft >= massAWidth * 0.5),
+    inferred_form: "unknown",
+    form_confidence: 0,
+    connected_mass_ids: ["mass_1"],
+    classification: null,
+  };
+  const massB: RoofMass = {
+    id: "mass_1",
+    polygon: ring,
+    area_sqft: massBArea,
+    perimeter_ft: roundTo((massBLength + massBWidth) * 2, 0),
+    dominant_axis_bearing: (axis.primaryAxis + 90) % 180, // wing is typically perpendicular
+    dominant_axis_length_ft: massBLength,
+    perpendicular_axis_length_ft: massBWidth,
+    aspect_ratio: massBWidth > 0 ? roundTo(massBLength / massBWidth, 2) : 1,
+    edge_classifications: edges.filter(e => e.length_ft < massAWidth * 0.5 || e.classification === "unknown"),
+    inferred_form: "unknown",
+    form_confidence: 0,
+    connected_mass_ids: ["mass_0"],
+    classification: null,
+  };
+
+  const allMasses = [massA, massB];
+  // Classify each mass
+  for (let i = 0; i < allMasses.length; i++) {
+    allMasses[i].classification = classifyMass(allMasses[i], allMasses, candidate.area_sqft, i);
+    notes.push(`  Mass ${allMasses[i].id}: ${allMasses[i].classification!.mass_type} (${allMasses[i].classification!.confidence}% conf, weight=${allMasses[i].classification!.derivation_weight}, contribution=${Math.round(allMasses[i].classification!.footprint_contribution * 100)}%).`);
+  }
 
   return {
-    masses,
-    junction_valleys: [{ mass_a: "mass_0", mass_b: "mass_1", approx_length_ft: valleyAtJunction }],
+    masses: allMasses,
+    junction_valleys: [{
+      mass_a: "mass_0",
+      mass_b: "mass_1",
+      approx_length_ft: valleyAtJunction,
+      status: "candidate",
+      promotion_reason: null,
+    }],
     decomposition_method: "axis_split",
     notes,
   };
