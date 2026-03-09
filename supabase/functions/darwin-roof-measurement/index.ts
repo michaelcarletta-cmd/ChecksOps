@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 type DerivationSource = "geometry" | "ai_estimated" | "satellite_imagery";
-type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative";
+type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative" | "unknown_insufficient_geometry";
 type RoofForm = "gable" | "hip" | "cross_gable" | "complex" | "unknown";
 type PitchBand = "flat" | "low" | "moderate" | "steep" | "very_steep" | "unknown";
 type PitchType = "band" | "exact";
