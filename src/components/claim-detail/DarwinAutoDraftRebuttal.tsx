@@ -28,6 +28,8 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
   const [rebuttal, setRebuttal] = useState<string | null>(null);
   const [editableRebuttal, setEditableRebuttal] = useState<string>("");
   const [provisionalOverride, setProvisionalOverride] = useState(false);
+  const [citationWatchdog, setCitationWatchdog] = useState<any>(null);
+  const [jurisdiction, setJurisdiction] = useState<any>(null);
   const { position, isLocked, loading: positionLoading } = useDeclaredPosition(claimId);
 
   // Fetch all strategic intelligence data
