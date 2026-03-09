@@ -752,18 +752,10 @@ async function fetchNJBuildingCandidate(lat: number, lng: number): Promise<Candi
   } catch { return null; }
 }
 
-// ── Satellite imagery analysis ───────────────────────────────────────
-
-interface SatelliteAnalysis {
-  estimated_pitch: string | null;
-  roof_form: string | null;
-  roof_color: string | null;
-  visible_layers: number | null;
-  complexity_notes: string | null;
-  shadow_pitch_estimate: string | null;
-  confidence: number;
-  analysis_notes: string;
-}
+// ── Phase 2F: Satellite vision classification ───────────────────────
+// Vision is used for CLASSIFICATION only (form, pitch band, facet count, obstructions).
+// Footprint geometry remains the source of truth for area and perimeter-derived values.
+// Vision results refine uncertainty or suppress weak geometry inferences.
 
 /** Encode a single tile to base64, returning null on failure. */
 async function fetchTileBase64(url: string): Promise<string | null> {
@@ -781,136 +773,131 @@ async function fetchTileBase64(url: string): Promise<string | null> {
   } catch { return null; }
 }
 
-/** Fetch a grid of satellite tiles centered on lat/lng. Returns array of {base64, position}. */
+/** Fetch a grid of satellite tiles centered on lat/lng. */
 async function fetchSatelliteTileGrid(
-  lat: number,
-  lng: number,
-  gridSize: number = 3,
-  zoom: number = 20,
+  lat: number, lng: number, gridSize: number = 3, zoom: number = 20,
 ): Promise<{ base64: string; row: number; col: number; tileX: number; tileY: number }[]> {
   const tileX = Math.floor((lng + 180) / 360 * Math.pow(2, zoom));
   const latRad = lat * Math.PI / 180;
   const tileY = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, zoom));
   const half = Math.floor(gridSize / 2);
-
   console.log(`[Darwin Roof] Fetching ${gridSize}x${gridSize} tile grid at zoom ${zoom}, center: ${tileX},${tileY}`);
-
-  // Build tile fetch promises
   const tilePromises: { row: number; col: number; url: string; tileX: number; tileY: number }[] = [];
   for (let dy = -half; dy <= half; dy++) {
     for (let dx = -half; dx <= half; dx++) {
       const tx = tileX + dx;
       const ty = tileY + dy;
-      tilePromises.push({
-        row: dy + half,
-        col: dx + half,
-        tileX: tx,
-        tileY: ty,
-        url: `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}`,
-      });
+      tilePromises.push({ row: dy + half, col: dx + half, tileX: tx, tileY: ty,
+        url: `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}` });
     }
   }
-
-  // Fetch all tiles in parallel
-  const results = await Promise.all(
-    tilePromises.map(async (t) => {
-      const b64 = await fetchTileBase64(t.url);
-      return b64 ? { base64: b64, row: t.row, col: t.col, tileX: t.tileX, tileY: t.tileY } : null;
-    }),
-  );
-
+  const results = await Promise.all(tilePromises.map(async (t) => {
+    const b64 = await fetchTileBase64(t.url);
+    return b64 ? { base64: b64, row: t.row, col: t.col, tileX: t.tileX, tileY: t.tileY } : null;
+  }));
   const successful = results.filter((r): r is NonNullable<typeof r> => r !== null);
   console.log(`[Darwin Roof] Fetched ${successful.length}/${tilePromises.length} tiles successfully`);
   return successful;
 }
 
-/** Legacy single-tile fetch for backward compatibility. */
-async function fetchSatelliteImage(lat: number, lng: number): Promise<string | null> {
-  const grid = await fetchSatelliteTileGrid(lat, lng, 1, 20);
-  if (grid.length > 0) return grid[0].base64;
-  // Fallback to zoom 19
-  const grid19 = await fetchSatelliteTileGrid(lat, lng, 1, 19);
-  return grid19.length > 0 ? grid19[0].base64 : null;
+function normalizeVisionResult(parsed: any): SatelliteVisionResult {
+  const validBands: PitchBand[] = ["flat", "low", "moderate", "steep", "very_steep", "unknown"];
+  const validShadow = ["none", "light", "moderate", "heavy"];
+  return {
+    roof_form: {
+      value: parsed.roof_form?.value ?? "unknown",
+      confidence: clamp(Number(parsed.roof_form?.confidence) || 0, 0, 100),
+      abstain: !!parsed.roof_form?.abstain,
+      reasoning: parsed.roof_form?.reasoning ?? "",
+    },
+    pitch_band: {
+      value: (validBands.includes(parsed.pitch_band?.value) ? parsed.pitch_band.value : "unknown") as PitchBand,
+      confidence: clamp(Number(parsed.pitch_band?.confidence) || 0, 0, 100),
+      abstain: !!parsed.pitch_band?.abstain,
+      reasoning: parsed.pitch_band?.reasoning ?? "",
+    },
+    visible_facets: {
+      value: Math.max(0, Math.round(Number(parsed.visible_facets?.value) || 0)),
+      confidence: clamp(Number(parsed.visible_facets?.confidence) || 0, 0, 100),
+      abstain: !!parsed.visible_facets?.abstain,
+      reasoning: parsed.visible_facets?.reasoning ?? "",
+    },
+    obstructions: {
+      tree_cover_pct: clamp(Number(parsed.obstructions?.tree_cover_pct) || 0, 0, 100),
+      shadow_coverage: (validShadow.includes(parsed.obstructions?.shadow_coverage) ? parsed.obstructions.shadow_coverage : "light") as any,
+      rear_slope_visible: parsed.obstructions?.rear_slope_visible !== false,
+      visible_sides: clamp(Math.round(Number(parsed.obstructions?.visible_sides) || 4), 1, 4),
+      obstructions: Array.isArray(parsed.obstructions?.obstructions) ? parsed.obstructions.obstructions : [],
+      confidence: clamp(Number(parsed.obstructions?.confidence) || 0, 0, 100),
+    },
+    roof_color: parsed.roof_color ?? null,
+    overall_image_quality: clamp(Number(parsed.overall_image_quality) || 50, 0, 100),
+    analysis_notes: parsed.analysis_notes ?? "",
+  };
 }
 
-async function analyzeRoofFromSatellite(
-  base64Image: string,
+/**
+ * Split-task satellite vision classification.
+ * Returns structured per-task results with confidence and abstain flags.
+ * Does NOT produce measurements — only classifications.
+ */
+async function classifyRoofFromSatellite(
+  tileGrid: { base64: string; row: number; col: number }[],
   address: string,
   footprintAreaSqft: number | null,
-  tileGrid?: { base64: string; row: number; col: number }[],
-): Promise<SatelliteAnalysis | null> {
-  const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1";
+): Promise<SatelliteVisionResult | null> {
   const LOVABLE_AI_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_AI_KEY) return null;
+  if (!LOVABLE_AI_KEY || tileGrid.length === 0) return null;
 
   try {
-    const systemPrompt = `You are an expert roof measurement analyst specializing in insurance claims. You are reviewing aerial/satellite imagery to estimate roof characteristics. Return ONLY valid JSON.
-
-JSON schema:
-{
-  "estimated_pitch": string | null (e.g. "6/12", "8/12"),
-  "roof_form": string ("gable" | "hip" | "cross_gable" | "cross_hip" | "gambrel" | "mansard" | "flat" | "complex" | "unknown"),
-  "roof_color": string (e.g. "dark gray", "brown", "black"),
-  "visible_layers": number (count of distinct roof planes/facets visible from above),
-  "complexity_notes": string (describe dormers, valleys, ridge lines, extensions, attached structures),
-  "shadow_pitch_estimate": string | null (if shadows visible, estimate from shadow geometry),
-  "confidence": number (0-85),
-  "analysis_notes": string (methodology, observations)
-}
-
-CRITICAL PITCH ESTIMATION RULES:
-1. Most residential homes in NJ have pitches between 6/12 and 10/12. 4/12 is uncommon for main roofs (only garages, porches, additions).
-2. If the roof appears to have visible slope from aerial view (not flat), it's likely 6/12 or steeper.
-3. Shadow analysis: longer shadows relative to roof width = steeper pitch. Compare shadow length to the apparent width of the roof plane.
-4. Ridge visibility: if you can see a clear ridge line with sloping planes on both sides, the pitch is at least 5/12.
-5. If the roof has valleys (diagonal lines where two sloping planes meet), the roof is likely 6/12+ and cross_gable or cross_hip form.
-6. Hip roofs (slopes on ALL four sides) are very common in NJ. Look for triangular planes at the short ends.
-
-CRITICAL FACET COUNTING:
-- A "gable" roof has 2 main facets (front and back slopes)
-- A "hip" roof has 4 facets (front, back, and two end triangles)  
-- Each dormer adds 2-3 facets
-- Each wing/extension adds 2+ facets
-- An L-shaped or T-shaped home typically has 6-8+ facets with valleys
-- Count EVERY distinct plane you can see, including small ones
-
-ROOF FORM IDENTIFICATION:
-- "gable": Rectangle roof with ridge along the long axis, sloping down to eaves on two sides. Triangular wall at each end.
-- "hip": All four sides slope. No vertical triangular walls at ends.
-- "cross_gable": Two or more gable sections intersecting at right angles, creating valleys where they meet.
-- "cross_hip": Like cross_gable but with hipped ends instead of vertical gables.
-- "complex": Multiple forms combined, many extensions, dormers, or irregular layout.
-
-Be CONSERVATIVE with confidence. If the image is blurry or tiles are low-res, max confidence is 50%.`;
-
-    // Build the image content array
     const imageContent: any[] = [];
-    
-    if (tileGrid && tileGrid.length > 1) {
-      // Multi-tile: send grid description + all tile images
-      const gridDesc = `I'm providing ${tileGrid.length} satellite tiles arranged in a grid pattern covering the property and its surroundings. The CENTER tile contains the property at ${address}. Analyze the roof structure visible across these tiles.${footprintAreaSqft ? ` Known footprint area: ~${footprintAreaSqft} sqft.` : ""}
-
-Tiles are arranged in reading order (top-left to bottom-right) in a ${Math.sqrt(tileGrid.length)}×${Math.sqrt(tileGrid.length)} grid. Focus on the CENTER tile for the main roof but use surrounding tiles for context (shadows, scale reference from neighboring houses).`;
-      
-      imageContent.push({ type: "text", text: gridDesc });
-      
-      // Sort tiles by row then col for consistent ordering
+    if (tileGrid.length > 1) {
+      const gridSize = Math.round(Math.sqrt(tileGrid.length));
+      imageContent.push({ type: "text", text: `${tileGrid.length} satellite tiles in a ${gridSize}×${gridSize} grid for ${address}. CENTER tile has the property.${footprintAreaSqft ? ` Known footprint: ~${footprintAreaSqft} sqft.` : ""}\n\nYou are a CLASSIFIER, not a measurer. For each task, report confidence (0-100) and set abstain=true if you genuinely cannot determine.` });
       const sorted = [...tileGrid].sort((a, b) => a.row !== b.row ? a.row - b.row : a.col - b.col);
       for (const tile of sorted) {
-        const pos = `Row ${tile.row + 1}, Col ${tile.col + 1}${tile.row === Math.floor(sorted.length / 6) && tile.col === Math.floor(sorted.length / 6) ? " (CENTER - property location)" : ""}`;
-        imageContent.push({ type: "text", text: pos });
         imageContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${tile.base64}` } });
       }
     } else {
-      // Single tile fallback
-      imageContent.push({
-        type: "text",
-        text: `Analyze this satellite/aerial image of the property at: ${address}${footprintAreaSqft ? `\nKnown footprint area: ~${footprintAreaSqft} sqft` : ""}\n\nExamine the roof carefully. Count every distinct facet/plane. Estimate pitch from visible slopes and shadows. Identify the roof form. Return JSON only.`,
-      });
-      imageContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64Image}` } });
+      imageContent.push({ type: "text", text: `Satellite image of ${address}.${footprintAreaSqft ? ` Footprint: ~${footprintAreaSqft} sqft.` : ""} Classify the roof.` });
+      imageContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${tileGrid[0].base64}` } });
     }
 
-    const response = await fetch(`${LOVABLE_AI_URL}/chat/completions`, {
+    const systemPrompt = `You are a roof CLASSIFIER (not measurer). Classify roof characteristics from aerial imagery into discrete categories. Do NOT attempt to measure areas or linear dimensions.
+
+TASK 1 — ROOF FORM: Identify the overall roof form.
+Options: gable, hip, cross_gable, cross_hip, gambrel, mansard, flat, complex, unknown.
+- gable: Ridge along long axis, slopes down two sides, triangular walls at ends.
+- hip: All four sides slope, no vertical gable walls.
+- cross_gable: Two+ gable sections intersecting, creating valleys.
+- cross_hip: Like cross_gable but with hipped ends.
+- complex: Multiple forms combined.
+
+TASK 2 — PITCH BAND: Classify roof steepness into a BAND (not an exact pitch).
+- "flat": 0-2/12 (nearly flat)
+- "low": 2-4/12 (shallow, porches/garages)
+- "moderate": 5-7/12 (standard residential)
+- "steep": 8-10/12 (clearly steep, common in NJ)
+- "very_steep": 11+/12 (very steep)
+- "unknown": cannot determine
+CRITICAL: Aerial imagery CANNOT determine exact pitch. Use bands only. If shadows suggest steepness but you can't narrow to a band, set abstain=true.
+
+TASK 3 — VISIBLE FACETS: Count distinct visible roof planes/facets. Only count what you can actually see. Note if rear slopes are hidden.
+
+TASK 4 — OBSTRUCTIONS: Report what prevents accurate classification.
+- tree_cover_pct: 0-100, what percentage of the roof is obscured by tree canopy
+- shadow_coverage: none/light/moderate/heavy
+- rear_slope_visible: can you see the back of the building?
+- visible_sides: 1-4, how many building sides are clearly visible
+- obstructions: list of obstruction types (trees, shadows, neighboring buildings, etc.)
+
+RULES:
+- ABSTAIN rather than guess when visibility is poor (set abstain=true, confidence<15)
+- Pitch from aerial is inherently imprecise — bands only, never exact values
+- If tree cover >40%, abstain on pitch
+- If only 1-2 sides visible, reduce facet confidence and note rear-slope invisibility`;
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_AI_KEY}` },
       body: JSON.stringify({
@@ -921,37 +908,188 @@ Tiles are arranged in reading order (top-left to bottom-right) in a ${Math.sqrt(
         ],
         temperature: 0.1,
         max_tokens: 2000,
+        tools: [{
+          type: "function",
+          function: {
+            name: "classify_roof",
+            description: "Classify roof characteristics from satellite imagery",
+            parameters: {
+              type: "object",
+              properties: {
+                roof_form: {
+                  type: "object",
+                  properties: {
+                    value: { type: "string", enum: ["gable", "hip", "cross_gable", "cross_hip", "gambrel", "mansard", "flat", "complex", "unknown"] },
+                    confidence: { type: "number" },
+                    abstain: { type: "boolean" },
+                    reasoning: { type: "string" },
+                  },
+                  required: ["value", "confidence", "abstain", "reasoning"],
+                  additionalProperties: false,
+                },
+                pitch_band: {
+                  type: "object",
+                  properties: {
+                    value: { type: "string", enum: ["flat", "low", "moderate", "steep", "very_steep", "unknown"] },
+                    confidence: { type: "number" },
+                    abstain: { type: "boolean" },
+                    reasoning: { type: "string" },
+                  },
+                  required: ["value", "confidence", "abstain", "reasoning"],
+                  additionalProperties: false,
+                },
+                visible_facets: {
+                  type: "object",
+                  properties: {
+                    value: { type: "number" },
+                    confidence: { type: "number" },
+                    abstain: { type: "boolean" },
+                    reasoning: { type: "string" },
+                  },
+                  required: ["value", "confidence", "abstain", "reasoning"],
+                  additionalProperties: false,
+                },
+                obstructions: {
+                  type: "object",
+                  properties: {
+                    tree_cover_pct: { type: "number" },
+                    shadow_coverage: { type: "string", enum: ["none", "light", "moderate", "heavy"] },
+                    rear_slope_visible: { type: "boolean" },
+                    visible_sides: { type: "number" },
+                    obstructions: { type: "array", items: { type: "string" } },
+                    confidence: { type: "number" },
+                  },
+                  required: ["tree_cover_pct", "shadow_coverage", "rear_slope_visible", "visible_sides", "obstructions", "confidence"],
+                  additionalProperties: false,
+                },
+                roof_color: { type: "string" },
+                overall_image_quality: { type: "number" },
+                analysis_notes: { type: "string" },
+              },
+              required: ["roof_form", "pitch_band", "visible_facets", "obstructions", "roof_color", "overall_image_quality", "analysis_notes"],
+              additionalProperties: false,
+            },
+          },
+        }],
+        tool_choice: { type: "function", function: { name: "classify_roof" } },
       }),
     });
 
     if (!response.ok) {
-      console.error("Satellite analysis AI error:", response.status, await response.text().catch(() => ""));
+      console.error("Vision classification error:", response.status, await response.text().catch(() => ""));
       return null;
     }
 
     const result = await response.json();
-    const content = result.choices?.[0]?.message?.content || "";
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.warn("[Darwin Roof] Vision model returned no JSON:", content.substring(0, 300));
-      return null;
+    const toolCall = result.choices?.[0]?.message?.tool_calls?.[0];
+    let parsed: any;
+    if (toolCall?.function?.arguments) {
+      parsed = typeof toolCall.function.arguments === "string"
+        ? JSON.parse(toolCall.function.arguments)
+        : toolCall.function.arguments;
+    } else {
+      // Fallback: parse content as JSON
+      const content = result.choices?.[0]?.message?.content || "";
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) { console.warn("[Darwin Roof] Vision returned no structured output"); return null; }
+      parsed = JSON.parse(jsonMatch[0]);
     }
 
-    const parsed = JSON.parse(jsonMatch[0]);
-    return {
-      estimated_pitch: parsed.estimated_pitch ?? null,
-      roof_form: parsed.roof_form ?? null,
-      roof_color: parsed.roof_color ?? null,
-      visible_layers: typeof parsed.visible_layers === "number" ? parsed.visible_layers : null,
-      complexity_notes: parsed.complexity_notes ?? null,
-      shadow_pitch_estimate: parsed.shadow_pitch_estimate ?? null,
-      confidence: clamp(Number(parsed.confidence) || 0, 0, 85),
-      analysis_notes: parsed.analysis_notes ?? "Satellite analysis completed.",
-    };
+    return normalizeVisionResult(parsed);
   } catch (e) {
-    console.error("Satellite analysis failed:", e);
+    console.error("Vision classification failed:", e);
     return null;
   }
+}
+
+/**
+ * Suppression engine: applies rules to reduce confidence or force abstain
+ * based on obstructions, image quality, and geometry-vision conflicts.
+ */
+function applyVisionSuppressions(
+  vision: SatelliteVisionResult,
+  geometryQuality: number | null,
+  geometryRoofForm: RoofForm | null,
+  geometryRoofFormConfidence: number | null,
+): { refined: SatelliteVisionResult; suppressions: SuppressionRecord[] } {
+  const suppressions: SuppressionRecord[] = [];
+  const refined: SatelliteVisionResult = JSON.parse(JSON.stringify(vision));
+
+  // Rule 1: Tree cover heavy (>40%) — suppress pitch and facet confidence
+  if (vision.obstructions.tree_cover_pct > 40) {
+    const beforeP = refined.pitch_band.confidence;
+    refined.pitch_band.confidence = Math.min(refined.pitch_band.confidence, 20);
+    if (refined.pitch_band.confidence < 15) { refined.pitch_band.abstain = true; refined.pitch_band.value = "unknown"; }
+    suppressions.push({ rule: "tree_cover_heavy", field: "pitch_band", reason: `Tree cover ${vision.obstructions.tree_cover_pct}% obscures roof surface`, action: refined.pitch_band.abstain ? "abstain_forced" : "confidence_reduced", before_confidence: beforeP, after_confidence: refined.pitch_band.confidence });
+
+    const beforeF = refined.visible_facets.confidence;
+    refined.visible_facets.confidence = Math.min(refined.visible_facets.confidence, 25);
+    suppressions.push({ rule: "tree_cover_heavy", field: "visible_facets", reason: `Tree cover ${vision.obstructions.tree_cover_pct}% may hide facets`, action: "confidence_reduced", before_confidence: beforeF, after_confidence: refined.visible_facets.confidence });
+  }
+
+  // Rule 2: Heavy shadow — suppress pitch classification
+  if (vision.obstructions.shadow_coverage === "heavy") {
+    const before = refined.pitch_band.confidence;
+    refined.pitch_band.confidence = Math.min(refined.pitch_band.confidence, 15);
+    refined.pitch_band.abstain = true;
+    refined.pitch_band.value = "unknown";
+    suppressions.push({ rule: "heavy_shadow", field: "pitch_band", reason: "Heavy shadow prevents reliable pitch assessment", action: "abstain_forced", before_confidence: before, after_confidence: refined.pitch_band.confidence });
+  }
+
+  // Rule 3: Rear-slope invisibility (< 3 sides visible)
+  if (vision.obstructions.visible_sides < 3) {
+    const beforeF = refined.visible_facets.confidence;
+    refined.visible_facets.confidence = Math.min(refined.visible_facets.confidence, 30);
+    suppressions.push({ rule: "rear_slope_invisible", field: "visible_facets", reason: `Only ${vision.obstructions.visible_sides}/4 sides visible`, action: "confidence_reduced", before_confidence: beforeF, after_confidence: refined.visible_facets.confidence });
+
+    const beforeForm = refined.roof_form.confidence;
+    refined.roof_form.confidence = Math.min(refined.roof_form.confidence, 40);
+    suppressions.push({ rule: "rear_slope_invisible", field: "roof_form", reason: `Cannot confirm rear slopes with ${vision.obstructions.visible_sides}/4 sides visible`, action: "confidence_reduced", before_confidence: beforeForm, after_confidence: refined.roof_form.confidence });
+  }
+
+  // Rule 4: Low footprint quality — geometry-vision conflicts are unreliable
+  if (geometryQuality != null && geometryQuality < 40) {
+    // Don't suppress vision (geometry is weak), but note for downstream
+    suppressions.push({ rule: "low_footprint_quality", field: "geometry_vs_vision", reason: `Footprint quality ${geometryQuality}/100 too low for reliable geometry-vision comparison`, action: "confidence_reduced", before_confidence: geometryQuality, after_confidence: geometryQuality });
+  }
+
+  // Rule 5: Geometry-vision conflict on roof form
+  if (geometryRoofForm && geometryRoofForm !== "unknown" &&
+      refined.roof_form.value !== "unknown" && refined.roof_form.value !== geometryRoofForm &&
+      !refined.roof_form.abstain) {
+    const geoConf = geometryRoofFormConfidence ?? 0;
+    const visConf = refined.roof_form.confidence;
+
+    if (geoConf > 50 && visConf < 40) {
+      // Geometry wins
+      const before = refined.roof_form.confidence;
+      refined.roof_form.confidence = Math.min(visConf, 15);
+      suppressions.push({ rule: "geometry_vision_conflict", field: "roof_form", reason: `Vision (${refined.roof_form.value}) conflicts with geometry (${geometryRoofForm}); geometry confidence higher (${geoConf}% vs ${before}%)`, action: "confidence_reduced", before_confidence: before, after_confidence: refined.roof_form.confidence });
+    } else if (visConf > 50 && geoConf < 40) {
+      // Vision wins — no suppression but record
+      suppressions.push({ rule: "geometry_vision_conflict", field: "roof_form", reason: `Vision (${refined.roof_form.value}) overrides weak geometry (${geometryRoofForm}, ${geoConf}%)`, action: "confidence_reduced", before_confidence: geoConf, after_confidence: geoConf });
+    } else {
+      // Both uncertain — reduce vision confidence
+      const before = refined.roof_form.confidence;
+      refined.roof_form.confidence = Math.round(visConf * 0.7);
+      suppressions.push({ rule: "geometry_vision_conflict", field: "roof_form", reason: `Vision (${refined.roof_form.value}) and geometry (${geometryRoofForm}) disagree; both uncertain`, action: "confidence_reduced", before_confidence: before, after_confidence: refined.roof_form.confidence });
+    }
+  }
+
+  // Rule 6: Low image quality — suppress all classifications
+  if (vision.overall_image_quality < 30) {
+    for (const field of ["roof_form", "pitch_band", "visible_facets"] as const) {
+      const before = refined[field].confidence;
+      refined[field].confidence = Math.min(refined[field].confidence, 20);
+      if (refined[field].confidence < 15) {
+        refined[field].abstain = true;
+        if (field === "pitch_band") (refined[field] as any).value = "unknown";
+      }
+      suppressions.push({ rule: "low_image_quality", field, reason: `Image quality ${vision.overall_image_quality}/100 too low for reliable ${field}`, action: before > 20 ? "confidence_reduced" : "abstain_forced", before_confidence: before, after_confidence: refined[field].confidence });
+    }
+  }
+
+  return { refined, suppressions };
 }
 
 // ── AI estimation ────────────────────────────────────────────────────
