@@ -1461,16 +1461,22 @@ Deno.serve(async (req) => {
       if (Object.keys(result.netImpact).length > 0) netImpact = result.netImpact;
       if (result.shadowMatches.length > 0) {
         shadowMatches = result.shadowMatches;
-        // Increment shadow_mode_hits for matched shadow heuristics
-        const shadowKeys = result.shadowMatches.map((s: any) => s.key);
-        for (const key of shadowKeys) {
-          await supabase.rpc("increment_shadow_hits_noop", { p_key: key }).catch(() => {
-            // Fallback: direct update
-            supabase.from("darwin_roof_tuning_heuristics")
-              .update({ shadow_mode_hits: (activeHeuristics?.find((h: any) => h.heuristic_key === key)?.shadow_mode_hits ?? 0) + 1 })
-              .eq("heuristic_key", key)
-              .then(() => {});
-          });
+        // Increment shadow_mode_hits and store predicted impacts
+        for (const sm of result.shadowMatches) {
+          const existing = activeHeuristics?.find((h: any) => h.heuristic_key === sm.key);
+          const newHits = (existing?.shadow_mode_hits ?? 0) + 1;
+          const prevImpacts = (existing as any)?.shadow_mode_predicted_impacts || [];
+          const updatedImpacts = [...(Array.isArray(prevImpacts) ? prevImpacts.slice(-19) : []), {
+            claim_id,
+            field: sm.field,
+            predicted_action: sm.predictedAction,
+            before: sm.predictedBefore,
+            after: sm.predictedAfter,
+            at: new Date().toISOString(),
+          }];
+          await supabase.from("darwin_roof_tuning_heuristics")
+            .update({ shadow_mode_hits: newHits, shadow_mode_predicted_impacts: updatedImpacts })
+            .eq("heuristic_key", sm.key);
         }
       }
     }
