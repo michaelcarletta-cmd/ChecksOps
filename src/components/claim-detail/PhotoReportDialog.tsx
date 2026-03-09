@@ -303,6 +303,12 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       setAiReferencedPhotos(data.referencedPhotos || []);
       setAiSupportingDocs(data.supportingDocs || []);
       setWeatherData(data.weatherData || null);
+      if (data.citation_watchdog) {
+        setCitationWatchdog(data.citation_watchdog);
+      }
+      if (data.jurisdiction) {
+        setJurisdictionInfo(data.jurisdiction);
+      }
       if (data.jobId) {
         setCurrentJobId(data.jobId);
       }
