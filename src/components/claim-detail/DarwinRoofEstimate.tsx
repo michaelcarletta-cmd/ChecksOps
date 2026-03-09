@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import {
   Ruler, Loader2, MapPin, AlertTriangle, CheckCircle2, RefreshCw,
-  Lock, Unlock, Pencil, Save, X, Shield, Eye, Layers, Home
+  Lock, Unlock, Pencil, Save, X, Shield, Eye, Layers, Home, Settings2
 } from "lucide-react";
 import { logAudit } from "@/hooks/useAuditLog";
 import { DarwinRoofValidation } from "./DarwinRoofValidation";
