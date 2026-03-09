@@ -313,8 +313,14 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
         setCurrentJobId(data.jobId);
       }
       
-      // Notify about referenced photos
-      if (data.referencedPhotos?.length > 0) {
+      // Notify — watchdog warnings take priority
+      if (data.citation_watchdog) {
+        toast({ 
+          title: "⚠️ Wrong-State Citations Detected", 
+          description: `${data.citation_watchdog.wrong_state_citations_found} citation(s) from the wrong state found. Review the report carefully before sending.`,
+          variant: "destructive",
+        });
+      } else if (data.referencedPhotos?.length > 0) {
         toast({ 
           title: "Analysis complete", 
           description: `AI cited ${data.referencedPhotos.length} photos in the report. You can download a PDF with just those photos.`
