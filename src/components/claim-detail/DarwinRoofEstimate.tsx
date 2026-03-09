@@ -989,6 +989,9 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                 {estimate.address} ({estimate.geocoded_lat.toFixed(5)}, {estimate.geocoded_lng.toFixed(5)})
               </div>
             )}
+
+            {/* Benchmarking & Validation */}
+            <DarwinRoofValidation claimId={claimId} estimate={estimate} />
           </div>
         )}
       </CardContent>
