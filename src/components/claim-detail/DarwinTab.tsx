@@ -458,7 +458,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
                 }
               }}
             />
-            <DarwinRoofMeasurement claimId={claimId} claim={claim} />
+            <DarwinRoofEstimate claimId={claimId} claim={claim} />
           </>
         );
       case "document-analysis":
