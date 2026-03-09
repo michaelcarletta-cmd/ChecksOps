@@ -462,6 +462,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
             {auth === "ai_provisional" && " — requires confirmation"}
             {auth === "geometry_authoritative" && " — derived from building geometry"}
             {auth === "user_authoritative" && " — user-overridden, workflow-authoritative"}
+            {auth === "unknown_insufficient_geometry" && " — geometry insufficient; value is null until confirmed by measurement report or manual entry"}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
