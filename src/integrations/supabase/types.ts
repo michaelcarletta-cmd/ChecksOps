@@ -5810,17 +5810,28 @@ export type Database = {
           avg_accuracy_score: number | null
           avg_pct_delta: number | null
           common_failures: Json | null
+          conflict_group: string | null
           created_at: string
           created_by: string | null
+          effective_from: string | null
           evidence_summary: string | null
+          expires_at: string | null
           failure_rate: number | null
+          governance_notes: string | null
+          governance_status: string
           heuristic_key: string
           heuristic_type: string
           id: string
           is_active: boolean
           last_computed_at: string | null
+          last_validation_support_at: string | null
           manually_overridden: boolean
+          max_adjustment_factor: number
+          max_confidence_penalty: number
           median_pct_delta: number | null
+          min_adjustment_factor: number
+          min_sample_size: number
+          priority: number
           sample_size: number
           segment_aspect_ratio_max: number | null
           segment_aspect_ratio_min: number | null
@@ -5832,6 +5843,7 @@ export type Database = {
           segment_quality_score_min: number | null
           segment_region: string | null
           segment_roof_form: string | null
+          staleness_days: number
           suppress_below_confidence: number | null
           suppress_field: string | null
           updated_at: string
@@ -5846,17 +5858,28 @@ export type Database = {
           avg_accuracy_score?: number | null
           avg_pct_delta?: number | null
           common_failures?: Json | null
+          conflict_group?: string | null
           created_at?: string
           created_by?: string | null
+          effective_from?: string | null
           evidence_summary?: string | null
+          expires_at?: string | null
           failure_rate?: number | null
+          governance_notes?: string | null
+          governance_status?: string
           heuristic_key: string
           heuristic_type?: string
           id?: string
           is_active?: boolean
           last_computed_at?: string | null
+          last_validation_support_at?: string | null
           manually_overridden?: boolean
+          max_adjustment_factor?: number
+          max_confidence_penalty?: number
           median_pct_delta?: number | null
+          min_adjustment_factor?: number
+          min_sample_size?: number
+          priority?: number
           sample_size?: number
           segment_aspect_ratio_max?: number | null
           segment_aspect_ratio_min?: number | null
@@ -5868,6 +5891,7 @@ export type Database = {
           segment_quality_score_min?: number | null
           segment_region?: string | null
           segment_roof_form?: string | null
+          staleness_days?: number
           suppress_below_confidence?: number | null
           suppress_field?: string | null
           updated_at?: string
@@ -5882,17 +5906,28 @@ export type Database = {
           avg_accuracy_score?: number | null
           avg_pct_delta?: number | null
           common_failures?: Json | null
+          conflict_group?: string | null
           created_at?: string
           created_by?: string | null
+          effective_from?: string | null
           evidence_summary?: string | null
+          expires_at?: string | null
           failure_rate?: number | null
+          governance_notes?: string | null
+          governance_status?: string
           heuristic_key?: string
           heuristic_type?: string
           id?: string
           is_active?: boolean
           last_computed_at?: string | null
+          last_validation_support_at?: string | null
           manually_overridden?: boolean
+          max_adjustment_factor?: number
+          max_confidence_penalty?: number
           median_pct_delta?: number | null
+          min_adjustment_factor?: number
+          min_sample_size?: number
+          priority?: number
           sample_size?: number
           segment_aspect_ratio_max?: number | null
           segment_aspect_ratio_min?: number | null
@@ -5904,6 +5939,7 @@ export type Database = {
           segment_quality_score_min?: number | null
           segment_region?: string | null
           segment_roof_form?: string | null
+          staleness_days?: number
           suppress_below_confidence?: number | null
           suppress_field?: string | null
           updated_at?: string

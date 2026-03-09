@@ -907,7 +907,7 @@ Return JSON only.`;
   };
 }
 
-// ── Phase 2D: Tuning heuristics application ─────────────────────────
+// ── Phase 2D: Tuning heuristics application with governance ─────────
 
 interface TuningHeuristic {
   id: string;
@@ -923,6 +923,35 @@ interface TuningHeuristic {
   segment_aspect_ratio_min: number | null;
   segment_aspect_ratio_max: number | null;
   evidence_summary: string | null;
+  // Governance
+  min_sample_size: number | null;
+  sample_size: number | null;
+  effective_from: string | null;
+  expires_at: string | null;
+  last_validation_support_at: string | null;
+  staleness_days: number | null;
+  max_adjustment_factor: number | null;
+  min_adjustment_factor: number | null;
+  max_confidence_penalty: number | null;
+  priority: number | null;
+  conflict_group: string | null;
+  governance_status: string | null;
+}
+
+interface ExplanationStep {
+  order: number;
+  heuristic_key: string;
+  action_type: string;
+  field: string;
+  action: string;
+  before: number;
+  after: number;
+  segment_match: string;
+  evidence_basis: string;
+  governance_status: string;
+  was_capped: boolean;
+  was_suppressed: boolean;
+  suppression_reason: string | null;
 }
 
 function matchesHeuristic(
@@ -939,16 +968,87 @@ function matchesHeuristic(
   return true;
 }
 
+function isGovernanceEligible(h: TuningHeuristic): { eligible: boolean; reason: string } {
+  const now = Date.now();
+  if (h.min_sample_size != null && (h.sample_size ?? 0) < h.min_sample_size) {
+    return { eligible: false, reason: `Insufficient evidence: ${h.sample_size ?? 0} < ${h.min_sample_size}` };
+  }
+  if (h.effective_from && new Date(h.effective_from).getTime() > now) {
+    return { eligible: false, reason: `Not yet effective` };
+  }
+  if (h.expires_at && new Date(h.expires_at).getTime() < now) {
+    return { eligible: false, reason: `Expired` };
+  }
+  if (h.last_validation_support_at && h.staleness_days) {
+    const daysSince = (now - new Date(h.last_validation_support_at).getTime()) / 86400000;
+    if (daysSince > h.staleness_days) {
+      return { eligible: false, reason: `Stale: ${Math.round(daysSince)}d since last support` };
+    }
+  }
+  if (h.governance_status && ["expired", "stale", "insufficient_evidence", "conflict_suppressed"].includes(h.governance_status)) {
+    return { eligible: false, reason: `Governance status: ${h.governance_status}` };
+  }
+  return { eligible: true, reason: "OK" };
+}
+
+function resolveConflicts(matched: TuningHeuristic[]): { winners: TuningHeuristic[]; suppressed: { heuristic: TuningHeuristic; reason: string }[] } {
+  const suppressed: { heuristic: TuningHeuristic; reason: string }[] = [];
+  const byGroup = new Map<string, TuningHeuristic[]>();
+  for (const h of matched) {
+    const group = h.conflict_group || h.heuristic_key;
+    if (!byGroup.has(group)) byGroup.set(group, []);
+    byGroup.get(group)!.push(h);
+  }
+  const winners: TuningHeuristic[] = [];
+  for (const [group, heurs] of byGroup) {
+    if (heurs.length === 1) { winners.push(heurs[0]); continue; }
+    heurs.sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100) || (b.sample_size ?? 0) - (a.sample_size ?? 0));
+    winners.push(heurs[0]);
+    for (let i = 1; i < heurs.length; i++) {
+      suppressed.push({ heuristic: heurs[i], reason: `Conflict: superseded by "${heurs[0].heuristic_key}"` });
+    }
+  }
+  // Suppress adjustments when same field is also suppressed
+  const suppressedFields = new Set(winners.filter(h => h.action_type === "suppress_field" && h.suppress_field).map(h => h.suppress_field!));
+  const final: TuningHeuristic[] = [];
+  for (const h of winners) {
+    if (h.action_type === "adjust_value" && h.adjustment_field && suppressedFields.has(h.adjustment_field)) {
+      suppressed.push({ heuristic: h, reason: `Redundant: "${h.adjustment_field}" also suppressed` });
+    } else {
+      final.push(h);
+    }
+  }
+  return { winners: final, suppressed };
+}
+
+function buildSegmentDesc(h: TuningHeuristic): string {
+  const p: string[] = [];
+  if (h.segment_roof_form) p.push(`form=${h.segment_roof_form}`);
+  if (h.segment_quality_score_min != null) p.push(`quality=${h.segment_quality_score_min}-${h.segment_quality_score_max ?? 100}`);
+  if (h.segment_aspect_ratio_min != null) p.push(`AR=${h.segment_aspect_ratio_min}-${h.segment_aspect_ratio_max ?? "∞"}`);
+  return p.length > 0 ? p.join(", ") : "all segments";
+}
+
 function applyTuningHeuristics(
   estimate: RoofEstimateResult,
   heuristics: TuningHeuristic[],
   roofForm: string | null,
   qualityScore: number | null,
   aspectRatio: number | null,
-): { tuned: RoofEstimateResult; applied: { key: string; field: string; action: string; before: number; after: number }[]; preTuningValues: Record<string, number> } {
+): {
+  tuned: RoofEstimateResult;
+  applied: { key: string; field: string; action: string; before: number; after: number }[];
+  preTuningValues: Record<string, number>;
+  explanationChain: ExplanationStep[];
+  suppressedHeuristics: { key: string; reason: string }[];
+  netImpact: Record<string, { original: number; final: number; pctChange: number }>;
+} {
   const applied: { key: string; field: string; action: string; before: number; after: number }[] = [];
   const preTuningValues: Record<string, number> = {};
+  const explanationChain: ExplanationStep[] = [];
+  const suppressedHeuristics: { key: string; reason: string }[] = [];
   const tuned = { ...estimate };
+  const originalValues: Record<string, number> = {};
 
   const fieldMap: Record<string, keyof RoofEstimateResult> = {
     footprint_area: "footprint_area_sqft",
@@ -962,59 +1062,110 @@ function applyTuningHeuristics(
     confidence_score: "confidence_score",
   };
 
-  for (const h of heuristics) {
-    if (!matchesHeuristic(h, roofForm, qualityScore, aspectRatio)) continue;
+  for (const [, mf] of Object.entries(fieldMap)) {
+    originalValues[String(mf)] = Number((estimate as any)[mf] ?? 0);
+  }
+  if (estimate.roof_form_confidence != null) originalValues["roof_form_confidence"] = estimate.roof_form_confidence;
+
+  // Step 1: Match
+  const matched = heuristics.filter(h => matchesHeuristic(h, roofForm, qualityScore, aspectRatio));
+
+  // Step 2: Governance
+  const eligible: TuningHeuristic[] = [];
+  for (const h of matched) {
+    const { eligible: ok, reason } = isGovernanceEligible(h);
+    if (!ok) {
+      suppressedHeuristics.push({ key: h.heuristic_key, reason });
+      explanationChain.push({ order: explanationChain.length + 1, heuristic_key: h.heuristic_key, action_type: h.action_type, field: h.adjustment_field || h.suppress_field || "?", action: "governance_blocked", before: 0, after: 0, segment_match: buildSegmentDesc(h), evidence_basis: h.evidence_summary || "", governance_status: h.governance_status || "blocked", was_capped: false, was_suppressed: true, suppression_reason: reason });
+      continue;
+    }
+    eligible.push(h);
+  }
+
+  // Step 3: Conflicts
+  const { winners, suppressed } = resolveConflicts(eligible);
+  for (const { heuristic, reason } of suppressed) {
+    suppressedHeuristics.push({ key: heuristic.heuristic_key, reason });
+    explanationChain.push({ order: explanationChain.length + 1, heuristic_key: heuristic.heuristic_key, action_type: heuristic.action_type, field: heuristic.adjustment_field || heuristic.suppress_field || "?", action: "conflict_suppressed", before: 0, after: 0, segment_match: buildSegmentDesc(heuristic), evidence_basis: heuristic.evidence_summary || "", governance_status: "conflict_suppressed", was_capped: false, was_suppressed: true, suppression_reason: reason });
+  }
+
+  // Step 4: Sort & apply with caps
+  winners.sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100));
+  let stepN = explanationChain.length;
+
+  for (const h of winners) {
+    const maxF = h.max_adjustment_factor ?? 1.35;
+    const minF = h.min_adjustment_factor ?? 0.65;
+    const maxCP = h.max_confidence_penalty ?? 0.40;
 
     if (h.action_type === "adjust_value" && h.adjustment_field && h.adjustment_factor != null) {
-      const mappedField = fieldMap[h.adjustment_field] || h.adjustment_field;
-      const before = Number((tuned as any)[mappedField] ?? 0);
+      const mf = fieldMap[h.adjustment_field] || h.adjustment_field;
+      const before = Number((tuned as any)[mf] ?? 0);
       if (before === 0) continue;
-      preTuningValues[mappedField] = before;
-      const after = roundTo(before * h.adjustment_factor, mappedField === "squares" ? 1 : 0);
-      (tuned as any)[mappedField] = after;
-      applied.push({ key: h.heuristic_key, field: String(mappedField), action: `×${h.adjustment_factor}`, before, after });
-      // Recalculate squares if roof area was adjusted
-      if (mappedField === "estimated_roof_area_sqft") {
+      preTuningValues[String(mf)] = preTuningValues[String(mf)] ?? before;
+      let factor = h.adjustment_factor;
+      const capped = factor < minF || factor > maxF;
+      factor = Math.max(minF, Math.min(maxF, factor));
+      const after = roundTo(before * factor, String(mf) === "squares" ? 1 : 0);
+      (tuned as any)[mf] = after;
+      applied.push({ key: h.heuristic_key, field: String(mf), action: `×${factor}${capped ? " (capped)" : ""}`, before, after });
+      stepN++;
+      explanationChain.push({ order: stepN, heuristic_key: h.heuristic_key, action_type: h.action_type, field: String(mf), action: `×${factor}`, before, after, segment_match: buildSegmentDesc(h), evidence_basis: h.evidence_summary || "", governance_status: capped ? "capped" : "active", was_capped: capped, was_suppressed: false, suppression_reason: null });
+      if (String(mf) === "estimated_roof_area_sqft") {
         const oldSq = tuned.squares;
         tuned.squares = roundTo(after / 100, 1);
         if (oldSq !== tuned.squares) {
-          preTuningValues["squares"] = oldSq;
-          applied.push({ key: h.heuristic_key, field: "squares", action: "recalc from roof_area", before: oldSq, after: tuned.squares });
+          preTuningValues["squares"] = preTuningValues["squares"] ?? oldSq;
+          applied.push({ key: h.heuristic_key, field: "squares", action: "recalc", before: oldSq, after: tuned.squares });
         }
       }
     } else if (h.action_type === "adjust_confidence" && h.adjustment_field && h.adjustment_factor != null) {
+      let factor = Math.max(maxCP, Math.min(1.0, h.adjustment_factor));
+      const capped = factor !== h.adjustment_factor;
       if (h.adjustment_field === "confidence_score") {
         const before = tuned.confidence_score;
-        preTuningValues["confidence_score"] = before;
-        tuned.confidence_score = roundTo(before * h.adjustment_factor, 0);
-        applied.push({ key: h.heuristic_key, field: "confidence_score", action: `×${h.adjustment_factor}`, before, after: tuned.confidence_score });
+        preTuningValues["confidence_score"] = preTuningValues["confidence_score"] ?? before;
+        tuned.confidence_score = roundTo(before * factor, 0);
+        applied.push({ key: h.heuristic_key, field: "confidence_score", action: `×${factor}${capped ? " (capped)" : ""}`, before, after: tuned.confidence_score });
+        stepN++;
+        explanationChain.push({ order: stepN, heuristic_key: h.heuristic_key, action_type: h.action_type, field: "confidence_score", action: `×${factor}`, before, after: tuned.confidence_score, segment_match: buildSegmentDesc(h), evidence_basis: h.evidence_summary || "", governance_status: capped ? "capped" : "active", was_capped: capped, was_suppressed: false, suppression_reason: null });
       } else if (h.adjustment_field === "roof_form_confidence" && tuned.roof_form_confidence != null) {
         const before = tuned.roof_form_confidence;
-        preTuningValues["roof_form_confidence"] = before;
-        tuned.roof_form_confidence = roundTo(before * h.adjustment_factor, 0);
-        applied.push({ key: h.heuristic_key, field: "roof_form_confidence", action: `×${h.adjustment_factor}`, before, after: tuned.roof_form_confidence });
+        preTuningValues["roof_form_confidence"] = preTuningValues["roof_form_confidence"] ?? before;
+        tuned.roof_form_confidence = roundTo(before * factor, 0);
+        applied.push({ key: h.heuristic_key, field: "roof_form_confidence", action: `×${factor}${capped ? " (capped)" : ""}`, before, after: tuned.roof_form_confidence });
+        stepN++;
+        explanationChain.push({ order: stepN, heuristic_key: h.heuristic_key, action_type: h.action_type, field: "roof_form_confidence", action: `×${factor}`, before, after: tuned.roof_form_confidence, segment_match: buildSegmentDesc(h), evidence_basis: h.evidence_summary || "", governance_status: capped ? "capped" : "active", was_capped: capped, was_suppressed: false, suppression_reason: null });
       }
     } else if (h.action_type === "suppress_field" && h.suppress_field && h.suppress_below_confidence != null) {
-      const mappedField = fieldMap[h.suppress_field] || h.suppress_field;
-      const fieldConf = (tuned.field_confidence as Record<string, number>)?.[h.suppress_field] ?? 0;
-      if (fieldConf < h.suppress_below_confidence) {
-        const before = Number((tuned as any)[mappedField] ?? 0);
+      const mf = fieldMap[h.suppress_field] || h.suppress_field;
+      const fc = (tuned.field_confidence as Record<string, number>)?.[h.suppress_field] ?? 0;
+      if (fc < h.suppress_below_confidence) {
+        const before = Number((tuned as any)[mf] ?? 0);
         if (before !== 0) {
-          preTuningValues[String(mappedField)] = before;
-          (tuned as any)[mappedField] = 0;
-          applied.push({ key: h.heuristic_key, field: String(mappedField), action: `suppressed (conf ${fieldConf}% < ${h.suppress_below_confidence}%)`, before, after: 0 });
+          preTuningValues[String(mf)] = preTuningValues[String(mf)] ?? before;
+          (tuned as any)[mf] = 0;
+          applied.push({ key: h.heuristic_key, field: String(mf), action: `suppressed (conf ${fc}% < ${h.suppress_below_confidence}%)`, before, after: 0 });
+          stepN++;
+          explanationChain.push({ order: stepN, heuristic_key: h.heuristic_key, action_type: h.action_type, field: String(mf), action: "suppressed", before, after: 0, segment_match: buildSegmentDesc(h), evidence_basis: h.evidence_summary || "", governance_status: "active", was_capped: false, was_suppressed: false, suppression_reason: null });
         }
       }
     }
   }
 
-  // Append tuning notes to ai_notes
+  // Net impact
+  const netImpact: Record<string, { original: number; final: number; pctChange: number }> = {};
+  for (const [key, orig] of Object.entries(originalValues)) {
+    const fin = Number((tuned as any)[key] ?? 0);
+    if (orig !== fin) netImpact[key] = { original: orig, final: fin, pctChange: orig !== 0 ? Math.round(((fin - orig) / orig) * 1000) / 10 : 0 };
+  }
+
   if (applied.length > 0) {
-    tuned.ai_notes += `\n\n🔧 Tuning Applied (${applied.length} heuristic${applied.length > 1 ? "s" : ""}): ` +
+    tuned.ai_notes += `\n\n🔧 Tuning Applied (${applied.length} heuristic${applied.length > 1 ? "s" : ""}, ${suppressedHeuristics.length} suppressed): ` +
       applied.map(a => `${a.field}: ${a.before} → ${a.after} (${a.action})`).join("; ");
   }
 
-  return { tuned, applied, preTuningValues };
+  return { tuned, applied, preTuningValues, explanationChain, suppressedHeuristics, netImpact };
 }
 
 // ── Main handler ─────────────────────────────────────────────────────
@@ -1135,8 +1286,12 @@ Deno.serve(async (req) => {
 
     const { data: activeHeuristics } = await supabase
       .from("darwin_roof_tuning_heuristics")
-      .select("id, heuristic_key, action_type, adjustment_field, adjustment_factor, suppress_field, suppress_below_confidence, segment_roof_form, segment_quality_score_min, segment_quality_score_max, segment_aspect_ratio_min, segment_aspect_ratio_max, evidence_summary")
+      .select("id, heuristic_key, action_type, adjustment_field, adjustment_factor, suppress_field, suppress_below_confidence, segment_roof_form, segment_quality_score_min, segment_quality_score_max, segment_aspect_ratio_min, segment_aspect_ratio_max, evidence_summary, min_sample_size, sample_size, effective_from, expires_at, last_validation_support_at, staleness_days, max_adjustment_factor, min_adjustment_factor, max_confidence_penalty, priority, conflict_group, governance_status")
       .eq("is_active", true);
+
+    let explanationChain: any = null;
+    let suppressedHeuristics: any = null;
+    let netImpact: any = null;
 
     if (activeHeuristics && activeHeuristics.length > 0) {
       const result = applyTuningHeuristics(
@@ -1151,6 +1306,9 @@ Deno.serve(async (req) => {
         tuningApplied = result.applied;
         preTuningValues = result.preTuningValues;
       }
+      if (result.explanationChain.length > 0) explanationChain = result.explanationChain;
+      if (result.suppressedHeuristics.length > 0) suppressedHeuristics = result.suppressedHeuristics;
+      if (Object.keys(result.netImpact).length > 0) netImpact = result.netImpact;
     }
 
     const { data: saved, error: saveErr } = await supabase
@@ -1225,6 +1383,9 @@ Deno.serve(async (req) => {
         candidateCount: candidates.length,
         roofFormInferred: !!roofFormInference,
         tuningApplied: tuningApplied ? tuningApplied.length : 0,
+        explanationChain,
+        suppressedHeuristics,
+        netImpact,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

@@ -1,15 +1,15 @@
+
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import {
-  Settings2, RefreshCw, Loader2, Shield, AlertTriangle, TrendingDown,
-  TrendingUp, Eye, EyeOff, ChevronDown, ChevronUp, Activity, Zap, Ban
+  Settings2, RefreshCw, Loader2, AlertTriangle,
+  Eye, EyeOff, ChevronDown, ChevronUp, Activity, Zap, Ban,
+  Shield, Clock, ShieldAlert, ShieldCheck, ShieldX
 } from "lucide-react";
 
 interface Heuristic {
@@ -41,10 +41,23 @@ interface Heuristic {
   manually_overridden: boolean;
   last_computed_at: string | null;
   created_at: string;
+  // Governance
+  min_sample_size: number | null;
+  effective_from: string | null;
+  expires_at: string | null;
+  last_validation_support_at: string | null;
+  staleness_days: number | null;
+  max_adjustment_factor: number | null;
+  min_adjustment_factor: number | null;
+  max_confidence_penalty: number | null;
+  priority: number | null;
+  conflict_group: string | null;
+  governance_status: string | null;
+  governance_notes: string | null;
 }
 
 const TYPE_ICONS: Record<string, typeof Settings2> = {
-  adjustment: TrendingDown,
+  adjustment: Activity,
   suppression: Ban,
 };
 
@@ -52,6 +65,15 @@ const ACTION_LABELS: Record<string, string> = {
   adjust_value: "Value Adjustment",
   adjust_confidence: "Confidence Adjustment",
   suppress_field: "Field Suppression",
+};
+
+const GOV_STATUS_CONFIG: Record<string, { icon: typeof Shield; color: string; label: string }> = {
+  active: { icon: ShieldCheck, color: "text-green-600", label: "Active" },
+  expired: { icon: ShieldX, color: "text-red-500", label: "Expired" },
+  stale: { icon: Clock, color: "text-yellow-600", label: "Stale" },
+  insufficient_evidence: { icon: ShieldAlert, color: "text-orange-500", label: "Low Evidence" },
+  capped: { icon: Shield, color: "text-blue-500", label: "Capped" },
+  conflict_suppressed: { icon: ShieldX, color: "text-muted-foreground", label: "Conflict Suppressed" },
 };
 
 const qualityBandLabel = (min: number | null, max: number | null): string => {
@@ -68,6 +90,17 @@ const arBandLabel = (min: number | null, max: number | null): string => {
   if ((min ?? 0) >= 1.3 && (max ?? 0) < 2) return "Rectangular (1.3-2.0)";
   if ((min ?? 0) >= 2) return "Elongated (≥2.0)";
   return `${min}-${max}`;
+};
+
+const GovernanceStatusBadge = ({ status }: { status: string | null }) => {
+  const config = GOV_STATUS_CONFIG[status || "active"] || GOV_STATUS_CONFIG.active;
+  const Icon = config.icon;
+  return (
+    <Badge variant="outline" className={`text-[9px] shrink-0 gap-0.5 ${config.color}`}>
+      <Icon className="h-2.5 w-2.5" />
+      {config.label}
+    </Badge>
+  );
 };
 
 export const DarwinRoofTuningDashboard = () => {
@@ -101,7 +134,12 @@ export const DarwinRoofTuningDashboard = () => {
         body: { action: "recompute" },
       });
       if (error) throw new Error(error.message);
-      toast.success(`Tuning recomputed: ${data.heuristics_derived} heuristics from ${data.total_validations} validations (${data.buckets_analyzed} segments)`);
+      const parts = [
+        `${data.heuristics_derived} heuristics from ${data.total_validations} validations`,
+        data.heuristics_expired > 0 ? `${data.heuristics_expired} expired` : null,
+        data.heuristics_stale > 0 ? `${data.heuristics_stale} stale` : null,
+      ].filter(Boolean).join(", ");
+      toast.success(`Tuning recomputed: ${parts}`);
       fetchHeuristics();
     } catch (err: any) {
       toast.error(err.message || "Recompute failed");
@@ -116,7 +154,7 @@ export const DarwinRoofTuningDashboard = () => {
         body: { action: "toggle", heuristic_id: id, is_active: active },
       });
       if (error) throw new Error(error.message);
-      setHeuristics(prev => prev.map(h => h.id === id ? { ...h, is_active: active, manually_overridden: true } : h));
+      setHeuristics(prev => prev.map(h => h.id === id ? { ...h, is_active: active, manually_overridden: true, governance_status: active ? "active" : "conflict_suppressed" } : h));
       toast.success(`Heuristic ${active ? "activated" : "deactivated"}`);
     } catch (err: any) {
       toast.error(err.message || "Toggle failed");
@@ -127,13 +165,18 @@ export const DarwinRoofTuningDashboard = () => {
   const inactiveHeuristics = heuristics.filter(h => !h.is_active);
   const displayed = showInactive ? heuristics : activeHeuristics;
 
-  // Summary stats
   const totalActive = activeHeuristics.length;
   const totalAdjustments = activeHeuristics.filter(h => h.action_type.startsWith("adjust")).length;
   const totalSuppressions = activeHeuristics.filter(h => h.action_type === "suppress_field").length;
   const avgSampleSize = heuristics.length > 0
     ? Math.round(heuristics.reduce((s, h) => s + h.sample_size, 0) / heuristics.length)
     : 0;
+
+  // Governance summary
+  const expiredCount = heuristics.filter(h => h.governance_status === "expired").length;
+  const staleCount = heuristics.filter(h => h.governance_status === "stale").length;
+  const cappedCount = heuristics.filter(h => h.governance_status === "capped").length;
+  const insufficientCount = heuristics.filter(h => h.governance_status === "insufficient_evidence").length;
 
   if (loading) {
     return (
@@ -170,7 +213,7 @@ export const DarwinRoofTuningDashboard = () => {
             </div>
           </div>
           <CardDescription>
-            Heuristics derived from validation outcomes. Active rules adjust Darwin estimates before presentation. Toggle individually or recompute from latest validation data.
+            Governed heuristics derived from validation outcomes. Rules enforce minimum evidence, adjustment caps, expiration dates, and conflict resolution.
           </CardDescription>
         </CardHeader>
 
@@ -194,6 +237,30 @@ export const DarwinRoofTuningDashboard = () => {
               <div className="text-xs text-muted-foreground">Avg Sample Size</div>
             </div>
           </div>
+
+          {/* Governance Health */}
+          {(expiredCount > 0 || staleCount > 0 || cappedCount > 0 || insufficientCount > 0) && (
+            <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Shield className="h-4 w-4 text-yellow-600" />
+                <span className="text-sm font-medium">Governance Alerts</span>
+              </div>
+              <div className="flex gap-3 text-xs flex-wrap">
+                {expiredCount > 0 && (
+                  <span className="text-red-500"><strong>{expiredCount}</strong> expired</span>
+                )}
+                {staleCount > 0 && (
+                  <span className="text-yellow-600"><strong>{staleCount}</strong> stale (no recent validation support)</span>
+                )}
+                {insufficientCount > 0 && (
+                  <span className="text-orange-500"><strong>{insufficientCount}</strong> insufficient evidence</span>
+                )}
+                {cappedCount > 0 && (
+                  <span className="text-blue-500"><strong>{cappedCount}</strong> governance-capped</span>
+                )}
+              </div>
+            </div>
+          )}
 
           {displayed.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
@@ -222,15 +289,19 @@ export const DarwinRoofTuningDashboard = () => {
                     <Badge variant="outline" className="text-[9px] shrink-0">
                       {ACTION_LABELS[h.action_type] || h.action_type}
                     </Badge>
+                    <GovernanceStatusBadge status={h.governance_status} />
                     {h.manually_overridden && (
-                      <Badge variant="secondary" className="text-[9px] shrink-0">Manual Override</Badge>
+                      <Badge variant="secondary" className="text-[9px] shrink-0">Manual</Badge>
                     )}
                     <Badge
                       variant="outline"
-                      className={`text-[9px] shrink-0 ${h.sample_size >= 5 ? "border-green-500/50" : h.sample_size >= 3 ? "border-yellow-500/50" : "border-red-500/50"}`}
+                      className={`text-[9px] shrink-0 ${h.sample_size >= (h.min_sample_size ?? 3) ? "border-green-500/50" : "border-red-500/50"}`}
                     >
-                      n={h.sample_size}
+                      n={h.sample_size}{h.min_sample_size ? `/${h.min_sample_size}` : ""}
                     </Badge>
+                    {h.priority != null && h.priority !== 100 && (
+                      <Badge variant="outline" className="text-[9px] shrink-0">P{h.priority}</Badge>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <Switch
@@ -283,6 +354,61 @@ export const DarwinRoofTuningDashboard = () => {
                       </div>
                     )}
 
+                    {/* Governance details */}
+                    <div className="rounded bg-muted/30 p-2 space-y-1">
+                      <div className="flex items-center gap-1 text-xs font-medium">
+                        <Shield className="h-3 w-3" />
+                        Governance
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <span className="text-muted-foreground">Adjustment Caps:</span>{" "}
+                          <span className="font-medium tabular-nums">{h.min_adjustment_factor ?? 0.65}–{h.max_adjustment_factor ?? 1.35}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Conf. Floor:</span>{" "}
+                          <span className="font-medium tabular-nums">×{h.max_confidence_penalty ?? 0.40}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Min Evidence:</span>{" "}
+                          <span className="font-medium tabular-nums">{h.min_sample_size ?? 3}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Effective:</span>{" "}
+                          <span className="font-medium">{h.effective_from ? new Date(h.effective_from).toLocaleDateString() : "—"}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Expires:</span>{" "}
+                          <span className={`font-medium ${h.expires_at && new Date(h.expires_at) < new Date() ? "text-red-500" : ""}`}>
+                            {h.expires_at ? new Date(h.expires_at).toLocaleDateString() : "Never"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Stale After:</span>{" "}
+                          <span className="font-medium tabular-nums">{h.staleness_days ?? 90}d</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Last Support:</span>{" "}
+                          <span className={`font-medium ${
+                            h.last_validation_support_at && 
+                            (Date.now() - new Date(h.last_validation_support_at).getTime()) / 86400000 > (h.staleness_days ?? 90)
+                              ? "text-yellow-600" : ""
+                          }`}>
+                            {h.last_validation_support_at ? new Date(h.last_validation_support_at).toLocaleDateString() : "—"}
+                          </span>
+                        </div>
+                        {h.conflict_group && (
+                          <div className="col-span-2">
+                            <span className="text-muted-foreground">Conflict Group:</span>{" "}
+                            <span className="font-mono text-[10px]">{h.conflict_group}</span>
+                          </div>
+                        )}
+                      </div>
+                      {h.governance_notes && (
+                        <div className="text-[10px] text-muted-foreground mt-1 italic">{h.governance_notes}</div>
+                      )}
+                    </div>
+
                     <div className="grid grid-cols-4 gap-3 text-xs">
                       <div>
                         <span className="text-muted-foreground">Avg Accuracy:</span>{" "}
@@ -323,8 +449,10 @@ export const DarwinRoofTuningDashboard = () => {
                       <div className="flex items-center gap-2 text-xs rounded bg-primary/10 p-2">
                         <Activity className="h-3.5 w-3.5 text-primary" />
                         <span>
-                          When active, Darwin multiplies <strong>{h.adjustment_field}</strong> by <strong>{h.adjustment_factor}</strong> before presenting results.
-                          {h.avg_pct_delta != null && ` Corrects for ~${Math.abs(Math.round(h.avg_pct_delta))}% systematic ${h.avg_pct_delta > 0 ? "over" : "under"}estimation.`}
+                          Multiplies <strong>{h.adjustment_field}</strong> by <strong>{h.adjustment_factor}</strong>
+                          {h.adjustment_factor < (h.min_adjustment_factor ?? 0.65) || h.adjustment_factor > (h.max_adjustment_factor ?? 1.35)
+                            ? " (would be governance-capped at application)" : ""}.
+                          {h.avg_pct_delta != null && ` Corrects ~${Math.abs(Math.round(h.avg_pct_delta))}% systematic ${h.avg_pct_delta > 0 ? "over" : "under"}estimation.`}
                         </span>
                       </div>
                     )}
@@ -333,7 +461,9 @@ export const DarwinRoofTuningDashboard = () => {
                       <div className="flex items-center gap-2 text-xs rounded bg-yellow-500/10 p-2">
                         <AlertTriangle className="h-3.5 w-3.5 text-yellow-600" />
                         <span>
-                          When active, <strong>{h.adjustment_field}</strong> is multiplied by <strong>{h.adjustment_factor}</strong>, reducing displayed confidence to reflect validation evidence.
+                          <strong>{h.adjustment_field}</strong> multiplied by <strong>{h.adjustment_factor}</strong>
+                          {h.adjustment_factor != null && h.adjustment_factor < (h.max_confidence_penalty ?? 0.40)
+                            ? ` (capped at ×${h.max_confidence_penalty ?? 0.40})` : ""}.
                         </span>
                       </div>
                     )}
@@ -342,8 +472,7 @@ export const DarwinRoofTuningDashboard = () => {
                       <div className="flex items-center gap-2 text-xs rounded bg-red-500/10 p-2">
                         <Ban className="h-3.5 w-3.5 text-red-500" />
                         <span>
-                          When active, <strong>{h.suppress_field}</strong> is suppressed (hidden/zeroed) when its confidence falls below <strong>{h.suppress_below_confidence}%</strong>.
-                          Field is too unreliable in this segment for useful inference.
+                          <strong>{h.suppress_field}</strong> suppressed when confidence &lt; <strong>{h.suppress_below_confidence}%</strong>.
                         </span>
                       </div>
                     )}
