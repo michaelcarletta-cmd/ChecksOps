@@ -1000,6 +1000,18 @@ function CheckDetailPanel({
                     )}
                   </div>
                 </>
+               )}
+              {canUndo && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full mt-2 text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+                  onClick={handleUndoDecision}
+                  disabled={undoing}
+                >
+                  <Undo2 className="h-4 w-4 mr-2" />
+                  {undoing ? "Reverting..." : `Undo Decision (${check.status.replace(/_/g, " ")})`}
+                </Button>
               )}
               {check.claim_id && (
                 <DetailRow label="Linked Claim" value={check.claim_id.slice(0, 8) + "..."} />
