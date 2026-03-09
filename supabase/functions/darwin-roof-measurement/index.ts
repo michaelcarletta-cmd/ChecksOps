@@ -1224,6 +1224,7 @@ Deno.serve(async (req) => {
         footprintExtracted: !!selectedCandidate,
         candidateCount: candidates.length,
         roofFormInferred: !!roofFormInference,
+        tuningApplied: tuningApplied ? tuningApplied.length : 0,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
