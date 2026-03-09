@@ -3906,6 +3906,11 @@ export type Database = {
           candidate_footprints: Json | null
           claim_id: string
           confidence_score: number | null
+          confirmation_attachments: Json | null
+          confirmation_basis: string | null
+          confirmation_level: string | null
+          confirmation_notes: string | null
+          confirmation_strength_score: number | null
           confirmed_at: string | null
           confirmed_by: string | null
           created_at: string
@@ -3958,6 +3963,11 @@ export type Database = {
           candidate_footprints?: Json | null
           claim_id: string
           confidence_score?: number | null
+          confirmation_attachments?: Json | null
+          confirmation_basis?: string | null
+          confirmation_level?: string | null
+          confirmation_notes?: string | null
+          confirmation_strength_score?: number | null
           confirmed_at?: string | null
           confirmed_by?: string | null
           created_at?: string
@@ -4010,6 +4020,11 @@ export type Database = {
           candidate_footprints?: Json | null
           claim_id?: string
           confidence_score?: number | null
+          confirmation_attachments?: Json | null
+          confirmation_basis?: string | null
+          confirmation_level?: string | null
+          confirmation_notes?: string | null
+          confirmation_strength_score?: number | null
           confirmed_at?: string | null
           confirmed_by?: string | null
           created_at?: string
