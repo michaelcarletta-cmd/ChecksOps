@@ -1,3 +1,4 @@
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const corsHeaders = {
@@ -26,6 +27,7 @@ interface ValidationRow {
   pitch_match: boolean | null;
   estimate_id: string;
   source_type: string;
+  created_at: string;
 }
 
 interface MeasurementRow {
@@ -47,6 +49,16 @@ interface SegmentBucket {
   validations: ValidationRow[];
   measurements: MeasurementRow[];
 }
+
+// Governance constants
+const GOVERNANCE = {
+  MIN_EVIDENCE_THRESHOLD: 3,        // Minimum validations before a heuristic can activate
+  DEFAULT_STALENESS_DAYS: 90,       // Days without validation support before stale
+  MAX_ADJUSTMENT_FACTOR: 1.35,      // Maximum upward multiplier
+  MIN_ADJUSTMENT_FACTOR: 0.65,      // Maximum downward multiplier (floor)
+  MAX_CONFIDENCE_PENALTY: 0.40,     // Minimum confidence multiplier (can't reduce by more than 60%)
+  DEFAULT_EXPIRY_DAYS: 180,         // Default heuristic expiry (6 months)
+};
 
 function qualityBand(score: number | null): string {
   if (score == null) return "unknown";
@@ -76,6 +88,38 @@ function median(arr: number[]): number {
   return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
+/** Clamp an adjustment factor to governance caps */
+function clampAdjustmentFactor(factor: number): number {
+  return Math.max(GOVERNANCE.MIN_ADJUSTMENT_FACTOR, Math.min(GOVERNANCE.MAX_ADJUSTMENT_FACTOR, factor));
+}
+
+/** Clamp a confidence penalty factor */
+function clampConfidencePenalty(factor: number): number {
+  return Math.max(GOVERNANCE.MAX_CONFIDENCE_PENALTY, Math.min(1.0, factor));
+}
+
+/** Determine governance status for a derived heuristic */
+function computeGovernanceStatus(
+  sampleSize: number,
+  shouldActivate: boolean,
+  latestValidationDate: string | null,
+): { status: string; notes: string } {
+  if (sampleSize < GOVERNANCE.MIN_EVIDENCE_THRESHOLD) {
+    return { status: "insufficient_evidence", notes: `Only ${sampleSize} validations; need ≥${GOVERNANCE.MIN_EVIDENCE_THRESHOLD}.` };
+  }
+  if (!shouldActivate) {
+    return { status: "active", notes: "Below activation threshold but evidence exists." };
+  }
+  return { status: "active", notes: `Derived from ${sampleSize} validations.` };
+}
+
+/** Derive a conflict group from heuristic properties */
+function deriveConflictGroup(heuristicKey: string, actionType: string, field: string | null): string {
+  // Heuristics adjusting the same field in the same segment should conflict
+  const prefix = heuristicKey.split("_").slice(0, -2).join("_"); // segment prefix
+  return `${prefix}_${actionType}_${field || "general"}`;
+}
+
 function deriveHeuristics(bucket: SegmentBucket): {
   heuristic_key: string;
   heuristic_type: string;
@@ -92,17 +136,35 @@ function deriveHeuristics(bucket: SegmentBucket): {
   common_failures: string[];
   evidence_summary: string;
   should_activate: boolean;
+  // Governance fields
+  min_sample_size: number;
+  max_adjustment_factor: number;
+  min_adjustment_factor: number;
+  max_confidence_penalty: number;
+  priority: number;
+  conflict_group: string;
+  governance_status: string;
+  governance_notes: string;
+  last_validation_support_at: string | null;
+  staleness_days: number;
+  effective_from: string;
+  expires_at: string;
 }[] {
   const heuristics: ReturnType<typeof deriveHeuristics> = [];
   const vals = bucket.validations;
   const n = vals.length;
-  if (n < 2) return heuristics; // Need min 2 validations
+  if (n < 2) return heuristics;
 
   const avgAccuracy = vals.reduce((s, v) => s + (v.overall_accuracy_score ?? 0), 0) / n;
   const failCount = vals.filter(v => (v.overall_accuracy_score ?? 0) < 60).length;
   const failureRate = failCount / n;
 
-  // Collect all failure patterns
+  // Find latest validation date for staleness tracking
+  const latestValidationDate = vals.reduce((latest, v) => {
+    const d = v.created_at;
+    return d && (!latest || d > latest) ? d : latest;
+  }, null as string | null);
+
   const failureFreq: Record<string, number> = {};
   for (const v of vals) {
     for (const f of (v.failure_patterns || [])) {
@@ -114,7 +176,9 @@ function deriveHeuristics(bucket: SegmentBucket): {
     .slice(0, 5)
     .map(([f]) => f);
 
-  // Check per-field deviations
+  const now = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + GOVERNANCE.DEFAULT_EXPIRY_DAYS * 86400000).toISOString();
+
   const fieldChecks: { field: string; deltaKey: keyof ValidationRow }[] = [
     { field: "squares", deltaKey: "pct_delta_squares" },
     { field: "footprint_area", deltaKey: "pct_delta_footprint_area" },
@@ -136,10 +200,14 @@ function deriveHeuristics(bucket: SegmentBucket): {
     const medDelta = median(deltas);
     const absAvgDelta = Math.abs(avgDelta);
 
-    // If consistent overestimation/underestimation > 15%
     if (absAvgDelta > 15) {
       const direction = avgDelta > 0 ? "overestimating" : "underestimating";
-      const correctionFactor = 1 / (1 + avgDelta / 100); // Inverse correction
+      let correctionFactor = 1 / (1 + avgDelta / 100);
+      // Apply governance caps
+      correctionFactor = clampAdjustmentFactor(correctionFactor);
+      const wasCapped = correctionFactor !== 1 / (1 + avgDelta / 100);
+      const shouldAct = n >= GOVERNANCE.MIN_EVIDENCE_THRESHOLD && absAvgDelta > 20;
+      const gov = computeGovernanceStatus(deltas.length, shouldAct, latestValidationDate);
 
       heuristics.push({
         heuristic_key: `${bucket.key}_${fc.field}_bias`,
@@ -155,16 +223,30 @@ function deriveHeuristics(bucket: SegmentBucket): {
         median_pct_delta: Math.round(medDelta * 10) / 10,
         failure_rate: Math.round(failureRate * 100) / 100,
         common_failures: topFailures,
-        evidence_summary: `Darwin is consistently ${direction} ${fc.field} by ~${Math.round(absAvgDelta)}% for ${bucket.key} (n=${deltas.length}, median=${Math.round(medDelta)}%). Correction factor: ${correctionFactor.toFixed(3)}.`,
-        should_activate: n >= 3 && absAvgDelta > 20,
+        evidence_summary: `Darwin is consistently ${direction} ${fc.field} by ~${Math.round(absAvgDelta)}% for ${bucket.key} (n=${deltas.length}, median=${Math.round(medDelta)}%). Correction factor: ${correctionFactor.toFixed(3)}${wasCapped ? " (governance-capped)" : ""}.`,
+        should_activate: shouldAct,
+        min_sample_size: GOVERNANCE.MIN_EVIDENCE_THRESHOLD,
+        max_adjustment_factor: GOVERNANCE.MAX_ADJUSTMENT_FACTOR,
+        min_adjustment_factor: GOVERNANCE.MIN_ADJUSTMENT_FACTOR,
+        max_confidence_penalty: GOVERNANCE.MAX_CONFIDENCE_PENALTY,
+        priority: 100,
+        conflict_group: deriveConflictGroup(`${bucket.key}_${fc.field}_bias`, "adjust_value", fc.field),
+        governance_status: gov.status,
+        governance_notes: gov.notes + (wasCapped ? " Factor was governance-capped." : ""),
+        last_validation_support_at: latestValidationDate,
+        staleness_days: GOVERNANCE.DEFAULT_STALENESS_DAYS,
+        effective_from: now,
+        expires_at: expiresAt,
       });
     }
 
-    // If field has very high variance (unreliable), suppress it
     if (deltas.length >= 3) {
       const variance = deltas.reduce((s, d) => s + (d - avgDelta) ** 2, 0) / deltas.length;
       const stdDev = Math.sqrt(variance);
       if (stdDev > 30 && absAvgDelta > 10) {
+        const shouldAct = n >= 4;
+        const gov = computeGovernanceStatus(deltas.length, shouldAct, latestValidationDate);
+
         heuristics.push({
           heuristic_key: `${bucket.key}_${fc.field}_suppress`,
           heuristic_type: "suppression",
@@ -180,7 +262,19 @@ function deriveHeuristics(bucket: SegmentBucket): {
           failure_rate: Math.round(failureRate * 100) / 100,
           common_failures: topFailures,
           evidence_summary: `${fc.field} is unreliable for ${bucket.key}: avg delta ${Math.round(avgDelta)}%, stddev ${Math.round(stdDev)}% (n=${deltas.length}). Recommend suppressing when field confidence < 30%.`,
-          should_activate: n >= 4,
+          should_activate: shouldAct,
+          min_sample_size: 4,
+          max_adjustment_factor: GOVERNANCE.MAX_ADJUSTMENT_FACTOR,
+          min_adjustment_factor: GOVERNANCE.MIN_ADJUSTMENT_FACTOR,
+          max_confidence_penalty: GOVERNANCE.MAX_CONFIDENCE_PENALTY,
+          priority: 90,
+          conflict_group: deriveConflictGroup(`${bucket.key}_${fc.field}_suppress`, "suppress_field", fc.field),
+          governance_status: gov.status,
+          governance_notes: gov.notes,
+          last_validation_support_at: latestValidationDate,
+          staleness_days: GOVERNANCE.DEFAULT_STALENESS_DAYS,
+          effective_from: now,
+          expires_at: expiresAt,
         });
       }
     }
@@ -190,12 +284,17 @@ function deriveHeuristics(bucket: SegmentBucket): {
   const formMismatches = vals.filter(v => v.roof_form_match === false).length;
   const formMatchTotal = vals.filter(v => v.roof_form_match != null).length;
   if (formMatchTotal >= 2 && formMismatches / formMatchTotal > 0.5) {
+    let factor = 0.5;
+    factor = clampConfidencePenalty(factor);
+    const shouldAct = formMatchTotal >= GOVERNANCE.MIN_EVIDENCE_THRESHOLD;
+    const gov = computeGovernanceStatus(formMatchTotal, shouldAct, latestValidationDate);
+
     heuristics.push({
       heuristic_key: `${bucket.key}_form_confidence_reduction`,
       heuristic_type: "adjustment",
       action_type: "adjust_confidence",
       adjustment_field: "roof_form_confidence",
-      adjustment_factor: 0.5,
+      adjustment_factor: factor,
       adjustment_absolute: null,
       suppress_field: null,
       suppress_below_confidence: null,
@@ -204,19 +303,35 @@ function deriveHeuristics(bucket: SegmentBucket): {
       median_pct_delta: 0,
       failure_rate: Math.round((formMismatches / formMatchTotal) * 100) / 100,
       common_failures: ["roof_form_mismatch", ...topFailures],
-      evidence_summary: `Roof form classification is wrong ${Math.round((formMismatches / formMatchTotal) * 100)}% of the time for ${bucket.key} (${formMismatches}/${formMatchTotal}). Halving roof_form_confidence.`,
-      should_activate: formMatchTotal >= 3,
+      evidence_summary: `Roof form classification is wrong ${Math.round((formMismatches / formMatchTotal) * 100)}% of the time for ${bucket.key} (${formMismatches}/${formMatchTotal}). Confidence penalty: ×${factor}${factor === GOVERNANCE.MAX_CONFIDENCE_PENALTY ? " (governance floor)" : ""}.`,
+      should_activate: shouldAct,
+      min_sample_size: GOVERNANCE.MIN_EVIDENCE_THRESHOLD,
+      max_adjustment_factor: GOVERNANCE.MAX_ADJUSTMENT_FACTOR,
+      min_adjustment_factor: GOVERNANCE.MIN_ADJUSTMENT_FACTOR,
+      max_confidence_penalty: GOVERNANCE.MAX_CONFIDENCE_PENALTY,
+      priority: 80,
+      conflict_group: deriveConflictGroup(`${bucket.key}_form_confidence_reduction`, "adjust_confidence", "roof_form_confidence"),
+      governance_status: gov.status,
+      governance_notes: gov.notes,
+      last_validation_support_at: latestValidationDate,
+      staleness_days: GOVERNANCE.DEFAULT_STALENESS_DAYS,
+      effective_from: now,
+      expires_at: expiresAt,
     });
   }
 
   // Overall confidence adjustment if failure rate is high
-  if (failureRate > 0.4 && n >= 3) {
+  if (failureRate > 0.4 && n >= GOVERNANCE.MIN_EVIDENCE_THRESHOLD) {
+    let factor = Math.max(0.5, 1 - failureRate);
+    factor = clampConfidencePenalty(factor);
+    const gov = computeGovernanceStatus(n, true, latestValidationDate);
+
     heuristics.push({
       heuristic_key: `${bucket.key}_overall_confidence_penalty`,
       heuristic_type: "adjustment",
       action_type: "adjust_confidence",
       adjustment_field: "confidence_score",
-      adjustment_factor: Math.max(0.5, 1 - failureRate),
+      adjustment_factor: factor,
       adjustment_absolute: null,
       suppress_field: null,
       suppress_below_confidence: null,
@@ -225,8 +340,20 @@ function deriveHeuristics(bucket: SegmentBucket): {
       median_pct_delta: 0,
       failure_rate: Math.round(failureRate * 100) / 100,
       common_failures: topFailures,
-      evidence_summary: `${Math.round(failureRate * 100)}% of validations fail for ${bucket.key} (n=${n}). Applying ${Math.round((1 - Math.max(0.5, 1 - failureRate)) * 100)}% confidence penalty.`,
+      evidence_summary: `${Math.round(failureRate * 100)}% of validations fail for ${bucket.key} (n=${n}). Confidence penalty: ×${factor}${factor === GOVERNANCE.MAX_CONFIDENCE_PENALTY ? " (governance floor)" : ""}.`,
       should_activate: true,
+      min_sample_size: GOVERNANCE.MIN_EVIDENCE_THRESHOLD,
+      max_adjustment_factor: GOVERNANCE.MAX_ADJUSTMENT_FACTOR,
+      min_adjustment_factor: GOVERNANCE.MIN_ADJUSTMENT_FACTOR,
+      max_confidence_penalty: GOVERNANCE.MAX_CONFIDENCE_PENALTY,
+      priority: 70,
+      conflict_group: deriveConflictGroup(`${bucket.key}_overall_confidence_penalty`, "adjust_confidence", "confidence_score"),
+      governance_status: gov.status,
+      governance_notes: gov.notes,
+      last_validation_support_at: latestValidationDate,
+      staleness_days: GOVERNANCE.DEFAULT_STALENESS_DAYS,
+      effective_from: now,
+      expires_at: expiresAt,
     });
   }
 
@@ -272,7 +399,6 @@ Deno.serve(async (req) => {
     const action = body.action || "recompute";
 
     if (action === "recompute") {
-      // Fetch all validations
       const { data: validations, error: vErr } = await supabase
         .from("claim_roof_validations")
         .select("*")
@@ -286,7 +412,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Fetch corresponding measurements for segmentation
       const estimateIds = [...new Set(validations.map((v: any) => v.estimate_id).filter(Boolean))];
       const { data: measurements } = await supabase
         .from("claim_roof_measurements")
@@ -295,7 +420,6 @@ Deno.serve(async (req) => {
 
       const measMap = new Map((measurements || []).map((m: any) => [m.id, m]));
 
-      // Build segment buckets
       const buckets = new Map<string, SegmentBucket>();
 
       for (const v of validations as any[]) {
@@ -304,63 +428,31 @@ Deno.serve(async (req) => {
         const geoSource = meas?.imagery_source || "unknown";
         const qBand = qualityBand(v.darwin_geometry_quality_score ?? meas?.geometry_quality_score);
         const arBand = aspectRatioBand(meas?.aspect_ratio);
-        const cBand = confidenceBand(v.darwin_confidence_score ?? meas?.confidence_score);
 
-        // Primary bucket: roof_form + quality_band
         const primaryKey = `${roofForm}_q${qBand}`;
         if (!buckets.has(primaryKey)) {
-          buckets.set(primaryKey, {
-            key: primaryKey,
-            roof_form: roofForm,
-            geometry_source: null,
-            quality_band: qBand,
-            aspect_ratio_band: "all",
-            confidence_band: "all",
-            validations: [],
-            measurements: [],
-          });
+          buckets.set(primaryKey, { key: primaryKey, roof_form: roofForm, geometry_source: null, quality_band: qBand, aspect_ratio_band: "all", confidence_band: "all", validations: [], measurements: [] });
         }
         buckets.get(primaryKey)!.validations.push(v);
         if (meas) buckets.get(primaryKey)!.measurements.push(meas);
 
-        // Secondary bucket: roof_form + aspect_ratio_band
         const arKey = `${roofForm}_ar${arBand}`;
         if (!buckets.has(arKey)) {
-          buckets.set(arKey, {
-            key: arKey,
-            roof_form: roofForm,
-            geometry_source: null,
-            quality_band: "all",
-            aspect_ratio_band: arBand,
-            confidence_band: "all",
-            validations: [],
-            measurements: [],
-          });
+          buckets.set(arKey, { key: arKey, roof_form: roofForm, geometry_source: null, quality_band: "all", aspect_ratio_band: arBand, confidence_band: "all", validations: [], measurements: [] });
         }
         buckets.get(arKey)!.validations.push(v);
         if (meas) buckets.get(arKey)!.measurements.push(meas);
 
-        // Tertiary bucket: source-specific
         if (geoSource && geoSource !== "unknown") {
           const srcKey = `src_${geoSource.replace(/\s+/g, "_").toLowerCase()}`;
           if (!buckets.has(srcKey)) {
-            buckets.set(srcKey, {
-              key: srcKey,
-              roof_form: null,
-              geometry_source: geoSource,
-              quality_band: "all",
-              aspect_ratio_band: "all",
-              confidence_band: "all",
-              validations: [],
-              measurements: [],
-            });
+            buckets.set(srcKey, { key: srcKey, roof_form: null, geometry_source: geoSource, quality_band: "all", aspect_ratio_band: "all", confidence_band: "all", validations: [], measurements: [] });
           }
           buckets.get(srcKey)!.validations.push(v);
           if (meas) buckets.get(srcKey)!.measurements.push(meas);
         }
       }
 
-      // Derive heuristics from each bucket
       const allHeuristics: any[] = [];
       for (const bucket of buckets.values()) {
         const derived = deriveHeuristics(bucket);
@@ -375,14 +467,51 @@ Deno.serve(async (req) => {
             segment_aspect_ratio_max: bucket.aspect_ratio_band === "compact" ? 1.29 : bucket.aspect_ratio_band === "rectangular" ? 1.99 : bucket.aspect_ratio_band === "elongated" ? 10 : null,
             sample_size: bucket.validations.length,
             validation_ids: bucket.validations.map(v => v.id),
-            is_active: h.should_activate,
+            is_active: h.should_activate && h.governance_status === "active",
             last_computed_at: new Date().toISOString(),
             created_by: user.id,
           });
         }
       }
 
-      // Upsert heuristics (don't overwrite manually_overridden ones)
+      // Mark expired/stale existing heuristics
+      const now = new Date();
+      const { data: existingHeuristics } = await supabase
+        .from("darwin_roof_tuning_heuristics")
+        .select("id, heuristic_key, expires_at, last_validation_support_at, staleness_days, is_active, manually_overridden");
+
+      let expiredCount = 0;
+      let staleCount = 0;
+      for (const existing of (existingHeuristics || [])) {
+        if (existing.manually_overridden) continue;
+        
+        // Check expiration
+        if (existing.expires_at && new Date(existing.expires_at) < now) {
+          await supabase.from("darwin_roof_tuning_heuristics").update({
+            is_active: false,
+            governance_status: "expired",
+            governance_notes: `Expired on ${existing.expires_at}. Recompute to renew.`,
+          }).eq("id", existing.id);
+          expiredCount++;
+          continue;
+        }
+
+        // Check staleness
+        if (existing.last_validation_support_at && existing.staleness_days) {
+          const lastSupport = new Date(existing.last_validation_support_at);
+          const daysSince = (now.getTime() - lastSupport.getTime()) / 86400000;
+          if (daysSince > existing.staleness_days && existing.is_active) {
+            await supabase.from("darwin_roof_tuning_heuristics").update({
+              is_active: false,
+              governance_status: "stale",
+              governance_notes: `No validation support in ${Math.round(daysSince)} days (threshold: ${existing.staleness_days}). Auto-deactivated.`,
+            }).eq("id", existing.id);
+            staleCount++;
+          }
+        }
+      }
+
+      // Upsert new heuristics
       let upserted = 0;
       let skipped = 0;
       for (const h of allHeuristics) {
@@ -397,7 +526,7 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        const { heuristic_key, should_activate, ...rest } = h;
+        const { heuristic_key, should_activate, validation_ids, ...rest } = h;
         await supabase
           .from("darwin_roof_tuning_heuristics")
           .upsert({
@@ -409,7 +538,6 @@ Deno.serve(async (req) => {
         upserted++;
       }
 
-      // Audit log
       await supabase.from("audit_logs").insert({
         user_id: user.id,
         action: "create",
@@ -421,6 +549,9 @@ Deno.serve(async (req) => {
           heuristics_derived: allHeuristics.length,
           heuristics_upserted: upserted,
           heuristics_skipped_manual: skipped,
+          heuristics_expired: expiredCount,
+          heuristics_stale: staleCount,
+          governance_applied: true,
         },
       });
 
@@ -431,12 +562,13 @@ Deno.serve(async (req) => {
         heuristics_derived: allHeuristics.length,
         heuristics_upserted: upserted,
         heuristics_skipped_manual: skipped,
+        heuristics_expired: expiredCount,
+        heuristics_stale: staleCount,
       }), {
         status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
 
     } else if (action === "toggle") {
-      // Toggle active state of a heuristic
       const { heuristic_id, is_active } = body;
       if (!heuristic_id) throw new Error("heuristic_id required");
 
@@ -452,6 +584,8 @@ Deno.serve(async (req) => {
         .update({
           is_active: !!is_active,
           manually_overridden: true,
+          governance_status: is_active ? "active" : "conflict_suppressed",
+          governance_notes: `Manually ${is_active ? "activated" : "deactivated"} by admin.`,
           updated_at: new Date().toISOString(),
         })
         .eq("id", heuristic_id);
