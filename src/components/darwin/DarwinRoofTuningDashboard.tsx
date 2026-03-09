@@ -231,10 +231,14 @@ export const DarwinRoofTuningDashboard = () => {
 
         <CardContent className="space-y-4">
           {/* Summary Stats */}
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-5 gap-3">
             <div className="rounded-lg border p-3 text-center">
               <div className="text-2xl font-bold tabular-nums text-primary">{totalActive}</div>
               <div className="text-xs text-muted-foreground">Active Rules</div>
+            </div>
+            <div className="rounded-lg border p-3 text-center">
+              <div className="text-2xl font-bold tabular-nums text-purple-500">{totalShadow}</div>
+              <div className="text-xs text-muted-foreground">Shadow Mode</div>
             </div>
             <div className="rounded-lg border p-3 text-center">
               <div className="text-2xl font-bold tabular-nums">{totalAdjustments}</div>
