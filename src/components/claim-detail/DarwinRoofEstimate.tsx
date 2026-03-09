@@ -155,6 +155,7 @@ const AUTHORITY_LABELS: Record<FieldAuthority, { label: string; icon: string; co
   geometry_authoritative: { label: "Geometry Auth.", icon: "📐", color: "text-green-700" },
   ai_provisional: { label: "Provisional", icon: "⏳", color: "text-amber-600" },
   user_authoritative: { label: "User Auth.", icon: "✓", color: "text-blue-700" },
+  unknown_insufficient_geometry: { label: "Unknown", icon: "⊘", color: "text-red-500" },
 };
 
 const ROOF_FORM_ICONS: Record<RoofForm, string> = {
