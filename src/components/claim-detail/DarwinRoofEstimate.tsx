@@ -14,6 +14,7 @@ import {
   Lock, Unlock, Pencil, Save, X, Shield, Eye, Layers, Home
 } from "lucide-react";
 import { logAudit } from "@/hooks/useAuditLog";
+import { DarwinRoofValidation } from "./DarwinRoofValidation";
 
 type DerivationSource = "geometry" | "ai_estimated" | "user_override";
 type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative";
@@ -989,6 +990,9 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                 {estimate.address} ({estimate.geocoded_lat.toFixed(5)}, {estimate.geocoded_lng.toFixed(5)})
               </div>
             )}
+
+            {/* Benchmarking & Validation */}
+            <DarwinRoofValidation claimId={claimId} estimate={estimate} />
           </div>
         )}
       </CardContent>
