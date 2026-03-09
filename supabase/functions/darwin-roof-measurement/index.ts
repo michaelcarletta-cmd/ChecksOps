@@ -1923,26 +1923,50 @@ function deriveRoofEstimate(
   let pitchBand: PitchBand = "unknown";
   let pitchType: PitchType = "band";
   let slopeFactor = PITCH_BAND_META.unknown.slope_factor_mid;
+  let pitchIsDefaultFallback = false;
   if (visionResult && !visionResult.pitch_band.abstain && visionResult.pitch_band.confidence >= 20) {
     pitchBand = visionResult.pitch_band.value;
     slopeFactor = PITCH_BAND_META[pitchBand].slope_factor_mid;
+  } else if (hasGeometry) {
+    // Fallback: use moderate pitch when vision is unavailable/abstained
+    // This ensures area and linear calculations proceed rather than returning zero
+    pitchBand = "moderate";
+    slopeFactor = PITCH_BAND_META.moderate.slope_factor_mid;
+    pitchIsDefaultFallback = true;
   }
 
   // ── Area ──
+  // Always compute area when geometry exists — pitch fallback ensures non-zero
   let roofArea = 0, squares = 0;
-  if (hasGeometry && pitchBand !== "unknown") {
+  if (hasGeometry) {
     roofArea = roundTo(footprintArea * slopeFactor, 0);
     squares = roundTo(roofArea / 100, 1);
   }
 
   // ── Resolve roof form ──
+  // Start with geometry inference — use it even at low confidence as a baseline
   let resolvedRoofForm: RoofForm = roofFormInference?.inferred_roof_form ?? "unknown";
+
+  // Vision can upgrade form if it has higher confidence than geometry
   if (visionResult && !visionResult.roof_form.abstain && visionResult.roof_form.confidence > 30) {
     const vf = visionResult.roof_form.value;
     if (vf === "cross_hip" || vf === "gambrel" || vf === "mansard") resolvedRoofForm = "complex";
     else if (["gable", "hip", "cross_gable", "complex"].includes(vf)) resolvedRoofForm = vf as RoofForm;
+    // Geometry wins if its confidence is higher
     if (roofFormInference && roofFormInference.roof_form_confidence > visionResult.roof_form.confidence) {
       resolvedRoofForm = roofFormInference.inferred_roof_form;
+    }
+  }
+
+  // Last resort: if form is still "unknown" but we have geometry with 4 sides,
+  // default to gable (most common residential form) with very low confidence
+  if (resolvedRoofForm === "unknown" && hasGeometry && selectedCandidate) {
+    const vertexCount = selectedCandidate.polygon.length;
+    const effectiveVertices = (selectedCandidate.polygon[vertexCount - 1][0] === selectedCandidate.polygon[0][0]) ? vertexCount - 1 : vertexCount;
+    if (effectiveVertices <= 6) {
+      const ar = roofFormInference?.aspect_ratio ?? 1;
+      resolvedRoofForm = ar >= 1.3 ? "gable" : "hip";
+      console.log(`[Darwin Roof] Form fallback: ${resolvedRoofForm} (AR=${ar}, vertices=${effectiveVertices})`);
     }
   }
 
