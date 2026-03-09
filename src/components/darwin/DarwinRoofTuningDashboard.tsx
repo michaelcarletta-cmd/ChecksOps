@@ -54,6 +54,12 @@ interface Heuristic {
   conflict_group: string | null;
   governance_status: string | null;
   governance_notes: string | null;
+  // Shadow mode
+  shadow_mode: boolean;
+  shadow_mode_hits: number;
+  shadow_mode_min_hits: number;
+  shadow_mode_predicted_impacts: any[] | null;
+  shadow_mode_promoted_at: string | null;
 }
 
 const TYPE_ICONS: Record<string, typeof Settings2> = {
@@ -74,6 +80,8 @@ const GOV_STATUS_CONFIG: Record<string, { icon: typeof Shield; color: string; la
   insufficient_evidence: { icon: ShieldAlert, color: "text-orange-500", label: "Low Evidence" },
   capped: { icon: Shield, color: "text-blue-500", label: "Capped" },
   conflict_suppressed: { icon: ShieldX, color: "text-muted-foreground", label: "Conflict Suppressed" },
+  shadow_mode: { icon: Eye, color: "text-purple-500", label: "Shadow" },
+  estimate_cap: { icon: Shield, color: "text-amber-500", label: "Estimate Cap" },
 };
 
 const qualityBandLabel = (min: number | null, max: number | null): string => {
@@ -138,6 +146,8 @@ export const DarwinRoofTuningDashboard = () => {
         `${data.heuristics_derived} heuristics from ${data.total_validations} validations`,
         data.heuristics_expired > 0 ? `${data.heuristics_expired} expired` : null,
         data.heuristics_stale > 0 ? `${data.heuristics_stale} stale` : null,
+        data.heuristics_shadow > 0 ? `${data.heuristics_shadow} shadow` : null,
+        data.heuristics_promoted > 0 ? `${data.heuristics_promoted} promoted` : null,
       ].filter(Boolean).join(", ");
       toast.success(`Tuning recomputed: ${parts}`);
       fetchHeuristics();
@@ -161,11 +171,13 @@ export const DarwinRoofTuningDashboard = () => {
     }
   };
 
-  const activeHeuristics = heuristics.filter(h => h.is_active);
-  const inactiveHeuristics = heuristics.filter(h => !h.is_active);
-  const displayed = showInactive ? heuristics : activeHeuristics;
+  const activeHeuristics = heuristics.filter(h => h.is_active && !h.shadow_mode);
+  const shadowHeuristics = heuristics.filter(h => h.shadow_mode);
+  const inactiveHeuristics = heuristics.filter(h => !h.is_active && !h.shadow_mode);
+  const displayed = showInactive ? heuristics : [...activeHeuristics, ...shadowHeuristics];
 
   const totalActive = activeHeuristics.length;
+  const totalShadow = shadowHeuristics.length;
   const totalAdjustments = activeHeuristics.filter(h => h.action_type.startsWith("adjust")).length;
   const totalSuppressions = activeHeuristics.filter(h => h.action_type === "suppress_field").length;
   const avgSampleSize = heuristics.length > 0
@@ -198,7 +210,7 @@ export const DarwinRoofTuningDashboard = () => {
               <Settings2 className="h-5 w-5 text-primary" />
               <CardTitle className="text-lg">Darwin Roof Tuning</CardTitle>
               <Badge variant="outline" className="text-[10px]">
-                {totalActive} active / {heuristics.length} total
+                {totalActive} active / {totalShadow} shadow / {heuristics.length} total
               </Badge>
             </div>
             <div className="flex items-center gap-2">
@@ -219,10 +231,14 @@ export const DarwinRoofTuningDashboard = () => {
 
         <CardContent className="space-y-4">
           {/* Summary Stats */}
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-5 gap-3">
             <div className="rounded-lg border p-3 text-center">
               <div className="text-2xl font-bold tabular-nums text-primary">{totalActive}</div>
               <div className="text-xs text-muted-foreground">Active Rules</div>
+            </div>
+            <div className="rounded-lg border p-3 text-center">
+              <div className="text-2xl font-bold tabular-nums text-purple-500">{totalShadow}</div>
+              <div className="text-xs text-muted-foreground">Shadow Mode</div>
             </div>
             <div className="rounded-lg border p-3 text-center">
               <div className="text-2xl font-bold tabular-nums">{totalAdjustments}</div>
@@ -279,17 +295,25 @@ export const DarwinRoofTuningDashboard = () => {
               <div
                 key={h.id}
                 className={`rounded-lg border p-3 space-y-2 transition-colors ${
+                  h.shadow_mode ? "border-purple-500/30 bg-purple-500/5" :
                   h.is_active ? "border-primary/30 bg-primary/5" : "opacity-60"
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <Icon className={`h-4 w-4 shrink-0 ${h.is_active ? "text-primary" : "text-muted-foreground"}`} />
+                    <Icon className={`h-4 w-4 shrink-0 ${h.shadow_mode ? "text-purple-500" : h.is_active ? "text-primary" : "text-muted-foreground"}`} />
                     <span className="text-sm font-medium truncate">{h.heuristic_key}</span>
                     <Badge variant="outline" className="text-[9px] shrink-0">
                       {ACTION_LABELS[h.action_type] || h.action_type}
                     </Badge>
-                    <GovernanceStatusBadge status={h.governance_status} />
+                    {h.shadow_mode ? (
+                      <Badge variant="outline" className="text-[9px] shrink-0 text-purple-500 border-purple-500/50 gap-0.5">
+                        <Eye className="h-2.5 w-2.5" />
+                        Shadow {h.shadow_mode_hits}/{h.shadow_mode_min_hits}
+                      </Badge>
+                    ) : (
+                      <GovernanceStatusBadge status={h.governance_status} />
+                    )}
                     {h.manually_overridden && (
                       <Badge variant="secondary" className="text-[9px] shrink-0">Manual</Badge>
                     )}
@@ -408,6 +432,47 @@ export const DarwinRoofTuningDashboard = () => {
                         <div className="text-[10px] text-muted-foreground mt-1 italic">{h.governance_notes}</div>
                       )}
                     </div>
+
+                    {/* Shadow mode details */}
+                    {h.shadow_mode && (
+                      <div className="rounded bg-purple-500/10 p-2 space-y-1">
+                        <div className="flex items-center gap-1 text-xs font-medium text-purple-600">
+                          <Eye className="h-3 w-3" />
+                          Shadow Mode — Observing Only
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <span className="text-muted-foreground">Hits:</span>{" "}
+                            <span className="font-medium tabular-nums">{h.shadow_mode_hits} / {h.shadow_mode_min_hits} needed</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Progress:</span>{" "}
+                            <span className="font-medium tabular-nums">{Math.round((h.shadow_mode_hits / h.shadow_mode_min_hits) * 100)}%</span>
+                          </div>
+                          {h.shadow_mode_promoted_at && (
+                            <div>
+                              <span className="text-muted-foreground">Promoted:</span>{" "}
+                              <span className="font-medium">{new Date(h.shadow_mode_promoted_at).toLocaleDateString()}</span>
+                            </div>
+                          )}
+                        </div>
+                        {h.shadow_mode_predicted_impacts && Array.isArray(h.shadow_mode_predicted_impacts) && h.shadow_mode_predicted_impacts.length > 0 && (
+                          <div className="mt-1">
+                            <span className="text-[10px] text-muted-foreground">Recent predicted impacts:</span>
+                            <div className="flex flex-wrap gap-1 mt-0.5">
+                              {h.shadow_mode_predicted_impacts.slice(-5).map((impact: any, i: number) => (
+                                <Badge key={i} variant="outline" className="text-[9px] font-mono">
+                                  {impact.field}: {impact.before}→{impact.after}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <div className="text-[10px] text-muted-foreground italic mt-1">
+                          This heuristic is being observed but does not modify estimates. It will auto-promote to active after {h.shadow_mode_min_hits} estimate matches.
+                        </div>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-4 gap-3 text-xs">
                       <div>

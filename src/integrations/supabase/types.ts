@@ -5843,6 +5843,11 @@ export type Database = {
           segment_quality_score_min: number | null
           segment_region: string | null
           segment_roof_form: string | null
+          shadow_mode: boolean
+          shadow_mode_hits: number
+          shadow_mode_min_hits: number
+          shadow_mode_predicted_impacts: Json | null
+          shadow_mode_promoted_at: string | null
           staleness_days: number
           suppress_below_confidence: number | null
           suppress_field: string | null
@@ -5891,6 +5896,11 @@ export type Database = {
           segment_quality_score_min?: number | null
           segment_region?: string | null
           segment_roof_form?: string | null
+          shadow_mode?: boolean
+          shadow_mode_hits?: number
+          shadow_mode_min_hits?: number
+          shadow_mode_predicted_impacts?: Json | null
+          shadow_mode_promoted_at?: string | null
           staleness_days?: number
           suppress_below_confidence?: number | null
           suppress_field?: string | null
@@ -5939,6 +5949,11 @@ export type Database = {
           segment_quality_score_min?: number | null
           segment_region?: string | null
           segment_roof_form?: string | null
+          shadow_mode?: boolean
+          shadow_mode_hits?: number
+          shadow_mode_min_hits?: number
+          shadow_mode_predicted_impacts?: Json | null
+          shadow_mode_promoted_at?: string | null
           staleness_days?: number
           suppress_below_confidence?: number | null
           suppress_field?: string | null
