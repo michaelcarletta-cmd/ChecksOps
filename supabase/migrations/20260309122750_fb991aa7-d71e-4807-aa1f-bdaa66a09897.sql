@@ -1,0 +1,2 @@
+ALTER TABLE public.check_intake_items DROP CONSTRAINT check_intake_items_deposit_recommendation_check;
+ALTER TABLE public.check_intake_items ADD CONSTRAINT check_intake_items_deposit_recommendation_check CHECK (deposit_recommendation = ANY (ARRAY['ready_for_deposit'::text, 'endorsements_pending'::text, 'manual_review_required'::text, 'branch_deposit_recommended'::text, 'request_reissue'::text, 'loss_draft_required'::text]));
