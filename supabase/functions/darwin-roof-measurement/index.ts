@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 type DerivationSource = "geometry" | "ai_estimated";
+type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative";
 
 interface RoofEstimateResult {
   footprint_area_sqft: number;
@@ -27,6 +28,11 @@ interface RoofEstimateResult {
   data_sources: string[];
   field_sources: Record<string, DerivationSource>;
   field_confidence: Record<string, number>;
+  field_authority: Record<string, FieldAuthority>;
+  footprint_polygon: Record<string, unknown> | null;
+  footprint_perimeter_ft: number | null;
+  imagery_source: string | null;
+  imagery_date: string | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -56,11 +62,46 @@ function sanitise(raw: Record<string, any>): Record<string, any> {
     const v = Number(out[key]);
     out[key] = isNaN(v) ? 0 : roundTo(clamp(v, min, max), decimals);
   }
-  // Squares must be consistent with roof area
   if (out.estimated_roof_area_sqft > 0) {
     out.squares = roundTo(out.estimated_roof_area_sqft / 100, 1);
   }
   return out;
+}
+
+// ── Geometry helpers ─────────────────────────────────────────────────
+
+/** Calculate area of polygon in sqft from [lng,lat] ring using Shoelace + geodesic approximation */
+function polygonAreaSqft(ring: number[][]): number {
+  if (ring.length < 3) return 0;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const R = 20902231; // Earth radius in feet
+  let area = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const j = (i + 1) % ring.length;
+    const [lng1, lat1] = ring[i];
+    const [lng2, lat2] = ring[j];
+    area += toRad(lng2 - lng1) * (2 + Math.sin(toRad(lat1)) + Math.sin(toRad(lat2)));
+  }
+  area = Math.abs((area * R * R) / 2);
+  return roundTo(area, 0);
+}
+
+/** Calculate perimeter of polygon in feet from [lng,lat] ring using Haversine */
+function polygonPerimeterFt(ring: number[][]): number {
+  if (ring.length < 2) return 0;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const R = 20902231;
+  let total = 0;
+  for (let i = 0; i < ring.length; i++) {
+    const j = (i + 1) % ring.length;
+    const [lng1, lat1] = ring[i];
+    const [lng2, lat2] = ring[j];
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    total += 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+  return roundTo(total, 0);
 }
 
 // ── External data fetchers ───────────────────────────────────────────
@@ -108,6 +149,123 @@ async function getElevation(lat: number, lng: number): Promise<number | null> {
   } catch { return null; }
 }
 
+// ── Phase 2A: Aerial footprint extraction ────────────────────────────
+
+interface FootprintResult {
+  polygon: number[][];  // [lng, lat] ring
+  areaSqft: number;
+  perimeterFt: number;
+  source: string;
+  imageryDate: string | null;
+  geojson: Record<string, unknown>;
+}
+
+/**
+ * Attempt to extract a building footprint from Microsoft Building Footprints
+ * (open dataset) or OpenStreetMap building outlines.
+ */
+async function extractBuildingFootprint(lat: number, lng: number): Promise<FootprintResult | null> {
+  // Strategy 1: Microsoft Building Footprints via Overture/PMTiles proxy
+  // Strategy 2: OpenStreetMap Overpass API for building outlines
+  const footprint = await fetchOSMBuildingFootprint(lat, lng);
+  if (footprint) return footprint;
+
+  // Strategy 3: NJGIN building footprint layer
+  const njFootprint = await fetchNJBuildingFootprint(lat, lng);
+  if (njFootprint) return njFootprint;
+
+  return null;
+}
+
+async function fetchOSMBuildingFootprint(lat: number, lng: number): Promise<FootprintResult | null> {
+  try {
+    const radius = 0.0003; // ~30m bounding box
+    const bbox = `${lat - radius},${lng - radius},${lat + radius},${lng + radius}`;
+    const query = `[out:json][timeout:10];way["building"](${bbox});out body geom;`;
+    const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+
+    const buildings = data.elements?.filter((e: any) => e.type === "way" && e.geometry?.length > 2);
+    if (!buildings || buildings.length === 0) return null;
+
+    // Pick the building closest to the target point
+    let best = buildings[0];
+    let bestDist = Infinity;
+    for (const b of buildings) {
+      const centLat = b.geometry.reduce((s: number, g: any) => s + g.lat, 0) / b.geometry.length;
+      const centLng = b.geometry.reduce((s: number, g: any) => s + g.lon, 0) / b.geometry.length;
+      const d = Math.hypot(centLat - lat, centLng - lng);
+      if (d < bestDist) { bestDist = d; best = b; }
+    }
+
+    const ring: number[][] = best.geometry.map((g: any) => [g.lon, g.lat]);
+    // Close the ring if needed
+    if (ring.length > 0 && (ring[0][0] !== ring[ring.length - 1][0] || ring[0][1] !== ring[ring.length - 1][1])) {
+      ring.push([...ring[0]]);
+    }
+
+    const areaSqft = polygonAreaSqft(ring);
+    const perimeterFt = polygonPerimeterFt(ring);
+
+    if (areaSqft < 100 || areaSqft > 50000) return null; // sanity check
+
+    const geojson = {
+      type: "Feature",
+      properties: { source: "OpenStreetMap", osm_id: best.id },
+      geometry: { type: "Polygon", coordinates: [ring] },
+    };
+
+    return {
+      polygon: ring,
+      areaSqft,
+      perimeterFt,
+      source: "OpenStreetMap Building Footprints",
+      imageryDate: null,
+      geojson,
+    };
+  } catch { return null; }
+}
+
+async function fetchNJBuildingFootprint(lat: number, lng: number): Promise<FootprintResult | null> {
+  try {
+    const url = `https://services2.arcgis.com/XVOqAjTOJ5P6ngMu/arcgis/rest/services/Building_Footprints_of_NJ/FeatureServer/0/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.features?.length) return null;
+
+    const feat = data.features[0];
+    const rings = feat.geometry?.rings;
+    if (!rings || rings.length === 0) return null;
+
+    const ring: number[][] = rings[0]; // outer ring [lng, lat]
+    const areaSqft = polygonAreaSqft(ring);
+    const perimeterFt = polygonPerimeterFt(ring);
+
+    if (areaSqft < 100 || areaSqft > 50000) return null;
+
+    const geojson = {
+      type: "Feature",
+      properties: {
+        source: "NJGIN Building Footprints",
+        ...(feat.attributes || {}),
+      },
+      geometry: { type: "Polygon", coordinates: [ring] },
+    };
+
+    return {
+      polygon: ring,
+      areaSqft,
+      perimeterFt,
+      source: "NJGIN Building Footprints",
+      imageryDate: feat.attributes?.PHOTO_DATE || feat.attributes?.SOURCE_DATE || null,
+      geojson,
+    };
+  } catch { return null; }
+}
+
 // ── AI estimation ────────────────────────────────────────────────────
 
 async function estimateRoofWithAI(
@@ -116,10 +274,15 @@ async function estimateRoofWithAI(
   lng: number,
   parcel: { parcelArea?: number; landUse?: string; yearBuilt?: number; source: string } | null,
   elevation: number | null,
+  footprint: FootprintResult | null,
 ): Promise<RoofEstimateResult> {
   const LOVABLE_AI_URL = Deno.env.get("LOVABLE_AI_BASE_URL");
   const LOVABLE_AI_KEY = Deno.env.get("LOVABLE_AI_API_KEY");
   if (!LOVABLE_AI_URL || !LOVABLE_AI_KEY) throw new Error("AI service not configured");
+
+  const footprintContext = footprint
+    ? `\nBuilding Footprint (from ${footprint.source}):\n- Footprint area: ${footprint.areaSqft} sqft (GEOMETRY-DERIVED — use this, do NOT re-estimate)\n- Perimeter: ${footprint.perimeterFt} ft\n- Imagery date: ${footprint.imageryDate || "unknown"}\nDo NOT re-estimate footprint_area_sqft — use ${footprint.areaSqft} exactly.`
+    : "\nNo building footprint geometry available.";
 
   const systemPrompt = `You are a roof ESTIMATE AI for insurance claims adjusting. You produce PRELIMINARY estimates only — not measurements. Be conservative and honest about uncertainty. Return ONLY valid JSON.
 
@@ -143,22 +306,21 @@ JSON schema:
 }
 
 Rules:
-- Footprint is typically 30-50% of lot area for residential
+- If a geometry-derived footprint area is provided, use it EXACTLY for footprint_area_sqft and mark field_sources.footprint_area_sqft = "geometry"
+- If footprint perimeter is provided, use it to derive eave_lf and rake_lf estimates (perimeter ≈ 2*(eave + rake) for simple gable)
+- Footprint is typically 30-50% of lot area for residential (only if no geometry footprint)
 - Standard residential pitches: 4/12-8/12
 - Slope factors: 4/12=1.054, 5/12=1.083, 6/12=1.118, 7/12=1.158, 8/12=1.202
 - Pre-1970 homes: simpler gable roofs. Newer: more hip/valley
-- confidence_score MUST be ≤ 50 (no imagery = low confidence)
-- field_confidence: give each field its own 0-100 confidence score. Fields derived from parcel geometry get higher scores (40-70). Pure AI guesses get lower scores (10-35). Be honest per field.
-- All linear measurements (ridge, hip, valley, eave, rake) are AI_ESTIMATED
-- footprint_area_sqft is "geometry" ONLY if parcel data provides building footprint; otherwise "ai_estimated"
-- estimated_roof_area_sqft, squares are always "ai_estimated" (derived from pitch assumption)
+- confidence_score MUST be ≤ 50 (no verified imagery = low confidence)
+- field_confidence: give each field its own 0-100 confidence score. Geometry-derived fields get higher scores (60-85). AI guesses get lower scores (10-35).
 - Clearly state this is a preliminary estimate, not a measurement`;
 
   const userPrompt = `Estimate roof for:
 Address: ${address}
 Coordinates: ${lat}, ${lng}
 Elevation: ${elevation ? `${elevation} ft` : "unknown"}
-Parcel: ${parcel ? JSON.stringify(parcel) : "unavailable"}
+Parcel: ${parcel ? JSON.stringify(parcel) : "unavailable"}${footprintContext}
 
 Return JSON only.`;
 
@@ -184,11 +346,17 @@ Return JSON only.`;
   if (!jsonMatch) throw new Error("AI returned non-JSON response");
 
   const parsed = JSON.parse(jsonMatch[0]);
+
+  // If we have geometry footprint, override AI's footprint value
+  if (footprint) {
+    parsed.footprint_area_sqft = footprint.areaSqft;
+  }
+
   const cleaned = sanitise(parsed);
 
-  // Build field_sources with defaults
+  // Build field_sources
   const defaultSources: Record<string, DerivationSource> = {
-    footprint_area_sqft: "ai_estimated",
+    footprint_area_sqft: footprint ? "geometry" : "ai_estimated",
     estimated_roof_area_sqft: "ai_estimated",
     squares: "ai_estimated",
     dominant_pitch: "ai_estimated",
@@ -203,22 +371,24 @@ Return JSON only.`;
     ...defaultSources,
     ...(parsed.field_sources || {}),
   };
-  // Override: if parcel data gave us lot area, footprint may be geometry-based
-  if (parcel?.parcelArea) {
+  // Enforce geometry source when footprint polygon exists
+  if (footprint) {
+    fieldSources.footprint_area_sqft = "geometry";
+  } else if (parcel?.parcelArea) {
     fieldSources.footprint_area_sqft = "geometry";
   }
 
-  // Build field_confidence with defaults
+  // Build field_confidence
   const defaultConfidence: Record<string, number> = {
-    footprint_area_sqft: parcel?.parcelArea ? 55 : 20,
-    estimated_roof_area_sqft: 15,
-    squares: 15,
+    footprint_area_sqft: footprint ? 75 : parcel?.parcelArea ? 55 : 20,
+    estimated_roof_area_sqft: footprint ? 40 : 15,
+    squares: footprint ? 40 : 15,
     dominant_pitch: 20,
     ridge_lf: 10,
     hip_lf: 10,
     valley_lf: 10,
-    eave_lf: 10,
-    rake_lf: 10,
+    eave_lf: footprint ? 50 : 10,
+    rake_lf: footprint ? 50 : 10,
     facet_count: 15,
   };
   const fieldConfidence: Record<string, number> = { ...defaultConfidence };
@@ -227,6 +397,20 @@ Return JSON only.`;
     const num = Number(v);
     if (!isNaN(num)) fieldConfidence[k] = Math.max(0, Math.min(100, Math.round(num)));
   }
+
+  // Build field_authority — separate from confidence
+  const fieldAuthority: Record<string, FieldAuthority> = {
+    footprint_area_sqft: footprint ? "geometry_authoritative" : "ai_provisional",
+    estimated_roof_area_sqft: "ai_provisional",
+    squares: "ai_provisional",
+    dominant_pitch: "ai_provisional",
+    ridge_lf: "ai_provisional",
+    hip_lf: "ai_provisional",
+    valley_lf: "ai_provisional",
+    eave_lf: "ai_provisional",
+    rake_lf: "ai_provisional",
+    facet_count: "ai_provisional",
+  };
 
   return {
     footprint_area_sqft: cleaned.footprint_area_sqft,
@@ -242,12 +426,23 @@ Return JSON only.`;
     confidence_score: cleaned.confidence_score,
     review_required: true,
     overlay_image_url: null,
-    raw_geojson: null,
+    raw_geojson: footprint?.geojson || null,
     ai_notes: (parsed.ai_notes ?? "Preliminary AI estimate. Field verification required.") +
-      "\n\n⚠️ This is a PRELIMINARY ESTIMATE, not a measurement. All values are AI-modeled from public parcel data and should not be used without manual confirmation.",
-    data_sources: parsed.data_sources ?? ["US Census Geocoder", "AI estimation"],
+      (footprint
+        ? `\n\n📐 Building footprint extracted from ${footprint.source} (${footprint.areaSqft} sqft, ${footprint.perimeterFt} ft perimeter). Footprint area is geometry-derived.`
+        : "") +
+      "\n\n⚠️ This is a PRELIMINARY ESTIMATE, not a measurement. All values are AI-modeled and should not be used without manual confirmation.",
+    data_sources: [
+      ...(parsed.data_sources ?? ["US Census Geocoder", "AI estimation"]),
+      ...(footprint ? [footprint.source] : []),
+    ],
     field_sources: fieldSources,
     field_confidence: fieldConfidence,
+    field_authority: fieldAuthority,
+    footprint_polygon: footprint ? { type: "Polygon", coordinates: [footprint.polygon] } : null,
+    footprint_perimeter_ft: footprint?.perimeterFt ?? null,
+    imagery_source: footprint?.source ?? null,
+    imagery_date: footprint?.imageryDate ?? null,
   };
 }
 
@@ -310,12 +505,14 @@ Deno.serve(async (req) => {
       );
     }
 
-    const [parcel, elevation] = await Promise.all([
+    // Phase 2A: attempt footprint extraction in parallel with parcel/elevation
+    const [parcel, elevation, footprint] = await Promise.all([
       fetchParcelContext(geo.lat, geo.lng),
       getElevation(geo.lat, geo.lng),
+      extractBuildingFootprint(geo.lat, geo.lng),
     ]);
 
-    const estimate = await estimateRoofWithAI(address, geo.lat, geo.lng, parcel, elevation);
+    const estimate = await estimateRoofWithAI(address, geo.lat, geo.lng, parcel, elevation, footprint);
 
     const { data: saved, error: saveErr } = await supabase
       .from("claim_roof_measurements")
@@ -338,11 +535,16 @@ Deno.serve(async (req) => {
         review_required: true,
         manually_confirmed: false,
         overlay_image_url: null,
-        raw_geojson: null,
+        raw_geojson: estimate.raw_geojson,
         ai_notes: estimate.ai_notes,
         data_sources: estimate.data_sources,
         field_sources: estimate.field_sources,
         field_confidence: estimate.field_confidence,
+        field_authority: estimate.field_authority,
+        footprint_polygon: estimate.footprint_polygon,
+        footprint_perimeter_ft: estimate.footprint_perimeter_ft,
+        imagery_source: estimate.imagery_source,
+        imagery_date: estimate.imagery_date,
         created_by: user.id,
       })
       .select()
@@ -362,6 +564,7 @@ Deno.serve(async (req) => {
         geocode: { lat: geo.lat, lng: geo.lng, matchedAddress: geo.matchedAddress },
         parcelContext: parcel,
         elevation,
+        footprintExtracted: !!footprint,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
