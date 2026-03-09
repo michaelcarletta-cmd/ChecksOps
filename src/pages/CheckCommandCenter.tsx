@@ -765,6 +765,30 @@ function CheckDetailPanel({
     },
   });
 
+  const canUndo = check && ['branch_deposit_required', 'approved_for_deposit', 'loss_draft_required', 'reissue_requested'].includes(check.status) && check.status !== 'deposited';
+
+  const handleUndoDecision = async () => {
+    if (!user?.id || !check) return;
+    setUndoing(true);
+    try {
+      const { data, error } = await supabase.rpc("submit_check_review_decision", {
+        p_check_id: checkId,
+        p_reviewer_id: user.id,
+        p_deposit_path: "revert_to_review",
+        p_reviewer_notes: `Reverted from ${check.status} back to review`,
+      });
+      if (error) throw error;
+      toast({ title: "Decision reverted", description: "Check returned to review queue." });
+      qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
+      onRefresh();
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setUndoing(false);
+    }
+  };
+
   if (!check) return null;
 
   const rec = check.deposit_recommendation
