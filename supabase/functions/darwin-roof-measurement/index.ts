@@ -1383,6 +1383,9 @@ Deno.serve(async (req) => {
         candidateCount: candidates.length,
         roofFormInferred: !!roofFormInference,
         tuningApplied: tuningApplied ? tuningApplied.length : 0,
+        explanationChain,
+        suppressedHeuristics,
+        netImpact,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
