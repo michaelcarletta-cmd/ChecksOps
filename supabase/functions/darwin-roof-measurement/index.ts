@@ -701,25 +701,46 @@ interface SatelliteAnalysis {
 async function fetchSatelliteImage(lat: number, lng: number): Promise<string | null> {
   try {
     // Use ArcGIS World Imagery (free, no API key)
-    const spread = 0.0004; // ~120ft view radius — tight on a single home
+    const spread = 0.0008; // ~250ft view radius — enough to capture full property
     const bbox = `${lng - spread},${lat - spread},${lng + spread},${lat + spread}`;
-    const url = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${bbox}&bboxSR=4326&size=800,800&format=png&f=image`;
+    const url = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${bbox}&bboxSR=4326&size=1024,1024&format=png&f=image`;
     
-    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
-    if (!res.ok) return null;
+    console.log(`[Darwin Roof] Satellite URL: ${url}`);
+    const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+    console.log(`[Darwin Roof] Satellite response: status=${res.status}, content-type=${res.headers.get('content-type')}`);
+    
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[Darwin Roof] Satellite fetch failed: ${res.status} - ${errText.substring(0, 200)}`);
+      return null;
+    }
+    
+    const contentType = res.headers.get('content-type') || '';
+    // ArcGIS may return JSON error instead of image
+    if (contentType.includes('json') || contentType.includes('html')) {
+      const errText = await res.text();
+      console.error(`[Darwin Roof] ArcGIS returned non-image: ${errText.substring(0, 300)}`);
+      return null;
+    }
     
     const arrayBuffer = await res.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
-    if (bytes.length < 1000) return null; // too small = likely error
+    console.log(`[Darwin Roof] Satellite image size: ${bytes.length} bytes`);
+    if (bytes.length < 500) {
+      console.warn(`[Darwin Roof] Image too small (${bytes.length} bytes), likely an error tile`);
+      return null;
+    }
     
     // Convert to base64
     let binary = "";
     for (let i = 0; i < bytes.length; i++) {
       binary += String.fromCharCode(bytes[i]);
     }
-    return btoa(binary);
+    const b64 = btoa(binary);
+    console.log(`[Darwin Roof] Satellite image encoded successfully (${b64.length} chars base64)`);
+    return b64;
   } catch (e) {
-    console.error("Satellite image fetch failed:", e);
+    console.error("[Darwin Roof] Satellite image fetch failed:", e);
     return null;
   }
 }
