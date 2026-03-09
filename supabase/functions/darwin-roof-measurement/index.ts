@@ -2587,6 +2587,8 @@ Deno.serve(async (req) => {
         hip_valley_candidates: estimate.hip_valley_candidates,
         vision_classifications: estimate.vision_classifications,
         suppression_records: estimate.suppression_records,
+        roof_mass_decomposition: estimate.roof_mass_decomposition,
+        overhang_config: estimate.overhang_config,
         tuning_applied: tuningApplied,
         pre_tuning_values: Object.keys(preTuningValues).length > 0 ? preTuningValues : null,
         created_by: user.id,
