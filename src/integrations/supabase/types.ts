@@ -2831,6 +2831,7 @@ export type Database = {
           id: string
           is_predefined: boolean | null
           name: string
+          parent_folder_id: string | null
         }
         Insert: {
           claim_id: string
@@ -2840,6 +2841,7 @@ export type Database = {
           id?: string
           is_predefined?: boolean | null
           name: string
+          parent_folder_id?: string | null
         }
         Update: {
           claim_id?: string
@@ -2849,6 +2851,7 @@ export type Database = {
           id?: string
           is_predefined?: boolean | null
           name?: string
+          parent_folder_id?: string | null
         }
         Relationships: [
           {
@@ -2863,6 +2866,13 @@ export type Database = {
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_folders_parent_folder_id_fkey"
+            columns: ["parent_folder_id"]
+            isOneToOne: false
+            referencedRelation: "claim_folders"
             referencedColumns: ["id"]
           },
         ]
