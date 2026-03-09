@@ -618,12 +618,17 @@ Deno.serve(async (req) => {
     // Also check city field for embedded state (e.g., "Manahawkin NJ")
     const stateFromCity = claim.clients?.city ? parseStateFromAddress(claim.clients.city) : null;
     
-    stateCode = claim.clients?.state || 
+    // Priority: state_code column > client state > city parse > address parse > WARN + PA fallback
+    stateCode = (claim as any).state_code ||
+      claim.clients?.state || 
       stateFromCity ||
       parseStateFromAddress(claim.policyholder_address || '') || 
       'PA';
     
-    console.log(`State detection: client_state="${claim.clients?.state}", stateFromCity="${stateFromCity}", parsed from address="${parseStateFromAddress(claim.policyholder_address || '')}", final="${stateCode}"`);
+    if (!(claim as any).state_code && !claim.clients?.state && !stateFromCity && !parseStateFromAddress(claim.policyholder_address || '')) {
+      console.warn(`[Darwin] CRITICAL: Could not detect state for claim ${claimId}. Defaulting to PA — this may produce INCORRECT state-specific outputs.`);
+    }
+    console.log(`State detection: state_code="${(claim as any).state_code}", client_state="${claim.clients?.state}", stateFromCity="${stateFromCity}", parsed from address="${parseStateFromAddress(claim.policyholder_address || '')}", final="${stateCode}"`);
     
     const stateInfo = getStateInfo(stateCode);
 

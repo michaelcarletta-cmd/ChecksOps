@@ -760,7 +760,10 @@ Please create a professional Final Demand Letter including:
       }
         break;
 
-      case "demand-package":
+      case "demand-package": {
+        const dpStateLabel = detectedStateCode && stateRegulationsLookup[detectedStateCode]
+          ? `${stateRegulationsLookup[detectedStateCode].stateName} Insurance Codes (${stateRegulationsLookup[detectedStateCode].adminCode}, ${stateRegulationsLookup[detectedStateCode].badFaithStatute})`
+          : 'Applicable State Insurance Codes';
         userPrompt = `Create a COMPLETE DEMAND PACKAGE based on these photos documenting property damage.
 
 ${claimContext}
@@ -773,12 +776,13 @@ Create a comprehensive demand package structured as follows:
 ## II. DAMAGE ANALYSIS
 ## III. PROOF OF LOSS / VALUATION
 ## IV. RESTORATION REQUIREMENTS
-## V. PROSPECTIVE LIABILITY (NJ/PA Insurance Codes)
+## V. PROSPECTIVE LIABILITY (${dpStateLabel})
 ## VI. DEMAND FOR PAYMENT
 
 ${weatherData ? 'Include weather data in the analysis sections.' : ''}
 ${supportingDocsInfo.length > 0 ? 'Reference the supporting evidence documents in relevant sections and note they are attached as exhibits.' : ''}`;
         break;
+      }
         
       default: // full-report
         userPrompt = `Create a comprehensive Forensic Photo Documentation Report with detailed analysis of each photo.
