@@ -576,7 +576,8 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     {} as Record<string, number>,
   );
 
-  const phaseLabel = tuningApplied.length > 0 ? "Phase 2D" : estimate?.inferred_roof_form ? "Phase 2C" : hasFootprintGeometry ? "Phase 2B" : "Preliminary";
+  const hasSatelliteData = estimate?.data_sources?.some((s: string) => s.toLowerCase().includes("satellite"));
+  const phaseLabel = tuningApplied.length > 0 ? "Phase 2D" : hasSatelliteData ? "Phase 2E 🛰️" : estimate?.inferred_roof_form ? "Phase 2C" : hasFootprintGeometry ? "Phase 2B" : "Preliminary";
 
   return (
     <Card>
