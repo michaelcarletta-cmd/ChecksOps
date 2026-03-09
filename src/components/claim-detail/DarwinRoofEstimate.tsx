@@ -1022,7 +1022,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                     <Pencil className="h-4 w-4 mr-1" /> Edit Values
                   </Button>
                   {!estimate.manually_confirmed && (
-                    <Button size="sm" onClick={confirmEstimate}>
+                    <Button size="sm" onClick={() => setConfirmDialogOpen(true)}>
                       <CheckCircle2 className="h-4 w-4 mr-1" /> Confirm for Use
                     </Button>
                   )}
