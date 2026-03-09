@@ -907,6 +907,116 @@ Return JSON only.`;
   };
 }
 
+// ── Phase 2D: Tuning heuristics application ─────────────────────────
+
+interface TuningHeuristic {
+  id: string;
+  heuristic_key: string;
+  action_type: string;
+  adjustment_field: string | null;
+  adjustment_factor: number | null;
+  suppress_field: string | null;
+  suppress_below_confidence: number | null;
+  segment_roof_form: string | null;
+  segment_quality_score_min: number | null;
+  segment_quality_score_max: number | null;
+  segment_aspect_ratio_min: number | null;
+  segment_aspect_ratio_max: number | null;
+  evidence_summary: string | null;
+}
+
+function matchesHeuristic(
+  h: TuningHeuristic,
+  roofForm: string | null,
+  qualityScore: number | null,
+  aspectRatio: number | null,
+): boolean {
+  if (h.segment_roof_form && h.segment_roof_form !== roofForm) return false;
+  if (h.segment_quality_score_min != null && (qualityScore ?? 0) < h.segment_quality_score_min) return false;
+  if (h.segment_quality_score_max != null && (qualityScore ?? 100) > h.segment_quality_score_max) return false;
+  if (h.segment_aspect_ratio_min != null && (aspectRatio ?? 1) < h.segment_aspect_ratio_min) return false;
+  if (h.segment_aspect_ratio_max != null && (aspectRatio ?? 1) > h.segment_aspect_ratio_max) return false;
+  return true;
+}
+
+function applyTuningHeuristics(
+  estimate: RoofEstimateResult,
+  heuristics: TuningHeuristic[],
+  roofForm: string | null,
+  qualityScore: number | null,
+  aspectRatio: number | null,
+): { tuned: RoofEstimateResult; applied: { key: string; field: string; action: string; before: number; after: number }[]; preTuningValues: Record<string, number> } {
+  const applied: { key: string; field: string; action: string; before: number; after: number }[] = [];
+  const preTuningValues: Record<string, number> = {};
+  const tuned = { ...estimate };
+
+  const fieldMap: Record<string, keyof RoofEstimateResult> = {
+    footprint_area: "footprint_area_sqft",
+    roof_area: "estimated_roof_area_sqft",
+    squares: "squares",
+    ridge_lf: "ridge_lf",
+    hip_lf: "hip_lf",
+    valley_lf: "valley_lf",
+    eave_lf: "eave_lf",
+    rake_lf: "rake_lf",
+    confidence_score: "confidence_score",
+  };
+
+  for (const h of heuristics) {
+    if (!matchesHeuristic(h, roofForm, qualityScore, aspectRatio)) continue;
+
+    if (h.action_type === "adjust_value" && h.adjustment_field && h.adjustment_factor != null) {
+      const mappedField = fieldMap[h.adjustment_field] || h.adjustment_field;
+      const before = Number((tuned as any)[mappedField] ?? 0);
+      if (before === 0) continue;
+      preTuningValues[mappedField] = before;
+      const after = roundTo(before * h.adjustment_factor, mappedField === "squares" ? 1 : 0);
+      (tuned as any)[mappedField] = after;
+      applied.push({ key: h.heuristic_key, field: String(mappedField), action: `×${h.adjustment_factor}`, before, after });
+      // Recalculate squares if roof area was adjusted
+      if (mappedField === "estimated_roof_area_sqft") {
+        const oldSq = tuned.squares;
+        tuned.squares = roundTo(after / 100, 1);
+        if (oldSq !== tuned.squares) {
+          preTuningValues["squares"] = oldSq;
+          applied.push({ key: h.heuristic_key, field: "squares", action: "recalc from roof_area", before: oldSq, after: tuned.squares });
+        }
+      }
+    } else if (h.action_type === "adjust_confidence" && h.adjustment_field && h.adjustment_factor != null) {
+      if (h.adjustment_field === "confidence_score") {
+        const before = tuned.confidence_score;
+        preTuningValues["confidence_score"] = before;
+        tuned.confidence_score = roundTo(before * h.adjustment_factor, 0);
+        applied.push({ key: h.heuristic_key, field: "confidence_score", action: `×${h.adjustment_factor}`, before, after: tuned.confidence_score });
+      } else if (h.adjustment_field === "roof_form_confidence" && tuned.roof_form_confidence != null) {
+        const before = tuned.roof_form_confidence;
+        preTuningValues["roof_form_confidence"] = before;
+        tuned.roof_form_confidence = roundTo(before * h.adjustment_factor, 0);
+        applied.push({ key: h.heuristic_key, field: "roof_form_confidence", action: `×${h.adjustment_factor}`, before, after: tuned.roof_form_confidence });
+      }
+    } else if (h.action_type === "suppress_field" && h.suppress_field && h.suppress_below_confidence != null) {
+      const mappedField = fieldMap[h.suppress_field] || h.suppress_field;
+      const fieldConf = (tuned.field_confidence as Record<string, number>)?.[h.suppress_field] ?? 0;
+      if (fieldConf < h.suppress_below_confidence) {
+        const before = Number((tuned as any)[mappedField] ?? 0);
+        if (before !== 0) {
+          preTuningValues[String(mappedField)] = before;
+          (tuned as any)[mappedField] = 0;
+          applied.push({ key: h.heuristic_key, field: String(mappedField), action: `suppressed (conf ${fieldConf}% < ${h.suppress_below_confidence}%)`, before, after: 0 });
+        }
+      }
+    }
+  }
+
+  // Append tuning notes to ai_notes
+  if (applied.length > 0) {
+    tuned.ai_notes += `\n\n🔧 Tuning Applied (${applied.length} heuristic${applied.length > 1 ? "s" : ""}): ` +
+      applied.map(a => `${a.field}: ${a.before} → ${a.after} (${a.action})`).join("; ");
+  }
+
+  return { tuned, applied, preTuningValues };
+}
+
 // ── Main handler ─────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -1016,7 +1126,32 @@ Deno.serve(async (req) => {
       });
     }
 
-    const estimate = await estimateRoofWithAI(address, geo.lat, geo.lng, parcel, elevation, selectedCandidate, candidates, roofFormInference);
+    const rawEstimate = await estimateRoofWithAI(address, geo.lat, geo.lng, parcel, elevation, selectedCandidate, candidates, roofFormInference);
+
+    // Phase 2D: Apply tuning heuristics
+    let estimate = rawEstimate;
+    let tuningApplied: any = null;
+    let preTuningValues: Record<string, number> = {};
+
+    const { data: activeHeuristics } = await supabase
+      .from("darwin_roof_tuning_heuristics")
+      .select("id, heuristic_key, action_type, adjustment_field, adjustment_factor, suppress_field, suppress_below_confidence, segment_roof_form, segment_quality_score_min, segment_quality_score_max, segment_aspect_ratio_min, segment_aspect_ratio_max, evidence_summary")
+      .eq("is_active", true);
+
+    if (activeHeuristics && activeHeuristics.length > 0) {
+      const result = applyTuningHeuristics(
+        rawEstimate,
+        activeHeuristics as TuningHeuristic[],
+        roofFormInference?.inferred_roof_form ?? null,
+        selectedCandidate?.geometry_quality_score ?? null,
+        roofFormInference?.aspect_ratio ?? null,
+      );
+      estimate = result.tuned;
+      if (result.applied.length > 0) {
+        tuningApplied = result.applied;
+        preTuningValues = result.preTuningValues;
+      }
+    }
 
     const { data: saved, error: saveErr } = await supabase
       .from("claim_roof_measurements")
@@ -1064,6 +1199,9 @@ Deno.serve(async (req) => {
         aspect_ratio: estimate.aspect_ratio,
         ridge_candidates: estimate.ridge_candidates,
         hip_valley_candidates: estimate.hip_valley_candidates,
+        // Phase 2D: Tuning metadata
+        tuning_applied: tuningApplied,
+        pre_tuning_values: Object.keys(preTuningValues).length > 0 ? preTuningValues : null,
         created_by: user.id,
       })
       .select()
@@ -1086,6 +1224,7 @@ Deno.serve(async (req) => {
         footprintExtracted: !!selectedCandidate,
         candidateCount: candidates.length,
         roofFormInferred: !!roofFormInference,
+        tuningApplied: tuningApplied ? tuningApplied.length : 0,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

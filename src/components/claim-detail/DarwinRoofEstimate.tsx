@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import {
   Ruler, Loader2, MapPin, AlertTriangle, CheckCircle2, RefreshCw,
-  Lock, Unlock, Pencil, Save, X, Shield, Eye, Layers, Home
+  Lock, Unlock, Pencil, Save, X, Shield, Eye, Layers, Home, Settings2
 } from "lucide-react";
 import { logAudit } from "@/hooks/useAuditLog";
 import { DarwinRoofValidation } from "./DarwinRoofValidation";
@@ -109,6 +109,9 @@ interface RoofEstimate {
   aspect_ratio: number | null;
   ridge_candidates: RidgeCandidate[] | null;
   hip_valley_candidates: HipValleyCandidate[] | null;
+  // Phase 2D
+  tuning_applied: { key: string; field: string; action: string; before: number; after: number }[] | null;
+  pre_tuning_values: Record<string, number> | null;
   created_at: string;
   updated_at: string;
 }
@@ -502,6 +505,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const geoMeta = estimate?.geometry_metadata as GeometryMetadata | null;
   const ridgeCandidates = (estimate?.ridge_candidates as RidgeCandidate[] | null) || [];
   const hipValleyCandidates = (estimate?.hip_valley_candidates as HipValleyCandidate[] | null) || [];
+  const tuningApplied = (estimate?.tuning_applied as { key: string; field: string; action: string; before: number; after: number }[] | null) || [];
 
   const edgeSummary = edgeClassifications.reduce(
     (acc, e) => {
@@ -511,7 +515,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     {} as Record<string, number>,
   );
 
-  const phaseLabel = estimate?.inferred_roof_form ? "Phase 2C" : hasFootprintGeometry ? "Phase 2B" : "Preliminary";
+  const phaseLabel = tuningApplied.length > 0 ? "Phase 2D" : estimate?.inferred_roof_form ? "Phase 2C" : hasFootprintGeometry ? "Phase 2B" : "Preliminary";
 
   return (
     <Card>
@@ -755,6 +759,31 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Phase 2D: Tuning Applied Indicator */}
+            {tuningApplied.length > 0 && (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Settings2 className="h-4 w-4 text-primary" />
+                  Tuning Applied
+                  <Badge variant="outline" className="text-[9px]">Phase 2D</Badge>
+                  <Badge variant="secondary" className="text-[9px]">{tuningApplied.length} adjustment{tuningApplied.length > 1 ? "s" : ""}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Values below have been adjusted by validation-derived tuning heuristics to correct known biases.
+                </p>
+                <div className="space-y-0.5">
+                  {tuningApplied.map((t, i) => (
+                    <div key={i} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                      <span className="font-medium capitalize">{t.field.replace(/_/g, " ")}</span>
+                      <span className="tabular-nums">{t.before} → {t.after}</span>
+                      <span className="text-[10px]">({t.action})</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
