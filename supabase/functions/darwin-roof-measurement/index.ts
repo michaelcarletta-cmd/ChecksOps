@@ -951,18 +951,22 @@ Return JSON only.`;
   if (hasGeometry && geometryEaveLf > 0) fieldSources.eave_lf = "geometry";
   if (hasGeometry && geometryRakeLf > 0) fieldSources.rake_lf = "geometry";
 
-  // Build field_confidence
+  // Build field_confidence — boost when satellite analysis confirms values
+  const hasSatellite = !!satelliteAnalysis && satelliteAnalysis.confidence > 30;
+  const satPitchConfirmed = hasSatellite && !!satelliteAnalysis!.estimated_pitch;
+  const satFormConfirmed = hasSatellite && !!satelliteAnalysis!.roof_form && satelliteAnalysis!.roof_form !== "unknown";
+
   const defaultConfidence: Record<string, number> = {
     footprint_area_sqft: hasGeometry ? 75 : parcel?.parcelArea ? 55 : 20,
-    estimated_roof_area_sqft: hasGeometry ? 40 : 15,
-    squares: hasGeometry ? 40 : 15,
-    dominant_pitch: 20,
-    ridge_lf: roofFormInference?.ridge_candidates?.length ? 30 : 10,
-    hip_lf: roofFormInference?.hip_valley_candidates?.length ? 25 : 10,
-    valley_lf: roofFormInference?.hip_valley_candidates?.some(c => c.type === "valley") ? 25 : 10,
+    estimated_roof_area_sqft: hasGeometry ? (satPitchConfirmed ? 65 : 40) : (satPitchConfirmed ? 50 : 15),
+    squares: hasGeometry ? (satPitchConfirmed ? 65 : 40) : (satPitchConfirmed ? 50 : 15),
+    dominant_pitch: satPitchConfirmed ? 70 : 20,
+    ridge_lf: roofFormInference?.ridge_candidates?.length ? 30 : (satFormConfirmed ? 25 : 10),
+    hip_lf: roofFormInference?.hip_valley_candidates?.length ? 25 : (satFormConfirmed ? 20 : 10),
+    valley_lf: roofFormInference?.hip_valley_candidates?.some(c => c.type === "valley") ? 25 : (satFormConfirmed ? 20 : 10),
     eave_lf: hasGeometry && geometryEaveLf > 0 ? 50 : 10,
     rake_lf: hasGeometry && geometryRakeLf > 0 ? 50 : 10,
-    facet_count: 15,
+    facet_count: hasSatellite && satelliteAnalysis!.visible_layers ? 40 : 15,
   };
   const fieldConfidence: Record<string, number> = { ...defaultConfidence };
   const aiConfidence = parsed.field_confidence || {};
@@ -995,6 +999,10 @@ Return JSON only.`;
     ? `\n\n🏠 Roof Form Inference: ${roofFormInference.inferred_roof_form} (confidence: ${roofFormInference.roof_form_confidence}%). ${roofFormInference.roof_form_reasoning}` +
       (roofFormInference.ridge_candidates.length > 0 ? `\n📏 ${roofFormInference.ridge_candidates.length} ridge candidate(s) inferred from geometry.` : "") +
       (roofFormInference.hip_valley_candidates.length > 0 ? `\n📐 ${roofFormInference.hip_valley_candidates.length} hip/valley candidate(s) inferred.` : "")
+    : "";
+
+  const satelliteNote = satelliteAnalysis
+    ? `\n\n🛰️ Satellite Imagery Analysis: pitch=${satelliteAnalysis.estimated_pitch ?? "?"}, form=${satelliteAnalysis.roof_form ?? "?"}, planes=${satelliteAnalysis.visible_layers ?? "?"}, color=${satelliteAnalysis.roof_color ?? "?"}, confidence=${satelliteAnalysis.confidence}%. ${satelliteAnalysis.analysis_notes}`
     : "";
 
   return {
