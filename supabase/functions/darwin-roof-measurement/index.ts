@@ -2013,8 +2013,17 @@ function deriveRoofEstimate(
     if (roofArea > 0) notes.push(`📐 Area: ${footprintArea} × ${slopeFactor} = ${roofArea} sqft.`);
   }
   if (decomposition && decomposition.masses.length > 1) {
-    notes.push(`🏗️ Mass decomposition (${decomposition.decomposition_method}): ${decomposition.masses.length} masses, ${decomposition.junction_valleys.length} junction valley(s).`);
+    const promoted = decomposition.junction_valleys.filter(jv => jv.status === "promoted").length;
+    const candidate = decomposition.junction_valleys.filter(jv => jv.status === "candidate").length;
+    notes.push(`🏗️ Mass decomposition (${decomposition.decomposition_method}): ${decomposition.masses.length} masses, ${promoted} promoted + ${candidate} candidate junction valley(s).`);
+    for (const m of decomposition.masses) {
+      const cls = m.classification;
+      notes.push(`  • Mass ${m.id}: ${cls?.mass_type ?? "unclassified"} (${cls?.confidence ?? 0}% conf, weight=${cls?.derivation_weight ?? 1}, ${Math.round((cls?.footprint_contribution ?? 0) * 100)}% of footprint)`);
+    }
     for (const dn of decomposition.notes) notes.push(`  • ${dn}`);
+  } else if (decomposition && decomposition.masses.length === 1) {
+    const cls = decomposition.masses[0].classification;
+    if (cls) notes.push(`🏗️ Single mass: ${cls.mass_type} (${cls.confidence}% conf).`);
   }
   notes.push(`📏 Linear derivation (rule-based):`);
   for (const dn of linear.derivation_notes) notes.push(`  • ${dn}`);
