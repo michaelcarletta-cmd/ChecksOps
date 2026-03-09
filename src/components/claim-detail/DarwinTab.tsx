@@ -447,16 +447,19 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
     switch (activeWorkspace) {
       case "claim-intelligence":
         return (
-          <DarwinCockpit
-            claimId={claimId}
-            claim={claim}
-            onNavigateSection={(section) => {
-              const targetWorkspace = section as DarwinWorkspaceKey;
-              if (workspaceSections.some(s => s.key === targetWorkspace)) {
-                setActiveWorkspace(targetWorkspace);
-              }
-            }}
-          />
+          <>
+            <DarwinCockpit
+              claimId={claimId}
+              claim={claim}
+              onNavigateSection={(section) => {
+                const targetWorkspace = section as DarwinWorkspaceKey;
+                if (workspaceSections.some(s => s.key === targetWorkspace)) {
+                  setActiveWorkspace(targetWorkspace);
+                }
+              }}
+            />
+            <DarwinRoofMeasurement claimId={claimId} claim={claim} />
+          </>
         );
       case "document-analysis":
         return (
