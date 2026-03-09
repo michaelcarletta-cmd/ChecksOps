@@ -10909,29 +10909,6 @@ export type Database = {
           similarity: number
         }[]
       }
-      ocr_commit_results: {
-        Args: {
-          p_amount: number
-          p_carrier_name: string
-          p_check_id: string
-          p_check_number: string
-          p_check_status: string
-          p_claim_id: string
-          p_claim_number: string
-          p_evaluated_by: string
-          p_has_active_endorsements: boolean
-          p_is_multi_payee: boolean
-          p_issue_date: string
-          p_ocr_status: string
-          p_payee_line: string
-          p_payees: Json
-          p_raw_ocr: Json
-          p_reasons: Json
-          p_recommendation: string
-          p_rules: Json
-        }
-        Returns: Json
-      }
       process_deposit_webhook: {
         Args: {
           p_deposit_item_id?: string
