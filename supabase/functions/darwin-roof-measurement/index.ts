@@ -734,7 +734,7 @@ async function fetchAllCandidateFootprints(
 
 async function fetchOSMBuildingCandidates(lat: number, lng: number): Promise<CandidateFootprint[]> {
   try {
-    const radius = 0.0003;
+    const radius = 0.0008; // ~90m radius — increased from 0.0003 for better coverage
     const bbox = `${lat - radius},${lng - radius},${lat + radius},${lng + radius}`;
     const query = `[out:json][timeout:10];way["building"](${bbox});out body geom;`;
     const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
