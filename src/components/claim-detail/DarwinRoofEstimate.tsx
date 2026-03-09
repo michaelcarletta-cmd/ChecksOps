@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { logAudit } from "@/hooks/useAuditLog";
 import { DarwinRoofValidation } from "./DarwinRoofValidation";
+import { RoofConfirmationDialog, type ConfirmationLevel, type ConfirmationBasis } from "./RoofConfirmationDialog";
 
 type DerivationSource = "geometry" | "ai_estimated" | "user_override";
 type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative";
