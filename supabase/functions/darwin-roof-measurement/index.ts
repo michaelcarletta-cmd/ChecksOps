@@ -2962,7 +2962,37 @@ Deno.serve(async (req) => {
       console.log("[Darwin Roof] No satellite imagery available at any zoom level");
     }
 
-    // Audit log: candidate selection
+    // ── FALLBACK: AI Vision Footprint Estimation ──
+    // When ALL polygon sources fail (0 candidates), use satellite imagery + AI
+    // to estimate building dimensions and create a synthetic rectangular footprint.
+    // This ensures we always get measurements (sq ft, eaves, rakes, etc.) even
+    // when OSM/NJGIN/Esri have no data for this address.
+    if (candidates.length === 0 && !selectedCandidate) {
+      // Determine which tile grid to use for estimation
+      const estimationTiles = usedTileGrid && usedTileGrid.length > 0
+        ? usedTileGrid
+        : await (async () => {
+            // Try Google tiles if ArcGIS failed
+            const gt = await fetchGoogleSatelliteTiles(geo.lat, geo.lng);
+            return gt.length > 0 ? gt : null;
+          })();
+
+      if (estimationTiles && estimationTiles.length > 0) {
+        console.log(`[Darwin Roof] No polygon sources available — attempting AI vision footprint estimation from ${estimationTiles.length} tiles...`);
+        const visionCandidate = await estimateFootprintFromVision(estimationTiles, address, geo.lat, geo.lng);
+        if (visionCandidate) {
+          selectedCandidate = visionCandidate;
+          candidates.push(visionCandidate);
+          roofFormInference = inferRoofForm(visionCandidate);
+          console.log(`[Darwin Roof] Vision footprint created: ${visionCandidate.area_sqft} sqft, quality=${visionCandidate.geometry_quality_score}`);
+        } else {
+          console.log("[Darwin Roof] Vision footprint estimation returned no result");
+        }
+      } else {
+        console.log("[Darwin Roof] No satellite imagery available for footprint estimation fallback");
+      }
+    }
+
     const isReselection = typeof selected_candidate_index === "number";
     if (selectedCandidate) {
       await supabase.from("audit_logs").insert({
