@@ -4066,6 +4066,186 @@ export type Database = {
           },
         ]
       }
+      claim_roof_validations: {
+        Row: {
+          accuracy_grade: string | null
+          actual_dominant_pitch: string | null
+          actual_eave_lf: number | null
+          actual_facet_count: number | null
+          actual_footprint_area_sqft: number | null
+          actual_hip_lf: number | null
+          actual_rake_lf: number | null
+          actual_ridge_lf: number | null
+          actual_roof_area_sqft: number | null
+          actual_roof_form: string | null
+          actual_squares: number | null
+          actual_valley_lf: number | null
+          claim_id: string
+          created_at: string
+          created_by: string | null
+          darwin_confidence_score: number | null
+          darwin_dominant_pitch: string | null
+          darwin_eave_lf: number | null
+          darwin_facet_count: number | null
+          darwin_footprint_area_sqft: number | null
+          darwin_geometry_quality_score: number | null
+          darwin_hip_lf: number | null
+          darwin_rake_lf: number | null
+          darwin_ridge_lf: number | null
+          darwin_roof_area_sqft: number | null
+          darwin_roof_form: string | null
+          darwin_squares: number | null
+          darwin_valley_lf: number | null
+          delta_eave_lf: number | null
+          delta_footprint_area: number | null
+          delta_hip_lf: number | null
+          delta_rake_lf: number | null
+          delta_ridge_lf: number | null
+          delta_roof_area: number | null
+          delta_squares: number | null
+          delta_valley_lf: number | null
+          estimate_id: string
+          facet_count_match: boolean | null
+          failure_patterns: Json | null
+          id: string
+          overall_accuracy_score: number | null
+          pct_delta_eave_lf: number | null
+          pct_delta_footprint_area: number | null
+          pct_delta_hip_lf: number | null
+          pct_delta_rake_lf: number | null
+          pct_delta_ridge_lf: number | null
+          pct_delta_roof_area: number | null
+          pct_delta_squares: number | null
+          pct_delta_valley_lf: number | null
+          pitch_match: boolean | null
+          roof_form_match: boolean | null
+          source_date: string | null
+          source_document_url: string | null
+          source_name: string | null
+          source_type: string
+          staff_notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          accuracy_grade?: string | null
+          actual_dominant_pitch?: string | null
+          actual_eave_lf?: number | null
+          actual_facet_count?: number | null
+          actual_footprint_area_sqft?: number | null
+          actual_hip_lf?: number | null
+          actual_rake_lf?: number | null
+          actual_ridge_lf?: number | null
+          actual_roof_area_sqft?: number | null
+          actual_roof_form?: string | null
+          actual_squares?: number | null
+          actual_valley_lf?: number | null
+          claim_id: string
+          created_at?: string
+          created_by?: string | null
+          darwin_confidence_score?: number | null
+          darwin_dominant_pitch?: string | null
+          darwin_eave_lf?: number | null
+          darwin_facet_count?: number | null
+          darwin_footprint_area_sqft?: number | null
+          darwin_geometry_quality_score?: number | null
+          darwin_hip_lf?: number | null
+          darwin_rake_lf?: number | null
+          darwin_ridge_lf?: number | null
+          darwin_roof_area_sqft?: number | null
+          darwin_roof_form?: string | null
+          darwin_squares?: number | null
+          darwin_valley_lf?: number | null
+          delta_eave_lf?: number | null
+          delta_footprint_area?: number | null
+          delta_hip_lf?: number | null
+          delta_rake_lf?: number | null
+          delta_ridge_lf?: number | null
+          delta_roof_area?: number | null
+          delta_squares?: number | null
+          delta_valley_lf?: number | null
+          estimate_id: string
+          facet_count_match?: boolean | null
+          failure_patterns?: Json | null
+          id?: string
+          overall_accuracy_score?: number | null
+          pct_delta_eave_lf?: number | null
+          pct_delta_footprint_area?: number | null
+          pct_delta_hip_lf?: number | null
+          pct_delta_rake_lf?: number | null
+          pct_delta_ridge_lf?: number | null
+          pct_delta_roof_area?: number | null
+          pct_delta_squares?: number | null
+          pct_delta_valley_lf?: number | null
+          pitch_match?: boolean | null
+          roof_form_match?: boolean | null
+          source_date?: string | null
+          source_document_url?: string | null
+          source_name?: string | null
+          source_type?: string
+          staff_notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          accuracy_grade?: string | null
+          actual_dominant_pitch?: string | null
+          actual_eave_lf?: number | null
+          actual_facet_count?: number | null
+          actual_footprint_area_sqft?: number | null
+          actual_hip_lf?: number | null
+          actual_rake_lf?: number | null
+          actual_ridge_lf?: number | null
+          actual_roof_area_sqft?: number | null
+          actual_roof_form?: string | null
+          actual_squares?: number | null
+          actual_valley_lf?: number | null
+          claim_id?: string
+          created_at?: string
+          created_by?: string | null
+          darwin_confidence_score?: number | null
+          darwin_dominant_pitch?: string | null
+          darwin_eave_lf?: number | null
+          darwin_facet_count?: number | null
+          darwin_footprint_area_sqft?: number | null
+          darwin_geometry_quality_score?: number | null
+          darwin_hip_lf?: number | null
+          darwin_rake_lf?: number | null
+          darwin_ridge_lf?: number | null
+          darwin_roof_area_sqft?: number | null
+          darwin_roof_form?: string | null
+          darwin_squares?: number | null
+          darwin_valley_lf?: number | null
+          delta_eave_lf?: number | null
+          delta_footprint_area?: number | null
+          delta_hip_lf?: number | null
+          delta_rake_lf?: number | null
+          delta_ridge_lf?: number | null
+          delta_roof_area?: number | null
+          delta_squares?: number | null
+          delta_valley_lf?: number | null
+          estimate_id?: string
+          facet_count_match?: boolean | null
+          failure_patterns?: Json | null
+          id?: string
+          overall_accuracy_score?: number | null
+          pct_delta_eave_lf?: number | null
+          pct_delta_footprint_area?: number | null
+          pct_delta_hip_lf?: number | null
+          pct_delta_rake_lf?: number | null
+          pct_delta_ridge_lf?: number | null
+          pct_delta_roof_area?: number | null
+          pct_delta_squares?: number | null
+          pct_delta_valley_lf?: number | null
+          pitch_match?: boolean | null
+          roof_form_match?: boolean | null
+          source_date?: string | null
+          source_document_url?: string | null
+          source_name?: string | null
+          source_type?: string
+          staff_notes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       claim_scenario_simulations: {
         Row: {
           claim_id: string
