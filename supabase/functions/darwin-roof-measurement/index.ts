@@ -1624,22 +1624,39 @@ Deno.serve(async (req) => {
       roofFormInference = inferRoofForm(selectedCandidate);
     }
 
-    // Phase 2E: Satellite imagery analysis
-    console.log("[Darwin Roof] Fetching satellite imagery...");
-    const satelliteImage = await fetchSatelliteImage(geo.lat, geo.lng);
+    // Phase 2E: Satellite imagery analysis — multi-tile grid for better accuracy
+    console.log("[Darwin Roof] Fetching satellite imagery (multi-tile grid)...");
+    const tileGrid = await fetchSatelliteTileGrid(geo.lat, geo.lng, 3, 20);
+    let satelliteImage: string | null = null;
     let satelliteAnalysis: SatelliteAnalysis | null = null;
-    if (satelliteImage) {
-      console.log("[Darwin Roof] Analyzing satellite image with AI vision...");
+
+    if (tileGrid.length > 0) {
+      // Use center tile as the primary image
+      const centerIdx = Math.floor(tileGrid.length / 2);
+      satelliteImage = tileGrid[centerIdx]?.base64 ?? tileGrid[0].base64;
+      
+      console.log(`[Darwin Roof] Analyzing ${tileGrid.length} satellite tiles with AI vision...`);
       satelliteAnalysis = await analyzeRoofFromSatellite(
         satelliteImage,
         address,
         selectedCandidate?.area_sqft ?? null,
+        tileGrid.length >= 4 ? tileGrid : undefined,
       );
       if (satelliteAnalysis) {
-        console.log(`[Darwin Roof] Satellite analysis: pitch=${satelliteAnalysis.estimated_pitch}, form=${satelliteAnalysis.roof_form}, confidence=${satelliteAnalysis.confidence}%`);
+        console.log(`[Darwin Roof] Satellite analysis: pitch=${satelliteAnalysis.estimated_pitch}, form=${satelliteAnalysis.roof_form}, facets=${satelliteAnalysis.visible_layers}, confidence=${satelliteAnalysis.confidence}%`);
       }
     } else {
-      console.log("[Darwin Roof] No satellite imagery available for this location");
+      // Fallback to zoom 19 single tile
+      console.log("[Darwin Roof] Zoom 20 failed, trying zoom 19 fallback...");
+      satelliteImage = await fetchSatelliteImage(geo.lat, geo.lng);
+      if (satelliteImage) {
+        satelliteAnalysis = await analyzeRoofFromSatellite(satelliteImage, address, selectedCandidate?.area_sqft ?? null);
+        if (satelliteAnalysis) {
+          console.log(`[Darwin Roof] Fallback satellite analysis: pitch=${satelliteAnalysis.estimated_pitch}, form=${satelliteAnalysis.roof_form}, confidence=${satelliteAnalysis.confidence}%`);
+        }
+      } else {
+        console.log("[Darwin Roof] No satellite imagery available for this location");
+      }
     }
 
     // Audit log: candidate selection (especially re-selection)
