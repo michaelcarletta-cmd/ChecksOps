@@ -1,0 +1,2 @@
+ALTER TABLE public.claim_roof_measurements 
+ADD COLUMN IF NOT EXISTS field_confidence jsonb DEFAULT '{}'::jsonb;

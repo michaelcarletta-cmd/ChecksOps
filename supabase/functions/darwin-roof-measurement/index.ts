@@ -26,6 +26,7 @@ interface RoofEstimateResult {
   ai_notes: string;
   data_sources: string[];
   field_sources: Record<string, DerivationSource>;
+  field_confidence: Record<string, number>;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -137,7 +138,8 @@ JSON schema:
   "confidence_score": number (0-50, be honest),
   "ai_notes": string (explain methodology, assumptions, limitations),
   "data_sources": string[],
-  "field_sources": object mapping each field name to "geometry" or "ai_estimated"
+  "field_sources": object mapping each field name to "geometry" or "ai_estimated",
+  "field_confidence": object mapping each field name to a 0-100 integer confidence score
 }
 
 Rules:
@@ -146,6 +148,7 @@ Rules:
 - Slope factors: 4/12=1.054, 5/12=1.083, 6/12=1.118, 7/12=1.158, 8/12=1.202
 - Pre-1970 homes: simpler gable roofs. Newer: more hip/valley
 - confidence_score MUST be ≤ 50 (no imagery = low confidence)
+- field_confidence: give each field its own 0-100 confidence score. Fields derived from parcel geometry get higher scores (40-70). Pure AI guesses get lower scores (10-35). Be honest per field.
 - All linear measurements (ridge, hip, valley, eave, rake) are AI_ESTIMATED
 - footprint_area_sqft is "geometry" ONLY if parcel data provides building footprint; otherwise "ai_estimated"
 - estimated_roof_area_sqft, squares are always "ai_estimated" (derived from pitch assumption)
@@ -205,6 +208,26 @@ Return JSON only.`;
     fieldSources.footprint_area_sqft = "geometry";
   }
 
+  // Build field_confidence with defaults
+  const defaultConfidence: Record<string, number> = {
+    footprint_area_sqft: parcel?.parcelArea ? 55 : 20,
+    estimated_roof_area_sqft: 15,
+    squares: 15,
+    dominant_pitch: 20,
+    ridge_lf: 10,
+    hip_lf: 10,
+    valley_lf: 10,
+    eave_lf: 10,
+    rake_lf: 10,
+    facet_count: 15,
+  };
+  const fieldConfidence: Record<string, number> = { ...defaultConfidence };
+  const aiConfidence = parsed.field_confidence || {};
+  for (const [k, v] of Object.entries(aiConfidence)) {
+    const num = Number(v);
+    if (!isNaN(num)) fieldConfidence[k] = Math.max(0, Math.min(100, Math.round(num)));
+  }
+
   return {
     footprint_area_sqft: cleaned.footprint_area_sqft,
     estimated_roof_area_sqft: cleaned.estimated_roof_area_sqft,
@@ -224,6 +247,7 @@ Return JSON only.`;
       "\n\n⚠️ This is a PRELIMINARY ESTIMATE, not a measurement. All values are AI-modeled from public parcel data and should not be used without manual confirmation.",
     data_sources: parsed.data_sources ?? ["US Census Geocoder", "AI estimation"],
     field_sources: fieldSources,
+    field_confidence: fieldConfidence,
   };
 }
 
@@ -318,6 +342,7 @@ Deno.serve(async (req) => {
         ai_notes: estimate.ai_notes,
         data_sources: estimate.data_sources,
         field_sources: estimate.field_sources,
+        field_confidence: estimate.field_confidence,
         created_by: user.id,
       })
       .select()
