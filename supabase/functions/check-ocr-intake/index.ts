@@ -478,7 +478,12 @@ Rules:
       const needsManualReview = criticalFailed || overallFailed;
 
       const eligibility = evaluateEligibility(payees, isMultiPayee, ocrConfidence, fieldConfidence);
-      const checkStatus = needsManualReview ? "needs_review" : "ocr_complete";
+      // Auto-route mortgage checks to loss_draft_required status
+      const checkStatus = needsManualReview
+        ? "needs_review"
+        : eligibility.recommendation === "loss_draft_required"
+          ? "loss_draft_required"
+          : "ocr_complete";
 
       // ---- Commit via RPC ----
       stage = "rpc_commit";
