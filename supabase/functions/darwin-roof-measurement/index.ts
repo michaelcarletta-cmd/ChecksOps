@@ -1131,213 +1131,420 @@ function applyVisionSuppressions(
   return { refined, suppressions };
 }
 
+// ── Phase 2G: Roof-mass decomposition ────────────────────────────────
+// Split an L/T/U-shaped footprint into separate rectangular roof masses
+// so each mass gets independent ridge/hip/valley/facet derivation.
+
+function decomposeIntoMasses(candidate: CandidateFootprint): RoofMassDecomposition {
+  const ring = candidate.polygon;
+  const pts = ring[ring.length - 1][0] === ring[0][0] && ring[ring.length - 1][1] === ring[0][1]
+    ? ring.slice(0, -1) : ring;
+  const notes: string[] = [];
+
+  // Simple rectangular footprint (4 vertices) → single mass
+  if (pts.length <= 4) {
+    const { axis } = analyzeAxes(ring);
+    const edges = candidate.edge_classifications;
+    const eaveLen = edges.filter(e => e.classification === "likely_eave").reduce((s, e) => s + e.length_ft, 0);
+    const rakeLen = edges.filter(e => e.classification === "likely_rake").reduce((s, e) => s + e.length_ft, 0);
+    const longestEave = Math.max(...edges.filter(e => e.classification === "likely_eave").map(e => e.length_ft), 0);
+    const longestRake = Math.max(...edges.filter(e => e.classification === "likely_rake").map(e => e.length_ft), 0);
+
+    notes.push(`Simple ${pts.length}-vertex footprint → single roof mass.`);
+    return {
+      masses: [{
+        id: "mass_0",
+        polygon: ring,
+        area_sqft: candidate.area_sqft,
+        perimeter_ft: candidate.perimeter_ft,
+        dominant_axis_bearing: axis.primaryAxis,
+        dominant_axis_length_ft: longestEave || axis.primaryTotalLen / 2,
+        perpendicular_axis_length_ft: longestRake || axis.perpTotalLen / 2,
+        aspect_ratio: (longestRake > 0 ? (longestEave || axis.primaryTotalLen / 2) / longestRake : 1),
+        edge_classifications: edges,
+        inferred_form: "unknown", // will be resolved later
+        form_confidence: 0,
+        connected_mass_ids: [],
+      }],
+      junction_valleys: [],
+      decomposition_method: "single_mass",
+      notes,
+    };
+  }
+
+  // Complex footprint (5+ vertices) → attempt axis-aligned split
+  // Strategy: identify the dominant axis, find recesses/projections by grouping
+  // consecutive edge segments into axis-aligned runs, then split at offsets.
+  const { segments, axis } = analyzeAxes(ring);
+  const edges = candidate.edge_classifications;
+
+  // Group consecutive edges by axis alignment into "runs"
+  interface EdgeRun {
+    indices: number[];
+    alignment: "primary" | "perpendicular" | "other";
+    totalLength: number;
+    centroid: [number, number];
+  }
+  const runs: EdgeRun[] = [];
+  let currentRun: EdgeRun | null = null;
+
+  for (let i = 0; i < segments.length; i++) {
+    const s = segments[i];
+    const diffP = Math.min(Math.abs(s.normBearing - axis.primaryAxis), Math.abs(s.normBearing - axis.primaryAxis + 180), Math.abs(s.normBearing - axis.primaryAxis - 180));
+    const diffQ = Math.min(Math.abs(s.normBearing - axis.perpAxis), Math.abs(s.normBearing - axis.perpAxis + 180), Math.abs(s.normBearing - axis.perpAxis - 180));
+    const alignment: "primary" | "perpendicular" | "other" = diffP <= 15 ? "primary" : diffQ <= 15 ? "perpendicular" : "other";
+
+    if (currentRun && currentRun.alignment === alignment) {
+      currentRun.indices.push(i);
+      currentRun.totalLength += s.len;
+    } else {
+      if (currentRun) runs.push(currentRun);
+      currentRun = { indices: [i], alignment, totalLength: s.len, centroid: midpoint(s.start, s.end) };
+    }
+  }
+  if (currentRun) runs.push(currentRun);
+
+  // Find perpendicular-axis runs that are short (< 40% of longest perp run) → these are step-backs indicating mass boundaries
+  const perpRuns = runs.filter(r => r.alignment === "perpendicular");
+  if (perpRuns.length <= 1 || pts.length <= 5) {
+    // Not enough structure to split — treat as single mass
+    const longestEave = Math.max(...edges.filter(e => e.classification === "likely_eave").map(e => e.length_ft), 0);
+    const longestRake = Math.max(...edges.filter(e => e.classification === "likely_rake").map(e => e.length_ft), 0);
+    notes.push(`${pts.length}-vertex footprint with ${perpRuns.length} perp run(s) — insufficient for multi-mass decomposition → single mass.`);
+    return {
+      masses: [{
+        id: "mass_0",
+        polygon: ring,
+        area_sqft: candidate.area_sqft,
+        perimeter_ft: candidate.perimeter_ft,
+        dominant_axis_bearing: axis.primaryAxis,
+        dominant_axis_length_ft: longestEave || axis.primaryTotalLen / 2,
+        perpendicular_axis_length_ft: longestRake || axis.perpTotalLen / 2,
+        aspect_ratio: longestRake > 0 ? (longestEave || axis.primaryTotalLen / 2) / longestRake : 1,
+        edge_classifications: edges,
+        inferred_form: "unknown",
+        form_confidence: 0,
+        connected_mass_ids: [],
+      }],
+      junction_valleys: [],
+      decomposition_method: "single_mass",
+      notes,
+    };
+  }
+
+  // Multi-mass: approximate by splitting the footprint bounding box at step-back points
+  // For now, use a simplified approach: find the longest and second-longest perpendicular runs
+  // The step-back between them defines a mass boundary
+  perpRuns.sort((a, b) => b.totalLength - a.totalLength);
+  const mainPerp = perpRuns[0];
+  const secondPerp = perpRuns.length > 1 ? perpRuns[1] : null;
+
+  // Estimate mass dimensions from edge groups
+  // Mass A: the "main body" (longer section)
+  // Mass B: the "wing/projection" (shorter section)
+  const mainEaveEdges = edges.filter(e => e.classification === "likely_eave");
+  const mainRakeEdges = edges.filter(e => e.classification === "likely_rake");
+
+  // Sort eave edges by length descending — longest pair is main body
+  const eaveSorted = [...mainEaveEdges].sort((a, b) => b.length_ft - a.length_ft);
+  const rakeSorted = [...mainRakeEdges].sort((a, b) => b.length_ft - a.length_ft);
+
+  const massALength = eaveSorted[0]?.length_ft ?? axis.primaryTotalLen / 2;
+  const massAWidth = rakeSorted[0]?.length_ft ?? axis.perpTotalLen / 2;
+  const massBLength = eaveSorted.length > 1 ? (eaveSorted[1]?.length_ft ?? 0) : 0;
+  const massBWidth = rakeSorted.length > 1 ? (rakeSorted[1]?.length_ft ?? 0) : 0;
+
+  if (massBLength < 5 || massBWidth < 5) {
+    // Second mass is too small — probably not a real wing
+    notes.push(`Potential wing too small (${roundTo(massBLength)}×${roundTo(massBWidth)}ft) — single mass.`);
+    return {
+      masses: [{
+        id: "mass_0",
+        polygon: ring,
+        area_sqft: candidate.area_sqft,
+        perimeter_ft: candidate.perimeter_ft,
+        dominant_axis_bearing: axis.primaryAxis,
+        dominant_axis_length_ft: massALength,
+        perpendicular_axis_length_ft: massAWidth,
+        aspect_ratio: massAWidth > 0 ? massALength / massAWidth : 1,
+        edge_classifications: edges,
+        inferred_form: "unknown",
+        form_confidence: 0,
+        connected_mass_ids: [],
+      }],
+      junction_valleys: [],
+      decomposition_method: "single_mass",
+      notes,
+    };
+  }
+
+  // Compute approximate areas
+  const massAArea = roundTo(massALength * massAWidth, 0);
+  const massBArea = roundTo(massBLength * massBWidth, 0);
+  const totalDecomposed = massAArea + massBArea;
+  const areaRatio = candidate.area_sqft > 0 ? totalDecomposed / candidate.area_sqft : 1;
+
+  notes.push(`Decomposed into 2 masses: A(${roundTo(massALength)}×${roundTo(massAWidth)}ft ≈${massAArea}sqft) + B(${roundTo(massBLength)}×${roundTo(massBWidth)}ft ≈${massBArea}sqft).`);
+  notes.push(`Decomposed total ${totalDecomposed}sqft vs footprint ${candidate.area_sqft}sqft (ratio: ${roundTo(areaRatio, 2)}).`);
+
+  // Estimate valley length at junction (where wing meets main body)
+  const junctionLength = Math.min(massBWidth, massAWidth);
+  const slopeFactor = 1.118; // moderate default for valley slope-adjustment
+  const valleyAtJunction = roundTo(junctionLength * slopeFactor, 0);
+
+  const masses: RoofMass[] = [
+    {
+      id: "mass_0",
+      polygon: ring, // approximation — actual sub-polygon not computed
+      area_sqft: massAArea,
+      perimeter_ft: roundTo((massALength + massAWidth) * 2, 0),
+      dominant_axis_bearing: axis.primaryAxis,
+      dominant_axis_length_ft: massALength,
+      perpendicular_axis_length_ft: massAWidth,
+      aspect_ratio: massAWidth > 0 ? roundTo(massALength / massAWidth, 2) : 1,
+      edge_classifications: edges.filter(e => e.length_ft >= massAWidth * 0.5),
+      inferred_form: "unknown",
+      form_confidence: 0,
+      connected_mass_ids: ["mass_1"],
+    },
+    {
+      id: "mass_1",
+      polygon: ring,
+      area_sqft: massBArea,
+      perimeter_ft: roundTo((massBLength + massBWidth) * 2, 0),
+      dominant_axis_bearing: (axis.primaryAxis + 90) % 180, // wing is typically perpendicular
+      dominant_axis_length_ft: massBLength,
+      perpendicular_axis_length_ft: massBWidth,
+      aspect_ratio: massBWidth > 0 ? roundTo(massBLength / massBWidth, 2) : 1,
+      edge_classifications: edges.filter(e => e.length_ft < massAWidth * 0.5 || e.classification === "unknown"),
+      inferred_form: "unknown",
+      form_confidence: 0,
+      connected_mass_ids: ["mass_0"],
+    },
+  ];
+
+  return {
+    masses,
+    junction_valleys: [{ mass_a: "mass_0", mass_b: "mass_1", approx_length_ft: valleyAtJunction }],
+    decomposition_method: "axis_split",
+    notes,
+  };
+}
+
 // ── Deterministic linear measurement derivation ──────────────────────
 // All linear values (ridge, hip, valley, eave, rake) are computed from
 // footprint geometry, edge classifications, roof form, dominant axis,
-// and pitch band.  Vision validates/suppresses — never generates.
+// pitch band, and roof-mass decomposition.
+// Vision validates/suppresses — never generates.
+// Unknown values are null with explicit authority="unknown_insufficient_geometry".
 
 interface DerivedLinearMeasurements {
-  ridge_lf: number;
-  hip_lf: number;
-  valley_lf: number;
-  eave_lf: number;
-  rake_lf: number;
-  facet_count: number;
+  ridge_lf: number | null;
+  hip_lf: number | null;
+  valley_lf: number | null;
+  eave_lf: number | null;
+  rake_lf: number | null;
+  facet_count: number | null;
   derivation_notes: string[];
-  /** Per-field derivation confidence (0-100) separate from overall estimate */
   linear_confidence: Record<string, number>;
-  /** Fields set to 0 because geometry could not support a reliable value */
   unknown_fields: string[];
 }
 
-/**
- * Derive ridge, hip, valley, eave, rake, and facet count deterministically.
- * Returns 0 + adds to unknown_fields when geometry is insufficient.
- */
-function deriveLinearMeasurements(
-  candidate: CandidateFootprint | null,
-  roofForm: RoofFormInference | null,
+/** Guardrail: ridge must be >= min_ridge_ratio × dominant axis for the form to be plausible. */
+const RIDGE_GUARDRAILS = {
+  /** Gable ridge should be >= 60% of dominant axis (else footprint is too irregular). */
+  gable_min_ridge_ratio: 0.6,
+  /** Hip ridge must be positive and < dominant axis (else it's not really a hip). */
+  hip_max_ridge_ratio: 0.95,
+  /** Minimum absolute ridge length to report (ft). Below this → null. */
+  min_absolute_ridge_ft: 8,
+  /** Hip derivation: halfPerp must be > this to be reliable. */
+  min_half_perp_ft: 5,
+};
+
+function deriveLinearForMass(
+  mass: RoofMass,
   resolvedForm: RoofForm,
   pitchBand: PitchBand,
+  overhang: OverhangConfig,
+  roofFormInference: RoofFormInference | null,
 ): DerivedLinearMeasurements {
   const notes: string[] = [];
   const unknown_fields: string[] = [];
   const linear_confidence: Record<string, number> = {};
 
-  // ── No geometry → everything unknown ──
-  if (!candidate || !roofForm) {
-    notes.push("No footprint geometry available — all linear values unknown.");
-    return {
-      ridge_lf: 0, hip_lf: 0, valley_lf: 0, eave_lf: 0, rake_lf: 0,
-      facet_count: 0, derivation_notes: notes,
-      linear_confidence: { ridge_lf: 0, hip_lf: 0, valley_lf: 0, eave_lf: 0, rake_lf: 0, facet_count: 0 },
-      unknown_fields: ["ridge_lf", "hip_lf", "valley_lf", "eave_lf", "rake_lf", "facet_count"],
-    };
-  }
+  const edges = mass.edge_classifications;
+  const dominantLen = mass.dominant_axis_length_ft;
+  const perpLen = mass.perpendicular_axis_length_ft;
+  const aspect = mass.aspect_ratio;
+  // Use a rough quality proxy: area > 500 and reasonable aspect = decent quality
+  const qualityProxy = (mass.area_sqft > 500 && aspect > 0.5 && aspect < 5) ? 60 : 30;
 
-  const edges = candidate.edge_classifications;
-  const quality = candidate.geometry_quality_score;
-  const dominantLen = roofForm.dominant_axis_length_ft;
-  const perpLen = roofForm.perpendicular_axis_length_ft;
-  const aspect = roofForm.aspect_ratio;
-
-  // ── Eave & Rake: sum from edge classifications + overhang adjustment ──
-  const OVERHANG_FT = 1.0; // typical 12" overhang per eave side
-  let rawEaveLf = 0, rawRakeLf = 0, unknownEdgeLf = 0;
+  // ── Eave & Rake: sum from edge classifications + configurable overhang ──
+  let rawEaveLf = 0, rawRakeLf = 0;
   for (const e of edges) {
     if (e.classification === "likely_eave") rawEaveLf += e.length_ft;
     else if (e.classification === "likely_rake") rawRakeLf += e.length_ft;
-    else unknownEdgeLf += e.length_ft;
   }
 
-  // Adjust eave for overhang: each eave segment extends by ~OVERHANG_FT on each end
   const eaveSegCount = edges.filter(e => e.classification === "likely_eave").length;
   const rakeSegCount = edges.filter(e => e.classification === "likely_rake").length;
-  const eaveLf = rawEaveLf > 0 ? roundTo(rawEaveLf + eaveSegCount * OVERHANG_FT * 2, 0) : 0;
-  const rakeLf = rawRakeLf > 0 ? roundTo(rawRakeLf + rakeSegCount * OVERHANG_FT * 2, 0) : 0;
 
-  linear_confidence.eave_lf = rawEaveLf > 0 ? (quality >= 60 ? 65 : quality >= 40 ? 45 : 25) : 0;
-  linear_confidence.rake_lf = rawRakeLf > 0 ? (quality >= 60 ? 65 : quality >= 40 ? 45 : 25) : 0;
+  let eaveLf: number | null = null;
+  let rakeLf: number | null = null;
 
-  if (rawEaveLf === 0) { unknown_fields.push("eave_lf"); notes.push("Eave: no eave-classified edges found."); }
-  else notes.push(`Eave: ${rawEaveLf}ft edge sum + ${eaveSegCount}×${OVERHANG_FT*2}ft overhang = ${eaveLf}ft.`);
-
-  if (rawRakeLf === 0) { unknown_fields.push("rake_lf"); notes.push("Rake: no rake-classified edges found."); }
-  else notes.push(`Rake: ${rawRakeLf}ft edge sum + ${rakeSegCount}×${OVERHANG_FT*2}ft overhang = ${rakeLf}ft.`);
-
-  // ── Ridge: derived from roof form + dominant axis ──
-  let ridgeLf = 0;
-  if (resolvedForm === "gable" || resolvedForm === "cross_gable") {
-    // Ridge runs along dominant axis, approximately = longest eave segment length
-    if (roofForm.ridge_candidates.length > 0) {
-      ridgeLf = roundTo(roofForm.ridge_candidates[0].length_ft, 0);
-      const ridgeConf = roofForm.ridge_candidates[0].confidence;
-      linear_confidence.ridge_lf = Math.min(ridgeConf, quality >= 50 ? 55 : 35);
-      notes.push(`Ridge (gable): ${ridgeLf}ft from geometry ridge candidate @${ridgeConf}% conf.`);
-    } else if (dominantLen > 5) {
-      ridgeLf = roundTo(dominantLen, 0);
-      linear_confidence.ridge_lf = quality >= 50 ? 40 : 20;
-      notes.push(`Ridge (gable fallback): ${ridgeLf}ft = dominant axis length.`);
-    } else {
-      unknown_fields.push("ridge_lf");
-      linear_confidence.ridge_lf = 0;
-      notes.push("Ridge: dominant axis too short for reliable value.");
-    }
-  } else if (resolvedForm === "hip") {
-    // Hip roof ridge = dominant_axis - perpendicular_axis (the hip "eats into" the ridge)
-    const hipRidge = dominantLen - perpLen;
-    if (hipRidge > 5 && dominantLen > perpLen) {
-      ridgeLf = roundTo(hipRidge, 0);
-      linear_confidence.ridge_lf = quality >= 50 ? 40 : 20;
-      notes.push(`Ridge (hip): ${ridgeLf}ft = dominant(${dominantLen}) - perp(${perpLen}).`);
-    } else if (dominantLen > 5) {
-      // Near-square hip: ridge is very short or pyramid (0)
-      ridgeLf = aspect < 1.1 ? 0 : roundTo(Math.max(0, hipRidge), 0);
-      linear_confidence.ridge_lf = 25;
-      notes.push(`Ridge (hip, near-square): ${ridgeLf}ft. AR=${aspect}, may be pyramid.`);
-    } else {
-      unknown_fields.push("ridge_lf");
-      linear_confidence.ridge_lf = 0;
-      notes.push("Ridge (hip): insufficient axis dimensions.");
-    }
+  if (rawEaveLf > 0) {
+    eaveLf = roundTo(rawEaveLf + eaveSegCount * overhang.eave_overhang_ft * 2, 0);
+    linear_confidence.eave_lf = qualityProxy >= 60 ? 65 : qualityProxy >= 40 ? 45 : 25;
+    notes.push(`Eave: ${rawEaveLf}ft edge + ${eaveSegCount}×${overhang.eave_overhang_ft*2}ft overhang(${overhang.source}) = ${eaveLf}ft.`);
   } else {
-    // complex or unknown — cannot reliably derive ridge
-    unknown_fields.push("ridge_lf");
-    linear_confidence.ridge_lf = 0;
-    notes.push(`Ridge: roof form '${resolvedForm}' does not support deterministic ridge derivation.`);
+    unknown_fields.push("eave_lf");
+    linear_confidence.eave_lf = 0;
+    notes.push("Eave: null — no eave-classified edges.");
   }
 
-  // ── Hip LF: only for hip/complex roofs ──
-  let hipLf = 0;
+  if (rawRakeLf > 0) {
+    rakeLf = roundTo(rawRakeLf + rakeSegCount * overhang.rake_overhang_ft * 2, 0);
+    linear_confidence.rake_lf = qualityProxy >= 60 ? 65 : qualityProxy >= 40 ? 45 : 25;
+    notes.push(`Rake: ${rawRakeLf}ft edge + ${rakeSegCount}×${overhang.rake_overhang_ft*2}ft overhang(${overhang.source}) = ${rakeLf}ft.`);
+  } else {
+    unknown_fields.push("rake_lf");
+    linear_confidence.rake_lf = 0;
+    notes.push("Rake: null — no rake-classified edges.");
+  }
+
+  // ── Ridge: with guardrails ──
+  let ridgeLf: number | null = null;
+  if (resolvedForm === "gable" || resolvedForm === "cross_gable") {
+    // Try ridge candidates first
+    let candidateRidge: number | null = null;
+    if (roofFormInference && roofFormInference.ridge_candidates.length > 0) {
+      candidateRidge = roofFormInference.ridge_candidates[0].length_ft;
+    }
+    const rawRidge = candidateRidge ?? dominantLen;
+
+    // Guardrail: ridge must be >= ratio × dominant and >= min absolute
+    if (rawRidge >= RIDGE_GUARDRAILS.min_absolute_ridge_ft &&
+        rawRidge >= dominantLen * RIDGE_GUARDRAILS.gable_min_ridge_ratio) {
+      ridgeLf = roundTo(rawRidge, 0);
+      linear_confidence.ridge_lf = qualityProxy >= 50 ? (candidateRidge ? 50 : 35) : 20;
+      notes.push(`Ridge (gable): ${ridgeLf}ft${candidateRidge ? " from candidate" : " = dominant axis"}. Passed guardrail (>=${roundTo(dominantLen * RIDGE_GUARDRAILS.gable_min_ridge_ratio)}ft min).`);
+    } else {
+      unknown_fields.push("ridge_lf");
+      linear_confidence.ridge_lf = 0;
+      notes.push(`Ridge: null — failed guardrail (raw=${roundTo(rawRidge)}ft, min=${roundTo(dominantLen * RIDGE_GUARDRAILS.gable_min_ridge_ratio)}ft or ${RIDGE_GUARDRAILS.min_absolute_ridge_ft}ft).`);
+    }
+  } else if (resolvedForm === "hip") {
+    const hipRidge = dominantLen - perpLen;
+    // Guardrail: positive, > min absolute, < max ratio of dominant
+    if (hipRidge >= RIDGE_GUARDRAILS.min_absolute_ridge_ft &&
+        dominantLen > perpLen &&
+        hipRidge / dominantLen < RIDGE_GUARDRAILS.hip_max_ridge_ratio) {
+      ridgeLf = roundTo(hipRidge, 0);
+      linear_confidence.ridge_lf = qualityProxy >= 50 ? 40 : 20;
+      notes.push(`Ridge (hip): ${ridgeLf}ft = dominant(${roundTo(dominantLen)}) - perp(${roundTo(perpLen)}). Passed guardrail.`);
+    } else if (aspect < 1.15 && dominantLen > 10) {
+      // Near-square hip = pyramid, ridge ≈ 0 is intentional
+      ridgeLf = 0;
+      linear_confidence.ridge_lf = 30;
+      notes.push(`Ridge (pyramid hip): 0ft. Near-square AR=${aspect}.`);
+    } else {
+      unknown_fields.push("ridge_lf");
+      linear_confidence.ridge_lf = 0;
+      notes.push(`Ridge (hip): null — failed guardrail (raw=${roundTo(hipRidge)}ft, dom=${roundTo(dominantLen)}, perp=${roundTo(perpLen)}).`);
+    }
+  } else {
+    unknown_fields.push("ridge_lf");
+    linear_confidence.ridge_lf = 0;
+    notes.push(`Ridge: null — form '${resolvedForm}' unsupported for deterministic derivation.`);
+  }
+
+  // ── Hip LF: with guardrails ──
+  let hipLf: number | null = null;
   if (resolvedForm === "hip") {
-    // 4 hip lines from corners to ridge endpoints
-    // Each hip ≈ sqrt((perp/2)^2 + (perp/2)^2) in plan = perp/2 * sqrt(2), then slope-adjusted
     const halfPerp = perpLen / 2;
-    if (halfPerp > 3) {
-      const slopeFactor = PITCH_BAND_META[pitchBand]?.slope_factor_mid ?? 1.118;
-      // Plan-view hip length = sqrt(halfPerp^2 + halfPerp^2) = halfPerp*sqrt(2)
-      // But hip runs from corner diagonally to ridge end, in plan ≈ halfPerp/cos(45°) = halfPerp*sqrt(2)
-      const singleHipPlan = halfPerp * Math.SQRT2;
-      const singleHipSlope = singleHipPlan * slopeFactor;
+    if (halfPerp >= RIDGE_GUARDRAILS.min_half_perp_ft) {
+      const sf = PITCH_BAND_META[pitchBand]?.slope_factor_mid ?? 1.118;
+      const singleHipSlope = halfPerp * Math.SQRT2 * sf;
       hipLf = roundTo(4 * singleHipSlope, 0);
-      linear_confidence.hip_lf = quality >= 50 ? 35 : 20;
-      notes.push(`Hip: 4 × (${roundTo(halfPerp,1)}ft × √2 × ${slopeFactor} slope) = ${hipLf}ft.`);
+      linear_confidence.hip_lf = qualityProxy >= 50 ? 35 : 20;
+      notes.push(`Hip: 4×(${roundTo(halfPerp,1)}ft×√2×${sf}) = ${hipLf}ft. halfPerp passed guardrail (>=${RIDGE_GUARDRAILS.min_half_perp_ft}ft).`);
     } else {
       unknown_fields.push("hip_lf");
       linear_confidence.hip_lf = 0;
-      notes.push("Hip: perpendicular axis too short.");
+      notes.push(`Hip: null — halfPerp ${roundTo(halfPerp,1)}ft < ${RIDGE_GUARDRAILS.min_half_perp_ft}ft guardrail.`);
     }
-  } else if (resolvedForm === "cross_gable" || resolvedForm === "complex") {
-    // May have hips at wing junctions — use candidates if available
-    if (roofForm.hip_valley_candidates.filter(c => c.type === "hip").length > 0) {
-      const hipCandidates = roofForm.hip_valley_candidates.filter(c => c.type === "hip");
-      hipLf = roundTo(hipCandidates.reduce((s, c) => s + c.length_ft, 0), 0);
-      linear_confidence.hip_lf = 20;
-      notes.push(`Hip (${resolvedForm}): ${hipLf}ft from ${hipCandidates.length} geometry candidate(s).`);
-    } else {
-      hipLf = 0;
-      linear_confidence.hip_lf = 0;
-      notes.push(`Hip: none inferred for ${resolvedForm} form.`);
-    }
+  } else if (resolvedForm === "gable") {
+    hipLf = 0; // gable has no hips — this is a known zero, not unknown
+    linear_confidence.hip_lf = 70;
+    notes.push("Hip: 0ft (gable — known zero).");
   } else {
-    // Gable: no hips
-    hipLf = 0;
-    linear_confidence.hip_lf = resolvedForm === "gable" ? 70 : 0;
-    if (resolvedForm === "gable") notes.push("Hip: 0ft (gable roof — no hips).");
-    else { unknown_fields.push("hip_lf"); notes.push("Hip: unknown for this roof form."); }
+    // complex/cross_gable/unknown — check candidates
+    if (roofFormInference) {
+      const hipCands = roofFormInference.hip_valley_candidates.filter(c => c.type === "hip");
+      if (hipCands.length > 0) {
+        hipLf = roundTo(hipCands.reduce((s, c) => s + c.length_ft, 0), 0);
+        linear_confidence.hip_lf = 20;
+        notes.push(`Hip (${resolvedForm}): ${hipLf}ft from ${hipCands.length} candidate(s).`);
+      }
+    }
+    if (hipLf === null) {
+      unknown_fields.push("hip_lf");
+      linear_confidence.hip_lf = 0;
+      notes.push(`Hip: null — no candidates for '${resolvedForm}'.`);
+    }
   }
 
-  // ── Valley LF: cross-gable/complex only ──
-  let valleyLf = 0;
-  if (resolvedForm === "cross_gable" || resolvedForm === "complex") {
-    const valleyCandidates = roofForm.hip_valley_candidates.filter(c => c.type === "valley");
-    if (valleyCandidates.length > 0) {
-      // Slope-adjust valley lengths
-      const slopeFactor = PITCH_BAND_META[pitchBand]?.slope_factor_mid ?? 1.118;
-      valleyLf = roundTo(valleyCandidates.reduce((s, c) => s + c.length_ft * slopeFactor, 0), 0);
-      linear_confidence.valley_lf = Math.min(25, valleyCandidates[0].confidence);
-      notes.push(`Valley (${resolvedForm}): ${valleyLf}ft from ${valleyCandidates.length} candidate(s), slope-adjusted.`);
-    } else {
+  // ── Valley LF (per-mass — junction valleys added separately) ──
+  let valleyLf: number | null = null;
+  if (resolvedForm === "gable") {
+    valleyLf = 0;
+    linear_confidence.valley_lf = 70;
+    notes.push("Valley: 0ft (gable — known zero).");
+  } else if (resolvedForm === "hip") {
+    valleyLf = 0;
+    linear_confidence.valley_lf = 50;
+    notes.push("Valley: 0ft (simple hip — no valleys).");
+  } else if (resolvedForm === "cross_gable" || resolvedForm === "complex") {
+    if (roofFormInference) {
+      const valCands = roofFormInference.hip_valley_candidates.filter(c => c.type === "valley");
+      if (valCands.length > 0) {
+        const sf = PITCH_BAND_META[pitchBand]?.slope_factor_mid ?? 1.118;
+        valleyLf = roundTo(valCands.reduce((s, c) => s + c.length_ft * sf, 0), 0);
+        linear_confidence.valley_lf = Math.min(25, valCands[0].confidence);
+        notes.push(`Valley (${resolvedForm}): ${valleyLf}ft from ${valCands.length} candidate(s), slope-adjusted.`);
+      }
+    }
+    if (valleyLf === null) {
       unknown_fields.push("valley_lf");
       linear_confidence.valley_lf = 0;
-      notes.push(`Valley: ${resolvedForm} expected but no valley candidates from geometry.`);
+      notes.push(`Valley: null — no candidates for '${resolvedForm}'.`);
     }
-  } else if (resolvedForm === "gable" || resolvedForm === "hip") {
-    valleyLf = 0;
-    linear_confidence.valley_lf = resolvedForm === "gable" ? 70 : 50;
-    notes.push(`Valley: 0ft (simple ${resolvedForm} — no valleys expected).`);
   } else {
     unknown_fields.push("valley_lf");
     linear_confidence.valley_lf = 0;
-    notes.push("Valley: unknown for this roof form.");
+    notes.push("Valley: null — unknown form.");
   }
 
-  // ── Facet count: derived from roof form ──
-  let facetCount = 0;
+  // ── Facet count ──
+  let facetCount: number | null = null;
   if (resolvedForm === "gable") {
     facetCount = 2;
     linear_confidence.facet_count = 60;
-    notes.push("Facets: 2 (simple gable).");
+    notes.push("Facets: 2 (gable).");
   } else if (resolvedForm === "hip") {
-    facetCount = aspect < 1.1 ? 4 : 4; // pyramid = 4, standard hip = 4
+    facetCount = 4;
     linear_confidence.facet_count = 50;
-    notes.push(`Facets: ${facetCount} (hip roof).`);
+    notes.push("Facets: 4 (hip).");
   } else if (resolvedForm === "cross_gable") {
-    facetCount = 4 + roofForm.hip_valley_candidates.filter(c => c.type === "valley").length * 2;
-    facetCount = Math.max(4, facetCount);
+    const valCount = roofFormInference?.hip_valley_candidates.filter(c => c.type === "valley").length ?? 0;
+    facetCount = Math.max(4, 4 + valCount * 2);
     linear_confidence.facet_count = 30;
-    notes.push(`Facets: ${facetCount} (cross-gable, estimated from valley count).`);
-  } else if (resolvedForm === "complex") {
-    // Can't reliably count — use vision if available, else unknown
-    facetCount = 0;
-    unknown_fields.push("facet_count");
-    linear_confidence.facet_count = 0;
-    notes.push("Facets: unknown (complex roof form).");
+    notes.push(`Facets: ${facetCount} (cross-gable, ${valCount} valley(s)).`);
   } else {
-    facetCount = 0;
     unknown_fields.push("facet_count");
     linear_confidence.facet_count = 0;
-    notes.push("Facets: unknown.");
+    notes.push("Facets: null — form unsupported.");
   }
 
   return {
@@ -1354,11 +1561,115 @@ function deriveLinearMeasurements(
 }
 
 /**
+ * Full derivation: decompose → per-mass derivation → aggregate.
+ */
+function deriveLinearMeasurements(
+  candidate: CandidateFootprint | null,
+  roofForm: RoofFormInference | null,
+  resolvedForm: RoofForm,
+  pitchBand: PitchBand,
+  overhang: OverhangConfig,
+): { linear: DerivedLinearMeasurements; decomposition: RoofMassDecomposition | null } {
+  if (!candidate || !roofForm) {
+    return {
+      linear: {
+        ridge_lf: null, hip_lf: null, valley_lf: null, eave_lf: null, rake_lf: null,
+        facet_count: null,
+        derivation_notes: ["No footprint geometry — all linear values null."],
+        linear_confidence: { ridge_lf: 0, hip_lf: 0, valley_lf: 0, eave_lf: 0, rake_lf: 0, facet_count: 0 },
+        unknown_fields: ["ridge_lf", "hip_lf", "valley_lf", "eave_lf", "rake_lf", "facet_count"],
+      },
+      decomposition: null,
+    };
+  }
+
+  const decomposition = decomposeIntoMasses(candidate);
+  const massCount = decomposition.masses.length;
+
+  if (massCount === 1) {
+    // Single mass — derive directly
+    const mass = decomposition.masses[0];
+    // Assign resolved form to the single mass
+    mass.inferred_form = resolvedForm;
+    mass.form_confidence = roofForm.roof_form_confidence;
+    const linear = deriveLinearForMass(mass, resolvedForm, pitchBand, overhang, roofForm);
+    return { linear, decomposition };
+  }
+
+  // Multi-mass aggregation
+  const allNotes: string[] = [`Roof decomposed into ${massCount} masses.`];
+  const allUnknown: string[] = [];
+  const aggConfidence: Record<string, number> = {};
+  let totalRidge: number | null = null;
+  let totalHip: number | null = null;
+  let totalValley: number | null = null;
+  let totalEave: number | null = null;
+  let totalRake: number | null = null;
+  let totalFacets: number | null = null;
+
+  // Assign forms: main mass gets resolved form, wings get "gable" default
+  for (let i = 0; i < decomposition.masses.length; i++) {
+    const mass = decomposition.masses[i];
+    mass.inferred_form = i === 0 ? resolvedForm : (mass.aspect_ratio >= 1.3 ? "gable" : "hip");
+    mass.form_confidence = i === 0 ? roofForm.roof_form_confidence : 30;
+
+    const massLinear = deriveLinearForMass(mass, mass.inferred_form, pitchBand, overhang, i === 0 ? roofForm : null);
+    allNotes.push(`── Mass ${mass.id} (${mass.inferred_form}, ${mass.area_sqft}sqft):`);
+    allNotes.push(...massLinear.derivation_notes.map(n => `  ${n}`));
+
+    // Aggregate: null + number = number; null + null = null; number + number = sum
+    const addNullable = (a: number | null, b: number | null): number | null => {
+      if (a === null && b === null) return null;
+      return (a ?? 0) + (b ?? 0);
+    };
+
+    totalRidge = addNullable(totalRidge, massLinear.ridge_lf);
+    totalHip = addNullable(totalHip, massLinear.hip_lf);
+    totalValley = addNullable(totalValley, massLinear.valley_lf);
+    totalEave = addNullable(totalEave, massLinear.eave_lf);
+    totalRake = addNullable(totalRake, massLinear.rake_lf);
+    totalFacets = addNullable(totalFacets, massLinear.facet_count);
+
+    for (const f of massLinear.unknown_fields) {
+      if (!allUnknown.includes(f)) allUnknown.push(f);
+    }
+    for (const [k, v] of Object.entries(massLinear.linear_confidence)) {
+      aggConfidence[k] = Math.min(aggConfidence[k] ?? 100, v); // worst-case across masses
+    }
+  }
+
+  // Add junction valleys
+  for (const jv of decomposition.junction_valleys) {
+    const sf = PITCH_BAND_META[pitchBand]?.slope_factor_mid ?? 1.118;
+    const junctionValleySloped = roundTo(jv.approx_length_ft * sf, 0);
+    // Each junction produces 2 valley lines (one on each side)
+    const junctionTotal = junctionValleySloped * 2;
+    totalValley = (totalValley ?? 0) + junctionTotal;
+    allNotes.push(`Junction valley (${jv.mass_a}↔${jv.mass_b}): 2×${junctionValleySloped}ft = ${junctionTotal}ft.`);
+    // Remove valley from unknown if junction provided it
+    const vIdx = allUnknown.indexOf("valley_lf");
+    if (vIdx >= 0) allUnknown.splice(vIdx, 1);
+    aggConfidence.valley_lf = Math.max(aggConfidence.valley_lf ?? 0, 25);
+  }
+
+  return {
+    linear: {
+      ridge_lf: totalRidge,
+      hip_lf: totalHip,
+      valley_lf: totalValley,
+      eave_lf: totalEave,
+      rake_lf: totalRake,
+      facet_count: totalFacets,
+      derivation_notes: allNotes,
+      linear_confidence: aggConfidence,
+      unknown_fields: allUnknown,
+    },
+    decomposition,
+  };
+}
+
+/**
  * Vision validation/suppression for geometry-derived linear values.
- * Vision can:
- *   1. Suppress a derived value (reduce confidence / zero out) if vision contradicts.
- *   2. Fill in a facet count when geometry says "unknown" but vision is confident.
- * Vision CANNOT generate ridge/hip/valley/eave/rake values.
  */
 function applyVisionLinearValidation(
   derived: DerivedLinearMeasurements,
@@ -1370,54 +1681,50 @@ function applyVisionLinearValidation(
   const v = { ...derived, linear_confidence: { ...derived.linear_confidence }, unknown_fields: [...derived.unknown_fields] };
   const validationNotes: string[] = [];
 
-  // 1. Facet override: vision can fill unknown facet count
-  if (v.unknown_fields.includes("facet_count") && !vision.visible_facets.abstain && vision.visible_facets.confidence >= 30) {
+  // 1. Facet override: vision can fill null facet count
+  if (v.facet_count === null && !vision.visible_facets.abstain && vision.visible_facets.confidence >= 30) {
     v.facet_count = vision.visible_facets.value;
     v.linear_confidence.facet_count = Math.min(vision.visible_facets.confidence, 40);
     v.unknown_fields = v.unknown_fields.filter(f => f !== "facet_count");
-    validationNotes.push(`Facets: vision-filled ${v.facet_count} @${v.linear_confidence.facet_count}% (geometry couldn't determine).`);
+    validationNotes.push(`Facets: vision-filled ${v.facet_count} @${v.linear_confidence.facet_count}% (geometry null).`);
   }
 
-  // 2. Facet conflict: vision disagrees with geometry-derived count → reduce confidence
-  if (!v.unknown_fields.includes("facet_count") && !vision.visible_facets.abstain && vision.visible_facets.confidence >= 25) {
-    if (vision.visible_facets.value !== v.facet_count && Math.abs(vision.visible_facets.value - v.facet_count) > 1) {
-      v.linear_confidence.facet_count = Math.round(v.linear_confidence.facet_count * 0.6);
-      validationNotes.push(`Facet conflict: geometry=${v.facet_count}, vision=${vision.visible_facets.value}. Confidence reduced to ${v.linear_confidence.facet_count}%.`);
+  // 2. Facet conflict
+  if (v.facet_count !== null && !vision.visible_facets.abstain && vision.visible_facets.confidence >= 25) {
+    if (Math.abs(vision.visible_facets.value - v.facet_count) > 1) {
+      v.linear_confidence.facet_count = Math.round((v.linear_confidence.facet_count ?? 0) * 0.6);
+      validationNotes.push(`Facet conflict: geometry=${v.facet_count}, vision=${vision.visible_facets.value}. Confidence reduced.`);
     }
   }
 
-  // 3. Form conflict suppression on form-dependent linear values
+  // 3. Form conflict suppression
   if (!vision.roof_form.abstain && vision.roof_form.confidence >= 35) {
-    const visionForm = vision.roof_form.value;
-    // If vision says "hip" but we derived as "gable" (hip_lf=0, rake has value)
-    if (resolvedForm === "gable" && (visionForm === "hip" || visionForm === "cross_hip")) {
-      // Suppress rake confidence (gable assumes rake; hip doesn't have rakes)
-      if (v.linear_confidence.rake_lf > 0) {
+    const vf = vision.roof_form.value;
+    if (resolvedForm === "gable" && (vf === "hip" || vf === "cross_hip")) {
+      if ((v.linear_confidence.rake_lf ?? 0) > 0) {
         v.linear_confidence.rake_lf = Math.round(v.linear_confidence.rake_lf * 0.5);
-        validationNotes.push(`Vision sees hip/cross_hip but geometry says gable — rake confidence halved to ${v.linear_confidence.rake_lf}%.`);
+        validationNotes.push(`Vision hip vs geometry gable — rake confidence halved.`);
       }
-      // Suppress hip=0 confidence (it might actually have hips)
       if (v.hip_lf === 0) {
-        v.linear_confidence.hip_lf = 5; // very uncertain zero
-        validationNotes.push("Hip: geometry derived 0 but vision suggests hip form — low confidence in zero.");
+        v.linear_confidence.hip_lf = 5;
+        validationNotes.push("Hip=0 but vision sees hip — low confidence in zero.");
       }
     }
-    // If vision says "gable" but we derived as "hip" (no rake, has hip)
-    if (resolvedForm === "hip" && visionForm === "gable") {
-      if (v.hip_lf > 0) {
-        v.linear_confidence.hip_lf = Math.round(v.linear_confidence.hip_lf * 0.5);
-        validationNotes.push(`Vision sees gable but geometry says hip — hip confidence halved to ${v.linear_confidence.hip_lf}%.`);
+    if (resolvedForm === "hip" && vf === "gable") {
+      if (v.hip_lf !== null && v.hip_lf > 0) {
+        v.linear_confidence.hip_lf = Math.round((v.linear_confidence.hip_lf ?? 0) * 0.5);
+        validationNotes.push(`Vision gable vs geometry hip — hip confidence halved.`);
       }
     }
   }
 
-  // 4. If vision has high tree cover, suppress confidence on all derived linear values
+  // 4. Tree cover → suppress all linear confidence
   if (vision.obstructions.tree_cover_pct > 50) {
     for (const f of ["ridge_lf", "hip_lf", "valley_lf", "eave_lf", "rake_lf"]) {
-      if (v.linear_confidence[f] > 0) {
+      if ((v.linear_confidence[f] ?? 0) > 0) {
         const before = v.linear_confidence[f];
         v.linear_confidence[f] = Math.round(before * 0.6);
-        validationNotes.push(`${f}: confidence ${before}→${v.linear_confidence[f]}% (tree cover ${vision.obstructions.tree_cover_pct}%).`);
+        validationNotes.push(`${f}: conf ${before}→${v.linear_confidence[f]}% (trees ${vision.obstructions.tree_cover_pct}%).`);
       }
     }
   }
@@ -1439,24 +1746,21 @@ function deriveRoofEstimate(
   visionResult: SatelliteVisionResult | null,
   suppressions: SuppressionRecord[],
 ): RoofEstimateResult {
-  // ── Footprint = source of truth for area ──
   const hasGeometry = !!selectedCandidate;
   const footprintArea = selectedCandidate?.area_sqft ?? 0;
-  const footprintPerimeter = selectedCandidate?.perimeter_ft ?? 0;
+  const overhang: OverhangConfig = DEFAULT_OVERHANG;
 
-  // ── Determine pitch band (vision-classified, not exact) ──
+  // ── Pitch band ──
   let pitchBand: PitchBand = "unknown";
   let pitchType: PitchType = "band";
   let slopeFactor = PITCH_BAND_META.unknown.slope_factor_mid;
-
   if (visionResult && !visionResult.pitch_band.abstain && visionResult.pitch_band.confidence >= 20) {
     pitchBand = visionResult.pitch_band.value;
     slopeFactor = PITCH_BAND_META[pitchBand].slope_factor_mid;
   }
 
-  // ── Deterministic area calculation ──
-  let roofArea = 0;
-  let squares = 0;
+  // ── Area ──
+  let roofArea = 0, squares = 0;
   if (hasGeometry && pitchBand !== "unknown") {
     roofArea = roundTo(footprintArea * slopeFactor, 0);
     squares = roundTo(roofArea / 100, 1);
@@ -1466,55 +1770,38 @@ function deriveRoofEstimate(
   let resolvedRoofForm: RoofForm = roofFormInference?.inferred_roof_form ?? "unknown";
   if (visionResult && !visionResult.roof_form.abstain && visionResult.roof_form.confidence > 30) {
     const vf = visionResult.roof_form.value;
-    if (vf === "cross_hip" || vf === "gambrel" || vf === "mansard") {
-      resolvedRoofForm = "complex";
-    } else if (["gable", "hip", "cross_gable", "complex"].includes(vf)) {
-      resolvedRoofForm = vf as RoofForm;
-    }
+    if (vf === "cross_hip" || vf === "gambrel" || vf === "mansard") resolvedRoofForm = "complex";
+    else if (["gable", "hip", "cross_gable", "complex"].includes(vf)) resolvedRoofForm = vf as RoofForm;
     if (roofFormInference && roofFormInference.roof_form_confidence > visionResult.roof_form.confidence) {
       resolvedRoofForm = roofFormInference.inferred_roof_form;
     }
   }
 
-  // ── Deterministic linear measurement derivation ──
-  const rawLinear = deriveLinearMeasurements(selectedCandidate, roofFormInference, resolvedRoofForm, pitchBand);
-
-  // ── Vision validation/suppression on derived values ──
+  // ── Deterministic derivation with mass decomposition ──
+  const { linear: rawLinear, decomposition } = deriveLinearMeasurements(selectedCandidate, roofFormInference, resolvedRoofForm, pitchBand, overhang);
   const { validated: linear, validationNotes } = applyVisionLinearValidation(rawLinear, resolvedRoofForm, visionResult);
 
-  // ── Resolve facet count: prefer vision when geometry couldn't determine ──
+  // Vision facet fallback
   let resolvedFacets = linear.facet_count;
-  if (resolvedFacets === 0 && visionResult && !visionResult.visible_facets.abstain && visionResult.visible_facets.confidence >= 25) {
+  if (resolvedFacets === null && visionResult && !visionResult.visible_facets.abstain && visionResult.visible_facets.confidence >= 25) {
     resolvedFacets = visionResult.visible_facets.value;
   }
 
-  // ── Sanitise ──
-  const raw: Record<string, any> = {
-    footprint_area_sqft: footprintArea,
-    estimated_roof_area_sqft: roofArea,
-    squares,
-    ridge_lf: linear.ridge_lf,
-    hip_lf: linear.hip_lf,
-    valley_lf: linear.valley_lf,
-    eave_lf: linear.eave_lf,
-    rake_lf: linear.rake_lf,
-    facet_count: resolvedFacets,
-    confidence_score: hasGeometry ? Math.min(45, selectedCandidate!.geometry_quality_score * 0.5) : 10,
-  };
-  const cleaned = sanitise(raw);
+  // ── Sanitise (null-safe) ──
+  const confScore = hasGeometry ? Math.min(45, selectedCandidate!.geometry_quality_score * 0.5) : 10;
 
-  // ── Field sources: everything is geometry-derived or satellite-classified ──
+  // ── Field sources ──
   const fieldSources: Record<string, DerivationSource> = {
     footprint_area_sqft: hasGeometry ? "geometry" : "ai_estimated",
     estimated_roof_area_sqft: (hasGeometry && pitchBand !== "unknown") ? "geometry" : "ai_estimated",
     squares: (hasGeometry && pitchBand !== "unknown") ? "geometry" : "ai_estimated",
     dominant_pitch: (visionResult && !visionResult.pitch_band.abstain) ? "satellite_imagery" : "ai_estimated",
-    ridge_lf: hasGeometry ? "geometry" : "ai_estimated",
-    hip_lf: hasGeometry ? "geometry" : "ai_estimated",
-    valley_lf: hasGeometry ? "geometry" : "ai_estimated",
-    eave_lf: hasGeometry ? "geometry" : "ai_estimated",
-    rake_lf: hasGeometry ? "geometry" : "ai_estimated",
-    facet_count: (resolvedFacets > 0 && linear.facet_count > 0) ? "geometry"
+    ridge_lf: (hasGeometry && linear.ridge_lf !== null) ? "geometry" : "ai_estimated",
+    hip_lf: (hasGeometry && linear.hip_lf !== null) ? "geometry" : "ai_estimated",
+    valley_lf: (hasGeometry && linear.valley_lf !== null) ? "geometry" : "ai_estimated",
+    eave_lf: (hasGeometry && linear.eave_lf !== null) ? "geometry" : "ai_estimated",
+    rake_lf: (hasGeometry && linear.rake_lf !== null) ? "geometry" : "ai_estimated",
+    facet_count: (resolvedFacets !== null && linear.facet_count !== null) ? "geometry"
       : (visionResult && !visionResult.visible_facets.abstain && visionResult.visible_facets.confidence >= 25) ? "satellite_imagery"
       : "ai_estimated",
   };
@@ -1533,33 +1820,32 @@ function deriveRoofEstimate(
     facet_count: linear.linear_confidence.facet_count ?? 0,
   };
 
-  // ── Field authority ──
+  // ── Field authority: null values get explicit unknown status ──
   const fieldAuthority: Record<string, FieldAuthority> = {
     footprint_area_sqft: hasGeometry ? "geometry_authoritative" : "ai_provisional",
     estimated_roof_area_sqft: (hasGeometry && pitchBand !== "unknown") ? "geometry_authoritative" : "ai_provisional",
     squares: (hasGeometry && pitchBand !== "unknown") ? "geometry_authoritative" : "ai_provisional",
     dominant_pitch: "ai_provisional",
-    ridge_lf: hasGeometry ? "geometry_authoritative" : "ai_provisional",
-    hip_lf: hasGeometry ? "geometry_authoritative" : "ai_provisional",
-    valley_lf: hasGeometry ? "geometry_authoritative" : "ai_provisional",
-    eave_lf: hasGeometry ? "geometry_authoritative" : "ai_provisional",
-    rake_lf: hasGeometry ? "geometry_authoritative" : "ai_provisional",
-    facet_count: "ai_provisional",
+    ridge_lf: linear.ridge_lf !== null ? (hasGeometry ? "geometry_authoritative" : "ai_provisional") : "unknown_insufficient_geometry",
+    hip_lf: linear.hip_lf !== null ? (hasGeometry ? "geometry_authoritative" : "ai_provisional") : "unknown_insufficient_geometry",
+    valley_lf: linear.valley_lf !== null ? (hasGeometry ? "geometry_authoritative" : "ai_provisional") : "unknown_insufficient_geometry",
+    eave_lf: linear.eave_lf !== null ? (hasGeometry ? "geometry_authoritative" : "ai_provisional") : "unknown_insufficient_geometry",
+    rake_lf: linear.rake_lf !== null ? (hasGeometry ? "geometry_authoritative" : "ai_provisional") : "unknown_insufficient_geometry",
+    facet_count: resolvedFacets !== null ? "ai_provisional" : "unknown_insufficient_geometry",
   };
 
-  // Mark unknown fields as provisional regardless
-  for (const uf of linear.unknown_fields) {
-    if (fieldAuthority[uf]) fieldAuthority[uf] = "ai_provisional";
-    if (fieldSources[uf]) fieldSources[uf] = "ai_estimated";
-  }
-
-  // ── Build notes ──
+  // ── Notes ──
   const displayPitch = pitchBand !== "unknown" ? bandToDisplayPitch(pitchBand) : "unknown";
   const notes: string[] = [];
   notes.push(`Pitch: ${displayPitch} (${pitchType}). Roof form: ${resolvedRoofForm}.`);
+  notes.push(`📐 Overhang: eave=${overhang.eave_overhang_ft}ft, rake=${overhang.rake_overhang_ft}ft (${overhang.source}).`);
   if (hasGeometry) {
     notes.push(`📐 Footprint: ${footprintArea} sqft from ${selectedCandidate!.source} (quality: ${selectedCandidate!.geometry_quality_score}/100).`);
-    if (roofArea > 0) notes.push(`📐 Area: ${footprintArea} × ${slopeFactor} = ${roofArea} sqft (deterministic).`);
+    if (roofArea > 0) notes.push(`📐 Area: ${footprintArea} × ${slopeFactor} = ${roofArea} sqft.`);
+  }
+  if (decomposition && decomposition.masses.length > 1) {
+    notes.push(`🏗️ Mass decomposition (${decomposition.decomposition_method}): ${decomposition.masses.length} masses, ${decomposition.junction_valleys.length} junction valley(s).`);
+    for (const dn of decomposition.notes) notes.push(`  • ${dn}`);
   }
   notes.push(`📏 Linear derivation (rule-based):`);
   for (const dn of linear.derivation_notes) notes.push(`  • ${dn}`);
@@ -1568,31 +1854,30 @@ function deriveRoofEstimate(
     for (const vn of validationNotes) notes.push(`  • ${vn}`);
   }
   if (linear.unknown_fields.length > 0) {
-    notes.push(`⚠️ Unknown fields (geometry insufficient): ${linear.unknown_fields.join(", ")}`);
+    notes.push(`⚠️ Null fields (geometry insufficient): ${linear.unknown_fields.join(", ")}`);
   }
   if (visionResult) {
-    notes.push(`🛰️ Vision classification: form=${visionResult.roof_form.value}@${visionResult.roof_form.confidence}%${visionResult.roof_form.abstain ? "(abstained)" : ""}, pitch=${visionResult.pitch_band.value}@${visionResult.pitch_band.confidence}%${visionResult.pitch_band.abstain ? "(abstained)" : ""}, facets=${visionResult.visible_facets.value}@${visionResult.visible_facets.confidence}%${visionResult.visible_facets.abstain ? "(abstained)" : ""}`);
-    notes.push(`🔍 Obstructions: trees=${visionResult.obstructions.tree_cover_pct}%, shadow=${visionResult.obstructions.shadow_coverage}, sides visible=${visionResult.obstructions.visible_sides}/4, quality=${visionResult.overall_image_quality}/100`);
+    notes.push(`🛰️ Vision: form=${visionResult.roof_form.value}@${visionResult.roof_form.confidence}%${visionResult.roof_form.abstain ? "(abstained)" : ""}, pitch=${visionResult.pitch_band.value}@${visionResult.pitch_band.confidence}%${visionResult.pitch_band.abstain ? "(abstained)" : ""}, facets=${visionResult.visible_facets.value}@${visionResult.visible_facets.confidence}%${visionResult.visible_facets.abstain ? "(abstained)" : ""}`);
   }
   if (suppressions.length > 0) {
     notes.push(`⚠️ ${suppressions.length} suppression(s): ${suppressions.map(s => `${s.rule}→${s.field}`).join(", ")}`);
   }
-  notes.push("\n⚠️ PRELIMINARY ESTIMATE. All linear values are geometry-derived (rule-based), not AI-generated. Pitch is a BAND classification. All values require manual confirmation.");
+  notes.push("\n⚠️ PRELIMINARY. Linear values are geometry-derived with null for unsupported fields. Overhang is configurable. All values require manual confirmation.");
 
   return {
-    footprint_area_sqft: cleaned.footprint_area_sqft,
-    estimated_roof_area_sqft: cleaned.estimated_roof_area_sqft,
-    squares: cleaned.squares,
+    footprint_area_sqft: footprintArea,
+    estimated_roof_area_sqft: roofArea,
+    squares,
     dominant_pitch: displayPitch,
     pitch_band: pitchBand,
     pitch_type: pitchType,
-    ridge_lf: cleaned.ridge_lf,
-    hip_lf: cleaned.hip_lf,
-    valley_lf: cleaned.valley_lf,
-    eave_lf: cleaned.eave_lf,
-    rake_lf: cleaned.rake_lf,
-    facet_count: cleaned.facet_count,
-    confidence_score: cleaned.confidence_score,
+    ridge_lf: linear.ridge_lf,
+    hip_lf: linear.hip_lf,
+    valley_lf: linear.valley_lf,
+    eave_lf: linear.eave_lf,
+    rake_lf: linear.rake_lf,
+    facet_count: resolvedFacets,
+    confidence_score: roundTo(confScore, 0),
     review_required: true,
     overlay_image_url: null,
     raw_geojson: selectedCandidate?.geojson || null,
@@ -1602,7 +1887,8 @@ function deriveRoofEstimate(
       ...(selectedCandidate ? [selectedCandidate.source] : []),
       ...(roofFormInference ? ["Geometry Roof Form Inference"] : []),
       ...(visionResult ? ["Satellite Vision Classification (ArcGIS World Imagery)"] : []),
-      "Deterministic Linear Derivation Engine",
+      "Deterministic Linear Derivation Engine v2",
+      ...(decomposition && decomposition.masses.length > 1 ? ["Roof Mass Decomposition"] : []),
     ],
     field_sources: fieldSources,
     field_confidence: fieldConfidence,
@@ -1627,6 +1913,8 @@ function deriveRoofEstimate(
     hip_valley_candidates: roofFormInference?.hip_valley_candidates ?? null,
     vision_classifications: visionResult,
     suppression_records: suppressions.length > 0 ? suppressions : null,
+    roof_mass_decomposition: decomposition,
+    overhang_config: overhang,
   };
 }
 
