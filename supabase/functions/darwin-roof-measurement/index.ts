@@ -231,7 +231,7 @@ const toRad = (d: number) => (d * Math.PI) / 180;
 const toDeg = (r: number) => (r * 180) / Math.PI;
 const R_FT = 20902231; // Earth radius in feet
 
-/** Validate & sanitise numeric estimate fields. */
+/** Validate & sanitise numeric estimate fields. Preserves null for unknown values. */
 function sanitise(raw: Record<string, any>): Record<string, any> {
   const numeric: [string, number, number, number][] = [
     ["footprint_area_sqft", 0, 100, 50000],
@@ -247,10 +247,11 @@ function sanitise(raw: Record<string, any>): Record<string, any> {
   ];
   const out: Record<string, any> = { ...raw };
   for (const [key, decimals, min, max] of numeric) {
+    if (out[key] === null || out[key] === undefined) continue; // preserve null
     const v = Number(out[key]);
-    out[key] = isNaN(v) ? 0 : roundTo(clamp(v, min, max), decimals);
+    out[key] = isNaN(v) ? null : roundTo(clamp(v, min, max), decimals);
   }
-  if (out.estimated_roof_area_sqft > 0) {
+  if (out.estimated_roof_area_sqft != null && out.estimated_roof_area_sqft > 0) {
     out.squares = roundTo(out.estimated_roof_area_sqft / 100, 1);
   }
   return out;
