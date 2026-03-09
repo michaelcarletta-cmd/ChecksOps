@@ -738,7 +738,10 @@ For each damaged area:
 - Summary of all work required`;
         break;
 
-      case "final-demand":
+      case "final-demand": {
+        const stateLabel = detectedStateCode && stateRegulationsLookup[detectedStateCode]
+          ? `${stateRegulationsLookup[detectedStateCode].stateName} Insurance Codes (${stateRegulationsLookup[detectedStateCode].adminCode}, ${stateRegulationsLookup[detectedStateCode].badFaithStatute})`
+          : 'Applicable State Insurance Codes';
         userPrompt = `Create a Final Demand Letter based on these photos documenting property damage.
 
 ${claimContext}
@@ -750,9 +753,11 @@ Please create a professional Final Demand Letter including:
 ### I. FACTUAL BACKGROUND
 ### II. DAMAGE ANALYSIS
 ### III. RESTORATION REQUIREMENTS
-### IV. PROSPECTIVE LIABILITY (NJ/PA Insurance Codes)
+### IV. PROSPECTIVE LIABILITY (${stateLabel})
 ### V. DEMAND FOR PAYMENT
 ### VI. CONCLUSION`;
+        break;
+      }
         break;
 
       case "demand-package":
