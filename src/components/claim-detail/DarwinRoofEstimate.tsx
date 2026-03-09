@@ -162,6 +162,15 @@ const EDGE_COLORS: Record<string, string> = {
   unknown: "bg-muted-foreground",
 };
 
+const PITCH_SLOPE_FACTORS: Record<string, number> = {
+  "2/12": 1.014, "3/12": 1.031, "4/12": 1.054, "5/12": 1.083,
+  "6/12": 1.118, "7/12": 1.158, "8/12": 1.202, "9/12": 1.250,
+  "10/12": 1.302, "11/12": 1.357, "12/12": 1.414, "14/12": 1.537,
+  "16/12": 1.667, "18/12": 1.803,
+};
+
+const PITCH_OPTIONS = Object.keys(PITCH_SLOPE_FACTORS);
+
 const round = (v: number | null | undefined, decimals = 0): number | null => {
   if (v == null || isNaN(v)) return null;
   const factor = 10 ** decimals;
