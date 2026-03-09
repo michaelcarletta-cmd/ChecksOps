@@ -109,6 +109,9 @@ interface RoofEstimate {
   aspect_ratio: number | null;
   ridge_candidates: RidgeCandidate[] | null;
   hip_valley_candidates: HipValleyCandidate[] | null;
+  // Phase 2D
+  tuning_applied: { key: string; field: string; action: string; before: number; after: number }[] | null;
+  pre_tuning_values: Record<string, number> | null;
   created_at: string;
   updated_at: string;
 }
