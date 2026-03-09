@@ -433,6 +433,47 @@ export const DarwinRoofTuningDashboard = () => {
                       )}
                     </div>
 
+                    {/* Shadow mode details */}
+                    {h.shadow_mode && (
+                      <div className="rounded bg-purple-500/10 p-2 space-y-1">
+                        <div className="flex items-center gap-1 text-xs font-medium text-purple-600">
+                          <Eye className="h-3 w-3" />
+                          Shadow Mode — Observing Only
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <span className="text-muted-foreground">Hits:</span>{" "}
+                            <span className="font-medium tabular-nums">{h.shadow_mode_hits} / {h.shadow_mode_min_hits} needed</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Progress:</span>{" "}
+                            <span className="font-medium tabular-nums">{Math.round((h.shadow_mode_hits / h.shadow_mode_min_hits) * 100)}%</span>
+                          </div>
+                          {h.shadow_mode_promoted_at && (
+                            <div>
+                              <span className="text-muted-foreground">Promoted:</span>{" "}
+                              <span className="font-medium">{new Date(h.shadow_mode_promoted_at).toLocaleDateString()}</span>
+                            </div>
+                          )}
+                        </div>
+                        {h.shadow_mode_predicted_impacts && Array.isArray(h.shadow_mode_predicted_impacts) && h.shadow_mode_predicted_impacts.length > 0 && (
+                          <div className="mt-1">
+                            <span className="text-[10px] text-muted-foreground">Recent predicted impacts:</span>
+                            <div className="flex flex-wrap gap-1 mt-0.5">
+                              {h.shadow_mode_predicted_impacts.slice(-5).map((impact: any, i: number) => (
+                                <Badge key={i} variant="outline" className="text-[9px] font-mono">
+                                  {impact.field}: {impact.before}→{impact.after}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <div className="text-[10px] text-muted-foreground italic mt-1">
+                          This heuristic is being observed but does not modify estimates. It will auto-promote to active after {h.shadow_mode_min_hits} estimate matches.
+                        </div>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-4 gap-3 text-xs">
                       <div>
                         <span className="text-muted-foreground">Avg Accuracy:</span>{" "}
