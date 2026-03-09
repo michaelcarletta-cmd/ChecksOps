@@ -208,6 +208,26 @@ Return JSON only.`;
     fieldSources.footprint_area_sqft = "geometry";
   }
 
+  // Build field_confidence with defaults
+  const defaultConfidence: Record<string, number> = {
+    footprint_area_sqft: parcel?.parcelArea ? 55 : 20,
+    estimated_roof_area_sqft: 15,
+    squares: 15,
+    dominant_pitch: 20,
+    ridge_lf: 10,
+    hip_lf: 10,
+    valley_lf: 10,
+    eave_lf: 10,
+    rake_lf: 10,
+    facet_count: 15,
+  };
+  const fieldConfidence: Record<string, number> = { ...defaultConfidence };
+  const aiConfidence = parsed.field_confidence || {};
+  for (const [k, v] of Object.entries(aiConfidence)) {
+    const num = Number(v);
+    if (!isNaN(num)) fieldConfidence[k] = Math.max(0, Math.min(100, Math.round(num)));
+  }
+
   return {
     footprint_area_sqft: cleaned.footprint_area_sqft,
     estimated_roof_area_sqft: cleaned.estimated_roof_area_sqft,
@@ -227,6 +247,7 @@ Return JSON only.`;
       "\n\n⚠️ This is a PRELIMINARY ESTIMATE, not a measurement. All values are AI-modeled from public parcel data and should not be used without manual confirmation.",
     data_sources: parsed.data_sources ?? ["US Census Geocoder", "AI estimation"],
     field_sources: fieldSources,
+    field_confidence: fieldConfidence,
   };
 }
 
