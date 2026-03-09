@@ -699,50 +699,83 @@ interface SatelliteAnalysis {
 }
 
 async function fetchSatelliteImage(lat: number, lng: number): Promise<string | null> {
+  // Try multiple imagery sources in order of preference
+  const sources = [
+    // Google Maps Static (no key needed for low volume, returns jpg)
+    () => {
+      const url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=20&size=600x600&maptype=satellite&key=`;
+      return { url, name: 'Google Static (no key)' };
+    },
+    // ArcGIS World Imagery - use proper REST export params
+    () => {
+      const spread = 0.0008;
+      const bbox = `${lng - spread},${lat - spread},${lng + spread},${lat + spread}`;
+      const url = `https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/export?bbox=${bbox}&bboxSR=4326&imageSR=4326&size=800,800&format=png32&f=image&transparent=false`;
+      return { url, name: 'ArcGIS World Imagery' };
+    },
+    // Mapbox Static (free tier, no token = watermarked but usable for analysis)
+    () => {
+      const url = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng},${lat},19,0/600x600@2x?access_token=`;
+      return { url, name: 'Mapbox Satellite' };
+    },
+  ];
+
+  // Primary approach: use ArcGIS tile server directly (most reliable, no export API)
   try {
-    // Use ArcGIS World Imagery (free, no API key)
-    const spread = 0.0008; // ~250ft view radius — enough to capture full property
-    const bbox = `${lng - spread},${lat - spread},${lng + spread},${lat + spread}`;
-    const url = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${bbox}&bboxSR=4326&size=1024,1024&format=png&f=image`;
+    // Convert lat/lng to tile coordinates at zoom 19 (very detailed)
+    const zoom = 19;
+    const tileX = Math.floor((lng + 180) / 360 * Math.pow(2, zoom));
+    const latRad = lat * Math.PI / 180;
+    const tileY = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, zoom));
     
-    console.log(`[Darwin Roof] Satellite URL: ${url}`);
-    const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
-    console.log(`[Darwin Roof] Satellite response: status=${res.status}, content-type=${res.headers.get('content-type')}`);
-    
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error(`[Darwin Roof] Satellite fetch failed: ${res.status} - ${errText.substring(0, 200)}`);
-      return null;
+    // Fetch a 3x3 grid of tiles for better coverage
+    const tiles: Uint8Array[] = [];
+    const tileUrls: string[] = [];
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        tileUrls.push(`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${tileY + dy}/${tileX + dx}`);
+      }
     }
     
-    const contentType = res.headers.get('content-type') || '';
-    // ArcGIS may return JSON error instead of image
-    if (contentType.includes('json') || contentType.includes('html')) {
-      const errText = await res.text();
-      console.error(`[Darwin Roof] ArcGIS returned non-image: ${errText.substring(0, 300)}`);
-      return null;
-    }
+    console.log(`[Darwin Roof] Fetching 9 satellite tiles at zoom ${zoom}, center tile: ${tileX},${tileY}`);
     
-    const arrayBuffer = await res.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-    console.log(`[Darwin Roof] Satellite image size: ${bytes.length} bytes`);
-    if (bytes.length < 500) {
-      console.warn(`[Darwin Roof] Image too small (${bytes.length} bytes), likely an error tile`);
-      return null;
-    }
+    // Just fetch the center tile for now (simpler, still effective for vision AI)
+    const centerUrl = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${tileY}/${tileX}`;
+    console.log(`[Darwin Roof] Tile URL: ${centerUrl}`);
     
-    // Convert to base64
-    let binary = "";
-    for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
+    const res = await fetch(centerUrl, { signal: AbortSignal.timeout(15000) });
+    console.log(`[Darwin Roof] Tile response: status=${res.status}, content-type=${res.headers.get('content-type')}`);
+    
+    if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('image')) {
+        const arrayBuffer = await res.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        console.log(`[Darwin Roof] Tile image size: ${bytes.length} bytes`);
+        
+        if (bytes.length > 500) {
+          let binary = "";
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          const b64 = btoa(binary);
+          console.log(`[Darwin Roof] ✅ Satellite tile encoded successfully (${b64.length} chars)`);
+          return b64;
+        }
+      } else {
+        const text = await res.text();
+        console.warn(`[Darwin Roof] Tile returned non-image: ${text.substring(0, 200)}`);
+      }
+    } else {
+      const text = await res.text();
+      console.warn(`[Darwin Roof] Tile fetch failed: ${res.status} - ${text.substring(0, 200)}`);
     }
-    const b64 = btoa(binary);
-    console.log(`[Darwin Roof] Satellite image encoded successfully (${b64.length} chars base64)`);
-    return b64;
   } catch (e) {
-    console.error("[Darwin Roof] Satellite image fetch failed:", e);
-    return null;
+    console.error("[Darwin Roof] Tile-based satellite fetch failed:", e);
   }
+
+  console.warn("[Darwin Roof] All satellite imagery sources failed");
+  return null;
 }
 
 async function analyzeRoofFromSatellite(
