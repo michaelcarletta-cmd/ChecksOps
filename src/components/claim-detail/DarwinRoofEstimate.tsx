@@ -250,9 +250,12 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       setEstimate(data.measurement as RoofEstimate);
       const candidateCount = data.candidateCount || 0;
       const roofForm = data.roofFormInferred ? ` — roof form inferred` : "";
+      const satellite = data.satelliteAnalyzed
+        ? ` — 🛰️ satellite imagery analyzed (pitch: ${data.satellitePitch ?? "?"})`
+        : "";
       const fpMsg = data.footprintExtracted
-        ? ` — footprint extracted (${candidateCount} candidate${candidateCount > 1 ? "s" : ""} found)${roofForm}`
-        : " — no footprint geometry found, using AI estimation";
+        ? ` — footprint extracted (${candidateCount} candidate${candidateCount > 1 ? "s" : ""} found)${roofForm}${satellite}`
+        : ` — no footprint geometry found, using AI estimation${satellite}`;
       toast.success("Roof estimate generated" + fpMsg);
     } catch (err: any) {
       setError(err.message || "Estimate failed");
@@ -573,7 +576,8 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     {} as Record<string, number>,
   );
 
-  const phaseLabel = tuningApplied.length > 0 ? "Phase 2D" : estimate?.inferred_roof_form ? "Phase 2C" : hasFootprintGeometry ? "Phase 2B" : "Preliminary";
+  const hasSatelliteData = estimate?.data_sources?.some((s: string) => s.toLowerCase().includes("satellite"));
+  const phaseLabel = tuningApplied.length > 0 ? "Phase 2D" : hasSatelliteData ? "Phase 2E 🛰️" : estimate?.inferred_roof_form ? "Phase 2C" : hasFootprintGeometry ? "Phase 2B" : "Preliminary";
 
   return (
     <Card>

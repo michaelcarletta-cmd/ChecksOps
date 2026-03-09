@@ -685,6 +685,130 @@ async function fetchNJBuildingCandidate(lat: number, lng: number): Promise<Candi
   } catch { return null; }
 }
 
+// ── Satellite imagery analysis ───────────────────────────────────────
+
+interface SatelliteAnalysis {
+  estimated_pitch: string | null;
+  roof_form: string | null;
+  roof_color: string | null;
+  visible_layers: number | null;
+  complexity_notes: string | null;
+  shadow_pitch_estimate: string | null;
+  confidence: number;
+  analysis_notes: string;
+}
+
+async function fetchSatelliteImage(lat: number, lng: number): Promise<string | null> {
+  try {
+    // Use ArcGIS World Imagery (free, no API key)
+    const spread = 0.0004; // ~120ft view radius — tight on a single home
+    const bbox = `${lng - spread},${lat - spread},${lng + spread},${lat + spread}`;
+    const url = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${bbox}&bboxSR=4326&size=800,800&format=png&f=image`;
+    
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return null;
+    
+    const arrayBuffer = await res.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    if (bytes.length < 1000) return null; // too small = likely error
+    
+    // Convert to base64
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  } catch (e) {
+    console.error("Satellite image fetch failed:", e);
+    return null;
+  }
+}
+
+async function analyzeRoofFromSatellite(
+  base64Image: string,
+  address: string,
+  footprintAreaSqft: number | null,
+): Promise<SatelliteAnalysis | null> {
+  const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1";
+  const LOVABLE_AI_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_AI_KEY) return null;
+
+  try {
+    const systemPrompt = `You are an expert roof analyst reviewing satellite/aerial imagery for insurance claims. Analyze the roof visible in the image and return ONLY valid JSON.
+
+JSON schema:
+{
+  "estimated_pitch": string | null (e.g. "6/12", "8/12" — estimate from shadow length/angle if visible, or roof slope appearance),
+  "roof_form": string ("gable" | "hip" | "cross_gable" | "gambrel" | "mansard" | "flat" | "complex" | "unknown"),
+  "roof_color": string (e.g. "dark gray", "brown", "black"),
+  "visible_layers": number (count of distinct roof planes/facets visible from above),
+  "complexity_notes": string (describe dormers, valleys, ridge lines, extensions, attached structures),
+  "shadow_pitch_estimate": string | null (if shadows are visible, estimate pitch from shadow geometry),
+  "confidence": number (0-85, how confident you are in the analysis based on image clarity),
+  "analysis_notes": string (methodology, what you can/cannot determine from this view)
+}
+
+Rules:
+- Look for shadow angles cast by the roof ridge — longer shadows = steeper pitch
+- Count distinct roof planes visible from above
+- Note any dormers, chimneys, skylights, or protrusions
+- If the image is blurry, cloudy, or obstructed, lower confidence significantly
+- Standard residential pitch range: 4/12 to 10/12
+- Be conservative — this is for insurance claims where accuracy matters
+- A simple rectangular gable has 2 planes; a hip has 4; each dormer adds 2-3`;
+
+    const userPrompt = `Analyze this satellite/aerial image of the property at: ${address}
+${footprintAreaSqft ? `Known footprint area: ${footprintAreaSqft} sqft` : ""}
+
+Examine the roof structure, estimate pitch from shadows if visible, identify the roof form, count visible planes/facets, and note complexity. Return JSON only.`;
+
+    const response = await fetch(`${LOVABLE_AI_URL}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_AI_KEY}` },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-pro",
+        messages: [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: userPrompt },
+              { type: "image_url", image_url: { url: `data:image/png;base64,${base64Image}` } },
+            ],
+          },
+        ],
+        temperature: 0.15,
+        max_tokens: 1500,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Satellite analysis AI error:", response.status);
+      return null;
+    }
+
+    const result = await response.json();
+    const content = result.choices?.[0]?.message?.content || "";
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    return {
+      estimated_pitch: parsed.estimated_pitch ?? null,
+      roof_form: parsed.roof_form ?? null,
+      roof_color: parsed.roof_color ?? null,
+      visible_layers: typeof parsed.visible_layers === "number" ? parsed.visible_layers : null,
+      complexity_notes: parsed.complexity_notes ?? null,
+      shadow_pitch_estimate: parsed.shadow_pitch_estimate ?? null,
+      confidence: clamp(Number(parsed.confidence) || 0, 0, 85),
+      analysis_notes: parsed.analysis_notes ?? "Satellite analysis completed.",
+    };
+  } catch (e) {
+    console.error("Satellite analysis failed:", e);
+    return null;
+  }
+}
+
 // ── AI estimation ────────────────────────────────────────────────────
 
 async function estimateRoofWithAI(
@@ -696,6 +820,7 @@ async function estimateRoofWithAI(
   selectedCandidate: CandidateFootprint | null,
   allCandidates: CandidateFootprint[],
   roofFormInference: RoofFormInference | null,
+  satelliteAnalysis: SatelliteAnalysis | null,
 ): Promise<RoofEstimateResult> {
   const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1";
   const LOVABLE_AI_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -743,20 +868,35 @@ Rules:
 - If a geometry-derived footprint area is provided, use it EXACTLY for footprint_area_sqft and mark field_sources.footprint_area_sqft = "geometry"
 - If edge-classified eave/rake values are provided, use them as starting points and adjust for overhang (+1-2ft per side typically). Mark these as "geometry" source but note they are footprint-proxy.
 - If roof form inference is provided, use it to guide hip_lf, valley_lf, ridge_lf, and facet_count estimates. For "gable" forms, hip_lf should be 0. For "hip" forms, rake_lf should be minimal.
+- If satellite imagery analysis is provided, PRIORITIZE its pitch estimate and roof form over geometry-only inference. Satellite-derived pitch is much more reliable than guessing.
+- If satellite analysis provides a pitch, use it as the dominant_pitch and apply the corresponding slope factor
 - Footprint is typically 30-50% of lot area for residential (only if no geometry footprint)
 - Standard residential pitches: 4/12-8/12
-- Slope factors: 4/12=1.054, 5/12=1.083, 6/12=1.118, 7/12=1.158, 8/12=1.202
+- Slope factors: 4/12=1.054, 5/12=1.083, 6/12=1.118, 7/12=1.158, 8/12=1.202, 9/12=1.250, 10/12=1.302, 11/12=1.357, 12/12=1.414
 - Pre-1970 homes: simpler gable roofs. Newer: more hip/valley
-- confidence_score MUST be ≤ 50 (no verified imagery = low confidence)
-- field_confidence: give each field its own 0-100 confidence score. Geometry-derived fields get higher scores (60-85). AI guesses get lower scores (10-35). Footprint-proxy derived values (eave, rake from edge classification) get 40-60.
+- confidence_score: if satellite imagery was analyzed, you may go up to 65. Otherwise MUST be ≤ 50.
+- field_confidence: give each field its own 0-100 confidence score. Geometry-derived fields get higher scores (60-85). Satellite-confirmed fields get 55-75. AI guesses get lower scores (10-35). Footprint-proxy derived values (eave, rake from edge classification) get 40-60.
 - Clearly state this is a preliminary estimate, not a measurement
 - All perimeter-derived values (eave_lf, rake_lf) should be labeled as FOOTPRINT-PROXY in ai_notes`;
+
+  const satelliteContext = satelliteAnalysis
+    ? `\n\n🛰️ SATELLITE IMAGERY ANALYSIS (from aerial photo of this property):
+- Estimated pitch from imagery: ${satelliteAnalysis.estimated_pitch ?? "not determinable"}
+- Shadow-based pitch estimate: ${satelliteAnalysis.shadow_pitch_estimate ?? "not determinable"}
+- Roof form observed: ${satelliteAnalysis.roof_form ?? "unknown"}
+- Roof color: ${satelliteAnalysis.roof_color ?? "unknown"}
+- Visible roof planes/facets: ${satelliteAnalysis.visible_layers ?? "unknown"}
+- Complexity: ${satelliteAnalysis.complexity_notes ?? "none noted"}
+- Image analysis confidence: ${satelliteAnalysis.confidence}%
+- Notes: ${satelliteAnalysis.analysis_notes}
+IMPORTANT: Use the satellite-derived pitch and roof form as PRIMARY references. These are based on actual visual observation of this specific property.`
+    : "\nNo satellite imagery analysis available.";
 
   const userPrompt = `Estimate roof for:
 Address: ${address}
 Coordinates: ${lat}, ${lng}
 Elevation: ${elevation ? `${elevation} ft` : "unknown"}
-Parcel: ${parcel ? JSON.stringify(parcel) : "unavailable"}${footprintContext}${roofFormContext}
+Parcel: ${parcel ? JSON.stringify(parcel) : "unavailable"}${footprintContext}${roofFormContext}${satelliteContext}
 
 Return JSON only.`;
 
@@ -811,18 +951,22 @@ Return JSON only.`;
   if (hasGeometry && geometryEaveLf > 0) fieldSources.eave_lf = "geometry";
   if (hasGeometry && geometryRakeLf > 0) fieldSources.rake_lf = "geometry";
 
-  // Build field_confidence
+  // Build field_confidence — boost when satellite analysis confirms values
+  const hasSatellite = !!satelliteAnalysis && satelliteAnalysis.confidence > 30;
+  const satPitchConfirmed = hasSatellite && !!satelliteAnalysis!.estimated_pitch;
+  const satFormConfirmed = hasSatellite && !!satelliteAnalysis!.roof_form && satelliteAnalysis!.roof_form !== "unknown";
+
   const defaultConfidence: Record<string, number> = {
     footprint_area_sqft: hasGeometry ? 75 : parcel?.parcelArea ? 55 : 20,
-    estimated_roof_area_sqft: hasGeometry ? 40 : 15,
-    squares: hasGeometry ? 40 : 15,
-    dominant_pitch: 20,
-    ridge_lf: roofFormInference?.ridge_candidates?.length ? 30 : 10,
-    hip_lf: roofFormInference?.hip_valley_candidates?.length ? 25 : 10,
-    valley_lf: roofFormInference?.hip_valley_candidates?.some(c => c.type === "valley") ? 25 : 10,
+    estimated_roof_area_sqft: hasGeometry ? (satPitchConfirmed ? 65 : 40) : (satPitchConfirmed ? 50 : 15),
+    squares: hasGeometry ? (satPitchConfirmed ? 65 : 40) : (satPitchConfirmed ? 50 : 15),
+    dominant_pitch: satPitchConfirmed ? 70 : 20,
+    ridge_lf: roofFormInference?.ridge_candidates?.length ? 30 : (satFormConfirmed ? 25 : 10),
+    hip_lf: roofFormInference?.hip_valley_candidates?.length ? 25 : (satFormConfirmed ? 20 : 10),
+    valley_lf: roofFormInference?.hip_valley_candidates?.some(c => c.type === "valley") ? 25 : (satFormConfirmed ? 20 : 10),
     eave_lf: hasGeometry && geometryEaveLf > 0 ? 50 : 10,
     rake_lf: hasGeometry && geometryRakeLf > 0 ? 50 : 10,
-    facet_count: 15,
+    facet_count: hasSatellite && satelliteAnalysis!.visible_layers ? 40 : 15,
   };
   const fieldConfidence: Record<string, number> = { ...defaultConfidence };
   const aiConfidence = parsed.field_confidence || {};
@@ -857,6 +1001,10 @@ Return JSON only.`;
       (roofFormInference.hip_valley_candidates.length > 0 ? `\n📐 ${roofFormInference.hip_valley_candidates.length} hip/valley candidate(s) inferred.` : "")
     : "";
 
+  const satelliteNote = satelliteAnalysis
+    ? `\n\n🛰️ Satellite Imagery Analysis: pitch=${satelliteAnalysis.estimated_pitch ?? "?"}, form=${satelliteAnalysis.roof_form ?? "?"}, planes=${satelliteAnalysis.visible_layers ?? "?"}, color=${satelliteAnalysis.roof_color ?? "?"}, confidence=${satelliteAnalysis.confidence}%. ${satelliteAnalysis.analysis_notes}`
+    : "";
+
   return {
     footprint_area_sqft: cleaned.footprint_area_sqft,
     estimated_roof_area_sqft: cleaned.estimated_roof_area_sqft,
@@ -873,12 +1021,13 @@ Return JSON only.`;
     overlay_image_url: null,
     raw_geojson: selectedCandidate?.geojson || null,
     ai_notes: (parsed.ai_notes ?? "Preliminary AI estimate. Field verification required.") +
-      proxyNote + roofFormNote +
+      proxyNote + roofFormNote + satelliteNote +
       "\n\n⚠️ This is a PRELIMINARY ESTIMATE, not a measurement. All values are AI-modeled and should not be used without manual confirmation.",
     data_sources: [
       ...(parsed.data_sources ?? ["US Census Geocoder", "AI estimation"]),
       ...(selectedCandidate ? [selectedCandidate.source] : []),
       ...(roofFormInference ? ["Geometry Roof Form Inference"] : []),
+      ...(satelliteAnalysis ? ["Satellite Imagery Analysis (ArcGIS World Imagery)"] : []),
     ],
     field_sources: fieldSources,
     field_confidence: fieldConfidence,
@@ -1397,6 +1546,24 @@ Deno.serve(async (req) => {
       roofFormInference = inferRoofForm(selectedCandidate);
     }
 
+    // Phase 2E: Satellite imagery analysis
+    console.log("[Darwin Roof] Fetching satellite imagery...");
+    const satelliteImage = await fetchSatelliteImage(geo.lat, geo.lng);
+    let satelliteAnalysis: SatelliteAnalysis | null = null;
+    if (satelliteImage) {
+      console.log("[Darwin Roof] Analyzing satellite image with AI vision...");
+      satelliteAnalysis = await analyzeRoofFromSatellite(
+        satelliteImage,
+        address,
+        selectedCandidate?.area_sqft ?? null,
+      );
+      if (satelliteAnalysis) {
+        console.log(`[Darwin Roof] Satellite analysis: pitch=${satelliteAnalysis.estimated_pitch}, form=${satelliteAnalysis.roof_form}, confidence=${satelliteAnalysis.confidence}%`);
+      }
+    } else {
+      console.log("[Darwin Roof] No satellite imagery available for this location");
+    }
+
     // Audit log: candidate selection (especially re-selection)
     const isReselection = typeof selected_candidate_index === "number";
     if (selectedCandidate) {
@@ -1414,6 +1581,8 @@ Deno.serve(async (req) => {
           is_reselection: isReselection,
           total_candidates: candidates.length,
           inferred_roof_form: roofFormInference?.inferred_roof_form ?? null,
+          satellite_analysis_available: !!satelliteAnalysis,
+          satellite_pitch: satelliteAnalysis?.estimated_pitch ?? null,
         },
         metadata: {
           event: isReselection ? "footprint_candidate_reselected" : "footprint_candidate_selected",
@@ -1426,7 +1595,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const rawEstimate = await estimateRoofWithAI(address, geo.lat, geo.lng, parcel, elevation, selectedCandidate, candidates, roofFormInference);
+    const rawEstimate = await estimateRoofWithAI(address, geo.lat, geo.lng, parcel, elevation, selectedCandidate, candidates, roofFormInference, satelliteAnalysis);
 
     // Phase 2D: Apply tuning heuristics
     let estimate = rawEstimate;
@@ -1552,6 +1721,9 @@ Deno.serve(async (req) => {
         footprintExtracted: !!selectedCandidate,
         candidateCount: candidates.length,
         roofFormInferred: !!roofFormInference,
+        satelliteAnalyzed: !!satelliteAnalysis,
+        satellitePitch: satelliteAnalysis?.estimated_pitch ?? null,
+        satelliteConfidence: satelliteAnalysis?.confidence ?? null,
         tuningApplied: tuningApplied ? tuningApplied.length : 0,
         shadowModeMatches: shadowMatches ? shadowMatches.length : 0,
         explanationChain,
