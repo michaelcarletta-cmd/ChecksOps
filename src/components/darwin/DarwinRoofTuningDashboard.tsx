@@ -80,6 +80,8 @@ const GOV_STATUS_CONFIG: Record<string, { icon: typeof Shield; color: string; la
   insufficient_evidence: { icon: ShieldAlert, color: "text-orange-500", label: "Low Evidence" },
   capped: { icon: Shield, color: "text-blue-500", label: "Capped" },
   conflict_suppressed: { icon: ShieldX, color: "text-muted-foreground", label: "Conflict Suppressed" },
+  shadow_mode: { icon: Eye, color: "text-purple-500", label: "Shadow" },
+  estimate_cap: { icon: Shield, color: "text-amber-500", label: "Estimate Cap" },
 };
 
 const qualityBandLabel = (min: number | null, max: number | null): string => {
