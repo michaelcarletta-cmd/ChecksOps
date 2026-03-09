@@ -788,13 +788,27 @@ async function fetchOSMBuildingCandidates(lat: number, lng: number): Promise<Can
 
 async function fetchNJBuildingCandidate(lat: number, lng: number): Promise<CandidateFootprint | null> {
   try {
-    const url = `https://services2.arcgis.com/XVOqAjTOJ5P6ngMu/arcgis/rest/services/Building_Footprints_of_NJ/FeatureServer/0/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    // Use envelope (buffer ~50m) instead of point intersect — geocoded lat/lng may be slightly off the building polygon
+    const buf = 0.0005; // ~50m
+    const envelope = `${lng - buf},${lat - buf},${lng + buf},${lat + buf}`;
+    const url = `https://services2.arcgis.com/XVOqAjTOJ5P6ngMu/arcgis/rest/services/Building_Footprints_of_NJ/FeatureServer/0/query?geometry=${envelope}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json&resultRecordCount=5`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
     if (!res.ok) return null;
     const data = await res.json();
     if (!data.features?.length) return null;
 
-    const feat = data.features[0];
+    // Find the feature nearest to the geocoded point
+    let bestFeat = data.features[0];
+    let bestDist = Infinity;
+    for (const feat of data.features) {
+      if (feat.geometry?.rings?.[0]) {
+        const centroid = polygonCentroid(feat.geometry.rings[0]);
+        const dist = haversineDistFt([lng, lat], centroid);
+        if (dist < bestDist) { bestDist = dist; bestFeat = feat; }
+      }
+    }
+    const feat = bestFeat;
+
     const rings = feat.geometry?.rings;
     if (!rings || rings.length === 0) return null;
 
@@ -814,6 +828,8 @@ async function fetchNJBuildingCandidate(lat: number, lng: number): Promise<Candi
       geometry: { type: "Polygon", coordinates: [ring] },
     };
 
+    console.log(`[Darwin Roof] NJGIN: found building ${featureId} (${areaSqft} sqft, ${roundTo(bestDist)}ft from geocode)`);
+
     return {
       polygon: ring,
       area_sqft: areaSqft,
@@ -826,7 +842,10 @@ async function fetchNJBuildingCandidate(lat: number, lng: number): Promise<Candi
       edge_classifications: edges,
       geojson,
     };
-  } catch { return null; }
+  } catch (e) {
+    console.log("[Darwin Roof] NJGIN fetch failed:", e);
+    return null;
+  }
 }
 
 /** Fetch building footprint from Esri USA Structures (AI-extracted, near-universal US coverage). */
