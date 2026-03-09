@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { logAudit } from "@/hooks/useAuditLog";
 import { DarwinRoofValidation } from "./DarwinRoofValidation";
+import { RoofConfirmationDialog, type ConfirmationLevel, type ConfirmationBasis } from "./RoofConfirmationDialog";
 
 type DerivationSource = "geometry" | "ai_estimated" | "user_override";
 type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative";
@@ -112,6 +113,12 @@ interface RoofEstimate {
   // Phase 2D
   tuning_applied: { key: string; field: string; action: string; before: number; after: number }[] | null;
   pre_tuning_values: Record<string, number> | null;
+  // Evidence-based confirmation
+  confirmation_level: ConfirmationLevel | null;
+  confirmation_basis: ConfirmationBasis | null;
+  confirmation_notes: string | null;
+  confirmation_strength_score: number | null;
+  confirmation_attachments: { name: string; path: string; type: string }[] | null;
   created_at: string;
   updated_at: string;
 }
@@ -183,6 +190,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const [error, setError] = useState<string | null>(null);
   const [showEdgeDetail, setShowEdgeDetail] = useState(false);
   const [showRidgeCandidates, setShowRidgeCandidates] = useState(false);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -303,9 +311,6 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
         field_sources: updatedSources,
         field_confidence: updatedConf,
         field_authority: updatedAuth,
-        manually_confirmed: true,
-        confirmed_at: new Date().toISOString(),
-        review_required: false,
         updated_at: new Date().toISOString(),
       })
       .eq("id", estimate.id);
@@ -321,32 +326,26 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       field_sources: updatedSources,
       field_confidence: updatedConf,
       field_authority: updatedAuth,
-      manually_confirmed: true,
-      review_required: false,
     } as RoofEstimate);
     setEditing(false);
-    toast.success("Estimate updated and confirmed for use");
+    toast.success("Values saved — open confirmation dialog to authorize for downstream use");
+    setConfirmDialogOpen(true);
   };
 
-  const confirmEstimate = async () => {
+  const handleConfirmationComplete = (update: {
+    confirmation_level: ConfirmationLevel;
+    confirmation_basis: ConfirmationBasis;
+    confirmation_notes: string | null;
+    confirmation_strength_score: number;
+    confirmation_attachments: { name: string; path: string; type: string }[] | null;
+    manually_confirmed: boolean;
+  }) => {
     if (!estimate) return;
-    const { error: updateErr } = await supabase
-      .from("claim_roof_measurements")
-      .update({
-        manually_confirmed: true,
-        confirmed_at: new Date().toISOString(),
-        review_required: false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", estimate.id);
-
-    if (updateErr) {
-      toast.error("Failed to confirm");
-      return;
-    }
-
-    setEstimate({ ...estimate, manually_confirmed: true, review_required: false });
-    toast.success("Estimate confirmed — now available for downstream workflows");
+    setEstimate({
+      ...estimate,
+      ...update,
+      review_required: false,
+    });
   };
 
   const handleCandidateSelect = (indexStr: string) => {
@@ -611,7 +610,40 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                   <strong>Unconfirmed Estimate — Blocked from Downstream Use</strong>
                   <br />
                   This estimate <em>cannot</em> feed the estimate builder, material calculator, or supplement engine.
-                  Review per-field confidence and authority, then confirm or override values before production use.
+                  Review per-field confidence and authority, then choose a confirmation level before production use.
+                </AlertDescription>
+              </Alert>
+            )}
+            {estimate.manually_confirmed && estimate.confirmation_level && (
+              <Alert>
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <strong>Confirmed:</strong>{" "}
+                      <span className="capitalize">{estimate.confirmation_level.replace(/_/g, " ")}</span>
+                      {estimate.confirmation_basis && (
+                        <span className="text-muted-foreground"> — {estimate.confirmation_basis.replace(/_/g, " ")}</span>
+                      )}
+                    </div>
+                    {estimate.confirmation_strength_score != null && (
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] ${
+                          estimate.confirmation_strength_score >= 70
+                            ? "border-green-500/50 text-green-600"
+                            : estimate.confirmation_strength_score >= 40
+                            ? "border-yellow-500/50 text-yellow-600"
+                            : "border-red-500/50 text-red-600"
+                        }`}
+                      >
+                        Strength: {estimate.confirmation_strength_score}/100
+                      </Badge>
+                    )}
+                  </div>
+                  {estimate.confirmation_notes && (
+                    <p className="text-xs text-muted-foreground mt-1">{estimate.confirmation_notes}</p>
+                  )}
                 </AlertDescription>
               </Alert>
             )}
@@ -986,7 +1018,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                     <Pencil className="h-4 w-4 mr-1" /> Edit Values
                   </Button>
                   {!estimate.manually_confirmed && (
-                    <Button size="sm" onClick={confirmEstimate}>
+                    <Button size="sm" onClick={() => setConfirmDialogOpen(true)}>
                       <CheckCircle2 className="h-4 w-4 mr-1" /> Confirm for Use
                     </Button>
                   )}
@@ -1025,6 +1057,17 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
           </div>
         )}
       </CardContent>
+
+      {estimate && (
+        <RoofConfirmationDialog
+          open={confirmDialogOpen}
+          onOpenChange={setConfirmDialogOpen}
+          estimateId={estimate.id}
+          claimId={claimId}
+          confidenceScore={estimate.confidence_score}
+          onConfirmed={handleConfirmationComplete}
+        />
+      )}
     </Card>
   );
 };
@@ -1033,6 +1076,10 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
  * Downstream gate: returns confirmed roof estimate data or null.
  * Any estimate builder, material calculator, or supplement engine
  * MUST use this function instead of querying claim_roof_measurements directly.
+ *
+ * Returns the estimate only if it has been through the evidence-based confirmation flow
+ * (manually_confirmed = true). The confirmation_level and confirmation_strength_score
+ * are available on the returned object for downstream tools to make risk-aware decisions.
  */
 export async function getConfirmedRoofEstimate(claimId: string): Promise<RoofEstimate | null> {
   const { data } = await supabase
