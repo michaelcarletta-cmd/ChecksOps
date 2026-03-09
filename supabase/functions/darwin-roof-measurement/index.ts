@@ -1092,7 +1092,7 @@ function applyVisionSuppressions(
   return { refined, suppressions };
 }
 
-// ── AI estimation ────────────────────────────────────────────────────
+// ── AI estimation (Phase 2F: footprint-authoritative, vision-classificatory) ──
 
 async function estimateRoofWithAI(
   address: string,
@@ -1103,14 +1103,19 @@ async function estimateRoofWithAI(
   selectedCandidate: CandidateFootprint | null,
   allCandidates: CandidateFootprint[],
   roofFormInference: RoofFormInference | null,
-  satelliteAnalysis: SatelliteAnalysis | null,
+  visionResult: SatelliteVisionResult | null,
+  suppressions: SuppressionRecord[],
 ): Promise<RoofEstimateResult> {
   const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1";
   const LOVABLE_AI_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_AI_KEY) throw new Error("AI service not configured — LOVABLE_API_KEY missing");
 
-  let geometryEaveLf = 0;
-  let geometryRakeLf = 0;
+  // ── Footprint = source of truth for area ──
+  const hasGeometry = !!selectedCandidate;
+  const footprintArea = selectedCandidate?.area_sqft ?? 0;
+  const footprintPerimeter = selectedCandidate?.perimeter_ft ?? 0;
+
+  let geometryEaveLf = 0, geometryRakeLf = 0;
   if (selectedCandidate?.edge_classifications) {
     for (const edge of selectedCandidate.edge_classifications) {
       if (edge.classification === "likely_eave") geometryEaveLf += edge.length_ft;
@@ -1118,69 +1123,96 @@ async function estimateRoofWithAI(
     }
   }
 
-  const footprintContext = selectedCandidate
-    ? `\nBuilding Footprint (from ${selectedCandidate.source}, quality: ${selectedCandidate.geometry_quality_score}/100):\n- Footprint area: ${selectedCandidate.area_sqft} sqft (GEOMETRY-DERIVED — use this, do NOT re-estimate)\n- Perimeter: ${selectedCandidate.perimeter_ft} ft (FOOTPRINT-PROXY — not exact roof edge)\n- Edge classification derived eave LF (footprint-proxy): ${roundTo(geometryEaveLf)} ft\n- Edge classification derived rake LF (footprint-proxy): ${roundTo(geometryRakeLf)} ft\n- Imagery date: ${selectedCandidate.imagery_date || "unknown"}\nDo NOT re-estimate footprint_area_sqft — use ${selectedCandidate.area_sqft} exactly.\nEave and rake values are footprint-proxy estimates derived from perimeter segment classification, NOT exact roof-edge measurements. Adjust based on typical overhang and roof style.`
+  // ── Determine pitch band (vision-classified, not exact) ──
+  let pitchBand: PitchBand = "unknown";
+  let pitchType: PitchType = "band";
+  let slopeFactor = PITCH_BAND_META.unknown.slope_factor_mid;
+
+  if (visionResult && !visionResult.pitch_band.abstain && visionResult.pitch_band.confidence >= 20) {
+    pitchBand = visionResult.pitch_band.value;
+    slopeFactor = PITCH_BAND_META[pitchBand].slope_factor_mid;
+  }
+
+  // ── Deterministic area calculation when geometry + pitch band available ──
+  let roofArea = 0;
+  let squares = 0;
+  if (hasGeometry && pitchBand !== "unknown") {
+    roofArea = roundTo(footprintArea * slopeFactor, 0);
+    squares = roundTo(roofArea / 100, 1);
+  }
+
+  // ── Resolve roof form: geometry inference + vision classification ──
+  let resolvedRoofForm: RoofForm = roofFormInference?.inferred_roof_form ?? "unknown";
+  if (visionResult && !visionResult.roof_form.abstain && visionResult.roof_form.confidence > 30) {
+    const vf = visionResult.roof_form.value;
+    // Map cross_hip to complex for our form enum
+    if (vf === "cross_hip" || vf === "gambrel" || vf === "mansard") {
+      resolvedRoofForm = "complex";
+    } else if (["gable", "hip", "cross_gable", "complex"].includes(vf)) {
+      resolvedRoofForm = vf as RoofForm;
+    }
+    // Only override geometry if vision is more confident
+    if (roofFormInference && roofFormInference.roof_form_confidence > visionResult.roof_form.confidence) {
+      resolvedRoofForm = roofFormInference.inferred_roof_form;
+    }
+  }
+
+  // ── Resolve facet count: prefer vision when available and confident ──
+  let resolvedFacets = 0;
+  if (visionResult && !visionResult.visible_facets.abstain && visionResult.visible_facets.confidence >= 25) {
+    resolvedFacets = visionResult.visible_facets.value;
+  }
+
+  // ── AI call for LINEAR measurements and missing values only ──
+  const footprintContext = hasGeometry
+    ? `\nBuilding Footprint (${selectedCandidate!.source}, quality: ${selectedCandidate!.geometry_quality_score}/100):\n- Footprint area: ${footprintArea} sqft (GEOMETRY-DERIVED — this is authoritative, do NOT change)\n- Perimeter: ${footprintPerimeter} ft\n- Eave (proxy): ${roundTo(geometryEaveLf)} ft\n- Rake (proxy): ${roundTo(geometryRakeLf)} ft`
     : "\nNo building footprint geometry available.";
 
-  const roofFormContext = roofFormInference
-    ? `\nRoof Form Inference (Phase 2C — from footprint geometry):\n- Inferred form: ${roofFormInference.inferred_roof_form} (confidence: ${roofFormInference.roof_form_confidence}%)\n- Reasoning: ${roofFormInference.roof_form_reasoning}\n- Dominant axis: ${roofFormInference.dominant_axis_bearing}° bearing, ${roofFormInference.dominant_axis_length_ft} ft\n- Perpendicular axis: ${roofFormInference.perpendicular_axis_length_ft} ft\n- Aspect ratio: ${roofFormInference.aspect_ratio}\n- Ridge candidates: ${roofFormInference.ridge_candidates.length} (${roofFormInference.ridge_candidates.map(r => `${r.length_ft}ft @${r.confidence}%`).join(", ") || "none"})\n- Hip/valley candidates: ${roofFormInference.hip_valley_candidates.length}\nUse these geometry-inferred values to inform your estimates. Ridge and hip/valley candidates are conservative and may be incomplete.`
-    : "\nNo roof form inference available (no valid footprint geometry).";
+  const roofFormContext = `\nResolved Roof Form: ${resolvedRoofForm} (geometry: ${roofFormInference?.inferred_roof_form ?? "N/A"} @${roofFormInference?.roof_form_confidence ?? 0}%, vision: ${visionResult?.roof_form.value ?? "N/A"} @${visionResult?.roof_form.confidence ?? 0}%)`;
 
-  const systemPrompt = `You are a roof ESTIMATE AI for insurance claims adjusting. You produce PRELIMINARY estimates only — not measurements. Be conservative and honest about uncertainty. Return ONLY valid JSON.
+  const pitchContext = pitchBand !== "unknown"
+    ? `\nPitch Band (vision-classified): ${PITCH_BAND_META[pitchBand].label} (${PITCH_BAND_META[pitchBand].range}), slope factor: ${slopeFactor}`
+    : "\nPitch Band: unknown (vision abstained or unavailable)";
+
+  const areaContext = roofArea > 0
+    ? `\nRoof Area (computed): ${roofArea} sqft = ${footprintArea} × ${slopeFactor} (from ${pitchBand} band). Squares: ${squares}. These are AUTHORITATIVE — do NOT re-estimate.`
+    : "\nRoof area not yet computed (missing pitch band or footprint).";
+
+  const facetContext = resolvedFacets > 0
+    ? `\nVisible Facets (vision): ${resolvedFacets} (confidence: ${visionResult?.visible_facets.confidence ?? 0}%)`
+    : "\nFacet count: not determined from vision.";
+
+  const systemPrompt = `You are a roof LINEAR MEASUREMENT estimator. Your ONLY job is to estimate ridge, hip, valley, eave, and rake LINEAR FEET, and facet count if not already provided.
+
+CRITICAL RULES:
+- footprint_area_sqft: USE THE PROVIDED VALUE EXACTLY. Do NOT re-estimate.
+- estimated_roof_area_sqft and squares: USE THE PROVIDED VALUES EXACTLY if they are computed. Do NOT re-estimate.
+- dominant_pitch: USE THE PROVIDED PITCH BAND. Do NOT guess an exact pitch.
+- facet_count: USE THE PROVIDED VALUE if available.
+- Your job is ONLY to estimate: ridge_lf, hip_lf, valley_lf, eave_lf, rake_lf, and facet_count (if not provided).
+- For "gable" roofs: hip_lf=0, facet_count=2 (minimum).
+- For "hip" roofs: rake_lf is minimal, facet_count=4 (minimum).
+- Eave/rake from geometry are FOOTPRINT-PROXY — adjust for typical overhang.
+- confidence_score: max 50, be honest.
 
 JSON schema:
 {
-  "footprint_area_sqft": number,
-  "estimated_roof_area_sqft": number (slope-adjusted),
-  "squares": number (roof area / 100, 1 decimal),
-  "dominant_pitch": string (e.g. "6/12"),
-  "ridge_lf": number (whole),
-  "hip_lf": number (whole),
-  "valley_lf": number (whole),
-  "eave_lf": number (whole),
-  "rake_lf": number (whole),
-  "facet_count": number,
-  "confidence_score": number (0-50, be honest),
-  "ai_notes": string (explain methodology, assumptions, limitations),
-  "data_sources": string[],
-  "field_sources": object mapping each field name to "geometry" or "ai_estimated",
-  "field_confidence": object mapping each field name to a 0-100 integer confidence score
+  "ridge_lf": number, "hip_lf": number, "valley_lf": number,
+  "eave_lf": number, "rake_lf": number,
+  "facet_count": number (only if not pre-resolved),
+  "confidence_score": number (0-50),
+  "ai_notes": string,
+  "field_confidence": { field_name: 0-100 }
 }
 
-Rules:
-- If a geometry-derived footprint area is provided, use it EXACTLY for footprint_area_sqft and mark field_sources.footprint_area_sqft = "geometry"
-- If edge-classified eave/rake values are provided, use them as starting points and adjust for overhang (+1-2ft per side typically). Mark these as "geometry" source but note they are footprint-proxy.
-- If roof form inference is provided, use it to guide hip_lf, valley_lf, ridge_lf, and facet_count estimates. For "gable" forms, hip_lf should be 0. For "hip" forms, rake_lf should be minimal.
-- If satellite imagery analysis is provided, PRIORITIZE its pitch estimate and roof form over geometry-only inference. Satellite-derived pitch is much more reliable than guessing.
-- If satellite analysis provides a pitch, use it as the dominant_pitch and apply the corresponding slope factor
-- Footprint is typically 30-50% of lot area for residential (only if no geometry footprint)
-- Standard residential pitches: 4/12-8/12
-- Slope factors: 4/12=1.054, 5/12=1.083, 6/12=1.118, 7/12=1.158, 8/12=1.202, 9/12=1.250, 10/12=1.302, 11/12=1.357, 12/12=1.414
-- Pre-1970 homes: simpler gable roofs. Newer: more hip/valley
-- confidence_score: if satellite imagery was analyzed, you may go up to 65. Otherwise MUST be ≤ 50.
-- field_confidence: give each field its own 0-100 confidence score. Geometry-derived fields get higher scores (60-85). Satellite-confirmed fields get 55-75. AI guesses get lower scores (10-35). Footprint-proxy derived values (eave, rake from edge classification) get 40-60.
-- Clearly state this is a preliminary estimate, not a measurement
-- All perimeter-derived values (eave_lf, rake_lf) should be labeled as FOOTPRINT-PROXY in ai_notes`;
+Return JSON only.`;
 
-  const satelliteContext = satelliteAnalysis
-    ? `\n\n🛰️ SATELLITE IMAGERY ANALYSIS (from aerial photo of this property):
-- Estimated pitch from imagery: ${satelliteAnalysis.estimated_pitch ?? "not determinable"}
-- Shadow-based pitch estimate: ${satelliteAnalysis.shadow_pitch_estimate ?? "not determinable"}
-- Roof form observed: ${satelliteAnalysis.roof_form ?? "unknown"}
-- Roof color: ${satelliteAnalysis.roof_color ?? "unknown"}
-- Visible roof planes/facets: ${satelliteAnalysis.visible_layers ?? "unknown"}
-- Complexity: ${satelliteAnalysis.complexity_notes ?? "none noted"}
-- Image analysis confidence: ${satelliteAnalysis.confidence}%
-- Notes: ${satelliteAnalysis.analysis_notes}
-IMPORTANT: Use the satellite-derived pitch and roof form as PRIMARY references. These are based on actual visual observation of this specific property.`
-    : "\nNo satellite imagery analysis available.";
-
-  const userPrompt = `Estimate roof for:
-Address: ${address}
-Coordinates: ${lat}, ${lng}
+  const userPrompt = `Estimate linear measurements for:
+Address: ${address} | Coords: ${lat}, ${lng}
 Elevation: ${elevation ? `${elevation} ft` : "unknown"}
-Parcel: ${parcel ? JSON.stringify(parcel) : "unavailable"}${footprintContext}${roofFormContext}${satelliteContext}
+Parcel: ${parcel ? JSON.stringify(parcel) : "unavailable"}${footprintContext}${roofFormContext}${pitchContext}${areaContext}${facetContext}
 
+Resolved roof form for your reference: ${resolvedRoofForm}
 Return JSON only.`;
 
   const response = await fetch(`${LOVABLE_AI_URL}/chat/completions`, {
@@ -1193,83 +1225,80 @@ Return JSON only.`;
         { role: "user", content: userPrompt },
       ],
       temperature: 0.2,
-      max_tokens: 2000,
+      max_tokens: 1500,
     }),
   });
 
   if (!response.ok) throw new Error(`AI request failed: ${await response.text()}`);
-
   const result = await response.json();
   const content = result.choices?.[0]?.message?.content || "";
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error("AI returned non-JSON response");
-
   const parsed = JSON.parse(jsonMatch[0]);
 
-  if (selectedCandidate) {
-    parsed.footprint_area_sqft = selectedCandidate.area_sqft;
-  }
+  // ── Assemble result: footprint + deterministic area + AI linear measurements ──
+  const raw: Record<string, any> = {
+    footprint_area_sqft: footprintArea || parsed.footprint_area_sqft || 0,
+    estimated_roof_area_sqft: roofArea || parsed.estimated_roof_area_sqft || 0,
+    squares: squares || parsed.squares || 0,
+    ridge_lf: parsed.ridge_lf ?? 0,
+    hip_lf: parsed.hip_lf ?? 0,
+    valley_lf: parsed.valley_lf ?? 0,
+    eave_lf: parsed.eave_lf ?? (geometryEaveLf || 0),
+    rake_lf: parsed.rake_lf ?? (geometryRakeLf || 0),
+    facet_count: resolvedFacets || parsed.facet_count || 0,
+    confidence_score: parsed.confidence_score ?? 25,
+  };
 
-  const cleaned = sanitise(parsed);
+  // Force geometry values
+  if (hasGeometry) raw.footprint_area_sqft = footprintArea;
+  if (roofArea > 0) { raw.estimated_roof_area_sqft = roofArea; raw.squares = squares; }
 
-  // Build field_sources
-  const hasGeometry = !!selectedCandidate;
-  const defaultSources: Record<string, DerivationSource> = {
+  const cleaned = sanitise(raw);
+
+  // ── Field sources ──
+  const fieldSources: Record<string, DerivationSource> = {
     footprint_area_sqft: hasGeometry ? "geometry" : "ai_estimated",
-    estimated_roof_area_sqft: "ai_estimated",
-    squares: "ai_estimated",
-    dominant_pitch: "ai_estimated",
+    estimated_roof_area_sqft: (hasGeometry && pitchBand !== "unknown") ? "geometry" : "ai_estimated",
+    squares: (hasGeometry && pitchBand !== "unknown") ? "geometry" : "ai_estimated",
+    dominant_pitch: (visionResult && !visionResult.pitch_band.abstain) ? "satellite_imagery" : "ai_estimated",
     ridge_lf: "ai_estimated",
     hip_lf: "ai_estimated",
     valley_lf: "ai_estimated",
     eave_lf: hasGeometry && geometryEaveLf > 0 ? "geometry" : "ai_estimated",
     rake_lf: hasGeometry && geometryRakeLf > 0 ? "geometry" : "ai_estimated",
-    facet_count: "ai_estimated",
+    facet_count: (visionResult && !visionResult.visible_facets.abstain && visionResult.visible_facets.confidence >= 25) ? "satellite_imagery" : "ai_estimated",
   };
-  const fieldSources: Record<string, DerivationSource> = {
-    ...defaultSources,
-    ...(parsed.field_sources || {}),
-  };
-  if (hasGeometry) fieldSources.footprint_area_sqft = "geometry";
-  if (hasGeometry && geometryEaveLf > 0) fieldSources.eave_lf = "geometry";
-  if (hasGeometry && geometryRakeLf > 0) fieldSources.rake_lf = "geometry";
-  // Mark satellite-derived fields
-  const hasSatPitch = !!satelliteAnalysis?.estimated_pitch && satelliteAnalysis.confidence > 25;
-  const hasSatForm = !!satelliteAnalysis?.roof_form && satelliteAnalysis.roof_form !== "unknown" && satelliteAnalysis.confidence > 25;
-  const hasSatFacets = !!satelliteAnalysis?.visible_layers && satelliteAnalysis.confidence > 25;
-  if (hasSatPitch) fieldSources.dominant_pitch = "satellite_imagery";
-  if (hasSatForm) { fieldSources.hip_lf = "satellite_imagery"; fieldSources.valley_lf = "satellite_imagery"; fieldSources.ridge_lf = "satellite_imagery"; }
-  if (hasSatFacets) fieldSources.facet_count = "satellite_imagery";
 
-  // Build field_confidence — boost when satellite analysis confirms values
-  const hasSatellite = !!satelliteAnalysis && satelliteAnalysis.confidence > 30;
-  const satPitchConfirmed = hasSatellite && !!satelliteAnalysis!.estimated_pitch;
-  const satFormConfirmed = hasSatellite && !!satelliteAnalysis!.roof_form && satelliteAnalysis!.roof_form !== "unknown";
-
-  const defaultConfidence: Record<string, number> = {
-    footprint_area_sqft: hasGeometry ? 75 : parcel?.parcelArea ? 55 : 20,
-    estimated_roof_area_sqft: hasGeometry ? (satPitchConfirmed ? 65 : 40) : (satPitchConfirmed ? 50 : 15),
-    squares: hasGeometry ? (satPitchConfirmed ? 65 : 40) : (satPitchConfirmed ? 50 : 15),
-    dominant_pitch: satPitchConfirmed ? 70 : 20,
-    ridge_lf: roofFormInference?.ridge_candidates?.length ? 30 : (satFormConfirmed ? 25 : 10),
-    hip_lf: roofFormInference?.hip_valley_candidates?.length ? 25 : (satFormConfirmed ? 20 : 10),
-    valley_lf: roofFormInference?.hip_valley_candidates?.some(c => c.type === "valley") ? 25 : (satFormConfirmed ? 20 : 10),
+  // ── Field confidence ──
+  const fieldConfidence: Record<string, number> = {
+    footprint_area_sqft: hasGeometry ? 75 : 20,
+    estimated_roof_area_sqft: (hasGeometry && pitchBand !== "unknown") ? 60 : 15,
+    squares: (hasGeometry && pitchBand !== "unknown") ? 60 : 15,
+    dominant_pitch: (visionResult && !visionResult.pitch_band.abstain) ? visionResult.pitch_band.confidence : 10,
+    ridge_lf: 15,
+    hip_lf: 15,
+    valley_lf: 15,
     eave_lf: hasGeometry && geometryEaveLf > 0 ? 50 : 10,
     rake_lf: hasGeometry && geometryRakeLf > 0 ? 50 : 10,
-    facet_count: hasSatellite && satelliteAnalysis!.visible_layers ? 40 : 15,
+    facet_count: (visionResult && !visionResult.visible_facets.abstain) ? visionResult.visible_facets.confidence : 10,
   };
-  const fieldConfidence: Record<string, number> = { ...defaultConfidence };
-  const aiConfidence = parsed.field_confidence || {};
-  for (const [k, v] of Object.entries(aiConfidence)) {
-    const num = Number(v);
-    if (!isNaN(num)) fieldConfidence[k] = Math.max(0, Math.min(100, Math.round(num)));
+  // Merge AI-reported field confidence (capped)
+  const aiConf = parsed.field_confidence || {};
+  for (const [k, v] of Object.entries(aiConf)) {
+    if (fieldConfidence[k] !== undefined && typeof v === "number") {
+      // AI can only set confidence for fields it estimated, not geometry/vision fields
+      if (fieldSources[k] === "ai_estimated") {
+        fieldConfidence[k] = Math.max(0, Math.min(50, Math.round(v as number)));
+      }
+    }
   }
 
-  // Build field_authority
+  // ── Field authority ──
   const fieldAuthority: Record<string, FieldAuthority> = {
     footprint_area_sqft: hasGeometry ? "geometry_authoritative" : "ai_provisional",
-    estimated_roof_area_sqft: "ai_provisional",
-    squares: "ai_provisional",
+    estimated_roof_area_sqft: (hasGeometry && pitchBand !== "unknown") ? "geometry_authoritative" : "ai_provisional",
+    squares: (hasGeometry && pitchBand !== "unknown") ? "geometry_authoritative" : "ai_provisional",
     dominant_pitch: "ai_provisional",
     ridge_lf: "ai_provisional",
     hip_lf: "ai_provisional",
@@ -1279,27 +1308,30 @@ Return JSON only.`;
     facet_count: "ai_provisional",
   };
 
-  const proxyNote = hasGeometry
-    ? `\n\n📐 Building footprint extracted from ${selectedCandidate!.source} (${selectedCandidate!.area_sqft} sqft, ${selectedCandidate!.perimeter_ft} ft perimeter, quality: ${selectedCandidate!.geometry_quality_score}/100). Footprint area is geometry-derived.` +
-      `\n⚠️ Eave and rake values are FOOTPRINT-PROXY measurements derived from perimeter edge classification — they approximate roof edges but are NOT exact roof-edge measurements.` +
-      (allCandidates.length > 1 ? `\n📊 ${allCandidates.length} candidate footprints found from multiple sources.` : "")
-    : "";
-
-  const roofFormNote = roofFormInference
-    ? `\n\n🏠 Roof Form Inference: ${roofFormInference.inferred_roof_form} (confidence: ${roofFormInference.roof_form_confidence}%). ${roofFormInference.roof_form_reasoning}` +
-      (roofFormInference.ridge_candidates.length > 0 ? `\n📏 ${roofFormInference.ridge_candidates.length} ridge candidate(s) inferred from geometry.` : "") +
-      (roofFormInference.hip_valley_candidates.length > 0 ? `\n📐 ${roofFormInference.hip_valley_candidates.length} hip/valley candidate(s) inferred.` : "")
-    : "";
-
-  const satelliteNote = satelliteAnalysis
-    ? `\n\n🛰️ Satellite Imagery Analysis: pitch=${satelliteAnalysis.estimated_pitch ?? "?"}, form=${satelliteAnalysis.roof_form ?? "?"}, planes=${satelliteAnalysis.visible_layers ?? "?"}, color=${satelliteAnalysis.roof_color ?? "?"}, confidence=${satelliteAnalysis.confidence}%. ${satelliteAnalysis.analysis_notes}`
-    : "";
+  // ── Build notes ──
+  const displayPitch = pitchBand !== "unknown" ? bandToDisplayPitch(pitchBand) : "unknown";
+  const notes: string[] = [];
+  notes.push(`Pitch: ${displayPitch} (${pitchType}). Roof form: ${resolvedRoofForm}.`);
+  if (hasGeometry) {
+    notes.push(`📐 Footprint: ${footprintArea} sqft from ${selectedCandidate!.source} (quality: ${selectedCandidate!.geometry_quality_score}/100). Area computed deterministically: ${footprintArea} × ${slopeFactor} = ${roofArea} sqft.`);
+  }
+  if (visionResult) {
+    notes.push(`🛰️ Vision: form=${visionResult.roof_form.value}@${visionResult.roof_form.confidence}%${visionResult.roof_form.abstain ? "(abstained)" : ""}, pitch=${visionResult.pitch_band.value}@${visionResult.pitch_band.confidence}%${visionResult.pitch_band.abstain ? "(abstained)" : ""}, facets=${visionResult.visible_facets.value}@${visionResult.visible_facets.confidence}%${visionResult.visible_facets.abstain ? "(abstained)" : ""}`);
+    notes.push(`🔍 Obstructions: trees=${visionResult.obstructions.tree_cover_pct}%, shadow=${visionResult.obstructions.shadow_coverage}, sides visible=${visionResult.obstructions.visible_sides}/4, quality=${visionResult.overall_image_quality}/100`);
+  }
+  if (suppressions.length > 0) {
+    notes.push(`⚠️ ${suppressions.length} suppression(s): ${suppressions.map(s => `${s.rule}→${s.field}`).join(", ")}`);
+  }
+  notes.push(parsed.ai_notes ?? "");
+  notes.push("\n⚠️ PRELIMINARY ESTIMATE. Pitch is a BAND classification, not an exact measurement. All values require manual confirmation.");
 
   return {
     footprint_area_sqft: cleaned.footprint_area_sqft,
     estimated_roof_area_sqft: cleaned.estimated_roof_area_sqft,
     squares: cleaned.squares,
-    dominant_pitch: parsed.dominant_pitch ?? "unknown",
+    dominant_pitch: displayPitch,
+    pitch_band: pitchBand,
+    pitch_type: pitchType,
     ridge_lf: cleaned.ridge_lf,
     hip_lf: cleaned.hip_lf,
     valley_lf: cleaned.valley_lf,
@@ -1310,14 +1342,12 @@ Return JSON only.`;
     review_required: true,
     overlay_image_url: null,
     raw_geojson: selectedCandidate?.geojson || null,
-    ai_notes: (parsed.ai_notes ?? "Preliminary AI estimate. Field verification required.") +
-      proxyNote + roofFormNote + satelliteNote +
-      "\n\n⚠️ This is a PRELIMINARY ESTIMATE, not a measurement. All values are AI-modeled and should not be used without manual confirmation.",
+    ai_notes: notes.filter(Boolean).join("\n"),
     data_sources: [
-      ...(parsed.data_sources ?? ["US Census Geocoder", "AI estimation"]),
+      "US Census Geocoder",
       ...(selectedCandidate ? [selectedCandidate.source] : []),
       ...(roofFormInference ? ["Geometry Roof Form Inference"] : []),
-      ...(satelliteAnalysis ? ["Satellite Imagery Analysis (ArcGIS World Imagery)"] : []),
+      ...(visionResult ? ["Satellite Vision Classification (ArcGIS World Imagery)"] : []),
     ],
     field_sources: fieldSources,
     field_confidence: fieldConfidence,
@@ -1330,10 +1360,7 @@ Return JSON only.`;
     edge_classifications: selectedCandidate?.edge_classifications ?? null,
     geometry_metadata: selectedCandidate?.geometry_metadata ?? null,
     candidate_footprints: allCandidates.length > 0 ? allCandidates : null,
-    selected_candidate_index: selectedCandidate && allCandidates.length > 0
-      ? allCandidates.indexOf(selectedCandidate)
-      : null,
-    // Phase 2C
+    selected_candidate_index: selectedCandidate && allCandidates.length > 0 ? allCandidates.indexOf(selectedCandidate) : null,
     inferred_roof_form: roofFormInference?.inferred_roof_form ?? null,
     roof_form_confidence: roofFormInference?.roof_form_confidence ?? null,
     roof_form_reasoning: roofFormInference?.roof_form_reasoning ?? null,
@@ -1343,6 +1370,8 @@ Return JSON only.`;
     aspect_ratio: roofFormInference?.aspect_ratio ?? null,
     ridge_candidates: roofFormInference?.ridge_candidates ?? null,
     hip_valley_candidates: roofFormInference?.hip_valley_candidates ?? null,
+    vision_classifications: visionResult,
+    suppression_records: suppressions.length > 0 ? suppressions : null,
   };
 }
 
