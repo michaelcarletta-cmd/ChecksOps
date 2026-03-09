@@ -171,11 +171,13 @@ export const DarwinRoofTuningDashboard = () => {
     }
   };
 
-  const activeHeuristics = heuristics.filter(h => h.is_active);
-  const inactiveHeuristics = heuristics.filter(h => !h.is_active);
-  const displayed = showInactive ? heuristics : activeHeuristics;
+  const activeHeuristics = heuristics.filter(h => h.is_active && !h.shadow_mode);
+  const shadowHeuristics = heuristics.filter(h => h.shadow_mode);
+  const inactiveHeuristics = heuristics.filter(h => !h.is_active && !h.shadow_mode);
+  const displayed = showInactive ? heuristics : [...activeHeuristics, ...shadowHeuristics];
 
   const totalActive = activeHeuristics.length;
+  const totalShadow = shadowHeuristics.length;
   const totalAdjustments = activeHeuristics.filter(h => h.action_type.startsWith("adjust")).length;
   const totalSuppressions = activeHeuristics.filter(h => h.action_type === "suppress_field").length;
   const avgSampleSize = heuristics.length > 0
