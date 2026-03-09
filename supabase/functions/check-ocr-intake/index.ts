@@ -172,9 +172,15 @@ function evaluateEligibility(
     return { recommendation: "manual_review_required", reasons, rules };
   }
 
-  if (payees.length > 2 || (hasMortgage && payees.length > 1)) {
-    reasons.push("Complex multi-payee/mortgage structure — branch deposit required");
-    if (hasMortgage) reasons.push("Mortgage company listed — separate endorsement process may apply");
+  // Mortgage company detected — route to loss draft workflow
+  if (hasMortgage) {
+    reasons.push("Mortgage company listed — routing to Loss Draft workflow");
+    if (payees.length > 2) reasons.push("Complex multi-payee/mortgage structure");
+    return { recommendation: "loss_draft_required", reasons, rules };
+  }
+
+  if (payees.length > 2) {
+    reasons.push("Complex multi-payee structure — branch deposit required");
     return { recommendation: "branch_deposit_recommended", reasons, rules };
   }
 
