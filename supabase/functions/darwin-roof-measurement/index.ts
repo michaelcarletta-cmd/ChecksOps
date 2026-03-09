@@ -2155,7 +2155,7 @@ Deno.serve(async (req) => {
       }).then(({ error }) => { if (error) console.error("Audit log error:", error); });
     }
 
-    const rawEstimate = await estimateRoofWithAI(address, geo.lat, geo.lng, parcel, elevation, selectedCandidate, candidates, roofFormInference, visionResult, visionSuppressions);
+    const rawEstimate = deriveRoofEstimate(address, geo.lat, geo.lng, parcel, elevation, selectedCandidate, candidates, roofFormInference, visionResult, visionSuppressions);
 
     // Phase 2D: Apply tuning heuristics
     let estimate = rawEstimate;
