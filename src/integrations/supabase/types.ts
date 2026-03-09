@@ -3898,6 +3898,111 @@ export type Database = {
           },
         ]
       }
+      claim_roof_measurements: {
+        Row: {
+          address: string
+          ai_notes: string | null
+          claim_id: string
+          confidence_score: number | null
+          confirmed_at: string | null
+          confirmed_by: string | null
+          created_at: string
+          created_by: string | null
+          data_sources: string[] | null
+          dominant_pitch: string | null
+          eave_lf: number | null
+          estimated_roof_area_sqft: number | null
+          facet_count: number | null
+          footprint_area_sqft: number | null
+          geocoded_lat: number | null
+          geocoded_lng: number | null
+          hip_lf: number | null
+          id: string
+          manually_confirmed: boolean
+          overlay_image_url: string | null
+          rake_lf: number | null
+          raw_geojson: Json | null
+          review_required: boolean
+          ridge_lf: number | null
+          squares: number | null
+          updated_at: string
+          valley_lf: number | null
+        }
+        Insert: {
+          address: string
+          ai_notes?: string | null
+          claim_id: string
+          confidence_score?: number | null
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          data_sources?: string[] | null
+          dominant_pitch?: string | null
+          eave_lf?: number | null
+          estimated_roof_area_sqft?: number | null
+          facet_count?: number | null
+          footprint_area_sqft?: number | null
+          geocoded_lat?: number | null
+          geocoded_lng?: number | null
+          hip_lf?: number | null
+          id?: string
+          manually_confirmed?: boolean
+          overlay_image_url?: string | null
+          rake_lf?: number | null
+          raw_geojson?: Json | null
+          review_required?: boolean
+          ridge_lf?: number | null
+          squares?: number | null
+          updated_at?: string
+          valley_lf?: number | null
+        }
+        Update: {
+          address?: string
+          ai_notes?: string | null
+          claim_id?: string
+          confidence_score?: number | null
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          data_sources?: string[] | null
+          dominant_pitch?: string | null
+          eave_lf?: number | null
+          estimated_roof_area_sqft?: number | null
+          facet_count?: number | null
+          footprint_area_sqft?: number | null
+          geocoded_lat?: number | null
+          geocoded_lng?: number | null
+          hip_lf?: number | null
+          id?: string
+          manually_confirmed?: boolean
+          overlay_image_url?: string | null
+          rake_lf?: number | null
+          raw_geojson?: Json | null
+          review_required?: boolean
+          ridge_lf?: number | null
+          squares?: number | null
+          updated_at?: string
+          valley_lf?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_roof_measurements_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_roof_measurements_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_scenario_simulations: {
         Row: {
           claim_id: string

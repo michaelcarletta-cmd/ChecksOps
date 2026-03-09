@@ -68,6 +68,7 @@ const DarwinGeneratedAssets = lazy(() => import("@/components/claim-detail/Darwi
 const CarrierScenarioPlaybook = lazy(() => import("@/components/claim-detail/CarrierScenarioPlaybook").then(m => ({ default: m.CarrierScenarioPlaybook })));
 const DarwinEscalationEngine = lazy(() => import("@/components/claim-detail/DarwinEscalationEngine"));
 const DarwinHealthCheck = lazy(() => import("@/components/claim-detail/DarwinHealthCheck"));
+const DarwinRoofMeasurement = lazy(() => import("@/components/claim-detail/DarwinRoofMeasurement").then(m => ({ default: m.DarwinRoofMeasurement })));
 
 
 interface DarwinTabProps {
@@ -446,16 +447,19 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
     switch (activeWorkspace) {
       case "claim-intelligence":
         return (
-          <DarwinCockpit
-            claimId={claimId}
-            claim={claim}
-            onNavigateSection={(section) => {
-              const targetWorkspace = section as DarwinWorkspaceKey;
-              if (workspaceSections.some(s => s.key === targetWorkspace)) {
-                setActiveWorkspace(targetWorkspace);
-              }
-            }}
-          />
+          <>
+            <DarwinCockpit
+              claimId={claimId}
+              claim={claim}
+              onNavigateSection={(section) => {
+                const targetWorkspace = section as DarwinWorkspaceKey;
+                if (workspaceSections.some(s => s.key === targetWorkspace)) {
+                  setActiveWorkspace(targetWorkspace);
+                }
+              }}
+            />
+            <DarwinRoofMeasurement claimId={claimId} claim={claim} />
+          </>
         );
       case "document-analysis":
         return (
