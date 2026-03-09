@@ -6,7 +6,9 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-interface RoofMeasurement {
+type DerivationSource = "geometry" | "ai_estimated";
+
+interface RoofEstimateResult {
   footprint_area_sqft: number;
   estimated_roof_area_sqft: number;
   squares: number;
@@ -23,9 +25,45 @@ interface RoofMeasurement {
   raw_geojson: Record<string, unknown> | null;
   ai_notes: string;
   data_sources: string[];
+  field_sources: Record<string, DerivationSource>;
 }
 
-/** Geocode an address using the US Census Bureau geocoder (free, no API key). */
+// ── Helpers ──────────────────────────────────────────────────────────
+
+const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const roundTo = (v: number, decimals = 0) => {
+  const f = 10 ** decimals;
+  return Math.round(v * f) / f;
+};
+
+/** Validate & sanitise numeric estimate fields. */
+function sanitise(raw: Record<string, any>): Record<string, any> {
+  const numeric: [string, number, number, number][] = [
+    ["footprint_area_sqft", 0, 100, 50000],
+    ["estimated_roof_area_sqft", 0, 100, 60000],
+    ["squares", 1, 1, 600],
+    ["ridge_lf", 0, 0, 500],
+    ["hip_lf", 0, 0, 500],
+    ["valley_lf", 0, 0, 500],
+    ["eave_lf", 0, 0, 1000],
+    ["rake_lf", 0, 0, 1000],
+    ["facet_count", 0, 1, 50],
+    ["confidence_score", 0, 0, 50],
+  ];
+  const out: Record<string, any> = { ...raw };
+  for (const [key, decimals, min, max] of numeric) {
+    const v = Number(out[key]);
+    out[key] = isNaN(v) ? 0 : roundTo(clamp(v, min, max), decimals);
+  }
+  // Squares must be consistent with roof area
+  if (out.estimated_roof_area_sqft > 0) {
+    out.squares = roundTo(out.estimated_roof_area_sqft / 100, 1);
+  }
+  return out;
+}
+
+// ── External data fetchers ───────────────────────────────────────────
+
 async function geocodeAddress(address: string): Promise<{ lat: number; lng: number; matchedAddress: string } | null> {
   const url = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${encodeURIComponent(address)}&benchmark=Public_AR_Current&format=json`;
   try {
@@ -35,19 +73,11 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
     const matches = data?.result?.addressMatches;
     if (!matches || matches.length === 0) return null;
     const m = matches[0];
-    return {
-      lat: m.coordinates.y,
-      lng: m.coordinates.x,
-      matchedAddress: m.matchedAddress,
-    };
-  } catch {
-    return null;
-  }
+    return { lat: m.coordinates.y, lng: m.coordinates.x, matchedAddress: m.matchedAddress };
+  } catch { return null; }
 }
 
-/** Fetch parcel context from public sources. Returns whatever we can find. */
-async function fetchParcelContext(lat: number, lng: number): Promise<{ parcelArea?: number; landUse?: string; yearBuilt?: number; source: string } | null> {
-  // Try NJ Parcels (ArcGIS REST) - works for NJ addresses
+async function fetchParcelContext(lat: number, lng: number) {
   try {
     const njUrl = `https://services2.arcgis.com/XVOqAjTOJ5P6ngMu/arcgis/rest/services/Parcels_in_New_Jersey/FeatureServer/0/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&f=json`;
     const res = await fetch(njUrl, { signal: AbortSignal.timeout(8000) });
@@ -56,7 +86,7 @@ async function fetchParcelContext(lat: number, lng: number): Promise<{ parcelAre
       if (data.features?.length > 0) {
         const attrs = data.features[0].attributes;
         return {
-          parcelArea: attrs.SHAPE_Area ? Math.round(attrs.SHAPE_Area * 10.764) : undefined, // m² to sqft
+          parcelArea: attrs.SHAPE_Area ? Math.round(attrs.SHAPE_Area * 10.764) : undefined,
           landUse: attrs.PROP_CLASS || attrs.MOD4_DESC || undefined,
           yearBuilt: attrs.YR_BUILT || undefined,
           source: "NJ Parcels ArcGIS",
@@ -67,7 +97,6 @@ async function fetchParcelContext(lat: number, lng: number): Promise<{ parcelAre
   return null;
 }
 
-/** Use USGS Elevation Point Query Service. */
 async function getElevation(lat: number, lng: number): Promise<number | null> {
   try {
     const url = `https://epqs.nationalmap.gov/v1/json?x=${lng}&y=${lat}&wkid=4326&units=Feet&includeDate=false`;
@@ -75,67 +104,64 @@ async function getElevation(lat: number, lng: number): Promise<number | null> {
     if (!res.ok) return null;
     const data = await res.json();
     return data?.value ?? null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-/** Use AI to estimate roof measurements based on available data. */
+// ── AI estimation ────────────────────────────────────────────────────
+
 async function estimateRoofWithAI(
   address: string,
   lat: number,
   lng: number,
   parcel: { parcelArea?: number; landUse?: string; yearBuilt?: number; source: string } | null,
   elevation: number | null,
-): Promise<RoofMeasurement> {
+): Promise<RoofEstimateResult> {
   const LOVABLE_AI_URL = Deno.env.get("LOVABLE_AI_BASE_URL");
   const LOVABLE_AI_KEY = Deno.env.get("LOVABLE_AI_API_KEY");
+  if (!LOVABLE_AI_URL || !LOVABLE_AI_KEY) throw new Error("AI service not configured");
 
-  if (!LOVABLE_AI_URL || !LOVABLE_AI_KEY) {
-    throw new Error("AI service not configured");
-  }
-
-  const systemPrompt = `You are a roof measurement estimation AI for insurance claims adjusting. Given property data, estimate roof measurements. Be conservative. All estimates must be clearly labeled as AI-estimated. Return ONLY valid JSON matching the schema.
+  const systemPrompt = `You are a roof ESTIMATE AI for insurance claims adjusting. You produce PRELIMINARY estimates only — not measurements. Be conservative and honest about uncertainty. Return ONLY valid JSON.
 
 JSON schema:
 {
   "footprint_area_sqft": number,
   "estimated_roof_area_sqft": number (slope-adjusted),
-  "squares": number (roof area / 100),
+  "squares": number (roof area / 100, 1 decimal),
   "dominant_pitch": string (e.g. "6/12"),
-  "ridge_lf": number,
-  "hip_lf": number,
-  "valley_lf": number,
-  "eave_lf": number,
-  "rake_lf": number,
+  "ridge_lf": number (whole),
+  "hip_lf": number (whole),
+  "valley_lf": number (whole),
+  "eave_lf": number (whole),
+  "rake_lf": number (whole),
   "facet_count": number,
-  "confidence_score": number (0-100, be honest about confidence),
-  "ai_notes": string (explain methodology, assumptions, and limitations),
-  "data_sources": string[] (list each data source used)
+  "confidence_score": number (0-50, be honest),
+  "ai_notes": string (explain methodology, assumptions, limitations),
+  "data_sources": string[],
+  "field_sources": object mapping each field name to "geometry" or "ai_estimated"
 }
 
-Key rules:
-- For typical residential NJ homes, footprint is 30-50% of lot area
-- Standard residential pitches are 4/12 to 8/12
-- Slope factor: multiply footprint by pitch factor (4/12=1.054, 5/12=1.083, 6/12=1.118, 7/12=1.158, 8/12=1.202)
-- If year built is known, older homes (pre-1970) tend to be simpler gable roofs, newer homes have more complex hip/valley configurations
-- Always set confidence_score LOW (20-45) since this is estimation without imagery
-- Always note this is an estimate requiring field verification`;
+Rules:
+- Footprint is typically 30-50% of lot area for residential
+- Standard residential pitches: 4/12-8/12
+- Slope factors: 4/12=1.054, 5/12=1.083, 6/12=1.118, 7/12=1.158, 8/12=1.202
+- Pre-1970 homes: simpler gable roofs. Newer: more hip/valley
+- confidence_score MUST be ≤ 50 (no imagery = low confidence)
+- All linear measurements (ridge, hip, valley, eave, rake) are AI_ESTIMATED
+- footprint_area_sqft is "geometry" ONLY if parcel data provides building footprint; otherwise "ai_estimated"
+- estimated_roof_area_sqft, squares are always "ai_estimated" (derived from pitch assumption)
+- Clearly state this is a preliminary estimate, not a measurement`;
 
-  const userPrompt = `Estimate roof measurements for:
+  const userPrompt = `Estimate roof for:
 Address: ${address}
 Coordinates: ${lat}, ${lng}
-Elevation: ${elevation ? `${elevation} feet` : "unknown"}
-Parcel data: ${parcel ? JSON.stringify(parcel) : "No parcel data available"}
+Elevation: ${elevation ? `${elevation} ft` : "unknown"}
+Parcel: ${parcel ? JSON.stringify(parcel) : "unavailable"}
 
-Provide your best estimate as JSON.`;
+Return JSON only.`;
 
   const response = await fetch(`${LOVABLE_AI_URL}/chat/completions`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${LOVABLE_AI_KEY}`,
-    },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_AI_KEY}` },
     body: JSON.stringify({
       model: "google/gemini-2.5-flash",
       messages: [
@@ -147,39 +173,61 @@ Provide your best estimate as JSON.`;
     }),
   });
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`AI request failed: ${err}`);
-  }
+  if (!response.ok) throw new Error(`AI request failed: ${await response.text()}`);
 
   const result = await response.json();
   const content = result.choices?.[0]?.message?.content || "";
-
-  // Extract JSON from response
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error("AI returned non-JSON response");
 
   const parsed = JSON.parse(jsonMatch[0]);
+  const cleaned = sanitise(parsed);
+
+  // Build field_sources with defaults
+  const defaultSources: Record<string, DerivationSource> = {
+    footprint_area_sqft: "ai_estimated",
+    estimated_roof_area_sqft: "ai_estimated",
+    squares: "ai_estimated",
+    dominant_pitch: "ai_estimated",
+    ridge_lf: "ai_estimated",
+    hip_lf: "ai_estimated",
+    valley_lf: "ai_estimated",
+    eave_lf: "ai_estimated",
+    rake_lf: "ai_estimated",
+    facet_count: "ai_estimated",
+  };
+  const fieldSources: Record<string, DerivationSource> = {
+    ...defaultSources,
+    ...(parsed.field_sources || {}),
+  };
+  // Override: if parcel data gave us lot area, footprint may be geometry-based
+  if (parcel?.parcelArea) {
+    fieldSources.footprint_area_sqft = "geometry";
+  }
 
   return {
-    footprint_area_sqft: parsed.footprint_area_sqft ?? 0,
-    estimated_roof_area_sqft: parsed.estimated_roof_area_sqft ?? 0,
-    squares: parsed.squares ?? 0,
+    footprint_area_sqft: cleaned.footprint_area_sqft,
+    estimated_roof_area_sqft: cleaned.estimated_roof_area_sqft,
+    squares: cleaned.squares,
     dominant_pitch: parsed.dominant_pitch ?? "unknown",
-    ridge_lf: parsed.ridge_lf ?? 0,
-    hip_lf: parsed.hip_lf ?? 0,
-    valley_lf: parsed.valley_lf ?? 0,
-    eave_lf: parsed.eave_lf ?? 0,
-    rake_lf: parsed.rake_lf ?? 0,
-    facet_count: parsed.facet_count ?? 0,
-    confidence_score: Math.min(parsed.confidence_score ?? 25, 50), // Cap at 50 for AI estimates
+    ridge_lf: cleaned.ridge_lf,
+    hip_lf: cleaned.hip_lf,
+    valley_lf: cleaned.valley_lf,
+    eave_lf: cleaned.eave_lf,
+    rake_lf: cleaned.rake_lf,
+    facet_count: cleaned.facet_count,
+    confidence_score: cleaned.confidence_score,
     review_required: true,
     overlay_image_url: null,
     raw_geojson: null,
-    ai_notes: parsed.ai_notes ?? "AI-estimated measurements. Field verification required.",
+    ai_notes: (parsed.ai_notes ?? "Preliminary AI estimate. Field verification required.") +
+      "\n\n⚠️ This is a PRELIMINARY ESTIMATE, not a measurement. All values are AI-modeled from public parcel data and should not be used without manual confirmation.",
     data_sources: parsed.data_sources ?? ["US Census Geocoder", "AI estimation"],
+    field_sources: fieldSources,
   };
 }
+
+// ── Main handler ─────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -190,8 +238,7 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Missing authorization" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -199,29 +246,21 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Verify user
     const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
     });
     const { data: { user }, error: userErr } = await userClient.auth.getUser();
     if (userErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Check role
     const { data: roleData } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .in("role", ["staff", "admin"]);
-
+      .from("user_roles").select("role").eq("user_id", user.id).in("role", ["staff", "admin"]);
     if (!roleData || roleData.length === 0) {
       return new Response(JSON.stringify({ error: "Insufficient permissions" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -229,13 +268,16 @@ Deno.serve(async (req) => {
     const { claim_id, address } = body;
 
     if (!claim_id || !address) {
-      return new Response(
-        JSON.stringify({ error: "claim_id and address are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ error: "claim_id and address are required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (typeof address !== "string" || address.trim().length < 5) {
+      return new Response(JSON.stringify({ error: "Address must be at least 5 characters" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Step 1: Geocode
     const geo = await geocodeAddress(address);
     if (!geo) {
       return new Response(
@@ -244,16 +286,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Step 2-3: Fetch parcel data and elevation in parallel
     const [parcel, elevation] = await Promise.all([
       fetchParcelContext(geo.lat, geo.lng),
       getElevation(geo.lat, geo.lng),
     ]);
 
-    // Step 4: AI estimation
-    const measurement = await estimateRoofWithAI(address, geo.lat, geo.lng, parcel, elevation);
+    const estimate = await estimateRoofWithAI(address, geo.lat, geo.lng, parcel, elevation);
 
-    // Step 5: Store in database
     const { data: saved, error: saveErr } = await supabase
       .from("claim_roof_measurements")
       .insert({
@@ -261,23 +300,24 @@ Deno.serve(async (req) => {
         address: geo.matchedAddress || address,
         geocoded_lat: geo.lat,
         geocoded_lng: geo.lng,
-        footprint_area_sqft: measurement.footprint_area_sqft,
-        estimated_roof_area_sqft: measurement.estimated_roof_area_sqft,
-        squares: measurement.squares,
-        dominant_pitch: measurement.dominant_pitch,
-        ridge_lf: measurement.ridge_lf,
-        hip_lf: measurement.hip_lf,
-        valley_lf: measurement.valley_lf,
-        eave_lf: measurement.eave_lf,
-        rake_lf: measurement.rake_lf,
-        facet_count: measurement.facet_count,
-        confidence_score: measurement.confidence_score,
+        footprint_area_sqft: estimate.footprint_area_sqft,
+        estimated_roof_area_sqft: estimate.estimated_roof_area_sqft,
+        squares: estimate.squares,
+        dominant_pitch: estimate.dominant_pitch,
+        ridge_lf: estimate.ridge_lf,
+        hip_lf: estimate.hip_lf,
+        valley_lf: estimate.valley_lf,
+        eave_lf: estimate.eave_lf,
+        rake_lf: estimate.rake_lf,
+        facet_count: estimate.facet_count,
+        confidence_score: estimate.confidence_score,
         review_required: true,
         manually_confirmed: false,
-        overlay_image_url: measurement.overlay_image_url,
-        raw_geojson: measurement.raw_geojson,
-        ai_notes: measurement.ai_notes,
-        data_sources: measurement.data_sources,
+        overlay_image_url: null,
+        raw_geojson: null,
+        ai_notes: estimate.ai_notes,
+        data_sources: estimate.data_sources,
+        field_sources: estimate.field_sources,
         created_by: user.id,
       })
       .select()
@@ -285,10 +325,9 @@ Deno.serve(async (req) => {
 
     if (saveErr) {
       console.error("Save error:", saveErr);
-      return new Response(
-        JSON.stringify({ error: "Failed to save measurement", detail: saveErr.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ error: "Failed to save estimate", detail: saveErr.message }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     return new Response(
@@ -302,10 +341,9 @@ Deno.serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {
-    console.error("Roof measurement error:", err);
-    return new Response(
-      JSON.stringify({ error: err.message || "Internal error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    console.error("Roof estimate error:", err);
+    return new Response(JSON.stringify({ error: err.message || "Internal error" }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });
