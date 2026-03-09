@@ -115,6 +115,11 @@ interface RoofEstimate {
   // Phase 2D
   tuning_applied: { key: string; field: string; action: string; before: number; after: number }[] | null;
   pre_tuning_values: Record<string, number> | null;
+  // Phase 2F: Vision classifications
+  pitch_band: PitchBand | null;
+  pitch_type: PitchType | null;
+  vision_classifications: any | null;
+  suppression_records: { rule: string; field: string; reason: string; action: string; before_confidence: number; after_confidence: number }[] | null;
   // Evidence-based confirmation
   confirmation_level: ConfirmationLevel | null;
   confirmation_basis: ConfirmationBasis | null;
