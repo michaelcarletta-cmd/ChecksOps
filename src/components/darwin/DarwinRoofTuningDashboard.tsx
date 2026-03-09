@@ -210,7 +210,7 @@ export const DarwinRoofTuningDashboard = () => {
               <Settings2 className="h-5 w-5 text-primary" />
               <CardTitle className="text-lg">Darwin Roof Tuning</CardTitle>
               <Badge variant="outline" className="text-[10px]">
-                {totalActive} active / {heuristics.length} total
+                {totalActive} active / {totalShadow} shadow / {heuristics.length} total
               </Badge>
             </div>
             <div className="flex items-center gap-2">
