@@ -457,6 +457,41 @@ Deno.serve(async (req) => {
       for (const bucket of buckets.values()) {
         const derived = deriveHeuristics(bucket);
         for (const h of derived) {
+          // Check if this heuristic already exists (for shadow mode promotion logic)
+          const { data: existingH } = await supabase
+            .from("darwin_roof_tuning_heuristics")
+            .select("id, shadow_mode, shadow_mode_hits, shadow_mode_min_hits, is_active, manually_overridden")
+            .eq("heuristic_key", h.heuristic_key)
+            .maybeSingle();
+
+          // Shadow mode logic:
+          // - New heuristics start in shadow_mode unless they have strong evidence (n>=5 and should_activate)
+          // - Existing shadow heuristics promote to active if hits >= min_hits
+          let isShadow = false;
+          let shouldBeActive = h.should_activate && h.governance_status === "active";
+          
+          if (existingH?.manually_overridden) {
+            // Don't change manually overridden
+            isShadow = existingH.shadow_mode;
+            shouldBeActive = existingH.is_active;
+          } else if (existingH?.shadow_mode) {
+            // Already in shadow mode - check if ready to promote
+            const hits = existingH.shadow_mode_hits ?? 0;
+            const minHits = existingH.shadow_mode_min_hits ?? 5;
+            if (hits >= minHits && h.should_activate) {
+              isShadow = false;
+              shouldBeActive = true;
+            } else {
+              isShadow = true;
+              shouldBeActive = false;
+            }
+          } else if (!existingH) {
+            // Brand new heuristic - start in shadow mode unless very strong evidence
+            const strongEvidence = bucket.validations.length >= 5 && h.should_activate;
+            isShadow = !strongEvidence;
+            shouldBeActive = strongEvidence;
+          }
+
           allHeuristics.push({
             ...h,
             segment_roof_form: bucket.roof_form,
@@ -467,7 +502,9 @@ Deno.serve(async (req) => {
             segment_aspect_ratio_max: bucket.aspect_ratio_band === "compact" ? 1.29 : bucket.aspect_ratio_band === "rectangular" ? 1.99 : bucket.aspect_ratio_band === "elongated" ? 10 : null,
             sample_size: bucket.validations.length,
             validation_ids: bucket.validations.map(v => v.id),
-            is_active: h.should_activate && h.governance_status === "active",
+            is_active: shouldBeActive,
+            shadow_mode: isShadow,
+            shadow_mode_promoted_at: existingH?.shadow_mode && !isShadow ? new Date().toISOString() : null,
             last_computed_at: new Date().toISOString(),
             created_by: user.id,
           });
