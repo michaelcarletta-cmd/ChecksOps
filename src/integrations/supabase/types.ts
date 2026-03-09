@@ -2086,7 +2086,7 @@ export type Database = {
           {
             foreignKeyName: "claim_checks_check_intake_item_id_fkey"
             columns: ["check_intake_item_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "check_intake_items"
             referencedColumns: ["id"]
           },
