@@ -142,6 +142,15 @@ const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
   satellite_imagery: { label: "Satellite", color: "text-purple-600" },
 };
 
+const PITCH_BAND_LABELS: Record<PitchBand, string> = {
+  flat: "Flat (0-2/12)",
+  low: "Low (2-4/12)",
+  moderate: "Moderate (5-7/12)",
+  steep: "Steep (8-10/12)",
+  very_steep: "Very Steep (11+/12)",
+  unknown: "Unknown",
+};
+
 const AUTHORITY_LABELS: Record<FieldAuthority, { label: string; icon: string; color: string }> = {
   geometry_authoritative: { label: "Geometry Auth.", icon: "📐", color: "text-green-700" },
   ai_provisional: { label: "Provisional", icon: "⏳", color: "text-amber-600" },
