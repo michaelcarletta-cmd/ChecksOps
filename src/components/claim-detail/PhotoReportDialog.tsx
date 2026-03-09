@@ -145,6 +145,8 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [pollingForResult, setPollingForResult] = useState(false);
   const [generatingReferencedPdf, setGeneratingReferencedPdf] = useState(false);
+  const [citationWatchdog, setCitationWatchdog] = useState<any>(null);
+  const [jurisdictionInfo, setJurisdictionInfo] = useState<any>(null);
   const { toast } = useToast();
 
   // Check for recently completed photo reports when dialog opens
