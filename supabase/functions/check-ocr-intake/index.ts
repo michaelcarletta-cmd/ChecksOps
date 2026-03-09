@@ -593,6 +593,7 @@ Rules:
       log("rpc_commit_fallback", "Applying direct fallback update", { error: rpcError });
 
       try {
+        // Save OCR data to check_intake_items
         await supabase.from("check_intake_items")
           .update({
             carrier_name: parsed.carrier_name,
@@ -614,10 +615,44 @@ Rules:
             deposit_recommendation: eligibility.recommendation === "loss_draft_required"
               ? "loss_draft_required"
               : eligibility.recommendation,
+            deposit_recommendation_reasons: eligibility.reasons,
             updated_at: new Date().toISOString(),
           })
           .eq("id", checkId);
-        log("rpc_commit_fallback", "Direct update succeeded — OCR data saved");
+        log("rpc_commit_fallback", "Direct check update succeeded");
+
+        // CRITICAL: Also insert payees — the RPC rollback wiped them
+        if (!hasActiveEndorsements && payees.length > 0) {
+          // Delete any stale payees first
+          await supabase.from("check_payees").delete().eq("check_id", checkId);
+
+          const payeeRows = payees.map((p) => ({
+            check_id: checkId,
+            payee_name: p.name,
+            payee_type: p.type || "unknown",
+            endorsement_token: crypto.randomUUID(),
+            endorsement_token_expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+          }));
+
+          const { error: payeeErr } = await supabase.from("check_payees").insert(payeeRows);
+          if (payeeErr) {
+            log("rpc_commit_fallback", "Payee insert failed", { error: payeeErr.message });
+          } else {
+            log("rpc_commit_fallback", `Inserted ${payeeRows.length} payees via fallback`);
+          }
+        }
+
+        // Also insert eligibility results
+        await supabase.from("check_eligibility_results").delete().eq("check_id", checkId);
+        await supabase.from("check_eligibility_results").insert({
+          check_id: checkId,
+          recommendation: eligibility.recommendation,
+          reasons: eligibility.reasons,
+          rule_results: eligibility.rules,
+          evaluated_by: userId,
+        });
+
+        log("rpc_commit_fallback", "Full fallback succeeded — OCR data + payees + eligibility saved");
       } catch (fallbackErr) {
         log("rpc_commit_fallback", "Direct update also failed", {
           error: fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr),
