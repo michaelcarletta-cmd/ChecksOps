@@ -20,6 +20,8 @@ import { RoofConfirmationDialog, type ConfirmationLevel, type ConfirmationBasis 
 type DerivationSource = "geometry" | "ai_estimated" | "user_override";
 type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative";
 type RoofForm = "gable" | "hip" | "cross_gable" | "complex" | "unknown";
+type PitchBand = "flat" | "low" | "moderate" | "steep" | "very_steep" | "unknown";
+type PitchType = "band" | "exact";
 
 interface EdgeClassification {
   segment_index: number;
