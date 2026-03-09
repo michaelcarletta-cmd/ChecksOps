@@ -10,10 +10,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { toast } from "sonner";
 import {
   Ruler, Loader2, MapPin, AlertTriangle, CheckCircle2, RefreshCw,
-  Lock, Unlock, Pencil, Save, X
+  Lock, Unlock, Pencil, Save, X, Shield, Eye
 } from "lucide-react";
 
 type DerivationSource = "geometry" | "ai_estimated" | "user_override";
+type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative";
 
 interface RoofEstimate {
   id: string;
@@ -40,6 +41,11 @@ interface RoofEstimate {
   data_sources: string[] | null;
   field_sources: Record<string, DerivationSource> | null;
   field_confidence: Record<string, number> | null;
+  field_authority: Record<string, FieldAuthority> | null;
+  footprint_polygon: any | null;
+  footprint_perimeter_ft: number | null;
+  imagery_source: string | null;
+  imagery_date: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -53,6 +59,12 @@ const SOURCE_LABELS: Record<DerivationSource, { label: string; color: string }> 
   geometry: { label: "Geometry", color: "text-green-600" },
   ai_estimated: { label: "AI Est.", color: "text-amber-600" },
   user_override: { label: "Manual", color: "text-blue-600" },
+};
+
+const AUTHORITY_LABELS: Record<FieldAuthority, { label: string; icon: string; color: string }> = {
+  geometry_authoritative: { label: "Geometry Auth.", icon: "📐", color: "text-green-700" },
+  ai_provisional: { label: "Provisional", icon: "⏳", color: "text-amber-600" },
+  user_authoritative: { label: "User Auth.", icon: "✓", color: "text-blue-700" },
 };
 
 const round = (v: number | null | undefined, decimals = 0): number | null => {
@@ -122,7 +134,10 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       if (data?.error) throw new Error(data.error);
 
       setEstimate(data.measurement as RoofEstimate);
-      toast.success("Roof estimate generated — requires confirmation before use");
+      const fpMsg = data.footprintExtracted
+        ? " — building footprint extracted from geometry"
+        : " — no footprint geometry found, using AI estimation";
+      toast.success("Roof estimate generated" + fpMsg);
     } catch (err: any) {
       setError(err.message || "Estimate failed");
       toast.error(err.message || "Estimate failed");
@@ -155,6 +170,9 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     const updatedSources: Record<string, DerivationSource> = { ...existingSources };
     const existingConf = (estimate.field_confidence || {}) as Record<string, number>;
     const updatedConf: Record<string, number> = { ...existingConf };
+    const existingAuth = (estimate.field_authority || {}) as Record<string, FieldAuthority>;
+    const updatedAuth: Record<string, FieldAuthority> = { ...existingAuth };
+
     const numericKeys = [
       "footprint_area_sqft", "estimated_roof_area_sqft", "squares",
       "ridge_lf", "hip_lf", "valley_lf", "eave_lf", "rake_lf", "facet_count",
@@ -164,12 +182,13 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       const newVal = (editValues as any)[key];
       if (newVal !== oldVal) {
         updatedSources[key] = "user_override";
-        updatedConf[key] = 100; // user-confirmed value = 100% confidence
+        updatedAuth[key] = "user_authoritative";
+        // confidence stays as-is — user authority ≠ automatic 100% confidence
       }
     }
     if (editValues.dominant_pitch !== estimate.dominant_pitch) {
       updatedSources["dominant_pitch"] = "user_override";
-      updatedConf["dominant_pitch"] = 100;
+      updatedAuth["dominant_pitch"] = "user_authoritative";
     }
 
     const rounded: Record<string, any> = {};
@@ -185,6 +204,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
         ...rounded,
         field_sources: updatedSources,
         field_confidence: updatedConf,
+        field_authority: updatedAuth,
         manually_confirmed: true,
         confirmed_at: new Date().toISOString(),
         review_required: false,
@@ -202,6 +222,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       ...rounded,
       field_sources: updatedSources,
       field_confidence: updatedConf,
+      field_authority: updatedAuth,
       manually_confirmed: true,
       review_required: false,
     } as RoofEstimate);
@@ -243,6 +264,9 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const getFieldConfidence = (key: string): number =>
     (estimate?.field_confidence as any)?.[key] ?? 0;
 
+  const getFieldAuthority = (key: string): FieldAuthority =>
+    (estimate?.field_authority as any)?.[key] ?? "ai_provisional";
+
   if (fetchingExisting) {
     return (
       <Card>
@@ -260,6 +284,28 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       <span className={`text-[10px] font-medium ${meta.color} ml-1`}>
         [{meta.label}]
       </span>
+    );
+  };
+
+  const AuthorityBadge = ({ fieldKey }: { fieldKey: string }) => {
+    const auth = getFieldAuthority(fieldKey);
+    const meta = AUTHORITY_LABELS[auth];
+    return (
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className={`text-[9px] font-medium ${meta.color} ml-1`}>
+              {meta.icon}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            Authority: {meta.label}
+            {auth === "ai_provisional" && " — requires confirmation"}
+            {auth === "geometry_authoritative" && " — derived from building geometry"}
+            {auth === "user_authoritative" && " — user-overridden, workflow-authoritative"}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   };
 
@@ -292,6 +338,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       <span className="text-sm text-muted-foreground">
         {label}
         {!editing && <SourceTag source={getFieldSource(fieldKey)} />}
+        {!editing && <AuthorityBadge fieldKey={fieldKey} />}
         {!editing && <ConfidencePip fieldKey={fieldKey} />}
       </span>
       {editing && editKey ? (
@@ -314,6 +361,8 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     </div>
   );
 
+  const hasFootprintGeometry = !!estimate?.footprint_polygon;
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -321,7 +370,9 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
           <div className="flex items-center gap-2">
             <Ruler className="h-5 w-5 text-primary" />
             <CardTitle className="text-lg">Roof Estimate</CardTitle>
-            <Badge variant="outline" className="text-[10px] font-normal">Preliminary</Badge>
+            <Badge variant="outline" className="text-[10px] font-normal">
+              {hasFootprintGeometry ? "Phase 2A" : "Preliminary"}
+            </Badge>
           </div>
           {estimate && (
             <div className="flex items-center gap-2">
@@ -338,7 +389,9 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
           )}
         </div>
         <CardDescription>
-          AI-estimated roof dimensions from public data. All values are preliminary until manually confirmed.
+          {hasFootprintGeometry
+            ? "Footprint extracted from building geometry. Pitch and linear estimates are AI-modeled."
+            : "AI-estimated roof dimensions from public data. All values are preliminary until manually confirmed."}
         </CardDescription>
       </CardHeader>
 
@@ -386,7 +439,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
           <div className="rounded-lg border border-dashed p-6 text-center space-y-2">
             <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
             <p className="text-sm text-muted-foreground">
-              Geocoding → Pulling parcel data → Fetching elevation → AI estimation...
+              Geocoding → Extracting footprint → Pulling parcel data → Fetching elevation → AI estimation...
             </p>
           </div>
         )}
@@ -402,7 +455,19 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                   <strong>Unconfirmed Estimate — Blocked from Downstream Use</strong>
                   <br />
                   This estimate <em>cannot</em> feed the estimate builder, material calculator, or supplement engine.
-                  Review per-field confidence scores, then confirm or override values before production use.
+                  Review per-field confidence and authority, then confirm or override values before production use.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Footprint geometry notice */}
+            {hasFootprintGeometry && (
+              <Alert>
+                <Shield className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Building footprint extracted</strong> from {estimate.imagery_source || "geometry source"}.
+                  Footprint area ({estimate.footprint_area_sqft?.toLocaleString()} sqft) and perimeter ({estimate.footprint_perimeter_ft?.toLocaleString()} ft)
+                  are geometry-derived. {estimate.imagery_date && `Imagery date: ${estimate.imagery_date}.`}
                 </AlertDescription>
               </Alert>
             )}
@@ -436,17 +501,33 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                 </div>
                 <div className="text-xs text-muted-foreground">Facets</div>
               </div>
+              {hasFootprintGeometry && (
+                <>
+                  <Separator orientation="vertical" className="h-10" />
+                  <div className="text-center">
+                    <div className="text-2xl font-bold tabular-nums text-green-600">
+                      {estimate.footprint_perimeter_ft?.toLocaleString() ?? "—"}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Perimeter ft</div>
+                  </div>
+                </>
+              )}
             </div>
 
-            {/* Source Legend */}
+            {/* Legend */}
             <div className="flex gap-3 text-[10px] text-muted-foreground flex-wrap">
-              <span className="text-green-600 font-medium">[Geometry]</span> = parcel/elevation
-              <span className="text-amber-600 font-medium ml-2">[AI Est.]</span> = AI-modeled
+              <span><strong>Source:</strong></span>
+              <span className="text-green-600 font-medium">[Geometry]</span> = measured
+              <span className="text-amber-600 font-medium ml-2">[AI Est.]</span> = modeled
               <span className="text-blue-600 font-medium ml-2">[Manual]</span> = user-entered
-              <span className="ml-2">
+              <span className="ml-3"><strong>Authority:</strong></span>
+              <span>📐 Geometry Auth.</span>
+              <span>⏳ Provisional</span>
+              <span>✓ User Auth.</span>
+              <span className="ml-3">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" /> ≥60%
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-yellow-500 ml-1" /> 30-59%
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 ml-1" /> &lt;30% = per-field confidence
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 ml-1" /> &lt;30% confidence
               </span>
             </div>
 
@@ -511,12 +592,6 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                 ))}
               </div>
             )}
-
-            {/* Phase 2 notice */}
-            <div className="text-[11px] text-muted-foreground p-2 rounded bg-muted/20 border border-dashed">
-              <strong>Coming:</strong> Aerial-image footprint extraction will derive roof area, eaves, and rakes from actual geometry
-              instead of AI estimation. Until then, all linear and area values are AI-modeled from parcel data.
-            </div>
 
             {/* Geocode info */}
             {estimate.geocoded_lat && estimate.geocoded_lng && (
