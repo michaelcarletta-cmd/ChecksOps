@@ -27,6 +27,7 @@ import { EndorsementChecklist } from "@/components/check-review/EndorsementCheck
 import { DepositPacketGenerator } from "@/components/check-review/DepositPacketGenerator";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards";
 import { LossDraftDashboard } from "@/components/loss-draft/LossDraftDashboard";
+import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
 import { DepositOperationsConsole, BranchDepositManifest } from "@/components/deposit-ops/DepositOperationsConsole";
 import { ReconciliationDashboard } from "@/components/deposit-ops/ReconciliationDashboard";
 import { ExceptionResolutionPanel } from "@/components/deposit-ops/ExceptionResolutionPanel";
@@ -790,6 +791,20 @@ function CheckDetailPanel({
     },
   });
 
+  // Fetch loss draft tracking record if required
+  const { data: lossDraftRecord } = useQuery({
+    queryKey: ["check-loss-draft-link", checkId],
+    enabled: check?.status === "loss_draft_required" || check?.status === "needs_review",
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("loss_draft_tracking")
+        .select("id")
+        .eq("check_intake_item_id", checkId)
+        .maybeSingle();
+      return data;
+    },
+  });
+
   const pendingEndorsements = endorsements.filter(
     (e) => e.status === "pending" || e.status === "sent",
   );
@@ -814,12 +829,14 @@ function CheckDetailPanel({
       `${rejectedEndorsements.length} rejected endorsement(s): ${rejectedEndorsements.map((e) => e.payee_name).join(", ")} — requires resolution`,
     );
   }
-  if (mortgageEndorsements.length > 0) {
+  if (check.status === "loss_draft_required") {
+    blockingReasons.push("Check is in Loss Draft workflow. Deposit is blocked until final release.");
+  } else if (mortgageEndorsements.length > 0) {
     blockingReasons.push(
       `${mortgageEndorsements.length} mortgage payee(s) routed to loss draft workflow`,
     );
   }
-  const isDepositBlocked = endorsements.length > 0 && !allEndorsementsComplete;
+  const isDepositBlocked = (endorsements.length > 0 && !allEndorsementsComplete) || check.status === "loss_draft_required";
 
   return (
     <Card className="overflow-hidden">
@@ -849,6 +866,43 @@ function CheckDetailPanel({
             {blockingReasons.map((reason, i) => (
               <p key={i} className="text-xs text-amber-300/80 pl-6">• {reason}</p>
             ))}
+          </div>
+        )}
+
+        {/* Loss Draft Banner & Action */}
+        {check.status === "loss_draft_required" && lossDraftRecord?.id && (
+          <div className="mt-2 border border-blue-500/30 bg-blue-500/10 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-blue-500 font-semibold text-sm">
+                <Landmark className="h-4 w-4 shrink-0" />
+                Loss Draft Active
+              </div>
+              <p className="text-xs text-blue-400/80">
+                This check is being processed by the mortgage servicer. Deposit is blocked until the final release is completed.
+              </p>
+            </div>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline" className="shrink-0 bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30 hover:text-blue-300">
+                  <Landmark className="h-4 w-4 mr-2" />
+                  View Loss Draft
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl max-h-[85vh] p-0 overflow-hidden border-border bg-card">
+                <div className="p-4 bg-muted/30 border-b flex items-center justify-between">
+                  <DialogTitle className="text-lg flex items-center gap-2">
+                    <Landmark className="h-5 w-5 text-amber-400" />
+                    Loss Draft Tracking
+                  </DialogTitle>
+                </div>
+                <div className="p-0 bg-card">
+                  <LossDraftDetailPanel 
+                    lossDraftId={lossDraftRecord.id} 
+                    onUpdate={() => onRefresh()} 
+                  />
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         )}
 

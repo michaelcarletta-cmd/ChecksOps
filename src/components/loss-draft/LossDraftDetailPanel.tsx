@@ -233,6 +233,20 @@ export function LossDraftDetailPanel({
         </div>
       </CardHeader>
       <Separator />
+
+      {draft.escrow_status === "final_release_complete" && (
+        <div className="mx-4 my-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg flex items-start gap-3">
+          <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-emerald-500">Return to Deposit Flow Complete</p>
+            <p className="text-xs text-emerald-400/80">
+              The final release has been recorded and the check has been unblocked. 
+              It is now approved for deposit in the main orchestrator.
+            </p>
+          </div>
+        </div>
+      )}
+
       <Tabs defaultValue="actions" className="flex-1 flex flex-col">
         <TabsList className="w-full rounded-none shrink-0">
           <TabsTrigger value="actions" className="flex-1 text-xs">Actions</TabsTrigger>

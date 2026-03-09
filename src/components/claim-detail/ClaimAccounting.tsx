@@ -1068,7 +1068,9 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                       </Badge>
                     ) : "—"}
                     {check.mortgage_flag && (
-                      <Badge className="ml-1 bg-blue-500/20 text-blue-400 text-[9px] px-1">MTG</Badge>
+                      <Badge className="ml-1 bg-blue-500/20 text-blue-400 text-[9px] px-1 whitespace-nowrap">
+                        {check.deposit_status !== 'ready' && check.deposit_status !== 'approved' && check.deposit_status !== 'deposited' ? 'LOSS DRAFT BLOCKED' : 'MTG'}
+                      </Badge>
                     )}
                   </TableCell>
                   {isAdmin && (
