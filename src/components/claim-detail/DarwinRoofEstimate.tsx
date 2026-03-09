@@ -9,10 +9,17 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
   Ruler, Loader2, MapPin, AlertTriangle, CheckCircle2, RefreshCw,
-  TriangleAlert, Pencil, Save, X, Home, ArrowUpRight
+  TriangleAlert, Pencil, Save, X, Lock, Unlock
 } from "lucide-react";
 
-interface RoofMeasurement {
+type DerivationSource = "geometry" | "ai_estimated" | "user_override";
+
+interface FieldMeta {
+  value: number | string | null;
+  source: DerivationSource;
+}
+
+interface RoofEstimate {
   id: string;
   claim_id: string;
   address: string;
@@ -35,6 +42,7 @@ interface RoofMeasurement {
   raw_geojson: any | null;
   ai_notes: string | null;
   data_sources: string[] | null;
+  field_sources: Record<string, DerivationSource> | null;
   created_at: string;
   updated_at: string;
 }
@@ -44,16 +52,27 @@ interface Props {
   claim: any;
 }
 
-export const DarwinRoofMeasurement = ({ claimId, claim }: Props) => {
+const SOURCE_LABELS: Record<DerivationSource, { label: string; color: string }> = {
+  geometry: { label: "Geometry", color: "text-green-600" },
+  ai_estimated: { label: "AI Est.", color: "text-amber-600" },
+  user_override: { label: "Manual", color: "text-blue-600" },
+};
+
+const round = (v: number | null | undefined, decimals = 0): number | null => {
+  if (v == null || isNaN(v)) return null;
+  const factor = 10 ** decimals;
+  return Math.round(v * factor) / factor;
+};
+
+export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const [address, setAddress] = useState("");
   const [loading, setLoading] = useState(false);
-  const [measurement, setMeasurement] = useState<RoofMeasurement | null>(null);
+  const [estimate, setEstimate] = useState<RoofEstimate | null>(null);
   const [fetchingExisting, setFetchingExisting] = useState(true);
   const [editing, setEditing] = useState(false);
-  const [editValues, setEditValues] = useState<Partial<RoofMeasurement>>({});
+  const [editValues, setEditValues] = useState<Partial<RoofEstimate>>({});
   const [error, setError] = useState<string | null>(null);
 
-  // Load existing measurement
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase
@@ -64,14 +83,13 @@ export const DarwinRoofMeasurement = ({ claimId, claim }: Props) => {
         .limit(1);
 
       if (data && data.length > 0) {
-        setMeasurement(data[0] as unknown as RoofMeasurement);
+        setEstimate(data[0] as unknown as RoofEstimate);
       }
       setFetchingExisting(false);
     };
     load();
   }, [claimId]);
 
-  // Pre-fill address from claim
   useEffect(() => {
     if (claim) {
       const parts = [
@@ -84,7 +102,7 @@ export const DarwinRoofMeasurement = ({ claimId, claim }: Props) => {
     }
   }, [claim]);
 
-  const runMeasurement = useCallback(async () => {
+  const runEstimate = useCallback(async () => {
     if (!address.trim()) {
       toast.error("Enter a property address");
       return;
@@ -100,63 +118,92 @@ export const DarwinRoofMeasurement = ({ claimId, claim }: Props) => {
       if (fnErr) throw new Error(fnErr.message);
       if (data?.error) throw new Error(data.error);
 
-      setMeasurement(data.measurement as RoofMeasurement);
-      toast.success("Roof measurement estimate generated");
+      setEstimate(data.measurement as RoofEstimate);
+      toast.success("Roof estimate generated — requires confirmation before use");
     } catch (err: any) {
-      setError(err.message || "Measurement failed");
-      toast.error(err.message || "Measurement failed");
+      setError(err.message || "Estimate failed");
+      toast.error(err.message || "Estimate failed");
     } finally {
       setLoading(false);
     }
   }, [claimId, address]);
 
   const startEditing = () => {
-    if (!measurement) return;
+    if (!estimate) return;
     setEditValues({
-      footprint_area_sqft: measurement.footprint_area_sqft,
-      estimated_roof_area_sqft: measurement.estimated_roof_area_sqft,
-      squares: measurement.squares,
-      dominant_pitch: measurement.dominant_pitch,
-      ridge_lf: measurement.ridge_lf,
-      hip_lf: measurement.hip_lf,
-      valley_lf: measurement.valley_lf,
-      eave_lf: measurement.eave_lf,
-      rake_lf: measurement.rake_lf,
-      facet_count: measurement.facet_count,
+      footprint_area_sqft: estimate.footprint_area_sqft,
+      estimated_roof_area_sqft: estimate.estimated_roof_area_sqft,
+      squares: estimate.squares,
+      dominant_pitch: estimate.dominant_pitch,
+      ridge_lf: estimate.ridge_lf,
+      hip_lf: estimate.hip_lf,
+      valley_lf: estimate.valley_lf,
+      eave_lf: estimate.eave_lf,
+      rake_lf: estimate.rake_lf,
+      facet_count: estimate.facet_count,
     });
     setEditing(true);
   };
 
   const saveEdits = async () => {
-    if (!measurement) return;
+    if (!estimate) return;
+
+    // Build field_sources: mark edited fields as user_override, keep existing for untouched
+    const existingSources = (estimate.field_sources || {}) as Record<string, DerivationSource>;
+    const updatedSources: Record<string, DerivationSource> = { ...existingSources };
+    const numericKeys = [
+      "footprint_area_sqft", "estimated_roof_area_sqft", "squares",
+      "ridge_lf", "hip_lf", "valley_lf", "eave_lf", "rake_lf", "facet_count",
+    ];
+    for (const key of numericKeys) {
+      const oldVal = (estimate as any)[key];
+      const newVal = (editValues as any)[key];
+      if (newVal !== oldVal) {
+        updatedSources[key] = "user_override";
+      }
+    }
+    if (editValues.dominant_pitch !== estimate.dominant_pitch) {
+      updatedSources["dominant_pitch"] = "user_override";
+    }
+
+    // Round numeric values
+    const rounded: Record<string, any> = {};
+    for (const key of numericKeys) {
+      const v = (editValues as any)[key];
+      rounded[key] = key === "squares" ? round(v, 1) : round(v);
+    }
+    rounded.dominant_pitch = editValues.dominant_pitch;
+
     const { error: updateErr } = await supabase
       .from("claim_roof_measurements")
       .update({
-        ...editValues,
+        ...rounded,
+        field_sources: updatedSources,
         manually_confirmed: true,
         confirmed_at: new Date().toISOString(),
         review_required: false,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", measurement.id);
+      .eq("id", estimate.id);
 
     if (updateErr) {
       toast.error("Failed to save changes");
       return;
     }
 
-    setMeasurement({
-      ...measurement,
-      ...editValues,
+    setEstimate({
+      ...estimate,
+      ...rounded,
+      field_sources: updatedSources,
       manually_confirmed: true,
       review_required: false,
-    } as RoofMeasurement);
+    } as RoofEstimate);
     setEditing(false);
-    toast.success("Measurements updated and confirmed");
+    toast.success("Estimate updated and confirmed for use");
   };
 
-  const confirmMeasurement = async () => {
-    if (!measurement) return;
+  const confirmEstimate = async () => {
+    if (!estimate) return;
     const { error: updateErr } = await supabase
       .from("claim_roof_measurements")
       .update({
@@ -165,15 +212,15 @@ export const DarwinRoofMeasurement = ({ claimId, claim }: Props) => {
         review_required: false,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", measurement.id);
+      .eq("id", estimate.id);
 
     if (updateErr) {
       toast.error("Failed to confirm");
       return;
     }
 
-    setMeasurement({ ...measurement, manually_confirmed: true, review_required: false });
-    toast.success("Measurement confirmed");
+    setEstimate({ ...estimate, manually_confirmed: true, review_required: false });
+    toast.success("Estimate confirmed — now available for use in scoping");
   };
 
   const confidenceColor = (score: number | null) => {
@@ -183,11 +230,8 @@ export const DarwinRoofMeasurement = ({ claimId, claim }: Props) => {
     return "text-red-500";
   };
 
-  const confidenceBadge = (score: number | null) => {
-    if (!score) return "outline";
-    if (score >= 60) return "default" as const;
-    if (score >= 35) return "secondary" as const;
-    return "destructive" as const;
+  const getFieldSource = (key: string): DerivationSource => {
+    return (estimate?.field_sources as any)?.[key] ?? "ai_estimated";
   };
 
   if (fetchingExisting) {
@@ -195,19 +239,31 @@ export const DarwinRoofMeasurement = ({ claimId, claim }: Props) => {
       <Card>
         <CardContent className="p-6 flex items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-primary mr-2" />
-          <span className="text-sm text-muted-foreground">Loading measurements...</span>
+          <span className="text-sm text-muted-foreground">Loading roof estimates...</span>
         </CardContent>
       </Card>
     );
   }
 
-  const MeasurementField = ({
-    label, value, unit, editKey,
+  const SourceTag = ({ source }: { source: DerivationSource }) => {
+    const meta = SOURCE_LABELS[source];
+    return (
+      <span className={`text-[10px] font-medium ${meta.color} ml-1`}>
+        [{meta.label}]
+      </span>
+    );
+  };
+
+  const EstimateField = ({
+    label, value, unit, editKey, fieldKey,
   }: {
-    label: string; value: number | string | null; unit?: string; editKey?: keyof RoofMeasurement;
+    label: string; value: number | string | null; unit?: string; editKey?: keyof RoofEstimate; fieldKey: string;
   }) => (
     <div className="flex items-center justify-between py-1.5">
-      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="text-sm text-muted-foreground">
+        {label}
+        {!editing && <SourceTag source={getFieldSource(fieldKey)} />}
+      </span>
       {editing && editKey ? (
         <Input
           type={typeof value === "string" ? "text" : "number"}
@@ -222,7 +278,7 @@ export const DarwinRoofMeasurement = ({ claimId, claim }: Props) => {
         />
       ) : (
         <span className="text-sm font-medium tabular-nums">
-          {value != null ? `${value}${unit ? ` ${unit}` : ""}` : "—"}
+          {value != null ? `${typeof value === "number" ? (editKey === "squares" ? (value as number).toFixed(1) : Math.round(value as number)) : value}${unit ? ` ${unit}` : ""}` : "—"}
         </span>
       )}
     </div>
@@ -234,24 +290,25 @@ export const DarwinRoofMeasurement = ({ claimId, claim }: Props) => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Ruler className="h-5 w-5 text-primary" />
-            <CardTitle className="text-lg">Roof Measurement</CardTitle>
+            <CardTitle className="text-lg">Roof Estimate</CardTitle>
+            <Badge variant="outline" className="text-[10px] font-normal">Preliminary</Badge>
           </div>
-          {measurement && (
+          {estimate && (
             <div className="flex items-center gap-2">
-              {measurement.manually_confirmed ? (
+              {estimate.manually_confirmed ? (
                 <Badge variant="default" className="gap-1">
-                  <CheckCircle2 className="h-3 w-3" /> Confirmed
+                  <Unlock className="h-3 w-3" /> Confirmed for Use
                 </Badge>
               ) : (
-                <Badge variant="secondary" className="gap-1">
-                  <TriangleAlert className="h-3 w-3" /> Estimated
+                <Badge variant="destructive" className="gap-1">
+                  <Lock className="h-3 w-3" /> Unconfirmed — Not for Use
                 </Badge>
               )}
             </div>
           )}
         </div>
         <CardDescription>
-          Zero-cost roof measurement using public geospatial data + AI estimation
+          AI-estimated roof dimensions from public data. All values are preliminary until manually confirmed.
         </CardDescription>
       </CardHeader>
 
@@ -268,21 +325,21 @@ export const DarwinRoofMeasurement = ({ claimId, claim }: Props) => {
               disabled={loading}
             />
           </div>
-          <Button onClick={runMeasurement} disabled={loading || !address.trim()}>
+          <Button onClick={runEstimate} disabled={loading || !address.trim()}>
             {loading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Measuring...
+                Estimating...
               </>
-            ) : measurement ? (
+            ) : estimate ? (
               <>
                 <RefreshCw className="h-4 w-4 mr-2" />
-                Re-measure
+                Re-estimate
               </>
             ) : (
               <>
                 <Ruler className="h-4 w-4 mr-2" />
-                Measure Roof
+                Run Estimate
               </>
             )}
           </Button>
@@ -305,15 +362,17 @@ export const DarwinRoofMeasurement = ({ claimId, claim }: Props) => {
         )}
 
         {/* Results */}
-        {measurement && !loading && (
+        {estimate && !loading && (
           <div className="space-y-4">
-            {/* Warning Banner */}
-            {!measurement.manually_confirmed && (
-              <Alert>
-                <AlertTriangle className="h-4 w-4" />
+            {/* Confirmation Gate */}
+            {!estimate.manually_confirmed && (
+              <Alert variant="destructive">
+                <Lock className="h-4 w-4" />
                 <AlertDescription>
-                  <strong>AI-Estimated Measurements</strong> — These values are generated from public data and AI modeling.
-                  They should be verified by field inspection before use in estimates or supplements.
+                  <strong>Unconfirmed Estimate — Do Not Use</strong>
+                  <br />
+                  These AI-estimated values are <em>not</em> derived from aerial imagery or field measurement.
+                  They must be reviewed and confirmed by staff before use in any estimate, supplement, or report.
                 </AlertDescription>
               </Alert>
             )}
@@ -321,50 +380,57 @@ export const DarwinRoofMeasurement = ({ claimId, claim }: Props) => {
             {/* Confidence & Summary */}
             <div className="flex items-center gap-4 p-3 rounded-lg bg-muted/50">
               <div className="text-center">
-                <div className={`text-2xl font-bold tabular-nums ${confidenceColor(measurement.confidence_score)}`}>
-                  {measurement.confidence_score ?? 0}%
+                <div className={`text-2xl font-bold tabular-nums ${confidenceColor(estimate.confidence_score)}`}>
+                  {estimate.confidence_score ?? 0}%
                 </div>
                 <div className="text-xs text-muted-foreground">Confidence</div>
               </div>
               <Separator orientation="vertical" className="h-10" />
               <div className="text-center">
                 <div className="text-2xl font-bold tabular-nums">
-                  {measurement.squares?.toFixed(1) ?? "—"}
+                  {estimate.squares != null ? round(estimate.squares, 1) : "—"}
                 </div>
                 <div className="text-xs text-muted-foreground">Squares</div>
               </div>
               <Separator orientation="vertical" className="h-10" />
               <div className="text-center">
                 <div className="text-2xl font-bold tabular-nums">
-                  {measurement.dominant_pitch ?? "—"}
+                  {estimate.dominant_pitch ?? "—"}
                 </div>
                 <div className="text-xs text-muted-foreground">Pitch</div>
               </div>
               <Separator orientation="vertical" className="h-10" />
               <div className="text-center">
                 <div className="text-2xl font-bold tabular-nums">
-                  {measurement.facet_count ?? "—"}
+                  {estimate.facet_count ?? "—"}
                 </div>
                 <div className="text-xs text-muted-foreground">Facets</div>
               </div>
+            </div>
+
+            {/* Source Legend */}
+            <div className="flex gap-3 text-[10px] text-muted-foreground">
+              <span className="text-green-600 font-medium">[Geometry]</span> = derived from parcel/elevation data
+              <span className="text-amber-600 font-medium ml-2">[AI Est.]</span> = AI-modeled
+              <span className="text-blue-600 font-medium ml-2">[Manual]</span> = user-entered
             </div>
 
             {/* Detail Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-0">
               <div>
                 <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-1">Area</h4>
-                <MeasurementField label="Footprint Area" value={measurement.footprint_area_sqft} unit="sqft" editKey="footprint_area_sqft" />
-                <MeasurementField label="Roof Area (slope-adjusted)" value={measurement.estimated_roof_area_sqft} unit="sqft" editKey="estimated_roof_area_sqft" />
-                <MeasurementField label="Squares" value={measurement.squares} editKey="squares" />
-                <MeasurementField label="Dominant Pitch" value={measurement.dominant_pitch} editKey="dominant_pitch" />
+                <EstimateField label="Footprint Area" value={estimate.footprint_area_sqft} unit="sqft" editKey="footprint_area_sqft" fieldKey="footprint_area_sqft" />
+                <EstimateField label="Roof Area (slope-adjusted)" value={estimate.estimated_roof_area_sqft} unit="sqft" editKey="estimated_roof_area_sqft" fieldKey="estimated_roof_area_sqft" />
+                <EstimateField label="Squares" value={estimate.squares} editKey="squares" fieldKey="squares" />
+                <EstimateField label="Dominant Pitch" value={estimate.dominant_pitch} editKey="dominant_pitch" fieldKey="dominant_pitch" />
               </div>
               <div>
                 <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-1">Linear</h4>
-                <MeasurementField label="Ridge" value={measurement.ridge_lf} unit="LF" editKey="ridge_lf" />
-                <MeasurementField label="Hip" value={measurement.hip_lf} unit="LF" editKey="hip_lf" />
-                <MeasurementField label="Valley" value={measurement.valley_lf} unit="LF" editKey="valley_lf" />
-                <MeasurementField label="Eave" value={measurement.eave_lf} unit="LF" editKey="eave_lf" />
-                <MeasurementField label="Rake" value={measurement.rake_lf} unit="LF" editKey="rake_lf" />
+                <EstimateField label="Ridge" value={estimate.ridge_lf} unit="LF" editKey="ridge_lf" fieldKey="ridge_lf" />
+                <EstimateField label="Hip" value={estimate.hip_lf} unit="LF" editKey="hip_lf" fieldKey="hip_lf" />
+                <EstimateField label="Valley" value={estimate.valley_lf} unit="LF" editKey="valley_lf" fieldKey="valley_lf" />
+                <EstimateField label="Eave" value={estimate.eave_lf} unit="LF" editKey="eave_lf" fieldKey="eave_lf" />
+                <EstimateField label="Rake" value={estimate.rake_lf} unit="LF" editKey="rake_lf" fieldKey="rake_lf" />
               </div>
             </div>
 
@@ -382,11 +448,11 @@ export const DarwinRoofMeasurement = ({ claimId, claim }: Props) => {
               ) : (
                 <>
                   <Button size="sm" variant="outline" onClick={startEditing}>
-                    <Pencil className="h-4 w-4 mr-1" /> Edit Measurements
+                    <Pencil className="h-4 w-4 mr-1" /> Edit Values
                   </Button>
-                  {!measurement.manually_confirmed && (
-                    <Button size="sm" onClick={confirmMeasurement}>
-                      <CheckCircle2 className="h-4 w-4 mr-1" /> Confirm As-Is
+                  {!estimate.manually_confirmed && (
+                    <Button size="sm" onClick={confirmEstimate}>
+                      <CheckCircle2 className="h-4 w-4 mr-1" /> Confirm for Use
                     </Button>
                   )}
                 </>
@@ -394,16 +460,16 @@ export const DarwinRoofMeasurement = ({ claimId, claim }: Props) => {
             </div>
 
             {/* AI Notes */}
-            {measurement.ai_notes && (
+            {estimate.ai_notes && (
               <div className="text-xs text-muted-foreground p-3 rounded bg-muted/30 border">
-                <strong>AI Notes:</strong> {measurement.ai_notes}
+                <strong>AI Methodology:</strong> {estimate.ai_notes}
               </div>
             )}
 
             {/* Data Sources */}
-            {measurement.data_sources && measurement.data_sources.length > 0 && (
+            {estimate.data_sources && estimate.data_sources.length > 0 && (
               <div className="flex flex-wrap gap-1">
-                {measurement.data_sources.map((s, i) => (
+                {estimate.data_sources.map((s, i) => (
                   <Badge key={i} variant="outline" className="text-xs">
                     {s}
                   </Badge>
@@ -411,11 +477,17 @@ export const DarwinRoofMeasurement = ({ claimId, claim }: Props) => {
               </div>
             )}
 
+            {/* Phase 2 notice */}
+            <div className="text-[11px] text-muted-foreground p-2 rounded bg-muted/20 border border-dashed">
+              <strong>Coming:</strong> Aerial-image footprint extraction will derive roof area, eaves, and rakes from actual geometry
+              instead of AI estimation. Until then, all linear and area values are AI-modeled from parcel data.
+            </div>
+
             {/* Geocode info */}
-            {measurement.geocoded_lat && measurement.geocoded_lng && (
+            {estimate.geocoded_lat && estimate.geocoded_lng && (
               <div className="text-xs text-muted-foreground flex items-center gap-1">
                 <MapPin className="h-3 w-3" />
-                {measurement.address} ({measurement.geocoded_lat.toFixed(5)}, {measurement.geocoded_lng.toFixed(5)})
+                {estimate.address} ({estimate.geocoded_lat.toFixed(5)}, {estimate.geocoded_lng.toFixed(5)})
               </div>
             )}
           </div>
