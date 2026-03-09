@@ -140,6 +140,8 @@ interface RoofEstimateResult {
   estimated_roof_area_sqft: number;
   squares: number;
   dominant_pitch: string;
+  pitch_band: PitchBand | null;
+  pitch_type: PitchType;
   ridge_lf: number;
   hip_lf: number;
   valley_lf: number;
@@ -174,6 +176,9 @@ interface RoofEstimateResult {
   aspect_ratio: number | null;
   ridge_candidates: RidgeCandidate[] | null;
   hip_valley_candidates: HipValleyCandidate[] | null;
+  // Phase 2F: Vision classifications
+  vision_classifications: SatelliteVisionResult | null;
+  suppression_records: SuppressionRecord[] | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
