@@ -3950,6 +3950,7 @@ export type Database = {
           imagery_source: string | null
           inferred_roof_form: string | null
           manually_confirmed: boolean
+          overhang_config: Json | null
           overlay_image_url: string | null
           perpendicular_axis_length_ft: number | null
           pitch_band: string | null
@@ -3962,6 +3963,7 @@ export type Database = {
           ridge_lf: number | null
           roof_form_confidence: number | null
           roof_form_reasoning: string | null
+          roof_mass_decomposition: Json | null
           selected_candidate_index: number | null
           squares: number | null
           suppression_records: Json | null
@@ -4011,6 +4013,7 @@ export type Database = {
           imagery_source?: string | null
           inferred_roof_form?: string | null
           manually_confirmed?: boolean
+          overhang_config?: Json | null
           overlay_image_url?: string | null
           perpendicular_axis_length_ft?: number | null
           pitch_band?: string | null
@@ -4023,6 +4026,7 @@ export type Database = {
           ridge_lf?: number | null
           roof_form_confidence?: number | null
           roof_form_reasoning?: string | null
+          roof_mass_decomposition?: Json | null
           selected_candidate_index?: number | null
           squares?: number | null
           suppression_records?: Json | null
@@ -4072,6 +4076,7 @@ export type Database = {
           imagery_source?: string | null
           inferred_roof_form?: string | null
           manually_confirmed?: boolean
+          overhang_config?: Json | null
           overlay_image_url?: string | null
           perpendicular_axis_length_ft?: number | null
           pitch_band?: string | null
@@ -4084,6 +4089,7 @@ export type Database = {
           ridge_lf?: number | null
           roof_form_confidence?: number | null
           roof_form_reasoning?: string | null
+          roof_mass_decomposition?: Json | null
           selected_candidate_index?: number | null
           squares?: number | null
           suppression_records?: Json | null
