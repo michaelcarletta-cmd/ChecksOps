@@ -222,6 +222,10 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
 
   const uploadDocuments = async () => {
     if (documents.length === 0) return;
+    if (!selectedParentFolderId) {
+      toast.error("Please select a parent folder first");
+      return;
+    }
     
     setIsUploading(true);
     const { data: { user } } = await supabase.auth.getUser();
@@ -237,7 +241,7 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
       );
 
       try {
-        // Find or create folder
+        // Find or create subfolder under the selected parent folder
         let folderId: string;
         
         const { data: existingFolder } = await supabase
@@ -245,7 +249,8 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
           .select("id")
           .eq("claim_id", claimId)
           .eq("name", doc.suggestedFolder)
-          .single();
+          .eq("parent_folder_id", selectedParentFolderId)
+          .maybeSingle();
         
         if (existingFolder) {
           folderId = existingFolder.id;
@@ -257,6 +262,7 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
               name: doc.suggestedFolder,
               is_predefined: false,
               created_by: user?.id,
+              parent_folder_id: selectedParentFolderId,
             })
             .select()
             .single();
