@@ -146,6 +146,8 @@ export const DarwinRoofTuningDashboard = () => {
         `${data.heuristics_derived} heuristics from ${data.total_validations} validations`,
         data.heuristics_expired > 0 ? `${data.heuristics_expired} expired` : null,
         data.heuristics_stale > 0 ? `${data.heuristics_stale} stale` : null,
+        data.heuristics_shadow > 0 ? `${data.heuristics_shadow} shadow` : null,
+        data.heuristics_promoted > 0 ? `${data.heuristics_promoted} promoted` : null,
       ].filter(Boolean).join(", ");
       toast.success(`Tuning recomputed: ${parts}`);
       fetchHeuristics();
