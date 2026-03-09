@@ -128,10 +128,11 @@ interface Props {
   claim: any;
 }
 
-const SOURCE_LABELS: Record<DerivationSource, { label: string; color: string }> = {
+const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
   geometry: { label: "Geometry", color: "text-green-600" },
   ai_estimated: { label: "AI Est.", color: "text-amber-600" },
   user_override: { label: "Manual", color: "text-blue-600" },
+  satellite_imagery: { label: "Satellite", color: "text-purple-600" },
 };
 
 const AUTHORITY_LABELS: Record<FieldAuthority, { label: string; icon: string; color: string }> = {
