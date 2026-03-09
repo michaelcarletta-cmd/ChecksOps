@@ -1076,6 +1076,10 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
  * Downstream gate: returns confirmed roof estimate data or null.
  * Any estimate builder, material calculator, or supplement engine
  * MUST use this function instead of querying claim_roof_measurements directly.
+ *
+ * Returns the estimate only if it has been through the evidence-based confirmation flow
+ * (manually_confirmed = true). The confirmation_level and confirmation_strength_score
+ * are available on the returned object for downstream tools to make risk-aware decisions.
  */
 export async function getConfirmedRoofEstimate(claimId: string): Promise<RoofEstimate | null> {
   const { data } = await supabase
