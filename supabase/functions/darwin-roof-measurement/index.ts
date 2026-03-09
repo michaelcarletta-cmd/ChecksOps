@@ -697,9 +697,9 @@ async function estimateRoofWithAI(
   allCandidates: CandidateFootprint[],
   roofFormInference: RoofFormInference | null,
 ): Promise<RoofEstimateResult> {
-  const LOVABLE_AI_URL = Deno.env.get("LOVABLE_AI_BASE_URL");
-  const LOVABLE_AI_KEY = Deno.env.get("LOVABLE_AI_API_KEY");
-  if (!LOVABLE_AI_URL || !LOVABLE_AI_KEY) throw new Error("AI service not configured");
+  const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1";
+  const LOVABLE_AI_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_AI_KEY) throw new Error("AI service not configured — LOVABLE_API_KEY missing");
 
   let geometryEaveLf = 0;
   let geometryRakeLf = 0;
