@@ -937,41 +937,68 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Detect state from policyholder address (NJ and PA only)
-    const detectState = (address: string | null): { state: string; stateName: string; insuranceCode: string; promptPayAct: string; adminCode: string } => {
-      if (!address) return { 
-        state: 'NJ', 
-        stateName: 'New Jersey', 
-        insuranceCode: 'N.J.S.A. 17:29B (Property and Casualty Insurance) and N.J.S.A. 17B (Life and Health Insurance)',
-        promptPayAct: 'N.J.S.A. 17:29B-4(9) (Unfair Claims Settlement Practices)',
-        adminCode: 'N.J.A.C. 11:2-17 (Unfair Claims Settlement Practices Regulations)'
-      };
-      
-      const upperAddress = address.toUpperCase();
-      
-      // Check for Pennsylvania
-      if (upperAddress.includes(' PA') || upperAddress.includes('PENNSYLVANIA') || upperAddress.includes(', PA')) {
-        return { 
-          state: 'PA', 
-          stateName: 'Pennsylvania', 
-          insuranceCode: '40 P.S. (Pennsylvania Insurance Code)',
-          promptPayAct: '40 P.S. § 1171.5 (Unfair Insurance Practices Act)',
-          adminCode: '31 Pa. Code Chapter 146 (Unfair Claims Settlement Practices)'
-        };
-      }
-      
-      // Default to New Jersey
-      return { 
-        state: 'NJ', 
-        stateName: 'New Jersey', 
-        insuranceCode: 'N.J.S.A. 17:29B (Property and Casualty Insurance) and N.J.S.A. 17B (Life and Health Insurance)',
-        promptPayAct: 'N.J.S.A. 17:29B-4(9) (Unfair Claims Settlement Practices)',
-        adminCode: 'N.J.A.C. 11:2-17 (Unfair Claims Settlement Practices Regulations)'
-      };
+    // ── Robust state detection with state_code priority ──────────────────
+    const STATE_REGULATIONS_MAP: Record<string, { state: string; stateName: string; insuranceCode: string; promptPayAct: string; adminCode: string }> = {
+      PA: { state: 'PA', stateName: 'Pennsylvania', insuranceCode: '40 P.S. (Pennsylvania Insurance Code)', promptPayAct: '40 P.S. § 1171.5 (Unfair Insurance Practices Act)', adminCode: '31 Pa. Code Chapter 146 (Unfair Claims Settlement Practices)' },
+      NJ: { state: 'NJ', stateName: 'New Jersey', insuranceCode: 'N.J.S.A. 17:29B (Property and Casualty Insurance) and N.J.S.A. 17B (Life and Health Insurance)', promptPayAct: 'N.J.S.A. 17:29B-4(9) (Unfair Claims Settlement Practices)', adminCode: 'N.J.A.C. 11:2-17 (Unfair Claims Settlement Practices Regulations)' },
+      TX: { state: 'TX', stateName: 'Texas', insuranceCode: 'Texas Insurance Code', promptPayAct: 'Texas Insurance Code Chapter 541 (Unfair Settlement Practices)', adminCode: '28 TAC § 21.203 (Prompt Payment of Claims)' },
+      FL: { state: 'FL', stateName: 'Florida', insuranceCode: 'Florida Statutes Title XXXVII', promptPayAct: 'F.S. § 624.155 (Civil Remedy)', adminCode: 'Fla. Admin. Code 69O-166 (Claims Settlement Practices)' },
+      NY: { state: 'NY', stateName: 'New York', insuranceCode: 'New York Insurance Law', promptPayAct: 'N.Y. Ins. Law § 2601 (Unfair Claim Settlement Practices)', adminCode: '11 NYCRR 216 (Unfair Claims Settlement Practices Regulation)' },
     };
 
-    const stateInfo = detectState(claim.policyholder_address);
-    console.log(`Detected state: ${stateInfo.stateName} from address: ${claim.policyholder_address}`);
+    // Cross-state citation patterns for watchdog
+    const STATE_CITATION_PATTERNS: Record<string, RegExp[]> = {
+      PA: [/31\s*Pa\.\s*Code/i, /40\s*P\.S\./i, /42\s*Pa\.C\.S/i, /Pa\.\s*Code\s*(Chapter|§|Ch\.)/i, /Pennsylvania\s+(Insurance\s+Code|Unfair)/i],
+      NJ: [/N\.J\.S\.A\./i, /N\.J\.A\.C\./i, /New\s+Jersey\s+(Insurance|Unfair|Admin)/i, /11:2-17/],
+      TX: [/Texas\s+Insurance\s+Code/i, /28\s*TAC/i, /Tex\.\s*Ins\.\s*Code/i],
+      FL: [/F\.S\.\s*§\s*624/i, /69O-166/i, /Florida\s+(Statute|Insurance|Admin)/i],
+      NY: [/N\.Y\.\s*Ins\.\s*Law/i, /11\s*NYCRR/i, /New\s+York\s+Insurance/i],
+    };
+
+    const detectStateFromAddress = (address: string | null): string | null => {
+      if (!address) return null;
+      const upper = address.toUpperCase();
+      // Priority 1: ZIP pattern e.g. "NJ 08050"
+      const zipMatch = upper.match(/[,\s]([A-Z]{2})[,\s]+\d{5}/);
+      if (zipMatch && STATE_REGULATIONS_MAP[zipMatch[1]]) return zipMatch[1];
+      // Priority 2: Word-boundary state code
+      const boundaryMatch = upper.match(/(^|[\s,])(PA|NJ|TX|FL|NY)([\s,]|$)/);
+      if (boundaryMatch && STATE_REGULATIONS_MAP[boundaryMatch[2]]) return boundaryMatch[2];
+      // Priority 3: Full name
+      if (/PENNSYLVANIA/.test(upper)) return 'PA';
+      if (/NEW\s+JERSEY/.test(upper)) return 'NJ';
+      if (/TEXAS/.test(upper)) return 'TX';
+      if (/FLORIDA/.test(upper)) return 'FL';
+      if (/NEW\s+YORK/.test(upper)) return 'NY';
+      return null;
+    };
+
+    // Detect state: state_code column > address parse > NO SILENT DEFAULT
+    const detectedStateRaw = (claim as any).state_code || detectStateFromAddress(claim.policyholder_address);
+    if (!detectedStateRaw) {
+      console.warn(`[darwin-ai-analysis] CRITICAL: Could not detect state for claim ${claimId} (address: "${claim.policyholder_address}"). Defaulting to NJ — outputs may cite WRONG jurisdiction.`);
+    }
+    const resolvedState = detectedStateRaw || 'NJ';
+    const stateInfo = STATE_REGULATIONS_MAP[resolvedState] || STATE_REGULATIONS_MAP['NJ'];
+    console.log(`[darwin-ai-analysis] State detection: state_code="${(claim as any).state_code}", parsed="${detectStateFromAddress(claim.policyholder_address)}", final="${resolvedState}"`);
+
+    // ── Post-generation watchdog function ──────────────────────────────
+    function auditStateCitations(text: string, correctState: string): { violations: string[]; cleaned: string } {
+      const violations: string[] = [];
+      let cleaned = text;
+      for (const [st, patterns] of Object.entries(STATE_CITATION_PATTERNS)) {
+        if (st === correctState) continue; // skip the correct state
+        for (const pattern of patterns) {
+          const matches = text.match(new RegExp(pattern.source, 'gi'));
+          if (matches) {
+            for (const m of matches) {
+              violations.push(`Found ${st} citation "${m}" in output meant for ${correctState}`);
+            }
+          }
+        }
+      }
+      return { violations, cleaned };
+    }
 
     // Fetch related data based on analysis type
     let context: any = { claim };
