@@ -2030,7 +2030,7 @@ function deriveRoofEstimate(
   // ── Notes ──
   const displayPitch = pitchBand !== "unknown" ? bandToDisplayPitch(pitchBand) : "unknown";
   const notes: string[] = [];
-  notes.push(`Pitch: ${displayPitch} (${pitchType}). Roof form: ${resolvedRoofForm}.`);
+  notes.push(`Pitch: ${displayPitch} (${pitchType})${pitchIsDefaultFallback ? " [DEFAULT FALLBACK — no vision pitch available]" : ""}. Roof form: ${resolvedRoofForm}.`);
   notes.push(`📐 Overhang: eave=${overhang.eave_overhang_ft}ft, rake=${overhang.rake_overhang_ft}ft (${overhang.source}).`);
   if (hasGeometry) {
     notes.push(`📐 Footprint: ${footprintArea} sqft from ${selectedCandidate!.source} (quality: ${selectedCandidate!.geometry_quality_score}/100).`);
