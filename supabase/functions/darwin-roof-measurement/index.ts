@@ -1021,12 +1021,13 @@ Return JSON only.`;
     overlay_image_url: null,
     raw_geojson: selectedCandidate?.geojson || null,
     ai_notes: (parsed.ai_notes ?? "Preliminary AI estimate. Field verification required.") +
-      proxyNote + roofFormNote +
+      proxyNote + roofFormNote + satelliteNote +
       "\n\n⚠️ This is a PRELIMINARY ESTIMATE, not a measurement. All values are AI-modeled and should not be used without manual confirmation.",
     data_sources: [
       ...(parsed.data_sources ?? ["US Census Geocoder", "AI estimation"]),
       ...(selectedCandidate ? [selectedCandidate.source] : []),
       ...(roofFormInference ? ["Geometry Roof Form Inference"] : []),
+      ...(satelliteAnalysis ? ["Satellite Imagery Analysis (ArcGIS World Imagery)"] : []),
     ],
     field_sources: fieldSources,
     field_confidence: fieldConfidence,
