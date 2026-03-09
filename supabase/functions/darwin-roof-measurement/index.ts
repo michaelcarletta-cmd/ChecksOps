@@ -6,7 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type DerivationSource = "geometry" | "ai_estimated";
+type DerivationSource = "geometry" | "ai_estimated" | "satellite_imagery";
 type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative";
 type RoofForm = "gable" | "hip" | "cross_gable" | "complex" | "unknown";
 
