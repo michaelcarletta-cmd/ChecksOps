@@ -54,6 +54,12 @@ interface Heuristic {
   conflict_group: string | null;
   governance_status: string | null;
   governance_notes: string | null;
+  // Shadow mode
+  shadow_mode: boolean;
+  shadow_mode_hits: number;
+  shadow_mode_min_hits: number;
+  shadow_mode_predicted_impacts: any[] | null;
+  shadow_mode_promoted_at: string | null;
 }
 
 const TYPE_ICONS: Record<string, typeof Settings2> = {
