@@ -685,6 +685,130 @@ async function fetchNJBuildingCandidate(lat: number, lng: number): Promise<Candi
   } catch { return null; }
 }
 
+// ── Satellite imagery analysis ───────────────────────────────────────
+
+interface SatelliteAnalysis {
+  estimated_pitch: string | null;
+  roof_form: string | null;
+  roof_color: string | null;
+  visible_layers: number | null;
+  complexity_notes: string | null;
+  shadow_pitch_estimate: string | null;
+  confidence: number;
+  analysis_notes: string;
+}
+
+async function fetchSatelliteImage(lat: number, lng: number): Promise<string | null> {
+  try {
+    // Use ArcGIS World Imagery (free, no API key)
+    const spread = 0.0004; // ~120ft view radius — tight on a single home
+    const bbox = `${lng - spread},${lat - spread},${lng + spread},${lat + spread}`;
+    const url = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${bbox}&bboxSR=4326&size=800,800&format=png&f=image`;
+    
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return null;
+    
+    const arrayBuffer = await res.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    if (bytes.length < 1000) return null; // too small = likely error
+    
+    // Convert to base64
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  } catch (e) {
+    console.error("Satellite image fetch failed:", e);
+    return null;
+  }
+}
+
+async function analyzeRoofFromSatellite(
+  base64Image: string,
+  address: string,
+  footprintAreaSqft: number | null,
+): Promise<SatelliteAnalysis | null> {
+  const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1";
+  const LOVABLE_AI_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_AI_KEY) return null;
+
+  try {
+    const systemPrompt = `You are an expert roof analyst reviewing satellite/aerial imagery for insurance claims. Analyze the roof visible in the image and return ONLY valid JSON.
+
+JSON schema:
+{
+  "estimated_pitch": string | null (e.g. "6/12", "8/12" — estimate from shadow length/angle if visible, or roof slope appearance),
+  "roof_form": string ("gable" | "hip" | "cross_gable" | "gambrel" | "mansard" | "flat" | "complex" | "unknown"),
+  "roof_color": string (e.g. "dark gray", "brown", "black"),
+  "visible_layers": number (count of distinct roof planes/facets visible from above),
+  "complexity_notes": string (describe dormers, valleys, ridge lines, extensions, attached structures),
+  "shadow_pitch_estimate": string | null (if shadows are visible, estimate pitch from shadow geometry),
+  "confidence": number (0-85, how confident you are in the analysis based on image clarity),
+  "analysis_notes": string (methodology, what you can/cannot determine from this view)
+}
+
+Rules:
+- Look for shadow angles cast by the roof ridge — longer shadows = steeper pitch
+- Count distinct roof planes visible from above
+- Note any dormers, chimneys, skylights, or protrusions
+- If the image is blurry, cloudy, or obstructed, lower confidence significantly
+- Standard residential pitch range: 4/12 to 10/12
+- Be conservative — this is for insurance claims where accuracy matters
+- A simple rectangular gable has 2 planes; a hip has 4; each dormer adds 2-3`;
+
+    const userPrompt = `Analyze this satellite/aerial image of the property at: ${address}
+${footprintAreaSqft ? `Known footprint area: ${footprintAreaSqft} sqft` : ""}
+
+Examine the roof structure, estimate pitch from shadows if visible, identify the roof form, count visible planes/facets, and note complexity. Return JSON only.`;
+
+    const response = await fetch(`${LOVABLE_AI_URL}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_AI_KEY}` },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-pro",
+        messages: [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: userPrompt },
+              { type: "image_url", image_url: { url: `data:image/png;base64,${base64Image}` } },
+            ],
+          },
+        ],
+        temperature: 0.15,
+        max_tokens: 1500,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Satellite analysis AI error:", response.status);
+      return null;
+    }
+
+    const result = await response.json();
+    const content = result.choices?.[0]?.message?.content || "";
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    return {
+      estimated_pitch: parsed.estimated_pitch ?? null,
+      roof_form: parsed.roof_form ?? null,
+      roof_color: parsed.roof_color ?? null,
+      visible_layers: typeof parsed.visible_layers === "number" ? parsed.visible_layers : null,
+      complexity_notes: parsed.complexity_notes ?? null,
+      shadow_pitch_estimate: parsed.shadow_pitch_estimate ?? null,
+      confidence: clamp(Number(parsed.confidence) || 0, 0, 85),
+      analysis_notes: parsed.analysis_notes ?? "Satellite analysis completed.",
+    };
+  } catch (e) {
+    console.error("Satellite analysis failed:", e);
+    return null;
+  }
+}
+
 // ── AI estimation ────────────────────────────────────────────────────
 
 async function estimateRoofWithAI(
@@ -696,6 +820,7 @@ async function estimateRoofWithAI(
   selectedCandidate: CandidateFootprint | null,
   allCandidates: CandidateFootprint[],
   roofFormInference: RoofFormInference | null,
+  satelliteAnalysis: SatelliteAnalysis | null,
 ): Promise<RoofEstimateResult> {
   const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1";
   const LOVABLE_AI_KEY = Deno.env.get("LOVABLE_API_KEY");
