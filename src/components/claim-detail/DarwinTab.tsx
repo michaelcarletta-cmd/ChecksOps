@@ -68,6 +68,7 @@ const DarwinGeneratedAssets = lazy(() => import("@/components/claim-detail/Darwi
 const CarrierScenarioPlaybook = lazy(() => import("@/components/claim-detail/CarrierScenarioPlaybook").then(m => ({ default: m.CarrierScenarioPlaybook })));
 const DarwinEscalationEngine = lazy(() => import("@/components/claim-detail/DarwinEscalationEngine"));
 const DarwinHealthCheck = lazy(() => import("@/components/claim-detail/DarwinHealthCheck"));
+const DarwinRoofMeasurement = lazy(() => import("@/components/claim-detail/DarwinRoofMeasurement").then(m => ({ default: m.DarwinRoofMeasurement })));
 
 
 interface DarwinTabProps {
