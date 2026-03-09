@@ -829,7 +829,78 @@ async function fetchNJBuildingCandidate(lat: number, lng: number): Promise<Candi
   } catch { return null; }
 }
 
-// ── Phase 2F: Satellite vision classification ───────────────────────
+/** Fetch building footprint from Esri USA Structures (AI-extracted, near-universal US coverage). */
+async function fetchEsriUSAStructuresCandidate(lat: number, lng: number): Promise<CandidateFootprint | null> {
+  try {
+    // Esri USA Structures / USA Building Footprints service
+    const url = `https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/MSBFP2/FeatureServer/0/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
+    if (!res.ok) {
+      // Try alternative endpoint (USA Structures)
+      const altUrl = `https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/USA_Structures_Footprints/FeatureServer/0/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json`;
+      const altRes = await fetch(altUrl, { signal: AbortSignal.timeout(12000) });
+      if (!altRes.ok) return null;
+      const altData = await altRes.json();
+      if (!altData.features?.length) return null;
+      return processEsriFeature(altData.features[0], lat, lng, "USA Structures (Esri)");
+    }
+    const data = await res.json();
+    if (!data.features?.length) {
+      // Fallback: try buffer query (50m)
+      const bufferUrl = `https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/MSBFP2/FeatureServer/0/query?geometry=${lng-0.0005},${lat-0.0005},${lng+0.0005},${lat+0.0005}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json&resultRecordCount=5`;
+      const bufRes = await fetch(bufferUrl, { signal: AbortSignal.timeout(10000) });
+      if (!bufRes.ok) return null;
+      const bufData = await bufRes.json();
+      if (!bufData.features?.length) return null;
+      // Find nearest to geocode point
+      let nearest = bufData.features[0];
+      let nearestDist = Infinity;
+      for (const feat of bufData.features) {
+        if (feat.geometry?.rings?.[0]) {
+          const centroid = polygonCentroid(feat.geometry.rings[0]);
+          const dist = haversineDistFt([lng, lat], centroid);
+          if (dist < nearestDist) { nearestDist = dist; nearest = feat; }
+        }
+      }
+      return processEsriFeature(nearest, lat, lng, "Microsoft Building Footprints (Esri)");
+    }
+    return processEsriFeature(data.features[0], lat, lng, "Microsoft Building Footprints (Esri)");
+  } catch (e) {
+    console.log("[Darwin Roof] Esri USA Structures fetch failed:", e);
+    return null;
+  }
+}
+
+function processEsriFeature(feat: any, lat: number, lng: number, sourceName: string): CandidateFootprint | null {
+  const rings = feat.geometry?.rings;
+  if (!rings || rings.length === 0) return null;
+  const ring: number[][] = rings[0];
+  if (ring.length < 4) return null;
+  const areaSqft = polygonAreaSqft(ring);
+  if (areaSqft < 100 || areaSqft > 50000) return null;
+  const perimeterFt = polygonPerimeterFt(ring);
+  const featureId = feat.attributes?.OBJECTID ? String(feat.attributes.OBJECTID) : (feat.attributes?.GlobalID || null);
+  const metadata = buildGeometryMetadata(ring, sourceName, featureId, lat, lng);
+  const qualityScore = computeGeometryQuality(ring, areaSqft, metadata.centroid_offset_ft);
+  const edges = classifyEdges(ring);
+  const geojson = {
+    type: "Feature",
+    properties: { source: sourceName, ...(feat.attributes || {}) },
+    geometry: { type: "Polygon", coordinates: [ring] },
+  };
+  return {
+    polygon: ring,
+    area_sqft: areaSqft,
+    perimeter_ft: perimeterFt,
+    source: sourceName,
+    source_feature_id: featureId,
+    imagery_date: feat.attributes?.CAPTURE_DATE || feat.attributes?.LASTMODDATE || null,
+    geometry_quality_score: qualityScore,
+    geometry_metadata: metadata,
+    edge_classifications: edges,
+    geojson,
+  };
+}
 // Vision is used for CLASSIFICATION only (form, pitch band, facet count, obstructions).
 // Footprint geometry remains the source of truth for area and perimeter-derived values.
 // Vision results refine uncertainty or suppress weak geometry inferences.
