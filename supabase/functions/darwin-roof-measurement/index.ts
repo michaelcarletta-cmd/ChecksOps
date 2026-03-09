@@ -147,6 +147,18 @@ const DEFAULT_OVERHANG: OverhangConfig = {
   source: "default",
 };
 
+type MassType = "main_roof" | "attached_garage" | "rear_projection" | "porch_bump_out" | "unknown_accessory";
+
+interface MassClassification {
+  mass_type: MassType;
+  confidence: number;
+  reasoning: string;
+  /** Footprint contribution: this mass's area / total footprint area */
+  footprint_contribution: number;
+  /** Weight applied to linear values from this mass (0-1). Minor masses get lower weight. */
+  derivation_weight: number;
+}
+
 /** A single rectangular roof mass decomposed from the building footprint. */
 interface RoofMass {
   id: string;
@@ -162,11 +174,22 @@ interface RoofMass {
   form_confidence: number;
   /** Indices of other masses this one connects to (shared edges → valleys). */
   connected_mass_ids: string[];
+  /** Classification of mass type and derivation weight */
+  classification: MassClassification | null;
+}
+
+interface JunctionValley {
+  mass_a: string;
+  mass_b: string;
+  approx_length_ft: number;
+  /** Whether this junction valley has been promoted from candidate to measured */
+  status: "candidate" | "promoted";
+  promotion_reason: string | null;
 }
 
 interface RoofMassDecomposition {
   masses: RoofMass[];
-  junction_valleys: { mass_a: string; mass_b: string; approx_length_ft: number }[];
+  junction_valleys: JunctionValley[];
   decomposition_method: "axis_split" | "convex_partition" | "single_mass";
   notes: string[];
 }

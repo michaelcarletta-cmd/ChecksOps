@@ -574,9 +574,9 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
         )
       ) : (
         <span className={`text-sm font-medium tabular-nums ${getFieldAuthority(fieldKey) === "unknown_insufficient_geometry" ? "text-muted-foreground italic" : ""}`}>
-          {value != null ? `${typeof value === "number" ? (editKey === "squares" ? (value as number).toFixed(1) : Math.round(value as number)) : value}${unit ? ` ${unit}` : ""}` : (
-            <span className="text-muted-foreground italic text-xs">null — insufficient geometry</span>
-          )}
+           {value != null ? `${typeof value === "number" ? (editKey === "squares" ? (value as number).toFixed(1) : Math.round(value as number)) : value}${unit ? ` ${unit}` : ""}` : (
+            <span className="text-muted-foreground italic text-xs">Unknown — insufficient geometry</span>
+           )}
         </span>
       )}
     </div>
