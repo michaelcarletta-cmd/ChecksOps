@@ -3952,6 +3952,8 @@ export type Database = {
           manually_confirmed: boolean
           overlay_image_url: string | null
           perpendicular_axis_length_ft: number | null
+          pitch_band: string | null
+          pitch_type: string
           pre_tuning_values: Json | null
           rake_lf: number | null
           raw_geojson: Json | null
@@ -3962,9 +3964,11 @@ export type Database = {
           roof_form_reasoning: string | null
           selected_candidate_index: number | null
           squares: number | null
+          suppression_records: Json | null
           tuning_applied: Json | null
           updated_at: string
           valley_lf: number | null
+          vision_classifications: Json | null
         }
         Insert: {
           address: string
@@ -4009,6 +4013,8 @@ export type Database = {
           manually_confirmed?: boolean
           overlay_image_url?: string | null
           perpendicular_axis_length_ft?: number | null
+          pitch_band?: string | null
+          pitch_type?: string
           pre_tuning_values?: Json | null
           rake_lf?: number | null
           raw_geojson?: Json | null
@@ -4019,9 +4025,11 @@ export type Database = {
           roof_form_reasoning?: string | null
           selected_candidate_index?: number | null
           squares?: number | null
+          suppression_records?: Json | null
           tuning_applied?: Json | null
           updated_at?: string
           valley_lf?: number | null
+          vision_classifications?: Json | null
         }
         Update: {
           address?: string
@@ -4066,6 +4074,8 @@ export type Database = {
           manually_confirmed?: boolean
           overlay_image_url?: string | null
           perpendicular_axis_length_ft?: number | null
+          pitch_band?: string | null
+          pitch_type?: string
           pre_tuning_values?: Json | null
           rake_lf?: number | null
           raw_geojson?: Json | null
@@ -4076,9 +4086,11 @@ export type Database = {
           roof_form_reasoning?: string | null
           selected_candidate_index?: number | null
           squares?: number | null
+          suppression_records?: Json | null
           tuning_applied?: Json | null
           updated_at?: string
           valley_lf?: number | null
+          vision_classifications?: Json | null
         }
         Relationships: [
           {

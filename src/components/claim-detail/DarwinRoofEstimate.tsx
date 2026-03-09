@@ -20,6 +20,8 @@ import { RoofConfirmationDialog, type ConfirmationLevel, type ConfirmationBasis 
 type DerivationSource = "geometry" | "ai_estimated" | "user_override";
 type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative";
 type RoofForm = "gable" | "hip" | "cross_gable" | "complex" | "unknown";
+type PitchBand = "flat" | "low" | "moderate" | "steep" | "very_steep" | "unknown";
+type PitchType = "band" | "exact";
 
 interface EdgeClassification {
   segment_index: number;
@@ -113,6 +115,11 @@ interface RoofEstimate {
   // Phase 2D
   tuning_applied: { key: string; field: string; action: string; before: number; after: number }[] | null;
   pre_tuning_values: Record<string, number> | null;
+  // Phase 2F: Vision classifications
+  pitch_band: PitchBand | null;
+  pitch_type: PitchType | null;
+  vision_classifications: any | null;
+  suppression_records: { rule: string; field: string; reason: string; action: string; before_confidence: number; after_confidence: number }[] | null;
   // Evidence-based confirmation
   confirmation_level: ConfirmationLevel | null;
   confirmation_basis: ConfirmationBasis | null;
@@ -133,6 +140,15 @@ const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
   ai_estimated: { label: "AI Est.", color: "text-amber-600" },
   user_override: { label: "Manual", color: "text-blue-600" },
   satellite_imagery: { label: "Satellite", color: "text-purple-600" },
+};
+
+const PITCH_BAND_LABELS: Record<PitchBand, string> = {
+  flat: "Flat (0-2/12)",
+  low: "Low (2-4/12)",
+  moderate: "Moderate (5-7/12)",
+  steep: "Steep (8-10/12)",
+  very_steep: "Very Steep (11+/12)",
+  unknown: "Unknown",
 };
 
 const AUTHORITY_LABELS: Record<FieldAuthority, { label: string; icon: string; color: string }> = {
@@ -251,12 +267,13 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       setEstimate(data.measurement as RoofEstimate);
       const candidateCount = data.candidateCount || 0;
       const roofForm = data.roofFormInferred ? ` — roof form inferred` : "";
-      const satellite = data.satelliteAnalyzed
-        ? ` — 🛰️ satellite imagery analyzed (pitch: ${data.satellitePitch ?? "?"})`
+      const visionInfo = data.visionClassified
+        ? ` — 🛰️ vision classified (pitch band: ${data.visionPitchBand ?? "?"}, ${data.suppressionCount || 0} suppression${data.suppressionCount !== 1 ? "s" : ""})`
         : "";
+      const abstentions = data.visionAbstentions?.length > 0 ? ` [abstained: ${data.visionAbstentions.join(", ")}]` : "";
       const fpMsg = data.footprintExtracted
-        ? ` — footprint extracted (${candidateCount} candidate${candidateCount > 1 ? "s" : ""} found)${roofForm}${satellite}`
-        : ` — no footprint geometry found, using AI estimation${satellite}`;
+        ? ` — footprint extracted (${candidateCount} candidate${candidateCount > 1 ? "s" : ""})${roofForm}${visionInfo}${abstentions}`
+        : ` — no footprint geometry found${visionInfo}`;
       toast.success("Roof estimate generated" + fpMsg);
     } catch (err: any) {
       setError(err.message || "Estimate failed");
@@ -577,8 +594,11 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     {} as Record<string, number>,
   );
 
-  const hasSatelliteData = estimate?.data_sources?.some((s: string) => s.toLowerCase().includes("satellite"));
-  const phaseLabel = tuningApplied.length > 0 ? "Phase 2D" : hasSatelliteData ? "Phase 2E 🛰️" : estimate?.inferred_roof_form ? "Phase 2C" : hasFootprintGeometry ? "Phase 2B" : "Preliminary";
+  const hasSatelliteData = estimate?.data_sources?.some((s: string) => s.toLowerCase().includes("satellite") || s.toLowerCase().includes("vision"));
+  const hasSuppressions = (estimate?.suppression_records as any[] | null)?.length ?? 0;
+  const pitchBand = estimate?.pitch_band as PitchBand | null;
+  const pitchType = (estimate?.pitch_type as PitchType | null) ?? "band";
+  const phaseLabel = tuningApplied.length > 0 ? "Phase 2D" : hasSatelliteData ? "Phase 2F 🛰️" : estimate?.inferred_roof_form ? "Phase 2C" : hasFootprintGeometry ? "Phase 2B" : "Preliminary";
 
   return (
     <Card>
