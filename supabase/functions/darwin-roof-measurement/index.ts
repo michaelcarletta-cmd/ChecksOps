@@ -1923,26 +1923,50 @@ function deriveRoofEstimate(
   let pitchBand: PitchBand = "unknown";
   let pitchType: PitchType = "band";
   let slopeFactor = PITCH_BAND_META.unknown.slope_factor_mid;
+  let pitchIsDefaultFallback = false;
   if (visionResult && !visionResult.pitch_band.abstain && visionResult.pitch_band.confidence >= 20) {
     pitchBand = visionResult.pitch_band.value;
     slopeFactor = PITCH_BAND_META[pitchBand].slope_factor_mid;
+  } else if (hasGeometry) {
+    // Fallback: use moderate pitch when vision is unavailable/abstained
+    // This ensures area and linear calculations proceed rather than returning zero
+    pitchBand = "moderate";
+    slopeFactor = PITCH_BAND_META.moderate.slope_factor_mid;
+    pitchIsDefaultFallback = true;
   }
 
   // ── Area ──
+  // Always compute area when geometry exists — pitch fallback ensures non-zero
   let roofArea = 0, squares = 0;
-  if (hasGeometry && pitchBand !== "unknown") {
+  if (hasGeometry) {
     roofArea = roundTo(footprintArea * slopeFactor, 0);
     squares = roundTo(roofArea / 100, 1);
   }
 
   // ── Resolve roof form ──
+  // Start with geometry inference — use it even at low confidence as a baseline
   let resolvedRoofForm: RoofForm = roofFormInference?.inferred_roof_form ?? "unknown";
+
+  // Vision can upgrade form if it has higher confidence than geometry
   if (visionResult && !visionResult.roof_form.abstain && visionResult.roof_form.confidence > 30) {
     const vf = visionResult.roof_form.value;
     if (vf === "cross_hip" || vf === "gambrel" || vf === "mansard") resolvedRoofForm = "complex";
     else if (["gable", "hip", "cross_gable", "complex"].includes(vf)) resolvedRoofForm = vf as RoofForm;
+    // Geometry wins if its confidence is higher
     if (roofFormInference && roofFormInference.roof_form_confidence > visionResult.roof_form.confidence) {
       resolvedRoofForm = roofFormInference.inferred_roof_form;
+    }
+  }
+
+  // Last resort: if form is still "unknown" but we have geometry with 4 sides,
+  // default to gable (most common residential form) with very low confidence
+  if (resolvedRoofForm === "unknown" && hasGeometry && selectedCandidate) {
+    const vertexCount = selectedCandidate.polygon.length;
+    const effectiveVertices = (selectedCandidate.polygon[vertexCount - 1][0] === selectedCandidate.polygon[0][0]) ? vertexCount - 1 : vertexCount;
+    if (effectiveVertices <= 6) {
+      const ar = roofFormInference?.aspect_ratio ?? 1;
+      resolvedRoofForm = ar >= 1.3 ? "gable" : "hip";
+      console.log(`[Darwin Roof] Form fallback: ${resolvedRoofForm} (AR=${ar}, vertices=${effectiveVertices})`);
     }
   }
 
@@ -1978,9 +2002,9 @@ function deriveRoofEstimate(
   // ── Field confidence ──
   const fieldConfidence: Record<string, number> = {
     footprint_area_sqft: hasGeometry ? 75 : 0,
-    estimated_roof_area_sqft: (hasGeometry && pitchBand !== "unknown") ? 60 : 0,
-    squares: (hasGeometry && pitchBand !== "unknown") ? 60 : 0,
-    dominant_pitch: (visionResult && !visionResult.pitch_band.abstain) ? visionResult.pitch_band.confidence : 0,
+    estimated_roof_area_sqft: hasGeometry ? (pitchIsDefaultFallback ? 35 : 60) : 0,
+    squares: hasGeometry ? (pitchIsDefaultFallback ? 35 : 60) : 0,
+    dominant_pitch: pitchIsDefaultFallback ? 15 : ((visionResult && !visionResult.pitch_band.abstain) ? visionResult.pitch_band.confidence : 0),
     ridge_lf: linear.linear_confidence.ridge_lf ?? 0,
     hip_lf: linear.linear_confidence.hip_lf ?? 0,
     valley_lf: linear.linear_confidence.valley_lf ?? 0,
@@ -1992,8 +2016,8 @@ function deriveRoofEstimate(
   // ── Field authority: null values get explicit unknown status ──
   const fieldAuthority: Record<string, FieldAuthority> = {
     footprint_area_sqft: hasGeometry ? "geometry_authoritative" : "ai_provisional",
-    estimated_roof_area_sqft: (hasGeometry && pitchBand !== "unknown") ? "geometry_authoritative" : "ai_provisional",
-    squares: (hasGeometry && pitchBand !== "unknown") ? "geometry_authoritative" : "ai_provisional",
+    estimated_roof_area_sqft: hasGeometry ? (pitchIsDefaultFallback ? "ai_provisional" : "geometry_authoritative") : "ai_provisional",
+    squares: hasGeometry ? (pitchIsDefaultFallback ? "ai_provisional" : "geometry_authoritative") : "ai_provisional",
     dominant_pitch: "ai_provisional",
     ridge_lf: linear.ridge_lf !== null ? (hasGeometry ? "geometry_authoritative" : "ai_provisional") : "unknown_insufficient_geometry",
     hip_lf: linear.hip_lf !== null ? (hasGeometry ? "geometry_authoritative" : "ai_provisional") : "unknown_insufficient_geometry",
@@ -2006,7 +2030,7 @@ function deriveRoofEstimate(
   // ── Notes ──
   const displayPitch = pitchBand !== "unknown" ? bandToDisplayPitch(pitchBand) : "unknown";
   const notes: string[] = [];
-  notes.push(`Pitch: ${displayPitch} (${pitchType}). Roof form: ${resolvedRoofForm}.`);
+  notes.push(`Pitch: ${displayPitch} (${pitchType})${pitchIsDefaultFallback ? " [DEFAULT FALLBACK — no vision pitch available]" : ""}. Roof form: ${resolvedRoofForm}.`);
   notes.push(`📐 Overhang: eave=${overhang.eave_overhang_ft}ft, rake=${overhang.rake_overhang_ft}ft (${overhang.source}).`);
   if (hasGeometry) {
     notes.push(`📐 Footprint: ${footprintArea} sqft from ${selectedCandidate!.source} (quality: ${selectedCandidate!.geometry_quality_score}/100).`);
