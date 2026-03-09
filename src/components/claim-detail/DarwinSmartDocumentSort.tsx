@@ -1,9 +1,11 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { 
   FolderOpen, 
   Upload, 
@@ -22,7 +24,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 interface DarwinSmartDocumentSortProps {
   claimId: string;
@@ -62,7 +64,25 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
   const [isClassifying, setIsClassifying] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [classificationProgress, setClassificationProgress] = useState(0);
+  const [selectedParentFolderId, setSelectedParentFolderId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+
+  // Fetch existing folders for parent folder selection
+  const { data: existingFolders } = useQuery({
+    queryKey: ["claim-folders", claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_folders")
+        .select("*")
+        .eq("claim_id", claimId)
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Only show top-level folders as parent options
+  const topLevelFolders = existingFolders?.filter(f => !f.parent_folder_id) || [];
 
   const classifyDocument = async (file: File): Promise<Partial<ClassifiedDocument>> => {
     const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
