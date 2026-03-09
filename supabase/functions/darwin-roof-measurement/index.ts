@@ -1865,42 +1865,51 @@ Deno.serve(async (req) => {
       roofFormInference = inferRoofForm(selectedCandidate);
     }
 
-    // Phase 2E: Satellite imagery analysis — multi-tile grid for better accuracy
-    console.log("[Darwin Roof] Fetching satellite imagery (multi-tile grid)...");
+    // Phase 2F: Split-task satellite vision classification
+    console.log("[Darwin Roof] Fetching satellite imagery for vision classification...");
     const tileGrid = await fetchSatelliteTileGrid(geo.lat, geo.lng, 3, 20);
-    let satelliteImage: string | null = null;
-    let satelliteAnalysis: SatelliteAnalysis | null = null;
+    let rawVisionResult: SatelliteVisionResult | null = null;
+    let visionResult: SatelliteVisionResult | null = null;
+    let visionSuppressions: SuppressionRecord[] = [];
 
     if (tileGrid.length > 0) {
-      // Use center tile as the primary image
-      const centerIdx = Math.floor(tileGrid.length / 2);
-      satelliteImage = tileGrid[centerIdx]?.base64 ?? tileGrid[0].base64;
-      
-      console.log(`[Darwin Roof] Analyzing ${tileGrid.length} satellite tiles with AI vision...`);
-      satelliteAnalysis = await analyzeRoofFromSatellite(
-        satelliteImage,
-        address,
-        selectedCandidate?.area_sqft ?? null,
-        tileGrid.length >= 4 ? tileGrid : undefined,
+      console.log(`[Darwin Roof] Classifying roof from ${tileGrid.length} tiles (split-task vision)...`);
+      rawVisionResult = await classifyRoofFromSatellite(
+        tileGrid, address, selectedCandidate?.area_sqft ?? null,
       );
-      if (satelliteAnalysis) {
-        console.log(`[Darwin Roof] Satellite analysis: pitch=${satelliteAnalysis.estimated_pitch}, form=${satelliteAnalysis.roof_form}, facets=${satelliteAnalysis.visible_layers}, confidence=${satelliteAnalysis.confidence}%`);
+      if (rawVisionResult) {
+        console.log(`[Darwin Roof] Raw vision: form=${rawVisionResult.roof_form.value}@${rawVisionResult.roof_form.confidence}%, pitch_band=${rawVisionResult.pitch_band.value}@${rawVisionResult.pitch_band.confidence}%, facets=${rawVisionResult.visible_facets.value}, trees=${rawVisionResult.obstructions.tree_cover_pct}%, quality=${rawVisionResult.overall_image_quality}`);
+        // Apply suppression rules
+        const suppResult = applyVisionSuppressions(
+          rawVisionResult,
+          selectedCandidate?.geometry_quality_score ?? null,
+          roofFormInference?.inferred_roof_form ?? null,
+          roofFormInference?.roof_form_confidence ?? null,
+        );
+        visionResult = suppResult.refined;
+        visionSuppressions = suppResult.suppressions;
+        if (visionSuppressions.length > 0) {
+          console.log(`[Darwin Roof] ${visionSuppressions.length} suppression(s) applied: ${visionSuppressions.map(s => s.rule).join(", ")}`);
+        }
+        console.log(`[Darwin Roof] Post-suppression vision: form=${visionResult.roof_form.value}@${visionResult.roof_form.confidence}%${visionResult.roof_form.abstain ? "(abstained)" : ""}, pitch_band=${visionResult.pitch_band.value}@${visionResult.pitch_band.confidence}%${visionResult.pitch_band.abstain ? "(abstained)" : ""}`);
       }
     } else {
-      // Fallback to zoom 19 single tile
+      // Fallback: try zoom 19 single tile
       console.log("[Darwin Roof] Zoom 20 failed, trying zoom 19 fallback...");
-      satelliteImage = await fetchSatelliteImage(geo.lat, geo.lng);
-      if (satelliteImage) {
-        satelliteAnalysis = await analyzeRoofFromSatellite(satelliteImage, address, selectedCandidate?.area_sqft ?? null);
-        if (satelliteAnalysis) {
-          console.log(`[Darwin Roof] Fallback satellite analysis: pitch=${satelliteAnalysis.estimated_pitch}, form=${satelliteAnalysis.roof_form}, confidence=${satelliteAnalysis.confidence}%`);
+      const fallbackGrid = await fetchSatelliteTileGrid(geo.lat, geo.lng, 1, 19);
+      if (fallbackGrid.length > 0) {
+        rawVisionResult = await classifyRoofFromSatellite(fallbackGrid, address, selectedCandidate?.area_sqft ?? null);
+        if (rawVisionResult) {
+          const suppResult = applyVisionSuppressions(rawVisionResult, selectedCandidate?.geometry_quality_score ?? null, roofFormInference?.inferred_roof_form ?? null, roofFormInference?.roof_form_confidence ?? null);
+          visionResult = suppResult.refined;
+          visionSuppressions = suppResult.suppressions;
         }
       } else {
-        console.log("[Darwin Roof] No satellite imagery available for this location");
+        console.log("[Darwin Roof] No satellite imagery available");
       }
     }
 
-    // Audit log: candidate selection (especially re-selection)
+    // Audit log: candidate selection
     const isReselection = typeof selected_candidate_index === "number";
     if (selectedCandidate) {
       await supabase.from("audit_logs").insert({
@@ -1917,21 +1926,20 @@ Deno.serve(async (req) => {
           is_reselection: isReselection,
           total_candidates: candidates.length,
           inferred_roof_form: roofFormInference?.inferred_roof_form ?? null,
-          satellite_analysis_available: !!satelliteAnalysis,
-          satellite_pitch: satelliteAnalysis?.estimated_pitch ?? null,
+          vision_available: !!visionResult,
+          vision_pitch_band: visionResult?.pitch_band.value ?? null,
+          vision_suppressions: visionSuppressions.length,
         },
         metadata: {
           event: isReselection ? "footprint_candidate_reselected" : "footprint_candidate_selected",
           note: isReselection
-            ? "Staff re-selected a different footprint candidate. All downstream geometry-derived values have changed."
-            : "Initial footprint candidate auto-selected (highest quality score).",
+            ? "Staff re-selected a different footprint candidate."
+            : "Initial footprint candidate auto-selected.",
         },
-      }).then(({ error }) => {
-        if (error) console.error("Audit log error:", error);
-      });
+      }).then(({ error }) => { if (error) console.error("Audit log error:", error); });
     }
 
-    const rawEstimate = await estimateRoofWithAI(address, geo.lat, geo.lng, parcel, elevation, selectedCandidate, candidates, roofFormInference, satelliteAnalysis);
+    const rawEstimate = await estimateRoofWithAI(address, geo.lat, geo.lng, parcel, elevation, selectedCandidate, candidates, roofFormInference, visionResult, visionSuppressions);
 
     // Phase 2D: Apply tuning heuristics
     let estimate = rawEstimate;
