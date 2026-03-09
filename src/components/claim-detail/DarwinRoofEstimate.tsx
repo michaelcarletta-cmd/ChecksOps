@@ -594,8 +594,11 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     {} as Record<string, number>,
   );
 
-  const hasSatelliteData = estimate?.data_sources?.some((s: string) => s.toLowerCase().includes("satellite"));
-  const phaseLabel = tuningApplied.length > 0 ? "Phase 2D" : hasSatelliteData ? "Phase 2E 🛰️" : estimate?.inferred_roof_form ? "Phase 2C" : hasFootprintGeometry ? "Phase 2B" : "Preliminary";
+  const hasSatelliteData = estimate?.data_sources?.some((s: string) => s.toLowerCase().includes("satellite") || s.toLowerCase().includes("vision"));
+  const hasSuppressions = (estimate?.suppression_records as any[] | null)?.length ?? 0;
+  const pitchBand = estimate?.pitch_band as PitchBand | null;
+  const pitchType = (estimate?.pitch_type as PitchType | null) ?? "band";
+  const phaseLabel = tuningApplied.length > 0 ? "Phase 2D" : hasSatelliteData ? "Phase 2F 🛰️" : estimate?.inferred_roof_form ? "Phase 2C" : hasFootprintGeometry ? "Phase 2B" : "Preliminary";
 
   return (
     <Card>
