@@ -868,20 +868,35 @@ Rules:
 - If a geometry-derived footprint area is provided, use it EXACTLY for footprint_area_sqft and mark field_sources.footprint_area_sqft = "geometry"
 - If edge-classified eave/rake values are provided, use them as starting points and adjust for overhang (+1-2ft per side typically). Mark these as "geometry" source but note they are footprint-proxy.
 - If roof form inference is provided, use it to guide hip_lf, valley_lf, ridge_lf, and facet_count estimates. For "gable" forms, hip_lf should be 0. For "hip" forms, rake_lf should be minimal.
+- If satellite imagery analysis is provided, PRIORITIZE its pitch estimate and roof form over geometry-only inference. Satellite-derived pitch is much more reliable than guessing.
+- If satellite analysis provides a pitch, use it as the dominant_pitch and apply the corresponding slope factor
 - Footprint is typically 30-50% of lot area for residential (only if no geometry footprint)
 - Standard residential pitches: 4/12-8/12
-- Slope factors: 4/12=1.054, 5/12=1.083, 6/12=1.118, 7/12=1.158, 8/12=1.202
+- Slope factors: 4/12=1.054, 5/12=1.083, 6/12=1.118, 7/12=1.158, 8/12=1.202, 9/12=1.250, 10/12=1.302, 11/12=1.357, 12/12=1.414
 - Pre-1970 homes: simpler gable roofs. Newer: more hip/valley
-- confidence_score MUST be ≤ 50 (no verified imagery = low confidence)
-- field_confidence: give each field its own 0-100 confidence score. Geometry-derived fields get higher scores (60-85). AI guesses get lower scores (10-35). Footprint-proxy derived values (eave, rake from edge classification) get 40-60.
+- confidence_score: if satellite imagery was analyzed, you may go up to 65. Otherwise MUST be ≤ 50.
+- field_confidence: give each field its own 0-100 confidence score. Geometry-derived fields get higher scores (60-85). Satellite-confirmed fields get 55-75. AI guesses get lower scores (10-35). Footprint-proxy derived values (eave, rake from edge classification) get 40-60.
 - Clearly state this is a preliminary estimate, not a measurement
 - All perimeter-derived values (eave_lf, rake_lf) should be labeled as FOOTPRINT-PROXY in ai_notes`;
+
+  const satelliteContext = satelliteAnalysis
+    ? `\n\n🛰️ SATELLITE IMAGERY ANALYSIS (from aerial photo of this property):
+- Estimated pitch from imagery: ${satelliteAnalysis.estimated_pitch ?? "not determinable"}
+- Shadow-based pitch estimate: ${satelliteAnalysis.shadow_pitch_estimate ?? "not determinable"}
+- Roof form observed: ${satelliteAnalysis.roof_form ?? "unknown"}
+- Roof color: ${satelliteAnalysis.roof_color ?? "unknown"}
+- Visible roof planes/facets: ${satelliteAnalysis.visible_layers ?? "unknown"}
+- Complexity: ${satelliteAnalysis.complexity_notes ?? "none noted"}
+- Image analysis confidence: ${satelliteAnalysis.confidence}%
+- Notes: ${satelliteAnalysis.analysis_notes}
+IMPORTANT: Use the satellite-derived pitch and roof form as PRIMARY references. These are based on actual visual observation of this specific property.`
+    : "\nNo satellite imagery analysis available.";
 
   const userPrompt = `Estimate roof for:
 Address: ${address}
 Coordinates: ${lat}, ${lng}
 Elevation: ${elevation ? `${elevation} ft` : "unknown"}
-Parcel: ${parcel ? JSON.stringify(parcel) : "unavailable"}${footprintContext}${roofFormContext}
+Parcel: ${parcel ? JSON.stringify(parcel) : "unavailable"}${footprintContext}${roofFormContext}${satelliteContext}
 
 Return JSON only.`;
 
