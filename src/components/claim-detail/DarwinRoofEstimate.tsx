@@ -311,9 +311,6 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
         field_sources: updatedSources,
         field_confidence: updatedConf,
         field_authority: updatedAuth,
-        manually_confirmed: true,
-        confirmed_at: new Date().toISOString(),
-        review_required: false,
         updated_at: new Date().toISOString(),
       })
       .eq("id", estimate.id);
@@ -329,11 +326,10 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       field_sources: updatedSources,
       field_confidence: updatedConf,
       field_authority: updatedAuth,
-      manually_confirmed: true,
-      review_required: false,
     } as RoofEstimate);
     setEditing(false);
-    toast.success("Estimate updated and confirmed for use");
+    toast.success("Values saved — open confirmation dialog to authorize for downstream use");
+    setConfirmDialogOpen(true);
   };
 
   const handleConfirmationComplete = (update: {
