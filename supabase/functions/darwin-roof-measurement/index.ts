@@ -2016,8 +2016,8 @@ function deriveRoofEstimate(
   // ── Field authority: null values get explicit unknown status ──
   const fieldAuthority: Record<string, FieldAuthority> = {
     footprint_area_sqft: hasGeometry ? "geometry_authoritative" : "ai_provisional",
-    estimated_roof_area_sqft: (hasGeometry && pitchBand !== "unknown") ? "geometry_authoritative" : "ai_provisional",
-    squares: (hasGeometry && pitchBand !== "unknown") ? "geometry_authoritative" : "ai_provisional",
+    estimated_roof_area_sqft: hasGeometry ? (pitchIsDefaultFallback ? "ai_provisional" : "geometry_authoritative") : "ai_provisional",
+    squares: hasGeometry ? (pitchIsDefaultFallback ? "ai_provisional" : "geometry_authoritative") : "ai_provisional",
     dominant_pitch: "ai_provisional",
     ridge_lf: linear.ridge_lf !== null ? (hasGeometry ? "geometry_authoritative" : "ai_provisional") : "unknown_insufficient_geometry",
     hip_lf: linear.hip_lf !== null ? (hasGeometry ? "geometry_authoritative" : "ai_provisional") : "unknown_insufficient_geometry",
