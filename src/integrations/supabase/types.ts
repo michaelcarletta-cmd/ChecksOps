@@ -3913,13 +3913,18 @@ export type Database = {
           eave_lf: number | null
           estimated_roof_area_sqft: number | null
           facet_count: number | null
+          field_authority: Json | null
           field_confidence: Json | null
           field_sources: Json | null
           footprint_area_sqft: number | null
+          footprint_perimeter_ft: number | null
+          footprint_polygon: Json | null
           geocoded_lat: number | null
           geocoded_lng: number | null
           hip_lf: number | null
           id: string
+          imagery_date: string | null
+          imagery_source: string | null
           manually_confirmed: boolean
           overlay_image_url: string | null
           rake_lf: number | null
@@ -3944,13 +3949,18 @@ export type Database = {
           eave_lf?: number | null
           estimated_roof_area_sqft?: number | null
           facet_count?: number | null
+          field_authority?: Json | null
           field_confidence?: Json | null
           field_sources?: Json | null
           footprint_area_sqft?: number | null
+          footprint_perimeter_ft?: number | null
+          footprint_polygon?: Json | null
           geocoded_lat?: number | null
           geocoded_lng?: number | null
           hip_lf?: number | null
           id?: string
+          imagery_date?: string | null
+          imagery_source?: string | null
           manually_confirmed?: boolean
           overlay_image_url?: string | null
           rake_lf?: number | null
@@ -3975,13 +3985,18 @@ export type Database = {
           eave_lf?: number | null
           estimated_roof_area_sqft?: number | null
           facet_count?: number | null
+          field_authority?: Json | null
           field_confidence?: Json | null
           field_sources?: Json | null
           footprint_area_sqft?: number | null
+          footprint_perimeter_ft?: number | null
+          footprint_polygon?: Json | null
           geocoded_lat?: number | null
           geocoded_lng?: number | null
           hip_lf?: number | null
           id?: string
+          imagery_date?: string | null
+          imagery_source?: string | null
           manually_confirmed?: boolean
           overlay_image_url?: string | null
           rake_lf?: number | null
