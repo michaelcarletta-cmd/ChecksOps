@@ -2697,19 +2697,51 @@ Deno.serve(async (req) => {
     }
 
     // Phase 2F: Split-task satellite vision classification
+    // Try multiple zoom levels and imagery sources for best coverage
     console.log("[Darwin Roof] Fetching satellite imagery for vision classification...");
-    const tileGrid = await fetchSatelliteTileGrid(geo.lat, geo.lng, 3, 20);
     let rawVisionResult: SatelliteVisionResult | null = null;
     let visionResult: SatelliteVisionResult | null = null;
     let visionSuppressions: SuppressionRecord[] = [];
 
-    if (tileGrid.length > 0) {
-      console.log(`[Darwin Roof] Classifying roof from ${tileGrid.length} tiles (split-task vision)...`);
+    // Try zoom levels in order: 20 (highest detail), 19, 18
+    let usedTileGrid: typeof tileGrid | null = null;
+    for (const zoom of [20, 19, 18]) {
+      const gridSize = zoom >= 20 ? 3 : zoom >= 19 ? 3 : 1;
+      const tileGrid = await fetchSatelliteTileGrid(geo.lat, geo.lng, gridSize, zoom);
+      if (tileGrid.length > 0) {
+        usedTileGrid = tileGrid;
+        console.log(`[Darwin Roof] Using zoom ${zoom} with ${tileGrid.length} tiles`);
+        break;
+      }
+    }
+
+    if (usedTileGrid && usedTileGrid.length > 0) {
+      console.log(`[Darwin Roof] Classifying roof from ${usedTileGrid.length} tiles (split-task vision)...`);
       rawVisionResult = await classifyRoofFromSatellite(
-        tileGrid, address, selectedCandidate?.area_sqft ?? null,
+        usedTileGrid, address, selectedCandidate?.area_sqft ?? null,
       );
       if (rawVisionResult) {
         console.log(`[Darwin Roof] Raw vision: form=${rawVisionResult.roof_form.value}@${rawVisionResult.roof_form.confidence}%, pitch_band=${rawVisionResult.pitch_band.value}@${rawVisionResult.pitch_band.confidence}%, facets=${rawVisionResult.visible_facets.value}, trees=${rawVisionResult.obstructions.tree_cover_pct}%, quality=${rawVisionResult.overall_image_quality}`);
+
+        // If vision reports all tiles are blank/unavailable, try Google satellite tiles
+        const imageryUnavailable = rawVisionResult.analysis_notes?.toLowerCase().includes("not yet available") ||
+          rawVisionResult.analysis_notes?.toLowerCase().includes("grey") ||
+          rawVisionResult.analysis_notes?.toLowerCase().includes("gray") ||
+          (rawVisionResult.overall_image_quality <= 20 && rawVisionResult.roof_form.abstain && rawVisionResult.pitch_band.abstain);
+
+        if (imageryUnavailable) {
+          console.log("[Darwin Roof] ArcGIS imagery unavailable at this location — trying Google Maps satellite...");
+          // Try Google Maps satellite tiles
+          const googleTiles = await fetchGoogleSatelliteTiles(geo.lat, geo.lng);
+          if (googleTiles.length > 0) {
+            const googleVision = await classifyRoofFromSatellite(googleTiles, address, selectedCandidate?.area_sqft ?? null);
+            if (googleVision && googleVision.overall_image_quality > rawVisionResult.overall_image_quality) {
+              rawVisionResult = googleVision;
+              console.log(`[Darwin Roof] Google satellite vision: form=${rawVisionResult.roof_form.value}@${rawVisionResult.roof_form.confidence}%`);
+            }
+          }
+        }
+
         // Apply suppression rules
         const suppResult = applyVisionSuppressions(
           rawVisionResult,
@@ -2725,19 +2757,7 @@ Deno.serve(async (req) => {
         console.log(`[Darwin Roof] Post-suppression vision: form=${visionResult.roof_form.value}@${visionResult.roof_form.confidence}%${visionResult.roof_form.abstain ? "(abstained)" : ""}, pitch_band=${visionResult.pitch_band.value}@${visionResult.pitch_band.confidence}%${visionResult.pitch_band.abstain ? "(abstained)" : ""}`);
       }
     } else {
-      // Fallback: try zoom 19 single tile
-      console.log("[Darwin Roof] Zoom 20 failed, trying zoom 19 fallback...");
-      const fallbackGrid = await fetchSatelliteTileGrid(geo.lat, geo.lng, 1, 19);
-      if (fallbackGrid.length > 0) {
-        rawVisionResult = await classifyRoofFromSatellite(fallbackGrid, address, selectedCandidate?.area_sqft ?? null);
-        if (rawVisionResult) {
-          const suppResult = applyVisionSuppressions(rawVisionResult, selectedCandidate?.geometry_quality_score ?? null, roofFormInference?.inferred_roof_form ?? null, roofFormInference?.roof_form_confidence ?? null);
-          visionResult = suppResult.refined;
-          visionSuppressions = suppResult.suppressions;
-        }
-      } else {
-        console.log("[Darwin Roof] No satellite imagery available");
-      }
+      console.log("[Darwin Roof] No satellite imagery available at any zoom level");
     }
 
     // Audit log: candidate selection
