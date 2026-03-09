@@ -32,7 +32,7 @@ interface RoofMeasurement {
   review_required: boolean;
   manually_confirmed: boolean;
   overlay_image_url: string | null;
-  raw_geojson: Record<string, unknown> | null;
+  raw_geojson: any | null;
   ai_notes: string | null;
   data_sources: string[] | null;
   created_at: string;
