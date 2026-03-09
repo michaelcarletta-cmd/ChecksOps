@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2, ExternalLink, Copy, Calculator, Bot, RefreshCw, Loader2 } from "lucide-react";
+import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2, ExternalLink, Copy, Calculator, Bot, RefreshCw, Loader2, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -42,6 +42,8 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
+  const [subfolderDialogOpen, setSubfolderDialogOpen] = useState(false);
+  const [subfolderParentId, setSubfolderParentId] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
   const [uploadingFile, setUploadingFile] = useState(false);
   const [saveAsTemplateDialogOpen, setSaveAsTemplateDialogOpen] = useState(false);
@@ -63,20 +65,14 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
   // Helper to detect if a file is likely an estimate
   const isEstimateFile = (fileName: string, folderName: string | null) => {
     const estimatePatterns = [
-      /estimate/i,
-      /xactimate/i,
-      /symbility/i,
-      /rcv/i,
-      /acv/i,
-      /settlement/i,
-      /scope/i,
+      /estimate/i, /xactimate/i, /symbility/i, /rcv/i, /acv/i, /settlement/i, /scope/i,
     ];
     const isInEstimateFolder = folderName?.toLowerCase().includes("estimate");
     const fileMatchesPattern = estimatePatterns.some(p => p.test(fileName));
     return isInEstimateFolder || fileMatchesPattern;
   };
 
-  // Fetch folders
+  // Fetch folders (including subfolders via parent_folder_id)
   const { data: folders } = useQuery({
     queryKey: ["claim-folders", claimId],
     queryFn: async () => {
@@ -91,6 +87,10 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
       return data;
     },
   });
+
+  // Separate top-level folders and subfolders
+  const topLevelFolders = folders?.filter(f => !f.parent_folder_id) || [];
+  const getSubfolders = (parentId: string) => folders?.filter(f => f.parent_folder_id === parentId) || [];
 
   // Fetch files with classification data
   const { data: files, refetch: refetchFiles } = useQuery({
@@ -170,9 +170,9 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
     );
   };
 
-  // Create folder mutation
+  // Create folder mutation (supports subfolders)
   const createFolderMutation = useMutation({
-    mutationFn: async (folderName: string) => {
+    mutationFn: async ({ folderName, parentId }: { folderName: string; parentId?: string | null }) => {
       const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from("claim_folders")
@@ -181,6 +181,7 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
           name: folderName,
           is_predefined: false,
           created_by: user?.id,
+          parent_folder_id: parentId || null,
         })
         .select()
         .single();
@@ -188,13 +189,15 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["claim-folders", claimId] });
       setFolderDialogOpen(false);
+      setSubfolderDialogOpen(false);
+      setSubfolderParentId(null);
       setNewFolderName("");
       toast({
-        title: "Folder created",
-        description: "The folder has been created successfully.",
+        title: variables.parentId ? "Subfolder created" : "Folder created",
+        description: `The ${variables.parentId ? 'subfolder' : 'folder'} has been created successfully.`,
       });
     },
     onError: () => {
@@ -215,14 +218,12 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
       const fileExt = file.name.split(".").pop();
       const fileName = `${claimId}/${selectedFolderId}/${Date.now()}.${fileExt}`;
 
-      // Upload to storage
       const { error: uploadError } = await supabase.storage
         .from("claim-files")
         .upload(fileName, file);
 
       if (uploadError) throw uploadError;
 
-      // Create database record
       const { data, error } = await supabase
         .from("claim_files")
         .insert({
@@ -243,12 +244,10 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["claim-files", claimId] });
       
-      // Trigger Darwin classification immediately (non-blocking)
       if (data?.id) {
         supabase.functions.invoke('darwin-process-document', {
           body: { fileId: data.id }
         }).then(() => {
-          // Refetch to show updated classification
           setTimeout(() => refetchFiles(), 2000);
         }).catch(err => console.error('Darwin processing queued:', err));
       }
@@ -266,7 +265,6 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
     const uploadedFiles = e.target.files;
     if (!uploadedFiles || uploadedFiles.length === 0) return;
 
-    // Get folder name for estimate detection
     const folder = folders?.find(f => f.id === selectedFolderId);
     const folderName = folder?.name || null;
 
@@ -280,10 +278,8 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
         description: `${uploadedFiles.length} file${uploadedFiles.length > 1 ? 's' : ''} uploaded successfully.`,
       });
 
-      // Check if any uploaded file is an estimate
       const firstFile = uploadedFiles[0];
       if (uploadedFiles.length === 1 && isEstimateFile(firstFile.name, folderName)) {
-        // Store the file info for potential estimate extraction
         setPendingEstimateFile({
           file: firstFile,
           dbRecord: results[0],
@@ -305,11 +301,7 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
       .download(file.file_path);
 
     if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to download file.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to download file.", variant: "destructive" });
       return;
     }
 
@@ -327,11 +319,7 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
       .createSignedUrl(file.file_path, 3600);
 
     if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to view file.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to view file.", variant: "destructive" });
       return;
     }
 
@@ -343,7 +331,7 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
   const handleSaveAsTemplate = (file: any) => {
     setSelectedFile(file);
     setTemplateForm({
-      name: file.file_name.replace(/\.[^/.]+$/, ""), // Remove extension
+      name: file.file_name.replace(/\.[^/.]+$/, ""),
       description: "",
       category: "Other",
     });
@@ -354,14 +342,12 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
     mutationFn: async () => {
       if (!selectedFile) throw new Error("No file selected");
 
-      // Download the file from claim-files
       const { data: fileData, error: downloadError } = await supabase.storage
         .from("claim-files")
         .download(selectedFile.file_path);
 
       if (downloadError) throw downloadError;
 
-      // Upload to document-templates bucket
       const fileName = `${Date.now()}-${selectedFile.file_name}`;
       const { error: uploadError } = await supabase.storage
         .from("document-templates")
@@ -369,7 +355,6 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
 
       if (uploadError) throw uploadError;
 
-      // Create template record
       const { error: dbError } = await supabase
         .from("document_templates")
         .insert({
@@ -383,33 +368,24 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
       if (dbError) throw dbError;
     },
     onSuccess: () => {
-      toast({
-        title: "Template created",
-        description: "File has been saved as a template.",
-      });
+      toast({ title: "Template created", description: "File has been saved as a template." });
       setSaveAsTemplateDialogOpen(false);
       setSelectedFile(null);
       setTemplateForm({ name: "", description: "", category: "Other" });
     },
     onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
   const deleteFileMutation = useMutation({
     mutationFn: async (file: any) => {
-      // Delete from storage
       const { error: storageError } = await supabase.storage
         .from("claim-files")
         .remove([file.file_path]);
 
       if (storageError) throw storageError;
 
-      // Delete from database
       const { error: dbError } = await supabase
         .from("claim_files")
         .delete()
@@ -419,17 +395,10 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["claim-files", claimId] });
-      toast({
-        title: "File deleted",
-        description: "The file has been deleted successfully.",
-      });
+      toast({ title: "File deleted", description: "The file has been deleted successfully." });
     },
     onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to delete file.",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to delete file.", variant: "destructive" });
     },
   });
 
@@ -437,6 +406,149 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
     if (confirm("Are you sure you want to delete this file?")) {
       await deleteFileMutation.mutateAsync(file);
     }
+  };
+
+  // Render file list for a folder
+  const renderFileList = (folderFiles: any[]) => {
+    if (folderFiles.length === 0) {
+      return (
+        <p className="text-sm text-muted-foreground text-center py-4">
+          No files in this folder
+        </p>
+      );
+    }
+
+    return (
+      <div className="space-y-2">
+        {folderFiles.map((file) => {
+          const Icon = getFileIcon(file.file_type);
+          const isReprocessing = reprocessFileMutation.isPending && reprocessFileMutation.variables === file.id;
+          return (
+            <div key={file.id} className="p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium truncate">{file.file_name}</p>
+                    {getClassificationBadge(file.document_classification, file.classification_confidence)}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {formatFileSize(file.file_size || 0)} •{" "}
+                    {new Date(file.uploaded_at).toLocaleDateString()}
+                    {file.classification_metadata && typeof file.classification_metadata === 'object' && 'summary' in file.classification_metadata && (
+                      <span className="ml-2 text-muted-foreground">
+                        • {String((file.classification_metadata as Record<string, unknown>).summary)}
+                      </span>
+                    )}
+                  </p>
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    <Button variant="outline" size="sm" onClick={() => handleView(file)}>
+                      <Eye className="h-3 w-3 mr-1" /> View
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => handleDownload(file)}>
+                      <Download className="h-3 w-3 mr-1" /> Download
+                    </Button>
+                    {(file.file_name.toLowerCase().endsWith('.docx') || file.file_name.toLowerCase().endsWith('.pdf')) && (
+                      <Button variant="outline" size="sm" onClick={() => handleSaveAsTemplate(file)}>
+                        <FileUp className="h-3 w-3 mr-1" /> Save as Template
+                      </Button>
+                    )}
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="outline" size="sm" onClick={() => reprocessFileMutation.mutate(file.id)} disabled={isReprocessing}>
+                            {isReprocessing ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+                            {isReprocessing ? "Processing..." : "Reprocess"}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>Re-analyze with Darwin AI</p></TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <Button variant="outline" size="sm" onClick={() => handleDeleteFile(file)}>
+                      <Trash2 className="h-3 w-3 mr-1" /> Delete
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // Render upload button for a folder
+  const renderUploadButton = (folderId: string, folderName: string) => (
+    <Dialog open={uploadDialogOpen && selectedFolderId === folderId} onOpenChange={(open) => {
+      setUploadDialogOpen(open);
+      if (!open) setSelectedFolderId(null);
+    }}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="w-full" onClick={() => setSelectedFolderId(folderId)}>
+          <Upload className="h-4 w-4 mr-2" /> Upload File
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Upload File to {folderName}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <Input type="file" multiple onChange={handleFileUpload} disabled={uploadingFile} />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
+  // Render subfolders inside a parent folder
+  const renderSubfolders = (parentId: string) => {
+    const subs = getSubfolders(parentId);
+    if (subs.length === 0) return null;
+
+    return (
+      <Accordion type="multiple" className="w-full space-y-1 mt-2">
+        {subs.map((sub) => {
+          const subFiles = files?.filter((f) => f.folder_id === sub.id) || [];
+          const nestedSubs = getSubfolders(sub.id);
+          
+          return (
+            <AccordionItem key={sub.id} value={sub.id} className="border rounded-lg bg-muted/20">
+              <AccordionTrigger className="px-3 py-2 hover:no-underline hover:bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                  <Folder className="h-4 w-4 text-primary/70" />
+                  <span className="font-medium text-sm text-foreground">{sub.name}</span>
+                  <Badge variant="secondary" className="ml-1 text-xs">
+                    {subFiles.length}
+                  </Badge>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-3 pb-3">
+                <div className="space-y-3 mt-2">
+                  <div className="flex gap-2">
+                    {renderUploadButton(sub.id, sub.name)}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSubfolderParentId(sub.id);
+                        setSubfolderDialogOpen(true);
+                      }}
+                    >
+                      <FolderPlus className="h-4 w-4 mr-1" />
+                      Subfolder
+                    </Button>
+                  </div>
+                  {renderFileList(subFiles)}
+                  {nestedSubs.length > 0 && renderSubfolders(sub.id)}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          );
+        })}
+      </Accordion>
+    );
   };
 
   return (
@@ -457,221 +569,98 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                 variant="outline"
                 onClick={() => {
                   navigator.clipboard.writeText(claim.policyholder_address);
-                  toast({
-                    title: "Address copied",
-                    description: "Property address copied to clipboard.",
-                  });
+                  toast({ title: "Address copied", description: "Property address copied to clipboard." });
                 }}
               >
-                <Copy className="h-4 w-4 mr-2" />
-                Copy Address
+                <Copy className="h-4 w-4 mr-2" /> Copy Address
               </Button>
             )}
             {isStaffOrAdmin && (
-              <Button
-                variant="outline"
-                onClick={() => window.open("https://ssoext.gaf.com/oauth2/ausclyogeZBNESNcI4x6/v1/authorize?client_id=0oaclwmauH1TXBDzU4x6&code_challenge=5w3eWPZzMixtrRpmMsiaB-kkOrB6f0iptcPGkKehUHU&code_challenge_method=S256&nonce=zCbdYnAIj7cBfgWxzMPjoxyi0ftuviGSK8qw3SiigZHS0KqaDOYVOei142d5znNF&redirect_uri=https%3A%2F%2Fquickmeasure.gaf.com%2Fcallback&response_type=code&state=thy7nldi3KrQQkvaxuvNMe92rjHE0kqxXKEOIjdVXDSOXrjW31jo58XUBnAtEOKi&scope=openid%20profile%20email%20openid%20email%20profile%20CheckCoverage%20IsServiceOpen%20SiteStatus%20SendErrorReport%20SearchOrders%20PlaceOrder%20InitiatePayment%20UpdatePayment%20IsValidPromoCode%20RedeemPromoCode%20SearchReceipts%20DownloadRoofReport%20GetUserProfile%20SaveUserProfile%20GetLookup%20User%3ASavePreferences%20User%3AGetPreferences%20User%3AGetAvailableAddresses%20User%3ASetNotificationLog%20User%3AGetReplenishmentPreferences%20User%3ASaveReplenishmentPreferences%20User%3AGetProductPreferences%20User%3ASaveProductPreferences%20User%3AAcceptTermsAndConditions%20User%3AGetAccountPreferences%20User%3ASaveAccountPreferences%20Track%20Guest%3AAcceptTermsAndConditions%20GetDistributorsForPostalCode%20UpdateOrderService%20DownloadFile%20BPFileupload%20Orders%3AShareOrder%20Orders%3AGetSharedOrder", "_blank")}
-              >
-                <ExternalLink className="h-4 w-4 mr-2" />
-                GAF QuickMeasure
+              <Button variant="outline" onClick={() => window.open("https://ssoext.gaf.com/oauth2/ausclyogeZBNESNcI4x6/v1/authorize?client_id=0oaclwmauH1TXBDzU4x6&code_challenge=5w3eWPZzMixtrRpmMsiaB-kkOrB6f0iptcPGkKehUHU&code_challenge_method=S256&nonce=zCbdYnAIj7cBfgWxzMPjoxyi0ftuviGSK8qw3SiigZHS0KqaDOYVOei142d5znNF&redirect_uri=https%3A%2F%2Fquickmeasure.gaf.com%2Fcallback&response_type=code&state=thy7nldi3KrQQkvaxuvNMe92rjHE0kqxXKEOIjdVXDSOXrjW31jo58XUBnAtEOKi&scope=openid%20profile%20email%20openid%20email%20profile%20CheckCoverage%20IsServiceOpen%20SiteStatus%20SendErrorReport%20SearchOrders%20PlaceOrder%20InitiatePayment%20UpdatePayment%20IsValidPromoCode%20RedeemPromoCode%20SearchReceipts%20DownloadRoofReport%20GetUserProfile%20SaveUserProfile%20GetLookup%20User%3ASavePreferences%20User%3AGetPreferences%20User%3AGetAvailableAddresses%20User%3ASetNotificationLog%20User%3AGetReplenishmentPreferences%20User%3ASaveReplenishmentPreferences%20User%3AGetProductPreferences%20User%3ASaveProductPreferences%20User%3AAcceptTermsAndConditions%20User%3AGetAccountPreferences%20User%3ASaveAccountPreferences%20Track%20Guest%3AAcceptTermsAndConditions%20GetDistributorsForPostalCode%20UpdateOrderService%20DownloadFile%20BPFileupload%20Orders%3AShareOrder%20Orders%3AGetSharedOrder", "_blank")}>
+                <ExternalLink className="h-4 w-4 mr-2" /> GAF QuickMeasure
               </Button>
             )}
             {isStaffOrAdmin && (
-              <Button
-                variant="outline"
-                onClick={() => window.open("https://xactimate.com/xor/sign-in?utm_source=xactimate&utm_medium=referral&utm_campaign=login_page&utm_content=sign_in_btn", "_blank")}
-              >
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Xactimate
+              <Button variant="outline" onClick={() => window.open("https://xactimate.com/xor/sign-in?utm_source=xactimate&utm_medium=referral&utm_campaign=login_page&utm_content=sign_in_btn", "_blank")}>
+                <ExternalLink className="h-4 w-4 mr-2" /> Xactimate
               </Button>
             )}
             
-            {isStaffOrAdmin && (
-              <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline">
-                    <FolderPlus className="h-4 w-4 mr-2" />
-                    New Folder
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Create New Folder</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="folderName">Folder Name</Label>
-                      <Input
-                        id="folderName"
-                        value={newFolderName}
-                        onChange={(e) => setNewFolderName(e.target.value)}
-                        placeholder="Enter folder name"
-                      />
-                    </div>
-                    <Button
-                      onClick={() => createFolderMutation.mutate(newFolderName)}
-                      disabled={!newFolderName.trim() || createFolderMutation.isPending}
-                      className="w-full"
-                    >
-                      Create Folder
-                    </Button>
+            {/* New Folder - available to all users */}
+            <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <FolderPlus className="h-4 w-4 mr-2" /> New Folder
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create New Folder</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="folderName">Folder Name</Label>
+                    <Input
+                      id="folderName"
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                      placeholder="Enter folder name"
+                    />
                   </div>
-                </DialogContent>
-              </Dialog>
-            )}
+                  <Button
+                    onClick={() => createFolderMutation.mutate({ folderName: newFolderName })}
+                    disabled={!newFolderName.trim() || createFolderMutation.isPending}
+                    className="w-full"
+                  >
+                    Create Folder
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
 
       <Accordion type="multiple" className="w-full space-y-2">
-        {folders?.map((folder) => {
+        {topLevelFolders.map((folder) => {
           const folderFiles = files?.filter((f) => f.folder_id === folder.id) || [];
+          const subs = getSubfolders(folder.id);
+          const totalSubFiles = subs.reduce((acc, sub) => acc + (files?.filter(f => f.folder_id === sub.id).length || 0), 0);
           
           return (
-            <AccordionItem
-              key={folder.id}
-              value={folder.id}
-              className="border rounded-lg bg-card"
-            >
+            <AccordionItem key={folder.id} value={folder.id} className="border rounded-lg bg-card">
               <AccordionTrigger className="px-4 hover:no-underline hover:bg-muted/30">
                 <div className="flex items-center gap-2">
                   <Folder className="h-4 w-4 text-primary" />
                   <span className="font-medium text-foreground">{folder.name}</span>
                   <Badge variant="secondary" className="ml-2">
-                    {folderFiles.length}
+                    {folderFiles.length}{subs.length > 0 ? ` + ${totalSubFiles}` : ''}
                   </Badge>
+                  {subs.length > 0 && (
+                    <Badge variant="outline" className="text-xs text-muted-foreground">
+                      {subs.length} subfolder{subs.length > 1 ? 's' : ''}
+                    </Badge>
+                  )}
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-4 pb-4">
                 <div className="space-y-3 mt-3">
-                  <Dialog open={uploadDialogOpen && selectedFolderId === folder.id} onOpenChange={(open) => {
-                    setUploadDialogOpen(open);
-                    if (!open) setSelectedFolderId(null);
-                  }}>
-                    <DialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={() => setSelectedFolderId(folder.id)}
-                      >
-                        <Upload className="h-4 w-4 mr-2" />
-                        Upload File
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Upload File to {folder.name}</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        <Input
-                          type="file"
-                          multiple
-                          onChange={handleFileUpload}
-                          disabled={uploadingFile}
-                        />
-                      </div>
-                    </DialogContent>
-                  </Dialog>
+                  <div className="flex gap-2">
+                    {renderUploadButton(folder.id, folder.name)}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSubfolderParentId(folder.id);
+                        setSubfolderDialogOpen(true);
+                      }}
+                    >
+                      <FolderPlus className="h-4 w-4 mr-1" />
+                      Subfolder
+                    </Button>
+                  </div>
 
-                  {folderFiles.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">
-                      No files in this folder
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {folderFiles.map((file) => {
-                        const Icon = getFileIcon(file.file_type);
-                        const isReprocessing = reprocessFileMutation.isPending && reprocessFileMutation.variables === file.id;
-                        return (
-                          <div
-                            key={file.id}
-                            className="p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors"
-                          >
-                            <div className="flex items-start gap-3">
-                              <div className="p-2 rounded-lg bg-primary/10">
-                                <Icon className="h-4 w-4" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="text-sm font-medium truncate">
-                                    {file.file_name}
-                                  </p>
-                                  {getClassificationBadge(file.document_classification, file.classification_confidence)}
-                                </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {formatFileSize(file.file_size || 0)} •{" "}
-                                  {new Date(file.uploaded_at).toLocaleDateString()}
-                                  {file.classification_metadata && typeof file.classification_metadata === 'object' && 'summary' in file.classification_metadata && (
-                                    <span className="ml-2 text-muted-foreground">
-                                      • {String((file.classification_metadata as Record<string, unknown>).summary)}
-                                    </span>
-                                  )}
-                                </p>
-                                <div className="flex gap-2 mt-2 flex-wrap">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleView(file)}
-                                  >
-                                    <Eye className="h-3 w-3 mr-1" />
-                                    View
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleDownload(file)}
-                                  >
-                                    <Download className="h-3 w-3 mr-1" />
-                                    Download
-                                  </Button>
-                                  {(file.file_name.toLowerCase().endsWith('.docx') || file.file_name.toLowerCase().endsWith('.pdf')) && (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleSaveAsTemplate(file)}
-                                    >
-                                      <FileUp className="h-3 w-3 mr-1" />
-                                      Save as Template
-                                    </Button>
-                                  )}
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          onClick={() => reprocessFileMutation.mutate(file.id)}
-                                          disabled={isReprocessing}
-                                        >
-                                          {isReprocessing ? (
-                                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                          ) : (
-                                            <RefreshCw className="h-3 w-3 mr-1" />
-                                          )}
-                                          {isReprocessing ? "Processing..." : "Reprocess"}
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>Re-analyze with Darwin AI</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleDeleteFile(file)}
-                                  >
-                                    <Trash2 className="h-3 w-3 mr-1" />
-                                    Delete
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                  {renderFileList(folderFiles)}
+                  {renderSubfolders(folder.id)}
                 </div>
               </AccordionContent>
             </AccordionItem>
@@ -685,46 +674,59 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
         </p>
       )}
 
-      <Dialog open={saveAsTemplateDialogOpen} onOpenChange={setSaveAsTemplateDialogOpen}>
+      {/* Subfolder Dialog */}
+      <Dialog open={subfolderDialogOpen} onOpenChange={(open) => {
+        setSubfolderDialogOpen(open);
+        if (!open) { setSubfolderParentId(null); setNewFolderName(""); }
+      }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Save as Template</DialogTitle>
+            <DialogTitle>Create Subfolder</DialogTitle>
             <DialogDescription>
-              Save this document as a reusable template for future claims
+              Create a subfolder inside "{folders?.find(f => f.id === subfolderParentId)?.name}"
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Template Name</Label>
+              <Label htmlFor="subfolderName">Subfolder Name</Label>
               <Input
-                value={templateForm.name}
-                onChange={(e) =>
-                  setTemplateForm({ ...templateForm, name: e.target.value })
-                }
-                placeholder="e.g., Standard Contract"
+                id="subfolderName"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                placeholder="Enter subfolder name"
               />
+            </div>
+            <Button
+              onClick={() => createFolderMutation.mutate({ folderName: newFolderName, parentId: subfolderParentId })}
+              disabled={!newFolderName.trim() || createFolderMutation.isPending}
+              className="w-full"
+            >
+              {createFolderMutation.isPending ? "Creating..." : "Create Subfolder"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Save as Template Dialog */}
+      <Dialog open={saveAsTemplateDialogOpen} onOpenChange={setSaveAsTemplateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save as Template</DialogTitle>
+            <DialogDescription>Save this document as a reusable template for future claims</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Template Name</Label>
+              <Input value={templateForm.name} onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })} placeholder="e.g., Standard Contract" />
             </div>
             <div>
               <Label>Description</Label>
-              <Textarea
-                value={templateForm.description}
-                onChange={(e) =>
-                  setTemplateForm({ ...templateForm, description: e.target.value })
-                }
-                placeholder="Optional description"
-              />
+              <Textarea value={templateForm.description} onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })} placeholder="Optional description" />
             </div>
             <div>
               <Label>Category</Label>
-              <Select
-                value={templateForm.category}
-                onValueChange={(value) =>
-                  setTemplateForm({ ...templateForm, category: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+              <Select value={templateForm.category} onValueChange={(value) => setTemplateForm({ ...templateForm, category: value })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Contract">Contract</SelectItem>
                   <SelectItem value="Invoice">Invoice</SelectItem>
@@ -736,16 +738,8 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
             </div>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setSaveAsTemplateDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => saveAsTemplateMutation.mutate()}
-              disabled={!templateForm.name || saveAsTemplateMutation.isPending}
-            >
+            <Button variant="outline" onClick={() => setSaveAsTemplateDialogOpen(false)}>Cancel</Button>
+            <Button onClick={() => saveAsTemplateMutation.mutate()} disabled={!templateForm.name || saveAsTemplateMutation.isPending}>
               {saveAsTemplateMutation.isPending ? "Saving..." : "Save as Template"}
             </Button>
           </DialogFooter>
@@ -762,26 +756,14 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
             {previewUrl && (
               <>
                 {previewFileType.includes("image") ? (
-                  <img 
-                    src={previewUrl} 
-                    alt="Preview" 
-                    className="w-full h-auto rounded-lg"
-                  />
+                  <img src={previewUrl} alt="Preview" className="w-full h-auto rounded-lg" />
                 ) : previewFileType.includes("pdf") ? (
-                  <iframe
-                    src={previewUrl}
-                    className="w-full h-[70vh] rounded-lg border"
-                    title="PDF Preview"
-                  />
+                  <iframe src={previewUrl} className="w-full h-[70vh] rounded-lg border" title="PDF Preview" />
                 ) : (
                   <div className="text-center py-8">
                     <FileText className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground mb-4">
-                      Preview not available for this file type
-                    </p>
-                    <Button onClick={() => window.open(previewUrl, "_blank")}>
-                      Open in New Tab
-                    </Button>
+                    <p className="text-muted-foreground mb-4">Preview not available for this file type</p>
+                    <Button onClick={() => window.open(previewUrl, "_blank")}>Open in New Tab</Button>
                   </div>
                 )}
               </>
@@ -798,43 +780,26 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
         </TabsContent>
       )}
 
-      {/* Estimate Upload Dialog (direct upload) */}
-      <EstimateUploadDialog
-        open={estimateUploadOpen}
-        onOpenChange={setEstimateUploadOpen}
-        claimId={claimId}
-      />
+      {/* Estimate Upload Dialog */}
+      <EstimateUploadDialog open={estimateUploadOpen} onOpenChange={setEstimateUploadOpen} claimId={claimId} />
 
       {/* Estimate Detection Prompt */}
       <Dialog open={estimatePromptOpen} onOpenChange={setEstimatePromptOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Calculator className="h-5 w-5" />
-              Estimate Detected
+              <Calculator className="h-5 w-5" /> Estimate Detected
             </DialogTitle>
             <DialogDescription>
               This file appears to be an insurance estimate. Would you like to extract the financial figures and populate them into the Accounting tab?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setEstimatePromptOpen(false);
-                setPendingEstimateFile(null);
-              }}
-            >
+            <Button variant="outline" onClick={() => { setEstimatePromptOpen(false); setPendingEstimateFile(null); }}>
               No, just upload
             </Button>
-            <Button
-              onClick={() => {
-                setEstimatePromptOpen(false);
-                setEstimateUploadOpen(true);
-              }}
-            >
-              <Calculator className="h-4 w-4 mr-2" />
-              Extract & Populate
+            <Button onClick={() => { setEstimatePromptOpen(false); setEstimateUploadOpen(true); }}>
+              <Calculator className="h-4 w-4 mr-2" /> Extract & Populate
             </Button>
           </DialogFooter>
         </DialogContent>
