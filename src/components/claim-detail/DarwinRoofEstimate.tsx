@@ -419,7 +419,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   }
 
   const SourceTag = ({ source }: { source: DerivationSource }) => {
-    const meta = SOURCE_LABELS[source];
+    const meta = SOURCE_LABELS[source] ?? { label: source, color: "text-muted-foreground" };
     return (
       <span className={`text-[10px] font-medium ${meta.color} ml-1`}>
         [{meta.label}]
@@ -429,7 +429,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
 
   const AuthorityBadge = ({ fieldKey }: { fieldKey: string }) => {
     const auth = getFieldAuthority(fieldKey);
-    const meta = AUTHORITY_LABELS[auth];
+    const meta = AUTHORITY_LABELS[auth] ?? { label: auth, icon: "?", color: "text-muted-foreground" };
     return (
       <TooltipProvider delayDuration={200}>
         <Tooltip>
