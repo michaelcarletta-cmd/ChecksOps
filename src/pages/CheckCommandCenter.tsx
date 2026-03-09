@@ -721,6 +721,10 @@ function CheckDetailPanel({
   onRefresh: () => void;
 }) {
   const [detailTab, setDetailTab] = useState("overview");
+  const [undoing, setUndoing] = useState(false);
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const qc = useQueryClient();
 
    const { data: check } = useQuery({
     queryKey: ["check-detail", checkId],
