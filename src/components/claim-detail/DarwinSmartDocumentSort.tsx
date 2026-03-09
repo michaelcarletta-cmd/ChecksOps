@@ -447,7 +447,7 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
                       <Button 
                         size="sm" 
                         onClick={uploadDocuments}
-                        disabled={isUploading}
+                        disabled={isUploading || !selectedParentFolderId}
                       >
                         {isUploading ? (
                           <>
@@ -457,7 +457,7 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
                         ) : (
                           <>
                             <FolderPlus className="h-4 w-4 mr-2" />
-                            Upload {pendingCount} to Folders
+                            Upload {pendingCount} as Subfolders
                           </>
                         )}
                       </Button>
