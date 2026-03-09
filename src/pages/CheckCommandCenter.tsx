@@ -108,6 +108,7 @@ const statusColors: Record<string, string> = {
   needs_review: "bg-red-500/20 text-red-400",
   approved_for_deposit: "bg-emerald-500/20 text-emerald-400",
   branch_deposit_required: "bg-blue-500/20 text-blue-400",
+  loss_draft_required: "bg-purple-500/20 text-purple-400",
   reissue_requested: "bg-orange-500/20 text-orange-400",
   deposited: "bg-primary/20 text-primary",
   voided: "bg-destructive/20 text-destructive",
