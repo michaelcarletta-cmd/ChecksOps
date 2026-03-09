@@ -2002,9 +2002,9 @@ function deriveRoofEstimate(
   // ── Field confidence ──
   const fieldConfidence: Record<string, number> = {
     footprint_area_sqft: hasGeometry ? 75 : 0,
-    estimated_roof_area_sqft: (hasGeometry && pitchBand !== "unknown") ? 60 : 0,
-    squares: (hasGeometry && pitchBand !== "unknown") ? 60 : 0,
-    dominant_pitch: (visionResult && !visionResult.pitch_band.abstain) ? visionResult.pitch_band.confidence : 0,
+    estimated_roof_area_sqft: hasGeometry ? (pitchIsDefaultFallback ? 35 : 60) : 0,
+    squares: hasGeometry ? (pitchIsDefaultFallback ? 35 : 60) : 0,
+    dominant_pitch: pitchIsDefaultFallback ? 15 : ((visionResult && !visionResult.pitch_band.abstain) ? visionResult.pitch_band.confidence : 0),
     ridge_lf: linear.linear_confidence.ridge_lf ?? 0,
     hip_lf: linear.linear_confidence.hip_lf ?? 0,
     valley_lf: linear.linear_confidence.valley_lf ?? 0,
