@@ -8128,6 +8128,7 @@ export type Database = {
           holdback_amount: number | null
           id: string
           last_contact_at: string | null
+          lender_website_url: string | null
           loan_number: string | null
           loss_draft_contact: string | null
           loss_draft_email: string | null
@@ -8135,7 +8136,11 @@ export type Database = {
           loss_draft_phone: string | null
           mortgage_servicer: string
           notes: string | null
+          shipping_method_return: string | null
+          shipping_method_sent: string | null
           total_escrowed: number | null
+          tracking_number_return: string | null
+          tracking_number_sent: string | null
           updated_at: string
         }
         Insert: {
@@ -8154,6 +8159,7 @@ export type Database = {
           holdback_amount?: number | null
           id?: string
           last_contact_at?: string | null
+          lender_website_url?: string | null
           loan_number?: string | null
           loss_draft_contact?: string | null
           loss_draft_email?: string | null
@@ -8161,7 +8167,11 @@ export type Database = {
           loss_draft_phone?: string | null
           mortgage_servicer: string
           notes?: string | null
+          shipping_method_return?: string | null
+          shipping_method_sent?: string | null
           total_escrowed?: number | null
+          tracking_number_return?: string | null
+          tracking_number_sent?: string | null
           updated_at?: string
         }
         Update: {
@@ -8180,6 +8190,7 @@ export type Database = {
           holdback_amount?: number | null
           id?: string
           last_contact_at?: string | null
+          lender_website_url?: string | null
           loan_number?: string | null
           loss_draft_contact?: string | null
           loss_draft_email?: string | null
@@ -8187,7 +8198,11 @@ export type Database = {
           loss_draft_phone?: string | null
           mortgage_servicer?: string
           notes?: string | null
+          shipping_method_return?: string | null
+          shipping_method_sent?: string | null
           total_escrowed?: number | null
+          tracking_number_return?: string | null
+          tracking_number_sent?: string | null
           updated_at?: string
         }
         Relationships: [
