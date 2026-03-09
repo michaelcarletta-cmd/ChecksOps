@@ -505,6 +505,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const geoMeta = estimate?.geometry_metadata as GeometryMetadata | null;
   const ridgeCandidates = (estimate?.ridge_candidates as RidgeCandidate[] | null) || [];
   const hipValleyCandidates = (estimate?.hip_valley_candidates as HipValleyCandidate[] | null) || [];
+  const tuningApplied = (estimate?.tuning_applied as { key: string; field: string; action: string; before: number; after: number }[] | null) || [];
 
   const edgeSummary = edgeClassifications.reduce(
     (acc, e) => {
@@ -514,7 +515,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     {} as Record<string, number>,
   );
 
-  const phaseLabel = estimate?.inferred_roof_form ? "Phase 2C" : hasFootprintGeometry ? "Phase 2B" : "Preliminary";
+  const phaseLabel = tuningApplied.length > 0 ? "Phase 2D" : estimate?.inferred_roof_form ? "Phase 2C" : hasFootprintGeometry ? "Phase 2B" : "Preliminary";
 
   return (
     <Card>
