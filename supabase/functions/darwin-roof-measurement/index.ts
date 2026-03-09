@@ -732,6 +732,158 @@ async function fetchAllCandidateFootprints(
   return deduped;
 }
 
+/**
+ * AI Vision Footprint Estimation: when all polygon sources fail,
+ * use satellite imagery + AI to estimate building dimensions and
+ * create a synthetic rectangular footprint.
+ */
+async function estimateFootprintFromVision(
+  tileGrid: { base64: string; row: number; col: number }[],
+  address: string,
+  lat: number,
+  lng: number,
+): Promise<CandidateFootprint | null> {
+  const LOVABLE_AI_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_AI_KEY || tileGrid.length === 0) return null;
+
+  try {
+    const imageContent: any[] = [];
+    const gridSize = Math.round(Math.sqrt(tileGrid.length));
+    imageContent.push({
+      type: "text",
+      text: `${tileGrid.length} satellite tiles in a ${gridSize}×${gridSize} grid for ${address}. The CENTER tile contains the property.\n\nYou are a building footprint estimator. Estimate the building's footprint dimensions from this aerial imagery. Look at the building's roof outline and estimate its approximate length and width in feet. Also estimate the compass bearing of the building's long axis (0-360 degrees, where 0=North).`,
+    });
+    const sorted = [...tileGrid].sort((a, b) => a.row !== b.row ? a.row - b.row : a.col - b.col);
+    for (const tile of sorted) {
+      imageContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${tile.base64}` } });
+    }
+
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_AI_KEY}` },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          {
+            role: "system",
+            content: `You estimate building footprint dimensions from aerial/satellite imagery. You MUST provide estimates — do NOT refuse or say you cannot determine dimensions. Use visual cues like roof shadow length, comparison to driveways (~10ft wide), cars (~6x15ft), sidewalks (~4ft), and standard residential features.
+
+RULES:
+- Estimate length (longer dimension) and width (shorter dimension) in feet
+- length_ft should be the LONGER dimension, width_ft the SHORTER
+- Typical US residential: 30-80ft long, 25-50ft wide
+- Estimate bearing of the long axis in degrees (0=North, 90=East)
+- Provide confidence 0-100
+- ALWAYS provide a best estimate even if uncertain`,
+          },
+          { role: "user", content: imageContent },
+        ],
+        temperature: 0.1,
+        max_tokens: 1000,
+        tools: [{
+          type: "function",
+          function: {
+            name: "estimate_footprint",
+            description: "Estimate building footprint dimensions from satellite imagery",
+            parameters: {
+              type: "object",
+              properties: {
+                length_ft: { type: "number", description: "Longer building dimension in feet" },
+                width_ft: { type: "number", description: "Shorter building dimension in feet" },
+                bearing_deg: { type: "number", description: "Compass bearing of long axis (0-360)" },
+                confidence: { type: "number", description: "Confidence 0-100" },
+                notes: { type: "string", description: "Brief notes on estimation method" },
+              },
+              required: ["length_ft", "width_ft", "bearing_deg", "confidence", "notes"],
+              additionalProperties: false,
+            },
+          },
+        }],
+        tool_choice: { type: "function", function: { name: "estimate_footprint" } },
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("[Darwin Roof] Vision footprint estimation error:", response.status);
+      return null;
+    }
+
+    const result = await response.json();
+    const toolCall = result.choices?.[0]?.message?.tool_calls?.[0];
+    let parsed: any;
+    if (toolCall?.function?.arguments) {
+      parsed = typeof toolCall.function.arguments === "string"
+        ? JSON.parse(toolCall.function.arguments)
+        : toolCall.function.arguments;
+    } else {
+      const content = result.choices?.[0]?.message?.content || "";
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return null;
+      parsed = JSON.parse(jsonMatch[0]);
+    }
+
+    const lengthFt = Math.max(20, Math.min(200, Number(parsed.length_ft) || 50));
+    const widthFt = Math.max(15, Math.min(150, Number(parsed.width_ft) || 30));
+    const bearingDegVal = Number(parsed.bearing_deg) || 0;
+    const conf = clamp(Number(parsed.confidence) || 30, 10, 70);
+
+    console.log(`[Darwin Roof] Vision footprint estimate: ${lengthFt}ft x ${widthFt}ft, bearing=${bearingDegVal}°, confidence=${conf}% — "${parsed.notes}"`);
+
+    // Create a synthetic rectangular footprint polygon centered on the geocoded point
+    const areaSqft = roundTo(lengthFt * widthFt, 0);
+    const halfL = lengthFt / 2;
+    const halfW = widthFt / 2;
+    const bearingRad = toRad(bearingDegVal);
+
+    // Compute 4 corners of the rectangle in lat/lng
+    // Each corner is offset from center by (halfL along bearing, halfW perpendicular)
+    const corners: [number, number][] = [];
+    const offsets = [
+      [-halfL, -halfW],
+      [halfL, -halfW],
+      [halfL, halfW],
+      [-halfL, halfW],
+    ];
+    for (const [along, perp] of offsets) {
+      const dxFt = along * Math.sin(bearingRad) + perp * Math.cos(bearingRad);
+      const dyFt = along * Math.cos(bearingRad) - perp * Math.sin(bearingRad);
+      const dLat = dyFt / 364000; // ~364000 ft per degree lat
+      const dLng = dxFt / (364000 * Math.cos(toRad(lat))); // adjust for longitude
+      corners.push([lng + dLng, lat + dLat]);
+    }
+    // Close the ring
+    const ring: number[][] = [...corners, [corners[0][0], corners[0][1]]];
+
+    const perimeterFt = roundTo(2 * (lengthFt + widthFt), 0);
+    const metadata = buildGeometryMetadata(ring, "AI Vision Estimate", null, lat, lng);
+    // Lower quality score since this is AI-estimated
+    const qualityScore = Math.min(conf, 40);
+    const edges = classifyEdges(ring);
+
+    const geojson = {
+      type: "Feature",
+      properties: { source: "AI Vision Estimate", length_ft: lengthFt, width_ft: widthFt, bearing: bearingDegVal, notes: parsed.notes },
+      geometry: { type: "Polygon", coordinates: [ring] },
+    };
+
+    return {
+      polygon: ring,
+      area_sqft: areaSqft,
+      perimeter_ft: perimeterFt,
+      source: "AI Vision Estimate (satellite imagery)",
+      source_feature_id: null,
+      imagery_date: null,
+      geometry_quality_score: qualityScore,
+      geometry_metadata: metadata,
+      edge_classifications: edges,
+      geojson,
+    };
+  } catch (e) {
+    console.error("[Darwin Roof] Vision footprint estimation failed:", e);
+    return null;
+  }
+}
+
 async function fetchOSMBuildingCandidates(lat: number, lng: number): Promise<CandidateFootprint[]> {
   try {
     const radius = 0.0008; // ~90m radius — increased from 0.0003 for better coverage
