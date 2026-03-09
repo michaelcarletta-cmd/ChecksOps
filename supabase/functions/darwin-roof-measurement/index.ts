@@ -1126,7 +1126,32 @@ Deno.serve(async (req) => {
       });
     }
 
-    const estimate = await estimateRoofWithAI(address, geo.lat, geo.lng, parcel, elevation, selectedCandidate, candidates, roofFormInference);
+    const rawEstimate = await estimateRoofWithAI(address, geo.lat, geo.lng, parcel, elevation, selectedCandidate, candidates, roofFormInference);
+
+    // Phase 2D: Apply tuning heuristics
+    let estimate = rawEstimate;
+    let tuningApplied: any = null;
+    let preTuningValues: Record<string, number> = {};
+
+    const { data: activeHeuristics } = await supabase
+      .from("darwin_roof_tuning_heuristics")
+      .select("id, heuristic_key, action_type, adjustment_field, adjustment_factor, suppress_field, suppress_below_confidence, segment_roof_form, segment_quality_score_min, segment_quality_score_max, segment_aspect_ratio_min, segment_aspect_ratio_max, evidence_summary")
+      .eq("is_active", true);
+
+    if (activeHeuristics && activeHeuristics.length > 0) {
+      const result = applyTuningHeuristics(
+        rawEstimate,
+        activeHeuristics as TuningHeuristic[],
+        roofFormInference?.inferred_roof_form ?? null,
+        selectedCandidate?.geometry_quality_score ?? null,
+        roofFormInference?.aspect_ratio ?? null,
+      );
+      estimate = result.tuned;
+      if (result.applied.length > 0) {
+        tuningApplied = result.applied;
+        preTuningValues = result.preTuningValues;
+      }
+    }
 
     const { data: saved, error: saveErr } = await supabase
       .from("claim_roof_measurements")
@@ -1174,6 +1199,9 @@ Deno.serve(async (req) => {
         aspect_ratio: estimate.aspect_ratio,
         ridge_candidates: estimate.ridge_candidates,
         hip_valley_candidates: estimate.hip_valley_candidates,
+        // Phase 2D: Tuning metadata
+        tuning_applied: tuningApplied,
+        pre_tuning_values: Object.keys(preTuningValues).length > 0 ? preTuningValues : null,
         created_by: user.id,
       })
       .select()
