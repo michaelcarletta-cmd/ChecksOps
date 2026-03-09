@@ -762,6 +762,31 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
               </div>
             )}
 
+            {/* Phase 2D: Tuning Applied Indicator */}
+            {tuningApplied.length > 0 && (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Settings2 className="h-4 w-4 text-primary" />
+                  Tuning Applied
+                  <Badge variant="outline" className="text-[9px]">Phase 2D</Badge>
+                  <Badge variant="secondary" className="text-[9px]">{tuningApplied.length} adjustment{tuningApplied.length > 1 ? "s" : ""}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Values below have been adjusted by validation-derived tuning heuristics to correct known biases.
+                </p>
+                <div className="space-y-0.5">
+                  {tuningApplied.map((t, i) => (
+                    <div key={i} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                      <span className="font-medium capitalize">{t.field.replace(/_/g, " ")}</span>
+                      <span className="tabular-nums">{t.before} → {t.after}</span>
+                      <span className="text-[10px]">({t.action})</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Candidate Footprint Selector */}
             {candidates.length > 1 && (
               <div className="rounded-lg border p-3 space-y-2">
