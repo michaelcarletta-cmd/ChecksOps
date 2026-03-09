@@ -3937,6 +3937,7 @@ export type Database = {
           manually_confirmed: boolean
           overlay_image_url: string | null
           perpendicular_axis_length_ft: number | null
+          pre_tuning_values: Json | null
           rake_lf: number | null
           raw_geojson: Json | null
           review_required: boolean
@@ -3946,6 +3947,7 @@ export type Database = {
           roof_form_reasoning: string | null
           selected_candidate_index: number | null
           squares: number | null
+          tuning_applied: Json | null
           updated_at: string
           valley_lf: number | null
         }
@@ -3987,6 +3989,7 @@ export type Database = {
           manually_confirmed?: boolean
           overlay_image_url?: string | null
           perpendicular_axis_length_ft?: number | null
+          pre_tuning_values?: Json | null
           rake_lf?: number | null
           raw_geojson?: Json | null
           review_required?: boolean
@@ -3996,6 +3999,7 @@ export type Database = {
           roof_form_reasoning?: string | null
           selected_candidate_index?: number | null
           squares?: number | null
+          tuning_applied?: Json | null
           updated_at?: string
           valley_lf?: number | null
         }
@@ -4037,6 +4041,7 @@ export type Database = {
           manually_confirmed?: boolean
           overlay_image_url?: string | null
           perpendicular_axis_length_ft?: number | null
+          pre_tuning_values?: Json | null
           rake_lf?: number | null
           raw_geojson?: Json | null
           review_required?: boolean
@@ -4046,6 +4051,7 @@ export type Database = {
           roof_form_reasoning?: string | null
           selected_candidate_index?: number | null
           squares?: number | null
+          tuning_applied?: Json | null
           updated_at?: string
           valley_lf?: number | null
         }
@@ -5791,6 +5797,117 @@ export type Database = {
           status?: string
           ttl_seconds?: number
           updated_at?: string
+        }
+        Relationships: []
+      }
+      darwin_roof_tuning_heuristics: {
+        Row: {
+          action_type: string
+          adjustment_absolute: number | null
+          adjustment_factor: number | null
+          adjustment_field: string | null
+          auto_derived: boolean
+          avg_accuracy_score: number | null
+          avg_pct_delta: number | null
+          common_failures: Json | null
+          created_at: string
+          created_by: string | null
+          evidence_summary: string | null
+          failure_rate: number | null
+          heuristic_key: string
+          heuristic_type: string
+          id: string
+          is_active: boolean
+          last_computed_at: string | null
+          manually_overridden: boolean
+          median_pct_delta: number | null
+          sample_size: number
+          segment_aspect_ratio_max: number | null
+          segment_aspect_ratio_min: number | null
+          segment_carrier: string | null
+          segment_confidence_max: number | null
+          segment_confidence_min: number | null
+          segment_geometry_source: string | null
+          segment_quality_score_max: number | null
+          segment_quality_score_min: number | null
+          segment_region: string | null
+          segment_roof_form: string | null
+          suppress_below_confidence: number | null
+          suppress_field: string | null
+          updated_at: string
+          validation_ids: Json | null
+        }
+        Insert: {
+          action_type?: string
+          adjustment_absolute?: number | null
+          adjustment_factor?: number | null
+          adjustment_field?: string | null
+          auto_derived?: boolean
+          avg_accuracy_score?: number | null
+          avg_pct_delta?: number | null
+          common_failures?: Json | null
+          created_at?: string
+          created_by?: string | null
+          evidence_summary?: string | null
+          failure_rate?: number | null
+          heuristic_key: string
+          heuristic_type?: string
+          id?: string
+          is_active?: boolean
+          last_computed_at?: string | null
+          manually_overridden?: boolean
+          median_pct_delta?: number | null
+          sample_size?: number
+          segment_aspect_ratio_max?: number | null
+          segment_aspect_ratio_min?: number | null
+          segment_carrier?: string | null
+          segment_confidence_max?: number | null
+          segment_confidence_min?: number | null
+          segment_geometry_source?: string | null
+          segment_quality_score_max?: number | null
+          segment_quality_score_min?: number | null
+          segment_region?: string | null
+          segment_roof_form?: string | null
+          suppress_below_confidence?: number | null
+          suppress_field?: string | null
+          updated_at?: string
+          validation_ids?: Json | null
+        }
+        Update: {
+          action_type?: string
+          adjustment_absolute?: number | null
+          adjustment_factor?: number | null
+          adjustment_field?: string | null
+          auto_derived?: boolean
+          avg_accuracy_score?: number | null
+          avg_pct_delta?: number | null
+          common_failures?: Json | null
+          created_at?: string
+          created_by?: string | null
+          evidence_summary?: string | null
+          failure_rate?: number | null
+          heuristic_key?: string
+          heuristic_type?: string
+          id?: string
+          is_active?: boolean
+          last_computed_at?: string | null
+          manually_overridden?: boolean
+          median_pct_delta?: number | null
+          sample_size?: number
+          segment_aspect_ratio_max?: number | null
+          segment_aspect_ratio_min?: number | null
+          segment_carrier?: string | null
+          segment_confidence_max?: number | null
+          segment_confidence_min?: number | null
+          segment_geometry_source?: string | null
+          segment_quality_score_max?: number | null
+          segment_quality_score_min?: number | null
+          segment_region?: string | null
+          segment_roof_form?: string | null
+          suppress_below_confidence?: number | null
+          suppress_field?: string | null
+          updated_at?: string
+          validation_ids?: Json | null
         }
         Relationships: []
       }
