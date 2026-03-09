@@ -660,8 +660,12 @@ WRITING STYLE:
 - Write in a professional, authoritative tone suitable for insurance claim documentation
 - Use technical terminology but explain implications
 - Be specific and detailed - avoid vague statements
-- Build a compelling narrative connecting the loss event to the observed damage`;
-    
+- Build a compelling narrative connecting the loss event to the observed damage
+
+JURISDICTION COMPLIANCE:
+- When citing state insurance codes, statutes, or regulatory deadlines, you MUST use ONLY the jurisdiction specified in the claim context.
+- NEVER default to Pennsylvania codes unless the claim is explicitly in Pennsylvania.
+- If no jurisdiction is specified, do NOT cite any state-specific regulations — use only general industry standards.`;
     // Build user prompt based on report type
     let userPrompt = "";
     
