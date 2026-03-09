@@ -18,7 +18,7 @@ import { DarwinRoofValidation } from "./DarwinRoofValidation";
 import { RoofConfirmationDialog, type ConfirmationLevel, type ConfirmationBasis } from "./RoofConfirmationDialog";
 
 type DerivationSource = "geometry" | "ai_estimated" | "user_override";
-type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative";
+type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative" | "unknown_insufficient_geometry";
 type RoofForm = "gable" | "hip" | "cross_gable" | "complex" | "unknown";
 type PitchBand = "flat" | "low" | "moderate" | "steep" | "very_steep" | "unknown";
 type PitchType = "band" | "exact";
