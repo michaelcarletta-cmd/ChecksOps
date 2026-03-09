@@ -6589,6 +6589,16 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       );
     }
 
+    // ── STATE CITATION WATCHDOG — scan output for wrong-state references ──
+    let citationAudit: { violations: string[]; cleaned: string } | null = null;
+    if (analysisResult && typeof analysisResult === 'string') {
+      citationAudit = auditStateCitations(analysisResult, resolvedState);
+      if (citationAudit.violations.length > 0) {
+        console.warn(`[WATCHDOG] ⚠️ WRONG-STATE CITATIONS DETECTED (claim ${claimId}, state ${resolvedState}):`);
+        citationAudit.violations.forEach(v => console.warn(`  → ${v}`));
+      }
+    }
+
     const responseBuildStep = startStep('response', 'Build response payload');
     const responsePayload: any = {
       success: true,
@@ -6598,7 +6608,21 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       suggestedActions,
       carrierDismantler: carrierDismantlerResult,
       claimId,
+      jurisdiction: {
+        state_code: resolvedState,
+        state_name: stateInfo.stateName,
+        detection_source: (claim as any).state_code ? 'database' : detectedStateRaw ? 'address_parse' : 'fallback_default',
+        confidence: (claim as any).state_code ? 'high' : detectedStateRaw ? 'medium' : 'low',
+      },
     };
+    // Attach watchdog results so the UI can flag issues
+    if (citationAudit && citationAudit.violations.length > 0) {
+      responsePayload.citation_watchdog = {
+        wrong_state_citations_found: citationAudit.violations.length,
+        violations: citationAudit.violations,
+        warning: `⚠️ Darwin detected ${citationAudit.violations.length} citation(s) from the WRONG state in this output. These should be reviewed before sending to the carrier.`,
+      };
+    }
     if (claimFactsPack) responsePayload.claimFactsPack = claimFactsPack;
     responsePayload.executionSteps = executionSteps;
     responsePayload.processingMetrics = {
