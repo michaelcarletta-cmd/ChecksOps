@@ -6,18 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import {
   Ruler, Loader2, MapPin, AlertTriangle, CheckCircle2, RefreshCw,
-  TriangleAlert, Pencil, Save, X, Lock, Unlock
+  Lock, Unlock, Pencil, Save, X
 } from "lucide-react";
 
 type DerivationSource = "geometry" | "ai_estimated" | "user_override";
-
-interface FieldMeta {
-  value: number | string | null;
-  source: DerivationSource;
-}
 
 interface RoofEstimate {
   id: string;
@@ -43,6 +39,7 @@ interface RoofEstimate {
   ai_notes: string | null;
   data_sources: string[] | null;
   field_sources: Record<string, DerivationSource> | null;
+  field_confidence: Record<string, number> | null;
   created_at: string;
   updated_at: string;
 }
@@ -62,6 +59,12 @@ const round = (v: number | null | undefined, decimals = 0): number | null => {
   if (v == null || isNaN(v)) return null;
   const factor = 10 ** decimals;
   return Math.round(v * factor) / factor;
+};
+
+const confidenceDot = (score: number) => {
+  if (score >= 60) return "bg-green-500";
+  if (score >= 30) return "bg-yellow-500";
+  return "bg-red-500";
 };
 
 export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
@@ -148,9 +151,10 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const saveEdits = async () => {
     if (!estimate) return;
 
-    // Build field_sources: mark edited fields as user_override, keep existing for untouched
     const existingSources = (estimate.field_sources || {}) as Record<string, DerivationSource>;
     const updatedSources: Record<string, DerivationSource> = { ...existingSources };
+    const existingConf = (estimate.field_confidence || {}) as Record<string, number>;
+    const updatedConf: Record<string, number> = { ...existingConf };
     const numericKeys = [
       "footprint_area_sqft", "estimated_roof_area_sqft", "squares",
       "ridge_lf", "hip_lf", "valley_lf", "eave_lf", "rake_lf", "facet_count",
@@ -160,13 +164,14 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       const newVal = (editValues as any)[key];
       if (newVal !== oldVal) {
         updatedSources[key] = "user_override";
+        updatedConf[key] = 100; // user-confirmed value = 100% confidence
       }
     }
     if (editValues.dominant_pitch !== estimate.dominant_pitch) {
       updatedSources["dominant_pitch"] = "user_override";
+      updatedConf["dominant_pitch"] = 100;
     }
 
-    // Round numeric values
     const rounded: Record<string, any> = {};
     for (const key of numericKeys) {
       const v = (editValues as any)[key];
@@ -179,6 +184,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       .update({
         ...rounded,
         field_sources: updatedSources,
+        field_confidence: updatedConf,
         manually_confirmed: true,
         confirmed_at: new Date().toISOString(),
         review_required: false,
@@ -195,6 +201,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       ...estimate,
       ...rounded,
       field_sources: updatedSources,
+      field_confidence: updatedConf,
       manually_confirmed: true,
       review_required: false,
     } as RoofEstimate);
@@ -220,19 +227,21 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     }
 
     setEstimate({ ...estimate, manually_confirmed: true, review_required: false });
-    toast.success("Estimate confirmed — now available for use in scoping");
+    toast.success("Estimate confirmed — now available for downstream workflows");
   };
 
-  const confidenceColor = (score: number | null) => {
+  const overallConfidenceColor = (score: number | null) => {
     if (!score) return "text-muted-foreground";
     if (score >= 60) return "text-green-600";
     if (score >= 35) return "text-yellow-600";
     return "text-red-500";
   };
 
-  const getFieldSource = (key: string): DerivationSource => {
-    return (estimate?.field_sources as any)?.[key] ?? "ai_estimated";
-  };
+  const getFieldSource = (key: string): DerivationSource =>
+    (estimate?.field_sources as any)?.[key] ?? "ai_estimated";
+
+  const getFieldConfidence = (key: string): number =>
+    (estimate?.field_confidence as any)?.[key] ?? 0;
 
   if (fetchingExisting) {
     return (
@@ -254,6 +263,26 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     );
   };
 
+  const ConfidencePip = ({ fieldKey }: { fieldKey: string }) => {
+    const conf = getFieldConfidence(fieldKey);
+    return (
+      <TooltipProvider delayDuration={200}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex items-center ml-1.5 gap-0.5">
+              <span className={`inline-block w-1.5 h-1.5 rounded-full ${confidenceDot(conf)}`} />
+              <span className="text-[9px] tabular-nums text-muted-foreground">{conf}%</span>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs">
+            Field confidence: {conf}%
+            {conf < 30 && " — prioritize review"}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
   const EstimateField = ({
     label, value, unit, editKey, fieldKey,
   }: {
@@ -263,6 +292,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       <span className="text-sm text-muted-foreground">
         {label}
         {!editing && <SourceTag source={getFieldSource(fieldKey)} />}
+        {!editing && <ConfidencePip fieldKey={fieldKey} />}
       </span>
       {editing && editKey ? (
         <Input
@@ -369,10 +399,10 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
               <Alert variant="destructive">
                 <Lock className="h-4 w-4" />
                 <AlertDescription>
-                  <strong>Unconfirmed Estimate — Do Not Use</strong>
+                  <strong>Unconfirmed Estimate — Blocked from Downstream Use</strong>
                   <br />
-                  These AI-estimated values are <em>not</em> derived from aerial imagery or field measurement.
-                  They must be reviewed and confirmed by staff before use in any estimate, supplement, or report.
+                  This estimate <em>cannot</em> feed the estimate builder, material calculator, or supplement engine.
+                  Review per-field confidence scores, then confirm or override values before production use.
                 </AlertDescription>
               </Alert>
             )}
@@ -380,10 +410,10 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
             {/* Confidence & Summary */}
             <div className="flex items-center gap-4 p-3 rounded-lg bg-muted/50">
               <div className="text-center">
-                <div className={`text-2xl font-bold tabular-nums ${confidenceColor(estimate.confidence_score)}`}>
+                <div className={`text-2xl font-bold tabular-nums ${overallConfidenceColor(estimate.confidence_score)}`}>
                   {estimate.confidence_score ?? 0}%
                 </div>
-                <div className="text-xs text-muted-foreground">Confidence</div>
+                <div className="text-xs text-muted-foreground">Overall</div>
               </div>
               <Separator orientation="vertical" className="h-10" />
               <div className="text-center">
@@ -409,10 +439,15 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
             </div>
 
             {/* Source Legend */}
-            <div className="flex gap-3 text-[10px] text-muted-foreground">
-              <span className="text-green-600 font-medium">[Geometry]</span> = derived from parcel/elevation data
+            <div className="flex gap-3 text-[10px] text-muted-foreground flex-wrap">
+              <span className="text-green-600 font-medium">[Geometry]</span> = parcel/elevation
               <span className="text-amber-600 font-medium ml-2">[AI Est.]</span> = AI-modeled
               <span className="text-blue-600 font-medium ml-2">[Manual]</span> = user-entered
+              <span className="ml-2">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" /> ≥60%
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-yellow-500 ml-1" /> 30-59%
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 ml-1" /> &lt;30% = per-field confidence
+              </span>
             </div>
 
             {/* Detail Grid */}
@@ -496,3 +531,21 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     </Card>
   );
 };
+
+/**
+ * Downstream gate: returns confirmed roof estimate data or null.
+ * Any estimate builder, material calculator, or supplement engine
+ * MUST use this function instead of querying claim_roof_measurements directly.
+ */
+export async function getConfirmedRoofEstimate(claimId: string): Promise<RoofEstimate | null> {
+  const { data } = await supabase
+    .from("claim_roof_measurements")
+    .select("*")
+    .eq("claim_id", claimId)
+    .eq("manually_confirmed", true)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (!data || data.length === 0) return null;
+  return data[0] as unknown as RoofEstimate;
+}
