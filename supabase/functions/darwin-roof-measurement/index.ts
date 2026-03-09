@@ -1286,8 +1286,12 @@ Deno.serve(async (req) => {
 
     const { data: activeHeuristics } = await supabase
       .from("darwin_roof_tuning_heuristics")
-      .select("id, heuristic_key, action_type, adjustment_field, adjustment_factor, suppress_field, suppress_below_confidence, segment_roof_form, segment_quality_score_min, segment_quality_score_max, segment_aspect_ratio_min, segment_aspect_ratio_max, evidence_summary")
+      .select("id, heuristic_key, action_type, adjustment_field, adjustment_factor, suppress_field, suppress_below_confidence, segment_roof_form, segment_quality_score_min, segment_quality_score_max, segment_aspect_ratio_min, segment_aspect_ratio_max, evidence_summary, min_sample_size, sample_size, effective_from, expires_at, last_validation_support_at, staleness_days, max_adjustment_factor, min_adjustment_factor, max_confidence_penalty, priority, conflict_group, governance_status")
       .eq("is_active", true);
+
+    let explanationChain: any = null;
+    let suppressedHeuristics: any = null;
+    let netImpact: any = null;
 
     if (activeHeuristics && activeHeuristics.length > 0) {
       const result = applyTuningHeuristics(
@@ -1302,6 +1306,9 @@ Deno.serve(async (req) => {
         tuningApplied = result.applied;
         preTuningValues = result.preTuningValues;
       }
+      if (result.explanationChain.length > 0) explanationChain = result.explanationChain;
+      if (result.suppressedHeuristics.length > 0) suppressedHeuristics = result.suppressedHeuristics;
+      if (Object.keys(result.netImpact).length > 0) netImpact = result.netImpact;
     }
 
     const { data: saved, error: saveErr } = await supabase
