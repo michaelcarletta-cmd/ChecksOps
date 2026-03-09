@@ -162,6 +162,15 @@ const EDGE_COLORS: Record<string, string> = {
   unknown: "bg-muted-foreground",
 };
 
+const PITCH_SLOPE_FACTORS: Record<string, number> = {
+  "2/12": 1.014, "3/12": 1.031, "4/12": 1.054, "5/12": 1.083,
+  "6/12": 1.118, "7/12": 1.158, "8/12": 1.202, "9/12": 1.250,
+  "10/12": 1.302, "11/12": 1.357, "12/12": 1.414, "14/12": 1.537,
+  "16/12": 1.667, "18/12": 1.803,
+};
+
+const PITCH_OPTIONS = Object.keys(PITCH_SLOPE_FACTORS);
+
 const round = (v: number | null | undefined, decimals = 0): number | null => {
   if (v == null || isNaN(v)) return null;
   const factor = 10 ** decimals;
@@ -295,6 +304,16 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     if (editValues.dominant_pitch !== estimate.dominant_pitch) {
       updatedSources["dominant_pitch"] = "user_override";
       updatedAuth["dominant_pitch"] = "user_authoritative";
+      // If pitch changed and triggered auto-recalc, also mark area fields
+      if (PITCH_SLOPE_FACTORS[editValues.dominant_pitch as string]) {
+        updatedSources["estimated_roof_area_sqft"] = "user_override";
+        updatedAuth["estimated_roof_area_sqft"] = "user_authoritative";
+        updatedConf["estimated_roof_area_sqft"] = 85;
+        updatedSources["squares"] = "user_override";
+        updatedAuth["squares"] = "user_authoritative";
+        updatedConf["squares"] = 85;
+        updatedConf["dominant_pitch"] = 95;
+      }
     }
 
     const rounded: Record<string, any> = {};
@@ -465,7 +484,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     );
   };
 
-  const EstimateField = ({
+   const EstimateField = ({
     label, value, unit, editKey, fieldKey,
   }: {
     label: string; value: number | string | null; unit?: string; editKey?: keyof RoofEstimate; fieldKey: string;
@@ -479,17 +498,57 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
         {!editing && <ConfidencePip fieldKey={fieldKey} />}
       </span>
       {editing && editKey ? (
-        <Input
-          type={typeof value === "string" ? "text" : "number"}
-          className="w-28 h-7 text-sm text-right"
-          value={(editValues as any)[editKey] ?? ""}
-          onChange={(e) =>
-            setEditValues((prev) => ({
-              ...prev,
-              [editKey]: typeof value === "string" ? e.target.value : Number(e.target.value),
-            }))
-          }
-        />
+        editKey === "dominant_pitch" ? (
+          <div className="flex items-center gap-1.5">
+            <Select
+              value={(editValues as any).dominant_pitch ?? ""}
+              onValueChange={(pitch) => {
+                const slopeFactor = PITCH_SLOPE_FACTORS[pitch];
+                const footprint = (editValues as any).footprint_area_sqft ?? estimate?.footprint_area_sqft;
+                if (slopeFactor && footprint) {
+                  const newRoofArea = Math.round(footprint * slopeFactor);
+                  const newSquares = Math.round((newRoofArea / 100) * 10) / 10;
+                  setEditValues((prev) => ({
+                    ...prev,
+                    dominant_pitch: pitch,
+                    estimated_roof_area_sqft: newRoofArea,
+                    squares: newSquares,
+                  }));
+                } else {
+                  setEditValues((prev) => ({ ...prev, dominant_pitch: pitch }));
+                }
+              }}
+            >
+              <SelectTrigger className="w-28 h-7 text-sm">
+                <SelectValue placeholder="Select pitch" />
+              </SelectTrigger>
+              <SelectContent>
+                {PITCH_OPTIONS.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {p} ({PITCH_SLOPE_FACTORS[p].toFixed(3)}×)
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {PITCH_SLOPE_FACTORS[(editValues as any).dominant_pitch] && (
+              <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                auto-recalc
+              </span>
+            )}
+          </div>
+        ) : (
+          <Input
+            type={typeof value === "string" ? "text" : "number"}
+            className="w-28 h-7 text-sm text-right"
+            value={(editValues as any)[editKey] ?? ""}
+            onChange={(e) =>
+              setEditValues((prev) => ({
+                ...prev,
+                [editKey]: typeof value === "string" ? e.target.value : Number(e.target.value),
+              }))
+            }
+          />
+        )
       ) : (
         <span className="text-sm font-medium tabular-nums">
           {value != null ? `${typeof value === "number" ? (editKey === "squares" ? (value as number).toFixed(1) : Math.round(value as number)) : value}${unit ? ` ${unit}` : ""}` : "—"}
