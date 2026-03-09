@@ -788,13 +788,27 @@ async function fetchOSMBuildingCandidates(lat: number, lng: number): Promise<Can
 
 async function fetchNJBuildingCandidate(lat: number, lng: number): Promise<CandidateFootprint | null> {
   try {
-    const url = `https://services2.arcgis.com/XVOqAjTOJ5P6ngMu/arcgis/rest/services/Building_Footprints_of_NJ/FeatureServer/0/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    // Use envelope (buffer ~50m) instead of point intersect — geocoded lat/lng may be slightly off the building polygon
+    const buf = 0.0005; // ~50m
+    const envelope = `${lng - buf},${lat - buf},${lng + buf},${lat + buf}`;
+    const url = `https://services2.arcgis.com/XVOqAjTOJ5P6ngMu/arcgis/rest/services/Building_Footprints_of_NJ/FeatureServer/0/query?geometry=${envelope}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json&resultRecordCount=5`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
     if (!res.ok) return null;
     const data = await res.json();
     if (!data.features?.length) return null;
 
-    const feat = data.features[0];
+    // Find the feature nearest to the geocoded point
+    let bestFeat = data.features[0];
+    let bestDist = Infinity;
+    for (const feat of data.features) {
+      if (feat.geometry?.rings?.[0]) {
+        const centroid = polygonCentroid(feat.geometry.rings[0]);
+        const dist = haversineDistFt([lng, lat], centroid);
+        if (dist < bestDist) { bestDist = dist; bestFeat = feat; }
+      }
+    }
+    const feat = bestFeat;
+
     const rings = feat.geometry?.rings;
     if (!rings || rings.length === 0) return null;
 
@@ -814,6 +828,8 @@ async function fetchNJBuildingCandidate(lat: number, lng: number): Promise<Candi
       geometry: { type: "Polygon", coordinates: [ring] },
     };
 
+    console.log(`[Darwin Roof] NJGIN: found building ${featureId} (${areaSqft} sqft, ${roundTo(bestDist)}ft from geocode)`);
+
     return {
       polygon: ring,
       area_sqft: areaSqft,
@@ -826,49 +842,51 @@ async function fetchNJBuildingCandidate(lat: number, lng: number): Promise<Candi
       edge_classifications: edges,
       geojson,
     };
-  } catch { return null; }
+  } catch (e) {
+    console.log("[Darwin Roof] NJGIN fetch failed:", e);
+    return null;
+  }
 }
 
 /** Fetch building footprint from Esri USA Structures (AI-extracted, near-universal US coverage). */
 async function fetchEsriUSAStructuresCandidate(lat: number, lng: number): Promise<CandidateFootprint | null> {
-  try {
-    // Esri USA Structures / USA Building Footprints service
-    const url = `https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/MSBFP2/FeatureServer/0/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
-    if (!res.ok) {
-      // Try alternative endpoint (USA Structures)
-      const altUrl = `https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/USA_Structures_Footprints/FeatureServer/0/query?geometry=${lng},${lat}&geometryType=esriGeometryPoint&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json`;
-      const altRes = await fetch(altUrl, { signal: AbortSignal.timeout(12000) });
-      if (!altRes.ok) return null;
-      const altData = await altRes.json();
-      if (!altData.features?.length) return null;
-      return processEsriFeature(altData.features[0], lat, lng, "USA Structures (Esri)");
-    }
-    const data = await res.json();
-    if (!data.features?.length) {
-      // Fallback: try buffer query (50m)
-      const bufferUrl = `https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/MSBFP2/FeatureServer/0/query?geometry=${lng-0.0005},${lat-0.0005},${lng+0.0005},${lat+0.0005}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json&resultRecordCount=5`;
-      const bufRes = await fetch(bufferUrl, { signal: AbortSignal.timeout(10000) });
-      if (!bufRes.ok) return null;
-      const bufData = await bufRes.json();
-      if (!bufData.features?.length) return null;
-      // Find nearest to geocode point
-      let nearest = bufData.features[0];
-      let nearestDist = Infinity;
-      for (const feat of bufData.features) {
-        if (feat.geometry?.rings?.[0]) {
-          const centroid = polygonCentroid(feat.geometry.rings[0]);
-          const dist = haversineDistFt([lng, lat], centroid);
-          if (dist < nearestDist) { nearestDist = dist; nearest = feat; }
+  // Try multiple endpoints with retry logic
+  const endpoints = [
+    `https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/MSBFP2/FeatureServer/0/query?geometry=${lng - 0.0005},${lat - 0.0005},${lng + 0.0005},${lat + 0.0005}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json&resultRecordCount=5`,
+    `https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/USA_Structures_Footprints/FeatureServer/0/query?geometry=${lng - 0.0005},${lat - 0.0005},${lng + 0.0005},${lat + 0.0005}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json&resultRecordCount=5`,
+  ];
+
+  for (const url of endpoints) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (!data.features?.length) continue;
+
+        // Find nearest to geocode point
+        let nearest = data.features[0];
+        let nearestDist = Infinity;
+        for (const feat of data.features) {
+          if (feat.geometry?.rings?.[0]) {
+            const centroid = polygonCentroid(feat.geometry.rings[0]);
+            const dist = haversineDistFt([lng, lat], centroid);
+            if (dist < nearestDist) { nearestDist = dist; nearest = feat; }
+          }
         }
+        const result = processEsriFeature(nearest, lat, lng, "Microsoft Building Footprints (Esri)");
+        if (result) {
+          console.log(`[Darwin Roof] Esri: found building (${result.area_sqft} sqft, ${roundTo(nearestDist)}ft from geocode, attempt ${attempt + 1})`);
+          return result;
+        }
+      } catch (e) {
+        console.log(`[Darwin Roof] Esri endpoint attempt ${attempt + 1} failed:`, e instanceof Error ? e.message : e);
+        // Brief pause before retry
+        if (attempt === 0) await new Promise(r => setTimeout(r, 500));
       }
-      return processEsriFeature(nearest, lat, lng, "Microsoft Building Footprints (Esri)");
     }
-    return processEsriFeature(data.features[0], lat, lng, "Microsoft Building Footprints (Esri)");
-  } catch (e) {
-    console.log("[Darwin Roof] Esri USA Structures fetch failed:", e);
-    return null;
   }
+  return null;
 }
 
 function processEsriFeature(feat: any, lat: number, lng: number, sourceName: string): CandidateFootprint | null {
