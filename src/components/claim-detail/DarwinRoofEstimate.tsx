@@ -1061,6 +1061,17 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
           </div>
         )}
       </CardContent>
+
+      {estimate && (
+        <RoofConfirmationDialog
+          open={confirmDialogOpen}
+          onOpenChange={setConfirmDialogOpen}
+          estimateId={estimate.id}
+          claimId={claimId}
+          confidenceScore={estimate.confidence_score}
+          onConfirmed={handleConfirmationComplete}
+        />
+      )}
     </Card>
   );
 };
