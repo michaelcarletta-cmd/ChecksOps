@@ -15,6 +15,7 @@ import { useDeclaredPosition } from "@/hooks/useDeclaredPosition";
 import { PositionGateBanner } from "./PositionGateBanner";
 import { publishCarrierDismantler } from "@/lib/darwinDismantlerBus";
 import { DarwinRefinementChat } from "./DarwinRefinementChat";
+import { DarwinCitationWatchdog } from "./DarwinCitationWatchdog";
 
 interface DarwinAutoDraftRebuttalProps {
   claimId: string;
@@ -27,6 +28,8 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
   const [rebuttal, setRebuttal] = useState<string | null>(null);
   const [editableRebuttal, setEditableRebuttal] = useState<string>("");
   const [provisionalOverride, setProvisionalOverride] = useState(false);
+  const [citationWatchdog, setCitationWatchdog] = useState<any>(null);
+  const [jurisdiction, setJurisdiction] = useState<any>(null);
   const { position, isLocked, loading: positionLoading } = useDeclaredPosition(claimId);
 
   // Fetch all strategic intelligence data
@@ -272,6 +275,15 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
       if (data?.result) {
         setRebuttal(data.result);
         setEditableRebuttal(data.result);
+        
+        // Store watchdog results for display
+        if (data?.citation_watchdog) {
+          setCitationWatchdog(data.citation_watchdog);
+        }
+        if (data?.jurisdiction) {
+          setJurisdiction(data.jurisdiction);
+        }
+        
         if (data?.carrierDismantler) {
           publishCarrierDismantler({
             claimId,
@@ -293,7 +305,10 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
 
         toast({
           title: "Rebuttal drafted",
-          description: "Darwin has compiled a comprehensive rebuttal using all available intelligence",
+          description: data?.citation_watchdog 
+            ? `⚠️ Rebuttal ready but ${data.citation_watchdog.wrong_state_citations_found} wrong-state citation(s) detected — review before sending`
+            : "Darwin has compiled a comprehensive rebuttal using all available intelligence",
+          variant: data?.citation_watchdog ? "destructive" : "default",
         });
       }
     } catch (error: any) {
@@ -448,6 +463,7 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
 
         {rebuttal && (
           <div className="space-y-3 pt-4 border-t">
+            <DarwinCitationWatchdog watchdog={citationWatchdog} jurisdiction={jurisdiction} />
             <div className="flex items-center justify-between">
               <h4 className="font-medium text-foreground">Generated Rebuttal</h4>
               <div className="flex gap-2">

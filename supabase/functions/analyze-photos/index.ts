@@ -857,6 +857,31 @@ ${claimContext}
 
     console.log("Photo analysis complete, final report length:", reportContent.length);
 
+    // ── STATE CITATION WATCHDOG — scan for wrong-state references ──────
+    const STATE_CITATION_PATTERNS: Record<string, RegExp[]> = {
+      PA: [/31\s*Pa\.\s*Code/i, /40\s*P\.S\./i, /42\s*Pa\.C\.S/i, /Pennsylvania\s+(Insurance\s+Code|Unfair)/i],
+      NJ: [/N\.J\.S\.A\./i, /N\.J\.A\.C\./i, /New\s+Jersey\s+(Insurance|Unfair|Admin)/i, /11:2-17/],
+      TX: [/Texas\s+Insurance\s+Code/i, /28\s*TAC/i],
+      FL: [/F\.S\.\s*§\s*624/i, /69O-166/i, /Florida\s+(Statute|Insurance)/i],
+      NY: [/N\.Y\.\s*Ins\.\s*Law/i, /11\s*NYCRR/i],
+    };
+    let citationViolations: string[] = [];
+    if (detectedStateCode && reportContent) {
+      for (const [st, patterns] of Object.entries(STATE_CITATION_PATTERNS)) {
+        if (st === detectedStateCode) continue;
+        for (const pattern of patterns) {
+          const matches = reportContent.match(new RegExp(pattern.source, 'gi'));
+          if (matches) {
+            matches.forEach(m => citationViolations.push(`Found ${st} citation "${m}" in output for ${detectedStateCode} claim`));
+          }
+        }
+      }
+      if (citationViolations.length > 0) {
+        console.warn(`[WATCHDOG] ⚠️ WRONG-STATE CITATIONS in photo report (state=${detectedStateCode}):`);
+        citationViolations.forEach(v => console.warn(`  → ${v}`));
+      }
+    }
+
     // Extract which photos the AI referenced in its analysis
     const referencedPhotos = await extractPhotoReferences(reportContent, allPhotoDescriptions, LOVABLE_API_KEY);
     
@@ -889,21 +914,36 @@ ${claimContext}
       console.log("Report saved to database with jobId:", jobId);
     }
 
+    const responseData: any = { 
+      report: reportContent,
+      jobId,
+      photoCount: photos.length,
+      reportType,
+      photoUrls: photoUrls,
+      referencedPhotos: referencedPhotoData,
+      weatherData: weatherData,
+      supportingDocs: supportingDocsInfo,
+      batchesProcessed: batchResults.length,
+      totalBatches,
+      wasLimited,
+      originalPhotoCount: photoIds.length,
+      jurisdiction: detectedStateCode ? {
+        state_code: detectedStateCode,
+        detection_source: (claimData as any)?.state_code ? 'database' : 'address_parse',
+      } : { state_code: null, detection_source: 'undetected' },
+    };
+
+    // Attach watchdog warnings if found
+    if (citationViolations.length > 0) {
+      responseData.citation_watchdog = {
+        wrong_state_citations_found: citationViolations.length,
+        violations: citationViolations,
+        warning: `⚠️ Darwin detected ${citationViolations.length} citation(s) from the WRONG state in this report. Review before sending.`,
+      };
+    }
+
     return new Response(
-      JSON.stringify({ 
-        report: reportContent,
-        jobId,
-        photoCount: photos.length,
-        reportType,
-        photoUrls: photoUrls,
-        referencedPhotos: referencedPhotoData, // Photos the AI specifically cited with context
-        weatherData: weatherData,
-        supportingDocs: supportingDocsInfo,
-        batchesProcessed: batchResults.length,
-        totalBatches,
-        wasLimited,
-        originalPhotoCount: photoIds.length
-      }),
+      JSON.stringify(responseData),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 

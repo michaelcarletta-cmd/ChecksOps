@@ -11,6 +11,7 @@ import { FileText, Download, Grid, Columns, Sparkles, Loader2, Cloud, Wind, Drop
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { htmlElementToPdf } from "@/utils/htmlToPdf";
+import { DarwinCitationWatchdog } from "./DarwinCitationWatchdog";
 
 interface ClaimPhoto {
   id: string;
@@ -144,6 +145,8 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [pollingForResult, setPollingForResult] = useState(false);
   const [generatingReferencedPdf, setGeneratingReferencedPdf] = useState(false);
+  const [citationWatchdog, setCitationWatchdog] = useState<any>(null);
+  const [jurisdictionInfo, setJurisdictionInfo] = useState<any>(null);
   const { toast } = useToast();
 
   // Check for recently completed photo reports when dialog opens
@@ -300,12 +303,24 @@ export function PhotoReportDialog({ open, onOpenChange, photos, claim, claimId }
       setAiReferencedPhotos(data.referencedPhotos || []);
       setAiSupportingDocs(data.supportingDocs || []);
       setWeatherData(data.weatherData || null);
+      if (data.citation_watchdog) {
+        setCitationWatchdog(data.citation_watchdog);
+      }
+      if (data.jurisdiction) {
+        setJurisdictionInfo(data.jurisdiction);
+      }
       if (data.jobId) {
         setCurrentJobId(data.jobId);
       }
       
-      // Notify about referenced photos
-      if (data.referencedPhotos?.length > 0) {
+      // Notify — watchdog warnings take priority
+      if (data.citation_watchdog) {
+        toast({ 
+          title: "⚠️ Wrong-State Citations Detected", 
+          description: `${data.citation_watchdog.wrong_state_citations_found} citation(s) from the wrong state found. Review the report carefully before sending.`,
+          variant: "destructive",
+        });
+      } else if (data.referencedPhotos?.length > 0) {
         toast({ 
           title: "Analysis complete", 
           description: `AI cited ${data.referencedPhotos.length} photos in the report. You can download a PDF with just those photos.`
@@ -994,6 +1009,7 @@ ${photoCardsHtml}
 
             {aiReport && (
               <div className="space-y-3">
+                <DarwinCitationWatchdog watchdog={citationWatchdog} jurisdiction={jurisdictionInfo} />
                 {aiReferencedPhotos.length > 0 && (
                   <div className="border border-primary/20 bg-primary/5 rounded-lg p-4">
                     <h4 className="font-medium mb-2 flex items-center gap-2 text-primary">
