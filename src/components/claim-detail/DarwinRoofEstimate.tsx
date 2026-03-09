@@ -336,25 +336,20 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     toast.success("Estimate updated and confirmed for use");
   };
 
-  const confirmEstimate = async () => {
+  const handleConfirmationComplete = (update: {
+    confirmation_level: ConfirmationLevel;
+    confirmation_basis: ConfirmationBasis;
+    confirmation_notes: string | null;
+    confirmation_strength_score: number;
+    confirmation_attachments: { name: string; path: string; type: string }[] | null;
+    manually_confirmed: boolean;
+  }) => {
     if (!estimate) return;
-    const { error: updateErr } = await supabase
-      .from("claim_roof_measurements")
-      .update({
-        manually_confirmed: true,
-        confirmed_at: new Date().toISOString(),
-        review_required: false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", estimate.id);
-
-    if (updateErr) {
-      toast.error("Failed to confirm");
-      return;
-    }
-
-    setEstimate({ ...estimate, manually_confirmed: true, review_required: false });
-    toast.success("Estimate confirmed — now available for downstream workflows");
+    setEstimate({
+      ...estimate,
+      ...update,
+      review_required: false,
+    });
   };
 
   const handleCandidateSelect = (indexStr: string) => {
