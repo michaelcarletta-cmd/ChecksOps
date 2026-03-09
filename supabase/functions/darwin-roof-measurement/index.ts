@@ -698,123 +698,150 @@ interface SatelliteAnalysis {
   analysis_notes: string;
 }
 
-async function fetchSatelliteImage(lat: number, lng: number): Promise<string | null> {
-  // Try multiple imagery sources in order of preference
-  const sources = [
-    // Google Maps Static (no key needed for low volume, returns jpg)
-    () => {
-      const url = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=20&size=600x600&maptype=satellite&key=`;
-      return { url, name: 'Google Static (no key)' };
-    },
-    // ArcGIS World Imagery - use proper REST export params
-    () => {
-      const spread = 0.0008;
-      const bbox = `${lng - spread},${lat - spread},${lng + spread},${lat + spread}`;
-      const url = `https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/export?bbox=${bbox}&bboxSR=4326&imageSR=4326&size=800,800&format=png32&f=image&transparent=false`;
-      return { url, name: 'ArcGIS World Imagery' };
-    },
-    // Mapbox Static (free tier, no token = watermarked but usable for analysis)
-    () => {
-      const url = `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/${lng},${lat},19,0/600x600@2x?access_token=`;
-      return { url, name: 'Mapbox Satellite' };
-    },
-  ];
-
-  // Primary approach: use ArcGIS tile server directly (most reliable, no export API)
+/** Encode a single tile to base64, returning null on failure. */
+async function fetchTileBase64(url: string): Promise<string | null> {
   try {
-    // Convert lat/lng to tile coordinates at zoom 19 (very detailed)
-    const zoom = 19;
-    const tileX = Math.floor((lng + 180) / 360 * Math.pow(2, zoom));
-    const latRad = lat * Math.PI / 180;
-    const tileY = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, zoom));
-    
-    // Fetch a 3x3 grid of tiles for better coverage
-    const tiles: Uint8Array[] = [];
-    const tileUrls: string[] = [];
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        tileUrls.push(`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${tileY + dy}/${tileX + dx}`);
-      }
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) { await res.text().catch(() => {}); return null; }
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.includes("image")) { await res.text().catch(() => {}); return null; }
+    const buf = await res.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    if (bytes.length < 500) return null;
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  } catch { return null; }
+}
+
+/** Fetch a grid of satellite tiles centered on lat/lng. Returns array of {base64, position}. */
+async function fetchSatelliteTileGrid(
+  lat: number,
+  lng: number,
+  gridSize: number = 3,
+  zoom: number = 20,
+): Promise<{ base64: string; row: number; col: number; tileX: number; tileY: number }[]> {
+  const tileX = Math.floor((lng + 180) / 360 * Math.pow(2, zoom));
+  const latRad = lat * Math.PI / 180;
+  const tileY = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * Math.pow(2, zoom));
+  const half = Math.floor(gridSize / 2);
+
+  console.log(`[Darwin Roof] Fetching ${gridSize}x${gridSize} tile grid at zoom ${zoom}, center: ${tileX},${tileY}`);
+
+  // Build tile fetch promises
+  const tilePromises: { row: number; col: number; url: string; tileX: number; tileY: number }[] = [];
+  for (let dy = -half; dy <= half; dy++) {
+    for (let dx = -half; dx <= half; dx++) {
+      const tx = tileX + dx;
+      const ty = tileY + dy;
+      tilePromises.push({
+        row: dy + half,
+        col: dx + half,
+        tileX: tx,
+        tileY: ty,
+        url: `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${ty}/${tx}`,
+      });
     }
-    
-    console.log(`[Darwin Roof] Fetching 9 satellite tiles at zoom ${zoom}, center tile: ${tileX},${tileY}`);
-    
-    // Just fetch the center tile for now (simpler, still effective for vision AI)
-    const centerUrl = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${tileY}/${tileX}`;
-    console.log(`[Darwin Roof] Tile URL: ${centerUrl}`);
-    
-    const res = await fetch(centerUrl, { signal: AbortSignal.timeout(15000) });
-    console.log(`[Darwin Roof] Tile response: status=${res.status}, content-type=${res.headers.get('content-type')}`);
-    
-    if (res.ok) {
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('image')) {
-        const arrayBuffer = await res.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        console.log(`[Darwin Roof] Tile image size: ${bytes.length} bytes`);
-        
-        if (bytes.length > 500) {
-          let binary = "";
-          for (let i = 0; i < bytes.length; i++) {
-            binary += String.fromCharCode(bytes[i]);
-          }
-          const b64 = btoa(binary);
-          console.log(`[Darwin Roof] ✅ Satellite tile encoded successfully (${b64.length} chars)`);
-          return b64;
-        }
-      } else {
-        const text = await res.text();
-        console.warn(`[Darwin Roof] Tile returned non-image: ${text.substring(0, 200)}`);
-      }
-    } else {
-      const text = await res.text();
-      console.warn(`[Darwin Roof] Tile fetch failed: ${res.status} - ${text.substring(0, 200)}`);
-    }
-  } catch (e) {
-    console.error("[Darwin Roof] Tile-based satellite fetch failed:", e);
   }
 
-  console.warn("[Darwin Roof] All satellite imagery sources failed");
-  return null;
+  // Fetch all tiles in parallel
+  const results = await Promise.all(
+    tilePromises.map(async (t) => {
+      const b64 = await fetchTileBase64(t.url);
+      return b64 ? { base64: b64, row: t.row, col: t.col, tileX: t.tileX, tileY: t.tileY } : null;
+    }),
+  );
+
+  const successful = results.filter((r): r is NonNullable<typeof r> => r !== null);
+  console.log(`[Darwin Roof] Fetched ${successful.length}/${tilePromises.length} tiles successfully`);
+  return successful;
+}
+
+/** Legacy single-tile fetch for backward compatibility. */
+async function fetchSatelliteImage(lat: number, lng: number): Promise<string | null> {
+  const grid = await fetchSatelliteTileGrid(lat, lng, 1, 20);
+  if (grid.length > 0) return grid[0].base64;
+  // Fallback to zoom 19
+  const grid19 = await fetchSatelliteTileGrid(lat, lng, 1, 19);
+  return grid19.length > 0 ? grid19[0].base64 : null;
 }
 
 async function analyzeRoofFromSatellite(
   base64Image: string,
   address: string,
   footprintAreaSqft: number | null,
+  tileGrid?: { base64: string; row: number; col: number }[],
 ): Promise<SatelliteAnalysis | null> {
   const LOVABLE_AI_URL = "https://ai.gateway.lovable.dev/v1";
   const LOVABLE_AI_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_AI_KEY) return null;
 
   try {
-    const systemPrompt = `You are an expert roof analyst reviewing satellite/aerial imagery for insurance claims. Analyze the roof visible in the image and return ONLY valid JSON.
+    const systemPrompt = `You are an expert roof measurement analyst specializing in insurance claims. You are reviewing aerial/satellite imagery to estimate roof characteristics. Return ONLY valid JSON.
 
 JSON schema:
 {
-  "estimated_pitch": string | null (e.g. "6/12", "8/12" — estimate from shadow length/angle if visible, or roof slope appearance),
-  "roof_form": string ("gable" | "hip" | "cross_gable" | "gambrel" | "mansard" | "flat" | "complex" | "unknown"),
+  "estimated_pitch": string | null (e.g. "6/12", "8/12"),
+  "roof_form": string ("gable" | "hip" | "cross_gable" | "cross_hip" | "gambrel" | "mansard" | "flat" | "complex" | "unknown"),
   "roof_color": string (e.g. "dark gray", "brown", "black"),
   "visible_layers": number (count of distinct roof planes/facets visible from above),
   "complexity_notes": string (describe dormers, valleys, ridge lines, extensions, attached structures),
-  "shadow_pitch_estimate": string | null (if shadows are visible, estimate pitch from shadow geometry),
-  "confidence": number (0-85, how confident you are in the analysis based on image clarity),
-  "analysis_notes": string (methodology, what you can/cannot determine from this view)
+  "shadow_pitch_estimate": string | null (if shadows visible, estimate from shadow geometry),
+  "confidence": number (0-85),
+  "analysis_notes": string (methodology, observations)
 }
 
-Rules:
-- Look for shadow angles cast by the roof ridge — longer shadows = steeper pitch
-- Count distinct roof planes visible from above
-- Note any dormers, chimneys, skylights, or protrusions
-- If the image is blurry, cloudy, or obstructed, lower confidence significantly
-- Standard residential pitch range: 4/12 to 10/12
-- Be conservative — this is for insurance claims where accuracy matters
-- A simple rectangular gable has 2 planes; a hip has 4; each dormer adds 2-3`;
+CRITICAL PITCH ESTIMATION RULES:
+1. Most residential homes in NJ have pitches between 6/12 and 10/12. 4/12 is uncommon for main roofs (only garages, porches, additions).
+2. If the roof appears to have visible slope from aerial view (not flat), it's likely 6/12 or steeper.
+3. Shadow analysis: longer shadows relative to roof width = steeper pitch. Compare shadow length to the apparent width of the roof plane.
+4. Ridge visibility: if you can see a clear ridge line with sloping planes on both sides, the pitch is at least 5/12.
+5. If the roof has valleys (diagonal lines where two sloping planes meet), the roof is likely 6/12+ and cross_gable or cross_hip form.
+6. Hip roofs (slopes on ALL four sides) are very common in NJ. Look for triangular planes at the short ends.
 
-    const userPrompt = `Analyze this satellite/aerial image of the property at: ${address}
-${footprintAreaSqft ? `Known footprint area: ${footprintAreaSqft} sqft` : ""}
+CRITICAL FACET COUNTING:
+- A "gable" roof has 2 main facets (front and back slopes)
+- A "hip" roof has 4 facets (front, back, and two end triangles)  
+- Each dormer adds 2-3 facets
+- Each wing/extension adds 2+ facets
+- An L-shaped or T-shaped home typically has 6-8+ facets with valleys
+- Count EVERY distinct plane you can see, including small ones
 
-Examine the roof structure, estimate pitch from shadows if visible, identify the roof form, count visible planes/facets, and note complexity. Return JSON only.`;
+ROOF FORM IDENTIFICATION:
+- "gable": Rectangle roof with ridge along the long axis, sloping down to eaves on two sides. Triangular wall at each end.
+- "hip": All four sides slope. No vertical triangular walls at ends.
+- "cross_gable": Two or more gable sections intersecting at right angles, creating valleys where they meet.
+- "cross_hip": Like cross_gable but with hipped ends instead of vertical gables.
+- "complex": Multiple forms combined, many extensions, dormers, or irregular layout.
+
+Be CONSERVATIVE with confidence. If the image is blurry or tiles are low-res, max confidence is 50%.`;
+
+    // Build the image content array
+    const imageContent: any[] = [];
+    
+    if (tileGrid && tileGrid.length > 1) {
+      // Multi-tile: send grid description + all tile images
+      const gridDesc = `I'm providing ${tileGrid.length} satellite tiles arranged in a grid pattern covering the property and its surroundings. The CENTER tile contains the property at ${address}. Analyze the roof structure visible across these tiles.${footprintAreaSqft ? ` Known footprint area: ~${footprintAreaSqft} sqft.` : ""}
+
+Tiles are arranged in reading order (top-left to bottom-right) in a ${Math.sqrt(tileGrid.length)}×${Math.sqrt(tileGrid.length)} grid. Focus on the CENTER tile for the main roof but use surrounding tiles for context (shadows, scale reference from neighboring houses).`;
+      
+      imageContent.push({ type: "text", text: gridDesc });
+      
+      // Sort tiles by row then col for consistent ordering
+      const sorted = [...tileGrid].sort((a, b) => a.row !== b.row ? a.row - b.row : a.col - b.col);
+      for (const tile of sorted) {
+        const pos = `Row ${tile.row + 1}, Col ${tile.col + 1}${tile.row === Math.floor(sorted.length / 6) && tile.col === Math.floor(sorted.length / 6) ? " (CENTER - property location)" : ""}`;
+        imageContent.push({ type: "text", text: pos });
+        imageContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${tile.base64}` } });
+      }
+    } else {
+      // Single tile fallback
+      imageContent.push({
+        type: "text",
+        text: `Analyze this satellite/aerial image of the property at: ${address}${footprintAreaSqft ? `\nKnown footprint area: ~${footprintAreaSqft} sqft` : ""}\n\nExamine the roof carefully. Count every distinct facet/plane. Estimate pitch from visible slopes and shadows. Identify the roof form. Return JSON only.`,
+      });
+      imageContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64Image}` } });
+    }
 
     const response = await fetch(`${LOVABLE_AI_URL}/chat/completions`, {
       method: "POST",
@@ -823,28 +850,25 @@ Examine the roof structure, estimate pitch from shadows if visible, identify the
         model: "google/gemini-2.5-pro",
         messages: [
           { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: userPrompt },
-              { type: "image_url", image_url: { url: `data:image/png;base64,${base64Image}` } },
-            ],
-          },
+          { role: "user", content: imageContent },
         ],
-        temperature: 0.15,
-        max_tokens: 1500,
+        temperature: 0.1,
+        max_tokens: 2000,
       }),
     });
 
     if (!response.ok) {
-      console.error("Satellite analysis AI error:", response.status);
+      console.error("Satellite analysis AI error:", response.status, await response.text().catch(() => ""));
       return null;
     }
 
     const result = await response.json();
     const content = result.choices?.[0]?.message?.content || "";
     const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
+    if (!jsonMatch) {
+      console.warn("[Darwin Roof] Vision model returned no JSON:", content.substring(0, 300));
+      return null;
+    }
 
     const parsed = JSON.parse(jsonMatch[0]);
     return {
