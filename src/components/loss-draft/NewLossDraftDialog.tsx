@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -18,6 +18,7 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
   const [saving, setSaving] = useState(false);
 
   const [claimId, setClaimId] = useState("");
+  const [mortgageCompanyId, setMortgageCompanyId] = useState("");
   const [servicer, setServicer] = useState("");
   const [contact, setContact] = useState("");
   const [phone, setPhone] = useState("");
@@ -31,7 +32,7 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
     queryFn: async () => {
       const { data } = await supabase
         .from("claims")
-        .select("id, claim_number, policyholder_name")
+        .select("id, claim_number, policyholder_name, mortgage_company_id, loan_number")
         .eq("is_closed", false)
         .order("created_at", { ascending: false })
         .limit(200);
@@ -40,14 +41,57 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
     enabled: open,
   });
 
+  const { data: mortgageCompanies = [] } = useQuery({
+    queryKey: ["mortgage-companies-for-loss-draft"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("mortgage_companies")
+        .select("id, name, contact_name, phone, email, loan_number")
+        .eq("is_active", true)
+        .order("name");
+      return data ?? [];
+    },
+    enabled: open,
+  });
+
+  // When a claim is selected, auto-select its mortgage company if one is linked
+  useEffect(() => {
+    if (!claimId) return;
+    const claim = claims.find(c => c.id === claimId);
+    if (claim?.mortgage_company_id) {
+      setMortgageCompanyId(claim.mortgage_company_id);
+      applyMortgageCompany(claim.mortgage_company_id);
+    }
+    if (claim?.loan_number && !loanNumber) {
+      setLoanNumber(claim.loan_number);
+    }
+  }, [claimId, claims]);
+
+  const applyMortgageCompany = (companyId: string) => {
+    const company = mortgageCompanies.find(m => m.id === companyId);
+    if (company) {
+      setServicer(company.name);
+      setContact(company.contact_name || "");
+      setPhone(company.phone || "");
+      setEmail(company.email || "");
+      if (company.loan_number && !loanNumber) {
+        setLoanNumber(company.loan_number);
+      }
+    }
+  };
+
+  const handleMortgageSelect = (companyId: string) => {
+    setMortgageCompanyId(companyId);
+    applyMortgageCompany(companyId);
+  };
+
   const handleSave = async () => {
     if (!claimId || !servicer) {
-      toast({ title: "Required", description: "Select a claim and enter servicer name.", variant: "destructive" });
+      toast({ title: "Required", description: "Select a claim and mortgage company.", variant: "destructive" });
       return;
     }
     setSaving(true);
     try {
-      // Check for existing active draft for same claim + servicer (idempotent guard)
       const { data: existing } = await supabase
         .from("loss_draft_tracking")
         .select("id")
@@ -79,10 +123,8 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
         .single();
       if (error) throw error;
 
-      // Initialize doc checklist
       await supabase.rpc("init_loss_draft_documents", { p_loss_draft_id: inserted.id });
 
-      // Audit
       await supabase.from("loss_draft_audit_log").insert({
         loss_draft_id: inserted.id,
         action: "created",
@@ -103,7 +145,7 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
   };
 
   const resetForm = () => {
-    setClaimId(""); setServicer(""); setContact(""); setPhone("");
+    setClaimId(""); setMortgageCompanyId(""); setServicer(""); setContact(""); setPhone("");
     setEmail(""); setLoanNumber(""); setAmount(""); setNotes("");
   };
 
@@ -133,8 +175,22 @@ export function NewLossDraftDialog({ onCreated }: { onCreated: () => void }) {
             </Select>
           </div>
           <div>
-            <Label className="text-xs">Mortgage Servicer *</Label>
-            <Input value={servicer} onChange={e => setServicer(e.target.value)} placeholder="e.g. Mr. Cooper" className="h-9" />
+            <Label className="text-xs">Mortgage Company *</Label>
+            <Select value={mortgageCompanyId} onValueChange={handleMortgageSelect}>
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Select mortgage company" />
+              </SelectTrigger>
+              <SelectContent>
+                {mortgageCompanies.map(m => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Mortgage companies are managed in Networking
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
