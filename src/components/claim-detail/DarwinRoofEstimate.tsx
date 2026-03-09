@@ -429,7 +429,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
 
   const AuthorityBadge = ({ fieldKey }: { fieldKey: string }) => {
     const auth = getFieldAuthority(fieldKey);
-    const meta = AUTHORITY_LABELS[auth];
+    const meta = AUTHORITY_LABELS[auth] ?? { label: auth, icon: "?", color: "text-muted-foreground" };
     return (
       <TooltipProvider delayDuration={200}>
         <Tooltip>
