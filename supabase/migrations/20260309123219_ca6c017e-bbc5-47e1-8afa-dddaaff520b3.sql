@@ -1,0 +1,2 @@
+ALTER TABLE public.check_eligibility_results DROP CONSTRAINT check_eligibility_results_recommendation_check;
+ALTER TABLE public.check_eligibility_results ADD CONSTRAINT check_eligibility_results_recommendation_check CHECK (recommendation = ANY (ARRAY['ready_for_deposit'::text, 'endorsements_pending'::text, 'endorsements_complete'::text, 'manual_review_required'::text, 'branch_deposit_recommended'::text, 'request_reissue'::text, 'loss_draft_required'::text]));
