@@ -1008,6 +1008,27 @@ function CheckDetailPanel({
               <DetailRow label="Multi-Payee" value={check.is_multi_payee ? "Yes" : "No"} />
               <DetailRow label="OCR Status" value={check.ocr_status} />
               <Separator />
+              {/* Check Images */}
+              {(frontImageUrl || backImageUrl) && (
+                <div className="space-y-2">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium flex items-center gap-1">
+                    <FileImage className="h-3 w-3" /> Check Images
+                  </p>
+                  {frontImageUrl && (
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-muted-foreground">Front</p>
+                      <img src={frontImageUrl} alt="Check front" className="w-full rounded border border-border object-contain max-h-48" />
+                    </div>
+                  )}
+                  {backImageUrl && (
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-muted-foreground">Back</p>
+                      <img src={backImageUrl} alt="Check back" className="w-full rounded border border-border object-contain max-h-48" />
+                    </div>
+                  )}
+                </div>
+              )}
+              <Separator />
               {check.reviewed_by && (
                 <>
                   <Separator />
