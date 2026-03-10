@@ -129,47 +129,61 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
       // Upload receipt file
       let receiptFilePath: string | null = null;
       if (receiptFile) {
-        const fileExt = receiptFile.name.split('.').pop();
-        const fileName = `${claimId}/receipts/${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
-          .from('claim-files')
-          .upload(fileName, receiptFile);
-        if (!uploadError) {
-          receiptFilePath = fileName;
+        // Check for duplicate file (same name + size already in this claim)
+        const { data: existingFiles } = await supabase
+          .from('claim_files')
+          .select('id, file_name, file_path, folder_id')
+          .eq('claim_id', claimId)
+          .eq('file_name', receiptFile.name)
+          .eq('file_size', receiptFile.size);
 
-          const receiptDate = editDate ? new Date(editDate) : new Date();
-          const monthLabel = receiptDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-          const subfolderName = `Receipts - ${monthLabel}`;
+        if (existingFiles && existingFiles.length > 0) {
+          // File already exists — reuse its path, skip re-upload
+          receiptFilePath = existingFiles[0].file_path;
+          toast.info("File already exists in claim — linking existing copy");
+        } else {
+          const fileExt = receiptFile.name.split('.').pop();
+          const fileName = `${claimId}/receipts/${Date.now()}.${fileExt}`;
+          const { error: uploadError } = await supabase.storage
+            .from('claim-files')
+            .upload(fileName, receiptFile);
+          if (!uploadError) {
+            receiptFilePath = fileName;
 
-          let folderId: string | null = null;
-          const { data: existingFolder } = await supabase
-            .from('claim_folders')
-            .select('id')
-            .eq('claim_id', claimId)
-            .eq('name', subfolderName)
-            .maybeSingle();
+            const receiptDate = editDate ? new Date(editDate) : new Date();
+            const monthLabel = receiptDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+            const subfolderName = `Receipts - ${monthLabel}`;
 
-          if (existingFolder) {
-            folderId = existingFolder.id;
-          } else {
-            const { data: newFolder } = await supabase
+            let folderId: string | null = null;
+            const { data: existingFolder } = await supabase
               .from('claim_folders')
-              .insert({ claim_id: claimId, name: subfolderName, created_by: userData.user?.id })
               .select('id')
-              .single();
-            folderId = newFolder?.id || null;
-          }
+              .eq('claim_id', claimId)
+              .eq('name', subfolderName)
+              .maybeSingle();
 
-          await supabase.from('claim_files').insert({
-            claim_id: claimId,
-            file_name: receiptFile.name,
-            file_path: fileName,
-            file_type: receiptFile.type,
-            file_size: receiptFile.size,
-            folder_id: folderId,
-            uploaded_by: userData.user?.id,
-            source: 'receipt_scan',
-          });
+            if (existingFolder) {
+              folderId = existingFolder.id;
+            } else {
+              const { data: newFolder } = await supabase
+                .from('claim_folders')
+                .insert({ claim_id: claimId, name: subfolderName, created_by: userData.user?.id })
+                .select('id')
+                .single();
+              folderId = newFolder?.id || null;
+            }
+
+            await supabase.from('claim_files').insert({
+              claim_id: claimId,
+              file_name: receiptFile.name,
+              file_path: fileName,
+              file_type: receiptFile.type,
+              file_size: receiptFile.size,
+              folder_id: folderId,
+              uploaded_by: userData.user?.id,
+              source: 'receipt_scan',
+            });
+          }
         }
       }
 
