@@ -26,7 +26,7 @@ const ClientPortal = lazy(() => import("./pages/ClientPortal"));
 const ClientPortalHelp = lazy(() => import("./pages/ClientPortalHelp"));
 const ContractorPortal = lazy(() => import("./pages/ContractorPortal"));
 const Sign = lazy(() => import("./pages/Sign"));
-const TestCompositePreview = lazy(() => import("./pages/TestCompositePreview"));
+
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Workspaces = lazy(() => import("./pages/Workspaces"));
 const WorkspaceDetailPage = lazy(() => import("./pages/WorkspaceDetailPage"));
