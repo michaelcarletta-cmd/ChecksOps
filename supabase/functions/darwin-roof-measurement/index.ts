@@ -2979,18 +2979,78 @@ Deno.serve(async (req) => {
 
       if (estimationTiles && estimationTiles.length > 0) {
         console.log(`[Darwin Roof] No polygon sources available — attempting AI vision footprint estimation from ${estimationTiles.length} tiles...`);
-        const visionCandidate = await estimateFootprintFromVision(estimationTiles, address, geo.lat, geo.lng);
-        if (visionCandidate) {
-          selectedCandidate = visionCandidate;
-          candidates.push(visionCandidate);
-          roofFormInference = inferRoofForm(visionCandidate);
-          console.log(`[Darwin Roof] Vision footprint created: ${visionCandidate.area_sqft} sqft, quality=${visionCandidate.geometry_quality_score}`);
-        } else {
-          console.log("[Darwin Roof] Vision footprint estimation returned no result");
+        try {
+          const visionCandidate = await estimateFootprintFromVision(estimationTiles, address, geo.lat, geo.lng);
+          if (visionCandidate) {
+            selectedCandidate = visionCandidate;
+            candidates.push(visionCandidate);
+            roofFormInference = inferRoofForm(visionCandidate);
+            console.log(`[Darwin Roof] Vision footprint created: ${visionCandidate.area_sqft} sqft, quality=${visionCandidate.geometry_quality_score}`);
+          } else {
+            console.log("[Darwin Roof] Vision footprint estimation returned no result — will use default fallback");
+          }
+        } catch (visionErr) {
+          console.error("[Darwin Roof] Vision footprint estimation threw error:", visionErr);
         }
       } else {
         console.log("[Darwin Roof] No satellite imagery available for footprint estimation fallback");
       }
+    }
+
+    // ── GUARANTEED FALLBACK: Default residential footprint ──
+    // If ALL sources failed (GIS + AI vision), create a default rectangular
+    // footprint using typical US residential dimensions so that eaves, rakes,
+    // ridge, hip, and sqft are NEVER zero when we at least have an address.
+    if (candidates.length === 0 && !selectedCandidate) {
+      console.log("[Darwin Roof] ALL footprint sources exhausted — creating default residential footprint");
+      const defaultLengthFt = 50;
+      const defaultWidthFt = 30;
+      const defaultBearing = 0; // North-aligned
+      const defaultArea = defaultLengthFt * defaultWidthFt; // 1500 sqft
+
+      const halfL = defaultLengthFt / 2;
+      const halfW = defaultWidthFt / 2;
+      const bearingRad = toRad(defaultBearing);
+
+      const defaultCorners: [number, number][] = [];
+      const defaultOffsets = [
+        [-halfL, -halfW],
+        [halfL, -halfW],
+        [halfL, halfW],
+        [-halfL, halfW],
+      ];
+      for (const [along, perp] of defaultOffsets) {
+        const dxFt = along * Math.sin(bearingRad) + perp * Math.cos(bearingRad);
+        const dyFt = along * Math.cos(bearingRad) - perp * Math.sin(bearingRad);
+        const dLat = dyFt / 364000;
+        const dLng = dxFt / (364000 * Math.cos(toRad(geo.lat)));
+        defaultCorners.push([geo.lng + dLng, geo.lat + dLat]);
+      }
+      const defaultRing: number[][] = [...defaultCorners, [defaultCorners[0][0], defaultCorners[0][1]]];
+      const defaultEdges = classifyEdges(defaultRing);
+      const defaultMetadata = buildGeometryMetadata(defaultRing, "Default Residential Fallback", null, geo.lat, geo.lng);
+
+      const defaultCandidate: CandidateFootprint = {
+        polygon: defaultRing,
+        area_sqft: defaultArea,
+        perimeter_ft: roundTo(2 * (defaultLengthFt + defaultWidthFt), 0),
+        source: "Default Residential Fallback (no GIS or vision data)",
+        source_feature_id: null,
+        imagery_date: null,
+        geometry_quality_score: 15,
+        geometry_metadata: defaultMetadata,
+        edge_classifications: defaultEdges,
+        geojson: {
+          type: "Feature",
+          properties: { source: "Default Residential Fallback", length_ft: defaultLengthFt, width_ft: defaultWidthFt },
+          geometry: { type: "Polygon", coordinates: [defaultRing] },
+        },
+      };
+
+      selectedCandidate = defaultCandidate;
+      candidates.push(defaultCandidate);
+      roofFormInference = inferRoofForm(defaultCandidate);
+      console.log(`[Darwin Roof] Default fallback footprint created: ${defaultArea} sqft (${defaultLengthFt}x${defaultWidthFt}ft). Measurements will populate but require manual review.`);
     }
 
     const isReselection = typeof selected_candidate_index === "number";
