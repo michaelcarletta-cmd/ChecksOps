@@ -407,7 +407,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                       </SelectTrigger>
                       <SelectContent>
                         {claimPdfFiles?.length === 0 && (
-                          <div className="px-3 py-2 text-sm text-muted-foreground">No PDF files found for this claim</div>
+                          <div className="px-3 py-2 text-sm text-muted-foreground">No PDF or DOCX files found for this claim</div>
                         )}
                         {claimPdfFiles?.map((file) => (
                           <SelectItem key={file.id} value={file.id}>
