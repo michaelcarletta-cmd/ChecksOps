@@ -99,6 +99,7 @@ function AppRoutes() {
             : <Suspense fallback={<PageLoader />}><Auth /></Suspense>
         }
       />
+      <Route path="/test-composite" element={<Suspense fallback={<PageLoader />}><TestCompositePreview /></Suspense>} />
       <Route path="/sign" element={<Suspense fallback={<PageLoader />}><Sign /></Suspense>} />
       <Route path="/portal" element={<Suspense fallback={<PageLoader />}><PortalLogin /></Suspense>} />
       {/* Redirect unauthenticated portal visitors to PIN login */}
