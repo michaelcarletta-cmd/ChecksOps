@@ -403,7 +403,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select a PDF from claim files" />
+                        <SelectValue placeholder="Select a file from claim files" />
                       </SelectTrigger>
                       <SelectContent>
                         {claimPdfFiles?.length === 0 && (
