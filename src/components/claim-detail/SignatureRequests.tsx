@@ -56,7 +56,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         .select("*")
         .eq("claim_id", claimId)
         .or("file_name.ilike.%.pdf,file_name.ilike.%.docx")
-        .order("created_at", { ascending: false });
+        .order("uploaded_at", { ascending: false });
       if (error) throw error;
       return data;
     },
