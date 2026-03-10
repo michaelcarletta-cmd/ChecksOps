@@ -79,8 +79,23 @@ Deno.serve(async (req) => {
     // Determine image dimensions (use reasonable defaults for check images)
     const imgWidth = 1200;
     const imgHeight = 800;
-    const overlayHeight = 300;
-    const totalHeight = imgHeight + overlayHeight;
+    const stampHeight = 220;
+    const sigBlockHeight = 300;
+    const totalHeight = imgHeight + stampHeight + sigBlockHeight;
+
+    // Build the restrictive endorsement stamp
+    const stampY = imgHeight + 20;
+    const endorsementStamp = `
+      <!-- Restrictive Endorsement Stamp -->
+      <rect x="60" y="${stampY}" width="500" height="190" rx="8" ry="8" fill="none" stroke="#1e293b" stroke-width="2"/>
+      <text x="310" y="${stampY + 30}" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#1e293b">Pay to the Order of:</text>
+      <text x="310" y="${stampY + 55}" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#1e293b">Freedom Adjustment</text>
+      <text x="310" y="${stampY + 85}" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#1e293b">FOR DEPOSIT ONLY</text>
+      <line x1="120" y1="${stampY + 110}" x2="500" y2="${stampY + 110}" stroke="#64748b" stroke-width="0.5"/>
+      <text x="310" y="${stampY + 125}" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#64748b">Client Signature</text>
+      <line x1="120" y1="${stampY + 155}" x2="500" y2="${stampY + 155}" stroke="#64748b" stroke-width="0.5"/>
+      <text x="310" y="${stampY + 170}" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#64748b">Freedom Adjustment Signature</text>
+    `;
 
     const compositeSvg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
@@ -90,10 +105,14 @@ Deno.serve(async (req) => {
          x="0" y="0" width="${imgWidth}" height="${imgHeight}" 
          preserveAspectRatio="xMidYMid meet"/>
   
-  <!-- Endorsement overlay area -->
-  <rect x="0" y="${imgHeight}" width="${imgWidth}" height="${overlayHeight}" fill="#ffffff"/>
-  <line x1="20" y1="${imgHeight + 10}" x2="${imgWidth - 20}" y2="${imgHeight + 10}" stroke="#334155" stroke-width="2"/>
-  <text x="${imgWidth / 2}" y="${imgHeight + 35}" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#1e293b">ENDORSEMENTS</text>
+  <!-- White area below image -->
+  <rect x="0" y="${imgHeight}" width="${imgWidth}" height="${stampHeight + sigBlockHeight}" fill="#ffffff"/>
+  
+  ${endorsementStamp}
+
+  <!-- Individual endorsement signatures -->
+  <line x1="20" y1="${imgHeight + stampHeight}" x2="${imgWidth - 20}" y2="${imgHeight + stampHeight}" stroke="#334155" stroke-width="2"/>
+  <text x="${imgWidth / 2}" y="${imgHeight + stampHeight + 25}" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#1e293b">ENDORSEMENTS</text>
   
   ${overlaySvg}
 </svg>`;
