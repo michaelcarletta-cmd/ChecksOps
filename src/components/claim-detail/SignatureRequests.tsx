@@ -395,7 +395,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
 
                 {sourceType === "claim_file" && (
                   <div>
-                    <Label>Claim PDF File</Label>
+                    <Label>Claim File (PDF or DOCX)</Label>
                     <Select
                       value={selectedClaimFile?.id}
                       onValueChange={(id) =>
