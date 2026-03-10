@@ -739,6 +739,28 @@ function CheckDetailPanel({
     },
   });
 
+  const { data: frontImageUrl } = useQuery({
+    queryKey: ["check-front-img", check?.front_image_path],
+    enabled: !!check?.front_image_path,
+    queryFn: async () => {
+      const { data } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(check!.front_image_path, 3600);
+      return data?.signedUrl ?? null;
+    },
+  });
+
+  const { data: backImageUrl } = useQuery({
+    queryKey: ["check-back-img", check?.back_image_path],
+    enabled: !!check?.back_image_path,
+    queryFn: async () => {
+      const { data } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(check!.back_image_path!, 3600);
+      return data?.signedUrl ?? null;
+    },
+  });
+
   // Fetch reviewer profile for name display
   const { data: reviewerProfile } = useQuery({
     queryKey: ["reviewer-profile", check?.reviewed_by],
