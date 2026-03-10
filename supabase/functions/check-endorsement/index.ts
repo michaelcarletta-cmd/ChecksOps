@@ -152,6 +152,24 @@ async function reEvaluateAfterEndorsement(
       console.error("Auto packet generation failed (non-blocking):", packetErr);
     }
 
+    // Auto-composite endorsement signatures onto back of check image
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      console.log(`[ENDORSEMENT] Triggering signature composite for check ${checkId}`);
+      await fetch(`${supabaseUrl}/functions/v1/composite-endorsement-signatures`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${serviceKey}`,
+        },
+        body: JSON.stringify({ checkId }),
+      });
+      console.log(`[ENDORSEMENT] Signature composite triggered successfully`);
+    } catch (compositeErr) {
+      console.error("Auto signature composite failed (non-blocking):", compositeErr);
+    }
+
     return { allSigned: true, newStatus: check?.is_multi_payee || RESTRICTED_RECOMMENDATIONS.has(originalRec) ? "endorsements_complete" : "ready" };
   }
 
