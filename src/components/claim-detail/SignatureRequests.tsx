@@ -55,7 +55,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         .from("claim_files")
         .select("*")
         .eq("claim_id", claimId)
-        .ilike("file_name", "%.pdf")
+        .or("file_name.ilike.%.pdf,file_name.ilike.%.docx")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
@@ -395,7 +395,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
 
                 {sourceType === "claim_file" && (
                   <div>
-                    <Label>Claim PDF File</Label>
+                    <Label>Claim File (PDF or DOCX)</Label>
                     <Select
                       value={selectedClaimFile?.id}
                       onValueChange={(id) =>
@@ -403,11 +403,11 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select a PDF from claim files" />
+                        <SelectValue placeholder="Select a file from claim files" />
                       </SelectTrigger>
                       <SelectContent>
                         {claimPdfFiles?.length === 0 && (
-                          <div className="px-3 py-2 text-sm text-muted-foreground">No PDF files found for this claim</div>
+                          <div className="px-3 py-2 text-sm text-muted-foreground">No PDF or DOCX files found for this claim</div>
                         )}
                         {claimPdfFiles?.map((file) => (
                           <SelectItem key={file.id} value={file.id}>
