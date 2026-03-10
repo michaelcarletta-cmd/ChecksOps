@@ -209,7 +209,7 @@ function buildEndorsementOverlaySvg(
   checkNumber: string | null,
   carrierName: string | null
 ): string {
-  const baseY = 800; // matches imgHeight
+  const baseY = 800 + 220; // imgHeight + stampHeight
   let blocks = "";
 
   endorsements.forEach((e, i) => {
