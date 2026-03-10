@@ -55,7 +55,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         .from("claim_files")
         .select("*")
         .eq("claim_id", claimId)
-        .ilike("file_name", "%.pdf")
+        .or("file_name.ilike.%.pdf,file_name.ilike.%.docx")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
