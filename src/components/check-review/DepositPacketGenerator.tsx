@@ -169,9 +169,14 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
       <div class="notes">${esc(check.review_notes)}</div>
     ` : "";
 
-    const imgHtml = imageUrl ? `
-      <h2>Check Image</h2>
+    const frontImgHtml = imageUrl ? `
+      <h2>Check Front</h2>
       <img src="${esc(imageUrl)}" alt="Check front" class="check-img" />
+    ` : "";
+
+    const backImgHtml = backImageUrl ? `
+      <h2>Check Back (Endorsements)</h2>
+      <img src="${esc(backImageUrl)}" alt="Check back with endorsements" class="check-img" />
     ` : "";
 
     printWindow.document.write(`<!DOCTYPE html><html><head>
