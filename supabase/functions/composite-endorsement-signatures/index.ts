@@ -168,8 +168,10 @@ Deno.serve(async (req) => {
          x="0" y="0" width="${imgWidth}" height="${imgHeight}" 
          preserveAspectRatio="xMidYMid meet"/>
   
-  <!-- Bank endorsement zone: top horizontal strip -->
-  ${endorsementSvg}
+  <!-- Endorsement zone: left strip, rotated 90° CCW -->
+  <g transform="translate(${stripCenterX}, ${stripCenterY}) rotate(-90) translate(${-stripCenterY}, ${-stripCenterX})">
+    ${endorsementSvg}
+  </g>
 </svg>`;
 
     // 6. Upload composited image
