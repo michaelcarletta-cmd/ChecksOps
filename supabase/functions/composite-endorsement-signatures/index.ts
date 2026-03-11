@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
     // 3. Download the original back image
     const { data: imgBlob, error: dlErr } = await supabase.storage
       .from("claim-files")
-      .download(check.back_image_path);
+      .download(backImagePath);
 
     if (dlErr || !imgBlob) throw new Error(`Cannot download back image: ${dlErr?.message}`);
 
@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
 
     // 4. Build the endorsement overlay in the CORRECT bank zone
     const originalBase64 = uint8ToBase64(originalBytes);
-    const mimeType = check.back_image_path.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+    const mimeType = backImagePath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
 
     // Standard check image dimensions (landscape orientation)
     const imgWidth = 1200;
