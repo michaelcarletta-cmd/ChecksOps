@@ -156,7 +156,11 @@ export default function CheckCommandCenter() {
 
   const deleteCheckMutation = useMutation({
     mutationFn: async (checkId: string) => {
-      // Delete related records first, then the check
+      // Delete all related records first, then the check
+      await supabase.from("check_endorsements").delete().eq("check_id", checkId);
+      await supabase.from("check_endorsement_events").delete().eq("check_id", checkId);
+      await supabase.from("check_review_decisions").delete().eq("check_id", checkId);
+      await supabase.from("check_reissue_requests").delete().eq("check_id", checkId);
       await supabase.from("check_eligibility_results").delete().eq("check_id", checkId);
       await supabase.from("check_audit_log").delete().eq("check_id", checkId);
       await supabase.from("check_payees").delete().eq("check_id", checkId);
