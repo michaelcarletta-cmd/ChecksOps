@@ -123,10 +123,11 @@ Deno.serve(async (req) => {
     const originalBase64 = uint8ToBase64(originalBytes);
     const mimeType = backImagePath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
 
-    // Endorsement zone: upper-left area of the check back
-    const ezLeftPad = Math.round(imgWidth * 0.03);
-    const ezTopPad = Math.round(imgHeight * 0.05);
-    const ezContentWidth = Math.round(imgWidth * 0.35);
+    // Endorsement zone anchored to the check body (not page/container)
+    // Matches UI overlay coordinates for consistent final deposit output.
+    const ezLeftPad = Math.round(imgWidth * 0.18);
+    const ezTopPad = Math.round(imgHeight * 0.10);
+    const ezContentWidth = Math.round(imgWidth * 0.55);
 
     // Scale font sizes relative to image dimensions
     const scaleFactor = Math.min(imgWidth / 1200, imgHeight / 800);
