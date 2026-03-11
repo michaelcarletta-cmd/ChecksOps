@@ -8,16 +8,10 @@ const corsHeaders = {
 
 /**
  * Composite endorsement signatures onto the back of a check image.
- * Triggered automatically when all endorsements are complete.
+ * Endorsements are placed in the standard bank endorsement zone:
+ * a horizontal strip across the TOP of the back of the check.
  *
  * Input: { checkId: string }
- *
- * Flow:
- * 1. Load check + endorsements
- * 2. Download the back check image
- * 3. Draw endorsement signatures onto the image using Canvas
- * 4. Upload the composited image back to storage
- * 5. Update check_intake_items.back_image_path
  */
 
 Deno.serve(async (req) => {
@@ -68,43 +62,106 @@ Deno.serve(async (req) => {
 
     const originalBytes = new Uint8Array(await imgBlob.arrayBuffer());
 
-    // 4. Build the vertical endorsement overlay
+    // 4. Build the endorsement overlay in the CORRECT bank zone
     const originalBase64 = uint8ToBase64(originalBytes);
     const mimeType = check.back_image_path.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
 
-    // Standard check dimensions
+    // Standard check image dimensions (landscape orientation)
     const imgWidth = 1200;
     const imgHeight = 800;
 
-    // Endorsement zone: upper-left area of back of check (traditional bank format)
-    // Typically ~1.5" wide zone on the left side, we use a vertical strip
-    const ezX = 40; // left margin
-    const ezWidth = 340; // endorsement zone width
-    let curY = 40; // start near top
+    // Bank endorsement zone: horizontal strip across the TOP of the back of the check
+    // Standard endorsement area is approximately the top 1.5" of a 6" check = top 25%
+    // We center content within this zone
+    const ezTopMargin = 20;
+    const ezLeftMargin = 60;
+    const ezRightMargin = 60;
+    const ezContentWidth = imgWidth - ezLeftMargin - ezRightMargin;
 
-
-
+    let curY = ezTopMargin;
     let endorsementSvg = "";
 
-    // --- Pay to the Order Of ---
-    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="11" fill="#1e293b" font-weight="bold">Pay to the Order of</text>`;
-    curY += 18;
-    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="14" fill="#1e293b" font-weight="bold">Freedom Adjustment LLC</text>`;
-    curY += 20;
+    // --- Semi-transparent white background for endorsement zone legibility ---
+    const ezHeight = Math.min(imgHeight * 0.30, 260); // top ~30% or 260px max
+    endorsementSvg += `<rect x="0" y="0" width="${imgWidth}" height="${ezHeight}" fill="white" fill-opacity="0.88" rx="0"/>`;
 
-    // --- For Mobile Deposit Only ---
-    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="11" fill="#1e293b" font-weight="bold">For Mobile Deposit Only</text>`;
-    curY += 18;
-    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="14" fill="#1e293b" font-weight="bold">Freedom Adjustment LLC</text>`;
+    // --- Restrictive endorsement legend (centered, bold) ---
+    const centerX = imgWidth / 2;
+    endorsementSvg += `<text x="${centerX}" y="${curY + 14}" font-family="Arial, sans-serif" font-size="12" fill="#1e293b" font-weight="bold" text-anchor="middle">Pay to the Order of</text>`;
     curY += 20;
+    endorsementSvg += `<text x="${centerX}" y="${curY + 14}" font-family="Arial, sans-serif" font-size="15" fill="#1e293b" font-weight="bold" text-anchor="middle">Freedom Adjustment LLC</text>`;
+    curY += 22;
+    endorsementSvg += `<text x="${centerX}" y="${curY + 12}" font-family="Arial, sans-serif" font-size="12" fill="#1e293b" font-weight="bold" text-anchor="middle">For Mobile Deposit Only</text>`;
+    curY += 20;
+    endorsementSvg += `<text x="${centerX}" y="${curY + 14}" font-family="Arial, sans-serif" font-size="15" fill="#1e293b" font-weight="bold" text-anchor="middle">Freedom Adjustment LLC</text>`;
+    curY += 22;
 
     // --- Separator ---
-    endorsementSvg += `<line x1="${ezX}" y1="${curY}" x2="${ezX + ezWidth}" y2="${curY}" stroke="#94a3b8" stroke-width="0.5"/>`;
-    curY += 14;
+    endorsementSvg += `<line x1="${ezLeftMargin}" y1="${curY}" x2="${imgWidth - ezRightMargin}" y2="${curY}" stroke="#94a3b8" stroke-width="1"/>`;
+    curY += 10;
 
-    // --- Render all endorsement signatures vertically (insured first, company last) ---
-    const sigBlock = buildVerticalEndorsementBlock(endorsements, ezX, ezWidth, curY, "insured_first");
-    endorsementSvg += sigBlock.svg;
+    // --- Render endorsement signatures horizontally across the zone ---
+    // Sort: insured/client first, then company/PA last
+    const insured = endorsements.filter((e: EndorsementRecord) =>
+      e.payee_type !== "company" && e.payee_type !== "public_adjuster"
+    );
+    const company = endorsements.filter((e: EndorsementRecord) =>
+      e.payee_type === "company" || e.payee_type === "public_adjuster"
+    );
+    const ordered = [...insured, ...company];
+
+    // If few endorsements, stack vertically centered
+    // If many, use a compact 2-column layout
+    const useColumns = ordered.length > 3;
+    const colWidth = useColumns ? (ezContentWidth / 2) - 10 : ezContentWidth;
+
+    let col = 0;
+    let colStartY = curY;
+
+    for (const e of ordered) {
+      const xOffset = useColumns ? ezLeftMargin + col * (colWidth + 20) : ezLeftMargin;
+
+      // Label
+      const label = e.payee_name + (e.payee_type ? ` (${e.payee_type.replace(/_/g, " ")})` : "");
+      endorsementSvg += `<text x="${xOffset}" y="${curY + 10}" font-family="Arial, sans-serif" font-size="9" fill="#64748b">${escHtml(label)}</text>`;
+      curY += 14;
+
+      // Signature
+      if (e.signature_image_url && e.signature_image_url.startsWith("data:image/")) {
+        const sigWidth = Math.min(colWidth - 20, 280);
+        endorsementSvg += `<image href="${escHtml(e.signature_image_url)}" x="${xOffset}" y="${curY}" width="${sigWidth}" height="36" preserveAspectRatio="xMinYMid meet"/>`;
+        curY += 40;
+      } else if (e.signature_image_url && e.signature_image_url.startsWith("typed:")) {
+        const typedName = e.signature_image_url.slice(6);
+        endorsementSvg += `<text x="${xOffset}" y="${curY + 16}" font-family="'Brush Script MT', cursive, serif" font-size="20" fill="#1e293b">${escHtml(typedName)}</text>`;
+        curY += 24;
+      } else if (e.status === "waived") {
+        endorsementSvg += `<text x="${xOffset}" y="${curY + 10}" font-family="Arial, sans-serif" font-size="9" fill="#94a3b8" font-style="italic">Waived</text>`;
+        curY += 14;
+      } else {
+        curY += 4;
+      }
+
+      // Date
+      if (e.signed_at) {
+        const d = new Date(e.signed_at).toLocaleDateString("en-US");
+        endorsementSvg += `<text x="${xOffset}" y="${curY + 8}" font-family="Arial, sans-serif" font-size="8" fill="#94a3b8">${escHtml(d)}</text>`;
+        curY += 12;
+      }
+
+      curY += 4;
+
+      // Column logic
+      if (useColumns) {
+        col++;
+        if (col >= 2) {
+          col = 0;
+          colStartY = curY;
+        } else {
+          curY = colStartY;
+        }
+      }
+    }
 
     const compositeSvg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
@@ -114,7 +171,7 @@ Deno.serve(async (req) => {
          x="0" y="0" width="${imgWidth}" height="${imgHeight}" 
          preserveAspectRatio="xMidYMid meet"/>
   
-  <!-- Vertical endorsement block overlaid in upper endorsement zone -->
+  <!-- Bank endorsement zone: top horizontal strip -->
   ${endorsementSvg}
 </svg>`;
 
@@ -148,12 +205,13 @@ Deno.serve(async (req) => {
     await supabase.from("check_audit_log").insert({
       check_id: checkId,
       event_type: "endorsement_signatures_composited",
-      event_description: `Darwin composited ${endorsements.length} endorsement signature(s) onto back of check`,
+      event_description: `Composited ${endorsements.length} endorsement signature(s) onto top endorsement zone of check back`,
       event_data: {
         original_back_path: check.back_image_path,
         composited_back_path: compositePath,
         endorsement_count: endorsements.length,
         endorsement_ids: endorsements.map((e: { id: string }) => e.id),
+        placement: "top_horizontal_strip",
       },
     });
 
@@ -203,59 +261,4 @@ interface EndorsementRecord {
   signed_at: string | null;
   signature_image_url: string | null;
   signature_method: string | null;
-}
-
-// Vertical endorsement block builder:
-function buildVerticalEndorsementBlock(
-  endorsements: EndorsementRecord[],
-  ezX: number,
-  ezWidth: number,
-  startY: number,
-  order: "insured_first" | "all"
-): { svg: string; endY: number } {
-  let curY = startY;
-  let svg = "";
-
-  const insured = order === "insured_first"
-    ? endorsements.filter(e => e.payee_type !== "company" && e.payee_type !== "public_adjuster")
-    : [];
-  const company = order === "insured_first"
-    ? endorsements.filter(e => e.payee_type === "company" || e.payee_type === "public_adjuster")
-    : [];
-  const ordered = order === "insured_first" ? [...insured, ...company] : endorsements;
-
-  for (const e of ordered) {
-    // Label
-    const label = e.payee_name + (e.payee_type ? ` (${e.payee_type.replace(/_/g, " ")})` : "");
-    svg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="9" fill="#64748b">${escHtml(label)}</text>`;
-    curY += 14;
-
-    // Signature
-    if (e.signature_image_url && e.signature_image_url.startsWith("data:image/")) {
-      svg += `<image href="${escHtml(e.signature_image_url)}" x="${ezX}" y="${curY}" width="${ezWidth - 20}" height="40" preserveAspectRatio="xMinYMid meet"/>`;
-      curY += 44;
-    } else if (e.signature_image_url && e.signature_image_url.startsWith("typed:")) {
-      const typedName = e.signature_image_url.slice(6);
-      svg += `<text x="${ezX}" y="${curY + 14}" font-family="'Brush Script MT', cursive, serif" font-size="20" fill="#1e293b">${escHtml(typedName)}</text>`;
-      curY += 24;
-    } else if (e.status === "waived") {
-      svg += `<text x="${ezX}" y="${curY + 10}" font-family="Arial, sans-serif" font-size="9" fill="#94a3b8" font-style="italic">Waived</text>`;
-      curY += 16;
-    } else {
-      curY += 4;
-    }
-
-    // Date
-    if (e.signed_at) {
-      const d = new Date(e.signed_at).toLocaleDateString("en-US");
-      svg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="8" fill="#94a3b8">${escHtml(d)}</text>`;
-      curY += 12;
-    }
-
-    // Separator line
-    svg += `<line x1="${ezX}" y1="${curY}" x2="${ezX + ezWidth}" y2="${curY}" stroke="#cbd5e1" stroke-width="0.5"/>`;
-    curY += 10;
-  }
-
-  return { svg, endY: curY };
 }
