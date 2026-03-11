@@ -231,10 +231,9 @@ Deno.serve(async (req) => {
 
     // 7. Flatten SVG → PNG at original resolution using resvg WASM.
     // For very large images, skip rasterization to avoid edge memory crashes.
-    const totalPixels = imgWidth * imgHeight;
-    if (totalPixels > MAX_RASTER_PIXELS) {
+    if (pixelCount > MAX_RASTER_PIXELS) {
       console.log(
-        `[COMPOSITE] Large image ${imgWidth}x${imgHeight} (${totalPixels} px) exceeds raster limit ${MAX_RASTER_PIXELS}; using SVG fallback`,
+        `[COMPOSITE] rasterized vs svg-fallback mode: svg_fallback (${pixelCount} px > ${MAX_RASTER_PIXELS})`,
       );
       return await uploadAndFinalize(
         supabase,
