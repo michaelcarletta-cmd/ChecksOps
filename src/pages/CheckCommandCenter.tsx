@@ -1019,7 +1019,16 @@ function CheckDetailPanel({
     check.status === "endorsements_complete";
 
   const showWatermark = !isFinalDepositImage;
-  const overlayCoordinates = { topPercent: 8, leftPercent: 6, widthPercent: 32 };
+  const overlayCoordinates = { topPercent: 10, leftPercent: 18, widthPercent: 55 };
+  const endorsementStyle: React.CSSProperties = {
+    position: "absolute",
+    top: `${overlayCoordinates.topPercent}%`,
+    left: `${overlayCoordinates.leftPercent}%`,
+    width: `${overlayCoordinates.widthPercent}%`,
+    zIndex: 20,
+    color: "hsl(var(--foreground))",
+    pointerEvents: "none",
+  };
 
   console.log("[CHECK-RENDER] check.status:", check.status);
   console.log("[CHECK-RENDER] endorsementData:", endorsementRows);
