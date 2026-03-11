@@ -878,14 +878,14 @@ function CheckDetailPanel({
       qc.invalidateQueries({ queryKey: ["check-back-img"] });
       onRefresh();
 
-      return signedData?.signedUrl ?? backImageUrl ?? null;
+      return signedData?.signedUrl ?? null;
     } catch (e: any) {
       toast({
         title: "Could not refresh endorsement image",
-        description: e?.message ?? "Using existing back image for print",
+        description: e?.message ?? "Final deposit image could not be generated",
         variant: "destructive",
       });
-      return backImageUrl ?? null;
+      return null;
     } finally {
       setPreparingDepositPrint(false);
     }
