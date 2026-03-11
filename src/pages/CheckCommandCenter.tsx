@@ -1020,14 +1020,14 @@ function CheckDetailPanel({
 
   const showWatermark = !isFinalDepositImage;
   const overlayCoordinates = { topPercent: 10, leftPercent: 18, widthPercent: 55 };
-  const endorsementStyle: React.CSSProperties = {
-    position: "absolute",
+  const endorsementStyle = {
+    position: "absolute" as const,
     top: `${overlayCoordinates.topPercent}%`,
     left: `${overlayCoordinates.leftPercent}%`,
     width: `${overlayCoordinates.widthPercent}%`,
     zIndex: 20,
     color: "hsl(var(--foreground))",
-    pointerEvents: "none",
+    pointerEvents: "none" as const,
   };
 
   console.log("[CHECK-RENDER] check.status:", check.status);
