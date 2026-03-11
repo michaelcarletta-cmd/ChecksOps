@@ -791,7 +791,7 @@ function CheckDetailPanel({
     queryFn: async () => {
       const { data } = await supabase
         .from("check_endorsements")
-        .select("id, payee_name, payee_type, status")
+        .select("id, payee_name, payee_type, status, signature_image_url, signature_method, signed_at")
         .eq("check_id", checkId);
       return data ?? [];
     },
