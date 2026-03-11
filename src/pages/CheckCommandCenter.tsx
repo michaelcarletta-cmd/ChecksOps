@@ -1076,28 +1076,73 @@ function CheckDetailPanel({
                       </div>
                     </div>
                   )}
-                  {backImageUrl && (
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <p className="text-[10px] text-muted-foreground">Back</p>
-                        <a href={backImageUrl} download={`check-${check.check_number ?? check.id}-back`} target="_blank" rel="noopener noreferrer">
-                          <Button variant="ghost" size="icon" className="h-5 w-5"><Download className="h-3 w-3" /></Button>
-                        </a>
-                      </div>
-                      <div className="relative overflow-hidden rounded border border-border">
-                        <img src={backImageUrl} alt="Check back" className="w-full object-contain max-h-48" />
-                        {!allEndorsementsComplete && check.status !== 'approved_for_deposit' && check.status !== 'deposit_ready' && (
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ transform: 'rotate(-30deg)' }}>
-                            <div className="grid grid-cols-2 gap-x-12 gap-y-4 opacity-30">
-                              {Array.from({ length: 6 }).map((_, i) => (
-                                <span key={i} className="text-red-500 font-bold text-4xl tracking-widest" style={{ textShadow: '0 0 2px rgba(180,0,0,0.3)' }}>VOID</span>
-                              ))}
+                  {backImageUrl && (() => {
+                    const signedEndorsements = endorsements.filter(
+                      (e) => e.status === "signed" || e.status === "waived"
+                    );
+                    const showEndorsement = signedEndorsements.length > 0;
+                    const showWatermark = !(check.status === "approved_for_deposit" || check.status === "deposit_ready");
+
+                    console.log("[CHECK-RENDER] endorsementData:", signedEndorsements);
+                    console.log("[CHECK-RENDER] showEndorsement:", showEndorsement);
+                    console.log("[CHECK-RENDER] showWatermark:", showWatermark);
+                    console.log("[CHECK-RENDER] overlay position: top-left endorsement zone");
+
+                    return (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] text-muted-foreground">Back</p>
+                          <a href={backImageUrl} download={`check-${check.check_number ?? check.id}-back`} target="_blank" rel="noopener noreferrer">
+                            <Button variant="ghost" size="icon" className="h-5 w-5"><Download className="h-3 w-3" /></Button>
+                          </a>
+                        </div>
+                        <div className="relative overflow-hidden rounded border border-border">
+                          {/* Base layer: back of check image */}
+                          <img src={backImageUrl} alt="Check back" className="w-full object-contain max-h-48" />
+
+                          {/* Endorsement overlay — always visible when endorsement data exists */}
+                          {showEndorsement && (
+                            <div
+                              className="absolute top-[5%] left-[3%] pointer-events-none select-none"
+                              style={{ width: '35%', zIndex: 10 }}
+                            >
+                              <div className="text-[6px] leading-tight space-y-[1px]">
+                                <p className="font-bold text-foreground text-center">Pay to the order of</p>
+                                <p className="font-bold text-foreground text-center text-[7px]">Freedom Adjustment</p>
+                                <p className="font-bold text-foreground text-center">For Mobile Deposit Only</p>
+                                <p className="font-bold text-foreground text-center text-[7px]">Freedom Adjustment</p>
+                                <div className="border-t border-muted-foreground/40 my-[2px]" />
+                                {signedEndorsements.map((e) => (
+                                  <div key={e.id} className="py-[1px]">
+                                    {e.signature_image_url && e.signature_image_url.startsWith("data:image/") ? (
+                                      <img src={e.signature_image_url} alt={`${e.payee_name} signature`} className="h-4 object-contain" />
+                                    ) : e.signature_image_url && e.signature_image_url.startsWith("typed:") ? (
+                                      <p className="italic text-foreground text-center text-[7px] font-serif">{e.signature_image_url.slice(6)}</p>
+                                    ) : e.status === "waived" ? (
+                                      <p className="italic text-muted-foreground text-center">{e.payee_name} — Waived</p>
+                                    ) : (
+                                      <p className="text-foreground text-center">{e.payee_name}</p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
+
+                          {/* VOID watermark — only in preview mode, hidden when deposit-ready */}
+                          {showWatermark && (
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ transform: 'rotate(-30deg)', zIndex: 20 }}>
+                              <div className="grid grid-cols-2 gap-x-12 gap-y-4 opacity-30">
+                                {Array.from({ length: 6 }).map((_, i) => (
+                                  <span key={i} className="text-red-500 font-bold text-4xl tracking-widest" style={{ textShadow: '0 0 2px rgba(180,0,0,0.3)' }}>VOID</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                   {/* Print for Deposit — only visible when all endorsements complete */}
                   {allEndorsementsComplete && !isDepositBlocked && (
                     <Button
