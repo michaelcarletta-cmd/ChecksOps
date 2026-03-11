@@ -431,9 +431,13 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const tokenParam = url.searchParams.get("token");
 
-    // GET with token → render endorsement signing page
+    // GET with token → redirect to frontend endorsement page
     if (req.method === "GET" && tokenParam) {
-      return await handlePublicEndorsementPage(supabase, supabaseUrl, tokenParam);
+      const appUrl = Deno.env.get("APP_URL") || "https://freedomclaims.lovable.app";
+      return new Response(null, {
+        status: 302,
+        headers: { ...corsHeaders, Location: `${appUrl}/endorse?token=${tokenParam}` },
+      });
     }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
