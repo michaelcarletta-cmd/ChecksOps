@@ -21,6 +21,10 @@ const corsHeaders = {
 // Below that is the "DO NOT WRITE BELOW THIS LINE" area.
 const BOTTOM_ZONE_LIMIT = 0.75;
 
+// Rasterizing very large images can exceed edge runtime memory.
+// For oversized checks we save a composited SVG fallback directly.
+const MAX_RASTER_PIXELS = 8_000_000;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -213,7 +217,29 @@ Deno.serve(async (req) => {
   </g>
 </svg>`;
 
-    // 7. Flatten SVG → PNG at original resolution using resvg WASM
+    // 7. Flatten SVG → PNG at original resolution using resvg WASM.
+    // For very large images, skip rasterization to avoid edge memory crashes.
+    const totalPixels = imgWidth * imgHeight;
+    if (totalPixels > MAX_RASTER_PIXELS) {
+      console.log(
+        `[COMPOSITE] Large image ${imgWidth}x${imgHeight} (${totalPixels} px) exceeds raster limit ${MAX_RASTER_PIXELS}; using SVG fallback`,
+      );
+      return await uploadAndFinalize(
+        supabase,
+        check,
+        backImagePath,
+        checkId,
+        endorsements,
+        new Blob([compositeSvg], { type: "image/svg+xml" }),
+        "image/svg+xml",
+        "_endorsed.svg",
+        imgWidth,
+        imgHeight,
+        curY,
+        maxEndorsementY,
+      );
+    }
+
     let pngBytes: Uint8Array;
     try {
       pngBytes = await render(compositeSvg);
