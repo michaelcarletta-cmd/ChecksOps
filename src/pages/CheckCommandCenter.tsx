@@ -719,6 +719,7 @@ function CheckDetailPanel({
 }) {
   const [detailTab, setDetailTab] = useState("overview");
   const [undoing, setUndoing] = useState(false);
+  const [preparingDepositPrint, setPreparingDepositPrint] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -844,6 +845,48 @@ function CheckDetailPanel({
       toast({ title: "Error", description: e.message, variant: "destructive" });
     } finally {
       setUndoing(false);
+    }
+  };
+
+  const ensureDepositReadyBackImage = async () => {
+    if (!check?.id || !check.back_image_path) return backImageUrl ?? null;
+
+    setPreparingDepositPrint(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const { data, error } = await supabase.functions.invoke("composite-endorsement-signatures", {
+        body: { checkId: check.id },
+        headers: session.session?.access_token
+          ? { Authorization: `Bearer ${session.session.access_token}` }
+          : undefined,
+      });
+
+      if (error) throw error;
+
+      const compositedPath =
+        (data as { composited_path?: string })?.composited_path ?? check.back_image_path;
+
+      const { data: signedData, error: signedErr } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(compositedPath, 3600);
+
+      if (signedErr) throw signedErr;
+
+      qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-back-img"] });
+      onRefresh();
+
+      return signedData?.signedUrl ?? backImageUrl ?? null;
+    } catch (e: any) {
+      toast({
+        title: "Could not refresh endorsement image",
+        description: e?.message ?? "Using existing back image for print",
+        variant: "destructive",
+      });
+      return backImageUrl ?? null;
+    } finally {
+      setPreparingDepositPrint(false);
     }
   };
 
@@ -1060,7 +1103,16 @@ function CheckDetailPanel({
                     <Button
                       size="sm"
                       className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                      onClick={() => {
+                      disabled={preparingDepositPrint}
+                      onClick={async () => {
+                        let printableBackImageUrl = backImageUrl;
+
+                        // Re-generate composited back image right before print so endorsements
+                        // are placed on-check and any stale/watermarked composite is replaced.
+                        if (check.back_image_path) {
+                          printableBackImageUrl = await ensureDepositReadyBackImage();
+                        }
+
                         const printWindow = window.open('', '_blank');
                         if (!printWindow) return;
                         printWindow.document.write(`
@@ -1085,7 +1137,7 @@ function CheckDetailPanel({
                             </div>
                             <button class="no-print" onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;cursor:pointer;">Print</button>
                             ${frontImageUrl ? `<div><p style="font-size:12px;color:#666;">Front</p><img src="${frontImageUrl}" /></div>` : ''}
-                            ${backImageUrl ? `<div><p style="font-size:12px;color:#666;">Back</p><img src="${backImageUrl}" /></div>` : ''}
+                            ${printableBackImageUrl ? `<div><p style="font-size:12px;color:#666;">Back</p><img src="${printableBackImageUrl}" /></div>` : ''}
                           </body>
                           </html>
                         `);
@@ -1093,7 +1145,7 @@ function CheckDetailPanel({
                       }}
                     >
                       <Printer className="h-4 w-4 mr-2" />
-                      Print for Deposit
+                      {preparingDepositPrint ? "Preparing deposit print..." : "Print for Deposit"}
                     </Button>
                   )}
                 </div>
