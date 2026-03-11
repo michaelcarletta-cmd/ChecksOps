@@ -1145,7 +1145,7 @@ function CheckDetailPanel({
                       }}
                     >
                       <Printer className="h-4 w-4 mr-2" />
-                      Print for Deposit
+                      {preparingDepositPrint ? "Preparing deposit print..." : "Print for Deposit"}
                     </Button>
                   )}
                 </div>
