@@ -40,6 +40,10 @@ export default function Sign() {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       
+      console.log("[Sign] Fetching signer data with token:", token);
+      console.log("[Sign] Supabase URL:", supabaseUrl);
+      console.log("[Sign] Anon key present:", !!anonKey);
+      
       const response = await fetch(`${supabaseUrl}/functions/v1/get-signature-document`, {
         method: "POST",
         headers: {
@@ -49,9 +53,11 @@ export default function Sign() {
         body: JSON.stringify({ token }),
       });
 
+      console.log("[Sign] Response status:", response.status);
+      
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(errorText || `HTTP ${response.status}`);
+        console.error("[Sign] Error response:", errorText);
       }
 
       const data = await response.json();
