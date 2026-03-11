@@ -1103,7 +1103,15 @@ function CheckDetailPanel({
                     <Button
                       size="sm"
                       className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                      onClick={() => {
+                      onClick={async () => {
+                        let printableBackImageUrl = backImageUrl;
+
+                        // Re-generate composited back image right before print so endorsements
+                        // are placed on-check and any stale/watermarked composite is replaced.
+                        if (check.back_image_path) {
+                          printableBackImageUrl = await ensureDepositReadyBackImage();
+                        }
+
                         const printWindow = window.open('', '_blank');
                         if (!printWindow) return;
                         printWindow.document.write(`
@@ -1128,7 +1136,7 @@ function CheckDetailPanel({
                             </div>
                             <button class="no-print" onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;cursor:pointer;">Print</button>
                             ${frontImageUrl ? `<div><p style="font-size:12px;color:#666;">Front</p><img src="${frontImageUrl}" /></div>` : ''}
-                            ${backImageUrl ? `<div><p style="font-size:12px;color:#666;">Back</p><img src="${backImageUrl}" /></div>` : ''}
+                            ${printableBackImageUrl ? `<div><p style="font-size:12px;color:#666;">Back</p><img src="${printableBackImageUrl}" /></div>` : ''}
                           </body>
                           </html>
                         `);
