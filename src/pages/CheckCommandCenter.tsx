@@ -907,6 +907,7 @@ function CheckDetailPanel({
           composited_path?: string;
           composited_back_path?: string;
           output_format?: string;
+          db_path_update_committed?: boolean;
         } | null;
 
         originalPath =
@@ -923,6 +924,7 @@ function CheckDetailPanel({
           null;
 
         renderMode = renderMode ?? auditData?.output_format ?? null;
+        dbPathUpdateCommitted = dbPathUpdateCommitted ?? auditData?.db_path_update_committed ?? null;
       }
 
       if (!compositedPath) {
@@ -932,6 +934,7 @@ function CheckDetailPanel({
       console.log("[CHECK-EXPORT] original image path:", originalPath);
       console.log("[CHECK-EXPORT] generated output path:", compositedPath);
       console.log("[CHECK-EXPORT] rasterized vs svg-fallback mode:", renderMode);
+      console.log("[CHECK-EXPORT] DB path update committed:", dbPathUpdateCommitted);
 
       const { data: signedData, error: signedErr } = await supabase.storage
         .from("claim-files")
