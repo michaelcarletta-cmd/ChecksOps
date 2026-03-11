@@ -589,10 +589,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Watermark check images with VOID before storing — prevents fraudulent printing
-      const watermarkedFront = await watermarkCheckImage(frontFile);
-      const watermarkedBack = backFile ? await watermarkCheckImage(backFile) : null;
-
+      // Store clean originals — VOID watermark is rendered as CSS overlay in UI
       const ts = Date.now();
       const claimDir = claimId || "unclaimed";
       const prefix = `checks/${user.id}/${claimDir}`;
@@ -600,7 +597,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 
       const { error: fErr } = await supabase.storage
         .from("claim-files")
-        .upload(frontPath, watermarkedFront);
+        .upload(frontPath, frontFile);
       if (fErr) throw new Error(`Front upload failed: ${fErr.message}`);
 
       let backPath: string | null = null;
