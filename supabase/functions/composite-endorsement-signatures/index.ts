@@ -1,5 +1,11 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
-import { render } from "https://deno.land/x/resvg_wasm@0.2.0/mod.ts";
+let render: ((svg: string) => Promise<Uint8Array>) | null = null;
+try {
+  const resvg = await import("https://deno.land/x/resvg_wasm@0.2.0/mod.ts");
+  render = resvg.render;
+} catch (e) {
+  console.warn("[COMPOSITE] resvg_wasm not available, will use SVG fallback:", e);
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
