@@ -468,7 +468,34 @@ Deno.serve(async (req) => {
             .eq("payee_id", payeeId)
             .limit(1)
             .maybeSingle();
-          if (found) endorsementId = found.id;
+          if (found) {
+            endorsementId = found.id;
+          } else {
+            // Auto-create endorsement from check_payees record
+            const { data: payee } = await supabase
+              .from("check_payees")
+              .select("*")
+              .eq("id", payeeId)
+              .single();
+            if (payee) {
+              const { data: created, error: cErr } = await supabase
+                .from("check_endorsements")
+                .insert({
+                  check_id: payee.check_id,
+                  payee_id: payee.id,
+                  payee_name: payee.payee_name,
+                  payee_type: payee.payee_type ?? "other",
+                  status: "pending",
+                  signature_method: "portal",
+                  contact_email: payee.contact_email ?? (body.email as string | undefined) ?? null,
+                  contact_phone: payee.contact_phone ?? (body.phone as string | undefined) ?? null,
+                })
+                .select("id")
+                .single();
+              if (cErr) console.error("Failed to auto-create endorsement:", cErr.message);
+              if (created) endorsementId = created.id;
+            }
+          }
         }
 
         if (!endorsementId || !method) {
