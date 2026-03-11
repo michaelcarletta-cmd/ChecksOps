@@ -195,6 +195,16 @@ function uint8ToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+interface EndorsementRecord {
+  id: string;
+  payee_name: string;
+  payee_type: string;
+  status: string;
+  signed_at: string | null;
+  signature_image_url: string | null;
+  signature_method: string | null;
+}
+
 // Vertical endorsement block builder:
 function buildVerticalEndorsementBlock(
   endorsements: EndorsementRecord[],
