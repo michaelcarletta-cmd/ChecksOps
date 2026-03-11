@@ -8,8 +8,10 @@ const corsHeaders = {
 
 /**
  * Composite endorsement signatures onto the back of a check image.
- * Endorsements are placed in the standard bank endorsement zone:
- * a horizontal strip across the TOP of the back of the check.
+ * Endorsements are rendered DIRECTLY ON the check image in the
+ * upper-left endorsement zone, following the natural orientation
+ * of the uploaded image. Output is a single flattened SVG ready
+ * for mobile deposit — no watermark, no background boxes.
  *
  * Input: { checkId: string }
  */
@@ -56,7 +58,6 @@ Deno.serve(async (req) => {
       if (originalPath) {
         console.log(`[COMPOSITE] Re-compositing: using original path ${originalPath}`);
         backImagePath = originalPath;
-        // Reset the back_image_path to original before re-compositing
         await supabase.from("check_intake_items")
           .update({ back_image_path: originalPath })
           .eq("id", checkId);
@@ -88,37 +89,47 @@ Deno.serve(async (req) => {
 
     const originalBytes = new Uint8Array(await imgBlob.arrayBuffer());
 
-    // 4. Build the endorsement overlay in the CORRECT bank zone
+    // 4. Detect actual image dimensions from the binary data
+    const dims = detectImageDimensions(originalBytes);
+    const imgWidth = dims.width;
+    const imgHeight = dims.height;
+    console.log(`[COMPOSITE] Detected image dimensions: ${imgWidth}x${imgHeight}`);
+
+    // 5. Build endorsement overlay INSIDE the check image bounds
     const originalBase64 = uint8ToBase64(originalBytes);
     const mimeType = backImagePath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
 
-    // Standard check image dimensions (landscape orientation)
-    const imgWidth = 1200;
-    const imgHeight = 800;
-
-    // Endorsement zone: left strip of check back, NO rotation
-    // Text follows the natural orientation of the uploaded image
+    // Endorsement zone: upper-left area of the check back
+    // Positioned well within the image bounds so it appears ON the check
     const ezLeftPad = Math.round(imgWidth * 0.03);
-    const ezTopPad = Math.round(imgHeight * 0.06);
+    const ezTopPad = Math.round(imgHeight * 0.05);
     const ezContentWidth = Math.round(imgWidth * 0.35);
+
+    // Scale font sizes relative to image dimensions
+    const scaleFactor = Math.min(imgWidth / 1200, imgHeight / 800);
+    const baseFontLg = Math.round(18 * scaleFactor);
+    const baseFontMd = Math.round(14 * scaleFactor);
+    const baseFontSm = Math.round(10 * scaleFactor);
+    const sigHeight = Math.round(44 * scaleFactor);
 
     let curY = ezTopPad;
     let endorsementSvg = "";
 
-    // --- Restrictive endorsement legend ---
     const centerX = ezLeftPad + ezContentWidth / 2;
-    endorsementSvg += `<text x="${centerX}" y="${curY + 16}" font-family="Arial, sans-serif" font-size="14" fill="#1e293b" font-weight="bold" text-anchor="middle">Pay to the order of</text>`;
-    curY += 24;
-    endorsementSvg += `<text x="${centerX}" y="${curY + 18}" font-family="Arial, sans-serif" font-size="18" fill="#1e293b" font-weight="bold" text-anchor="middle">Freedom Adjustment</text>`;
-    curY += 28;
-    endorsementSvg += `<text x="${centerX}" y="${curY + 14}" font-family="Arial, sans-serif" font-size="14" fill="#1e293b" font-weight="bold" text-anchor="middle">For Mobile Deposit Only</text>`;
-    curY += 24;
-    endorsementSvg += `<text x="${centerX}" y="${curY + 18}" font-family="Arial, sans-serif" font-size="18" fill="#1e293b" font-weight="bold" text-anchor="middle">Freedom Adjustment</text>`;
-    curY += 30;
+
+    // --- Restrictive endorsement legend ---
+    endorsementSvg += `<text x="${centerX}" y="${curY + baseFontMd}" font-family="Arial, sans-serif" font-size="${baseFontMd}" fill="#1e293b" font-weight="bold" text-anchor="middle">Pay to the order of</text>`;
+    curY += Math.round(baseFontMd * 1.7);
+    endorsementSvg += `<text x="${centerX}" y="${curY + baseFontLg}" font-family="Arial, sans-serif" font-size="${baseFontLg}" fill="#1e293b" font-weight="bold" text-anchor="middle">Freedom Adjustment</text>`;
+    curY += Math.round(baseFontLg * 1.5);
+    endorsementSvg += `<text x="${centerX}" y="${curY + baseFontMd}" font-family="Arial, sans-serif" font-size="${baseFontMd}" fill="#1e293b" font-weight="bold" text-anchor="middle">For Mobile Deposit Only</text>`;
+    curY += Math.round(baseFontMd * 1.7);
+    endorsementSvg += `<text x="${centerX}" y="${curY + baseFontLg}" font-family="Arial, sans-serif" font-size="${baseFontLg}" fill="#1e293b" font-weight="bold" text-anchor="middle">Freedom Adjustment</text>`;
+    curY += Math.round(baseFontLg * 1.7);
 
     // --- Separator ---
     endorsementSvg += `<line x1="${ezLeftPad}" y1="${curY}" x2="${ezLeftPad + ezContentWidth}" y2="${curY}" stroke="#94a3b8" stroke-width="1"/>`;
-    curY += 14;
+    curY += Math.round(14 * scaleFactor);
 
     // --- Render endorsement signatures ---
     const insured = endorsements.filter((e: EndorsementRecord) =>
@@ -130,41 +141,43 @@ Deno.serve(async (req) => {
     const ordered = [...insured, ...company];
 
     for (const e of ordered) {
-      // Signature
       if (e.signature_image_url && e.signature_image_url.startsWith("data:image/")) {
-        const sigWidth = Math.min(ezContentWidth - 20, 300);
-        endorsementSvg += `<image href="${escHtml(e.signature_image_url)}" x="${ezLeftPad}" y="${curY}" width="${sigWidth}" height="44" preserveAspectRatio="xMinYMid meet"/>`;
-        curY += 48;
+        const sigWidth = Math.min(ezContentWidth - 20, Math.round(300 * scaleFactor));
+        endorsementSvg += `<image href="${escHtml(e.signature_image_url)}" x="${ezLeftPad}" y="${curY}" width="${sigWidth}" height="${sigHeight}" preserveAspectRatio="xMinYMid meet"/>`;
+        curY += sigHeight + Math.round(4 * scaleFactor);
       } else if (e.signature_image_url && e.signature_image_url.startsWith("typed:")) {
         const typedName = e.signature_image_url.slice(6);
-        endorsementSvg += `<text x="${centerX}" y="${curY + 20}" font-family="'Brush Script MT', cursive, serif" font-size="24" fill="#1e293b" text-anchor="middle">${escHtml(typedName)}</text>`;
-        curY += 28;
+        const typedSize = Math.round(24 * scaleFactor);
+        endorsementSvg += `<text x="${centerX}" y="${curY + typedSize}" font-family="'Brush Script MT', cursive, serif" font-size="${typedSize}" fill="#1e293b" text-anchor="middle">${escHtml(typedName)}</text>`;
+        curY += Math.round(typedSize * 1.2);
       } else if (e.status === "waived") {
-        endorsementSvg += `<text x="${centerX}" y="${curY + 12}" font-family="Arial, sans-serif" font-size="10" fill="#94a3b8" font-style="italic" text-anchor="middle">${escHtml(e.payee_name)} — Waived</text>`;
-        curY += 16;
+        endorsementSvg += `<text x="${centerX}" y="${curY + baseFontSm}" font-family="Arial, sans-serif" font-size="${baseFontSm}" fill="#94a3b8" font-style="italic" text-anchor="middle">${escHtml(e.payee_name)} — Waived</text>`;
+        curY += Math.round(baseFontSm * 1.6);
       } else {
-        endorsementSvg += `<text x="${centerX}" y="${curY + 16}" font-family="Arial, sans-serif" font-size="14" fill="#1e293b" text-anchor="middle">${escHtml(e.payee_name)}</text>`;
-        curY += 20;
-        endorsementSvg += `<text x="${centerX}" y="${curY + 10}" font-family="Arial, sans-serif" font-size="10" fill="#64748b" font-style="italic" text-anchor="middle">signature</text>`;
-        curY += 16;
+        endorsementSvg += `<text x="${centerX}" y="${curY + baseFontMd}" font-family="Arial, sans-serif" font-size="${baseFontMd}" fill="#1e293b" text-anchor="middle">${escHtml(e.payee_name)}</text>`;
+        curY += Math.round(baseFontMd * 1.4);
+        endorsementSvg += `<text x="${centerX}" y="${curY + baseFontSm}" font-family="Arial, sans-serif" font-size="${baseFontSm}" fill="#64748b" font-style="italic" text-anchor="middle">signature</text>`;
+        curY += Math.round(baseFontSm * 1.6);
       }
 
-      curY += 8;
+      curY += Math.round(8 * scaleFactor);
     }
 
+    // 6. Build final SVG — image fills entire canvas with preserveAspectRatio="none"
+    //    so endorsements are guaranteed to be ON the check image, not beside it
     const compositeSvg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
      width="${imgWidth}" height="${imgHeight}" viewBox="0 0 ${imgWidth} ${imgHeight}">
-  <!-- Original back check image -->
+  <!-- Original back check image — stretched to fill entire SVG canvas -->
   <image href="data:${mimeType};base64,${originalBase64}" 
          x="0" y="0" width="${imgWidth}" height="${imgHeight}" 
-         preserveAspectRatio="xMidYMid meet"/>
+         preserveAspectRatio="none"/>
   
-  <!-- Endorsement zone: left strip, transparent, follows image orientation -->
+  <!-- Endorsement overlay: rendered directly ON the check image, upper-left zone -->
   ${endorsementSvg}
 </svg>`;
 
-    // 6. Upload composited image
+    // 7. Upload composited image
     const compositePath = backImagePath.replace(
       /(\.[^.]+)$/,
       "_endorsed.svg"
@@ -179,7 +192,7 @@ Deno.serve(async (req) => {
 
     if (uploadErr) throw new Error(`Failed to upload composite: ${uploadErr.message}`);
 
-    // 7. Update check with new back image path
+    // 8. Update check with new back image path
     const { error: updateErr } = await supabase
       .from("check_intake_items")
       .update({
@@ -190,21 +203,22 @@ Deno.serve(async (req) => {
 
     if (updateErr) throw new Error(`Failed to update check: ${updateErr.message}`);
 
-    // 8. Audit log
+    // 9. Audit log
     await supabase.from("check_audit_log").insert({
       check_id: checkId,
       event_type: "endorsement_signatures_composited",
-      event_description: `Composited ${endorsements.length} endorsement signature(s) onto top endorsement zone of check back`,
+      event_description: `Composited ${endorsements.length} endorsement signature(s) onto upper-left endorsement zone of check back (${imgWidth}x${imgHeight})`,
       event_data: {
         original_back_path: check.back_image_path,
         composited_back_path: compositePath,
         endorsement_count: endorsements.length,
         endorsement_ids: endorsements.map((e: { id: string }) => e.id),
-        placement: "top_horizontal_strip",
+        placement: "upper_left_on_image",
+        image_dimensions: { width: imgWidth, height: imgHeight },
       },
     });
 
-    console.log(`[COMPOSITE] Done — saved to ${compositePath}`);
+    console.log(`[COMPOSITE] Done — saved to ${compositePath} (${imgWidth}x${imgHeight})`);
 
     return jsonResp({
       success: true,
@@ -240,6 +254,49 @@ function uint8ToBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode(bytes[i]);
   }
   return btoa(binary);
+}
+
+/**
+ * Detect image dimensions from binary data by reading file headers.
+ * Supports JPEG, PNG. Falls back to 1200x800 if detection fails.
+ */
+function detectImageDimensions(bytes: Uint8Array): { width: number; height: number } {
+  const fallback = { width: 1200, height: 800 };
+
+  try {
+    // PNG: bytes 16-23 contain width (4 bytes) and height (4 bytes) in IHDR
+    if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) {
+      const width = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+      const height = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+      if (width > 0 && height > 0 && width < 20000 && height < 20000) {
+        return { width, height };
+      }
+    }
+
+    // JPEG: scan for SOF0 (0xFFC0) or SOF2 (0xFFC2) marker
+    if (bytes[0] === 0xFF && bytes[1] === 0xD8) {
+      let offset = 2;
+      while (offset < bytes.length - 8) {
+        if (bytes[offset] !== 0xFF) { offset++; continue; }
+        const marker = bytes[offset + 1];
+        // SOF0, SOF1, SOF2, SOF3
+        if (marker >= 0xC0 && marker <= 0xC3) {
+          const height = (bytes[offset + 5] << 8) | bytes[offset + 6];
+          const width = (bytes[offset + 7] << 8) | bytes[offset + 8];
+          if (width > 0 && height > 0 && width < 20000 && height < 20000) {
+            return { width, height };
+          }
+        }
+        const segLen = (bytes[offset + 2] << 8) | bytes[offset + 3];
+        offset += 2 + segLen;
+      }
+    }
+  } catch {
+    // fall through to default
+  }
+
+  console.log("[COMPOSITE] Could not detect image dimensions, using fallback 1200x800");
+  return fallback;
 }
 
 interface EndorsementRecord {

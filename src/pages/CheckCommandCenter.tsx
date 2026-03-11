@@ -1086,7 +1086,7 @@ function CheckDetailPanel({
                       </div>
                       <div className="relative overflow-hidden rounded border border-border">
                         <img src={backImageUrl} alt="Check back" className="w-full object-contain max-h-48" />
-                        {!allEndorsementsComplete && (
+                        {!allEndorsementsComplete && check.status !== 'approved_for_deposit' && check.status !== 'deposit_ready' && (
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ transform: 'rotate(-30deg)' }}>
                             <div className="grid grid-cols-2 gap-x-12 gap-y-4 opacity-30">
                               {Array.from({ length: 6 }).map((_, i) => (
