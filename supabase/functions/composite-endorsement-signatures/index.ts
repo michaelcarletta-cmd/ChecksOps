@@ -21,6 +21,11 @@ const corsHeaders = {
 // Below that is the "DO NOT WRITE BELOW THIS LINE" area.
 const BOTTOM_ZONE_LIMIT = 0.75;
 
+// Endorsement placement (anchored to image/check bounds)
+const ENDORSEMENT_TOP_PCT = 0.10;
+const ENDORSEMENT_LEFT_PCT = 0.18;
+const ENDORSEMENT_WIDTH_PCT = 0.55;
+
 // Rasterizing very large images can exceed edge runtime memory.
 // For oversized checks we save a composited SVG fallback directly.
 const MAX_RASTER_PIXELS = 8_000_000;
