@@ -864,8 +864,55 @@ function CheckDetailPanel({
 
       if (error) throw error;
 
-      const compositedPath =
-        (data as { composited_path?: string })?.composited_path ?? check.back_image_path;
+      const payload = (data ?? {}) as {
+        success?: boolean;
+        error?: string;
+        skipped?: boolean;
+        reason?: string;
+        composited_path?: string;
+        composited_back_path?: string;
+      };
+
+      if (payload.success === false) {
+        throw new Error(payload.error ?? "Final deposit image could not be generated");
+      }
+
+      let compositedPath = payload.composited_path ?? payload.composited_back_path ?? null;
+
+      if (!compositedPath) {
+        const { data: latestCompositeAudit } = await supabase
+          .from("check_audit_log")
+          .select("event_data")
+          .eq("check_id", check.id)
+          .eq("event_type", "endorsement_signatures_composited")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const auditData = (latestCompositeAudit?.event_data ?? null) as {
+          composited_back_path?: string;
+          composited_path?: string;
+        } | null;
+
+        compositedPath = auditData?.composited_path ?? auditData?.composited_back_path ?? null;
+      }
+
+      if (!compositedPath) {
+        const { data: latestCheck } = await supabase
+          .from("check_intake_items")
+          .select("back_image_path")
+          .eq("id", check.id)
+          .maybeSingle();
+
+        const latestPath = latestCheck?.back_image_path ?? null;
+        compositedPath = latestPath && latestPath.includes("_endorsed") ? latestPath : null;
+      }
+
+      if (!compositedPath) {
+        throw new Error("Endorsement composite was not produced for this check");
+      }
+
+      console.log("[CHECK-EXPORT] resolved composited path:", compositedPath);
 
       const { data: signedData, error: signedErr } = await supabase.storage
         .from("claim-files")
