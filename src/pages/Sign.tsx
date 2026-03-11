@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -36,15 +36,25 @@ export default function Sign() {
 
   const fetchSignerData = async () => {
     try {
-      // Fetch all data from the edge function (bypasses RLS)
-      const { data, error: fetchError } = await supabase.functions.invoke(
-        "get-signature-document",
-        { body: { token } }
-      );
+      // Call edge function directly via fetch to avoid JWT requirements
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      
+      const response = await fetch(`${supabaseUrl}/functions/v1/get-signature-document`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": anonKey,
+        },
+        body: JSON.stringify({ token }),
+      });
 
-      if (fetchError) {
-        throw new Error(fetchError.message || "Failed to fetch signature data");
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `HTTP ${response.status}`);
       }
+
+      const data = await response.json();
 
       if (data?.error) {
         throw new Error(data.error);
@@ -130,15 +140,25 @@ export default function Sign() {
     
     setSigning(true);
     try {
-      // Use edge function to submit signature (bypasses RLS securely)
-      const { data, error } = await supabase.functions.invoke(
-        "submit-signature",
-        { body: { token, fieldValues: collectedValues } }
-      );
+      // Call edge function directly via fetch to avoid JWT requirements
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      
+      const response = await fetch(`${supabaseUrl}/functions/v1/submit-signature`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": anonKey,
+        },
+        body: JSON.stringify({ token, fieldValues: collectedValues }),
+      });
 
-      if (error) {
-        throw new Error(error.message || "Failed to submit signature");
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `HTTP ${response.status}`);
       }
+
+      const data = await response.json();
 
       if (data?.error) {
         throw new Error(data.error);
