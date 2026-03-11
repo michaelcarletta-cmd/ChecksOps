@@ -455,7 +455,10 @@ Deno.serve(async (req) => {
 
         let endorsementId = body.endorsementId as string | undefined;
         const payeeId = body.payeeId as string | undefined;
-        const method = body.method as string;
+        const method = body.method as string | undefined;
+
+        console.log("send_endorsement_request body keys:", Object.keys(body));
+        console.log("endorsementId:", endorsementId, "payeeId:", payeeId, "method:", method);
 
         // Support lookup by payeeId if endorsementId not provided
         if (!endorsementId && payeeId) {
@@ -468,7 +471,9 @@ Deno.serve(async (req) => {
           if (found) endorsementId = found.id;
         }
 
-        if (!endorsementId || !method) return json({ error: "endorsementId (or payeeId) and method required" }, 400);
+        if (!endorsementId || !method) {
+          return json({ error: `endorsementId (or payeeId) and method required. Got endorsementId=${endorsementId}, payeeId=${payeeId}, method=${method}` }, 400);
+        }
 
         const { data: endorsement, error: eErr } = await supabase
           .from("check_endorsements")
