@@ -214,7 +214,8 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
       </table>
       ${decisionHtml}
       ${reviewNotesHtml}
-      ${imgHtml}
+      ${frontImgHtml}
+      ${backImgHtml}
       <div class="footer">Generated ${esc(new Date().toLocaleString())} · Freedom Adjustment Deposit Packet</div>
     </body></html>`);
     printWindow.document.close();
