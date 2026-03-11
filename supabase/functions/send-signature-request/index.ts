@@ -443,7 +443,7 @@ Deno.serve(async (req) => {
 
     for (const signer of signersArr) {
       const signUrl = `${appUrl}/sign?token=${signer.access_token}`;
-      const traceId = `esign-${requestId}-${signer.id}`;
+      const traceId = `es-${requestId.substring(0, 8)}-${signer.id.substring(0, 8)}`;
 
       await log(sb, {
         request_id: requestId, signer_id: signer.id, claim_id: claimId,
