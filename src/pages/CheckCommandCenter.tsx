@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -884,14 +885,10 @@ function CheckDetailPanel({
 
       if (error) {
         console.error("[CHECK-EXPORT] Edge function error:", error);
-        // Try to extract detailed message from FunctionsHttpError
-        let detail = error?.message ?? "Unknown error";
-        if (error?.context?.body) {
-          try {
-            const body = await error.context.json();
-            detail = body?.error ?? detail;
-          } catch { /* ignore parse failure */ }
-        }
+        const detail = await getFunctionErrorMessage(
+          error,
+          "Final deposit image could not be generated",
+        );
         throw new Error(detail);
       }
 
@@ -981,7 +978,7 @@ function CheckDetailPanel({
       return signedData?.signedUrl ?? null;
     } catch (e: any) {
       toast({
-        title: "Could not refresh endorsement image",
+        title: "Could not generate final deposit image",
         description: e?.message ?? "Final deposit image could not be generated",
         variant: "destructive",
       });
@@ -1337,11 +1334,6 @@ function CheckDetailPanel({
                         console.log("[CHECK-EXPORT] final export mode:", exportMode);
 
                         if (!printableBackImageUrl) {
-                          toast({
-                            title: "Could not generate final deposit image",
-                            description: "Endorsement overlay could not be composited onto the back image.",
-                            variant: "destructive",
-                          });
                           return;
                         }
 

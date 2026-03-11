@@ -425,11 +425,16 @@ function svgText(
 }
 
 function uint8ToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  // Avoid O(n²) string concatenation for large images (can trigger edge memory limits).
+  const chunkSize = 0x8000;
+  const binaryChunks: string[] = [];
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binaryChunks.push(String.fromCharCode(...chunk));
   }
-  return btoa(binary);
+
+  return btoa(binaryChunks.join(""));
 }
 
 /**
