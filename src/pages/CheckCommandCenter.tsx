@@ -1180,9 +1180,9 @@ function CheckDetailPanel({
                         <img src={frontImageUrl} alt="Check front" className="w-full object-contain max-h-48" />
                         {showWatermark && (
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ transform: "rotate(-30deg)" }}>
-                            <div className="grid grid-cols-2 gap-x-12 gap-y-4 opacity-30">
-                              {Array.from({ length: 6 }).map((_, i) => (
-                                <span key={i} className="text-red-500 font-bold text-4xl tracking-widest" style={{ textShadow: "0 0 2px rgba(180,0,0,0.3)" }}>VOID</span>
+                            <div className="grid grid-cols-2 gap-x-8 gap-y-6 opacity-[0.07]">
+                              {Array.from({ length: 4 }).map((_, i) => (
+                                <span key={i} className="text-destructive font-bold text-3xl tracking-widest">VOID</span>
                               ))}
                             </div>
                           </div>
@@ -1213,33 +1213,65 @@ function CheckDetailPanel({
 
                         {hasEndorsement && (
                           <div className="endorsement-overlay absolute select-none overflow-hidden" style={endorsementStyle}>
-                            <div className="text-[6px] leading-tight space-y-[1px] font-semibold">
-                              {endorsementText.split("\n").map((line) => (
-                                <p key={line} className="text-center">{line}</p>
-                              ))}
-                              <div className="border-t border-border/70 my-[2px]" />
-                              {endorsementRows.map((e) => (
-                                <div key={e.id} className="py-[1px]">
-                                  {e.signature_image_url && e.signature_image_url.startsWith("data:image/") ? (
-                                    <img src={e.signature_image_url} alt={`${e.payee_name} signature`} className="h-4 object-contain" />
-                                  ) : e.signature_image_url && e.signature_image_url.startsWith("typed:") ? (
-                                    <p className="italic text-center text-[7px] font-serif">{e.signature_image_url.slice(6)}</p>
-                                  ) : e.status === "waived" ? (
-                                    <p className="italic text-center">{e.payee_name} — Waived</p>
-                                  ) : (
-                                    <p className="text-center">{e.payee_name}</p>
-                                  )}
+                            <div className="text-[10px] leading-snug space-y-[2px] font-semibold">
+                              <p className="text-center text-[9px]">Pay to the order of</p>
+                              <p className="text-center text-[11px] font-bold">Freedom Adjustment</p>
+                              <p className="text-center text-[9px] font-bold">For Mobile Deposit Only</p>
+                              <p className="text-center text-[11px] font-bold">Freedom Adjustment</p>
+                              <p className="text-center text-[9px]">By: Michael Carletta</p>
+                              <div className="border-t border-border/70 my-[3px]" />
+                              {endorsementRows.map((e) => {
+                                // Skip rendering Freedom Adjustment / Michael Carletta separately — already grouped above
+                                const nameLC = e.payee_name.toLowerCase();
+                                if (nameLC.includes("freedom") || nameLC.includes("carletta")) return null;
+                                return (
+                                  <div key={e.id} className="py-[1px]">
+                                    {e.signature_image_url && e.signature_image_url.startsWith("data:image/") ? (
+                                      <>
+                                        <p className="text-center text-[9px]">{e.payee_name}</p>
+                                        <img src={e.signature_image_url} alt={`${e.payee_name} signature`} className="h-5 mx-auto object-contain" />
+                                      </>
+                                    ) : e.signature_image_url && e.signature_image_url.startsWith("typed:") ? (
+                                      <p className="italic text-center text-[10px] font-serif">{e.signature_image_url.slice(6)}</p>
+                                    ) : e.status === "waived" ? (
+                                      <p className="italic text-center text-[9px]">{e.payee_name} — Waived</p>
+                                    ) : (
+                                      <p className="text-center text-[9px]">{e.payee_name}</p>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                              {/* Render Freedom/Carletta grouped signature at the end */}
+                              {endorsementRows.filter((e) => {
+                                const n = e.payee_name.toLowerCase();
+                                return n.includes("freedom") || n.includes("carletta");
+                              }).length > 0 && (
+                                <div className="pt-[2px]">
+                                  <p className="text-center text-[10px] font-bold">Freedom Adjustment</p>
+                                  <p className="text-center text-[9px]">By: Michael Carletta</p>
+                                  {endorsementRows.filter((e) => {
+                                    const n = e.payee_name.toLowerCase();
+                                    return (n.includes("freedom") || n.includes("carletta")) && e.signature_image_url;
+                                  }).slice(0, 1).map((e) => (
+                                    <div key={`sig-${e.id}`}>
+                                      {e.signature_image_url?.startsWith("data:image/") ? (
+                                        <img src={e.signature_image_url} alt="Carletta signature" className="h-5 mx-auto object-contain" />
+                                      ) : e.signature_image_url?.startsWith("typed:") ? (
+                                        <p className="italic text-center text-[10px] font-serif">{e.signature_image_url.slice(6)}</p>
+                                      ) : null}
+                                    </div>
+                                  ))}
                                 </div>
-                              ))}
+                              )}
                             </div>
                           </div>
                         )}
 
                         {showWatermark && (
                           <div className="void-watermark absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ transform: "rotate(-30deg)", zIndex: 30 }}>
-                            <div className="grid grid-cols-2 gap-x-12 gap-y-4 opacity-30">
-                              {Array.from({ length: 6 }).map((_, i) => (
-                                <span key={i} className="text-destructive font-bold text-4xl tracking-widest" style={{ textShadow: "0 0 2px hsl(var(--destructive) / 0.3)" }}>VOID</span>
+                            <div className="grid grid-cols-2 gap-x-8 gap-y-6 opacity-[0.07]">
+                              {Array.from({ length: 4 }).map((_, i) => (
+                                <span key={i} className="text-destructive font-bold text-3xl tracking-widest">VOID</span>
                               ))}
                             </div>
                           </div>
