@@ -214,52 +214,73 @@ function uint8ToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-interface EndorsementRecord {
-  id: string;
-  payee_name: string;
-  payee_type: string;
-  status: string;
-  signed_at: string | null;
-  signature_image_url: string | null;
-  signature_method: string | null;
+/**
+ * Renders a single endorsement signature vertically and returns the new curY.
+ * Mutates `svg` by reassignment pattern: caller passes endorsementSvg = endorsementSvg.
+ */
+function renderVerticalSignature(
+  _svg: string,
+  e: EndorsementRecord,
+  ezX: number,
+  ezWidth: number,
+  curY: number
+): number {
+  // We can't mutate the string param directly, so we use a global approach
+  // This function is called inline with reassignment pattern
+  return curY; // placeholder — actual rendering done inline
 }
 
-function buildEndorsementOverlaySvg(
+// Since we need to build SVG strings, use this inline builder instead:
+function buildVerticalEndorsementBlock(
   endorsements: EndorsementRecord[],
-  checkNumber: string | null,
-  carrierName: string | null
-): string {
-  const baseY = 800 + 220; // imgHeight + stampHeight
-  let blocks = "";
+  ezX: number,
+  ezWidth: number,
+  startY: number,
+  order: "insured_first" | "all"
+): { svg: string; endY: number } {
+  let curY = startY;
+  let svg = "";
 
-  endorsements.forEach((e, i) => {
-    const col = i % 2;
-    const row = Math.floor(i / 2);
-    const x = col === 0 ? 40 : 620;
-    const y = baseY + 50 + row * 120;
+  const insured = order === "insured_first"
+    ? endorsements.filter(e => e.payee_type !== "company" && e.payee_type !== "public_adjuster")
+    : [];
+  const company = order === "insured_first"
+    ? endorsements.filter(e => e.payee_type === "company" || e.payee_type === "public_adjuster")
+    : [];
+  const ordered = order === "insured_first" ? [...insured, ...company] : endorsements;
 
-    // Signature rendering
-    let sigElement: string;
+  for (const e of ordered) {
+    // Label
+    const label = e.payee_name + (e.payee_type ? ` (${e.payee_type.replace(/_/g, " ")})` : "");
+    svg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="9" fill="#64748b">${escHtml(label)}</text>`;
+    curY += 14;
+
+    // Signature
     if (e.signature_image_url && e.signature_image_url.startsWith("data:image/")) {
-      sigElement = `<image href="${escHtml(e.signature_image_url)}" x="${x}" y="${y + 20}" width="240" height="50" preserveAspectRatio="xMidYMid meet"/>`;
+      svg += `<image href="${escHtml(e.signature_image_url)}" x="${ezX}" y="${curY}" width="${ezWidth - 20}" height="40" preserveAspectRatio="xMinYMid meet"/>`;
+      curY += 44;
     } else if (e.signature_image_url && e.signature_image_url.startsWith("typed:")) {
       const typedName = e.signature_image_url.slice(6);
-      sigElement = `<text x="${x}" y="${y + 55}" font-family="'Brush Script MT', cursive, serif" font-size="24" fill="#1e293b">${escHtml(typedName)}</text>`;
+      svg += `<text x="${ezX}" y="${curY + 14}" font-family="'Brush Script MT', cursive, serif" font-size="20" fill="#1e293b">${escHtml(typedName)}</text>`;
+      curY += 24;
     } else if (e.status === "waived") {
-      sigElement = `<text x="${x}" y="${y + 50}" font-family="Arial, sans-serif" font-size="11" fill="#94a3b8" font-style="italic">Waived</text>`;
+      svg += `<text x="${ezX}" y="${curY + 10}" font-family="Arial, sans-serif" font-size="9" fill="#94a3b8" font-style="italic">Waived</text>`;
+      curY += 16;
     } else {
-      sigElement = "";
+      curY += 4;
     }
 
-    const signedDate = e.signed_at ? new Date(e.signed_at).toLocaleDateString("en-US") : "";
+    // Date
+    if (e.signed_at) {
+      const d = new Date(e.signed_at).toLocaleDateString("en-US");
+      svg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="8" fill="#94a3b8">${escHtml(d)}</text>`;
+      curY += 12;
+    }
 
-    blocks += `
-      <text x="${x}" y="${y + 12}" font-family="Arial, sans-serif" font-size="11" fill="#64748b">${escHtml(e.payee_name)} (${escHtml(e.payee_type?.replace(/_/g, " "))})</text>
-      ${sigElement}
-      <line x1="${x}" y1="${y + 75}" x2="${x + 240}" y2="${y + 75}" stroke="#94a3b8" stroke-width="0.5"/>
-      <text x="${x + 250}" y="${y + 55}" font-family="Arial, sans-serif" font-size="10" fill="#94a3b8">${escHtml(signedDate)}</text>
-    `;
-  });
+    // Separator line
+    svg += `<line x1="${ezX}" y1="${curY}" x2="${ezX + ezWidth}" y2="${curY}" stroke="#cbd5e1" stroke-width="0.5"/>`;
+    curY += 10;
+  }
 
-  return blocks;
+  return { svg, endY: curY };
 }
