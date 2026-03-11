@@ -978,7 +978,7 @@ function CheckDetailPanel({
       return signedData?.signedUrl ?? null;
     } catch (e: any) {
       toast({
-        title: "Could not refresh endorsement image",
+        title: "Could not generate final deposit image",
         description: e?.message ?? "Final deposit image could not be generated",
         variant: "destructive",
       });
