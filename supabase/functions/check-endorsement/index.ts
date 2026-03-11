@@ -453,9 +453,22 @@ Deno.serve(async (req) => {
         const { data: ud, error: ae } = await anon.auth.getUser(authToken);
         if (ae || !ud?.user) return json({ error: "Unauthorized" }, 401);
 
-        const endorsementId = body.endorsementId as string;
+        let endorsementId = body.endorsementId as string | undefined;
+        const payeeId = body.payeeId as string | undefined;
         const method = body.method as string;
-        if (!endorsementId || !method) return json({ error: "endorsementId and method required" }, 400);
+
+        // Support lookup by payeeId if endorsementId not provided
+        if (!endorsementId && payeeId) {
+          const { data: found } = await supabase
+            .from("check_endorsements")
+            .select("id")
+            .eq("payee_id", payeeId)
+            .limit(1)
+            .maybeSingle();
+          if (found) endorsementId = found.id;
+        }
+
+        if (!endorsementId || !method) return json({ error: "endorsementId (or payeeId) and method required" }, 400);
 
         const { data: endorsement, error: eErr } = await supabase
           .from("check_endorsements")
