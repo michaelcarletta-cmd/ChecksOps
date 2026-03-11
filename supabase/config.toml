@@ -17,3 +17,9 @@ verify_jwt = false
 
 [functions.darwin-roof-measurement]
 verify_jwt = false
+
+[functions.get-signature-document]
+verify_jwt = false
+
+[functions.submit-signature]
+verify_jwt = false
