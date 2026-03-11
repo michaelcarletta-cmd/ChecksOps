@@ -874,7 +874,7 @@ function CheckDetailPanel({
         original_back_image_path?: string;
         endorsed_back_image_path?: string;
         output_format?: string;
-      };
+        db_path_update_committed?: boolean;
 
       if (payload.success === false) {
         throw new Error(payload.error ?? "Final deposit image could not be generated");
