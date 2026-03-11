@@ -1213,56 +1213,56 @@ function CheckDetailPanel({
 
                         {hasEndorsement && (
                           <div className="endorsement-overlay absolute select-none overflow-hidden" style={endorsementStyle}>
-                            <div className="text-[10px] leading-snug space-y-[2px] font-semibold">
-                              <p className="text-center text-[9px]">Pay to the order of</p>
-                              <p className="text-center text-[11px] font-bold">Freedom Adjustment</p>
-                              <p className="text-center text-[9px] font-bold">For Mobile Deposit Only</p>
-                              <p className="text-center text-[11px] font-bold">Freedom Adjustment</p>
-                              <p className="text-center text-[9px]">By: Michael Carletta</p>
-                              <div className="border-t border-border/70 my-[3px]" />
+                            <div className="leading-tight font-semibold" style={{ lineHeight: 1.15 }}>
+                              {/* Header */}
+                              <p className="text-center text-[10px]">Pay to the order of</p>
+                              {/* Company payee — 1.3x header */}
+                              <p className="text-center text-[13px] font-bold mt-[2px]">Freedom Adjustment</p>
+                              {/* Mobile deposit — same as header */}
+                              <p className="text-center text-[10px] font-bold mt-[2px]">For Mobile Deposit Only</p>
+
+                              {/* Separator before signatures */}
+                              <div className="border-t border-border/70 my-[5px]" />
+
+                              {/* Client signatures first (non-Freedom, non-Carletta) */}
                               {endorsementRows.map((e) => {
-                                // Skip rendering Freedom Adjustment / Michael Carletta separately — already grouped above
                                 const nameLC = e.payee_name.toLowerCase();
                                 if (nameLC.includes("freedom") || nameLC.includes("carletta")) return null;
                                 return (
-                                  <div key={e.id} className="py-[1px]">
+                                  <div key={e.id} className="mt-[4px]">
                                     {e.signature_image_url && e.signature_image_url.startsWith("data:image/") ? (
                                       <>
-                                        <p className="text-center text-[9px]">{e.payee_name}</p>
-                                        <img src={e.signature_image_url} alt={`${e.payee_name} signature`} className="h-5 mx-auto object-contain" />
+                                        <p className="text-center text-[12px] font-medium">{e.payee_name}</p>
+                                        <img src={e.signature_image_url} alt={`${e.payee_name} signature`} className="h-7 mx-auto object-contain" />
                                       </>
                                     ) : e.signature_image_url && e.signature_image_url.startsWith("typed:") ? (
-                                      <p className="italic text-center text-[10px] font-serif">{e.signature_image_url.slice(6)}</p>
+                                      <p className="italic text-center text-[13px] font-serif">{e.signature_image_url.slice(6)}</p>
                                     ) : e.status === "waived" ? (
-                                      <p className="italic text-center text-[9px]">{e.payee_name} — Waived</p>
+                                      <p className="italic text-center text-[11px]">{e.payee_name} — Waived</p>
                                     ) : (
-                                      <p className="text-center text-[9px]">{e.payee_name}</p>
+                                      <p className="text-center text-[12px] font-medium">{e.payee_name}</p>
                                     )}
                                   </div>
                                 );
                               })}
-                              {/* Render Freedom/Carletta grouped signature at the end */}
-                              {endorsementRows.filter((e) => {
-                                const n = e.payee_name.toLowerCase();
-                                return n.includes("freedom") || n.includes("carletta");
-                              }).length > 0 && (
-                                <div className="pt-[2px]">
-                                  <p className="text-center text-[10px] font-bold">Freedom Adjustment</p>
-                                  <p className="text-center text-[9px]">By: Michael Carletta</p>
-                                  {endorsementRows.filter((e) => {
-                                    const n = e.payee_name.toLowerCase();
-                                    return (n.includes("freedom") || n.includes("carletta")) && e.signature_image_url;
-                                  }).slice(0, 1).map((e) => (
-                                    <div key={`sig-${e.id}`}>
-                                      {e.signature_image_url?.startsWith("data:image/") ? (
-                                        <img src={e.signature_image_url} alt="Carletta signature" className="h-5 mx-auto object-contain" />
-                                      ) : e.signature_image_url?.startsWith("typed:") ? (
-                                        <p className="italic text-center text-[10px] font-serif">{e.signature_image_url.slice(6)}</p>
-                                      ) : null}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
+
+                              {/* Freedom Adjustment / By: Michael Carletta — always grouped */}
+                              <div className="mt-[6px]">
+                                <p className="text-center text-[13px] font-bold">Freedom Adjustment</p>
+                                <p className="text-center text-[11px]">By: Michael Carletta</p>
+                                {endorsementRows.filter((e) => {
+                                  const n = e.payee_name.toLowerCase();
+                                  return (n.includes("freedom") || n.includes("carletta")) && e.signature_image_url;
+                                }).slice(0, 1).map((e) => (
+                                  <div key={`sig-${e.id}`} className="mt-[2px]">
+                                    {e.signature_image_url?.startsWith("data:image/") ? (
+                                      <img src={e.signature_image_url} alt="Carletta signature" className="h-7 mx-auto object-contain" />
+                                    ) : e.signature_image_url?.startsWith("typed:") ? (
+                                      <p className="italic text-center text-[13px] font-serif">{e.signature_image_url.slice(6)}</p>
+                                    ) : null}
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           </div>
                         )}

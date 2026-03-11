@@ -134,13 +134,14 @@ Deno.serve(async (req) => {
     const ezTopPad = Math.round(imgHeight * ENDORSEMENT_TOP_PCT);
     const ezContentWidth = Math.round(imgWidth * ENDORSEMENT_WIDTH_PCT);
 
-    // Scale font sizes relative to image dimensions — sized 35-50% larger
+    // Scale font sizes relative to image dimensions
+    // Header = base, company = 1.3x header, signatures = 1.2–1.3x header
     const scaleFactor = Math.min(imgWidth / 1200, imgHeight / 800);
-    const headerFont = Math.max(22, Math.round(32 * scaleFactor));   // "Pay to the order of" — 2.2x
-    const companyFont = Math.max(18, Math.round(28 * scaleFactor));  // company/payee — 1.7x
-    const bodyFont = Math.max(16, Math.round(24 * scaleFactor));     // "For Mobile Deposit Only" — 1.7x
-    const sigNameFont = Math.max(16, Math.round(26 * scaleFactor));  // signature names — 1.8x
-    const sigHeight = Math.max(50, Math.round(72 * scaleFactor));    // signature image height — 1.6x
+    const headerFont = Math.max(20, Math.round(28 * scaleFactor));     // base header
+    const companyFont = Math.round(headerFont * 1.3);                  // 1.3x header
+    const bodyFont = headerFont;                                       // same as header
+    const sigNameFont = Math.round(headerFont * 1.25);                 // 1.2–1.3x header — signatures most prominent
+    const sigHeight = Math.max(55, Math.round(80 * scaleFactor));      // signature image height
 
     let curY = ezTopPad;
     let endorsementSvg = "";
@@ -148,85 +149,71 @@ Deno.serve(async (req) => {
     const centerX = ezLeftPad + ezContentWidth / 2;
 
     // --- Restrictive endorsement legend ---
+    // "Pay to the order of" — base header
     endorsementSvg += svgText(centerX, curY + headerFont, headerFont, "#1e293b", "bold", "Pay to the order of");
-    curY += Math.round(headerFont * 1.6);
+    curY += Math.round(headerFont * 1.3);
+    // "Freedom Adjustment" — 1.3x header (company payee)
     endorsementSvg += svgText(centerX, curY + companyFont, companyFont, "#1e293b", "bold", "Freedom Adjustment");
-    curY += Math.round(companyFont * 1.5);
+    curY += Math.round(companyFont * 1.25);
+    // "For Mobile Deposit Only" — same as header
     endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#1e293b", "bold", "For Mobile Deposit Only");
-    curY += Math.round(bodyFont * 1.6);
-    endorsementSvg += svgText(centerX, curY + companyFont, companyFont, "#1e293b", "bold", "Freedom Adjustment");
-    curY += Math.round(companyFont * 1.4);
-    // "By: Michael Carletta" — grouped with company line
-    endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#1e293b", "normal", "By: Michael Carletta");
-    curY += Math.round(bodyFont * 1.7);
+    curY += Math.round(bodyFont * 1.4);
 
     // --- Separator ---
     endorsementSvg += `<line x1="${ezLeftPad}" y1="${curY}" x2="${ezLeftPad + ezContentWidth}" y2="${curY}" stroke="#94a3b8" stroke-width="2"/>`;
-    curY += Math.round(18 * scaleFactor);
+    curY += Math.round(14 * scaleFactor);
 
     // --- Render endorsement signatures ---
-    // Group company endorsements with their signer (Freedom Adjustment + Michael Carletta)
-    const insured = endorsements.filter((e: EndorsementRecord) =>
-      e.payee_type !== "company" && e.payee_type !== "public_adjuster"
-    );
-    const company = endorsements.filter((e: EndorsementRecord) =>
-      e.payee_type === "company" || e.payee_type === "public_adjuster"
-    );
-    const ordered = [...insured, ...company];
+    // Separate client/insured endorsements from Freedom/Carletta
+    const isFreedomOrCarletta = (name: string) => {
+      const lc = name.toLowerCase();
+      return lc.includes("freedom") || lc.includes("carletta");
+    };
+    const clientEndorsements = endorsements.filter((e: EndorsementRecord) => !isFreedomOrCarletta(e.payee_name));
+    const companyEndorsements = endorsements.filter((e: EndorsementRecord) => isFreedomOrCarletta(e.payee_name));
 
-    // Identify Michael Carletta entries to pair with Freedom Adjustment
-    const carlettaIdx = ordered.findIndex((e) => e.payee_name.toLowerCase().includes("carletta"));
-    const freedomIdx = ordered.findIndex((e) => e.payee_name.toLowerCase().includes("freedom"));
-    // If both exist, render them as a grouped block
-    const pairedSet = new Set<number>();
-    if (carlettaIdx >= 0 && freedomIdx >= 0 && carlettaIdx !== freedomIdx) {
-      pairedSet.add(carlettaIdx);
-      pairedSet.add(freedomIdx);
-      // Render grouped block: Freedom Adjustment / By: Michael Carletta / [signature]
-      const freedomE = ordered[freedomIdx];
-      const carlettaE = ordered[carlettaIdx];
-      endorsementSvg += svgText(centerX, curY + companyFont, companyFont, "#1e293b", "bold", freedomE.payee_name);
-      curY += Math.round(companyFont * 1.3);
-      endorsementSvg += svgText(centerX, curY + sigNameFont, sigNameFont, "#1e293b", "normal", `By: ${carlettaE.payee_name}`);
-      curY += Math.round(sigNameFont * 1.3);
-      // Render whichever has a signature
-      const sigEntry = carlettaE.signature_image_url ? carlettaE : freedomE;
-      if (sigEntry.signature_image_url && sigEntry.signature_image_url.startsWith("data:image/")) {
-        const sigWidth = Math.min(ezContentWidth - 20, Math.round(400 * scaleFactor));
-        endorsementSvg += `<image href="${escHtml(sigEntry.signature_image_url)}" x="${centerX - sigWidth / 2}" y="${curY}" width="${sigWidth}" height="${sigHeight}" preserveAspectRatio="xMidYMid meet"/>`;
-        curY += sigHeight + Math.round(6 * scaleFactor);
-      } else if (sigEntry.signature_image_url && sigEntry.signature_image_url.startsWith("typed:")) {
-        const typedName = sigEntry.signature_image_url.slice(6);
-        endorsementSvg += `<text x="${centerX}" y="${curY + sigNameFont}" font-family="serif" font-size="${sigNameFont}" fill="#1e293b" font-style="italic" text-anchor="middle">${escHtml(typedName)}</text>`;
-        curY += Math.round(sigNameFont * 1.3);
-      }
-      curY += Math.round(12 * scaleFactor);
-    }
-
-    for (let i = 0; i < ordered.length; i++) {
-      if (pairedSet.has(i)) continue; // already rendered in grouped block
-      const e = ordered[i];
+    // --- Client signatures first (most prominent — sigNameFont) ---
+    for (const e of clientEndorsements) {
       if (e.signature_image_url && e.signature_image_url.startsWith("data:image/")) {
         endorsementSvg += svgText(centerX, curY + sigNameFont, sigNameFont, "#1e293b", "normal", e.payee_name);
-        curY += Math.round(sigNameFont * 1.3);
+        curY += Math.round(sigNameFont * 1.2);
         const sigWidth = Math.min(ezContentWidth - 20, Math.round(400 * scaleFactor));
         endorsementSvg += `<image href="${escHtml(e.signature_image_url)}" x="${centerX - sigWidth / 2}" y="${curY}" width="${sigWidth}" height="${sigHeight}" preserveAspectRatio="xMidYMid meet"/>`;
         curY += sigHeight + Math.round(6 * scaleFactor);
       } else if (e.signature_image_url && e.signature_image_url.startsWith("typed:")) {
         const typedName = e.signature_image_url.slice(6);
-        const typedSize = sigNameFont;
-        endorsementSvg += `<text x="${centerX}" y="${curY + typedSize}" font-family="serif" font-size="${typedSize}" fill="#1e293b" font-style="italic" text-anchor="middle">${escHtml(typedName)}</text>`;
-        curY += Math.round(typedSize * 1.3);
+        endorsementSvg += `<text x="${centerX}" y="${curY + sigNameFont}" font-family="serif" font-size="${sigNameFont}" fill="#1e293b" font-style="italic" text-anchor="middle">${escHtml(typedName)}</text>`;
+        curY += Math.round(sigNameFont * 1.3);
       } else if (e.status === "waived") {
         endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#94a3b8", "normal", `${e.payee_name} — Waived`, "italic");
-        curY += Math.round(bodyFont * 1.5);
+        curY += Math.round(bodyFont * 1.3);
       } else {
         endorsementSvg += svgText(centerX, curY + sigNameFont, sigNameFont, "#1e293b", "normal", e.payee_name);
-        curY += Math.round(sigNameFont * 1.3);
+        curY += Math.round(sigNameFont * 1.2);
         endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#64748b", "normal", "signature", "italic");
-        curY += Math.round(bodyFont * 1.5);
+        curY += Math.round(bodyFont * 1.3);
       }
+      curY += Math.round(8 * scaleFactor);
+    }
 
+    // --- Freedom Adjustment / By: Michael Carletta — always grouped last ---
+    if (companyEndorsements.length > 0 || true) {
+      curY += Math.round(6 * scaleFactor); // extra spacing before company block
+      endorsementSvg += svgText(centerX, curY + companyFont, companyFont, "#1e293b", "bold", "Freedom Adjustment");
+      curY += Math.round(companyFont * 1.2);
+      endorsementSvg += svgText(centerX, curY + sigNameFont, sigNameFont, "#1e293b", "normal", "By: Michael Carletta");
+      curY += Math.round(sigNameFont * 1.2);
+      // Render the signature from whichever company endorsement has one
+      const sigEntry = companyEndorsements.find((e) => e.signature_image_url);
+      if (sigEntry?.signature_image_url?.startsWith("data:image/")) {
+        const sigWidth = Math.min(ezContentWidth - 20, Math.round(400 * scaleFactor));
+        endorsementSvg += `<image href="${escHtml(sigEntry.signature_image_url)}" x="${centerX - sigWidth / 2}" y="${curY}" width="${sigWidth}" height="${sigHeight}" preserveAspectRatio="xMidYMid meet"/>`;
+        curY += sigHeight + Math.round(6 * scaleFactor);
+      } else if (sigEntry?.signature_image_url?.startsWith("typed:")) {
+        const typedName = sigEntry.signature_image_url.slice(6);
+        endorsementSvg += `<text x="${centerX}" y="${curY + sigNameFont}" font-family="serif" font-size="${sigNameFont}" fill="#1e293b" font-style="italic" text-anchor="middle">${escHtml(typedName)}</text>`;
+        curY += Math.round(sigNameFont * 1.3);
+      }
       curY += Math.round(10 * scaleFactor);
     }
 
