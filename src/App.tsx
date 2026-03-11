@@ -103,6 +103,7 @@ function AppRoutes() {
       />
       
       <Route path="/sign" element={<Suspense fallback={<PageLoader />}><Sign /></Suspense>} />
+      <Route path="/endorse" element={<Suspense fallback={<PageLoader />}><Endorse /></Suspense>} />
       <Route path="/portal" element={<Suspense fallback={<PageLoader />}><PortalLogin /></Suspense>} />
       {/* Redirect unauthenticated portal visitors to PIN login */}
       {!user && (
