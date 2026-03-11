@@ -546,7 +546,7 @@ Deno.serve(async (req) => {
               body: {
                 to: endorsement.contact_email,
                 subject: `Endorsement Required — Check #${checkNum}`,
-                html: buildEndorsementEmailHtml(endorsement.payee_name, checkNum, carrier, amount, endorsementUrl),
+                body: buildEndorsementEmailHtml(endorsement.payee_name, checkNum, carrier, amount, endorsementUrl),
               },
             });
             if (invokeErr) throw invokeErr;
