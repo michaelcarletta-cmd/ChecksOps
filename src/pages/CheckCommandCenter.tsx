@@ -601,11 +601,11 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       if (fErr) throw new Error(`Front upload failed: ${fErr.message}`);
 
       let backPath: string | null = null;
-      if (watermarkedBack) {
-        backPath = `${prefix}/${ts}_back_${backFile!.name}`;
+      if (backFile) {
+        backPath = `${prefix}/${ts}_back_${backFile.name}`;
         const { error: bErr } = await supabase.storage
           .from("claim-files")
-          .upload(backPath, watermarkedBack);
+          .upload(backPath, backFile);
         if (bErr) throw new Error(`Back upload failed: ${bErr.message}`);
       }
 
