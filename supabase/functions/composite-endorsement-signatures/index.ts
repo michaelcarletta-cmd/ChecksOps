@@ -39,6 +39,32 @@ Deno.serve(async (req) => {
     if (checkErr || !check) throw new Error(`Check not found: ${checkErr?.message}`);
     if (!check.back_image_path) throw new Error("No back image to composite onto");
 
+    // Support re-compositing: if back_image_path is already an _endorsed.svg,
+    // look up the original path from the audit log
+    let backImagePath = check.back_image_path;
+    if (backImagePath.includes("_endorsed")) {
+      const { data: auditEntry } = await supabase
+        .from("check_audit_log")
+        .select("event_data")
+        .eq("check_id", checkId)
+        .eq("event_type", "endorsement_signatures_composited")
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .single();
+      
+      const originalPath = (auditEntry?.event_data as any)?.original_back_path;
+      if (originalPath) {
+        console.log(`[COMPOSITE] Re-compositing: using original path ${originalPath}`);
+        backImagePath = originalPath;
+        // Reset the back_image_path to original before re-compositing
+        await supabase.from("check_intake_items")
+          .update({ back_image_path: originalPath })
+          .eq("id", checkId);
+      } else {
+        console.log("[COMPOSITE] WARNING: Could not find original back image path in audit log, using current path");
+      }
+    }
+
     // 2. Get signed endorsements
     const { data: endorsements, error: endErr } = await supabase
       .from("check_endorsements")
@@ -56,7 +82,7 @@ Deno.serve(async (req) => {
     // 3. Download the original back image
     const { data: imgBlob, error: dlErr } = await supabase.storage
       .from("claim-files")
-      .download(check.back_image_path);
+      .download(backImagePath);
 
     if (dlErr || !imgBlob) throw new Error(`Cannot download back image: ${dlErr?.message}`);
 
@@ -64,7 +90,7 @@ Deno.serve(async (req) => {
 
     // 4. Build the endorsement overlay in the CORRECT bank zone
     const originalBase64 = uint8ToBase64(originalBytes);
-    const mimeType = check.back_image_path.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+    const mimeType = backImagePath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
 
     // Standard check image dimensions (landscape orientation)
     const imgWidth = 1200;
@@ -176,7 +202,7 @@ Deno.serve(async (req) => {
 </svg>`;
 
     // 6. Upload composited image
-    const compositePath = check.back_image_path.replace(
+    const compositePath = backImagePath.replace(
       /(\.[^.]+)$/,
       "_endorsed.svg"
     );
