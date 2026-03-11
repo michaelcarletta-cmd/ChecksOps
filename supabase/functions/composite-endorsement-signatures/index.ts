@@ -317,6 +317,11 @@ async function uploadAndFinalize(
   // IMPORTANT: never overwrite source path on check_intake_items.
   // Keep source image references untouched even after successful composition.
   const dbPathUpdateCommitted = false;
+  const overlayCoordinates = {
+    top_percent: Math.round(ENDORSEMENT_TOP_PCT * 100),
+    left_percent: Math.round(ENDORSEMENT_LEFT_PCT * 100),
+    width_percent: Math.round(ENDORSEMENT_WIDTH_PCT * 100),
+  };
 
   await supabase.from("check_audit_log").insert({
     check_id: checkId,
@@ -330,6 +335,7 @@ async function uploadAndFinalize(
       endorsement_count: endorsements.length,
       endorsement_ids: endorsements.map((e: { id: string }) => e.id),
       placement: "upper_left_on_image",
+      overlay_coordinates: overlayCoordinates,
       image_dimensions: { width: imgWidth, height: imgHeight },
       pixel_count: pixelCount,
       endorsement_bottom_y: endorsementBottomY,
@@ -338,6 +344,11 @@ async function uploadAndFinalize(
       db_path_update_committed: dbPathUpdateCommitted,
     },
   });
+
+  const { data: signedUrlData } = await supabase.storage
+    .from("claim-files")
+    .createSignedUrl(compositePath, 3600);
+  const compositedSignedUrl = signedUrlData?.signedUrl ?? null;
 
   console.log(`[COMPOSITE] original image path: ${backImagePath}`);
   console.log(`[COMPOSITE] generated output path: ${compositePath}`);
@@ -350,8 +361,10 @@ async function uploadAndFinalize(
     original_back_image_path: backImagePath,
     endorsed_back_image_path: compositePath,
     composited_path: compositePath,
+    composited_signed_url: compositedSignedUrl,
     endorsement_count: endorsements.length,
     output_format: renderMode,
+    overlay_coordinates: overlayCoordinates,
     image_dimensions: { width: imgWidth, height: imgHeight },
     pixel_count: pixelCount,
     db_path_update_committed: dbPathUpdateCommitted,
