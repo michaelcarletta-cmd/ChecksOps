@@ -666,18 +666,60 @@ function PayeeReconciliation({
         <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Payee Reconciliation
         </h4>
-        {payees.length >= 2 && (
+        <div className="flex gap-1">
           <Button
             size="sm"
-            variant={mergeMode ? "default" : "ghost"}
+            variant="ghost"
             className="h-6 text-[10px]"
-            onClick={() => { setMergeMode(!mergeMode); setMergeSelection([]); setMergedName(""); }}
+            onClick={() => setAddingPayee(!addingPayee)}
           >
-            <Merge className="h-3 w-3 mr-1" />
-            {mergeMode ? "Cancel Merge" : "Merge Payees"}
+            <Plus className="h-3 w-3 mr-1" />Add
           </Button>
-        )}
+          {payees.length >= 2 && (
+            <Button
+              size="sm"
+              variant={mergeMode ? "default" : "ghost"}
+              className="h-6 text-[10px]"
+              onClick={() => { setMergeMode(!mergeMode); setMergeSelection([]); setMergedName(""); }}
+            >
+              <Merge className="h-3 w-3 mr-1" />
+              {mergeMode ? "Cancel" : "Merge"}
+            </Button>
+          )}
+        </div>
       </div>
+
+      {addingPayee && (
+        <Card className="p-2.5 border-primary/30 bg-primary/5 space-y-2">
+          <Input
+            value={newPayeeName}
+            onChange={(e) => setNewPayeeName(e.target.value)}
+            placeholder="Payee name"
+            className="h-7 text-xs"
+          />
+          <Select value={newPayeeType} onValueChange={setNewPayeeType}>
+            <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {PAYEE_TYPES.map((t) => (
+                <SelectItem key={t} value={t} className="text-xs">{t.replace(/_/g, " ")}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              className="flex-1 h-6 text-[10px]"
+              disabled={addPayee.isPending || !newPayeeName.trim()}
+              onClick={() => addPayee.mutate({ name: newPayeeName, type: newPayeeType })}
+            >
+              <Plus className="h-3 w-3 mr-1" />Add Payee
+            </Button>
+            <Button size="sm" variant="outline" className="h-6 text-[10px]" onClick={() => { setAddingPayee(false); setNewPayeeName(""); }}>
+              Cancel
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {mergeMode && mergeSelection.length >= 2 && (
         <Card className="p-2.5 border-primary/30 bg-primary/5 space-y-2">
