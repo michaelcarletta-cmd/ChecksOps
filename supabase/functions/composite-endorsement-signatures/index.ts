@@ -50,30 +50,39 @@ Deno.serve(async (req) => {
     if (checkErr || !check) throw new Error(`Check not found: ${checkErr?.message}`);
     if (!check.back_image_path) throw new Error("No back image to composite onto");
 
-    // Support re-compositing: if back_image_path is already an _endorsed file,
-    // look up the original path from the audit log
+    // Resolve a clean source image path without mutating DB source fields.
+    // If current path is already an endorsed artifact, recover the true original
+    // from the earliest composite audit entry.
     let backImagePath = check.back_image_path;
     if (backImagePath.includes("_endorsed")) {
-      const { data: auditEntry } = await supabase
+      const { data: firstCompositeAudit } = await supabase
         .from("check_audit_log")
         .select("event_data")
         .eq("check_id", checkId)
         .eq("event_type", "endorsement_signatures_composited")
         .order("created_at", { ascending: true })
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      const originalPath = (auditEntry?.event_data as any)?.original_back_path;
-      if (originalPath) {
-        console.log(`[COMPOSITE] Re-compositing: using original path ${originalPath}`);
-        backImagePath = originalPath;
-        await supabase.from("check_intake_items")
-          .update({ back_image_path: originalPath })
-          .eq("id", checkId);
+      const auditData = (firstCompositeAudit?.event_data ?? null) as {
+        original_back_image_path?: string;
+        original_back_path?: string;
+      } | null;
+
+      const recoveredOriginalPath =
+        auditData?.original_back_image_path ??
+        auditData?.original_back_path ??
+        null;
+
+      if (recoveredOriginalPath) {
+        console.log(`[COMPOSITE] Re-compositing from recovered original source path: ${recoveredOriginalPath}`);
+        backImagePath = recoveredOriginalPath;
       } else {
-        console.log("[COMPOSITE] WARNING: Could not find original back image path in audit log, using current path");
+        throw new Error("Current back image path points to an endorsed artifact and no original source path could be recovered");
       }
     }
+
+    console.log(`[COMPOSITE] original image path: ${backImagePath}`);
 
     // 2. Get signed endorsements
     const { data: endorsements, error: endErr } = await supabase
@@ -106,6 +115,9 @@ Deno.serve(async (req) => {
 
     // Compute the maximum Y the endorsement block can reach
     const maxEndorsementY = Math.floor(imgHeight * BOTTOM_ZONE_LIMIT);
+    const pixelCount = imgWidth * imgHeight;
+    console.log(`[COMPOSITE] width/height: ${imgWidth}x${imgHeight}`);
+    console.log(`[COMPOSITE] pixel count: ${pixelCount}`);
 
     // 5. Build endorsement overlay INSIDE the check image bounds
     const originalBase64 = uint8ToBase64(originalBytes);
@@ -219,10 +231,9 @@ Deno.serve(async (req) => {
 
     // 7. Flatten SVG → PNG at original resolution using resvg WASM.
     // For very large images, skip rasterization to avoid edge memory crashes.
-    const totalPixels = imgWidth * imgHeight;
-    if (totalPixels > MAX_RASTER_PIXELS) {
+    if (pixelCount > MAX_RASTER_PIXELS) {
       console.log(
-        `[COMPOSITE] Large image ${imgWidth}x${imgHeight} (${totalPixels} px) exceeds raster limit ${MAX_RASTER_PIXELS}; using SVG fallback`,
+        `[COMPOSITE] rasterized vs svg-fallback mode: svg_fallback (${pixelCount} px > ${MAX_RASTER_PIXELS})`,
       );
       return await uploadAndFinalize(
         supabase,
@@ -242,6 +253,7 @@ Deno.serve(async (req) => {
 
     let pngBytes: Uint8Array;
     try {
+      console.log("[COMPOSITE] rasterized vs svg-fallback mode: rasterized_png");
       pngBytes = await render(compositeSvg);
       console.log(`[COMPOSITE] Rasterized to PNG: ${pngBytes.length} bytes`);
     } catch (renderErr) {
@@ -283,48 +295,60 @@ async function uploadAndFinalize(
   maxAllowedY: number,
 ) {
   const compositePath = backImagePath.replace(/(\.[^.]+)$/, suffix);
+  const renderMode = suffix.includes("png") ? "rasterized_png" : "svg_fallback";
+  const pixelCount = imgWidth * imgHeight;
 
   const { error: uploadErr } = await supabase.storage
     .from("claim-files")
     .upload(compositePath, blob, { contentType, upsert: true });
 
-  if (uploadErr) throw new Error(`Failed to upload composite: ${uploadErr.message}`);
+  if (uploadErr) {
+    console.error(`[COMPOSITE] generated output path (failed upload): ${compositePath}`);
+    console.error("[COMPOSITE] DB path update committed: false");
+    throw new Error(`Failed to upload composite: ${uploadErr.message}`);
+  }
 
-  const { error: updateErr } = await supabase
-    .from("check_intake_items")
-    .update({
-      back_image_path: compositePath,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", checkId);
-
-  if (updateErr) throw new Error(`Failed to update check: ${updateErr.message}`);
+  // IMPORTANT: never overwrite source path on check_intake_items.
+  // Keep source image references untouched even after successful composition.
+  const dbPathUpdateCommitted = false;
 
   await supabase.from("check_audit_log").insert({
     check_id: checkId,
     event_type: "endorsement_signatures_composited",
-    event_description: `Composited ${endorsements.length} endorsement(s) as flattened ${suffix.includes("png") ? "PNG" : "SVG"} at ${imgWidth}x${imgHeight}`,
+    event_description: `Composited ${endorsements.length} endorsement(s) as ${renderMode} at ${imgWidth}x${imgHeight}`,
     event_data: {
-      original_back_path: check.back_image_path,
+      original_back_image_path: backImagePath,
+      original_back_path: backImagePath,
+      endorsed_back_image_path: compositePath,
       composited_back_path: compositePath,
       endorsement_count: endorsements.length,
       endorsement_ids: endorsements.map((e: { id: string }) => e.id),
       placement: "upper_left_on_image",
       image_dimensions: { width: imgWidth, height: imgHeight },
+      pixel_count: pixelCount,
       endorsement_bottom_y: endorsementBottomY,
       max_allowed_y: maxAllowedY,
-      output_format: suffix.includes("png") ? "png" : "svg_fallback",
+      output_format: renderMode,
+      db_path_update_committed: dbPathUpdateCommitted,
     },
   });
 
+  console.log(`[COMPOSITE] original image path: ${backImagePath}`);
+  console.log(`[COMPOSITE] generated output path: ${compositePath}`);
+  console.log(`[COMPOSITE] rasterized vs svg-fallback mode: ${renderMode}`);
+  console.log(`[COMPOSITE] DB path update committed: ${dbPathUpdateCommitted}`);
   console.log(`[COMPOSITE] Done — saved to ${compositePath} (${imgWidth}x${imgHeight})`);
 
   return jsonResp({
     success: true,
+    original_back_image_path: backImagePath,
+    endorsed_back_image_path: compositePath,
     composited_path: compositePath,
     endorsement_count: endorsements.length,
-    output_format: suffix.includes("png") ? "png" : "svg_fallback",
+    output_format: renderMode,
     image_dimensions: { width: imgWidth, height: imgHeight },
+    pixel_count: pixelCount,
+    db_path_update_committed: dbPathUpdateCommitted,
   });
 }
 
