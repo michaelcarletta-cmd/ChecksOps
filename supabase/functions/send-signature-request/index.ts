@@ -49,42 +49,36 @@ async function failRequest(sb: any, id: string, error: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Mailjet direct send
+// Resend direct send
 // ---------------------------------------------------------------------------
 
-async function sendMailjet(
+async function sendResend(
   to: string,
   subject: string,
   html: string,
-  traceId: string,
 ) {
-  const apiKey = Deno.env.get("MAILJET_API_KEY");
-  const secretKey = Deno.env.get("MAILJET_SECRET_KEY");
+  const apiKey = Deno.env.get("RESEND_API_KEY");
+  if (!apiKey) throw new Error("RESEND_API_KEY not configured");
 
   const body = {
-    Messages: [
-      {
-        From: { Email: "claims@freedomclaims.work", Name: "Freedom Claims" },
-        To: [{ Email: to }],
-        Subject: subject,
-        HTMLPart: html,
-        CustomID: traceId,
-      },
-    ],
+    from: "Freedom Claims <claims@freedomclaims.work>",
+    to: [to],
+    subject,
+    html,
   };
 
-  const res = await fetch("https://api.mailjet.com/v3.1/send", {
+  const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Basic ${btoa(`${apiKey}:${secretKey}`)}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(body),
   });
 
   const result = await res.json();
   if (!res.ok) {
-    throw Object.assign(new Error(`Mailjet ${res.status}: ${JSON.stringify(result)}`), {
+    throw Object.assign(new Error(`Resend ${res.status}: ${JSON.stringify(result)}`), {
       response: result,
       statusCode: res.status,
     });
@@ -308,14 +302,14 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     // ── determine delivery mode ──
-    let deliveryMode: "manual_bypass" | "make_signnow" | "mailjet_direct";
+    let deliveryMode: "manual_bypass" | "make_signnow" | "resend_direct";
 
     if (skipEmail) {
       deliveryMode = "manual_bypass";
     } else {
       deliveryMode = branding?.signnow_make_webhook_url
         ? "make_signnow"
-        : "mailjet_direct";
+        : "resend_direct";
     }
 
     await log(sb, {
@@ -437,45 +431,41 @@ Deno.serve(async (req) => {
       return respond({ success: true, mode: "make_signnow", provider_id: providerId });
     }
 
-    // ── mailjet_direct ──
+    // ── resend_direct ──
     const appUrl = "https://freedomclaims.lovable.app";
     const results: { signer_id: string; success: boolean; error?: string }[] = [];
 
     for (const signer of signersArr) {
       const signUrl = `${appUrl}/sign?token=${signer.access_token}`;
-      const traceId = `es-${requestId.substring(0, 8)}-${signer.id.substring(0, 8)}`;
 
       await log(sb, {
         request_id: requestId, signer_id: signer.id, claim_id: claimId,
         stage: "email_sending", status: "in_progress",
         message: `Sending to ${signer.signer_email}`,
-        payload: { signUrl, traceId },
+        payload: { signUrl },
       });
 
       try {
         const html = emailHtml(signer, request, signUrl);
-        const emailRes = await sendMailjet(
+        const emailRes = await sendResend(
           signer.signer_email,
           `🔔 Action Required: Sign ${request.document_name}`,
           html,
-          traceId,
         );
 
-        const mjMsg = emailRes?.Messages?.[0];
-        const mjMsgId = mjMsg?.To?.[0]?.MessageID?.toString() || null;
-        const mjStatus = mjMsg?.Status || "unknown";
+        const resendId = emailRes?.id || null;
 
         await sb.from("signature_signers").update({
-          delivery_status: mjStatus === "success" ? "sent" : mjStatus,
+          delivery_status: "sent",
           email_sent_at: new Date().toISOString(),
-          email_provider_message_id: mjMsgId,
+          email_provider_message_id: resendId,
         }).eq("id", signer.id);
 
         await log(sb, {
           request_id: requestId, signer_id: signer.id, claim_id: claimId,
           stage: "email_sent", status: "ok",
-          message: `Mailjet ${mjStatus} — msgId ${mjMsgId}`,
-          payload: { emailRes, mjMsgId, mjStatus },
+          message: `Resend success — id ${resendId}`,
+          payload: { emailRes, resendId },
         });
 
         results.push({ signer_id: signer.id, success: true });
@@ -501,7 +491,6 @@ Deno.serve(async (req) => {
     const someFailed = results.some((r) => !r.success);
     const allSucceeded = results.every((r) => r.success);
 
-    // Determine correct provider_status
     let providerStatus: string;
     if (allSucceeded) {
       providerStatus = "emails_sent";
@@ -513,8 +502,7 @@ Deno.serve(async (req) => {
 
     await sb.from("signature_requests").update({
       status: allFailed ? "failed" : "pending",
-      delivery_mode: "mailjet_direct",
-      // Only set sent_at when at least one email succeeded
+      delivery_mode: "resend_direct",
       sent_at: allFailed ? null : new Date().toISOString(),
       last_error: allFailed ? "All emails failed" : someFailed ? "Some emails failed" : null,
       provider_status: providerStatus,
@@ -527,7 +515,7 @@ Deno.serve(async (req) => {
       payload: { results },
     });
 
-    return respond({ success: !allFailed, mode: "mailjet_direct", results });
+    return respond({ success: !allFailed, mode: "resend_direct", results });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     console.error("send-signature-request error:", msg);
