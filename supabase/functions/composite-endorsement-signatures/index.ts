@@ -1,5 +1,11 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
-import { render } from "https://deno.land/x/resvg_wasm@0.2.0/mod.ts";
+let render: ((svg: string) => Promise<Uint8Array>) | null = null;
+try {
+  const resvg = await import("https://deno.land/x/resvg_wasm@0.2.0/mod.ts");
+  render = resvg.render;
+} catch (e) {
+  console.warn("[COMPOSITE] resvg_wasm not available, will use SVG fallback:", e);
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -261,11 +267,10 @@ Deno.serve(async (req) => {
 </svg>`;
 
     // 7. Flatten SVG → PNG at original resolution using resvg WASM.
-    // For very large images, skip rasterization to avoid edge memory crashes.
-    if (pixelCount > MAX_RASTER_PIXELS) {
-      console.log(
-        `[COMPOSITE] rasterized vs svg-fallback mode: svg_fallback (${pixelCount} px > ${MAX_RASTER_PIXELS})`,
-      );
+    // For very large images or when resvg is unavailable, use SVG fallback.
+    if (pixelCount > MAX_RASTER_PIXELS || !render) {
+      const reason = !render ? "resvg_unavailable" : `oversized (${pixelCount} px > ${MAX_RASTER_PIXELS})`;
+      console.log(`[COMPOSITE] rasterized vs svg-fallback mode: svg_fallback (${reason})`);
       return await uploadAndFinalize(
         supabase,
         check,
@@ -288,7 +293,6 @@ Deno.serve(async (req) => {
       pngBytes = await render(compositeSvg);
       console.log(`[COMPOSITE] Rasterized to PNG: ${pngBytes.length} bytes`);
     } catch (renderErr) {
-      // If resvg fails, fall back to SVG upload so we don't lose the work
       console.error(`[COMPOSITE] PNG rasterization failed, falling back to SVG: ${renderErr}`);
       return await uploadAndFinalize(supabase, check, backImagePath, checkId, endorsements,
         new Blob([compositeSvg], { type: "image/svg+xml" }), "image/svg+xml", "_endorsed.svg",
