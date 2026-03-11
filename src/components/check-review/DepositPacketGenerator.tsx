@@ -127,6 +127,17 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
     },
   });
 
+  const { data: backImageUrl } = useQuery({
+    queryKey: ["check-back-image-url", check?.back_image_path],
+    enabled: !!check?.back_image_path,
+    queryFn: async () => {
+      const { data } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(check!.back_image_path!, 3600);
+      return data?.signedUrl ?? null;
+    },
+  });
+
   const handlePrint = () => {
     if (!check) return;
     const printWindow = window.open("", "_blank");
