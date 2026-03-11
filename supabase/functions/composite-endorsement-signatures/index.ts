@@ -21,6 +21,10 @@ const corsHeaders = {
 // Below that is the "DO NOT WRITE BELOW THIS LINE" area.
 const BOTTOM_ZONE_LIMIT = 0.75;
 
+// Rasterizing very large images can exceed edge runtime memory.
+// For oversized checks we save a composited SVG fallback directly.
+const MAX_RASTER_PIXELS = 8_000_000;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
