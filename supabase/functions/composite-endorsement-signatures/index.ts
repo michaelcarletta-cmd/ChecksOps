@@ -108,22 +108,9 @@ Deno.serve(async (req) => {
     endorsementSvg += `<line x1="${ezX}" y1="${curY}" x2="${ezX + ezWidth}" y2="${curY}" stroke="#94a3b8" stroke-width="0.5"/>`;
     curY += 14;
 
-    // --- Insured signatures first ---
-    for (const e of insuredEndorsements) {
-      curY = renderVerticalSignature(endorsementSvg = endorsementSvg, e, ezX, ezWidth, curY);
-    }
-
-    // --- Company signature last ---
-    for (const e of companyEndorsements) {
-      curY = renderVerticalSignature(endorsementSvg = endorsementSvg, e, ezX, ezWidth, curY);
-    }
-
-    // If no endorsements in either bucket, render them all in order
-    if (insuredEndorsements.length === 0 && companyEndorsements.length === 0) {
-      for (const e of endorsements) {
-        curY = renderVerticalSignature(endorsementSvg = endorsementSvg, e, ezX, ezWidth, curY);
-      }
-    }
+    // --- Render all endorsement signatures vertically (insured first, company last) ---
+    const sigBlock = buildVerticalEndorsementBlock(endorsements, ezX, ezWidth, curY, "insured_first");
+    endorsementSvg += sigBlock.svg;
 
     const compositeSvg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
