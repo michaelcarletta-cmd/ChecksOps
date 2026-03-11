@@ -761,7 +761,7 @@ function CheckDetailPanel({
     },
   });
 
-  // Fetch reviewer profile for name display
+   // Fetch reviewer profile for name display
   const { data: reviewerProfile } = useQuery({
     queryKey: ["reviewer-profile", check?.reviewed_by],
     enabled: !!check?.reviewed_by,
@@ -784,6 +784,45 @@ function CheckDetailPanel({
         .eq("check_id", checkId)
         .order("created_at", { ascending: false });
       return (data ?? []) as AuditEntry[];
+    },
+  });
+
+  // Fetch endorsements for blocking banner (moved above early return to fix hooks order)
+  const { data: endorsements = [] } = useQuery({
+    queryKey: ["check-endorsements-summary", checkId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("check_endorsements")
+        .select("id, payee_name, payee_type, status")
+        .eq("check_id", checkId);
+      return data ?? [];
+    },
+  });
+
+  // Fetch linked accounting entry
+  const { data: accountingEntry } = useQuery({
+    queryKey: ["check-accounting-link", checkId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("claim_checks")
+        .select("id, deposit_status, eligibility_status, mortgage_flag, source")
+        .eq("check_intake_item_id", checkId)
+        .maybeSingle();
+      return data;
+    },
+  });
+
+  // Fetch loss draft tracking record if required
+  const { data: lossDraftRecord } = useQuery({
+    queryKey: ["check-loss-draft-link", checkId],
+    enabled: !!check && (check.status === "loss_draft_required" || check.status === "needs_review"),
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("loss_draft_tracking")
+        .select("id")
+        .eq("check_intake_item_id", checkId)
+        .maybeSingle();
+      return data;
     },
   });
 
@@ -816,45 +855,6 @@ function CheckDetailPanel({
   const rec = check.deposit_recommendation
     ? recommendationConfig[check.deposit_recommendation]
     : null;
-
-  // Fetch endorsements for blocking banner
-  const { data: endorsements = [] } = useQuery({
-    queryKey: ["check-endorsements-summary", checkId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("check_endorsements")
-        .select("id, payee_name, payee_type, status")
-        .eq("check_id", checkId);
-      return data ?? [];
-    },
-  });
-
-  // Fetch linked accounting entry
-  const { data: accountingEntry } = useQuery({
-    queryKey: ["check-accounting-link", checkId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("claim_checks")
-        .select("id, deposit_status, eligibility_status, mortgage_flag, source")
-        .eq("check_intake_item_id", checkId)
-        .maybeSingle();
-      return data;
-    },
-  });
-
-  // Fetch loss draft tracking record if required
-  const { data: lossDraftRecord } = useQuery({
-    queryKey: ["check-loss-draft-link", checkId],
-    enabled: check?.status === "loss_draft_required" || check?.status === "needs_review",
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("loss_draft_tracking")
-        .select("id")
-        .eq("check_intake_item_id", checkId)
-        .maybeSingle();
-      return data;
-    },
-  });
 
   const pendingEndorsements = endorsements.filter(
     (e) => e.status === "pending" || e.status === "sent",
