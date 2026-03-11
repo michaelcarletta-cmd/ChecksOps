@@ -209,7 +209,9 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
       const { data, error } = await supabase.functions.invoke("send-signature-request", {
         body: { requestId: request.id, skipEmail },
       });
-      if (error) throw error;
+      if (error) {
+        throw new Error(await getFunctionErrorMessage(error, "Could not send signature request"));
+      }
       if (data?.error) throw new Error(data.error);
 
       // Copy links to clipboard in manual bypass mode

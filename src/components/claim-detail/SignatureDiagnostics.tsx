@@ -12,6 +12,7 @@ import {
   Loader2, Mail, RefreshCw, Send, XCircle, Link2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 
 interface SignatureDiagnosticsProps {
   claimId: string;
