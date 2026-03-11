@@ -882,7 +882,18 @@ function CheckDetailPanel({
           : undefined,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("[CHECK-EXPORT] Edge function error:", error);
+        // Try to extract detailed message from FunctionsHttpError
+        let detail = error?.message ?? "Unknown error";
+        if (error?.context?.body) {
+          try {
+            const body = await error.context.json();
+            detail = body?.error ?? detail;
+          } catch { /* ignore parse failure */ }
+        }
+        throw new Error(detail);
+      }
 
       const payload = (data ?? {}) as {
         success?: boolean;
