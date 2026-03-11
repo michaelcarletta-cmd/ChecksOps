@@ -557,13 +557,32 @@ Deno.serve(async (req) => {
         // Update contact info if provided
         const newEmail = body.email as string | undefined;
         const newPhone = body.phone as string | undefined;
-        if (newEmail || newPhone) {
+        const normalizedEmail = newEmail?.trim();
+        const normalizedPhone = newPhone?.trim();
+
+        if (normalizedEmail || normalizedPhone) {
           await supabase.from("check_endorsements").update({
-            contact_email: newEmail || endorsement.contact_email,
-            contact_phone: newPhone || endorsement.contact_phone,
+            contact_email: normalizedEmail || endorsement.contact_email,
+            contact_phone: normalizedPhone || endorsement.contact_phone,
           }).eq("id", endorsementId);
-          if (newEmail) endorsement.contact_email = newEmail;
-          if (newPhone) endorsement.contact_phone = newPhone;
+          if (normalizedEmail) endorsement.contact_email = normalizedEmail;
+          if (normalizedPhone) endorsement.contact_phone = normalizedPhone;
+        }
+
+        // If missing contact details on endorsement, hydrate from check_payees
+        if (endorsement.payee_id && (!endorsement.contact_email || !endorsement.contact_phone)) {
+          const { data: payeeContact } = await supabase
+            .from("check_payees")
+            .select("contact_email, contact_phone")
+            .eq("id", endorsement.payee_id)
+            .maybeSingle();
+
+          if (payeeContact?.contact_email && !endorsement.contact_email) {
+            endorsement.contact_email = payeeContact.contact_email;
+          }
+          if (payeeContact?.contact_phone && !endorsement.contact_phone) {
+            endorsement.contact_phone = payeeContact.contact_phone;
+          }
         }
 
         const appUrl = Deno.env.get("APP_URL") || "https://freedomclaims.lovable.app";
@@ -576,6 +595,14 @@ Deno.serve(async (req) => {
         let smsSent = false;
         let emailError: string | null = null;
         let smsError: string | null = null;
+
+        if ((method === "email" || method === "both") && !endorsement.contact_email) {
+          emailError = "Missing payee email address";
+        }
+
+        if ((method === "sms" || method === "both") && !endorsement.contact_phone) {
+          smsError = "Missing payee phone number";
+        }
 
         if ((method === "email" || method === "both") && endorsement.contact_email) {
           try {

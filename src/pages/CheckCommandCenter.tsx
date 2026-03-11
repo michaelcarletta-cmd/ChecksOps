@@ -1300,16 +1300,38 @@ function PayeeCard({
   const sendEndorsementRequest = async (method: "email" | "sms" | "both") => {
     setSending(true);
     try {
-      await supabase.from("check_payees").update({
-        contact_email: email || null,
-        contact_phone: phone || null,
-      }).eq("id", payee.id);
+      const normalizedEmail = email.trim();
+      const normalizedPhone = phone.trim();
+
+      if ((method === "email" || method === "both") && !normalizedEmail) {
+        throw new Error("Please enter an email address for this payee");
+      }
+
+      if ((method === "sms" || method === "both") && !normalizedPhone) {
+        throw new Error("Please enter a phone number for this payee");
+      }
+
+      const { error: updateError } = await supabase
+        .from("check_payees")
+        .update({
+          contact_email: normalizedEmail || null,
+          contact_phone: normalizedPhone || null,
+        })
+        .eq("id", payee.id);
+
+      if (updateError) throw updateError;
 
       const { data: session } = await supabase.auth.getSession();
       if (!session.session?.access_token) throw new Error("Not authenticated");
 
       const { error } = await supabase.functions.invoke("check-endorsement", {
-        body: { action: "send_endorsement_request", payeeId: payee.id, method },
+        body: {
+          action: "send_endorsement_request",
+          payeeId: payee.id,
+          method,
+          email: normalizedEmail || undefined,
+          phone: normalizedPhone || undefined,
+        },
         headers: { Authorization: `Bearer ${session.session.access_token}` },
       });
 
