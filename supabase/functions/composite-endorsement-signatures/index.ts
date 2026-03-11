@@ -87,15 +87,15 @@ Deno.serve(async (req) => {
     let endorsementSvg = "";
 
     // --- Pay to the Order Of ---
-    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="11" fill="#1e293b" font-weight="bold">Pay to the Order of:</text>`;
+    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="11" fill="#1e293b" font-weight="bold">Pay to the Order of</text>`;
     curY += 18;
-    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="14" fill="#1e293b" font-weight="bold">Freedom Adjustment Group</text>`;
+    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="14" fill="#1e293b" font-weight="bold">Freedom Adjustment LLC</text>`;
     curY += 20;
 
-    // --- For Deposit Only ---
-    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="11" fill="#1e293b" font-weight="bold">FOR DEPOSIT ONLY</text>`;
-    curY += 16;
-    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="9" fill="#64748b">Acct # XXXXXX7890</text>`;
+    // --- For Mobile Deposit Only ---
+    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="11" fill="#1e293b" font-weight="bold">For Mobile Deposit Only</text>`;
+    curY += 18;
+    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="14" fill="#1e293b" font-weight="bold">Freedom Adjustment LLC</text>`;
     curY += 20;
 
     // --- Separator ---
