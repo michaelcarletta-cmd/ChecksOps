@@ -68,53 +68,73 @@ Deno.serve(async (req) => {
 
     const originalBytes = new Uint8Array(await imgBlob.arrayBuffer());
 
-    // 4. Build the composite SVG overlay
-    const overlaySvg = buildEndorsementOverlaySvg(endorsements, check.check_number, check.carrier_name);
-
-    // 5. Use the SVG-on-image compositing approach:
-    //    Create a new SVG that embeds the original image + endorsement overlay
+    // 4. Build the vertical endorsement overlay
     const originalBase64 = uint8ToBase64(originalBytes);
     const mimeType = check.back_image_path.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
 
-    // Determine image dimensions (use reasonable defaults for check images)
+    // Standard check dimensions
     const imgWidth = 1200;
     const imgHeight = 800;
-    const stampHeight = 220;
-    const sigBlockHeight = 300;
-    const totalHeight = imgHeight + stampHeight + sigBlockHeight;
 
-    // Build the restrictive endorsement stamp
-    const stampY = imgHeight + 20;
-    const endorsementStamp = `
-      <!-- Restrictive Endorsement Stamp -->
-      <rect x="60" y="${stampY}" width="500" height="190" rx="8" ry="8" fill="none" stroke="#1e293b" stroke-width="2"/>
-      <text x="310" y="${stampY + 30}" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#1e293b">Pay to the Order of:</text>
-      <text x="310" y="${stampY + 55}" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#1e293b">Freedom Adjustment</text>
-      <text x="310" y="${stampY + 85}" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#1e293b">FOR DEPOSIT ONLY</text>
-      <line x1="120" y1="${stampY + 110}" x2="500" y2="${stampY + 110}" stroke="#64748b" stroke-width="0.5"/>
-      <text x="310" y="${stampY + 125}" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#64748b">Client Signature</text>
-      <line x1="120" y1="${stampY + 155}" x2="500" y2="${stampY + 155}" stroke="#64748b" stroke-width="0.5"/>
-      <text x="310" y="${stampY + 170}" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#64748b">Freedom Adjustment Signature</text>
-    `;
+    // Endorsement zone: upper-left area of back of check (traditional bank format)
+    // Typically ~1.5" wide zone on the left side, we use a vertical strip
+    const ezX = 40; // left margin
+    const ezWidth = 340; // endorsement zone width
+    let curY = 40; // start near top
+
+    // Separate insured (homeowner/mortgagee) from company endorsements
+    const insuredEndorsements = endorsements.filter((e: EndorsementRecord) =>
+      e.payee_type !== "company" && e.payee_type !== "public_adjuster"
+    );
+    const companyEndorsements = endorsements.filter((e: EndorsementRecord) =>
+      e.payee_type === "company" || e.payee_type === "public_adjuster"
+    );
+
+    let endorsementSvg = "";
+
+    // --- Pay to the Order Of ---
+    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="11" fill="#1e293b" font-weight="bold">Pay to the Order of:</text>`;
+    curY += 18;
+    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="14" fill="#1e293b" font-weight="bold">Freedom Adjustment Group</text>`;
+    curY += 20;
+
+    // --- For Deposit Only ---
+    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="11" fill="#1e293b" font-weight="bold">FOR DEPOSIT ONLY</text>`;
+    curY += 16;
+    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="9" fill="#64748b">Acct # XXXXXX7890</text>`;
+    curY += 20;
+
+    // --- Separator ---
+    endorsementSvg += `<line x1="${ezX}" y1="${curY}" x2="${ezX + ezWidth}" y2="${curY}" stroke="#94a3b8" stroke-width="0.5"/>`;
+    curY += 14;
+
+    // --- Insured signatures first ---
+    for (const e of insuredEndorsements) {
+      curY = renderVerticalSignature(endorsementSvg = endorsementSvg, e, ezX, ezWidth, curY);
+    }
+
+    // --- Company signature last ---
+    for (const e of companyEndorsements) {
+      curY = renderVerticalSignature(endorsementSvg = endorsementSvg, e, ezX, ezWidth, curY);
+    }
+
+    // If no endorsements in either bucket, render them all in order
+    if (insuredEndorsements.length === 0 && companyEndorsements.length === 0) {
+      for (const e of endorsements) {
+        curY = renderVerticalSignature(endorsementSvg = endorsementSvg, e, ezX, ezWidth, curY);
+      }
+    }
 
     const compositeSvg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
-     width="${imgWidth}" height="${totalHeight}" viewBox="0 0 ${imgWidth} ${totalHeight}">
+     width="${imgWidth}" height="${imgHeight}" viewBox="0 0 ${imgWidth} ${imgHeight}">
   <!-- Original back check image -->
   <image href="data:${mimeType};base64,${originalBase64}" 
          x="0" y="0" width="${imgWidth}" height="${imgHeight}" 
          preserveAspectRatio="xMidYMid meet"/>
   
-  <!-- White area below image -->
-  <rect x="0" y="${imgHeight}" width="${imgWidth}" height="${stampHeight + sigBlockHeight}" fill="#ffffff"/>
-  
-  ${endorsementStamp}
-
-  <!-- Individual endorsement signatures -->
-  <line x1="20" y1="${imgHeight + stampHeight}" x2="${imgWidth - 20}" y2="${imgHeight + stampHeight}" stroke="#334155" stroke-width="2"/>
-  <text x="${imgWidth / 2}" y="${imgHeight + stampHeight + 25}" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#1e293b">ENDORSEMENTS</text>
-  
-  ${overlaySvg}
+  <!-- Vertical endorsement block overlaid in upper endorsement zone -->
+  ${endorsementSvg}
 </svg>`;
 
     // 6. Upload composited image
