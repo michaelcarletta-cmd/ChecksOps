@@ -202,7 +202,7 @@ Deno.serve(async (req) => {
 </svg>`;
 
     // 6. Upload composited image
-    const compositePath = check.back_image_path.replace(
+    const compositePath = backImagePath.replace(
       /(\.[^.]+)$/,
       "_endorsed.svg"
     );
