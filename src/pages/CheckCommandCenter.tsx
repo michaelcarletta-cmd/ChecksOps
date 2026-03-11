@@ -1019,7 +1019,18 @@ function CheckDetailPanel({
                           <Button variant="ghost" size="icon" className="h-5 w-5"><Download className="h-3 w-3" /></Button>
                         </a>
                       </div>
-                      <img src={frontImageUrl} alt="Check front" className="w-full rounded border border-border object-contain max-h-48" />
+                      <div className="relative overflow-hidden rounded border border-border">
+                        <img src={frontImageUrl} alt="Check front" className="w-full object-contain max-h-48" />
+                        {!allEndorsementsComplete && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ transform: 'rotate(-30deg)' }}>
+                            <div className="grid grid-cols-2 gap-x-12 gap-y-4 opacity-30">
+                              {Array.from({ length: 6 }).map((_, i) => (
+                                <span key={i} className="text-red-500 font-bold text-4xl tracking-widest" style={{ textShadow: '0 0 2px rgba(180,0,0,0.3)' }}>VOID</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                   {backImageUrl && (
@@ -1030,8 +1041,60 @@ function CheckDetailPanel({
                           <Button variant="ghost" size="icon" className="h-5 w-5"><Download className="h-3 w-3" /></Button>
                         </a>
                       </div>
-                      <img src={backImageUrl} alt="Check back" className="w-full rounded border border-border object-contain max-h-48" />
+                      <div className="relative overflow-hidden rounded border border-border">
+                        <img src={backImageUrl} alt="Check back" className="w-full object-contain max-h-48" />
+                        {!allEndorsementsComplete && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ transform: 'rotate(-30deg)' }}>
+                            <div className="grid grid-cols-2 gap-x-12 gap-y-4 opacity-30">
+                              {Array.from({ length: 6 }).map((_, i) => (
+                                <span key={i} className="text-red-500 font-bold text-4xl tracking-widest" style={{ textShadow: '0 0 2px rgba(180,0,0,0.3)' }}>VOID</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
+                  )}
+                  {/* Print for Deposit — only visible when all endorsements complete */}
+                  {allEndorsementsComplete && !isDepositBlocked && (
+                    <Button
+                      size="sm"
+                      className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                      onClick={() => {
+                        const printWindow = window.open('', '_blank');
+                        if (!printWindow) return;
+                        printWindow.document.write(`
+                          <!DOCTYPE html>
+                          <html>
+                          <head>
+                            <title>Print Check #${check.check_number ?? check.id} for Deposit</title>
+                            <style>
+                              body { margin: 0; padding: 20px; font-family: sans-serif; background: white; }
+                              .header { text-align: center; margin-bottom: 20px; }
+                              .header h1 { font-size: 18px; margin: 0; }
+                              .header p { font-size: 12px; color: #666; margin: 4px 0; }
+                              img { max-width: 100%; border: 1px solid #ddd; margin-bottom: 16px; }
+                              @media print { .no-print { display: none; } }
+                            </style>
+                          </head>
+                          <body>
+                            <div class="header">
+                              <h1>Check #${check.check_number ?? 'N/A'} — ${check.carrier_name ?? ''}</h1>
+                              <p>Amount: $${check.amount?.toLocaleString('en-US', { minimumFractionDigits: 2 }) ?? 'N/A'} · Printed: ${new Date().toLocaleDateString()}</p>
+                              <p>All endorsements verified ✓</p>
+                            </div>
+                            <button class="no-print" onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;cursor:pointer;">Print</button>
+                            ${frontImageUrl ? `<div><p style="font-size:12px;color:#666;">Front</p><img src="${frontImageUrl}" /></div>` : ''}
+                            ${backImageUrl ? `<div><p style="font-size:12px;color:#666;">Back</p><img src="${backImageUrl}" /></div>` : ''}
+                          </body>
+                          </html>
+                        `);
+                        printWindow.document.close();
+                      }}
+                    >
+                      <Printer className="h-4 w-4 mr-2" />
+                      Print for Deposit
+                    </Button>
                   )}
                 </div>
               )}
