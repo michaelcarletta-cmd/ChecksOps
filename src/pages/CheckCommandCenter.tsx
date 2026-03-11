@@ -151,7 +151,8 @@ export default function CheckCommandCenter() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
 
-  const DELETABLE_STATUSES = ["uploaded", "ocr_complete", "needs_review", "manual_review_required"];
+  // Admin: allow delete at any stage
+  const canDeleteAnyCheck = true;
 
   const deleteCheckMutation = useMutation({
     mutationFn: async (checkId: string) => {
