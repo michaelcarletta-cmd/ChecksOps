@@ -536,16 +536,79 @@ function PayeeReconciliation({
     },
   });
 
+  const deletePayee = useMutation({
+    mutationFn: async (payeeId: string) => {
+      const original = payees.find((p) => p.id === payeeId);
+      if (!original) throw new Error("Payee not found");
+      if (original.endorsement_status !== "pending") {
+        throw new Error("Cannot delete a payee with active endorsement activity");
+      }
+
+      // Delete related endorsement records first
+      await supabase.from("check_endorsement_events").delete().eq("payee_id", payeeId);
+      await supabase.from("check_endorsements").delete().eq("payee_id", payeeId);
+
+      const { error } = await supabase.from("check_payees").delete().eq("id", payeeId);
+      if (error) throw error;
+
+      await supabase.from("check_audit_log").insert({
+        check_id: checkId,
+        event_type: "payee_deleted",
+        event_description: `Payee removed: "${original.payee_name}" (${original.payee_type})`,
+        event_data: { payee_id: payeeId, payee_name: original.payee_name, payee_type: original.payee_type },
+        actor_id: user?.id ?? null,
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Payee removed" });
+      qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+    },
+    onError: (err) => {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const addPayee = useMutation({
+    mutationFn: async ({ name, type }: { name: string; type: string }) => {
+      if (!name.trim()) throw new Error("Name is required");
+      const { error } = await supabase.from("check_payees").insert({
+        check_id: checkId,
+        payee_name: name.trim(),
+        payee_type: type,
+        endorsement_status: "pending",
+        endorsement_token: crypto.randomUUID(),
+        endorsement_token_expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+      });
+      if (error) throw error;
+
+      await supabase.from("check_audit_log").insert({
+        check_id: checkId,
+        event_type: "payee_added",
+        event_description: `Payee added: "${name.trim()}" (${type})`,
+        event_data: { payee_name: name.trim(), payee_type: type },
+        actor_id: user?.id ?? null,
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Payee added" });
+      setAddingPayee(false);
+      setNewPayeeName("");
+      setNewPayeeType("insured");
+      qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+    },
+    onError: (err) => {
+      toast({ title: "Add failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const mergePayees = useMutation({
     mutationFn: async () => {
       if (mergeSelection.length < 2) throw new Error("Select at least 2 payees to merge");
       if (!user?.id) throw new Error("Not authenticated");
 
-      // Target = first selected (or the one with endorsement activity)
       const sorted = [...mergeSelection].sort((a, b) => {
         const pa = payees.find((p) => p.id === a);
         const pb = payees.find((p) => p.id === b);
-        // Prefer the one with endorsement activity as target
         const aActive = pa && pa.endorsement_status !== "pending" ? 0 : 1;
         const bActive = pb && pb.endorsement_status !== "pending" ? 0 : 1;
         return aActive - bActive;
@@ -554,7 +617,6 @@ function PayeeReconciliation({
       const targetId = sorted[0];
       const sourceIds = sorted.slice(1);
 
-      // Only merge sources that have no endorsement activity
       const mergeable = sourceIds.filter((id) => {
         const p = payees.find((py) => py.id === id);
         return p?.endorsement_status === "pending";
@@ -570,7 +632,6 @@ function PayeeReconciliation({
         merged_name: mergedName || null,
       }));
 
-      // Use the transactional RPC with merge_only mode
       const { error } = await supabase.rpc("submit_check_review_decision", {
         p_check_id: checkId,
         p_reviewer_id: user.id,
