@@ -50,7 +50,8 @@ Deno.serve(async (req) => {
       }
 
       const checkInfo = endorsement.check_intake_items as any;
-      const endorsementUrl = `${supabaseUrl}/functions/v1/check-endorsement?token=${endorsement.token}`;
+      const appUrl = Deno.env.get("APP_URL") || "https://freedomclaims.lovable.app";
+      const endorsementUrl = `${appUrl}/endorse?token=${endorsement.token}`;
       let sent = false;
 
       // Try email first
