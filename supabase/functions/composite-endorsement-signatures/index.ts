@@ -68,53 +68,54 @@ Deno.serve(async (req) => {
 
     const originalBytes = new Uint8Array(await imgBlob.arrayBuffer());
 
-    // 4. Build the composite SVG overlay
-    const overlaySvg = buildEndorsementOverlaySvg(endorsements, check.check_number, check.carrier_name);
-
-    // 5. Use the SVG-on-image compositing approach:
-    //    Create a new SVG that embeds the original image + endorsement overlay
+    // 4. Build the vertical endorsement overlay
     const originalBase64 = uint8ToBase64(originalBytes);
     const mimeType = check.back_image_path.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
 
-    // Determine image dimensions (use reasonable defaults for check images)
+    // Standard check dimensions
     const imgWidth = 1200;
     const imgHeight = 800;
-    const stampHeight = 220;
-    const sigBlockHeight = 300;
-    const totalHeight = imgHeight + stampHeight + sigBlockHeight;
 
-    // Build the restrictive endorsement stamp
-    const stampY = imgHeight + 20;
-    const endorsementStamp = `
-      <!-- Restrictive Endorsement Stamp -->
-      <rect x="60" y="${stampY}" width="500" height="190" rx="8" ry="8" fill="none" stroke="#1e293b" stroke-width="2"/>
-      <text x="310" y="${stampY + 30}" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#1e293b">Pay to the Order of:</text>
-      <text x="310" y="${stampY + 55}" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#1e293b">Freedom Adjustment</text>
-      <text x="310" y="${stampY + 85}" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#1e293b">FOR DEPOSIT ONLY</text>
-      <line x1="120" y1="${stampY + 110}" x2="500" y2="${stampY + 110}" stroke="#64748b" stroke-width="0.5"/>
-      <text x="310" y="${stampY + 125}" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#64748b">Client Signature</text>
-      <line x1="120" y1="${stampY + 155}" x2="500" y2="${stampY + 155}" stroke="#64748b" stroke-width="0.5"/>
-      <text x="310" y="${stampY + 170}" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#64748b">Freedom Adjustment Signature</text>
-    `;
+    // Endorsement zone: upper-left area of back of check (traditional bank format)
+    // Typically ~1.5" wide zone on the left side, we use a vertical strip
+    const ezX = 40; // left margin
+    const ezWidth = 340; // endorsement zone width
+    let curY = 40; // start near top
+
+
+
+    let endorsementSvg = "";
+
+    // --- Pay to the Order Of ---
+    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="11" fill="#1e293b" font-weight="bold">Pay to the Order of:</text>`;
+    curY += 18;
+    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="14" fill="#1e293b" font-weight="bold">Freedom Adjustment Group</text>`;
+    curY += 20;
+
+    // --- For Deposit Only ---
+    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="11" fill="#1e293b" font-weight="bold">FOR DEPOSIT ONLY</text>`;
+    curY += 16;
+    endorsementSvg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="9" fill="#64748b">Acct # XXXXXX7890</text>`;
+    curY += 20;
+
+    // --- Separator ---
+    endorsementSvg += `<line x1="${ezX}" y1="${curY}" x2="${ezX + ezWidth}" y2="${curY}" stroke="#94a3b8" stroke-width="0.5"/>`;
+    curY += 14;
+
+    // --- Render all endorsement signatures vertically (insured first, company last) ---
+    const sigBlock = buildVerticalEndorsementBlock(endorsements, ezX, ezWidth, curY, "insured_first");
+    endorsementSvg += sigBlock.svg;
 
     const compositeSvg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
-     width="${imgWidth}" height="${totalHeight}" viewBox="0 0 ${imgWidth} ${totalHeight}">
+     width="${imgWidth}" height="${imgHeight}" viewBox="0 0 ${imgWidth} ${imgHeight}">
   <!-- Original back check image -->
   <image href="data:${mimeType};base64,${originalBase64}" 
          x="0" y="0" width="${imgWidth}" height="${imgHeight}" 
          preserveAspectRatio="xMidYMid meet"/>
   
-  <!-- White area below image -->
-  <rect x="0" y="${imgHeight}" width="${imgWidth}" height="${stampHeight + sigBlockHeight}" fill="#ffffff"/>
-  
-  ${endorsementStamp}
-
-  <!-- Individual endorsement signatures -->
-  <line x1="20" y1="${imgHeight + stampHeight}" x2="${imgWidth - 20}" y2="${imgHeight + stampHeight}" stroke="#334155" stroke-width="2"/>
-  <text x="${imgWidth / 2}" y="${imgHeight + stampHeight + 25}" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#1e293b">ENDORSEMENTS</text>
-  
-  ${overlaySvg}
+  <!-- Vertical endorsement block overlaid in upper endorsement zone -->
+  ${endorsementSvg}
 </svg>`;
 
     // 6. Upload composited image
@@ -204,42 +205,57 @@ interface EndorsementRecord {
   signature_method: string | null;
 }
 
-function buildEndorsementOverlaySvg(
+// Vertical endorsement block builder:
+function buildVerticalEndorsementBlock(
   endorsements: EndorsementRecord[],
-  checkNumber: string | null,
-  carrierName: string | null
-): string {
-  const baseY = 800 + 220; // imgHeight + stampHeight
-  let blocks = "";
+  ezX: number,
+  ezWidth: number,
+  startY: number,
+  order: "insured_first" | "all"
+): { svg: string; endY: number } {
+  let curY = startY;
+  let svg = "";
 
-  endorsements.forEach((e, i) => {
-    const col = i % 2;
-    const row = Math.floor(i / 2);
-    const x = col === 0 ? 40 : 620;
-    const y = baseY + 50 + row * 120;
+  const insured = order === "insured_first"
+    ? endorsements.filter(e => e.payee_type !== "company" && e.payee_type !== "public_adjuster")
+    : [];
+  const company = order === "insured_first"
+    ? endorsements.filter(e => e.payee_type === "company" || e.payee_type === "public_adjuster")
+    : [];
+  const ordered = order === "insured_first" ? [...insured, ...company] : endorsements;
 
-    // Signature rendering
-    let sigElement: string;
+  for (const e of ordered) {
+    // Label
+    const label = e.payee_name + (e.payee_type ? ` (${e.payee_type.replace(/_/g, " ")})` : "");
+    svg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="9" fill="#64748b">${escHtml(label)}</text>`;
+    curY += 14;
+
+    // Signature
     if (e.signature_image_url && e.signature_image_url.startsWith("data:image/")) {
-      sigElement = `<image href="${escHtml(e.signature_image_url)}" x="${x}" y="${y + 20}" width="240" height="50" preserveAspectRatio="xMidYMid meet"/>`;
+      svg += `<image href="${escHtml(e.signature_image_url)}" x="${ezX}" y="${curY}" width="${ezWidth - 20}" height="40" preserveAspectRatio="xMinYMid meet"/>`;
+      curY += 44;
     } else if (e.signature_image_url && e.signature_image_url.startsWith("typed:")) {
       const typedName = e.signature_image_url.slice(6);
-      sigElement = `<text x="${x}" y="${y + 55}" font-family="'Brush Script MT', cursive, serif" font-size="24" fill="#1e293b">${escHtml(typedName)}</text>`;
+      svg += `<text x="${ezX}" y="${curY + 14}" font-family="'Brush Script MT', cursive, serif" font-size="20" fill="#1e293b">${escHtml(typedName)}</text>`;
+      curY += 24;
     } else if (e.status === "waived") {
-      sigElement = `<text x="${x}" y="${y + 50}" font-family="Arial, sans-serif" font-size="11" fill="#94a3b8" font-style="italic">Waived</text>`;
+      svg += `<text x="${ezX}" y="${curY + 10}" font-family="Arial, sans-serif" font-size="9" fill="#94a3b8" font-style="italic">Waived</text>`;
+      curY += 16;
     } else {
-      sigElement = "";
+      curY += 4;
     }
 
-    const signedDate = e.signed_at ? new Date(e.signed_at).toLocaleDateString("en-US") : "";
+    // Date
+    if (e.signed_at) {
+      const d = new Date(e.signed_at).toLocaleDateString("en-US");
+      svg += `<text x="${ezX}" y="${curY}" font-family="Arial, sans-serif" font-size="8" fill="#94a3b8">${escHtml(d)}</text>`;
+      curY += 12;
+    }
 
-    blocks += `
-      <text x="${x}" y="${y + 12}" font-family="Arial, sans-serif" font-size="11" fill="#64748b">${escHtml(e.payee_name)} (${escHtml(e.payee_type?.replace(/_/g, " "))})</text>
-      ${sigElement}
-      <line x1="${x}" y1="${y + 75}" x2="${x + 240}" y2="${y + 75}" stroke="#94a3b8" stroke-width="0.5"/>
-      <text x="${x + 250}" y="${y + 55}" font-family="Arial, sans-serif" font-size="10" fill="#94a3b8">${escHtml(signedDate)}</text>
-    `;
-  });
+    // Separator line
+    svg += `<line x1="${ezX}" y1="${curY}" x2="${ezX + ezWidth}" y2="${curY}" stroke="#cbd5e1" stroke-width="0.5"/>`;
+    curY += 10;
+  }
 
-  return blocks;
+  return { svg, endY: curY };
 }
