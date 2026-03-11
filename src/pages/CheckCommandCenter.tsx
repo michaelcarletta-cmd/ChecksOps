@@ -888,6 +888,7 @@ function CheckDetailPanel({
 
       let originalPath = payload.original_back_image_path ?? check.back_image_path ?? null;
       let renderMode = payload.output_format ?? null;
+      let dbPathUpdateCommitted = payload.db_path_update_committed ?? null;
 
       if (!compositedPath || !originalPath || !renderMode) {
         const { data: latestCompositeAudit } = await supabase
