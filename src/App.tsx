@@ -26,6 +26,7 @@ const ClientPortal = lazy(() => import("./pages/ClientPortal"));
 const ClientPortalHelp = lazy(() => import("./pages/ClientPortalHelp"));
 const ContractorPortal = lazy(() => import("./pages/ContractorPortal"));
 const Sign = lazy(() => import("./pages/Sign"));
+const Endorse = lazy(() => import("./pages/Endorse"));
 
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Workspaces = lazy(() => import("./pages/Workspaces"));
@@ -102,6 +103,7 @@ function AppRoutes() {
       />
       
       <Route path="/sign" element={<Suspense fallback={<PageLoader />}><Sign /></Suspense>} />
+      <Route path="/endorse" element={<Suspense fallback={<PageLoader />}><Endorse /></Suspense>} />
       <Route path="/portal" element={<Suspense fallback={<PageLoader />}><PortalLogin /></Suspense>} />
       {/* Redirect unauthenticated portal visitors to PIN login */}
       {!user && (

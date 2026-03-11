@@ -431,15 +431,51 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const tokenParam = url.searchParams.get("token");
 
-    // GET with token → render endorsement signing page
+    // GET with token → redirect to frontend endorsement page
     if (req.method === "GET" && tokenParam) {
-      return await handlePublicEndorsementPage(supabase, supabaseUrl, tokenParam);
+      const appUrl = Deno.env.get("APP_URL") || "https://freedomclaims.lovable.app";
+      return new Response(null, {
+        status: 302,
+        headers: { ...corsHeaders, Location: `${appUrl}/endorse?token=${tokenParam}` },
+      });
     }
 
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
     const action = body.action as string | undefined;
 
     switch (action) {
+      /* ------------------------------------------------------------ */
+      /*  Get endorsement data (public, token-based, for React page)   */
+      /* ------------------------------------------------------------ */
+      case "get_endorsement_data": {
+        const eToken = body.token as string;
+        if (!eToken) return json({ error: "Token required" }, 400);
+
+        const { data: endorsement, error: eErr } = await supabase
+          .from("check_endorsements")
+          .select("id, payee_name, status, token, token_expires_at, check_intake_items(carrier_name, check_number, amount)")
+          .eq("token", eToken)
+          .single();
+
+        if (eErr || !endorsement) return json({ error: "Invalid or expired endorsement link" }, 404);
+
+        // Check expiry
+        if (endorsement.token_expires_at && new Date(endorsement.token_expires_at) < new Date()) {
+          await supabase.from("check_endorsements").update({ status: "expired" }).eq("id", endorsement.id);
+          return json({ error: "This endorsement link has expired" }, 410);
+        }
+
+        const ci = endorsement.check_intake_items as any;
+        return json({
+          id: endorsement.id,
+          payee_name: endorsement.payee_name,
+          status: endorsement.status,
+          carrier_name: ci?.carrier_name ?? "Unknown Carrier",
+          check_number: ci?.check_number ?? "N/A",
+          amount: ci?.amount ?? null,
+          token: endorsement.token,
+        });
+      }
       /* ------------------------------------------------------------ */
       /*  Send endorsement request (authenticated)                     */
       /* ------------------------------------------------------------ */
@@ -530,7 +566,8 @@ Deno.serve(async (req) => {
           if (newPhone) endorsement.contact_phone = newPhone;
         }
 
-        const endorsementUrl = `${supabaseUrl}/functions/v1/check-endorsement?token=${endorsement.token}`;
+        const appUrl = Deno.env.get("APP_URL") || "https://freedomclaims.lovable.app";
+        const endorsementUrl = `${appUrl}/endorse?token=${endorsement.token}`;
         const checkNum = endorsement.check_intake_items?.check_number ?? "N/A";
         const carrier = endorsement.check_intake_items?.carrier_name ?? "Unknown";
         const amount = endorsement.check_intake_items?.amount ?? null;
