@@ -1187,13 +1187,33 @@ function CheckDetailPanel({
                       onClick={async () => {
                         let printableBackImageUrl = backImageUrl;
 
-                        // Re-generate composited back image right before print so endorsements
-                        // are placed on-check and any stale/watermarked composite is replaced.
                         if (check.back_image_path) {
                           printableBackImageUrl = await ensureDepositReadyBackImage();
                         }
 
-                        const printWindow = window.open('', '_blank');
+                        const exportMode = "deposit-ready";
+                        console.log("[CHECK-EXPORT] check.status:", check.status);
+                        console.log("[CHECK-EXPORT] hasEndorsement:", hasEndorsement);
+                        console.log("[CHECK-EXPORT] showWatermark:", showWatermark);
+                        console.log("[CHECK-EXPORT] endorsementText:", endorsementText);
+                        console.log("[CHECK-EXPORT] signatures:", signatures);
+                        console.log("[CHECK-EXPORT] overlay coordinates:", overlayCoordinates);
+                        console.log("[CHECK-EXPORT] image width/height:", {
+                          width: backImageDimensions?.width ?? null,
+                          height: backImageDimensions?.height ?? null,
+                        });
+                        console.log("[CHECK-EXPORT] final export mode:", exportMode);
+
+                        if (!printableBackImageUrl) {
+                          toast({
+                            title: "Could not generate final deposit image",
+                            description: "Endorsement overlay could not be composited onto the back image.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+
+                        const printWindow = window.open("", "_blank");
                         if (!printWindow) return;
                         printWindow.document.write(`
                           <!DOCTYPE html>
@@ -1211,13 +1231,13 @@ function CheckDetailPanel({
                           </head>
                           <body>
                             <div class="header">
-                              <h1>Check #${check.check_number ?? 'N/A'} — ${check.carrier_name ?? ''}</h1>
-                              <p>Amount: $${check.amount?.toLocaleString('en-US', { minimumFractionDigits: 2 }) ?? 'N/A'} · Printed: ${new Date().toLocaleDateString()}</p>
+                              <h1>Check #${check.check_number ?? "N/A"} — ${check.carrier_name ?? ""}</h1>
+                              <p>Amount: $${check.amount?.toLocaleString("en-US", { minimumFractionDigits: 2 }) ?? "N/A"} · Printed: ${new Date().toLocaleDateString()}</p>
                               <p>All endorsements verified ✓</p>
                             </div>
                             <button class="no-print" onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;cursor:pointer;">Print</button>
-                            ${frontImageUrl ? `<div><p style="font-size:12px;color:#666;">Front</p><img src="${frontImageUrl}" /></div>` : ''}
-                            ${printableBackImageUrl ? `<div><p style="font-size:12px;color:#666;">Back</p><img src="${printableBackImageUrl}" /></div>` : ''}
+                            ${frontImageUrl ? `<div><p style="font-size:12px;color:#666;">Front</p><img src="${frontImageUrl}" /></div>` : ""}
+                            <div><p style="font-size:12px;color:#666;">Back</p><img src="${printableBackImageUrl}" /></div>
                           </body>
                           </html>
                         `);
