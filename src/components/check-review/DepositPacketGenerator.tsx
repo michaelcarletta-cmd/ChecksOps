@@ -294,8 +294,15 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
 
             {imageUrl && (
               <>
-                <h2 className="text-sm font-semibold mt-3 mb-1 border-b border-border pb-1">Check Image</h2>
+                <h2 className="text-sm font-semibold mt-3 mb-1 border-b border-border pb-1">Check Front</h2>
                 <img src={imageUrl} alt="Check front" className="max-w-full max-h-[300px] border border-border rounded" />
+              </>
+            )}
+
+            {backImageUrl && (
+              <>
+                <h2 className="text-sm font-semibold mt-3 mb-1 border-b border-border pb-1">Check Back (Endorsements)</h2>
+                <img src={backImageUrl} alt="Check back with endorsements" className="max-w-full max-h-[300px] border border-border rounded" />
               </>
             )}
           </div>
