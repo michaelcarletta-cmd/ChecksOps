@@ -1334,11 +1334,6 @@ function CheckDetailPanel({
                         console.log("[CHECK-EXPORT] final export mode:", exportMode);
 
                         if (!printableBackImageUrl) {
-                          toast({
-                            title: "Could not generate final deposit image",
-                            description: "Endorsement overlay could not be composited onto the back image.",
-                            variant: "destructive",
-                          });
                           return;
                         }
 
