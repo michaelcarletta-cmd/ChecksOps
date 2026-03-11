@@ -187,14 +187,30 @@ Deno.serve(async (req) => {
 
     console.log(`[COMPOSITE] Endorsement block ends at Y=${curY}, limit=${maxEndorsementY} — PASS`);
 
-    // 6. Build the intermediate SVG for rasterization
+    // 6. Validate endorsement block fits within image bounds
+    if (ezLeftPad + ezContentWidth > imgWidth) {
+      const msg = `SAFETY REJECTION: Endorsement width (${ezLeftPad + ezContentWidth}px) exceeds image width (${imgWidth}px).`;
+      console.error(`[COMPOSITE] ${msg}`);
+      return jsonResp({ success: false, error: msg, safety_rejected: true }, 400);
+    }
+
+    // 7. Build the intermediate SVG for rasterization.
+    // The endorsement is a child of a <clipPath> that constrains it
+    // strictly to the check image rectangle — nothing can render outside.
     const compositeSvg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
      width="${imgWidth}" height="${imgHeight}" viewBox="0 0 ${imgWidth} ${imgHeight}">
+  <defs>
+    <clipPath id="checkBounds">
+      <rect x="0" y="0" width="${imgWidth}" height="${imgHeight}"/>
+    </clipPath>
+  </defs>
   <image href="data:${mimeType};base64,${originalBase64}" 
          x="0" y="0" width="${imgWidth}" height="${imgHeight}" 
          preserveAspectRatio="none"/>
-  ${endorsementSvg}
+  <g clip-path="url(#checkBounds)">
+    ${endorsementSvg}
+  </g>
 </svg>`;
 
     // 7. Flatten SVG → PNG at original resolution using resvg WASM
