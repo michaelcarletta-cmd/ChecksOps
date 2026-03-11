@@ -817,18 +817,34 @@ function PayeeReconciliation({
                     </div>
                   </div>
                   {!mergeMode && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 w-6 p-0"
-                      onClick={() => {
-                        setEditingPayee(payee.id);
-                        setEditName(payee.payee_name);
-                        setEditType(payee.payee_type);
-                      }}
-                    >
-                      <Edit3 className="h-3 w-3" />
-                    </Button>
+                    <div className="flex gap-0.5 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0"
+                        onClick={() => {
+                          setEditingPayee(payee.id);
+                          setEditName(payee.payee_name);
+                          setEditType(payee.payee_type);
+                        }}
+                      >
+                        <Edit3 className="h-3 w-3" />
+                      </Button>
+                      {!hasActivity && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                          onClick={() => {
+                            if (confirm(`Remove payee "${payee.payee_name}"?`)) {
+                              deletePayee.mutate(payee.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
