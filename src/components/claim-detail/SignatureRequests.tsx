@@ -12,6 +12,7 @@ import { FileSignature, Plus, Loader2, Mail, Check, Clock, X, ChevronRight, Chev
 import { Badge } from "@/components/ui/badge";
 import { FieldPlacementEditor } from "./FieldPlacementEditor";
 import { SignatureDiagnostics } from "./SignatureDiagnostics";
+import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 
 interface SignatureRequestsProps {
   claimId: string;
