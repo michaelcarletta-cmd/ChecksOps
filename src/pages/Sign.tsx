@@ -53,9 +53,11 @@ export default function Sign() {
         body: JSON.stringify({ token }),
       });
 
+      console.log("[Sign] Response status:", response.status);
+      
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(errorText || `HTTP ${response.status}`);
+        console.error("[Sign] Error response:", errorText);
       }
 
       const data = await response.json();
