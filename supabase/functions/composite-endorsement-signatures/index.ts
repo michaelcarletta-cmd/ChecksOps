@@ -134,13 +134,14 @@ Deno.serve(async (req) => {
     const ezTopPad = Math.round(imgHeight * ENDORSEMENT_TOP_PCT);
     const ezContentWidth = Math.round(imgWidth * ENDORSEMENT_WIDTH_PCT);
 
-    // Scale font sizes relative to image dimensions — sized 35-50% larger
+    // Scale font sizes relative to image dimensions
+    // Header = base, company = 1.3x header, signatures = 1.2–1.3x header
     const scaleFactor = Math.min(imgWidth / 1200, imgHeight / 800);
-    const headerFont = Math.max(22, Math.round(32 * scaleFactor));   // "Pay to the order of" — 2.2x
-    const companyFont = Math.max(18, Math.round(28 * scaleFactor));  // company/payee — 1.7x
-    const bodyFont = Math.max(16, Math.round(24 * scaleFactor));     // "For Mobile Deposit Only" — 1.7x
-    const sigNameFont = Math.max(16, Math.round(26 * scaleFactor));  // signature names — 1.8x
-    const sigHeight = Math.max(50, Math.round(72 * scaleFactor));    // signature image height — 1.6x
+    const headerFont = Math.max(20, Math.round(28 * scaleFactor));     // base header
+    const companyFont = Math.round(headerFont * 1.3);                  // 1.3x header
+    const bodyFont = headerFont;                                       // same as header
+    const sigNameFont = Math.round(headerFont * 1.25);                 // 1.2–1.3x header — signatures most prominent
+    const sigHeight = Math.max(55, Math.round(80 * scaleFactor));      // signature image height
 
     let curY = ezTopPad;
     let endorsementSvg = "";
@@ -148,17 +149,15 @@ Deno.serve(async (req) => {
     const centerX = ezLeftPad + ezContentWidth / 2;
 
     // --- Restrictive endorsement legend ---
+    // "Pay to the order of" — base header
     endorsementSvg += svgText(centerX, curY + headerFont, headerFont, "#1e293b", "bold", "Pay to the order of");
-    curY += Math.round(headerFont * 1.6);
+    curY += Math.round(headerFont * 1.3);
+    // "Freedom Adjustment" — 1.3x header (company payee)
     endorsementSvg += svgText(centerX, curY + companyFont, companyFont, "#1e293b", "bold", "Freedom Adjustment");
-    curY += Math.round(companyFont * 1.5);
+    curY += Math.round(companyFont * 1.25);
+    // "For Mobile Deposit Only" — same as header
     endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#1e293b", "bold", "For Mobile Deposit Only");
-    curY += Math.round(bodyFont * 1.6);
-    endorsementSvg += svgText(centerX, curY + companyFont, companyFont, "#1e293b", "bold", "Freedom Adjustment");
-    curY += Math.round(companyFont * 1.4);
-    // "By: Michael Carletta" — grouped with company line
-    endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#1e293b", "normal", "By: Michael Carletta");
-    curY += Math.round(bodyFont * 1.7);
+    curY += Math.round(bodyFont * 1.4);
 
     // --- Separator ---
     endorsementSvg += `<line x1="${ezLeftPad}" y1="${curY}" x2="${ezLeftPad + ezContentWidth}" y2="${curY}" stroke="#94a3b8" stroke-width="2"/>`;
