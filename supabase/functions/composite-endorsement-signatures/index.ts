@@ -50,30 +50,39 @@ Deno.serve(async (req) => {
     if (checkErr || !check) throw new Error(`Check not found: ${checkErr?.message}`);
     if (!check.back_image_path) throw new Error("No back image to composite onto");
 
-    // Support re-compositing: if back_image_path is already an _endorsed file,
-    // look up the original path from the audit log
+    // Resolve a clean source image path without mutating DB source fields.
+    // If current path is already an endorsed artifact, recover the true original
+    // from the earliest composite audit entry.
     let backImagePath = check.back_image_path;
     if (backImagePath.includes("_endorsed")) {
-      const { data: auditEntry } = await supabase
+      const { data: firstCompositeAudit } = await supabase
         .from("check_audit_log")
         .select("event_data")
         .eq("check_id", checkId)
         .eq("event_type", "endorsement_signatures_composited")
         .order("created_at", { ascending: true })
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      const originalPath = (auditEntry?.event_data as any)?.original_back_path;
-      if (originalPath) {
-        console.log(`[COMPOSITE] Re-compositing: using original path ${originalPath}`);
-        backImagePath = originalPath;
-        await supabase.from("check_intake_items")
-          .update({ back_image_path: originalPath })
-          .eq("id", checkId);
+      const auditData = (firstCompositeAudit?.event_data ?? null) as {
+        original_back_image_path?: string;
+        original_back_path?: string;
+      } | null;
+
+      const recoveredOriginalPath =
+        auditData?.original_back_image_path ??
+        auditData?.original_back_path ??
+        null;
+
+      if (recoveredOriginalPath) {
+        console.log(`[COMPOSITE] Re-compositing from recovered original source path: ${recoveredOriginalPath}`);
+        backImagePath = recoveredOriginalPath;
       } else {
-        console.log("[COMPOSITE] WARNING: Could not find original back image path in audit log, using current path");
+        throw new Error("Current back image path points to an endorsed artifact and no original source path could be recovered");
       }
     }
+
+    console.log(`[COMPOSITE] original image path: ${backImagePath}`);
 
     // 2. Get signed endorsements
     const { data: endorsements, error: endErr } = await supabase
