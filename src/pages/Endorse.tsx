@@ -238,7 +238,7 @@ export default function Endorse() {
                   <canvas
                     ref={canvasRef}
                     height={120}
-                    style={{ display: "block", width: "100%", borderRadius: 8, cursor: "crosshair" }}
+                    style={{ display: "block", width: "100%", borderRadius: 8, cursor: "crosshair", touchAction: "none" }}
                     onMouseDown={(e) => startDraw(e.nativeEvent.offsetX, e.nativeEvent.offsetY)}
                     onMouseMove={(e) => moveDraw(e.nativeEvent.offsetX, e.nativeEvent.offsetY)}
                     onMouseUp={endDraw}
