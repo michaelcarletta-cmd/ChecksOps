@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertTriangle, CheckCircle2, Building2, Edit3, Save,
   RotateCcw, Shield, Users, FileCheck, Loader2, Merge,
+  Trash2, Plus,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -489,6 +490,9 @@ function PayeeReconciliation({
   const [mergeMode, setMergeMode] = useState(false);
   const [mergeSelection, setMergeSelection] = useState<string[]>([]);
   const [mergedName, setMergedName] = useState("");
+  const [addingPayee, setAddingPayee] = useState(false);
+  const [newPayeeName, setNewPayeeName] = useState("");
+  const [newPayeeType, setNewPayeeType] = useState("insured");
 
   const updatePayee = useMutation({
     mutationFn: async ({ payeeId, name, type }: { payeeId: string; name: string; type: string }) => {
@@ -532,16 +536,79 @@ function PayeeReconciliation({
     },
   });
 
+  const deletePayee = useMutation({
+    mutationFn: async (payeeId: string) => {
+      const original = payees.find((p) => p.id === payeeId);
+      if (!original) throw new Error("Payee not found");
+      if (original.endorsement_status !== "pending") {
+        throw new Error("Cannot delete a payee with active endorsement activity");
+      }
+
+      // Delete related endorsement records first
+      await supabase.from("check_endorsement_events").delete().eq("payee_id", payeeId);
+      await supabase.from("check_endorsements").delete().eq("payee_id", payeeId);
+
+      const { error } = await supabase.from("check_payees").delete().eq("id", payeeId);
+      if (error) throw error;
+
+      await supabase.from("check_audit_log").insert({
+        check_id: checkId,
+        event_type: "payee_deleted",
+        event_description: `Payee removed: "${original.payee_name}" (${original.payee_type})`,
+        event_data: { payee_id: payeeId, payee_name: original.payee_name, payee_type: original.payee_type },
+        actor_id: user?.id ?? null,
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Payee removed" });
+      qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+    },
+    onError: (err) => {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const addPayee = useMutation({
+    mutationFn: async ({ name, type }: { name: string; type: string }) => {
+      if (!name.trim()) throw new Error("Name is required");
+      const { error } = await supabase.from("check_payees").insert({
+        check_id: checkId,
+        payee_name: name.trim(),
+        payee_type: type,
+        endorsement_status: "pending",
+        endorsement_token: crypto.randomUUID(),
+        endorsement_token_expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+      });
+      if (error) throw error;
+
+      await supabase.from("check_audit_log").insert({
+        check_id: checkId,
+        event_type: "payee_added",
+        event_description: `Payee added: "${name.trim()}" (${type})`,
+        event_data: { payee_name: name.trim(), payee_type: type },
+        actor_id: user?.id ?? null,
+      });
+    },
+    onSuccess: () => {
+      toast({ title: "Payee added" });
+      setAddingPayee(false);
+      setNewPayeeName("");
+      setNewPayeeType("insured");
+      qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
+    },
+    onError: (err) => {
+      toast({ title: "Add failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const mergePayees = useMutation({
     mutationFn: async () => {
       if (mergeSelection.length < 2) throw new Error("Select at least 2 payees to merge");
       if (!user?.id) throw new Error("Not authenticated");
 
-      // Target = first selected (or the one with endorsement activity)
       const sorted = [...mergeSelection].sort((a, b) => {
         const pa = payees.find((p) => p.id === a);
         const pb = payees.find((p) => p.id === b);
-        // Prefer the one with endorsement activity as target
         const aActive = pa && pa.endorsement_status !== "pending" ? 0 : 1;
         const bActive = pb && pb.endorsement_status !== "pending" ? 0 : 1;
         return aActive - bActive;
@@ -550,7 +617,6 @@ function PayeeReconciliation({
       const targetId = sorted[0];
       const sourceIds = sorted.slice(1);
 
-      // Only merge sources that have no endorsement activity
       const mergeable = sourceIds.filter((id) => {
         const p = payees.find((py) => py.id === id);
         return p?.endorsement_status === "pending";
@@ -566,7 +632,6 @@ function PayeeReconciliation({
         merged_name: mergedName || null,
       }));
 
-      // Use the transactional RPC with merge_only mode
       const { error } = await supabase.rpc("submit_check_review_decision", {
         p_check_id: checkId,
         p_reviewer_id: user.id,
@@ -601,18 +666,60 @@ function PayeeReconciliation({
         <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Payee Reconciliation
         </h4>
-        {payees.length >= 2 && (
+        <div className="flex gap-1">
           <Button
             size="sm"
-            variant={mergeMode ? "default" : "ghost"}
+            variant="ghost"
             className="h-6 text-[10px]"
-            onClick={() => { setMergeMode(!mergeMode); setMergeSelection([]); setMergedName(""); }}
+            onClick={() => setAddingPayee(!addingPayee)}
           >
-            <Merge className="h-3 w-3 mr-1" />
-            {mergeMode ? "Cancel Merge" : "Merge Payees"}
+            <Plus className="h-3 w-3 mr-1" />Add
           </Button>
-        )}
+          {payees.length >= 2 && (
+            <Button
+              size="sm"
+              variant={mergeMode ? "default" : "ghost"}
+              className="h-6 text-[10px]"
+              onClick={() => { setMergeMode(!mergeMode); setMergeSelection([]); setMergedName(""); }}
+            >
+              <Merge className="h-3 w-3 mr-1" />
+              {mergeMode ? "Cancel" : "Merge"}
+            </Button>
+          )}
+        </div>
       </div>
+
+      {addingPayee && (
+        <Card className="p-2.5 border-primary/30 bg-primary/5 space-y-2">
+          <Input
+            value={newPayeeName}
+            onChange={(e) => setNewPayeeName(e.target.value)}
+            placeholder="Payee name"
+            className="h-7 text-xs"
+          />
+          <Select value={newPayeeType} onValueChange={setNewPayeeType}>
+            <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {PAYEE_TYPES.map((t) => (
+                <SelectItem key={t} value={t} className="text-xs">{t.replace(/_/g, " ")}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              className="flex-1 h-6 text-[10px]"
+              disabled={addPayee.isPending || !newPayeeName.trim()}
+              onClick={() => addPayee.mutate({ name: newPayeeName, type: newPayeeType })}
+            >
+              <Plus className="h-3 w-3 mr-1" />Add Payee
+            </Button>
+            <Button size="sm" variant="outline" className="h-6 text-[10px]" onClick={() => { setAddingPayee(false); setNewPayeeName(""); }}>
+              Cancel
+            </Button>
+          </div>
+        </Card>
+      )}
 
       {mergeMode && mergeSelection.length >= 2 && (
         <Card className="p-2.5 border-primary/30 bg-primary/5 space-y-2">
@@ -710,18 +817,34 @@ function PayeeReconciliation({
                     </div>
                   </div>
                   {!mergeMode && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 w-6 p-0"
-                      onClick={() => {
-                        setEditingPayee(payee.id);
-                        setEditName(payee.payee_name);
-                        setEditType(payee.payee_type);
-                      }}
-                    >
-                      <Edit3 className="h-3 w-3" />
-                    </Button>
+                    <div className="flex gap-0.5 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 w-6 p-0"
+                        onClick={() => {
+                          setEditingPayee(payee.id);
+                          setEditName(payee.payee_name);
+                          setEditType(payee.payee_type);
+                        }}
+                      >
+                        <Edit3 className="h-3 w-3" />
+                      </Button>
+                      {!hasActivity && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                          onClick={() => {
+                            if (confirm(`Remove payee "${payee.payee_name}"?`)) {
+                              deletePayee.mutate(payee.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </div>
               )}

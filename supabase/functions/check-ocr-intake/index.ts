@@ -393,6 +393,7 @@ Rules:
 - "field_confidence" gives per-field confidence for: amount, check_number, payee_line, carrier_name, issue_date.
 - "low_confidence_fields" lists fields where text was unclear.
 - Payee type: mortgage_company (banks/lending/mortgage), contractor (construction/roofing/restoration), public_adjuster (adjusting/PA), insured (individuals/homeowners), unknown otherwise.
+- CRITICAL: "payees" should ONLY contain the names of people or organizations the check is payable to. Do NOT include mailing addresses, street addresses, city/state/zip, suite numbers, PO boxes, or any address components as payees. The "payee_line" field captures the full text, but "payees" must be only the entity names (e.g. "Freedom Adjustment" and "Ildefonso Rosas", NOT "865 Route 33 Business Ste 3 Unit #231 Freehold NJ 07728").
 - Amount must be numeric only. Date must be YYYY-MM-DD.
 - Return ONLY the JSON object, no markdown, no explanation.`;
 
