@@ -445,6 +445,38 @@ Deno.serve(async (req) => {
 
     switch (action) {
       /* ------------------------------------------------------------ */
+      /*  Get endorsement data (public, token-based, for React page)   */
+      /* ------------------------------------------------------------ */
+      case "get_endorsement_data": {
+        const eToken = body.token as string;
+        if (!eToken) return json({ error: "Token required" }, 400);
+
+        const { data: endorsement, error: eErr } = await supabase
+          .from("check_endorsements")
+          .select("id, payee_name, status, token, token_expires_at, check_intake_items(carrier_name, check_number, amount)")
+          .eq("token", eToken)
+          .single();
+
+        if (eErr || !endorsement) return json({ error: "Invalid or expired endorsement link" }, 404);
+
+        // Check expiry
+        if (endorsement.token_expires_at && new Date(endorsement.token_expires_at) < new Date()) {
+          await supabase.from("check_endorsements").update({ status: "expired" }).eq("id", endorsement.id);
+          return json({ error: "This endorsement link has expired" }, 410);
+        }
+
+        const ci = endorsement.check_intake_items as any;
+        return json({
+          id: endorsement.id,
+          payee_name: endorsement.payee_name,
+          status: endorsement.status,
+          carrier_name: ci?.carrier_name ?? "Unknown Carrier",
+          check_number: ci?.check_number ?? "N/A",
+          amount: ci?.amount ?? null,
+          token: endorsement.token,
+        });
+      }
+      /* ------------------------------------------------------------ */
       /*  Send endorsement request (authenticated)                     */
       /* ------------------------------------------------------------ */
       case "send_endorsement_request": {
