@@ -566,7 +566,8 @@ Deno.serve(async (req) => {
           if (newPhone) endorsement.contact_phone = newPhone;
         }
 
-        const endorsementUrl = `${supabaseUrl}/functions/v1/check-endorsement?token=${endorsement.token}`;
+        const appUrl = Deno.env.get("APP_URL") || "https://freedomclaims.lovable.app";
+        const endorsementUrl = `${appUrl}/endorse?token=${endorsement.token}`;
         const checkNum = endorsement.check_intake_items?.check_number ?? "N/A";
         const carrier = endorsement.check_intake_items?.carrier_name ?? "Unknown";
         const amount = endorsement.check_intake_items?.amount ?? null;
