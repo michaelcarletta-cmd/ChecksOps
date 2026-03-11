@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { FileSignature, Loader2, CheckCircle, Clock, AlertCircle, Eye, ExternalLink, XCircle } from "lucide-react";
+import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 
 interface SendForSignatureButtonProps {
   claim: any;
@@ -33,7 +34,9 @@ export function SendForSignatureButton({ claim, onUpdate }: SendForSignatureButt
         body: { claimId: claim.id }
       });
 
-      if (error) throw error;
+      if (error) {
+        throw new Error(await getFunctionErrorMessage(error, "Could not send signature request"));
+      }
       if (data?.error) throw new Error(data.error);
 
       toast({

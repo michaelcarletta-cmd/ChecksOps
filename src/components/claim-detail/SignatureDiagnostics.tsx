@@ -12,6 +12,7 @@ import {
   Loader2, Mail, RefreshCw, Send, XCircle, Link2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 
 interface SignatureDiagnosticsProps {
   claimId: string;
@@ -55,7 +56,9 @@ export function SignatureDiagnostics({ claimId, claim }: SignatureDiagnosticsPro
       const { data, error } = await supabase.functions.invoke("send-signature-request", {
         body: { requestId },
       });
-      if (error) throw error;
+      if (error) {
+        throw new Error(await getFunctionErrorMessage(error, "Could not resend signature request"));
+      }
       if (data?.error) throw new Error(data.error);
       return data;
     },
@@ -74,7 +77,9 @@ export function SignatureDiagnostics({ claimId, claim }: SignatureDiagnosticsPro
       const { data, error } = await supabase.functions.invoke("send-signature-request", {
         body: { requestId, skipEmail: true },
       });
-      if (error) throw error;
+      if (error) {
+        throw new Error(await getFunctionErrorMessage(error, "Could not generate signer links"));
+      }
       if (data?.error) throw new Error(data.error);
       return data;
     },
