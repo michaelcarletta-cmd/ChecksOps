@@ -27,6 +27,7 @@ interface DepositPacketCheck {
   reviewed_by: string | null;
   reviewed_at: string | null;
   front_image_path: string;
+  back_image_path: string | null;
   check_payees?: {
     id: string;
     payee_name: string;
@@ -126,6 +127,17 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
     },
   });
 
+  const { data: backImageUrl } = useQuery({
+    queryKey: ["check-back-image-url", check?.back_image_path],
+    enabled: !!check?.back_image_path,
+    queryFn: async () => {
+      const { data } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(check!.back_image_path!, 3600);
+      return data?.signedUrl ?? null;
+    },
+  });
+
   const handlePrint = () => {
     if (!check) return;
     const printWindow = window.open("", "_blank");
@@ -157,9 +169,14 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
       <div class="notes">${esc(check.review_notes)}</div>
     ` : "";
 
-    const imgHtml = imageUrl ? `
-      <h2>Check Image</h2>
+    const frontImgHtml = imageUrl ? `
+      <h2>Check Front</h2>
       <img src="${esc(imageUrl)}" alt="Check front" class="check-img" />
+    ` : "";
+
+    const backImgHtml = backImageUrl ? `
+      <h2>Check Back (Endorsements)</h2>
+      <img src="${esc(backImageUrl)}" alt="Check back with endorsements" class="check-img" />
     ` : "";
 
     printWindow.document.write(`<!DOCTYPE html><html><head>
@@ -197,7 +214,8 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
       </table>
       ${decisionHtml}
       ${reviewNotesHtml}
-      ${imgHtml}
+      ${frontImgHtml}
+      ${backImgHtml}
       <div class="footer">Generated ${esc(new Date().toLocaleString())} · Freedom Adjustment Deposit Packet</div>
     </body></html>`);
     printWindow.document.close();
@@ -276,8 +294,15 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
 
             {imageUrl && (
               <>
-                <h2 className="text-sm font-semibold mt-3 mb-1 border-b border-border pb-1">Check Image</h2>
+                <h2 className="text-sm font-semibold mt-3 mb-1 border-b border-border pb-1">Check Front</h2>
                 <img src={imageUrl} alt="Check front" className="max-w-full max-h-[300px] border border-border rounded" />
+              </>
+            )}
+
+            {backImageUrl && (
+              <>
+                <h2 className="text-sm font-semibold mt-3 mb-1 border-b border-border pb-1">Check Back (Endorsements)</h2>
+                <img src={backImageUrl} alt="Check back with endorsements" className="max-w-full max-h-[300px] border border-border rounded" />
               </>
             )}
           </div>
