@@ -96,23 +96,22 @@ Deno.serve(async (req) => {
     const imgWidth = 1200;
     const imgHeight = 800;
 
-    // Bank endorsement zone: horizontal strip across the TOP of the back of the check
-    // Standard endorsement area is approximately the top 1.5" of a 6" check = top 25%
-    // We center content within this zone
-    const ezTopMargin = 20;
-    const ezLeftMargin = 60;
-    const ezRightMargin = 60;
-    const ezContentWidth = imgWidth - ezLeftMargin - ezRightMargin;
+    // Bank endorsement zone: centered on the physical check body (not page margins)
+    // Most mobile photos have the check centered with table/background around it.
+    // This zone anchors endorsements over the check itself.
+    const ezTopMargin = Math.round(imgHeight * 0.08);
+    const ezLeftMargin = Math.round(imgWidth * 0.24);
+    const ezContentWidth = Math.round(imgWidth * 0.52);
 
     let curY = ezTopMargin;
     let endorsementSvg = "";
 
-    // --- Semi-transparent white background for endorsement zone legibility ---
-    const ezHeight = Math.min(imgHeight * 0.30, 260); // top ~30% or 260px max
-    endorsementSvg += `<rect x="0" y="0" width="${imgWidth}" height="${ezHeight}" fill="white" fill-opacity="0.88" rx="0"/>`;
+    // --- Semi-transparent white background only over endorsement zone ---
+    const ezHeight = Math.min(Math.round(imgHeight * 0.34), 280);
+    endorsementSvg += `<rect x="${ezLeftMargin - 20}" y="${ezTopMargin - 12}" width="${ezContentWidth + 40}" height="${ezHeight}" fill="white" fill-opacity="0.9" rx="8"/>`;
 
-    // --- Restrictive endorsement legend (centered, bold) ---
-    const centerX = imgWidth / 2;
+    // --- Restrictive endorsement legend (centered in endorsement zone) ---
+    const centerX = ezLeftMargin + ezContentWidth / 2;
     endorsementSvg += `<text x="${centerX}" y="${curY + 14}" font-family="Arial, sans-serif" font-size="12" fill="#1e293b" font-weight="bold" text-anchor="middle">Pay to the Order of</text>`;
     curY += 20;
     endorsementSvg += `<text x="${centerX}" y="${curY + 14}" font-family="Arial, sans-serif" font-size="15" fill="#1e293b" font-weight="bold" text-anchor="middle">Freedom Adjustment LLC</text>`;
@@ -123,7 +122,7 @@ Deno.serve(async (req) => {
     curY += 22;
 
     // --- Separator ---
-    endorsementSvg += `<line x1="${ezLeftMargin}" y1="${curY}" x2="${imgWidth - ezRightMargin}" y2="${curY}" stroke="#94a3b8" stroke-width="1"/>`;
+    endorsementSvg += `<line x1="${ezLeftMargin}" y1="${curY}" x2="${ezLeftMargin + ezContentWidth}" y2="${curY}" stroke="#94a3b8" stroke-width="1"/>`;
     curY += 10;
 
     // --- Render endorsement signatures horizontally across the zone ---
