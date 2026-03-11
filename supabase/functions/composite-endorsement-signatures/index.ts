@@ -253,6 +253,7 @@ Deno.serve(async (req) => {
 
     let pngBytes: Uint8Array;
     try {
+      console.log("[COMPOSITE] rasterized vs svg-fallback mode: rasterized_png");
       pngBytes = await render(compositeSvg);
       console.log(`[COMPOSITE] Rasterized to PNG: ${pngBytes.length} bytes`);
     } catch (renderErr) {
