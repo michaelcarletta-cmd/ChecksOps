@@ -930,6 +930,41 @@ function CheckDetailPanel({
   }
   const isDepositBlocked = (endorsements.length > 0 && !allEndorsementsComplete) || check.status === "loss_draft_required";
 
+  const endorsementRows = endorsements.filter(
+    (e) => e.status === "signed" || e.status === "waived" || !!e.signature_image_url || !!e.signed_at,
+  );
+  const endorsementText = endorsementRows.length > 0
+    ? "Pay to the Order of\nFreedom Adjustment\nFor Mobile Deposit Only\nFreedom Adjustment"
+    : "";
+  const signatures = endorsementRows
+    .map((e) => e.signature_image_url)
+    .filter((signature): signature is string => Boolean(signature));
+
+  const hasEndorsement =
+    !!endorsementText ||
+    (Array.isArray(signatures) && signatures.length > 0);
+
+  const isFinalDepositImage =
+    check.status === "approved_for_deposit" ||
+    check.status === "deposit_ready" ||
+    check.status === "endorsements_complete";
+
+  const showWatermark = !isFinalDepositImage;
+  const overlayCoordinates = { topPercent: 8, leftPercent: 6, widthPercent: 32 };
+
+  console.log("[CHECK-RENDER] check.status:", check.status);
+  console.log("[CHECK-RENDER] endorsementData:", endorsementRows);
+  console.log("[CHECK-RENDER] hasEndorsement:", hasEndorsement);
+  console.log("[CHECK-RENDER] showWatermark:", showWatermark);
+  console.log("[CHECK-RENDER] endorsementText:", endorsementText);
+  console.log("[CHECK-RENDER] signatures:", signatures);
+  console.log("[CHECK-RENDER] overlay coordinates:", overlayCoordinates);
+  console.log("[CHECK-RENDER] image width/height:", {
+    width: backImageDimensions?.width ?? null,
+    height: backImageDimensions?.height ?? null,
+  });
+  console.log("[CHECK-RENDER] final export mode:", isFinalDepositImage ? "deposit-ready" : "preview");
+
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-2">
