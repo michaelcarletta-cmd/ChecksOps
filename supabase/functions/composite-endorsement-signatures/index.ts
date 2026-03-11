@@ -21,6 +21,11 @@ const corsHeaders = {
 // Below that is the "DO NOT WRITE BELOW THIS LINE" area.
 const BOTTOM_ZONE_LIMIT = 0.75;
 
+// Endorsement placement (anchored to image/check bounds)
+const ENDORSEMENT_TOP_PCT = 0.10;
+const ENDORSEMENT_LEFT_PCT = 0.18;
+const ENDORSEMENT_WIDTH_PCT = 0.55;
+
 // Rasterizing very large images can exceed edge runtime memory.
 // For oversized checks we save a composited SVG fallback directly.
 const MAX_RASTER_PIXELS = 8_000_000;
@@ -123,10 +128,11 @@ Deno.serve(async (req) => {
     const originalBase64 = uint8ToBase64(originalBytes);
     const mimeType = backImagePath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
 
-    // Endorsement zone: upper-left area of the check back
-    const ezLeftPad = Math.round(imgWidth * 0.03);
-    const ezTopPad = Math.round(imgHeight * 0.05);
-    const ezContentWidth = Math.round(imgWidth * 0.35);
+    // Endorsement zone anchored to the check body (not page/container)
+    // Matches UI overlay coordinates for consistent final deposit output.
+    const ezLeftPad = Math.round(imgWidth * ENDORSEMENT_LEFT_PCT);
+    const ezTopPad = Math.round(imgHeight * ENDORSEMENT_TOP_PCT);
+    const ezContentWidth = Math.round(imgWidth * ENDORSEMENT_WIDTH_PCT);
 
     // Scale font sizes relative to image dimensions
     const scaleFactor = Math.min(imgWidth / 1200, imgHeight / 800);
@@ -311,6 +317,11 @@ async function uploadAndFinalize(
   // IMPORTANT: never overwrite source path on check_intake_items.
   // Keep source image references untouched even after successful composition.
   const dbPathUpdateCommitted = false;
+  const overlayCoordinates = {
+    top_percent: Math.round(ENDORSEMENT_TOP_PCT * 100),
+    left_percent: Math.round(ENDORSEMENT_LEFT_PCT * 100),
+    width_percent: Math.round(ENDORSEMENT_WIDTH_PCT * 100),
+  };
 
   await supabase.from("check_audit_log").insert({
     check_id: checkId,
@@ -324,6 +335,7 @@ async function uploadAndFinalize(
       endorsement_count: endorsements.length,
       endorsement_ids: endorsements.map((e: { id: string }) => e.id),
       placement: "upper_left_on_image",
+      overlay_coordinates: overlayCoordinates,
       image_dimensions: { width: imgWidth, height: imgHeight },
       pixel_count: pixelCount,
       endorsement_bottom_y: endorsementBottomY,
@@ -332,6 +344,11 @@ async function uploadAndFinalize(
       db_path_update_committed: dbPathUpdateCommitted,
     },
   });
+
+  const { data: signedUrlData } = await supabase.storage
+    .from("claim-files")
+    .createSignedUrl(compositePath, 3600);
+  const compositedSignedUrl = signedUrlData?.signedUrl ?? null;
 
   console.log(`[COMPOSITE] original image path: ${backImagePath}`);
   console.log(`[COMPOSITE] generated output path: ${compositePath}`);
@@ -344,8 +361,10 @@ async function uploadAndFinalize(
     original_back_image_path: backImagePath,
     endorsed_back_image_path: compositePath,
     composited_path: compositePath,
+    composited_signed_url: compositedSignedUrl,
     endorsement_count: endorsements.length,
     output_format: renderMode,
+    overlay_coordinates: overlayCoordinates,
     image_dimensions: { width: imgWidth, height: imgHeight },
     pixel_count: pixelCount,
     db_path_update_committed: dbPathUpdateCommitted,

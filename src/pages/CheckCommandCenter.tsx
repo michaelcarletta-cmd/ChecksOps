@@ -1019,7 +1019,16 @@ function CheckDetailPanel({
     check.status === "endorsements_complete";
 
   const showWatermark = !isFinalDepositImage;
-  const overlayCoordinates = { topPercent: 8, leftPercent: 6, widthPercent: 32 };
+  const overlayCoordinates = { topPercent: 10, leftPercent: 18, widthPercent: 55 };
+  const endorsementStyle = {
+    position: "absolute" as const,
+    top: `${overlayCoordinates.topPercent}%`,
+    left: `${overlayCoordinates.leftPercent}%`,
+    width: `${overlayCoordinates.widthPercent}%`,
+    zIndex: 20,
+    color: "hsl(var(--foreground))",
+    pointerEvents: "none" as const,
+  };
 
   console.log("[CHECK-RENDER] check.status:", check.status);
   console.log("[CHECK-RENDER] endorsementData:", endorsementRows);
@@ -1189,11 +1198,11 @@ function CheckDetailPanel({
                           <Button variant="ghost" size="icon" className="h-5 w-5"><Download className="h-3 w-3" /></Button>
                         </a>
                       </div>
-                      <div className="relative overflow-hidden rounded border border-border">
+                      <div className="check-back-wrap relative inline-block max-w-full overflow-hidden rounded border border-border">
                         <img
                           src={backImageUrl}
                           alt="Check back"
-                          className="w-full object-contain max-h-48"
+                          className="check-back-image block h-auto max-h-48 max-w-full"
                           onLoad={(event) => {
                             setBackImageDimensions({
                               width: event.currentTarget.naturalWidth,
@@ -1203,16 +1212,7 @@ function CheckDetailPanel({
                         />
 
                         {hasEndorsement && (
-                          <div
-                            className="absolute pointer-events-none select-none"
-                            style={{
-                              top: `${overlayCoordinates.topPercent}%`,
-                              left: `${overlayCoordinates.leftPercent}%`,
-                              width: `${overlayCoordinates.widthPercent}%`,
-                              zIndex: 20,
-                              color: "hsl(220 13% 8%)",
-                            }}
-                          >
+                          <div className="endorsement-overlay absolute select-none overflow-hidden" style={endorsementStyle}>
                             <div className="text-[6px] leading-tight space-y-[1px] font-semibold">
                               {endorsementText.split("\n").map((line) => (
                                 <p key={line} className="text-center">{line}</p>
@@ -1236,10 +1236,10 @@ function CheckDetailPanel({
                         )}
 
                         {showWatermark && (
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ transform: "rotate(-30deg)", zIndex: 30 }}>
+                          <div className="void-watermark absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ transform: "rotate(-30deg)", zIndex: 30 }}>
                             <div className="grid grid-cols-2 gap-x-12 gap-y-4 opacity-30">
                               {Array.from({ length: 6 }).map((_, i) => (
-                                <span key={i} className="text-red-500 font-bold text-4xl tracking-widest" style={{ textShadow: "0 0 2px rgba(180,0,0,0.3)" }}>VOID</span>
+                                <span key={i} className="text-destructive font-bold text-4xl tracking-widest" style={{ textShadow: "0 0 2px hsl(var(--destructive) / 0.3)" }}>VOID</span>
                               ))}
                             </div>
                           </div>
