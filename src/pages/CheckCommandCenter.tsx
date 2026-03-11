@@ -156,16 +156,31 @@ export default function CheckCommandCenter() {
 
   const deleteCheckMutation = useMutation({
     mutationFn: async (checkId: string) => {
-      // Delete all related records first, then the check
-      await supabase.from("check_endorsements").delete().eq("check_id", checkId);
-      await supabase.from("check_endorsement_events").delete().eq("check_id", checkId);
-      await supabase.from("check_review_decisions").delete().eq("check_id", checkId);
-      await supabase.from("check_reissue_requests").delete().eq("check_id", checkId);
-      await supabase.from("check_eligibility_results").delete().eq("check_id", checkId);
-      await supabase.from("check_audit_log").delete().eq("check_id", checkId);
-      await supabase.from("check_payees").delete().eq("check_id", checkId);
+      // Delete all related records first (order matters for FK constraints)
+      const tables = [
+        "check_endorsement_events",
+        "check_endorsements",
+        "check_review_decisions",
+        "check_reissue_requests",
+        "check_eligibility_results",
+        "check_audit_log",
+        "check_payees",
+      ] as const;
+      
+      for (const table of tables) {
+        const { error } = await supabase.from(table).delete().eq("check_id", checkId);
+        if (error) {
+          console.error(`[DELETE] Failed to delete from ${table}:`, error);
+          throw new Error(`Failed to clear ${table}: ${error.message}`);
+        }
+      }
+      
+      // Also unlink from claim_checks if linked
+      const { error: ccErr } = await supabase.from("claim_checks").delete().eq("check_intake_item_id", checkId);
+      if (ccErr) console.warn("[DELETE] claim_checks cleanup:", ccErr.message);
+      
       const { error } = await supabase.from("check_intake_items").delete().eq("id", checkId);
-      if (error) throw error;
+      if (error) throw new Error(`Failed to delete check: ${error.message}`);
     },
     onSuccess: () => {
       toast({ title: "Check deleted" });
