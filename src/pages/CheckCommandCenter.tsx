@@ -1180,9 +1180,9 @@ function CheckDetailPanel({
                         <img src={frontImageUrl} alt="Check front" className="w-full object-contain max-h-48" />
                         {showWatermark && (
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ transform: "rotate(-30deg)" }}>
-                            <div className="grid grid-cols-2 gap-x-12 gap-y-4 opacity-30">
-                              {Array.from({ length: 6 }).map((_, i) => (
-                                <span key={i} className="text-red-500 font-bold text-4xl tracking-widest" style={{ textShadow: "0 0 2px rgba(180,0,0,0.3)" }}>VOID</span>
+                            <div className="grid grid-cols-2 gap-x-8 gap-y-6 opacity-[0.07]">
+                              {Array.from({ length: 4 }).map((_, i) => (
+                                <span key={i} className="text-destructive font-bold text-3xl tracking-widest">VOID</span>
                               ))}
                             </div>
                           </div>
