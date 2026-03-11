@@ -720,9 +720,9 @@ function CheckDetailPanel({
   const [detailTab, setDetailTab] = useState("overview");
   const [undoing, setUndoing] = useState(false);
   const [preparingDepositPrint, setPreparingDepositPrint] = useState(false);
+  const [backImageDimensions, setBackImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
-  const qc = useQueryClient();
 
    const { data: check } = useQuery({
     queryKey: ["check-detail", checkId],
