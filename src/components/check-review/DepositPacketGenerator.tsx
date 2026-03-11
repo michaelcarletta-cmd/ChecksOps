@@ -27,6 +27,7 @@ interface DepositPacketCheck {
   reviewed_by: string | null;
   reviewed_at: string | null;
   front_image_path: string;
+  back_image_path: string | null;
   check_payees?: {
     id: string;
     payee_name: string;
