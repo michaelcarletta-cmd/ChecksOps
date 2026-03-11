@@ -719,6 +719,7 @@ function CheckDetailPanel({
 }) {
   const [detailTab, setDetailTab] = useState("overview");
   const [undoing, setUndoing] = useState(false);
+  const [preparingDepositPrint, setPreparingDepositPrint] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
