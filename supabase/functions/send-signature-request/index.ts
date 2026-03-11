@@ -302,7 +302,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     // ── determine delivery mode ──
-    let deliveryMode: "manual_bypass" | "make_signnow" | "mailjet_direct";
+    let deliveryMode: "manual_bypass" | "make_signnow" | "resend_direct";
 
     if (skipEmail) {
       deliveryMode = "manual_bypass";
