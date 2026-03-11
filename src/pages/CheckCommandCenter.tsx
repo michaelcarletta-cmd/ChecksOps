@@ -723,6 +723,7 @@ function CheckDetailPanel({
   const [backImageDimensions, setBackImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
+  const qc = useQueryClient();
 
    const { data: check } = useQuery({
     queryKey: ["check-detail", checkId],
