@@ -96,24 +96,17 @@ Deno.serve(async (req) => {
     const imgWidth = 1200;
     const imgHeight = 800;
 
-    // Endorsement zone: LEFT strip of check back, rotated 90° CCW
-    // This matches standard bank endorsement placement (vertical strip on left)
-    const ezStripWidth = Math.round(imgWidth * 0.28); // left 28% of check
-    const ezStripHeight = imgHeight;
-    
-    // All endorsement content is rendered inside a rotated group
-    // Rotation: 90° CCW around the center of the strip
-    const stripCenterX = ezStripWidth / 2;
-    const stripCenterY = ezStripHeight / 2;
+    // Endorsement zone: left strip of check back, NO rotation
+    // Text follows the natural orientation of the uploaded image
+    const ezLeftPad = Math.round(imgWidth * 0.03);
+    const ezTopPad = Math.round(imgHeight * 0.06);
+    const ezContentWidth = Math.round(imgWidth * 0.35);
 
-    // Inside the rotated group, we layout top-to-bottom (which becomes left-to-right on check)
-    // After rotation, the "width" available = ezStripHeight, "height" available = ezStripWidth
-    const contentWidth = ezStripHeight - 40; // padding
-    let curY = 20; // start position inside rotated space
+    let curY = ezTopPad;
     let endorsementSvg = "";
 
     // --- Restrictive endorsement legend ---
-    const centerX = contentWidth / 2 + 20;
+    const centerX = ezLeftPad + ezContentWidth / 2;
     endorsementSvg += `<text x="${centerX}" y="${curY + 16}" font-family="Arial, sans-serif" font-size="14" fill="#1e293b" font-weight="bold" text-anchor="middle">Pay to the order of</text>`;
     curY += 24;
     endorsementSvg += `<text x="${centerX}" y="${curY + 18}" font-family="Arial, sans-serif" font-size="18" fill="#1e293b" font-weight="bold" text-anchor="middle">Freedom Adjustment</text>`;
@@ -124,7 +117,7 @@ Deno.serve(async (req) => {
     curY += 30;
 
     // --- Separator ---
-    endorsementSvg += `<line x1="20" y1="${curY}" x2="${contentWidth + 20}" y2="${curY}" stroke="#94a3b8" stroke-width="1"/>`;
+    endorsementSvg += `<line x1="${ezLeftPad}" y1="${curY}" x2="${ezLeftPad + ezContentWidth}" y2="${curY}" stroke="#94a3b8" stroke-width="1"/>`;
     curY += 14;
 
     // --- Render endorsement signatures ---
@@ -139,8 +132,8 @@ Deno.serve(async (req) => {
     for (const e of ordered) {
       // Signature
       if (e.signature_image_url && e.signature_image_url.startsWith("data:image/")) {
-        const sigWidth = Math.min(contentWidth - 40, 300);
-        endorsementSvg += `<image href="${escHtml(e.signature_image_url)}" x="20" y="${curY}" width="${sigWidth}" height="44" preserveAspectRatio="xMinYMid meet"/>`;
+        const sigWidth = Math.min(ezContentWidth - 20, 300);
+        endorsementSvg += `<image href="${escHtml(e.signature_image_url)}" x="${ezLeftPad}" y="${curY}" width="${sigWidth}" height="44" preserveAspectRatio="xMinYMid meet"/>`;
         curY += 48;
       } else if (e.signature_image_url && e.signature_image_url.startsWith("typed:")) {
         const typedName = e.signature_image_url.slice(6);
@@ -150,7 +143,6 @@ Deno.serve(async (req) => {
         endorsementSvg += `<text x="${centerX}" y="${curY + 12}" font-family="Arial, sans-serif" font-size="10" fill="#94a3b8" font-style="italic" text-anchor="middle">${escHtml(e.payee_name)} — Waived</text>`;
         curY += 16;
       } else {
-        // Pending or no signature yet — show name placeholder
         endorsementSvg += `<text x="${centerX}" y="${curY + 16}" font-family="Arial, sans-serif" font-size="14" fill="#1e293b" text-anchor="middle">${escHtml(e.payee_name)}</text>`;
         curY += 20;
         endorsementSvg += `<text x="${centerX}" y="${curY + 10}" font-family="Arial, sans-serif" font-size="10" fill="#64748b" font-style="italic" text-anchor="middle">signature</text>`;
@@ -168,10 +160,8 @@ Deno.serve(async (req) => {
          x="0" y="0" width="${imgWidth}" height="${imgHeight}" 
          preserveAspectRatio="xMidYMid meet"/>
   
-  <!-- Endorsement zone: left strip, rotated 90° CCW -->
-  <g transform="translate(${stripCenterX}, ${stripCenterY}) rotate(-90) translate(${-stripCenterY}, ${-stripCenterX})">
-    ${endorsementSvg}
-  </g>
+  <!-- Endorsement zone: left strip, transparent, follows image orientation -->
+  ${endorsementSvg}
 </svg>`;
 
     // 6. Upload composited image
