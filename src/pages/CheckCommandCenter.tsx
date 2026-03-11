@@ -1103,6 +1103,7 @@ function CheckDetailPanel({
                     <Button
                       size="sm"
                       className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                      disabled={preparingDepositPrint}
                       onClick={async () => {
                         let printableBackImageUrl = backImageUrl;
 
