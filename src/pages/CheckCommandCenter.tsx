@@ -436,7 +436,7 @@ export default function CheckCommandCenter() {
                             ? recommendationConfig[check.deposit_recommendation]
                             : null;
                           const RecIcon = rec?.icon ?? null;
-                          const canDelete = DELETABLE_STATUSES.includes(check.status);
+                          const canDelete = canDeleteAnyCheck;
                           return (
                             <TableRow
                               key={check.id}
