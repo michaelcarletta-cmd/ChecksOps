@@ -115,6 +115,9 @@ Deno.serve(async (req) => {
 
     // Compute the maximum Y the endorsement block can reach
     const maxEndorsementY = Math.floor(imgHeight * BOTTOM_ZONE_LIMIT);
+    const pixelCount = imgWidth * imgHeight;
+    console.log(`[COMPOSITE] width/height: ${imgWidth}x${imgHeight}`);
+    console.log(`[COMPOSITE] pixel count: ${pixelCount}`);
 
     // 5. Build endorsement overlay INSIDE the check image bounds
     const originalBase64 = uint8ToBase64(originalBytes);
