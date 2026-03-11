@@ -56,7 +56,9 @@ export function SignatureDiagnostics({ claimId, claim }: SignatureDiagnosticsPro
       const { data, error } = await supabase.functions.invoke("send-signature-request", {
         body: { requestId },
       });
-      if (error) throw error;
+      if (error) {
+        throw new Error(await getFunctionErrorMessage(error, "Could not resend signature request"));
+      }
       if (data?.error) throw new Error(data.error);
       return data;
     },
