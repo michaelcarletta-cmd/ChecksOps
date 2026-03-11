@@ -1016,13 +1016,23 @@ function CheckDetailPanel({
                   </p>
                   {frontImageUrl && (
                     <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground">Front</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] text-muted-foreground">Front</p>
+                        <a href={frontImageUrl} download={`check-${check.check_number ?? check.id}-front`} target="_blank" rel="noopener noreferrer">
+                          <Button variant="ghost" size="icon" className="h-5 w-5"><Download className="h-3 w-3" /></Button>
+                        </a>
+                      </div>
                       <img src={frontImageUrl} alt="Check front" className="w-full rounded border border-border object-contain max-h-48" />
                     </div>
                   )}
                   {backImageUrl && (
                     <div className="space-y-1">
-                      <p className="text-[10px] text-muted-foreground">Back</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] text-muted-foreground">Back</p>
+                        <a href={backImageUrl} download={`check-${check.check_number ?? check.id}-back`} target="_blank" rel="noopener noreferrer">
+                          <Button variant="ghost" size="icon" className="h-5 w-5"><Download className="h-3 w-3" /></Button>
+                        </a>
+                      </div>
                       <img src={backImageUrl} alt="Check back" className="w-full rounded border border-border object-contain max-h-48" />
                     </div>
                   )}
