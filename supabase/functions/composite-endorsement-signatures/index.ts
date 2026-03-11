@@ -195,23 +195,7 @@ function uint8ToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-/**
- * Renders a single endorsement signature vertically and returns the new curY.
- * Mutates `svg` by reassignment pattern: caller passes endorsementSvg = endorsementSvg.
- */
-function renderVerticalSignature(
-  _svg: string,
-  e: EndorsementRecord,
-  ezX: number,
-  ezWidth: number,
-  curY: number
-): number {
-  // We can't mutate the string param directly, so we use a global approach
-  // This function is called inline with reassignment pattern
-  return curY; // placeholder — actual rendering done inline
-}
-
-// Since we need to build SVG strings, use this inline builder instead:
+// Vertical endorsement block builder:
 function buildVerticalEndorsementBlock(
   endorsements: EndorsementRecord[],
   ezX: number,
