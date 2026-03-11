@@ -309,7 +309,7 @@ Deno.serve(async (req) => {
     } else {
       deliveryMode = branding?.signnow_make_webhook_url
         ? "make_signnow"
-        : "mailjet_direct";
+        : "resend_direct";
     }
 
     await log(sb, {
