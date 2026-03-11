@@ -82,13 +82,7 @@ Deno.serve(async (req) => {
     const ezWidth = 340; // endorsement zone width
     let curY = 40; // start near top
 
-    // Separate insured (homeowner/mortgagee) from company endorsements
-    const insuredEndorsements = endorsements.filter((e: EndorsementRecord) =>
-      e.payee_type !== "company" && e.payee_type !== "public_adjuster"
-    );
-    const companyEndorsements = endorsements.filter((e: EndorsementRecord) =>
-      e.payee_type === "company" || e.payee_type === "public_adjuster"
-    );
+
 
     let endorsementSvg = "";
 
