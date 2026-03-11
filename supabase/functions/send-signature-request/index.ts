@@ -49,42 +49,36 @@ async function failRequest(sb: any, id: string, error: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Mailjet direct send
+// Resend direct send
 // ---------------------------------------------------------------------------
 
-async function sendMailjet(
+async function sendResend(
   to: string,
   subject: string,
   html: string,
-  traceId: string,
 ) {
-  const apiKey = Deno.env.get("MAILJET_API_KEY");
-  const secretKey = Deno.env.get("MAILJET_SECRET_KEY");
+  const apiKey = Deno.env.get("RESEND_API_KEY");
+  if (!apiKey) throw new Error("RESEND_API_KEY not configured");
 
   const body = {
-    Messages: [
-      {
-        From: { Email: "claims@freedomclaims.work", Name: "Freedom Claims" },
-        To: [{ Email: to }],
-        Subject: subject,
-        HTMLPart: html,
-        CustomID: traceId,
-      },
-    ],
+    from: "Freedom Claims <claims@freedomclaims.work>",
+    to: [to],
+    subject,
+    html,
   };
 
-  const res = await fetch("https://api.mailjet.com/v3.1/send", {
+  const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Basic ${btoa(`${apiKey}:${secretKey}`)}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(body),
   });
 
   const result = await res.json();
   if (!res.ok) {
-    throw Object.assign(new Error(`Mailjet ${res.status}: ${JSON.stringify(result)}`), {
+    throw Object.assign(new Error(`Resend ${res.status}: ${JSON.stringify(result)}`), {
       response: result,
       statusCode: res.status,
     });
