@@ -848,6 +848,48 @@ function CheckDetailPanel({
     }
   };
 
+  const ensureDepositReadyBackImage = async () => {
+    if (!check?.id || !check.back_image_path) return backImageUrl ?? null;
+
+    setPreparingDepositPrint(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const { data, error } = await supabase.functions.invoke("composite-endorsement-signatures", {
+        body: { checkId: check.id },
+        headers: session.session?.access_token
+          ? { Authorization: `Bearer ${session.session.access_token}` }
+          : undefined,
+      });
+
+      if (error) throw error;
+
+      const compositedPath =
+        (data as { composited_path?: string })?.composited_path ?? check.back_image_path;
+
+      const { data: signedData, error: signedErr } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(compositedPath, 3600);
+
+      if (signedErr) throw signedErr;
+
+      qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-back-img"] });
+      onRefresh();
+
+      return signedData?.signedUrl ?? backImageUrl ?? null;
+    } catch (e: any) {
+      toast({
+        title: "Could not refresh endorsement image",
+        description: e?.message ?? "Using existing back image for print",
+        variant: "destructive",
+      });
+      return backImageUrl ?? null;
+    } finally {
+      setPreparingDepositPrint(false);
+    }
+  };
+
   if (!check) return null;
 
   const rec = check.deposit_recommendation
