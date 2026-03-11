@@ -431,45 +431,41 @@ Deno.serve(async (req) => {
       return respond({ success: true, mode: "make_signnow", provider_id: providerId });
     }
 
-    // ── mailjet_direct ──
+    // ── resend_direct ──
     const appUrl = "https://freedomclaims.lovable.app";
     const results: { signer_id: string; success: boolean; error?: string }[] = [];
 
     for (const signer of signersArr) {
       const signUrl = `${appUrl}/sign?token=${signer.access_token}`;
-      const traceId = `es-${requestId.substring(0, 8)}-${signer.id.substring(0, 8)}`;
 
       await log(sb, {
         request_id: requestId, signer_id: signer.id, claim_id: claimId,
         stage: "email_sending", status: "in_progress",
         message: `Sending to ${signer.signer_email}`,
-        payload: { signUrl, traceId },
+        payload: { signUrl },
       });
 
       try {
         const html = emailHtml(signer, request, signUrl);
-        const emailRes = await sendMailjet(
+        const emailRes = await sendResend(
           signer.signer_email,
           `🔔 Action Required: Sign ${request.document_name}`,
           html,
-          traceId,
         );
 
-        const mjMsg = emailRes?.Messages?.[0];
-        const mjMsgId = mjMsg?.To?.[0]?.MessageID?.toString() || null;
-        const mjStatus = mjMsg?.Status || "unknown";
+        const resendId = emailRes?.id || null;
 
         await sb.from("signature_signers").update({
-          delivery_status: mjStatus === "success" ? "sent" : mjStatus,
+          delivery_status: "sent",
           email_sent_at: new Date().toISOString(),
-          email_provider_message_id: mjMsgId,
+          email_provider_message_id: resendId,
         }).eq("id", signer.id);
 
         await log(sb, {
           request_id: requestId, signer_id: signer.id, claim_id: claimId,
           stage: "email_sent", status: "ok",
-          message: `Mailjet ${mjStatus} — msgId ${mjMsgId}`,
-          payload: { emailRes, mjMsgId, mjStatus },
+          message: `Resend success — id ${resendId}`,
+          payload: { emailRes, resendId },
         });
 
         results.push({ signer_id: signer.id, success: true });
@@ -495,7 +491,6 @@ Deno.serve(async (req) => {
     const someFailed = results.some((r) => !r.success);
     const allSucceeded = results.every((r) => r.success);
 
-    // Determine correct provider_status
     let providerStatus: string;
     if (allSucceeded) {
       providerStatus = "emails_sent";
@@ -507,8 +502,7 @@ Deno.serve(async (req) => {
 
     await sb.from("signature_requests").update({
       status: allFailed ? "failed" : "pending",
-      delivery_mode: "mailjet_direct",
-      // Only set sent_at when at least one email succeeded
+      delivery_mode: "resend_direct",
       sent_at: allFailed ? null : new Date().toISOString(),
       last_error: allFailed ? "All emails failed" : someFailed ? "Some emails failed" : null,
       provider_status: providerStatus,
@@ -521,7 +515,7 @@ Deno.serve(async (req) => {
       payload: { results },
     });
 
-    return respond({ success: !allFailed, mode: "mailjet_direct", results });
+    return respond({ success: !allFailed, mode: "resend_direct", results });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     console.error("send-signature-request error:", msg);
