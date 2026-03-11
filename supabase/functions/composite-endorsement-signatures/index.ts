@@ -130,9 +130,9 @@ Deno.serve(async (req) => {
 
     // Endorsement zone anchored to the check body (not page/container)
     // Matches UI overlay coordinates for consistent final deposit output.
-    const ezLeftPad = Math.round(imgWidth * 0.18);
-    const ezTopPad = Math.round(imgHeight * 0.10);
-    const ezContentWidth = Math.round(imgWidth * 0.55);
+    const ezLeftPad = Math.round(imgWidth * ENDORSEMENT_LEFT_PCT);
+    const ezTopPad = Math.round(imgHeight * ENDORSEMENT_TOP_PCT);
+    const ezContentWidth = Math.round(imgWidth * ENDORSEMENT_WIDTH_PCT);
 
     // Scale font sizes relative to image dimensions
     const scaleFactor = Math.min(imgWidth / 1200, imgHeight / 800);
