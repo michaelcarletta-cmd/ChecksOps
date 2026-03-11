@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertTriangle, CheckCircle2, Building2, Edit3, Save,
   RotateCcw, Shield, Users, FileCheck, Loader2, Merge,
+  Trash2, Plus,
 } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
