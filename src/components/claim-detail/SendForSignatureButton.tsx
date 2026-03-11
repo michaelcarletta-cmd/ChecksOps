@@ -34,7 +34,9 @@ export function SendForSignatureButton({ claim, onUpdate }: SendForSignatureButt
         body: { claimId: claim.id }
       });
 
-      if (error) throw error;
+      if (error) {
+        throw new Error(await getFunctionErrorMessage(error, "Could not send signature request"));
+      }
       if (data?.error) throw new Error(data.error);
 
       toast({

@@ -77,7 +77,9 @@ export function SignatureDiagnostics({ claimId, claim }: SignatureDiagnosticsPro
       const { data, error } = await supabase.functions.invoke("send-signature-request", {
         body: { requestId, skipEmail: true },
       });
-      if (error) throw error;
+      if (error) {
+        throw new Error(await getFunctionErrorMessage(error, "Could not generate signer links"));
+      }
       if (data?.error) throw new Error(data.error);
       return data;
     },
