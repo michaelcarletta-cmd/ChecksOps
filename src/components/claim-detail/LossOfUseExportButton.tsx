@@ -206,7 +206,7 @@ export const LossOfUseExportButton = ({ expenses, claimNumber }: LossOfUseExport
       const monthGroups: Record<string, { count: number; total: number }> = {};
       expenses.forEach((e) => {
         const d = new Date(e.expense_date);
-        const key = d.toLocaleString("en-US", { month: "long", year: "numeric" });
+        const key = d.toLocaleString("en-US", { month: "long" });
         if (!monthGroups[key]) monthGroups[key] = { count: 0, total: 0 };
         monthGroups[key].count++;
         monthGroups[key].total += e.amount;
