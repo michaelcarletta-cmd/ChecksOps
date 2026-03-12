@@ -741,6 +741,7 @@ function CheckDetailPanel({
   const [detailTab, setDetailTab] = useState("overview");
   const [undoing, setUndoing] = useState(false);
   const [preparingDepositPrint, setPreparingDepositPrint] = useState(false);
+  const [frontImageDimensions, setFrontImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [backImageDimensions, setBackImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
