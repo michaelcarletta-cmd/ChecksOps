@@ -1275,11 +1275,11 @@ function CheckDetailPanel({
                           <div className="endorsement-overlay absolute select-none" style={endorsementStyle}>
                             <div className="leading-tight font-semibold" style={{ lineHeight: 1.15 }}>
                               {/* Header */}
-                              <p className="text-center text-[10px]">Pay to the order of</p>
+                              <p className="text-center text-[12px]">Pay to the order of</p>
                               {/* Company payee — 1.3x header */}
-                              <p className="text-center text-[13px] font-bold mt-[2px]">Freedom Adjustment</p>
+                              <p className="text-center text-[16px] font-bold mt-[2px]">Freedom Adjustment</p>
                               {/* Mobile deposit — same as header */}
-                              <p className="text-center text-[10px] font-bold mt-[2px]">For Mobile Deposit Only</p>
+                              <p className="text-center text-[12px] font-bold mt-[2px]">For Mobile Deposit Only</p>
 
                               {/* Separator before signatures */}
                               <div className="my-[5px]" style={{ borderTop: "1px solid #111111", opacity: 0.3 }} />
