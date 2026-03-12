@@ -201,7 +201,7 @@ Deno.serve(async (req) => {
         endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#111111", "normal", "signature", "italic");
         curY += Math.round(bodyFont * 1.3);
       }
-      curY += Math.round(8 * scaleFactor);
+      curY += Math.round(imgWidth * 0.005);
     }
 
     // --- Freedom Adjustment / By: Michael Carletta — always grouped last ---
