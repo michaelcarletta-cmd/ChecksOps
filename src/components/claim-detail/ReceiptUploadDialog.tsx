@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
-import { Camera, FileUp, Loader2, Receipt, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Camera, FileUp, Loader2, Receipt, AlertTriangle, CheckCircle2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
@@ -16,6 +16,12 @@ interface ExtractedReceipt {
   total: number | null;
   suggested_category: string;
   needs_review: boolean;
+}
+
+interface ExistingExpense {
+  vendor_name: string | null;
+  expense_date: string;
+  amount: number;
 }
 
 const EXPENSE_CATEGORIES = [
@@ -31,16 +37,17 @@ const EXPENSE_CATEGORIES = [
 interface ReceiptUploadDialogProps {
   claimId: string;
   onExpensesAdded: () => void;
+  existingExpenses?: ExistingExpense[];
 }
 
-export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadDialogProps) => {
+export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses = [] }: ReceiptUploadDialogProps) => {
   const [open, setOpen] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [extracted, setExtracted] = useState<ExtractedReceipt | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  // Editable fields for review
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
   const [editVendor, setEditVendor] = useState("");
   const [editDate, setEditDate] = useState("");
   const [editTotal, setEditTotal] = useState("");
@@ -53,10 +60,26 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
     setReceiptFile(null);
     setExtracting(false);
     setSaving(false);
+    setDuplicateWarning(null);
     setEditVendor("");
     setEditDate("");
     setEditTotal("");
     setEditCategory("other");
+  };
+
+  const checkForDuplicate = (vendor: string | null, date: string | null, total: number | null): string | null => {
+    if (!date || total == null) return null;
+    const match = existingExpenses.find((e) => {
+      const sameDate = e.expense_date === date;
+      const sameAmount = Math.abs(e.amount - total) < 0.01;
+      const sameVendor = !vendor || !e.vendor_name ||
+        e.vendor_name.toLowerCase().trim() === vendor.toLowerCase().trim();
+      return sameDate && sameAmount && sameVendor;
+    });
+    if (match) {
+      return `Possible duplicate: $${total.toFixed(2)} on ${date}${match.vendor_name ? ` at ${match.vendor_name}` : ""} already exists.`;
+    }
+    return null;
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -71,11 +94,9 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
     setExtracting(true);
     try {
       const base64 = await fileToBase64(file);
-
       const response = await supabase.functions.invoke('extract-receipt', {
         body: { imageBase64: base64, mimeType: file.type },
       });
-
       if (response.error) throw new Error(response.error.message);
       const result = response.data;
       if (!result.success) throw new Error(result.error || 'Extraction failed');
@@ -87,7 +108,13 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
       setEditTotal(data.total != null ? data.total.toFixed(2) : "");
       setEditCategory(data.suggested_category || "other");
 
-      if (data.needs_review) {
+      // Check for duplicate
+      const dupMsg = checkForDuplicate(data.vendor_name, data.date, data.total);
+      setDuplicateWarning(dupMsg);
+
+      if (dupMsg) {
+        toast.warning("Possible duplicate receipt detected");
+      } else if (data.needs_review) {
         toast.warning("Total unclear — please verify before saving");
       } else {
         toast.success("Receipt extracted successfully");
@@ -121,15 +148,21 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
       return;
     }
 
+    // Re-check duplicate with edited values
+    const dupMsg = checkForDuplicate(editVendor, editDate, totalValue);
+    if (dupMsg) {
+      const confirmed = window.confirm(`${dupMsg}\n\nDo you still want to add this expense?`);
+      if (!confirmed) return;
+    }
+
     setSaving(true);
     try {
       const { data: userData } = await supabase.auth.getUser();
       const expenseDate = editDate || format(new Date(), "yyyy-MM-dd");
 
-      // Upload receipt file
       let receiptFilePath: string | null = null;
       if (receiptFile) {
-        // Check for duplicate file (same name + size already in this claim)
+        // Check for duplicate file (same name + size)
         const { data: existingFiles } = await supabase
           .from('claim_files')
           .select('id, file_name, file_path, folder_id')
@@ -138,7 +171,6 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
           .eq('file_size', receiptFile.size);
 
         if (existingFiles && existingFiles.length > 0) {
-          // File already exists — reuse its path, skip re-upload
           receiptFilePath = existingFiles[0].file_path;
           toast.info("File already exists in claim — linking existing copy");
         } else {
@@ -238,9 +270,7 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
             >
               <FileUp className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
               <p className="font-medium">Click to upload a receipt</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Supports images (JPG, PNG) and PDFs
-              </p>
+              <p className="text-sm text-muted-foreground mt-1">Supports images (JPG, PNG) and PDFs</p>
             </div>
             <input
               ref={fileInputRef}
@@ -264,47 +294,44 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
 
         {extracted && (
           <div className="space-y-4">
+            {/* Duplicate warning */}
+            {duplicateWarning && (
+              <div className="flex items-center gap-2 bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300 rounded-lg p-3 text-sm">
+                <Copy className="h-4 w-4 flex-shrink-0" />
+                <span>{duplicateWarning}</span>
+              </div>
+            )}
+
             {/* Needs Review banner */}
-            {extracted.needs_review && (
+            {extracted.needs_review && !duplicateWarning && (
               <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 rounded-lg p-3 text-sm">
                 <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                 <span>Total unclear or ambiguous — please verify the amount below before saving.</span>
               </div>
             )}
 
-            {!extracted.needs_review && extracted.total != null && (
+            {!extracted.needs_review && !duplicateWarning && extracted.total != null && (
               <div className="flex items-center gap-2 bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-300 rounded-lg p-3 text-sm">
                 <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
                 <span>Extracted successfully. Review and confirm.</span>
               </div>
             )}
 
-            {/* Receipt preview thumbnail */}
             {previewUrl && (
               <div className="flex justify-center">
                 <img src={previewUrl} alt="Receipt" className="max-h-40 rounded-lg border" />
               </div>
             )}
 
-            {/* Editable fields */}
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label>Vendor Name</Label>
-                <Input
-                  value={editVendor}
-                  onChange={(e) => setEditVendor(e.target.value)}
-                  placeholder="Store name"
-                />
+                <Input value={editVendor} onChange={(e) => setEditVendor(e.target.value)} placeholder="Store name" />
               </div>
-
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Date</Label>
-                  <Input
-                    type="date"
-                    value={editDate}
-                    onChange={(e) => setEditDate(e.target.value)}
-                  />
+                  <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Total Charged *</Label>
@@ -318,18 +345,13 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
                   />
                 </div>
               </div>
-
               <div className="space-y-1.5">
                 <Label>Category</Label>
                 <Select value={editCategory} onValueChange={setEditCategory}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {EXPENSE_CATEGORIES.map(cat => (
-                      <SelectItem key={cat.value} value={cat.value}>
-                        {cat.icon} {cat.label}
-                      </SelectItem>
+                      <SelectItem key={cat.value} value={cat.value}>{cat.icon} {cat.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -337,16 +359,15 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded }: ReceiptUploadD
             </div>
 
             <div className="flex gap-2 pt-2">
-              <Button variant="outline" className="flex-1" onClick={resetState}>
-                Upload Different Receipt
-              </Button>
+              <Button variant="outline" className="flex-1" onClick={resetState}>Upload Different Receipt</Button>
               <Button
                 className="flex-1"
                 onClick={handleSaveExpense}
                 disabled={saving || !canSave}
+                variant={duplicateWarning ? "destructive" : "default"}
               >
                 {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-                Add Expense — ${canSave ? totalValue.toFixed(2) : '0.00'}
+                {duplicateWarning ? "Add Anyway" : `Add Expense — $${canSave ? totalValue.toFixed(2) : '0.00'}`}
               </Button>
             </div>
           </div>
