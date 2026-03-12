@@ -1350,7 +1350,15 @@ function CheckDetailPanel({
                               .header { text-align: center; margin-bottom: 20px; }
                               .header h1 { font-size: 18px; margin: 0; }
                               .header p { font-size: 12px; color: #666; margin: 4px 0; }
-                              img { width: 100%; height: auto; object-fit: contain; border: 1px solid #ddd; margin-bottom: 16px; display: block; }
+                              .check-section { margin-bottom: 16px; }
+                              .check-section p.label { font-size: 12px; color: #666; margin: 0 0 4px 0; }
+                              .check-print-wrap { position: relative; display: block; width: 100%; }
+                              .check-print-wrap img {
+                                display: block;
+                                width: 100%;
+                                height: auto;
+                                border: 1px solid #ddd;
+                              }
                               @media print { .no-print { display: none; } }
                             </style>
                           </head>
@@ -1361,8 +1369,8 @@ function CheckDetailPanel({
                               <p>All endorsements verified ✓</p>
                             </div>
                             <button class="no-print" onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;cursor:pointer;">Print</button>
-                            ${frontImageUrl ? `<div><p style="font-size:12px;color:#666;">Front</p><img src="${frontImageUrl}" /></div>` : ""}
-                            <div><p style="font-size:12px;color:#666;">Back</p><img src="${printableBackImageUrl}" /></div>
+                            ${frontImageUrl ? `<div class="check-section"><p class="label">Front</p><div class="check-print-wrap"><img src="${frontImageUrl}" /></div></div>` : ""}
+                            <div class="check-section"><p class="label">Back (Endorsed)</p><div class="check-print-wrap"><img src="${printableBackImageUrl}" /></div></div>
                           </body>
                           </html>
                         `);
