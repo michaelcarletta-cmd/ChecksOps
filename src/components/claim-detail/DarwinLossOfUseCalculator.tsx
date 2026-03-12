@@ -185,6 +185,43 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
     }
   };
 
+  const handleEditExpense = async (expense: LossOfUseExpense, updatedData: typeof formData) => {
+    const { error } = await supabase
+      .from("claim_loss_of_use_expenses")
+      .update({
+        expense_category: updatedData.expense_category,
+        expense_date: updatedData.expense_date,
+        vendor_name: updatedData.vendor_name || null,
+        description: updatedData.description || EXPENSE_CATEGORIES.find(c => c.value === updatedData.expense_category)?.label || updatedData.expense_category,
+        amount: parseFloat(updatedData.amount),
+        notes: updatedData.notes || null,
+      })
+      .eq("id", expense.id);
+
+    if (error) {
+      toast.error("Failed to update expense");
+      console.error(error);
+    } else {
+      toast.success("Expense updated");
+      fetchExpenses();
+    }
+  };
+
+  const handleDeleteExpense = async (id: string) => {
+    const { error } = await supabase
+      .from("claim_loss_of_use_expenses")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      toast.error("Failed to delete expense");
+      console.error(error);
+    } else {
+      toast.success("Expense deleted");
+      fetchExpenses();
+    }
+  };
+
   // Calculate totals
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
   const totalSubmitted = expenses.filter(e => e.is_submitted_to_insurer).reduce((sum, e) => sum + e.amount, 0);
