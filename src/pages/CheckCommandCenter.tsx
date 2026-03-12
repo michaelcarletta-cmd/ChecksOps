@@ -1226,7 +1226,7 @@ function CheckDetailPanel({
                           <Button variant="ghost" size="icon" className="h-5 w-5"><Download className="h-3 w-3" /></Button>
                         </a>
                       </div>
-                      <div className="check-back-wrap relative inline-block max-w-full rounded border border-border">
+                      <div className="check-back-wrap relative inline-block max-w-full rounded border border-border" style={{ overflow: "visible" }}>
                         <img
                           src={backImageUrl}
                           alt="Check back"
@@ -1241,7 +1241,7 @@ function CheckDetailPanel({
                         />
 
                         {hasEndorsement && (
-                          <div className="endorsement-overlay absolute select-none overflow-hidden" style={endorsementStyle}>
+                          <div className="endorsement-overlay absolute select-none" style={endorsementStyle}>
                             <div className="leading-tight font-semibold" style={{ lineHeight: 1.15 }}>
                               {/* Header */}
                               <p className="text-center text-[10px]">Pay to the order of</p>
@@ -1265,11 +1265,11 @@ function CheckDetailPanel({
                                         <img src={e.signature_image_url} alt={`${e.payee_name} signature`} className="h-7 mx-auto object-contain" style={{ filter: "brightness(0)" }} />
                                       </>
                                     ) : e.signature_image_url && e.signature_image_url.startsWith("typed:") ? (
-                                      <p className="italic text-center text-[13px] font-serif">{e.signature_image_url.slice(6)}</p>
+                                      <p className="italic text-center text-[13px] font-serif" style={{ color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
                                     ) : e.status === "waived" ? (
-                                      <p className="italic text-center text-[11px]">{e.payee_name} — Waived</p>
+                                      <p className="italic text-center text-[11px]" style={{ color: "#111111" }}>{e.payee_name} — Waived</p>
                                     ) : (
-                                      <p className="text-center text-[12px] font-medium">{e.payee_name}</p>
+                                      <p className="text-center text-[12px] font-medium" style={{ color: "#111111" }}>{e.payee_name}</p>
                                     )}
                                   </div>
                                 );
