@@ -8,8 +8,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Camera, Upload, Pencil, Trash2, Link2, FileText, Grid, Columns, X, Download, Eye, Sparkles, ChevronLeft, ChevronRight, Brain, Loader2, AlertTriangle, CheckCircle2, XCircle, HelpCircle, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
+import { Camera, Upload, Pencil, Trash2, Link2, FileText, Grid, Columns, X, Download, Eye, Sparkles, ChevronLeft, ChevronRight, Brain, Loader2, AlertTriangle, CheckCircle2, XCircle, HelpCircle, ZoomIn, ZoomOut, RotateCcw, CheckSquare } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { PhotoAnnotationEditor } from "./PhotoAnnotationEditor";
@@ -582,6 +583,63 @@ export function ClaimPhotos({ claimId, claim, isPortalUser = false }: ClaimPhoto
     );
   };
 
+  const handleSelectAll = () => {
+    const allFilteredIds = filteredPhotos.map(p => p.id);
+    const allSelected = allFilteredIds.every(id => selectedPhotos.includes(id));
+    if (allSelected) {
+      setSelectedPhotos(prev => prev.filter(id => !allFilteredIds.includes(id)));
+    } else {
+      setSelectedPhotos(prev => [...new Set([...prev, ...allFilteredIds])]);
+    }
+  };
+
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteProgress, setBulkDeleteProgress] = useState({ current: 0, total: 0 });
+
+  const handleBulkDelete = async () => {
+    const photosToDelete = photos.filter(p => selectedPhotos.includes(p.id));
+    if (photosToDelete.length === 0) return;
+
+    setBulkDeleting(true);
+    setBulkDeleteProgress({ current: 0, total: photosToDelete.length });
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < photosToDelete.length; i++) {
+      const photo = photosToDelete[i];
+      try {
+        await supabase.storage.from("claim-files").remove([photo.file_path]);
+        if (photo.annotated_file_path) {
+          await supabase.storage.from("claim-files").remove([photo.annotated_file_path]);
+        }
+        const { error } = await supabase.from("claim_photos").delete().eq("id", photo.id);
+        if (error) throw error;
+        successCount++;
+      } catch {
+        failCount++;
+      }
+      setBulkDeleteProgress({ current: i + 1, total: photosToDelete.length });
+    }
+
+    // Clear deleted photo URLs from cache
+    setPhotoUrls(prev => {
+      const newUrls = { ...prev };
+      photosToDelete.forEach(p => delete newUrls[p.id]);
+      return newUrls;
+    });
+
+    setSelectedPhotos([]);
+    setBulkDeleting(false);
+    setBulkDeleteProgress({ current: 0, total: 0 });
+    fetchPhotos();
+
+    toast({
+      title: `Deleted ${successCount} photo(s)`,
+      description: failCount > 0 ? `${failCount} failed to delete.` : undefined,
+    });
+  };
+
   const categories = useMemo(() => {
     return ["all", ...new Set(photos.map(p => p.category))];
   }, [photos]);
@@ -622,6 +680,12 @@ export function ClaimPhotos({ claimId, claim, isPortalUser = false }: ClaimPhoto
         </div>
         
         <div className="flex flex-wrap gap-2">
+          {filteredPhotos.length > 0 && (
+            <Button variant="outline" size="sm" onClick={handleSelectAll}>
+              <CheckSquare className="h-4 w-4 mr-2" />
+              {filteredPhotos.every(p => selectedPhotos.includes(p.id)) ? "Deselect All" : "Select All"} ({filteredPhotos.length})
+            </Button>
+          )}
           {selectedPhotos.length === 2 && (
             <Button variant="outline" size="sm" onClick={() => setLinkDialogOpen(true)}>
               <Link2 className="h-4 w-4 mr-2" />
@@ -629,10 +693,43 @@ export function ClaimPhotos({ claimId, claim, isPortalUser = false }: ClaimPhoto
             </Button>
           )}
           {selectedPhotos.length > 0 && (
-            <Button variant="outline" size="sm" onClick={() => setSelectedPhotos([])}>
-              <X className="h-4 w-4 mr-2" />
-              Clear ({selectedPhotos.length})
-            </Button>
+            <>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="sm" disabled={bulkDeleting}>
+                    {bulkDeleting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Deleting {bulkDeleteProgress.current}/{bulkDeleteProgress.total}
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Selected ({selectedPhotos.length})
+                      </>
+                    )}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete {selectedPhotos.length} photo(s)?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently delete {selectedPhotos.length} selected photo(s) and their files. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                      Delete {selectedPhotos.length} Photo(s)
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <Button variant="outline" size="sm" onClick={() => setSelectedPhotos([])}>
+                <X className="h-4 w-4 mr-2" />
+                Clear ({selectedPhotos.length})
+              </Button>
+            </>
           )}
           {!isPortalUser && (
             <>

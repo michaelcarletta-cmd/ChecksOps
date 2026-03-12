@@ -1,30 +1,34 @@
 
 
-## Plan: Add "Select All" and Bulk Delete for Claim Photos
+## Persist Auto-Refresh Toggle State
 
-### What Changes
+The auto-refresh toggle currently uses local React state (`useState`), which resets when you navigate away. The fix is to persist it to `localStorage` so it remembers your choice per claim.
 
-**File: `src/components/claim-detail/ClaimPhotos.tsx`**
+### Changes
 
-1. **Add a "Select All" button** in the toolbar (next to the existing "Clear" button area, around line 624-636):
-   - When clicked, selects all photos currently visible (filtered by active category)
-   - Toggles to "Deselect All" when all are selected
+**File: `src/components/claim-detail/DarwinAutoSummary.tsx`**
 
-2. **Add a "Delete Selected" button** that appears when photos are selected:
-   - Shows confirmation dialog with count of photos to delete
-   - On confirm, bulk-deletes selected photos from both storage and the `claim_photos` table
-   - Shows progress feedback during deletion
+1. Initialize `autoRefresh` state from `localStorage` instead of defaulting to `false`:
+   - Read from `localStorage` key like `darwin-auto-refresh-{claimId}`
+   - Fall back to `false` if no saved value exists
 
-### Toolbar Button Layout (when photos are selected)
-
-```text
-[Select All] [Delete Selected (N)] [Link Before/After] [Clear (N)] ...existing buttons...
-```
+2. Save to `localStorage` whenever the toggle changes:
+   - Add a `useEffect` that writes the current `autoRefresh` value to `localStorage` whenever it changes
 
 ### Technical Details
 
-- **Select All** will use `filteredPhotos` (respects category filter) to select all visible photo IDs
-- **Bulk delete** will iterate through selected photos, removing storage files and DB records, similar to existing `handleDelete` but batched
-- An `AlertDialog` confirmation will prevent accidental deletion
-- After deletion, clears selection and refreshes photos
+```text
+Current:  const [autoRefresh, setAutoRefresh] = useState(false);
+
+Proposed: const [autoRefresh, setAutoRefresh] = useState(() => {
+            const saved = localStorage.getItem(`darwin-auto-refresh-${claimId}`);
+            return saved === "true";
+          });
+
+          useEffect(() => {
+            localStorage.setItem(`darwin-auto-refresh-${claimId}`, String(autoRefresh));
+          }, [autoRefresh, claimId]);
+```
+
+This is a small, self-contained change -- no database tables or backend work needed.
 
