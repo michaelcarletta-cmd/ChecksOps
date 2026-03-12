@@ -1315,8 +1315,8 @@ function CheckDetailPanel({
                                   return (n.includes("freedom") || n.includes("carletta")) && e.signature_image_url;
                                 }).slice(0, 1).map((e) => (
                                   <div key={`sig-${e.id}`} className="mt-[2px]">
-                                    {e.signature_image_url?.startsWith("data:image/") ? (
-                                      <img src={e.signature_image_url} alt="Carletta signature" className="h-7 mx-auto object-contain" style={{ filter: "brightness(0)" }} />
+                    {e.signature_image_url?.startsWith("data:image/") ? (
+                                      <img src={e.signature_image_url} alt="Carletta signature" className="h-9 mx-auto object-contain" style={{ filter: "brightness(0)" }} />
                                     ) : e.signature_image_url?.startsWith("typed:") ? (
                                       <p className="italic text-center text-[13px] font-serif" style={{ color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
                                     ) : null}
