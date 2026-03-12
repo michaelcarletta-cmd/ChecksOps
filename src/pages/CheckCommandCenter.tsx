@@ -1251,7 +1251,7 @@ function CheckDetailPanel({
                               <p className="text-center text-[10px] font-bold mt-[2px]">For Mobile Deposit Only</p>
 
                               {/* Separator before signatures */}
-                              <div className="border-t border-border/70 my-[5px]" />
+                              <div className="my-[5px]" style={{ borderTop: "1px solid #111111", opacity: 0.3 }} />
 
                               {/* Client signatures first (non-Freedom, non-Carletta) */}
                               {endorsementRows.map((e) => {
