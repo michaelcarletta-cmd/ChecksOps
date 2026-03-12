@@ -1,34 +1,29 @@
 
 
-## Persist Auto-Refresh Toggle State
+# Fix: Deposit Route Dropdown Empty in Assign Dialog
 
-The auto-refresh toggle currently uses local React state (`useState`), which resets when you navigate away. The fix is to persist it to `localStorage` so it remembers your choice per claim.
+## Problem
+When clicking "Assign" on a pending deposit item, the "Deposit Route" dropdown appears empty. The data exists in the database (3 active providers) and RLS policies are correct for admin/staff roles.
 
-### Changes
+The root cause is most likely a **z-index/portal stacking issue**: the Radix `SelectContent` portal renders behind the `DialogContent` overlay. Both use `z-50`, and on mobile viewports the dropdown can appear invisible or clipped.
 
-**File: `src/components/claim-detail/DarwinAutoSummary.tsx`**
+## Solution
 
-1. Initialize `autoRefresh` state from `localStorage` instead of defaulting to `false`:
-   - Read from `localStorage` key like `darwin-auto-refresh-{claimId}`
-   - Fall back to `false` if no saved value exists
+1. **Increase z-index on SelectContent inside the dialog** — pass a higher z-index class (e.g., `z-[200]`) to the `SelectContent` in the assign_provider dialog section.
 
-2. Save to `localStorage` whenever the toggle changes:
-   - Add a `useEffect` that writes the current `autoRefresh` value to `localStorage` whenever it changes
+2. **Add error handling and loading state** — add `isError` / `isLoading` checks on the provider config query so any silent failures become visible. Show a "Loading providers..." or "Failed to load" message in the dropdown area.
 
-### Technical Details
+3. **Add `modal={false}` to the Select** inside the Dialog — this is a known Radix workaround to prevent the Dialog's modal trap from intercepting the Select portal.
 
-```text
-Current:  const [autoRefresh, setAutoRefresh] = useState(false);
+## Files to Change
 
-Proposed: const [autoRefresh, setAutoRefresh] = useState(() => {
-            const saved = localStorage.getItem(`darwin-auto-refresh-${claimId}`);
-            return saved === "true";
-          });
+- `src/components/deposit-ops/DepositOperationsConsole.tsx`
+  - Add `modal={false}` prop to the `<SelectContent>` for the deposit route selector (or wrap with appropriate portal container)
+  - Add error/loading feedback for the provider configs query
+  - Ensure the `SelectContent` renders with a higher z-index (`z-[200]`) to sit above the Dialog overlay
 
-          useEffect(() => {
-            localStorage.setItem(`darwin-auto-refresh-${claimId}`, String(autoRefresh));
-          }, [autoRefresh, claimId]);
-```
-
-This is a small, self-contained change -- no database tables or backend work needed.
+## No Changes To
+- Database schema or RLS policies (confirmed working)
+- Back-of-check sizing logic
+- Any other components
 
