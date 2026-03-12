@@ -428,92 +428,190 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
 };
 
 /* Extracted table to keep things clean */
-function ExpenseTable({ expenses, categories, markAsSubmitted, markAsReimbursed, markAsPaid, markAsUnpaid }: {
+function ExpenseTable({ expenses, categories, markAsSubmitted, markAsReimbursed, markAsPaid, markAsUnpaid, onEdit, onDelete }: {
   expenses: LossOfUseExpense[];
   categories: typeof EXPENSE_CATEGORIES;
   markAsSubmitted: (id: string) => void;
   markAsReimbursed: (id: string, amount: number) => void;
   markAsPaid: (id: string) => void;
   markAsUnpaid: (id: string) => void;
+  onEdit: (expense: LossOfUseExpense, data: any) => void;
+  onDelete: (id: string) => void;
 }) {
+  const [editingExpense, setEditingExpense] = useState<LossOfUseExpense | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editData, setEditData] = useState({
+    expense_category: "",
+    expense_date: "",
+    vendor_name: "",
+    description: "",
+    amount: "",
+    notes: "",
+  });
+
+  const openEdit = (expense: LossOfUseExpense) => {
+    setEditData({
+      expense_category: expense.expense_category,
+      expense_date: expense.expense_date,
+      vendor_name: expense.vendor_name || "",
+      description: expense.description,
+      amount: String(expense.amount),
+      notes: expense.notes || "",
+    });
+    setEditingExpense(expense);
+  };
+
   return (
-    <div className="border rounded-lg overflow-hidden">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead>Description</TableHead>
-            <TableHead className="text-right">Amount</TableHead>
-            <TableHead>Paid</TableHead>
-            <TableHead>Insurer Status</TableHead>
-            <TableHead>Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {expenses.map((expense) => {
-            const catInfo = categories.find(c => c.value === expense.expense_category);
-            const isPaid = (expense as any).is_paid;
-            const paidDate = (expense as any).paid_date;
-            return (
-              <TableRow key={expense.id}>
-                <TableCell>{format(new Date(expense.expense_date), "MMM d")}</TableCell>
-                <TableCell>
-                  <span>{catInfo?.icon}</span> {catInfo?.label || expense.expense_category}
-                </TableCell>
-                <TableCell>
-                  {expense.vendor_name && <span className="font-medium">{expense.vendor_name}: </span>}
-                  {expense.description}
-                </TableCell>
-                <TableCell className="text-right font-medium">
-                  ${expense.amount.toLocaleString()}
-                </TableCell>
-                <TableCell>
-                  {isPaid ? (
-                    <Badge className="bg-green-100 text-green-800 cursor-pointer" onClick={() => markAsUnpaid(expense.id)}>
-                      <CheckCircle className="h-3 w-3 mr-1" /> Paid {paidDate ? format(new Date(paidDate), "M/d") : ""}
-                    </Badge>
-                  ) : (
-                    <Badge variant="destructive" className="cursor-pointer opacity-80" onClick={() => markAsPaid(expense.id)}>
-                      Not Paid
-                    </Badge>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {expense.is_reimbursed ? (
-                    <Badge className="bg-emerald-100 text-emerald-800">
-                      <CheckCircle className="h-3 w-3 mr-1" /> Reimbursed
-                    </Badge>
-                  ) : expense.is_submitted_to_insurer ? (
-                    <Badge className="bg-blue-100 text-blue-800">Submitted</Badge>
-                  ) : (
-                    <Badge variant="secondary">Not Submitted</Badge>
-                  )}
-                </TableCell>
-                <TableCell>
-                  <div className="flex gap-1">
-                    {!isPaid && (
-                      <Button variant="ghost" size="sm" onClick={() => markAsPaid(expense.id)} title="Mark as paid">
-                        <CreditCard className="h-4 w-4" />
-                      </Button>
+    <>
+      <div className="border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Description</TableHead>
+              <TableHead className="text-right">Amount</TableHead>
+              <TableHead>Paid</TableHead>
+              <TableHead>Insurer Status</TableHead>
+              <TableHead>Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {expenses.map((expense) => {
+              const catInfo = categories.find(c => c.value === expense.expense_category);
+              const isPaid = (expense as any).is_paid;
+              const paidDate = (expense as any).paid_date;
+              return (
+                <TableRow key={expense.id}>
+                  <TableCell>{format(new Date(expense.expense_date), "MMM d")}</TableCell>
+                  <TableCell>
+                    <span>{catInfo?.icon}</span> {catInfo?.label || expense.expense_category}
+                  </TableCell>
+                  <TableCell>
+                    {expense.vendor_name && <span className="font-medium">{expense.vendor_name}: </span>}
+                    {expense.description}
+                  </TableCell>
+                  <TableCell className="text-right font-medium">
+                    ${expense.amount.toLocaleString()}
+                  </TableCell>
+                  <TableCell>
+                    {isPaid ? (
+                      <Badge className="bg-green-100 text-green-800 cursor-pointer" onClick={() => markAsUnpaid(expense.id)}>
+                        <CheckCircle className="h-3 w-3 mr-1" /> Paid {paidDate ? format(new Date(paidDate), "M/d") : ""}
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive" className="cursor-pointer opacity-80" onClick={() => markAsPaid(expense.id)}>
+                        Not Paid
+                      </Badge>
                     )}
-                    {!expense.is_submitted_to_insurer && (
-                      <Button variant="ghost" size="sm" onClick={() => markAsSubmitted(expense.id)} title="Mark as submitted">
-                        <Upload className="h-4 w-4" />
-                      </Button>
+                  </TableCell>
+                  <TableCell>
+                    {expense.is_reimbursed ? (
+                      <Badge className="bg-emerald-100 text-emerald-800">
+                        <CheckCircle className="h-3 w-3 mr-1" /> Reimbursed
+                      </Badge>
+                    ) : expense.is_submitted_to_insurer ? (
+                      <Badge className="bg-blue-100 text-blue-800">Submitted</Badge>
+                    ) : (
+                      <Badge variant="secondary">Not Submitted</Badge>
                     )}
-                    {expense.is_submitted_to_insurer && !expense.is_reimbursed && (
-                      <Button variant="ghost" size="sm" onClick={() => markAsReimbursed(expense.id, expense.amount)} title="Mark as reimbursed">
-                        <DollarSign className="h-4 w-4" />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(expense)} title="Edit expense">
+                        <Edit className="h-4 w-4" />
                       </Button>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </div>
+                      <Button variant="ghost" size="sm" onClick={() => setDeleteId(expense.id)} title="Delete expense" className="text-destructive hover:text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      {!isPaid && (
+                        <Button variant="ghost" size="sm" onClick={() => markAsPaid(expense.id)} title="Mark as paid">
+                          <CreditCard className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {!expense.is_submitted_to_insurer && (
+                        <Button variant="ghost" size="sm" onClick={() => markAsSubmitted(expense.id)} title="Mark as submitted">
+                          <Upload className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {expense.is_submitted_to_insurer && !expense.is_reimbursed && (
+                        <Button variant="ghost" size="sm" onClick={() => markAsReimbursed(expense.id, expense.amount)} title="Mark as reimbursed">
+                          <DollarSign className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editingExpense} onOpenChange={(open) => !open && setEditingExpense(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit ALE Expense</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Category *</Label>
+              <Select value={editData.expense_category} onValueChange={(v) => setEditData({ ...editData, expense_category: v })}>
+                <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                <SelectContent>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.value} value={cat.value}>{cat.icon} {cat.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Date *</Label>
+                <Input type="date" value={editData.expense_date} onChange={(e) => setEditData({ ...editData, expense_date: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Amount *</Label>
+                <Input type="number" step="0.01" value={editData.amount} onChange={(e) => setEditData({ ...editData, amount: e.target.value })} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Vendor Name</Label>
+              <Input value={editData.vendor_name} onChange={(e) => setEditData({ ...editData, vendor_name: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Input value={editData.description} onChange={(e) => setEditData({ ...editData, description: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Notes</Label>
+              <Textarea value={editData.notes} onChange={(e) => setEditData({ ...editData, notes: e.target.value })} />
+            </div>
+            <Button onClick={() => { if (editingExpense) { onEdit(editingExpense, editData); setEditingExpense(null); } }} className="w-full">
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Expense</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this ALE expense? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { if (deleteId) { onDelete(deleteId); setDeleteId(null); } }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
