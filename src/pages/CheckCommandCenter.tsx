@@ -1226,7 +1226,7 @@ function CheckDetailPanel({
                           <Button variant="ghost" size="icon" className="h-5 w-5"><Download className="h-3 w-3" /></Button>
                         </a>
                       </div>
-                      <div className="check-back-wrap relative inline-block max-w-full rounded border border-border">
+                      <div className="check-back-wrap relative inline-block max-w-full rounded border border-border" style={{ overflow: "visible" }}>
                         <img
                           src={backImageUrl}
                           alt="Check back"
