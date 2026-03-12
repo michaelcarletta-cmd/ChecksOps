@@ -117,16 +117,21 @@ export function DepositOperationsConsole() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   // Fetch provider configs
-  const { data: providerConfigs = [] } = useQuery({
+  const { data: providerConfigs = [], isError: providerError } = useQuery({
     queryKey: ["deposit-provider-configs"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deposit_provider_config")
         .select("*")
         .order("provider");
-      if (error) throw error;
+      if (error) {
+        console.error("[DepositOps] Provider config query error:", error.message);
+        throw error;
+      }
+      console.log("[DepositOps] Loaded provider configs:", data?.length, data);
       return (data ?? []) as ProviderConfig[];
     },
+    retry: 1,
   });
 
   const activeProviders = providerConfigs.filter((p) => p.is_active);
@@ -528,7 +533,9 @@ export function DepositOperationsConsole() {
                 <Select value={actionProvider} onValueChange={setActionProvider}>
                   <SelectTrigger><SelectValue placeholder="Select deposit route" /></SelectTrigger>
                   <SelectContent className="z-[200]" position="popper" sideOffset={4}>
-                    {activeProviders.length === 0 ? (
+                    {providerError ? (
+                      <div className="px-2 py-1.5 text-xs text-destructive">Failed to load providers — check permissions</div>
+                    ) : activeProviders.length === 0 ? (
                       <div className="px-2 py-1.5 text-xs text-muted-foreground">No active providers found</div>
                     ) : (
                       activeProviders.map((p) => (
