@@ -40,7 +40,12 @@ const accountItems: any[] = [];
 
 export function AppSidebar() {
   const { open } = useSidebar();
-  const { signOut, user } = useAuth();
+  const { signOut, user, userRole } = useAuth();
+
+  const visibleItems = mainItems.filter(item => {
+    if ('adminOnly' in item && item.adminOnly && userRole !== 'admin') return false;
+    return true;
+  });
 
   // Fetch unread notification count for claims
   const { data: unreadClaimNotifications = 0, refetch: refetchNotifications } = useQuery({
