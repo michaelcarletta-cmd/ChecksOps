@@ -1308,8 +1308,8 @@ function CheckDetailPanel({
 
                               {/* Freedom Adjustment / By: Michael Carletta — always grouped */}
                               <div className="mt-[6px]">
-                                <p className="text-center text-[13px] font-bold">Freedom Adjustment</p>
-                                <p className="text-center text-[11px]">By: Michael Carletta</p>
+                                <p className="text-center text-[16px] font-bold">Freedom Adjustment</p>
+                                <p className="text-center text-[13px]">By: Michael Carletta</p>
                                 {endorsementRows.filter((e) => {
                                   const n = e.payee_name.toLowerCase();
                                   return (n.includes("freedom") || n.includes("carletta")) && e.signature_image_url;
