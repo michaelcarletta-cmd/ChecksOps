@@ -1350,7 +1350,7 @@ function CheckDetailPanel({
                               .header { text-align: center; margin-bottom: 20px; }
                               .header h1 { font-size: 18px; margin: 0; }
                               .header p { font-size: 12px; color: #666; margin: 4px 0; }
-                              img { max-width: 100%; height: auto; object-fit: contain; border: 1px solid #ddd; margin-bottom: 16px; }
+                              img { width: 100%; height: auto; object-fit: contain; border: 1px solid #ddd; margin-bottom: 16px; display: block; }
                               @media print { .no-print { display: none; } }
                             </style>
                           </head>
