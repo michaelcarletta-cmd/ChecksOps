@@ -109,7 +109,7 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
     if (selectedMonth) {
       result = result.filter((e) => {
         const d = new Date(e.expense_date);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        const key = String(d.getMonth());
         return key === selectedMonth;
       });
     }
