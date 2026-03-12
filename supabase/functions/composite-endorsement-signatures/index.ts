@@ -206,7 +206,7 @@ Deno.serve(async (req) => {
 
     // --- Freedom Adjustment / By: Michael Carletta — always grouped last ---
     if (companyEndorsements.length > 0 || true) {
-      curY += Math.round(6 * scaleFactor); // extra spacing before company block
+      curY += Math.round(imgWidth * 0.004); // extra spacing before company block
       endorsementSvg += svgText(centerX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
       curY += Math.round(companyFont * 1.2);
       endorsementSvg += svgText(centerX, curY + sigNameFont, sigNameFont, "#111111", "normal", "By: Michael Carletta");
