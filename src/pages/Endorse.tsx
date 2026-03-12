@@ -67,7 +67,7 @@ export default function Endorse() {
       canvas.width = parent.clientWidth;
       canvas.height = 120;
       const ctx = canvas.getContext("2d");
-      if (ctx) { ctx.strokeStyle = "#e2e8f0"; ctx.lineWidth = 2; ctx.lineCap = "round"; }
+      if (ctx) { ctx.strokeStyle = "#1e293b"; ctx.lineWidth = 2; ctx.lineCap = "round"; }
     };
     resize();
     window.addEventListener("resize", resize);
