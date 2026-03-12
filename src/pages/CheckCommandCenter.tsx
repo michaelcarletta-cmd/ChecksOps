@@ -1472,15 +1472,15 @@ function CheckDetailPanel({
                                 color: #111111;
                               }
                               .overlay-body { font-weight: 600; line-height: 1.15; }
-                              .overlay-header { text-align: center; margin: 0; font-size: 12px; font-weight: 700; }
-                              .overlay-company { text-align: center; margin: 2px 0 0; font-size: 14px; font-weight: 700; }
-                              .overlay-by { text-align: center; margin: 2px 0 0; font-size: 12px; }
+                              .overlay-header { text-align: center; margin: 0; font-size: 15px; font-weight: 700; }
+                              .overlay-company { text-align: center; margin: 2px 0 0; font-size: 18px; font-weight: 700; }
+                              .overlay-by { text-align: center; margin: 2px 0 0; font-size: 15px; }
                               .overlay-separator { margin: 6px 0; border-top: 1px solid #111111; opacity: 0.3; }
-                              .sig-block { margin-top: 4px; }
-                              .sig-name { text-align: center; margin: 0; font-size: 12px; }
-                              .sig-typed { text-align: center; margin: 0; font-size: 13px; font-style: italic; font-family: serif; }
-                              .sig-waived { text-align: center; margin: 0; font-size: 11px; font-style: italic; }
-                              .sig-img { display: block; margin: 2px auto 0; max-width: 42%; max-height: 34px; filter: brightness(0); }
+                              .sig-block { margin-top: 6px; }
+                              .sig-name { text-align: center; margin: 0; font-size: 15px; }
+                              .sig-typed { text-align: center; margin: 0; font-size: 17px; font-style: italic; font-family: serif; }
+                              .sig-waived { text-align: center; margin: 0; font-size: 14px; font-style: italic; }
+                              .sig-img { display: block; margin: 4px auto 0; max-width: 50%; max-height: 44px; filter: brightness(0); }
                               @media print {
                                 .no-print { display: none; }
                                 body { padding: 8px; }
