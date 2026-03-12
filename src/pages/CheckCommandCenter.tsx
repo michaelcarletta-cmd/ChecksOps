@@ -1509,7 +1509,7 @@ function CheckDetailPanel({
                                 ${endorsementOverlayHtml}
                               </div>
                             </div>
-                            <script>console.log("[CHECK-EXPORT-DIMENSIONS]", ${JSON.stringify(dimensionDebugPayload)});</script>
+                            
                           </body>
                           </html>
                         `);
