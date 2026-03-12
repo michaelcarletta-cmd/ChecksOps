@@ -98,7 +98,7 @@ export const LossOfUseExportButton = ({ expenses, claimNumber }: LossOfUseExport
       for (let i = 0; i < sorted.length; i++) {
         const exp = sorted[i];
         const expDate = new Date(exp.expense_date);
-        const monthLabel = expDate.toLocaleString("en-US", { month: "long", year: "numeric" });
+        const monthLabel = expDate.toLocaleString("en-US", { month: "long" });
 
         const row = sheet.addRow({
           date: exp.expense_date,
