@@ -2891,13 +2891,8 @@ VIII. Interdependency of Building Systems
 IX. Why Damaged Areas Must Be Disturbed for Repairs
 X. State/Local Code Requirements
 XI. Manufacturer Installation Standards (Adopted by Code)
-XII. How Repairs Trigger Code Upgrades
-XIII. HAAG Engineering Standards & Industry Best Practices
-XIV. Rebuttal of Carrier Engineer Reports (If Applicable)
-XV. Communications Log & Carrier Response Timeline
-XVI. Detailed Repair Estimate Explanation
-XVII. Formal Demand and Conclusion
-XVIII. Signature
+XII. HAAG Engineering Standards & Industry Best Practices
+XIII. Formal Demand and Conclusion
 
 ================================================================================
 
@@ -3034,18 +3029,7 @@ XI. MANUFACTURER INSTALLATION STANDARDS (ADOPTED BY CODE)
 
 ================================================================================
 
-XII. HOW REPAIRS TRIGGER CODE UPGRADES
-
-[Explain code upgrade requirements:
-- When repairs exceed thresholds requiring full compliance
-- Ordinance and Law coverage triggers
-- Required upgrades per current code
-- Cost implications of code upgrades
-- Reference specific ${stateInfo.stateName} adoption of IRC/IBC]
-
-================================================================================
-
-XIII. HAAG ENGINEERING STANDARDS & INDUSTRY BEST PRACTICES
+XII. HAAG ENGINEERING STANDARDS & INDUSTRY BEST PRACTICES
 
 [Reference HAAG and industry standards:
 - HAAG damage identification methodology
@@ -3057,44 +3041,7 @@ XIII. HAAG ENGINEERING STANDARDS & INDUSTRY BEST PRACTICES
 
 ================================================================================
 
-XIV. REBUTTAL OF CARRIER ENGINEER REPORTS (IF APPLICABLE)
-
-[If carrier engineer reports are in the evidence, provide comprehensive rebuttal:
-- Identify scope limitations in the inspection (time on site, areas inspected)
-- Challenge the ASTM wind rating fallacy - lab ratings for new materials do not apply to aged shingles with degraded seal strips and UV oxidation
-- Note any carrier-friendly bias in conclusions
-- Identify where observations don't support conclusions
-- Reference contradictory evidence from other inspections
-- Note failure to consider material degradation and age factors
-- Challenge desk reviews vs actual field inspections]
-
-================================================================================
-
-XV. COMMUNICATIONS LOG & CARRIER RESPONSE TIMELINE
-
-[Document carrier interactions and response times:
-- Timeline of all communications with carrier
-- Any carrier promises or commitments made
-- Deadlines mentioned by carrier representatives
-- Response time analysis per ${stateInfo.adminCode}
-- Any missed deadlines that constitute regulatory violations
-- Bad faith indicators if applicable]
-
-================================================================================
-
-XVI. DETAILED REPAIR ESTIMATE EXPLANATION
-
-[Provide line-by-line explanation of the estimate:
-- Each major line item and its necessity
-- Quantity and pricing justification
-- Why each item is required for proper repair
-- Code-required items
-- Total breakdown by category
-- Comparison to previous successful settlements for similar claims if available]
-
-================================================================================
-
-XVII. FORMAL DEMAND AND CONCLUSION
+XIII. FORMAL DEMAND AND CONCLUSION
 
 Based on the evidence documented above, including the demonstrated IRREPARABILITY of the damaged materials and the policyholder's right to INDEMNIFICATION and restoration to PRE-LOSS CONDITION, we hereby formally demand payment of the full claim value as follows:
 
@@ -3105,14 +3052,9 @@ Response is required within thirty (30) days pursuant to ${stateInfo.promptPayAc
 Failure to respond will result in escalation including but not limited to:
 - Filing complaint with ${stateInfo.stateName} Department of Insurance
 - Demand for appraisal per policy terms
-- Pursuit of bad faith claim if warranted based on timeline violations documented in Communications Log
+- Pursuit of bad faith claim if warranted based on documented timeline violations and regulatory non-compliance
 
 ================================================================================
-
-XVIII. SIGNATURE
-
-Respectfully submitted,
-
 
 ${assignedUserName}
 Licensed Public Adjuster
@@ -3125,7 +3067,7 @@ Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long',
 
 ================================================================================
 
-Create a thorough, professional demand package using ALL evidence from the provided documents. Be specific and reference actual findings, measurements, and conclusions from the documents. NEVER use the word "matching" - focus on REPAIRABILITY, UNIFORM APPEARANCE, PRE-LOSS CONDITION, and INDEMNIFICATION.`;
+Create a thorough, professional demand package using ALL evidence from the provided documents. Be specific and reference actual findings, measurements, and conclusions from the documents. NEVER use the word "matching" - focus on REPAIRABILITY, UNIFORM APPEARANCE, PRE-LOSS CONDITION, and INDEMNIFICATION. Focus on documenting damage thoroughly and explaining what is needed for proper repair. Leverage any uploaded training materials, videos, and knowledge base content to strengthen technical arguments.`;
         break;
       }
 
