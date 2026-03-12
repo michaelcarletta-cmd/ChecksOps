@@ -1261,8 +1261,8 @@ function CheckDetailPanel({
                                   <div key={e.id} className="mt-[4px]">
                                     {e.signature_image_url && e.signature_image_url.startsWith("data:image/") ? (
                                       <>
-                                        <p className="text-center text-[12px] font-medium">{e.payee_name}</p>
-                                        <img src={e.signature_image_url} alt={`${e.payee_name} signature`} className="h-7 mx-auto object-contain" />
+                                        <p className="text-center text-[12px] font-medium" style={{ color: "#111111" }}>{e.payee_name}</p>
+                                        <img src={e.signature_image_url} alt={`${e.payee_name} signature`} className="h-7 mx-auto object-contain" style={{ filter: "brightness(0)" }} />
                                       </>
                                     ) : e.signature_image_url && e.signature_image_url.startsWith("typed:") ? (
                                       <p className="italic text-center text-[13px] font-serif">{e.signature_image_url.slice(6)}</p>
