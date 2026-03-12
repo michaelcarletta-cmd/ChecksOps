@@ -1275,11 +1275,11 @@ function CheckDetailPanel({
                           <div className="endorsement-overlay absolute select-none" style={endorsementStyle}>
                             <div className="leading-tight font-semibold" style={{ lineHeight: 1.15 }}>
                               {/* Header */}
-                              <p className="text-center text-[10px]">Pay to the order of</p>
+                              <p className="text-center text-[12px]">Pay to the order of</p>
                               {/* Company payee — 1.3x header */}
-                              <p className="text-center text-[13px] font-bold mt-[2px]">Freedom Adjustment</p>
+                              <p className="text-center text-[16px] font-bold mt-[2px]">Freedom Adjustment</p>
                               {/* Mobile deposit — same as header */}
-                              <p className="text-center text-[10px] font-bold mt-[2px]">For Mobile Deposit Only</p>
+                              <p className="text-center text-[12px] font-bold mt-[2px]">For Mobile Deposit Only</p>
 
                               {/* Separator before signatures */}
                               <div className="my-[5px]" style={{ borderTop: "1px solid #111111", opacity: 0.3 }} />
@@ -1292,15 +1292,15 @@ function CheckDetailPanel({
                                   <div key={e.id} className="mt-[4px]">
                                     {e.signature_image_url && e.signature_image_url.startsWith("data:image/") ? (
                                       <>
-                                        <p className="text-center text-[12px] font-medium" style={{ color: "#111111" }}>{e.payee_name}</p>
-                                        <img src={e.signature_image_url} alt={`${e.payee_name} signature`} className="h-7 mx-auto object-contain" style={{ filter: "brightness(0)" }} />
+                                        <p className="text-center text-[14px] font-medium" style={{ color: "#111111" }}>{e.payee_name}</p>
+                                        <img src={e.signature_image_url} alt={`${e.payee_name} signature`} className="h-9 mx-auto object-contain" style={{ filter: "brightness(0)" }} />
                                       </>
                                     ) : e.signature_image_url && e.signature_image_url.startsWith("typed:") ? (
-                                      <p className="italic text-center text-[13px] font-serif" style={{ color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
+                                      <p className="italic text-center text-[16px] font-serif" style={{ color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
                                     ) : e.status === "waived" ? (
-                                      <p className="italic text-center text-[11px]" style={{ color: "#111111" }}>{e.payee_name} — Waived</p>
+                                      <p className="italic text-center text-[13px]" style={{ color: "#111111" }}>{e.payee_name} — Waived</p>
                                     ) : (
-                                      <p className="text-center text-[12px] font-medium" style={{ color: "#111111" }}>{e.payee_name}</p>
+                                      <p className="text-center text-[14px] font-medium" style={{ color: "#111111" }}>{e.payee_name}</p>
                                     )}
                                   </div>
                                 );
@@ -1308,15 +1308,15 @@ function CheckDetailPanel({
 
                               {/* Freedom Adjustment / By: Michael Carletta — always grouped */}
                               <div className="mt-[6px]">
-                                <p className="text-center text-[13px] font-bold">Freedom Adjustment</p>
-                                <p className="text-center text-[11px]">By: Michael Carletta</p>
+                                <p className="text-center text-[16px] font-bold">Freedom Adjustment</p>
+                                <p className="text-center text-[13px]">By: Michael Carletta</p>
                                 {endorsementRows.filter((e) => {
                                   const n = e.payee_name.toLowerCase();
                                   return (n.includes("freedom") || n.includes("carletta")) && e.signature_image_url;
                                 }).slice(0, 1).map((e) => (
                                   <div key={`sig-${e.id}`} className="mt-[2px]">
-                                    {e.signature_image_url?.startsWith("data:image/") ? (
-                                      <img src={e.signature_image_url} alt="Carletta signature" className="h-7 mx-auto object-contain" style={{ filter: "brightness(0)" }} />
+                    {e.signature_image_url?.startsWith("data:image/") ? (
+                                      <img src={e.signature_image_url} alt="Carletta signature" className="h-9 mx-auto object-contain" style={{ filter: "brightness(0)" }} />
                                     ) : e.signature_image_url?.startsWith("typed:") ? (
                                       <p className="italic text-center text-[13px] font-serif" style={{ color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
                                     ) : null}
@@ -1472,15 +1472,15 @@ function CheckDetailPanel({
                                 color: #111111;
                               }
                               .overlay-body { font-weight: 600; line-height: 1.15; }
-                              .overlay-header { text-align: center; margin: 0; font-size: 12px; font-weight: 700; }
-                              .overlay-company { text-align: center; margin: 2px 0 0; font-size: 14px; font-weight: 700; }
-                              .overlay-by { text-align: center; margin: 2px 0 0; font-size: 12px; }
+                              .overlay-header { text-align: center; margin: 0; font-size: 15px; font-weight: 700; }
+                              .overlay-company { text-align: center; margin: 2px 0 0; font-size: 18px; font-weight: 700; }
+                              .overlay-by { text-align: center; margin: 2px 0 0; font-size: 15px; }
                               .overlay-separator { margin: 6px 0; border-top: 1px solid #111111; opacity: 0.3; }
-                              .sig-block { margin-top: 4px; }
-                              .sig-name { text-align: center; margin: 0; font-size: 12px; }
-                              .sig-typed { text-align: center; margin: 0; font-size: 13px; font-style: italic; font-family: serif; }
-                              .sig-waived { text-align: center; margin: 0; font-size: 11px; font-style: italic; }
-                              .sig-img { display: block; margin: 2px auto 0; max-width: 42%; max-height: 34px; filter: brightness(0); }
+                              .sig-block { margin-top: 6px; }
+                              .sig-name { text-align: center; margin: 0; font-size: 15px; }
+                              .sig-typed { text-align: center; margin: 0; font-size: 17px; font-style: italic; font-family: serif; }
+                              .sig-waived { text-align: center; margin: 0; font-size: 14px; font-style: italic; }
+                              .sig-img { display: block; margin: 4px auto 0; max-width: 50%; max-height: 44px; filter: brightness(0); }
                               @media print {
                                 .no-print { display: none; }
                                 body { padding: 8px; }
