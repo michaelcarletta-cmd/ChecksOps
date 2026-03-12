@@ -225,7 +225,7 @@ Deno.serve(async (req) => {
         endorsementSvg += `<text x="${centerX}" y="${curY + sigNameFont}" font-family="serif" font-size="${sigNameFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(typedName)}</text>`;
         curY += Math.round(sigNameFont * 1.3);
       }
-      curY += Math.round(10 * scaleFactor);
+      curY += Math.round(imgWidth * 0.006);
     }
 
     // ──── HARD SAFETY CHECK ────
