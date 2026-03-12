@@ -166,7 +166,7 @@ Deno.serve(async (req) => {
 
     // --- Separator ---
     endorsementSvg += `<line x1="${ezLeftPad}" y1="${curY}" x2="${ezLeftPad + ezContentWidth}" y2="${curY}" stroke="#111111" stroke-width="2" opacity="0.3"/>`;
-    curY += Math.round(14 * scaleFactor);
+    curY += Math.round(imgWidth * 0.008);
 
     // --- Render endorsement signatures ---
     // Separate client/insured endorsements from Freedom/Carletta
