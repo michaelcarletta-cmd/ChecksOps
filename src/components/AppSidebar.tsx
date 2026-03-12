@@ -28,7 +28,7 @@ const mainItems = [
   { title: "Inbox", url: "/inbox", icon: Inbox },
   
   { title: "Darwin Ops", url: "/darwin-operations", icon: Bot },
-  { title: "Check Center", url: "/check-command-center", icon: Banknote },
+  { title: "Check Center", url: "/check-command-center", icon: Banknote, adminOnly: true },
   { title: "Clients", url: "/clients", icon: Users },
   { title: "Networking", url: "/networking", icon: Network },
   { title: "Sales", url: "/sales", icon: DollarSign },

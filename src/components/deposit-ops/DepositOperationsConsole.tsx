@@ -117,16 +117,21 @@ export function DepositOperationsConsole() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   // Fetch provider configs
-  const { data: providerConfigs = [] } = useQuery({
+  const { data: providerConfigs = [], isError: providerError } = useQuery({
     queryKey: ["deposit-provider-configs"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deposit_provider_config")
         .select("*")
         .order("provider");
-      if (error) throw error;
+      if (error) {
+        console.error("[DepositOps] Provider config query error:", error.message);
+        throw error;
+      }
+      console.log("[DepositOps] Loaded provider configs:", data?.length, data);
       return (data ?? []) as ProviderConfig[];
     },
+    retry: 1,
   });
 
   const activeProviders = providerConfigs.filter((p) => p.is_active);
