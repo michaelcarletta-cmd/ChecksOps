@@ -1230,7 +1230,8 @@ function CheckDetailPanel({
                         <img
                           src={backImageUrl}
                           alt="Check back"
-                          className="check-back-image block h-auto w-full"
+                          className="check-back-image block w-full"
+                          style={{ objectFit: "contain", height: "auto" }}
                           onLoad={(event) => {
                             setBackImageDimensions({
                               width: event.currentTarget.naturalWidth,
