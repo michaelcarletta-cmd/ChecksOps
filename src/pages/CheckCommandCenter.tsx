@@ -1292,15 +1292,15 @@ function CheckDetailPanel({
                                   <div key={e.id} className="mt-[4px]">
                                     {e.signature_image_url && e.signature_image_url.startsWith("data:image/") ? (
                                       <>
-                                        <p className="text-center text-[12px] font-medium" style={{ color: "#111111" }}>{e.payee_name}</p>
-                                        <img src={e.signature_image_url} alt={`${e.payee_name} signature`} className="h-7 mx-auto object-contain" style={{ filter: "brightness(0)" }} />
+                                        <p className="text-center text-[14px] font-medium" style={{ color: "#111111" }}>{e.payee_name}</p>
+                                        <img src={e.signature_image_url} alt={`${e.payee_name} signature`} className="h-9 mx-auto object-contain" style={{ filter: "brightness(0)" }} />
                                       </>
                                     ) : e.signature_image_url && e.signature_image_url.startsWith("typed:") ? (
-                                      <p className="italic text-center text-[13px] font-serif" style={{ color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
+                                      <p className="italic text-center text-[16px] font-serif" style={{ color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
                                     ) : e.status === "waived" ? (
-                                      <p className="italic text-center text-[11px]" style={{ color: "#111111" }}>{e.payee_name} — Waived</p>
+                                      <p className="italic text-center text-[13px]" style={{ color: "#111111" }}>{e.payee_name} — Waived</p>
                                     ) : (
-                                      <p className="text-center text-[12px] font-medium" style={{ color: "#111111" }}>{e.payee_name}</p>
+                                      <p className="text-center text-[14px] font-medium" style={{ color: "#111111" }}>{e.payee_name}</p>
                                     )}
                                   </div>
                                 );
