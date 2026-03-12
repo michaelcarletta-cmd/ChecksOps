@@ -533,7 +533,9 @@ export function DepositOperationsConsole() {
                 <Select value={actionProvider} onValueChange={setActionProvider}>
                   <SelectTrigger><SelectValue placeholder="Select deposit route" /></SelectTrigger>
                   <SelectContent className="z-[200]" position="popper" sideOffset={4}>
-                    {activeProviders.length === 0 ? (
+                    {providerError ? (
+                      <div className="px-2 py-1.5 text-xs text-destructive">Failed to load providers — check permissions</div>
+                    ) : activeProviders.length === 0 ? (
                       <div className="px-2 py-1.5 text-xs text-muted-foreground">No active providers found</div>
                     ) : (
                       activeProviders.map((p) => (
