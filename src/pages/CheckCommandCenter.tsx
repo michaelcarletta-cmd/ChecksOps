@@ -847,6 +847,26 @@ function CheckDetailPanel({
     },
   });
 
+  const loadImageDimensions = useCallback((url: string) => {
+    return new Promise<{ width: number; height: number }>((resolve, reject) => {
+      const img = new Image();
+      img.decoding = "async";
+      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      img.onerror = () => reject(new Error(`Failed to load image dimensions for ${url}`));
+      img.src = url;
+    });
+  }, []);
+
+  const escPrint = useCallback((value: unknown) => {
+    if (value == null) return "";
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }, []);
+
   const canUndo = check && ['branch_deposit_required', 'approved_for_deposit', 'loss_draft_required', 'reissue_requested'].includes(check.status) && check.status !== 'deposited';
 
   const handleUndoDecision = async () => {
