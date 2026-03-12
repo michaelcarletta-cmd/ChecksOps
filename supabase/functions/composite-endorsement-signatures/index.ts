@@ -181,22 +181,25 @@ Deno.serve(async (req) => {
     // --- Client signatures first (most prominent — sigNameFont) ---
     for (const e of clientEndorsements) {
       if (e.signature_image_url && e.signature_image_url.startsWith("data:image/")) {
-        endorsementSvg += svgText(centerX, curY + sigNameFont, sigNameFont, "#1e293b", "normal", e.payee_name);
+        endorsementSvg += svgText(centerX, curY + sigNameFont, sigNameFont, "#111111", "normal", e.payee_name);
         curY += Math.round(sigNameFont * 1.2);
         const sigWidth = Math.min(ezContentWidth - 20, Math.round(400 * scaleFactor));
-        endorsementSvg += `<image href="${escHtml(e.signature_image_url)}" x="${centerX - sigWidth / 2}" y="${curY}" width="${sigWidth}" height="${sigHeight}" preserveAspectRatio="xMidYMid meet"/>`;
+        // Use a feColorMatrix filter to force signature image to solid black
+        const sigFilterId = `blackInk_${e.id.replace(/[^a-zA-Z0-9]/g, "")}`;
+        endorsementSvg += `<defs><filter id="${sigFilterId}"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></defs>`;
+        endorsementSvg += `<image href="${escHtml(e.signature_image_url)}" x="${centerX - sigWidth / 2}" y="${curY}" width="${sigWidth}" height="${sigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${sigFilterId})"/>`;
         curY += sigHeight + Math.round(6 * scaleFactor);
       } else if (e.signature_image_url && e.signature_image_url.startsWith("typed:")) {
         const typedName = e.signature_image_url.slice(6);
-        endorsementSvg += `<text x="${centerX}" y="${curY + sigNameFont}" font-family="serif" font-size="${sigNameFont}" fill="#1e293b" font-style="italic" text-anchor="middle">${escHtml(typedName)}</text>`;
+        endorsementSvg += `<text x="${centerX}" y="${curY + sigNameFont}" font-family="serif" font-size="${sigNameFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(typedName)}</text>`;
         curY += Math.round(sigNameFont * 1.3);
       } else if (e.status === "waived") {
-        endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#94a3b8", "normal", `${e.payee_name} — Waived`, "italic");
+        endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#111111", "normal", `${e.payee_name} — Waived`, "italic");
         curY += Math.round(bodyFont * 1.3);
       } else {
-        endorsementSvg += svgText(centerX, curY + sigNameFont, sigNameFont, "#1e293b", "normal", e.payee_name);
+        endorsementSvg += svgText(centerX, curY + sigNameFont, sigNameFont, "#111111", "normal", e.payee_name);
         curY += Math.round(sigNameFont * 1.2);
-        endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#64748b", "normal", "signature", "italic");
+        endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#111111", "normal", "signature", "italic");
         curY += Math.round(bodyFont * 1.3);
       }
       curY += Math.round(8 * scaleFactor);
