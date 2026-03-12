@@ -527,12 +527,16 @@ export function DepositOperationsConsole() {
                 <Label className="text-xs">Deposit Route</Label>
                 <Select value={actionProvider} onValueChange={setActionProvider}>
                   <SelectTrigger><SelectValue placeholder="Select deposit route" /></SelectTrigger>
-                  <SelectContent>
-                    {activeProviders.map((p) => (
-                      <SelectItem key={p.provider} value={p.provider}>
-                        {p.display_name}
-                      </SelectItem>
-                    ))}
+                  <SelectContent className="z-[200]" position="popper" sideOffset={4}>
+                    {activeProviders.length === 0 ? (
+                      <div className="px-2 py-1.5 text-xs text-muted-foreground">No active providers found</div>
+                    ) : (
+                      activeProviders.map((p) => (
+                        <SelectItem key={p.provider} value={p.provider}>
+                          {p.display_name}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
                 {stubbedProviders.length > 0 && (
