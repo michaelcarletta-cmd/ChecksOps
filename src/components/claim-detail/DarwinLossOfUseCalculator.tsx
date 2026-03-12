@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,12 +10,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { Home, Plus, DollarSign, Receipt, Upload, CheckCircle, CreditCard, Edit, Trash2 } from "lucide-react";
+import { Home, Plus, DollarSign, Receipt, Upload, CheckCircle, CreditCard, Edit, Trash2, X } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ReceiptUploadDialog } from "./ReceiptUploadDialog";
-interface LossOfUseExpense {
+import { LossOfUseExportButton } from "./LossOfUseExportButton";
+
+export interface LossOfUseExpense {
   id: string;
   expense_category: string;
   expense_date: string;
@@ -51,6 +53,8 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
   const [expenses, setExpenses] = useState<LossOfUseExpense[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     expense_category: "",
     expense_date: format(new Date(), "yyyy-MM-dd"),
@@ -78,6 +82,42 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
   useEffect(() => {
     fetchExpenses();
   }, [claimId]);
+
+  // Derive available months
+  const availableMonths = useMemo(() => {
+    const months = new Map<string, string>();
+    expenses.forEach((e) => {
+      const d = new Date(e.expense_date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!months.has(key)) {
+        months.set(key, d.toLocaleString("en-US", { month: "long", year: "numeric" }));
+      }
+    });
+    return Array.from(months.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [expenses]);
+
+  // Derive used categories
+  const usedCategories = useMemo(() => {
+    const cats = new Set<string>();
+    expenses.forEach((e) => cats.add(e.expense_category));
+    return EXPENSE_CATEGORIES.filter((c) => cats.has(c.value));
+  }, [expenses]);
+
+  // Filter expenses
+  const filteredExpenses = useMemo(() => {
+    let result = expenses;
+    if (selectedMonth) {
+      result = result.filter((e) => {
+        const d = new Date(e.expense_date);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        return key === selectedMonth;
+      });
+    }
+    if (selectedCategory) {
+      result = result.filter((e) => e.expense_category === selectedCategory);
+    }
+    return result;
+  }, [expenses, selectedMonth, selectedCategory]);
 
   const handleAddExpense = async () => {
     if (!formData.expense_category || !formData.expense_date || !formData.amount) {
@@ -119,70 +159,37 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
   const markAsSubmitted = async (id: string) => {
     const { error } = await supabase
       .from("claim_loss_of_use_expenses")
-      .update({
-        is_submitted_to_insurer: true,
-        submitted_date: format(new Date(), "yyyy-MM-dd"),
-      })
+      .update({ is_submitted_to_insurer: true, submitted_date: format(new Date(), "yyyy-MM-dd") })
       .eq("id", id);
-
-    if (error) {
-      toast.error("Failed to update");
-    } else {
-      toast.success("Marked as submitted");
-      fetchExpenses();
-    }
+    if (error) toast.error("Failed to update");
+    else { toast.success("Marked as submitted"); fetchExpenses(); }
   };
 
   const markAsReimbursed = async (id: string, amount: number) => {
     const { error } = await supabase
       .from("claim_loss_of_use_expenses")
-      .update({
-        is_reimbursed: true,
-        reimbursed_amount: amount,
-        reimbursed_date: format(new Date(), "yyyy-MM-dd"),
-      })
+      .update({ is_reimbursed: true, reimbursed_amount: amount, reimbursed_date: format(new Date(), "yyyy-MM-dd") })
       .eq("id", id);
-
-    if (error) {
-      toast.error("Failed to update");
-    } else {
-      toast.success("Marked as reimbursed");
-      fetchExpenses();
-    }
+    if (error) toast.error("Failed to update");
+    else { toast.success("Marked as reimbursed"); fetchExpenses(); }
   };
 
   const markAsPaid = async (id: string) => {
     const { error } = await supabase
       .from("claim_loss_of_use_expenses")
-      .update({
-        is_paid: true,
-        paid_date: format(new Date(), "yyyy-MM-dd"),
-      } as any)
+      .update({ is_paid: true, paid_date: format(new Date(), "yyyy-MM-dd") } as any)
       .eq("id", id);
-
-    if (error) {
-      toast.error("Failed to update");
-    } else {
-      toast.success("Marked as paid");
-      fetchExpenses();
-    }
+    if (error) toast.error("Failed to update");
+    else { toast.success("Marked as paid"); fetchExpenses(); }
   };
 
   const markAsUnpaid = async (id: string) => {
     const { error } = await supabase
       .from("claim_loss_of_use_expenses")
-      .update({
-        is_paid: false,
-        paid_date: null,
-      } as any)
+      .update({ is_paid: false, paid_date: null } as any)
       .eq("id", id);
-
-    if (error) {
-      toast.error("Failed to update");
-    } else {
-      toast.success("Marked as unpaid");
-      fetchExpenses();
-    }
+    if (error) toast.error("Failed to update");
+    else { toast.success("Marked as unpaid"); fetchExpenses(); }
   };
 
   const handleEditExpense = async (expense: LossOfUseExpense, updatedData: typeof formData) => {
@@ -197,48 +204,33 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
         notes: updatedData.notes || null,
       })
       .eq("id", expense.id);
-
-    if (error) {
-      toast.error("Failed to update expense");
-      console.error(error);
-    } else {
-      toast.success("Expense updated");
-      fetchExpenses();
-    }
+    if (error) { toast.error("Failed to update expense"); console.error(error); }
+    else { toast.success("Expense updated"); fetchExpenses(); }
   };
 
   const handleDeleteExpense = async (id: string) => {
-    const { error } = await supabase
-      .from("claim_loss_of_use_expenses")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      toast.error("Failed to delete expense");
-      console.error(error);
-    } else {
-      toast.success("Expense deleted");
-      fetchExpenses();
-    }
+    const { error } = await supabase.from("claim_loss_of_use_expenses").delete().eq("id", id);
+    if (error) { toast.error("Failed to delete expense"); console.error(error); }
+    else { toast.success("Expense deleted"); fetchExpenses(); }
   };
 
-  // Calculate totals
-  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
-  const totalSubmitted = expenses.filter(e => e.is_submitted_to_insurer).reduce((sum, e) => sum + e.amount, 0);
-  const totalReimbursed = expenses.filter(e => e.is_reimbursed).reduce((sum, e) => sum + (e.reimbursed_amount || 0), 0);
+  // Calculate totals from filtered
+  const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const totalSubmitted = filteredExpenses.filter(e => e.is_submitted_to_insurer).reduce((sum, e) => sum + e.amount, 0);
+  const totalReimbursed = filteredExpenses.filter(e => e.is_reimbursed).reduce((sum, e) => sum + (e.reimbursed_amount || 0), 0);
   const totalPending = totalSubmitted - totalReimbursed;
-  const totalUnsubmitted = totalExpenses - totalSubmitted;
-  const totalPaid = expenses.filter(e => (e as any).is_paid).reduce((sum, e) => sum + e.amount, 0);
+  const totalPaid = filteredExpenses.filter(e => (e as any).is_paid).reduce((sum, e) => sum + e.amount, 0);
   const totalUnpaid = totalExpenses - totalPaid;
 
-  const paidExpenses = expenses.filter(e => (e as any).is_paid);
-  const unpaidExpenses = expenses.filter(e => !(e as any).is_paid);
+  const paidExpenses = filteredExpenses.filter(e => (e as any).is_paid);
+  const unpaidExpenses = filteredExpenses.filter(e => !(e as any).is_paid);
 
-  // Group by category for summary
-  const categoryTotals = expenses.reduce((acc, e) => {
+  const categoryTotals = filteredExpenses.reduce((acc, e) => {
     acc[e.expense_category] = (acc[e.expense_category] || 0) + e.amount;
     return acc;
   }, {} as Record<string, number>);
+
+  const activeFilters = (selectedMonth ? 1 : 0) + (selectedCategory ? 1 : 0);
 
   return (
     <Card>
@@ -249,95 +241,121 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
               <Home className="h-5 w-5 text-green-600" />
               Loss of Use (Coverage D) Tracker
             </CardTitle>
-            <CardDescription>
-              Track Additional Living Expenses for PA/NJ claims
-            </CardDescription>
+            <CardDescription>Track Additional Living Expenses for PA/NJ claims</CardDescription>
           </div>
           <div className="flex gap-2">
-            <ReceiptUploadDialog claimId={claimId} onExpensesAdded={fetchExpenses} />
+            <LossOfUseExportButton expenses={filteredExpenses} claimNumber={claim?.claim_number} />
+            <ReceiptUploadDialog claimId={claimId} onExpensesAdded={fetchExpenses} existingExpenses={expenses} />
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
-                <Button size="sm">
-                  <Plus className="h-4 w-4 mr-1" /> Add Expense
-                </Button>
+                <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Add Expense</Button>
               </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add ALE Expense</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Category *</Label>
-                  <Select
-                    value={formData.expense_category}
-                    onValueChange={(v) => setFormData({ ...formData, expense_category: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {EXPENSE_CATEGORIES.map((cat) => (
-                        <SelectItem key={cat.value} value={cat.value}>
-                          {cat.icon} {cat.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+              <DialogContent>
+                <DialogHeader><DialogTitle>Add ALE Expense</DialogTitle></DialogHeader>
+                <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Date *</Label>
-                    <Input
-                      type="date"
-                      value={formData.expense_date}
-                      onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })}
-                    />
+                    <Label>Category *</Label>
+                    <Select value={formData.expense_category} onValueChange={(v) => setFormData({ ...formData, expense_category: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                      <SelectContent>
+                        {EXPENSE_CATEGORIES.map((cat) => (
+                          <SelectItem key={cat.value} value={cat.value}>{cat.icon} {cat.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Date *</Label>
+                      <Input type="date" value={formData.expense_date} onChange={(e) => setFormData({ ...formData, expense_date: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Amount *</Label>
+                      <Input type="number" step="0.01" placeholder="0.00" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} />
+                    </div>
                   </div>
                   <div className="space-y-2">
-                    <Label>Amount *</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={formData.amount}
-                      onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                    />
+                    <Label>Vendor Name</Label>
+                    <Input placeholder="e.g., Marriott, Shell Gas" value={formData.vendor_name} onChange={(e) => setFormData({ ...formData, vendor_name: e.target.value })} />
                   </div>
+                  <div className="space-y-2">
+                    <Label>Description</Label>
+                    <Input placeholder="Brief description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Notes</Label>
+                    <Textarea placeholder="Additional notes..." value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} />
+                  </div>
+                  <Button onClick={handleAddExpense} className="w-full">Add Expense</Button>
                 </div>
-                <div className="space-y-2">
-                  <Label>Vendor Name</Label>
-                  <Input
-                    placeholder="e.g., Marriott, Shell Gas"
-                    value={formData.vendor_name}
-                    onChange={(e) => setFormData({ ...formData, vendor_name: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Description</Label>
-                  <Input
-                    placeholder="Brief description"
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Notes</Label>
-                  <Textarea
-                    placeholder="Additional notes..."
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  />
-                </div>
-                <Button onClick={handleAddExpense} className="w-full">
-                  Add Expense
-                </Button>
-              </div>
-            </DialogContent>
+              </DialogContent>
             </Dialog>
           </div>
         </div>
       </CardHeader>
       <CardContent>
+        {/* Month & Category Filters */}
+        {expenses.length > 0 && (
+          <div className="mb-4 space-y-2">
+            {/* Month filter */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-medium text-muted-foreground">Month:</span>
+              <Button
+                size="sm"
+                variant={selectedMonth === null ? "default" : "outline"}
+                className="text-xs h-7"
+                onClick={() => setSelectedMonth(null)}
+              >
+                All
+              </Button>
+              {availableMonths.map(([key, label]) => (
+                <Button
+                  key={key}
+                  size="sm"
+                  variant={selectedMonth === key ? "default" : "outline"}
+                  className="text-xs h-7"
+                  onClick={() => setSelectedMonth(selectedMonth === key ? null : key)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            {/* Category filter */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-medium text-muted-foreground">Category:</span>
+              <Button
+                size="sm"
+                variant={selectedCategory === null ? "default" : "outline"}
+                className="text-xs h-7"
+                onClick={() => setSelectedCategory(null)}
+              >
+                All
+              </Button>
+              {usedCategories.map((cat) => (
+                <Button
+                  key={cat.value}
+                  size="sm"
+                  variant={selectedCategory === cat.value ? "default" : "outline"}
+                  className="text-xs h-7"
+                  onClick={() => setSelectedCategory(selectedCategory === cat.value ? null : cat.value)}
+                >
+                  {cat.icon} {cat.label}
+                </Button>
+              ))}
+            </div>
+            {activeFilters > 0 && (
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary" className="text-xs">
+                  Showing {filteredExpenses.length} of {expenses.length} expenses
+                </Badge>
+                <Button size="sm" variant="ghost" className="text-xs h-6 px-2" onClick={() => { setSelectedMonth(null); setSelectedCategory(null); }}>
+                  <X className="h-3 w-3 mr-1" /> Clear filters
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Summary Cards */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-muted/50 rounded-lg p-4 text-center">
@@ -370,7 +388,12 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
               {Object.entries(categoryTotals).map(([cat, total]) => {
                 const catInfo = EXPENSE_CATEGORIES.find(c => c.value === cat);
                 return (
-                  <Badge key={cat} variant="secondary" className="text-sm">
+                  <Badge
+                    key={cat}
+                    variant="secondary"
+                    className="text-sm cursor-pointer"
+                    onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
+                  >
                     {catInfo?.icon} {catInfo?.label}: ${total.toLocaleString()}
                   </Badge>
                 );
@@ -383,24 +406,18 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
           </div>
-        ) : expenses.length === 0 ? (
+        ) : filteredExpenses.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <Receipt className="h-12 w-12 mx-auto mb-2 opacity-50" />
-            <p>No expenses tracked yet</p>
+            <p>{activeFilters > 0 ? "No expenses match the current filters" : "No expenses tracked yet"}</p>
             <p className="text-sm">Add ALE expenses to track reimbursements</p>
           </div>
         ) : (
           <Tabs defaultValue="not_paid" className="w-full">
             <TabsList className="mb-4">
-              <TabsTrigger value="not_paid">
-                Not Paid ({unpaidExpenses.length})
-              </TabsTrigger>
-              <TabsTrigger value="paid">
-                Paid ({paidExpenses.length})
-              </TabsTrigger>
-              <TabsTrigger value="all">
-                All ({expenses.length})
-              </TabsTrigger>
+              <TabsTrigger value="not_paid">Not Paid ({unpaidExpenses.length})</TabsTrigger>
+              <TabsTrigger value="paid">Paid ({paidExpenses.length})</TabsTrigger>
+              <TabsTrigger value="all">All ({filteredExpenses.length})</TabsTrigger>
             </TabsList>
 
             <TabsContent value="not_paid">
@@ -418,7 +435,7 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
               )}
             </TabsContent>
             <TabsContent value="all">
-              <ExpenseTable expenses={expenses} categories={EXPENSE_CATEGORIES} markAsSubmitted={markAsSubmitted} markAsReimbursed={markAsReimbursed} markAsPaid={markAsPaid} markAsUnpaid={markAsUnpaid} onEdit={handleEditExpense} onDelete={handleDeleteExpense} />
+              <ExpenseTable expenses={filteredExpenses} categories={EXPENSE_CATEGORIES} markAsSubmitted={markAsSubmitted} markAsReimbursed={markAsReimbursed} markAsPaid={markAsPaid} markAsUnpaid={markAsUnpaid} onEdit={handleEditExpense} onDelete={handleDeleteExpense} />
             </TabsContent>
           </Tabs>
         )}
@@ -491,25 +508,19 @@ function ExpenseTable({ expenses, categories, markAsSubmitted, markAsReimbursed,
                     {expense.vendor_name && <span className="font-medium">{expense.vendor_name}: </span>}
                     {expense.description}
                   </TableCell>
-                  <TableCell className="text-right font-medium">
-                    ${expense.amount.toLocaleString()}
-                  </TableCell>
+                  <TableCell className="text-right font-medium">${expense.amount.toLocaleString()}</TableCell>
                   <TableCell>
                     {isPaid ? (
                       <Badge className="bg-green-100 text-green-800 cursor-pointer" onClick={() => markAsUnpaid(expense.id)}>
                         <CheckCircle className="h-3 w-3 mr-1" /> Paid {paidDate ? format(new Date(paidDate), "M/d") : ""}
                       </Badge>
                     ) : (
-                      <Badge variant="destructive" className="cursor-pointer opacity-80" onClick={() => markAsPaid(expense.id)}>
-                        Not Paid
-                      </Badge>
+                      <Badge variant="destructive" className="cursor-pointer opacity-80" onClick={() => markAsPaid(expense.id)}>Not Paid</Badge>
                     )}
                   </TableCell>
                   <TableCell>
                     {expense.is_reimbursed ? (
-                      <Badge className="bg-emerald-100 text-emerald-800">
-                        <CheckCircle className="h-3 w-3 mr-1" /> Reimbursed
-                      </Badge>
+                      <Badge className="bg-emerald-100 text-emerald-800"><CheckCircle className="h-3 w-3 mr-1" /> Reimbursed</Badge>
                     ) : expense.is_submitted_to_insurer ? (
                       <Badge className="bg-blue-100 text-blue-800">Submitted</Badge>
                     ) : (
@@ -518,27 +529,11 @@ function ExpenseTable({ expenses, categories, markAsSubmitted, markAsReimbursed,
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(expense)} title="Edit expense">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setDeleteId(expense.id)} title="Delete expense" className="text-destructive hover:text-destructive">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                      {!isPaid && (
-                        <Button variant="ghost" size="sm" onClick={() => markAsPaid(expense.id)} title="Mark as paid">
-                          <CreditCard className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {!expense.is_submitted_to_insurer && (
-                        <Button variant="ghost" size="sm" onClick={() => markAsSubmitted(expense.id)} title="Mark as submitted">
-                          <Upload className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {expense.is_submitted_to_insurer && !expense.is_reimbursed && (
-                        <Button variant="ghost" size="sm" onClick={() => markAsReimbursed(expense.id, expense.amount)} title="Mark as reimbursed">
-                          <DollarSign className="h-4 w-4" />
-                        </Button>
-                      )}
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(expense)} title="Edit expense"><Edit className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="sm" onClick={() => setDeleteId(expense.id)} title="Delete expense" className="text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                      {!isPaid && <Button variant="ghost" size="sm" onClick={() => markAsPaid(expense.id)} title="Mark as paid"><CreditCard className="h-4 w-4" /></Button>}
+                      {!expense.is_submitted_to_insurer && <Button variant="ghost" size="sm" onClick={() => markAsSubmitted(expense.id)} title="Mark as submitted"><Upload className="h-4 w-4" /></Button>}
+                      {expense.is_submitted_to_insurer && !expense.is_reimbursed && <Button variant="ghost" size="sm" onClick={() => markAsReimbursed(expense.id, expense.amount)} title="Mark as reimbursed"><DollarSign className="h-4 w-4" /></Button>}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -551,18 +546,14 @@ function ExpenseTable({ expenses, categories, markAsSubmitted, markAsReimbursed,
       {/* Edit Dialog */}
       <Dialog open={!!editingExpense} onOpenChange={(open) => !open && setEditingExpense(null)}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit ALE Expense</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Edit ALE Expense</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Category *</Label>
               <Select value={editData.expense_category} onValueChange={(v) => setEditData({ ...editData, expense_category: v })}>
                 <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                 <SelectContent>
-                  {categories.map((cat) => (
-                    <SelectItem key={cat.value} value={cat.value}>{cat.icon} {cat.label}</SelectItem>
-                  ))}
+                  {categories.map((cat) => (<SelectItem key={cat.value} value={cat.value}>{cat.icon} {cat.label}</SelectItem>))}
                 </SelectContent>
               </Select>
             </div>
@@ -588,9 +579,7 @@ function ExpenseTable({ expenses, categories, markAsSubmitted, markAsReimbursed,
               <Label>Notes</Label>
               <Textarea value={editData.notes} onChange={(e) => setEditData({ ...editData, notes: e.target.value })} />
             </div>
-            <Button onClick={() => { if (editingExpense) { onEdit(editingExpense, editData); setEditingExpense(null); } }} className="w-full">
-              Save Changes
-            </Button>
+            <Button onClick={() => { if (editingExpense) { onEdit(editingExpense, editData); setEditingExpense(null); } }} className="w-full">Save Changes</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -600,15 +589,11 @@ function ExpenseTable({ expenses, categories, markAsSubmitted, markAsReimbursed,
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Expense</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this ALE expense? This action cannot be undone.
-            </AlertDialogDescription>
+            <AlertDialogDescription>Are you sure you want to delete this ALE expense? This action cannot be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { if (deleteId) { onDelete(deleteId); setDeleteId(null); } }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete
-            </AlertDialogAction>
+            <AlertDialogAction onClick={() => { if (deleteId) { onDelete(deleteId); setDeleteId(null); } }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
