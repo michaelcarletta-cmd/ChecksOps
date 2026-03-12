@@ -209,6 +209,45 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
     },
   });
 
+  // Delete folder mutation
+  const deleteFolderMutation = useMutation({
+    mutationFn: async (folderId: string) => {
+      // Delete all files in the folder from storage and DB
+      const folderFiles = files?.filter(f => f.folder_id === folderId) || [];
+      for (const file of folderFiles) {
+        await supabase.storage.from("claim-files").remove([file.file_path]);
+        await supabase.from("claim_files").delete().eq("id", file.id);
+      }
+      // Delete subfolders recursively
+      const subs = folders?.filter(f => f.parent_folder_id === folderId) || [];
+      for (const sub of subs) {
+        await deleteFolderMutation.mutateAsync(sub.id);
+      }
+      // Delete the folder itself
+      const { error } = await supabase.from("claim_folders").delete().eq("id", folderId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["claim-folders", claimId] });
+      queryClient.invalidateQueries({ queryKey: ["claim-files", claimId] });
+      toast({ title: "Folder deleted", description: "The folder and its contents have been removed." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete folder.", variant: "destructive" });
+    },
+  });
+
+  const handleDeleteFolder = (folderId: string, folderName: string) => {
+    const folderFiles = files?.filter(f => f.folder_id === folderId) || [];
+    const subs = folders?.filter(f => f.parent_folder_id === folderId) || [];
+    const msg = folderFiles.length > 0 || subs.length > 0
+      ? `"${folderName}" contains ${folderFiles.length} file(s) and ${subs.length} subfolder(s). Everything inside will be permanently deleted. Continue?`
+      : `Delete folder "${folderName}"?`;
+    if (confirm(msg)) {
+      deleteFolderMutation.mutate(folderId);
+    }
+  };
+
   // Upload file mutation
   const uploadFileMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -539,6 +578,16 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                       <FolderPlus className="h-4 w-4 mr-1" />
                       Subfolder
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => handleDeleteFolder(sub.id, sub.name)}
+                      disabled={deleteFolderMutation.isPending}
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete
+                    </Button>
                   </div>
                   {renderFileList(subFiles)}
                   {nestedSubs.length > 0 && renderSubfolders(sub.id)}
@@ -644,7 +693,7 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
               </AccordionTrigger>
               <AccordionContent className="px-4 pb-4">
                 <div className="space-y-3 mt-3">
-                  <div className="flex gap-2">
+                   <div className="flex gap-2">
                     {renderUploadButton(folder.id, folder.name)}
                     <Button
                       variant="outline"
@@ -656,6 +705,16 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                     >
                       <FolderPlus className="h-4 w-4 mr-1" />
                       Subfolder
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => handleDeleteFolder(folder.id, folder.name)}
+                      disabled={deleteFolderMutation.isPending}
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete
                     </Button>
                   </div>
 
