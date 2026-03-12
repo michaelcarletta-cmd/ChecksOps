@@ -1054,7 +1054,7 @@ function CheckDetailPanel({
     left: `${overlayCoordinates.leftPercent}%`,
     width: `${overlayCoordinates.widthPercent}%`,
     zIndex: 20,
-    color: "#1e293b",
+    color: "#111111",
     pointerEvents: "none" as const,
   };
 
@@ -1230,7 +1230,8 @@ function CheckDetailPanel({
                         <img
                           src={backImageUrl}
                           alt="Check back"
-                          className="check-back-image block h-auto w-full"
+                          className="check-back-image block w-full"
+                          style={{ objectFit: "contain", height: "auto" }}
                           onLoad={(event) => {
                             setBackImageDimensions({
                               width: event.currentTarget.naturalWidth,
@@ -1250,7 +1251,7 @@ function CheckDetailPanel({
                               <p className="text-center text-[10px] font-bold mt-[2px]">For Mobile Deposit Only</p>
 
                               {/* Separator before signatures */}
-                              <div className="border-t border-border/70 my-[5px]" />
+                              <div className="my-[5px]" style={{ borderTop: "1px solid #111111", opacity: 0.3 }} />
 
                               {/* Client signatures first (non-Freedom, non-Carletta) */}
                               {endorsementRows.map((e) => {
@@ -1260,8 +1261,8 @@ function CheckDetailPanel({
                                   <div key={e.id} className="mt-[4px]">
                                     {e.signature_image_url && e.signature_image_url.startsWith("data:image/") ? (
                                       <>
-                                        <p className="text-center text-[12px] font-medium">{e.payee_name}</p>
-                                        <img src={e.signature_image_url} alt={`${e.payee_name} signature`} className="h-7 mx-auto object-contain" />
+                                        <p className="text-center text-[12px] font-medium" style={{ color: "#111111" }}>{e.payee_name}</p>
+                                        <img src={e.signature_image_url} alt={`${e.payee_name} signature`} className="h-7 mx-auto object-contain" style={{ filter: "brightness(0)" }} />
                                       </>
                                     ) : e.signature_image_url && e.signature_image_url.startsWith("typed:") ? (
                                       <p className="italic text-center text-[13px] font-serif">{e.signature_image_url.slice(6)}</p>
@@ -1284,9 +1285,9 @@ function CheckDetailPanel({
                                 }).slice(0, 1).map((e) => (
                                   <div key={`sig-${e.id}`} className="mt-[2px]">
                                     {e.signature_image_url?.startsWith("data:image/") ? (
-                                      <img src={e.signature_image_url} alt="Carletta signature" className="h-7 mx-auto object-contain" />
+                                      <img src={e.signature_image_url} alt="Carletta signature" className="h-7 mx-auto object-contain" style={{ filter: "brightness(0)" }} />
                                     ) : e.signature_image_url?.startsWith("typed:") ? (
-                                      <p className="italic text-center text-[13px] font-serif">{e.signature_image_url.slice(6)}</p>
+                                      <p className="italic text-center text-[13px] font-serif" style={{ color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
                                     ) : null}
                                   </div>
                                 ))}
@@ -1349,7 +1350,7 @@ function CheckDetailPanel({
                               .header { text-align: center; margin-bottom: 20px; }
                               .header h1 { font-size: 18px; margin: 0; }
                               .header p { font-size: 12px; color: #666; margin: 4px 0; }
-                              img { max-width: 100%; border: 1px solid #ddd; margin-bottom: 16px; }
+                              img { max-width: 100%; height: auto; object-fit: contain; border: 1px solid #ddd; margin-bottom: 16px; }
                               @media print { .no-print { display: none; } }
                             </style>
                           </head>
