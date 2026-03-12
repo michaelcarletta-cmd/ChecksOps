@@ -680,6 +680,12 @@ export function ClaimPhotos({ claimId, claim, isPortalUser = false }: ClaimPhoto
         </div>
         
         <div className="flex flex-wrap gap-2">
+          {filteredPhotos.length > 0 && (
+            <Button variant="outline" size="sm" onClick={handleSelectAll}>
+              <CheckSquare className="h-4 w-4 mr-2" />
+              {filteredPhotos.every(p => selectedPhotos.includes(p.id)) ? "Deselect All" : "Select All"} ({filteredPhotos.length})
+            </Button>
+          )}
           {selectedPhotos.length === 2 && (
             <Button variant="outline" size="sm" onClick={() => setLinkDialogOpen(true)}>
               <Link2 className="h-4 w-4 mr-2" />
@@ -687,10 +693,43 @@ export function ClaimPhotos({ claimId, claim, isPortalUser = false }: ClaimPhoto
             </Button>
           )}
           {selectedPhotos.length > 0 && (
-            <Button variant="outline" size="sm" onClick={() => setSelectedPhotos([])}>
-              <X className="h-4 w-4 mr-2" />
-              Clear ({selectedPhotos.length})
-            </Button>
+            <>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="sm" disabled={bulkDeleting}>
+                    {bulkDeleting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Deleting {bulkDeleteProgress.current}/{bulkDeleteProgress.total}
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Selected ({selectedPhotos.length})
+                      </>
+                    )}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete {selectedPhotos.length} photo(s)?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently delete {selectedPhotos.length} selected photo(s) and their files. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                      Delete {selectedPhotos.length} Photo(s)
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <Button variant="outline" size="sm" onClick={() => setSelectedPhotos([])}>
+                <X className="h-4 w-4 mr-2" />
+                Clear ({selectedPhotos.length})
+              </Button>
+            </>
           )}
           {!isPortalUser && (
             <>
