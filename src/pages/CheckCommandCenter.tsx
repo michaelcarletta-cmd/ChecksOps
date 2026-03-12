@@ -1481,8 +1481,6 @@ function CheckDetailPanel({
                               .sig-typed { text-align: center; margin: 0; font-size: 13px; font-style: italic; font-family: serif; }
                               .sig-waived { text-align: center; margin: 0; font-size: 11px; font-style: italic; }
                               .sig-img { display: block; margin: 2px auto 0; max-width: 42%; max-height: 34px; filter: brightness(0); }
-                              .debug-block { margin: 0 0 14px; padding: 8px; border: 1px solid #ddd; background: #fafafa; font-size: 11px; }
-                              .debug-block pre { margin: 0; white-space: pre-wrap; }
                               @media print {
                                 .no-print { display: none; }
                                 body { padding: 8px; }
