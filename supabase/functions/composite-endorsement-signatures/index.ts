@@ -156,17 +156,17 @@ Deno.serve(async (req) => {
 
     // --- Restrictive endorsement legend ---
     // "Pay to the order of" — base header
-    endorsementSvg += svgText(centerX, curY + headerFont, headerFont, "#1e293b", "bold", "Pay to the order of");
+    endorsementSvg += svgText(centerX, curY + headerFont, headerFont, "#111111", "bold", "Pay to the order of");
     curY += Math.round(headerFont * 1.3);
     // "Freedom Adjustment" — 1.3x header (company payee)
-    endorsementSvg += svgText(centerX, curY + companyFont, companyFont, "#1e293b", "bold", "Freedom Adjustment");
+    endorsementSvg += svgText(centerX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
     curY += Math.round(companyFont * 1.25);
     // "For Mobile Deposit Only" — same as header
-    endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#1e293b", "bold", "For Mobile Deposit Only");
+    endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#111111", "bold", "For Mobile Deposit Only");
     curY += Math.round(bodyFont * 1.4);
 
     // --- Separator ---
-    endorsementSvg += `<line x1="${ezLeftPad}" y1="${curY}" x2="${ezLeftPad + ezContentWidth}" y2="${curY}" stroke="#94a3b8" stroke-width="2"/>`;
+    endorsementSvg += `<line x1="${ezLeftPad}" y1="${curY}" x2="${ezLeftPad + ezContentWidth}" y2="${curY}" stroke="#111111" stroke-width="2" opacity="0.3"/>`;
     curY += Math.round(14 * scaleFactor);
 
     // --- Render endorsement signatures ---
