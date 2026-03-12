@@ -1267,7 +1267,7 @@ function CheckDetailPanel({
                                     ) : e.signature_image_url && e.signature_image_url.startsWith("typed:") ? (
                                       <p className="italic text-center text-[13px] font-serif" style={{ color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
                                     ) : e.status === "waived" ? (
-                                      <p className="italic text-center text-[11px]">{e.payee_name} — Waived</p>
+                                      <p className="italic text-center text-[11px]" style={{ color: "#111111" }}>{e.payee_name} — Waived</p>
                                     ) : (
                                       <p className="text-center text-[12px] font-medium">{e.payee_name}</p>
                                     )}
