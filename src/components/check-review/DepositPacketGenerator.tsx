@@ -302,7 +302,7 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
             {backImageUrl && (
               <>
                 <h2 className="text-sm font-semibold mt-3 mb-1 border-b border-border pb-1">Check Back (Endorsements)</h2>
-                <img src={backImageUrl} alt="Check back with endorsements" className="max-w-full max-h-[300px] border border-border rounded" />
+                <img src={backImageUrl} alt="Check back with endorsements" className="max-w-full border border-border rounded" />
               </>
             )}
           </div>
