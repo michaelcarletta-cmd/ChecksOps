@@ -578,6 +578,16 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                       <FolderPlus className="h-4 w-4 mr-1" />
                       Subfolder
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => handleDeleteFolder(sub.id, sub.name)}
+                      disabled={deleteFolderMutation.isPending}
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete
+                    </Button>
                   </div>
                   {renderFileList(subFiles)}
                   {nestedSubs.length > 0 && renderSubfolders(sub.id)}
