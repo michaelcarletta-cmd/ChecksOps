@@ -583,6 +583,63 @@ export function ClaimPhotos({ claimId, claim, isPortalUser = false }: ClaimPhoto
     );
   };
 
+  const handleSelectAll = () => {
+    const allFilteredIds = filteredPhotos.map(p => p.id);
+    const allSelected = allFilteredIds.every(id => selectedPhotos.includes(id));
+    if (allSelected) {
+      setSelectedPhotos(prev => prev.filter(id => !allFilteredIds.includes(id)));
+    } else {
+      setSelectedPhotos(prev => [...new Set([...prev, ...allFilteredIds])]);
+    }
+  };
+
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteProgress, setBulkDeleteProgress] = useState({ current: 0, total: 0 });
+
+  const handleBulkDelete = async () => {
+    const photosToDelete = photos.filter(p => selectedPhotos.includes(p.id));
+    if (photosToDelete.length === 0) return;
+
+    setBulkDeleting(true);
+    setBulkDeleteProgress({ current: 0, total: photosToDelete.length });
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < photosToDelete.length; i++) {
+      const photo = photosToDelete[i];
+      try {
+        await supabase.storage.from("claim-files").remove([photo.file_path]);
+        if (photo.annotated_file_path) {
+          await supabase.storage.from("claim-files").remove([photo.annotated_file_path]);
+        }
+        const { error } = await supabase.from("claim_photos").delete().eq("id", photo.id);
+        if (error) throw error;
+        successCount++;
+      } catch {
+        failCount++;
+      }
+      setBulkDeleteProgress({ current: i + 1, total: photosToDelete.length });
+    }
+
+    // Clear deleted photo URLs from cache
+    setPhotoUrls(prev => {
+      const newUrls = { ...prev };
+      photosToDelete.forEach(p => delete newUrls[p.id]);
+      return newUrls;
+    });
+
+    setSelectedPhotos([]);
+    setBulkDeleting(false);
+    setBulkDeleteProgress({ current: 0, total: 0 });
+    fetchPhotos();
+
+    toast({
+      title: `Deleted ${successCount} photo(s)`,
+      description: failCount > 0 ? `${failCount} failed to delete.` : undefined,
+    });
+  };
+
   const categories = useMemo(() => {
     return ["all", ...new Set(photos.map(p => p.category))];
   }, [photos]);
