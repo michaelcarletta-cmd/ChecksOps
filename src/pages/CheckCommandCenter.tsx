@@ -1495,7 +1495,6 @@ function CheckDetailPanel({
                               <p>Amount: $${check.amount?.toLocaleString("en-US", { minimumFractionDigits: 2 }) ?? "N/A"} · Printed: ${new Date().toLocaleDateString()}</p>
                               <p>All endorsements verified ✓</p>
                             </div>
-                            <div class="debug-block no-print"><pre>${escPrint(JSON.stringify(dimensionDebugPayload, null, 2))}</pre></div>
                             <button class="no-print" onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;cursor:pointer;">Print</button>
                             <div class="check-section">
                               <p class="label">Front</p>
