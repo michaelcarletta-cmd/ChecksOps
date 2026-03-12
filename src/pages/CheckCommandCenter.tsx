@@ -741,6 +741,7 @@ function CheckDetailPanel({
   const [detailTab, setDetailTab] = useState("overview");
   const [undoing, setUndoing] = useState(false);
   const [preparingDepositPrint, setPreparingDepositPrint] = useState(false);
+  const [frontImageDimensions, setFrontImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [backImageDimensions, setBackImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
@@ -845,6 +846,26 @@ function CheckDetailPanel({
       return data;
     },
   });
+
+  const loadImageDimensions = useCallback((url: string) => {
+    return new Promise<{ width: number; height: number }>((resolve, reject) => {
+      const img = new Image();
+      img.decoding = "async";
+      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      img.onerror = () => reject(new Error(`Failed to load image dimensions for ${url}`));
+      img.src = url;
+    });
+  }, []);
+
+  const escPrint = useCallback((value: unknown) => {
+    if (value == null) return "";
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }, []);
 
   const canUndo = check && ['branch_deposit_required', 'approved_for_deposit', 'loss_draft_required', 'reissue_requested'].includes(check.status) && check.status !== 'deposited';
 
@@ -1205,7 +1226,17 @@ function CheckDetailPanel({
                         </a>
                       </div>
                       <div className="relative overflow-hidden rounded border border-border">
-                        <img src={frontImageUrl} alt="Check front" className="w-full object-contain" />
+                        <img
+                          src={frontImageUrl}
+                          alt="Check front"
+                          className="w-full object-contain"
+                          onLoad={(event) => {
+                            setFrontImageDimensions({
+                              width: event.currentTarget.naturalWidth,
+                              height: event.currentTarget.naturalHeight,
+                            });
+                          }}
+                        />
                         {showWatermark && (
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ transform: "rotate(-30deg)" }}>
                             <div className="grid grid-cols-2 gap-x-8 gap-y-6 opacity-[0.07]">
@@ -1315,62 +1346,171 @@ function CheckDetailPanel({
                       className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white"
                       disabled={preparingDepositPrint}
                       onClick={async () => {
-                        let printableBackImageUrl = backImageUrl;
+                        if (!frontImageUrl || !backImageUrl) return;
 
+                        let printableBackImageUrl = backImageUrl;
                         if (check.back_image_path) {
                           printableBackImageUrl = await ensureDepositReadyBackImage();
                         }
+                        if (!printableBackImageUrl) return;
 
-                        const exportMode = "deposit-ready";
-                        console.log("[CHECK-EXPORT] check.status:", check.status);
-                        console.log("[CHECK-EXPORT] hasEndorsement:", hasEndorsement);
-                        console.log("[CHECK-EXPORT] showWatermark:", showWatermark);
-                        console.log("[CHECK-EXPORT] endorsementText:", endorsementText);
-                        console.log("[CHECK-EXPORT] signatures:", signatures);
-                        console.log("[CHECK-EXPORT] overlay coordinates:", overlayCoordinates);
-                        console.log("[CHECK-EXPORT] image width/height:", {
-                          width: backImageDimensions?.width ?? null,
-                          height: backImageDimensions?.height ?? null,
-                        });
-                        console.log("[CHECK-EXPORT] final export mode:", exportMode);
+                        const [resolvedFrontDims, resolvedBackDims, compositedBackDims] = await Promise.all([
+                          loadImageDimensions(frontImageUrl).catch(() => frontImageDimensions),
+                          loadImageDimensions(backImageUrl).catch(() => backImageDimensions),
+                          loadImageDimensions(printableBackImageUrl).catch(() => null),
+                        ]);
 
-                        if (!printableBackImageUrl) {
+                        if (!resolvedFrontDims || !resolvedBackDims) {
+                          toast({
+                            title: "Unable to prepare print dimensions",
+                            description: "Could not determine front/back image dimensions.",
+                            variant: "destructive",
+                          });
                           return;
                         }
 
+                        const originalFrontImageWidth = resolvedFrontDims.width;
+                        const originalFrontImageHeight = resolvedFrontDims.height;
+                        const originalBackImageWidth = resolvedBackDims.width;
+                        const originalBackImageHeight = resolvedBackDims.height;
+
+                        const finalFrontWidth = originalFrontImageWidth;
+                        const finalFrontHeight = originalFrontImageHeight;
+                        const finalBackWidth = originalBackImageWidth;
+                        const finalBackHeight = originalBackImageHeight;
+                        const normalizedRenderWidth = Math.max(finalFrontWidth, finalBackWidth);
+
+                        const dimensionDebugPayload = {
+                          originalFrontImageWidth,
+                          originalFrontImageHeight,
+                          originalBackImageWidth,
+                          originalBackImageHeight,
+                          finalFrontWidth,
+                          finalFrontHeight,
+                          finalBackWidth,
+                          finalBackHeight,
+                          normalizedRenderWidth,
+                          compositedBackImageWidth: compositedBackDims?.width ?? null,
+                          compositedBackImageHeight: compositedBackDims?.height ?? null,
+                        };
+
+                        console.log("[CHECK-EXPORT-DIMENSIONS]", dimensionDebugPayload);
+
+                        const clientEndorsements = endorsementRows.filter((e) => {
+                          const nameLC = e.payee_name.toLowerCase();
+                          return !nameLC.includes("freedom") && !nameLC.includes("carletta");
+                        });
+
+                        const companySignature = endorsementRows.find((e) => {
+                          const nameLC = e.payee_name.toLowerCase();
+                          return (nameLC.includes("freedom") || nameLC.includes("carletta")) && !!e.signature_image_url;
+                        });
+
+                        const clientEndorsementsHtml = clientEndorsements
+                          .map((e) => {
+                            if (e.signature_image_url?.startsWith("data:image/")) {
+                              return `<div class="sig-block"><p class="sig-name">${escPrint(e.payee_name)}</p><img class="sig-img" src="${e.signature_image_url}" alt="${escPrint(e.payee_name)} signature" /></div>`;
+                            }
+                            if (e.signature_image_url?.startsWith("typed:")) {
+                              return `<div class="sig-block"><p class="sig-typed">${escPrint(e.signature_image_url.slice(6))}</p></div>`;
+                            }
+                            if (e.status === "waived") {
+                              return `<div class="sig-block"><p class="sig-waived">${escPrint(e.payee_name)} — Waived</p></div>`;
+                            }
+                            return `<div class="sig-block"><p class="sig-name">${escPrint(e.payee_name)}</p></div>`;
+                          })
+                          .join("");
+
+                        const companySignatureHtml = companySignature?.signature_image_url?.startsWith("data:image/")
+                          ? `<img class="sig-img" src="${companySignature.signature_image_url}" alt="Company signature" />`
+                          : companySignature?.signature_image_url?.startsWith("typed:")
+                            ? `<p class="sig-typed">${escPrint(companySignature.signature_image_url.slice(6))}</p>`
+                            : "";
+
+                        const endorsementOverlayHtml = hasEndorsement
+                          ? `<div class="endorsement-overlay">
+                              <div class="overlay-body">
+                                <p class="overlay-header">Pay to the order of</p>
+                                <p class="overlay-company">Freedom Adjustment</p>
+                                <p class="overlay-header">For Mobile Deposit Only</p>
+                                <div class="overlay-separator"></div>
+                                ${clientEndorsementsHtml}
+                                <div class="sig-block company-block">
+                                  <p class="overlay-company">Freedom Adjustment</p>
+                                  <p class="overlay-by">By: Michael Carletta</p>
+                                  ${companySignatureHtml}
+                                </div>
+                              </div>
+                            </div>`
+                          : "";
+
                         const printWindow = window.open("", "_blank");
                         if (!printWindow) return;
+
                         printWindow.document.write(`
                           <!DOCTYPE html>
                           <html>
                           <head>
-                            <title>Print Check #${check.check_number ?? check.id} for Deposit</title>
+                            <title>Print Check #${escPrint(check.check_number ?? check.id)} for Deposit</title>
                             <style>
+                              :root { --render-width: ${normalizedRenderWidth}px; }
                               body { margin: 0; padding: 20px; font-family: sans-serif; background: white; }
                               .header { text-align: center; margin-bottom: 20px; }
                               .header h1 { font-size: 18px; margin: 0; }
                               .header p { font-size: 12px; color: #666; margin: 4px 0; }
                               .check-section { margin-bottom: 16px; }
                               .check-section p.label { font-size: 12px; color: #666; margin: 0 0 4px 0; }
-                              .check-print-wrap { position: relative; display: block; width: 100%; }
-                              .check-print-wrap img {
-                                display: block;
-                                width: 100%;
-                                height: auto;
-                                border: 1px solid #ddd;
+                              .check-print-wrap { position: relative; display: inline-block; width: min(100%, var(--render-width)); }
+                              .check-front-image, .check-back-image { display: block; width: 100%; height: auto; border: 1px solid #ddd; }
+                              .endorsement-overlay {
+                                position: absolute;
+                                top: ${overlayCoordinates.topPercent}%;
+                                left: ${overlayCoordinates.leftPercent}%;
+                                width: ${overlayCoordinates.widthPercent}%;
+                                z-index: 5;
+                                pointer-events: none;
+                                color: #111111;
                               }
-                              @media print { .no-print { display: none; } }
+                              .overlay-body { font-weight: 600; line-height: 1.15; }
+                              .overlay-header { text-align: center; margin: 0; font-size: 12px; font-weight: 700; }
+                              .overlay-company { text-align: center; margin: 2px 0 0; font-size: 14px; font-weight: 700; }
+                              .overlay-by { text-align: center; margin: 2px 0 0; font-size: 12px; }
+                              .overlay-separator { margin: 6px 0; border-top: 1px solid #111111; opacity: 0.3; }
+                              .sig-block { margin-top: 4px; }
+                              .sig-name { text-align: center; margin: 0; font-size: 12px; }
+                              .sig-typed { text-align: center; margin: 0; font-size: 13px; font-style: italic; font-family: serif; }
+                              .sig-waived { text-align: center; margin: 0; font-size: 11px; font-style: italic; }
+                              .sig-img { display: block; margin: 2px auto 0; max-width: 42%; max-height: 34px; filter: brightness(0); }
+                              .debug-block { margin: 0 0 14px; padding: 8px; border: 1px solid #ddd; background: #fafafa; font-size: 11px; }
+                              .debug-block pre { margin: 0; white-space: pre-wrap; }
+                              @media print {
+                                .no-print { display: none; }
+                                body { padding: 8px; }
+                              }
                             </style>
                           </head>
                           <body>
                             <div class="header">
-                              <h1>Check #${check.check_number ?? "N/A"} — ${check.carrier_name ?? ""}</h1>
+                              <h1>Check #${escPrint(check.check_number ?? "N/A")} — ${escPrint(check.carrier_name ?? "")}</h1>
                               <p>Amount: $${check.amount?.toLocaleString("en-US", { minimumFractionDigits: 2 }) ?? "N/A"} · Printed: ${new Date().toLocaleDateString()}</p>
                               <p>All endorsements verified ✓</p>
                             </div>
+                            <div class="debug-block no-print"><pre>${escPrint(JSON.stringify(dimensionDebugPayload, null, 2))}</pre></div>
                             <button class="no-print" onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;cursor:pointer;">Print</button>
-                            ${frontImageUrl ? `<div class="check-section"><p class="label">Front</p><div class="check-print-wrap"><img src="${frontImageUrl}" /></div></div>` : ""}
-                            <div class="check-section"><p class="label">Back (Endorsed)</p><div class="check-print-wrap"><img src="${printableBackImageUrl}" /></div></div>
+                            <div class="check-section">
+                              <p class="label">Front</p>
+                              <div class="check-print-wrap">
+                                <img class="check-front-image" src="${frontImageUrl}" width="${finalFrontWidth}" height="${finalFrontHeight}" alt="Check front" />
+                              </div>
+                            </div>
+                            <div class="check-section">
+                              <p class="label">Back (Endorsed)</p>
+                              <div class="check-print-wrap">
+                                <img class="check-back-image" src="${backImageUrl}" width="${finalBackWidth}" height="${finalBackHeight}" alt="Check back" />
+                                ${endorsementOverlayHtml}
+                              </div>
+                            </div>
+                            <script>console.log("[CHECK-EXPORT-DIMENSIONS]", ${JSON.stringify(dimensionDebugPayload)});</script>
                           </body>
                           </html>
                         `);
