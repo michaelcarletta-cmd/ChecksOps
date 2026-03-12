@@ -525,9 +525,9 @@ export function DepositOperationsConsole() {
             {actionDialog?.action === "assign_provider" && (
               <div className="space-y-2">
                 <Label className="text-xs">Deposit Route</Label>
-                <Select value={actionProvider} onValueChange={setActionProvider} modal={false}>
+                <Select value={actionProvider} onValueChange={setActionProvider}>
                   <SelectTrigger><SelectValue placeholder="Select deposit route" /></SelectTrigger>
-                  <SelectContent className="z-[200]">
+                  <SelectContent className="z-[200]" position="popper" sideOffset={4}>
                     {activeProviders.length === 0 ? (
                       <div className="px-2 py-1.5 text-xs text-muted-foreground">No active providers found</div>
                     ) : (
