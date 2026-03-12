@@ -683,7 +683,7 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
               </AccordionTrigger>
               <AccordionContent className="px-4 pb-4">
                 <div className="space-y-3 mt-3">
-                  <div className="flex gap-2">
+                   <div className="flex gap-2">
                     {renderUploadButton(folder.id, folder.name)}
                     <Button
                       variant="outline"
@@ -695,6 +695,16 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                     >
                       <FolderPlus className="h-4 w-4 mr-1" />
                       Subfolder
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => handleDeleteFolder(folder.id, folder.name)}
+                      disabled={deleteFolderMutation.isPending}
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete
                     </Button>
                   </div>
 
