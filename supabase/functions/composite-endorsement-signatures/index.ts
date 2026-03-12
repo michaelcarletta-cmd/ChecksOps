@@ -140,14 +140,13 @@ Deno.serve(async (req) => {
     const ezTopPad = Math.round(imgHeight * ENDORSEMENT_TOP_PCT);
     const ezContentWidth = Math.round(imgWidth * ENDORSEMENT_WIDTH_PCT);
 
-    // Scale font sizes relative to image dimensions
-    // Header = base, company = 1.3x header, signatures = 1.2–1.3x header
-    const scaleFactor = Math.min(imgWidth / 1200, imgHeight / 800);
-    const headerFont = Math.max(20, Math.round(28 * scaleFactor));     // base header
-    const companyFont = Math.round(headerFont * 1.3);                  // 1.3x header
-    const bodyFont = headerFont;                                       // same as header
-    const sigNameFont = Math.round(headerFont * 1.25);                 // 1.2–1.3x header — signatures most prominent
-    const sigHeight = Math.max(55, Math.round(80 * scaleFactor));      // signature image height
+    // Scale font sizes relative to actual check image width for consistent
+    // rendering across any resolution (2000px scans, 4000px phone photos, etc.)
+    const headerFont = Math.max(14, Math.round(imgWidth * 0.018));
+    const companyFont = Math.max(18, Math.round(imgWidth * 0.025));
+    const bodyFont = headerFont;
+    const sigNameFont = Math.max(18, Math.round(imgWidth * 0.028));
+    const sigHeight = Math.max(40, Math.round(imgWidth * 0.06));
 
     let curY = ezTopPad;
     let endorsementSvg = "";
