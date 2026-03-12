@@ -214,12 +214,12 @@ Deno.serve(async (req) => {
       // Render the signature from whichever company endorsement has one
       const sigEntry = companyEndorsements.find((e) => e.signature_image_url);
       if (sigEntry?.signature_image_url?.startsWith("data:image/")) {
-        const sigWidth = Math.min(ezContentWidth - 20, Math.round(400 * scaleFactor));
+        const sigWidth = Math.min(ezContentWidth - 20, Math.round(imgWidth * 0.22));
         // Force signature to black ink using feColorMatrix
         const coSigFilterId = `blackInkCo_${sigEntry.id.replace(/[^a-zA-Z0-9]/g, "")}`;
         endorsementSvg += `<defs><filter id="${coSigFilterId}"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></defs>`;
         endorsementSvg += `<image href="${escHtml(sigEntry.signature_image_url)}" x="${centerX - sigWidth / 2}" y="${curY}" width="${sigWidth}" height="${sigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${coSigFilterId})"/>`;
-        curY += sigHeight + Math.round(6 * scaleFactor);
+        curY += sigHeight + Math.round(imgWidth * 0.003);
       } else if (sigEntry?.signature_image_url?.startsWith("typed:")) {
         const typedName = sigEntry.signature_image_url.slice(6);
         endorsementSvg += `<text x="${centerX}" y="${curY + sigNameFont}" font-family="serif" font-size="${sigNameFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(typedName)}</text>`;
