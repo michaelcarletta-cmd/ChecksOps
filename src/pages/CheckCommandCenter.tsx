@@ -1054,7 +1054,7 @@ function CheckDetailPanel({
     left: `${overlayCoordinates.leftPercent}%`,
     width: `${overlayCoordinates.widthPercent}%`,
     zIndex: 20,
-    color: "#1e293b",
+    color: "#111111",
     pointerEvents: "none" as const,
   };
 
