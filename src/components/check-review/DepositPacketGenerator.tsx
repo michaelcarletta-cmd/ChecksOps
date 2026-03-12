@@ -189,7 +189,7 @@ export function DepositPacketGenerator({ checkId }: { checkId: string }) {
         .meta-item label{font-size:0.7rem;color:#888;text-transform:uppercase;letter-spacing:0.5px}
         .meta-item p{font-size:0.9rem;margin:0.15rem 0 0;font-weight:500}
         .notes{background:#f9f9f9;padding:0.75rem;border-radius:0.25rem;font-size:0.85rem;margin-top:0.5rem}
-        .check-img{max-width:100%;max-height:300px;border:1px solid #ddd;border-radius:0.25rem}
+        .check-img{max-width:100%;border:1px solid #ddd;border-radius:0.25rem}
         .footer{margin-top:2rem;padding-top:0.75rem;border-top:1px solid #ddd;font-size:0.7rem;color:#999}
         table{width:100%;border-collapse:collapse;margin-top:0.5rem}
         th{border:1px solid #ddd;padding:0.4rem;background:#f5f5f5;font-weight:600;font-size:0.8rem;text-align:left}
