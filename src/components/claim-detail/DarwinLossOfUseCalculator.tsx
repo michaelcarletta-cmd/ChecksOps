@@ -414,7 +414,7 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
               {paidExpenses.length === 0 ? (
                 <p className="text-center py-4 text-muted-foreground text-sm">No paid expenses yet</p>
               ) : (
-                <ExpenseTable expenses={paidExpenses} categories={EXPENSE_CATEGORIES} markAsSubmitted={markAsSubmitted} markAsReimbursed={markAsReimbursed} markAsPaid={markAsPaid} markAsUnpaid={markAsUnpaid} />
+                <ExpenseTable expenses={paidExpenses} categories={EXPENSE_CATEGORIES} markAsSubmitted={markAsSubmitted} markAsReimbursed={markAsReimbursed} markAsPaid={markAsPaid} markAsUnpaid={markAsUnpaid} onEdit={handleEditExpense} onDelete={handleDeleteExpense} />
               )}
             </TabsContent>
             <TabsContent value="all">
