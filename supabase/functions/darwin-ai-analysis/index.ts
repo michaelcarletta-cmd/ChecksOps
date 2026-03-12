@@ -2891,13 +2891,8 @@ VIII. Interdependency of Building Systems
 IX. Why Damaged Areas Must Be Disturbed for Repairs
 X. State/Local Code Requirements
 XI. Manufacturer Installation Standards (Adopted by Code)
-XII. How Repairs Trigger Code Upgrades
-XIII. HAAG Engineering Standards & Industry Best Practices
-XIV. Rebuttal of Carrier Engineer Reports (If Applicable)
-XV. Communications Log & Carrier Response Timeline
-XVI. Detailed Repair Estimate Explanation
-XVII. Formal Demand and Conclusion
-XVIII. Signature
+XII. HAAG Engineering Standards & Industry Best Practices
+XIII. Formal Demand and Conclusion
 
 ================================================================================
 
