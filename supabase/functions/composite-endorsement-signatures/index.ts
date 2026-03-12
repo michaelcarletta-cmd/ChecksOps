@@ -166,7 +166,7 @@ Deno.serve(async (req) => {
 
     // --- Separator ---
     endorsementSvg += `<line x1="${ezLeftPad}" y1="${curY}" x2="${ezLeftPad + ezContentWidth}" y2="${curY}" stroke="#111111" stroke-width="2" opacity="0.3"/>`;
-    curY += Math.round(14 * scaleFactor);
+    curY += Math.round(imgWidth * 0.008);
 
     // --- Render endorsement signatures ---
     // Separate client/insured endorsements from Freedom/Carletta
@@ -182,12 +182,12 @@ Deno.serve(async (req) => {
       if (e.signature_image_url && e.signature_image_url.startsWith("data:image/")) {
         endorsementSvg += svgText(centerX, curY + sigNameFont, sigNameFont, "#111111", "normal", e.payee_name);
         curY += Math.round(sigNameFont * 1.2);
-        const sigWidth = Math.min(ezContentWidth - 20, Math.round(400 * scaleFactor));
+        const sigWidth = Math.min(ezContentWidth - 20, Math.round(imgWidth * 0.22));
         // Use a feColorMatrix filter to force signature image to solid black
         const sigFilterId = `blackInk_${e.id.replace(/[^a-zA-Z0-9]/g, "")}`;
         endorsementSvg += `<defs><filter id="${sigFilterId}"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></defs>`;
         endorsementSvg += `<image href="${escHtml(e.signature_image_url)}" x="${centerX - sigWidth / 2}" y="${curY}" width="${sigWidth}" height="${sigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${sigFilterId})"/>`;
-        curY += sigHeight + Math.round(6 * scaleFactor);
+        curY += sigHeight + Math.round(imgWidth * 0.003);
       } else if (e.signature_image_url && e.signature_image_url.startsWith("typed:")) {
         const typedName = e.signature_image_url.slice(6);
         endorsementSvg += `<text x="${centerX}" y="${curY + sigNameFont}" font-family="serif" font-size="${sigNameFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(typedName)}</text>`;
@@ -201,12 +201,12 @@ Deno.serve(async (req) => {
         endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#111111", "normal", "signature", "italic");
         curY += Math.round(bodyFont * 1.3);
       }
-      curY += Math.round(8 * scaleFactor);
+      curY += Math.round(imgWidth * 0.005);
     }
 
     // --- Freedom Adjustment / By: Michael Carletta — always grouped last ---
     if (companyEndorsements.length > 0 || true) {
-      curY += Math.round(6 * scaleFactor); // extra spacing before company block
+      curY += Math.round(imgWidth * 0.004); // extra spacing before company block
       endorsementSvg += svgText(centerX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
       curY += Math.round(companyFont * 1.2);
       endorsementSvg += svgText(centerX, curY + sigNameFont, sigNameFont, "#111111", "normal", "By: Michael Carletta");
@@ -214,18 +214,18 @@ Deno.serve(async (req) => {
       // Render the signature from whichever company endorsement has one
       const sigEntry = companyEndorsements.find((e) => e.signature_image_url);
       if (sigEntry?.signature_image_url?.startsWith("data:image/")) {
-        const sigWidth = Math.min(ezContentWidth - 20, Math.round(400 * scaleFactor));
+        const sigWidth = Math.min(ezContentWidth - 20, Math.round(imgWidth * 0.22));
         // Force signature to black ink using feColorMatrix
         const coSigFilterId = `blackInkCo_${sigEntry.id.replace(/[^a-zA-Z0-9]/g, "")}`;
         endorsementSvg += `<defs><filter id="${coSigFilterId}"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></defs>`;
         endorsementSvg += `<image href="${escHtml(sigEntry.signature_image_url)}" x="${centerX - sigWidth / 2}" y="${curY}" width="${sigWidth}" height="${sigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${coSigFilterId})"/>`;
-        curY += sigHeight + Math.round(6 * scaleFactor);
+        curY += sigHeight + Math.round(imgWidth * 0.003);
       } else if (sigEntry?.signature_image_url?.startsWith("typed:")) {
         const typedName = sigEntry.signature_image_url.slice(6);
         endorsementSvg += `<text x="${centerX}" y="${curY + sigNameFont}" font-family="serif" font-size="${sigNameFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(typedName)}</text>`;
         curY += Math.round(sigNameFont * 1.3);
       }
-      curY += Math.round(10 * scaleFactor);
+      curY += Math.round(imgWidth * 0.006);
     }
 
     // ──── HARD SAFETY CHECK ────
