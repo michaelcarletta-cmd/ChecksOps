@@ -88,9 +88,9 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
     const months = new Map<string, string>();
     expenses.forEach((e) => {
       const d = new Date(e.expense_date);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const key = String(d.getMonth());
       if (!months.has(key)) {
-        months.set(key, d.toLocaleString("en-US", { month: "long", year: "numeric" }));
+        months.set(key, d.toLocaleString("en-US", { month: "long" }));
       }
     });
     return Array.from(months.entries()).sort((a, b) => b[0].localeCompare(a[0]));
@@ -109,7 +109,7 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
     if (selectedMonth) {
       result = result.filter((e) => {
         const d = new Date(e.expense_date);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        const key = String(d.getMonth());
         return key === selectedMonth;
       });
     }
