@@ -1269,7 +1269,7 @@ function CheckDetailPanel({
                                     ) : e.status === "waived" ? (
                                       <p className="italic text-center text-[11px]" style={{ color: "#111111" }}>{e.payee_name} — Waived</p>
                                     ) : (
-                                      <p className="text-center text-[12px] font-medium">{e.payee_name}</p>
+                                      <p className="text-center text-[12px] font-medium" style={{ color: "#111111" }}>{e.payee_name}</p>
                                     )}
                                   </div>
                                 );
