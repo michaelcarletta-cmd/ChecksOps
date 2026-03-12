@@ -1241,7 +1241,7 @@ function CheckDetailPanel({
                         />
 
                         {hasEndorsement && (
-                          <div className="endorsement-overlay absolute select-none overflow-hidden" style={endorsementStyle}>
+                          <div className="endorsement-overlay absolute select-none" style={endorsementStyle}>
                             <div className="leading-tight font-semibold" style={{ lineHeight: 1.15 }}>
                               {/* Header */}
                               <p className="text-center text-[10px]">Pay to the order of</p>
