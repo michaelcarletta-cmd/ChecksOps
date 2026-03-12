@@ -182,12 +182,12 @@ Deno.serve(async (req) => {
       if (e.signature_image_url && e.signature_image_url.startsWith("data:image/")) {
         endorsementSvg += svgText(centerX, curY + sigNameFont, sigNameFont, "#111111", "normal", e.payee_name);
         curY += Math.round(sigNameFont * 1.2);
-        const sigWidth = Math.min(ezContentWidth - 20, Math.round(400 * scaleFactor));
+        const sigWidth = Math.min(ezContentWidth - 20, Math.round(imgWidth * 0.22));
         // Use a feColorMatrix filter to force signature image to solid black
         const sigFilterId = `blackInk_${e.id.replace(/[^a-zA-Z0-9]/g, "")}`;
         endorsementSvg += `<defs><filter id="${sigFilterId}"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></defs>`;
         endorsementSvg += `<image href="${escHtml(e.signature_image_url)}" x="${centerX - sigWidth / 2}" y="${curY}" width="${sigWidth}" height="${sigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${sigFilterId})"/>`;
-        curY += sigHeight + Math.round(6 * scaleFactor);
+        curY += sigHeight + Math.round(imgWidth * 0.003);
       } else if (e.signature_image_url && e.signature_image_url.startsWith("typed:")) {
         const typedName = e.signature_image_url.slice(6);
         endorsementSvg += `<text x="${centerX}" y="${curY + sigNameFont}" font-family="serif" font-size="${sigNameFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(typedName)}</text>`;
