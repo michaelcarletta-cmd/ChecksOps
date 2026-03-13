@@ -77,10 +77,12 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [collapsedTrades, setCollapsedTrades] = useState<Set<string>>(new Set());
   const [showDepreciation, setShowDepreciation] = useState(false);
   const [showOP, setShowOP] = useState(false);
   const [showCarrier, setShowCarrier] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const loadLines = useCallback(async () => {
