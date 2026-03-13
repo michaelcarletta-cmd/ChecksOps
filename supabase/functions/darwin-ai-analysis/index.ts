@@ -5622,7 +5622,9 @@ Build the comprehensive timeline, identify timing risk flags, and list missing d
           ? `\n\nPrevious refinement instructions:\n${history.map((h: any) => `${h.role === 'user' ? 'User' : 'Darwin'}: ${h.content}`).join('\n')}`
           : '';
 
-        systemPrompt = `You are Darwin, an expert insurance claims strategist. You are refining a ${docLabel} that was previously generated for an insurance claim.
+        systemPrompt = `You are an expert insurance claims strategist. You are refining a ${docLabel} that was previously generated for an insurance claim.
+
+${getExternalWritingRules(authorName, authorTitle)}
 
 Your job is to apply the user's instruction to the existing document and return the FULL revised document. Do NOT return only the changed parts — return the complete updated ${docLabel}.
 
@@ -5632,6 +5634,7 @@ Rules:
 - If the user asks to change tone or emphasis, apply it throughout.
 - Preserve all existing citations, regulation references, and evidence unless explicitly told to remove them.
 - Maintain the same professional format and structure.
+- The output must be clean prose — no bullet points, markdown, or emoji.
 - Return ONLY the revised document text, no explanations or meta-commentary.`;
 
         userPrompt = `Here is the current ${docLabel}:
