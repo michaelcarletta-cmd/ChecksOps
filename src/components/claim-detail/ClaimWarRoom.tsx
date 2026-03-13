@@ -357,6 +357,85 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
               </CardContent>
             </Card>
 
+            {/* === STRATEGY SIMULATIONS (Decision Engine) === */}
+            {strategySimulations.length > 0 && (
+              <Card className="border-2">
+                <CardHeader className="py-3 px-4 bg-muted/30">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Brain className="h-4 w-4 text-primary" />
+                    Strategy Decision Engine
+                    <Badge variant="secondary" className="ml-auto text-[10px]">{strategySimulations.length} options scored</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 space-y-3">
+                  {strategySimulations.map((sim: any) => (
+                    <div key={sim.id} className={`p-3 rounded-lg border ${sim.is_recommended ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm capitalize">{(sim.strategy_type || '').replace(/_/g, ' ')}</span>
+                          {sim.is_recommended && <Badge className="text-[10px] bg-primary">Recommended</Badge>}
+                          {sim.risk_level && (
+                            <Badge variant="outline" className={`text-[10px] ${sim.risk_level === 'high' ? 'border-destructive text-destructive' : sim.risk_level === 'medium' ? 'border-warning text-warning' : 'border-success text-success'}`}>
+                              {sim.risk_level} risk
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="text-lg font-bold">{sim.score}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-1">{sim.recommended_action}</p>
+                      {sim.predicted_recovery_delta && (
+                        <div className="flex gap-4 text-[10px] text-muted-foreground">
+                          <span>Recovery: +${Number(sim.predicted_recovery_delta).toLocaleString()}</span>
+                          {sim.predicted_timeline_days && <span>Timeline: ~{sim.predicted_timeline_days}d</span>}
+                          {sim.evidence_completeness_pct && <span>Evidence: {sim.evidence_completeness_pct}%</span>}
+                        </div>
+                      )}
+                      {sim.required_missing_evidence?.length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {(sim.required_missing_evidence as string[]).slice(0, 3).map((e: string, i: number) => (
+                            <Badge key={i} variant="outline" className="text-[9px] border-warning/50 text-warning">{e}</Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* === PHOTO INTELLIGENCE SUMMARY === */}
+            {photoIntelSummary && (
+              <Card className="border-2">
+                <CardHeader className="py-3 px-4 bg-muted/30">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Target className="h-4 w-4 text-chart-3" />
+                    Photo Intelligence
+                    <Badge variant="secondary" className="ml-auto text-[10px]">{photoIntelSummary.total} findings</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(photoIntelSummary.byType).map(([type, count]: [string, any]) => (
+                      <Badge key={type} variant="outline" className="text-xs capitalize">
+                        {type.replace(/_/g, ' ')}: {count}
+                      </Badge>
+                    ))}
+                    <Badge className="bg-success/20 text-success text-xs">
+                      {photoIntelSummary.strongEvidence} strong evidence
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* === ARGUMENT MAP SUMMARY === */}
+            {argumentMapCount > 0 && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/5 border border-destructive/20">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                <span className="text-sm font-medium">{argumentMapCount} carrier arguments mapped and classified</span>
+              </div>
+            )}
+
             {/* === SCENARIO SIMULATION === */}
             <ScenarioSimulator scenarios={scenarioSims} confidenceLevel={confidenceScores?.scenarios?.level} />
 
