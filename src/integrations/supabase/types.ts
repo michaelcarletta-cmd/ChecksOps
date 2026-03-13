@@ -1690,6 +1690,91 @@ export type Database = {
           },
         ]
       }
+      claim_argument_map: {
+        Row: {
+          argument_category: string | null
+          argument_text: string
+          argument_type: string
+          carrier_position_summary: string | null
+          claim_id: string
+          contradictions: Json | null
+          created_at: string
+          evidence_gaps: Json | null
+          id: string
+          knowledge_base_refs: Json | null
+          rebuttal_confidence: number | null
+          rebuttal_strategies: Json | null
+          source_file_id: string | null
+          source_file_name: string | null
+          status: string | null
+          strength_score: number | null
+          supporting_citations: Json | null
+          updated_at: string
+        }
+        Insert: {
+          argument_category?: string | null
+          argument_text: string
+          argument_type: string
+          carrier_position_summary?: string | null
+          claim_id: string
+          contradictions?: Json | null
+          created_at?: string
+          evidence_gaps?: Json | null
+          id?: string
+          knowledge_base_refs?: Json | null
+          rebuttal_confidence?: number | null
+          rebuttal_strategies?: Json | null
+          source_file_id?: string | null
+          source_file_name?: string | null
+          status?: string | null
+          strength_score?: number | null
+          supporting_citations?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          argument_category?: string | null
+          argument_text?: string
+          argument_type?: string
+          carrier_position_summary?: string | null
+          claim_id?: string
+          contradictions?: Json | null
+          created_at?: string
+          evidence_gaps?: Json | null
+          id?: string
+          knowledge_base_refs?: Json | null
+          rebuttal_confidence?: number | null
+          rebuttal_strategies?: Json | null
+          source_file_id?: string | null
+          source_file_name?: string | null
+          status?: string | null
+          strength_score?: number | null
+          supporting_citations?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_argument_map_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_argument_map_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_argument_map_source_file_id_fkey"
+            columns: ["source_file_id"]
+            isOneToOne: false
+            referencedRelation: "claim_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_automations: {
         Row: {
           auto_complete_tasks: boolean | null
@@ -2507,6 +2592,107 @@ export type Database = {
           },
         ]
       }
+      claim_estimate_analysis: {
+        Row: {
+          analysis_type: string
+          carrier_estimate_file_id: string | null
+          carrier_total: number | null
+          claim_id: string
+          code_upgrade_gaps: Json | null
+          confidence_score: number | null
+          contractor_estimate_file_id: string | null
+          contractor_total: number | null
+          created_at: string
+          created_by: string | null
+          darwin_recommended_total: number | null
+          difference_amount: number | null
+          id: string
+          op_gaps: Json | null
+          pricing_gaps: Json | null
+          quantity_gaps: Json | null
+          rebuttal_narrative: string | null
+          scope_gaps: Json | null
+          structured_findings: Json | null
+          supplement_recommendations: Json | null
+          updated_at: string
+        }
+        Insert: {
+          analysis_type?: string
+          carrier_estimate_file_id?: string | null
+          carrier_total?: number | null
+          claim_id: string
+          code_upgrade_gaps?: Json | null
+          confidence_score?: number | null
+          contractor_estimate_file_id?: string | null
+          contractor_total?: number | null
+          created_at?: string
+          created_by?: string | null
+          darwin_recommended_total?: number | null
+          difference_amount?: number | null
+          id?: string
+          op_gaps?: Json | null
+          pricing_gaps?: Json | null
+          quantity_gaps?: Json | null
+          rebuttal_narrative?: string | null
+          scope_gaps?: Json | null
+          structured_findings?: Json | null
+          supplement_recommendations?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          analysis_type?: string
+          carrier_estimate_file_id?: string | null
+          carrier_total?: number | null
+          claim_id?: string
+          code_upgrade_gaps?: Json | null
+          confidence_score?: number | null
+          contractor_estimate_file_id?: string | null
+          contractor_total?: number | null
+          created_at?: string
+          created_by?: string | null
+          darwin_recommended_total?: number | null
+          difference_amount?: number | null
+          id?: string
+          op_gaps?: Json | null
+          pricing_gaps?: Json | null
+          quantity_gaps?: Json | null
+          rebuttal_narrative?: string | null
+          scope_gaps?: Json | null
+          structured_findings?: Json | null
+          supplement_recommendations?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_estimate_analysis_carrier_estimate_file_id_fkey"
+            columns: ["carrier_estimate_file_id"]
+            isOneToOne: false
+            referencedRelation: "claim_files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_estimate_analysis_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_estimate_analysis_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_estimate_analysis_contractor_estimate_file_id_fkey"
+            columns: ["contractor_estimate_file_id"]
+            isOneToOne: false
+            referencedRelation: "claim_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_events: {
         Row: {
           actor: string | null
@@ -3311,6 +3497,90 @@ export type Database = {
           },
         ]
       }
+      claim_outcome_learning: {
+        Row: {
+          carrier: string | null
+          claim_id: string
+          created_at: string
+          created_by: string | null
+          denial_rationale: string | null
+          evidence_patterns: Json | null
+          final_settlement: number | null
+          id: string
+          initial_carrier_offer: number | null
+          key_turning_point: string | null
+          lessons_learned: string | null
+          loss_type: string | null
+          outcome: string | null
+          recovery_delta: number | null
+          resolution_timeline_days: number | null
+          reusable_language: Json | null
+          state_code: string | null
+          strategy_sequence: Json | null
+          tags: string[] | null
+          winning_arguments: Json | null
+        }
+        Insert: {
+          carrier?: string | null
+          claim_id: string
+          created_at?: string
+          created_by?: string | null
+          denial_rationale?: string | null
+          evidence_patterns?: Json | null
+          final_settlement?: number | null
+          id?: string
+          initial_carrier_offer?: number | null
+          key_turning_point?: string | null
+          lessons_learned?: string | null
+          loss_type?: string | null
+          outcome?: string | null
+          recovery_delta?: number | null
+          resolution_timeline_days?: number | null
+          reusable_language?: Json | null
+          state_code?: string | null
+          strategy_sequence?: Json | null
+          tags?: string[] | null
+          winning_arguments?: Json | null
+        }
+        Update: {
+          carrier?: string | null
+          claim_id?: string
+          created_at?: string
+          created_by?: string | null
+          denial_rationale?: string | null
+          evidence_patterns?: Json | null
+          final_settlement?: number | null
+          id?: string
+          initial_carrier_offer?: number | null
+          key_turning_point?: string | null
+          lessons_learned?: string | null
+          loss_type?: string | null
+          outcome?: string | null
+          recovery_delta?: number | null
+          resolution_timeline_days?: number | null
+          reusable_language?: Json | null
+          state_code?: string | null
+          strategy_sequence?: Json | null
+          tags?: string[] | null
+          winning_arguments?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_outcome_learning_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_outcome_learning_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_outcome_predictions: {
         Row: {
           analysis_notes: string | null
@@ -3683,6 +3953,84 @@ export type Database = {
             foreignKeyName: "claim_performance_attribution_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: true
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_photo_findings: {
+        Row: {
+          area: string | null
+          carrier_contradiction: string | null
+          causation_link: string | null
+          claim_id: string
+          code_trigger_ref: string | null
+          confidence: number | null
+          created_at: string
+          damage_description: string | null
+          evidence_strength: string | null
+          finding_type: string
+          id: string
+          material_type: string | null
+          photo_id: string | null
+          photo_url: string | null
+          scope_relevance: string | null
+          severity: string | null
+          source_analysis_id: string | null
+          structured_data: Json | null
+        }
+        Insert: {
+          area?: string | null
+          carrier_contradiction?: string | null
+          causation_link?: string | null
+          claim_id: string
+          code_trigger_ref?: string | null
+          confidence?: number | null
+          created_at?: string
+          damage_description?: string | null
+          evidence_strength?: string | null
+          finding_type: string
+          id?: string
+          material_type?: string | null
+          photo_id?: string | null
+          photo_url?: string | null
+          scope_relevance?: string | null
+          severity?: string | null
+          source_analysis_id?: string | null
+          structured_data?: Json | null
+        }
+        Update: {
+          area?: string | null
+          carrier_contradiction?: string | null
+          causation_link?: string | null
+          claim_id?: string
+          code_trigger_ref?: string | null
+          confidence?: number | null
+          created_at?: string
+          damage_description?: string | null
+          evidence_strength?: string | null
+          finding_type?: string
+          id?: string
+          material_type?: string | null
+          photo_id?: string | null
+          photo_url?: string | null
+          scope_relevance?: string | null
+          severity?: string | null
+          source_analysis_id?: string | null
+          structured_data?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_photo_findings_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_photo_findings_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claims"
             referencedColumns: ["id"]
           },
@@ -4730,6 +5078,81 @@ export type Database = {
           },
         ]
       }
+      claim_strategy_simulations: {
+        Row: {
+          carrier_behavior_factors: Json | null
+          claim_facts_snapshot: Json | null
+          claim_id: string
+          created_at: string
+          created_by: string | null
+          cross_claim_support: Json | null
+          evidence_completeness_pct: number | null
+          id: string
+          is_recommended: boolean | null
+          predicted_recovery_delta: number | null
+          predicted_timeline_days: number | null
+          rationale: string
+          recommended_action: string
+          required_missing_evidence: Json | null
+          risk_level: string | null
+          score: number
+          strategy_type: string
+        }
+        Insert: {
+          carrier_behavior_factors?: Json | null
+          claim_facts_snapshot?: Json | null
+          claim_id: string
+          created_at?: string
+          created_by?: string | null
+          cross_claim_support?: Json | null
+          evidence_completeness_pct?: number | null
+          id?: string
+          is_recommended?: boolean | null
+          predicted_recovery_delta?: number | null
+          predicted_timeline_days?: number | null
+          rationale: string
+          recommended_action: string
+          required_missing_evidence?: Json | null
+          risk_level?: string | null
+          score?: number
+          strategy_type: string
+        }
+        Update: {
+          carrier_behavior_factors?: Json | null
+          claim_facts_snapshot?: Json | null
+          claim_id?: string
+          created_at?: string
+          created_by?: string | null
+          cross_claim_support?: Json | null
+          evidence_completeness_pct?: number | null
+          id?: string
+          is_recommended?: boolean | null
+          predicted_recovery_delta?: number | null
+          predicted_timeline_days?: number | null
+          rationale?: string
+          recommended_action?: string
+          required_missing_evidence?: Json | null
+          risk_level?: string | null
+          score?: number
+          strategy_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_strategy_simulations_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_strategy_simulations_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_thesis_objects: {
         Row: {
           anticipated_pushback: string | null
@@ -5752,6 +6175,63 @@ export type Database = {
           },
           {
             foreignKeyName: "darwin_declared_positions_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      darwin_feedback_events: {
+        Row: {
+          actual_outcome: string | null
+          actual_recovery_delta: number | null
+          claim_id: string | null
+          created_at: string
+          feedback_detail: string | null
+          feedback_type: string
+          id: string
+          output_id: string | null
+          output_snapshot: Json | null
+          output_type: string
+          user_id: string | null
+        }
+        Insert: {
+          actual_outcome?: string | null
+          actual_recovery_delta?: number | null
+          claim_id?: string | null
+          created_at?: string
+          feedback_detail?: string | null
+          feedback_type: string
+          id?: string
+          output_id?: string | null
+          output_snapshot?: Json | null
+          output_type: string
+          user_id?: string | null
+        }
+        Update: {
+          actual_outcome?: string | null
+          actual_recovery_delta?: number | null
+          claim_id?: string | null
+          created_at?: string
+          feedback_detail?: string | null
+          feedback_type?: string
+          id?: string
+          output_id?: string | null
+          output_snapshot?: Json | null
+          output_type?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "darwin_feedback_events_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "darwin_feedback_events_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"
