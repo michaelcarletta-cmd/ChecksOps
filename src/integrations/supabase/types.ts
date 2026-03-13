@@ -2704,8 +2704,10 @@ export type Database = {
           doc_type: string | null
           event_type: string
           id: string
+          importance_score: number | null
           is_editable: boolean | null
           is_manual: boolean | null
+          is_pinned: boolean | null
           metadata_json: Json
           occurred_at: string
           source_artifact_id: string | null
@@ -2723,8 +2725,10 @@ export type Database = {
           doc_type?: string | null
           event_type: string
           id?: string
+          importance_score?: number | null
           is_editable?: boolean | null
           is_manual?: boolean | null
+          is_pinned?: boolean | null
           metadata_json?: Json
           occurred_at: string
           source_artifact_id?: string | null
@@ -2742,8 +2746,10 @@ export type Database = {
           doc_type?: string | null
           event_type?: string
           id?: string
+          importance_score?: number | null
           is_editable?: boolean | null
           is_manual?: boolean | null
+          is_pinned?: boolean | null
           metadata_json?: Json
           occurred_at?: string
           source_artifact_id?: string | null
@@ -6300,6 +6306,9 @@ export type Database = {
       darwin_estimate_lines: {
         Row: {
           acv_total: number | null
+          carrier_quantity: number | null
+          carrier_total: number | null
+          carrier_unit_price: number | null
           category: string
           claim_id: string
           code_reference: string | null
@@ -6316,7 +6325,9 @@ export type Database = {
           overhead_pct: number | null
           profit_pct: number | null
           quantity: number
+          rationale: string | null
           rcv_total: number | null
+          reason_tag: string | null
           sort_order: number | null
           source: string | null
           source_analysis_id: string | null
@@ -6324,9 +6335,13 @@ export type Database = {
           unit: string | null
           unit_price: number
           updated_at: string | null
+          variance_amount: number | null
         }
         Insert: {
           acv_total?: number | null
+          carrier_quantity?: number | null
+          carrier_total?: number | null
+          carrier_unit_price?: number | null
           category?: string
           claim_id: string
           code_reference?: string | null
@@ -6343,7 +6358,9 @@ export type Database = {
           overhead_pct?: number | null
           profit_pct?: number | null
           quantity?: number
+          rationale?: string | null
           rcv_total?: number | null
+          reason_tag?: string | null
           sort_order?: number | null
           source?: string | null
           source_analysis_id?: string | null
@@ -6351,9 +6368,13 @@ export type Database = {
           unit?: string | null
           unit_price?: number
           updated_at?: string | null
+          variance_amount?: number | null
         }
         Update: {
           acv_total?: number | null
+          carrier_quantity?: number | null
+          carrier_total?: number | null
+          carrier_unit_price?: number | null
           category?: string
           claim_id?: string
           code_reference?: string | null
@@ -6370,7 +6391,9 @@ export type Database = {
           overhead_pct?: number | null
           profit_pct?: number | null
           quantity?: number
+          rationale?: string | null
           rcv_total?: number | null
+          reason_tag?: string | null
           sort_order?: number | null
           source?: string | null
           source_analysis_id?: string | null
@@ -6378,6 +6401,7 @@ export type Database = {
           unit?: string | null
           unit_price?: number
           updated_at?: string | null
+          variance_amount?: number | null
         }
         Relationships: [
           {
