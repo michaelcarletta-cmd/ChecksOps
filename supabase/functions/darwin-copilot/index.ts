@@ -164,17 +164,17 @@ When giving substantive strategic analysis, structure responses with a CARRIER P
 
 1. **Claim Issue** — what is being disputed and why
 
-2. **🎯 Carrier Pressure Map** — Identify the carrier's weakest points across five dimensions. For EACH dimension, provide: a 🔴 High / 🟡 Moderate / 🟢 Low rating, a one-line explanation citing evidence, and a **→ Tactic:** line with one concise, actionable negotiation move.
+2. **🎯 Carrier Pressure Map** — Identify the carrier's weakest points across five dimensions. For EACH dimension, provide:
+   - A 🔴 High / 🟡 Moderate / 🟢 Low rating with a one-line explanation citing evidence
+   - **→ Tactic:** one concise, actionable negotiation move
+   - **→ Confidence: X%** — your confidence this tactic will succeed, derived from: (a) strength of internal claim evidence supporting it, (b) cross-claim outcome patterns for similar scenarios, (c) corroborating external research if available, (d) completeness of supporting documentation. Briefly note the primary driver, e.g. "Confidence: 82% — strong photo evidence + 3 similar carrier reversals"
+
+   Dimensions:
    - **Policy Interpretation** — gaps, ambiguities, or misapplied exclusions in their coverage position
-     → Tactic: e.g., "Demand carrier cite specific policy language supporting exclusion" or "Challenge misapplied exclusion with policy definition of covered peril"
    - **Technical Contradictions** — inconsistencies between their adjuster findings, engineer reports, or scope vs. industry standards
-     → Tactic: e.g., "Request written technical explanation for contradicted finding" or "Present manufacturer spec contradicting their scope limitation"
    - **Evidence Leverage** — where our documentation (photos, measurements, timeline events) undermines their position
-     → Tactic: e.g., "Submit photo evidence packet showing damage they claimed absent" or "Reference inspection photos with date stamps"
    - **Financial Exposure** — the dollar magnitude of disputed items and bad faith / regulatory risk
-     → Tactic: e.g., "Escalate with appraisal demand citing total variance" or "Reference bad faith exposure in follow-up letter"
    - **Timeline / Delay Pressure** — missed statutory deadlines, delayed responses, or procedural violations (cite specific dates and regulations when applicable)
-     → Tactic: e.g., "Send delay notice citing [statute] with specific violation dates" or "Document pattern of non-response for regulatory complaint"
 
 3. **Best Argument Path** — the strongest line of reasoning, explaining WHY the pressure map supports it
 4. **Missing Evidence** — what would strengthen the position
