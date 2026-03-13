@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
     // Gather full claim intelligence in parallel
     const [
       claimRes, filesRes, estimateRes, photoRes, strategyRes, argsRes, 
-      rebuttalsRes, deadlinesRes, outcomesRes, knowledgeRes
+      rebuttalsRes, deadlinesRes, outcomesRes, knowledgeRes, intelSummaryRes
     ] = await Promise.all([
       supabase.from('claims').select('*').eq('id', claimId).single(),
       supabase.from('claim_files').select('id, file_name, document_type, folder_key, created_at').eq('claim_id', claimId),
@@ -38,6 +38,7 @@ Deno.serve(async (req) => {
       supabase.from('claim_carrier_deadlines').select('*').eq('claim_id', claimId),
       supabase.from('claim_outcome_learning').select('*').ilike('carrier', `%${''}`).limit(10),
       supabase.from('ai_knowledge_chunks').select('content').limit(15),
+      supabase.from('claim_intelligence_summary').select('*').eq('claim_id', claimId).maybeSingle(),
     ]);
 
     const claim = claimRes.data;
