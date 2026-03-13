@@ -34,6 +34,9 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [insights, setInsights] = useState<any>(null);
   const [deadlines, setDeadlines] = useState<any[]>([]);
+  const [strategySimulations, setStrategySimulations] = useState<any[]>([]);
+  const [photoIntelSummary, setPhotoIntelSummary] = useState<any>(null);
+  const [argumentMapCount, setArgumentMapCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
@@ -44,12 +47,23 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
   const loadWarRoomData = async () => {
     setLoading(true);
     try {
-      const [insightsResult, deadlinesResult] = await Promise.all([
+      const [insightsResult, deadlinesResult, strategiesResult, photoFindingsResult, argMapResult] = await Promise.all([
         supabase.from('claim_strategic_insights').select('*').eq('claim_id', claimId).single(),
-        supabase.from('claim_carrier_deadlines').select('*').eq('claim_id', claimId).order('deadline_date', { ascending: true })
+        supabase.from('claim_carrier_deadlines').select('*').eq('claim_id', claimId).order('deadline_date', { ascending: true }),
+        supabase.from('claim_strategy_simulations').select('*').eq('claim_id', claimId).order('score', { ascending: false }),
+        supabase.from('claim_photo_findings').select('finding_type, evidence_strength, severity').eq('claim_id', claimId),
+        supabase.from('claim_argument_map').select('id').eq('claim_id', claimId),
       ]);
       if (insightsResult.data) setInsights(insightsResult.data);
       if (deadlinesResult.data) setDeadlines(deadlinesResult.data);
+      if (strategiesResult.data) setStrategySimulations(strategiesResult.data);
+      if (argMapResult.data) setArgumentMapCount(argMapResult.data.length);
+      if (photoFindingsResult.data && photoFindingsResult.data.length > 0) {
+        const byType: Record<string, number> = {};
+        const strongCount = photoFindingsResult.data.filter((f: any) => f.evidence_strength === 'strong').length;
+        photoFindingsResult.data.forEach((f: any) => { byType[f.finding_type] = (byType[f.finding_type] || 0) + 1; });
+        setPhotoIntelSummary({ total: photoFindingsResult.data.length, byType, strongEvidence: strongCount });
+      }
     } catch (error) {
       console.error("Error loading war room data:", error);
     } finally {
@@ -60,11 +74,17 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
   const runAnalysis = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('darwin-strategic-intelligence', {
-        body: { claimId, analysisType: 'war_room_2' }
-      });
-      if (error) throw error;
-      toast({ title: "War Room 2.0 Analysis Complete", description: "Strategic intelligence updated" });
+      // Run strategic intelligence + strategy simulation in parallel
+      const [stratResult, simResult] = await Promise.all([
+        supabase.functions.invoke('darwin-strategic-intelligence', {
+          body: { claimId, analysisType: 'war_room_2' }
+        }),
+        supabase.functions.invoke('darwin-strategy-simulation', {
+          body: { claimId }
+        }),
+      ]);
+      if (stratResult.error) throw stratResult.error;
+      toast({ title: "War Room 2.0 Analysis Complete", description: "Strategic intelligence + strategy simulations updated" });
       await loadWarRoomData();
     } catch (error: any) {
       toast({ title: "Analysis Failed", description: error.message, variant: "destructive" });
@@ -336,6 +356,85 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
                 <CarrierArgumentRebuttals claimId={claimId} />
               </CardContent>
             </Card>
+
+            {/* === STRATEGY SIMULATIONS (Decision Engine) === */}
+            {strategySimulations.length > 0 && (
+              <Card className="border-2">
+                <CardHeader className="py-3 px-4 bg-muted/30">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Brain className="h-4 w-4 text-primary" />
+                    Strategy Decision Engine
+                    <Badge variant="secondary" className="ml-auto text-[10px]">{strategySimulations.length} options scored</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 space-y-3">
+                  {strategySimulations.map((sim: any) => (
+                    <div key={sim.id} className={`p-3 rounded-lg border ${sim.is_recommended ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm capitalize">{(sim.strategy_type || '').replace(/_/g, ' ')}</span>
+                          {sim.is_recommended && <Badge className="text-[10px] bg-primary">Recommended</Badge>}
+                          {sim.risk_level && (
+                            <Badge variant="outline" className={`text-[10px] ${sim.risk_level === 'high' ? 'border-destructive text-destructive' : sim.risk_level === 'medium' ? 'border-warning text-warning' : 'border-success text-success'}`}>
+                              {sim.risk_level} risk
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="text-lg font-bold">{sim.score}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-1">{sim.recommended_action}</p>
+                      {sim.predicted_recovery_delta && (
+                        <div className="flex gap-4 text-[10px] text-muted-foreground">
+                          <span>Recovery: +${Number(sim.predicted_recovery_delta).toLocaleString()}</span>
+                          {sim.predicted_timeline_days && <span>Timeline: ~{sim.predicted_timeline_days}d</span>}
+                          {sim.evidence_completeness_pct && <span>Evidence: {sim.evidence_completeness_pct}%</span>}
+                        </div>
+                      )}
+                      {sim.required_missing_evidence?.length > 0 && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {(sim.required_missing_evidence as string[]).slice(0, 3).map((e: string, i: number) => (
+                            <Badge key={i} variant="outline" className="text-[9px] border-warning/50 text-warning">{e}</Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* === PHOTO INTELLIGENCE SUMMARY === */}
+            {photoIntelSummary && (
+              <Card className="border-2">
+                <CardHeader className="py-3 px-4 bg-muted/30">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Target className="h-4 w-4 text-chart-3" />
+                    Photo Intelligence
+                    <Badge variant="secondary" className="ml-auto text-[10px]">{photoIntelSummary.total} findings</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(photoIntelSummary.byType).map(([type, count]: [string, any]) => (
+                      <Badge key={type} variant="outline" className="text-xs capitalize">
+                        {type.replace(/_/g, ' ')}: {count}
+                      </Badge>
+                    ))}
+                    <Badge className="bg-success/20 text-success text-xs">
+                      {photoIntelSummary.strongEvidence} strong evidence
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* === ARGUMENT MAP SUMMARY === */}
+            {argumentMapCount > 0 && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/5 border border-destructive/20">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                <span className="text-sm font-medium">{argumentMapCount} carrier arguments mapped and classified</span>
+              </div>
+            )}
 
             {/* === SCENARIO SIMULATION === */}
             <ScenarioSimulator scenarios={scenarioSims} confidenceLevel={confidenceScores?.scenarios?.level} />

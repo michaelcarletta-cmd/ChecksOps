@@ -95,6 +95,17 @@ export const DarwinEstimateComparison = ({ claimId, claim }: DarwinEstimateCompa
         created_by: userData.user?.id
       });
 
+      // Trigger structured estimate intelligence in background (non-blocking)
+      supabase.functions.invoke('darwin-estimate-intelligence', {
+        body: {
+          claimId,
+          carrierEstimateText: data.result,
+          contractorEstimateText: data.result,
+          carrierFileId: selectedCarrierId,
+          contractorFileId: selectedOurId,
+        }
+      }).catch(err => console.warn('Estimate intelligence background error:', err));
+
       toast.success("Estimate comparison complete");
     } catch (err: any) {
       console.error("Comparison error:", err);
