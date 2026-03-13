@@ -322,7 +322,87 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
     }
   };
 
-  const toggleTrade = (trade: string) => {
+  const handleImportEstimate = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
+    setImporting(true);
+    try {
+      let extractedText = "";
+
+      // Text-based extraction for common formats
+      if (file.type === "text/csv" || file.name.endsWith(".csv") || file.type === "text/plain" || file.name.endsWith(".txt")) {
+        extractedText = await file.text();
+      } else if (file.type.includes("spreadsheet") || file.name.endsWith(".xlsx") || file.name.endsWith(".xls")) {
+        // Use xlsx library for spreadsheets
+        const { read, utils } = await import("xlsx");
+        const buffer = await file.arrayBuffer();
+        const wb = read(buffer);
+        const allText: string[] = [];
+        wb.SheetNames.forEach((name: string) => {
+          const ws = wb.Sheets[name];
+          allText.push(utils.sheet_to_csv(ws));
+        });
+        extractedText = allText.join("\n\n");
+      } else {
+        // For PDFs and other binary docs, convert to base64 and use vision extraction
+        const buffer = await file.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+        
+        // Use multimodal extraction via a simple edge function call
+        const { data: extractData, error: extractError } = await supabase.functions.invoke("darwin-estimate-import", {
+          body: {
+            claimId,
+            extractedText: `[BASE64_DOCUMENT:${file.type}]${base64.slice(0, 50000)}`,
+            fileName: file.name,
+          },
+        });
+        if (extractError) throw extractError;
+        if (extractData?.error) throw new Error(extractData.error);
+
+        toast({
+          title: `${extractData?.imported || 0} line items imported`,
+          description: `From ${file.name} (${extractData?.document_type || "estimate"})`,
+        });
+        loadLines();
+        if (extractData?.document_type === "carrier_estimate") setShowCarrier(true);
+        refreshOrchestrator();
+        setImporting(false);
+        return;
+      }
+
+      if (!extractedText.trim()) {
+        toast({ title: "No text extracted", description: "Could not read content from this file.", variant: "destructive" });
+        setImporting(false);
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("darwin-estimate-import", {
+        body: {
+          claimId,
+          extractedText,
+          fileName: file.name,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast({
+        title: `${data?.imported || 0} line items imported`,
+        description: `From ${file.name} (${data?.document_type || "estimate"})`,
+      });
+      loadLines();
+      if (data?.document_type === "carrier_estimate") setShowCarrier(true);
+      refreshOrchestrator();
+    } catch (err: any) {
+      toast({ title: "Import failed", description: err.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
     setCollapsedTrades((prev) => {
       const next = new Set(prev);
       next.has(trade) ? next.delete(trade) : next.add(trade);
