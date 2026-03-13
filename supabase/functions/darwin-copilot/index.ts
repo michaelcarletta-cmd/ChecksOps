@@ -490,7 +490,7 @@ FORMATTING RULE: NEVER output icon placeholder tokens like [Scales Icon], [Docum
             const queryTerms = [
               lastUserMsg,
               lossType && `${lossType} loss`,
-              state && `${state} state`,
+              stateCode && `${stateCode} state`,
               carrier !== 'Unknown' && `carrier: ${carrier}`,
               trade && `trade: ${trade}`,
               materialType && `material: ${materialType}`,
