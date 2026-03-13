@@ -14,7 +14,7 @@ import {
   Search, Filter, Plus, Edit2, Save, X, FileText, Mail, DollarSign,
   Calendar, AlertTriangle, CheckCircle2, Clock, Gavel,
   Shield, Send, Loader2, ExternalLink, Pin, PinOff, Zap,
-  ArrowRight, TrendingDown
+  ArrowRight, TrendingDown, Sparkles, BookOpen, Scale
 } from "lucide-react";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -27,7 +27,6 @@ const EVENT_TYPES = [
   "payment_issued", "estimate_issued"
 ] as const;
 
-// Critical milestone types get higher base importance
 const MILESTONE_TYPES = new Set([
   "denial", "denial_issued", "payment", "payment_received", "payment_issued",
   "legal_escalation", "inspection", "supplement", "fnol_received", "estimate_issued"
@@ -72,6 +71,9 @@ interface TimelineEvent {
   is_editable?: boolean;
   is_pinned?: boolean;
   importance_score?: number;
+  dispute_tag?: string | null;
+  supports_escalation?: boolean;
+  supports_rebuttal?: boolean;
 }
 
 interface ChronologyGap {
@@ -102,6 +104,9 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ summary: "", event_type: "", occurred_at: "" });
+  const [chronologySummary, setChronologySummary] = useState<string | null>(null);
+  const [generatingSummary, setGeneratingSummary] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
   const { toast } = useToast();
 
   const loadEvents = useCallback(async () => {
@@ -114,19 +119,18 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
 
       const { data: manualEvents } = await supabase
         .from("claim_events")
-        .select("id, event_type, occurred_at, summary, actor, source_artifact_id, source_artifact_type, metadata_json, date_source, is_manual, is_editable, is_pinned, importance_score")
+        .select("id, event_type, occurred_at, summary, actor, source_artifact_id, source_artifact_type, metadata_json, date_source, is_manual, is_editable, is_pinned, importance_score, dispute_tag, supports_escalation, supports_rebuttal")
         .eq("claim_id", claimId)
         .order("occurred_at", { ascending: false });
 
       const merged: TimelineEvent[] = [...(data?.events || [])];
       const existingIds = new Set(merged.map((e: TimelineEvent) => e.id));
 
-      // Merge manual events and sync pin/importance from DB
       const dbEventsMap = new Map((manualEvents || []).map((e: any) => [e.id, e]));
       merged.forEach((e, i) => {
         const dbE = dbEventsMap.get(e.id);
         if (dbE) {
-          merged[i] = { ...e, is_pinned: dbE.is_pinned, importance_score: dbE.importance_score, is_editable: dbE.is_editable, is_manual: dbE.is_manual };
+          merged[i] = { ...e, is_pinned: dbE.is_pinned, importance_score: dbE.importance_score, is_editable: dbE.is_editable, is_manual: dbE.is_manual, dispute_tag: dbE.dispute_tag, supports_escalation: dbE.supports_escalation, supports_rebuttal: dbE.supports_rebuttal };
         }
       });
       manualEvents?.forEach((e: any) => {
@@ -135,7 +139,6 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
         }
       });
 
-      // Assign computed importance if not set
       merged.forEach((e) => {
         if (!e.importance_score) {
           e.importance_score = getEventMeta(e.event_type).importance;
@@ -166,49 +169,22 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
   const gaps = useMemo<ChronologyGap[]>(() => {
     const sorted = [...events].sort((a, b) => new Date(a.occurred_at).getTime() - new Date(b.occurred_at).getTime());
     const result: ChronologyGap[] = [];
-
     for (let i = 0; i < sorted.length; i++) {
       const curr = sorted[i];
       const next = sorted[i + 1];
       if (!next) continue;
-
       const days = differenceInDays(new Date(next.occurred_at), new Date(curr.occurred_at));
-
-      // Detect carrier response delay (>15 days between PA action and carrier response)
       if ((curr.event_type === "pa_action" || curr.event_type === "supplement" || curr.event_type === "communication") &&
-        !["carrier_action", "payment", "payment_received", "payment_issued", "denial", "denial_issued", "estimate_issued"].includes(next.event_type) &&
-        days > 15) {
-        result.push({
-          type: "carrier_delay",
-          from_event: curr.id,
-          to_event: next.id,
-          days,
-          description: `${days}-day gap after ${getEventMeta(curr.event_type).label} with no carrier response`,
-        });
+        !["carrier_action", "payment", "payment_received", "payment_issued", "denial", "denial_issued", "estimate_issued"].includes(next.event_type) && days > 15) {
+        result.push({ type: "carrier_delay", from_event: curr.id, to_event: next.id, days, description: `${days}-day gap after ${getEventMeta(curr.event_type).label} with no carrier response` });
       }
-
-      // Detect payment delay (>30 days after estimate or approval without payment)
       if ((curr.event_type === "estimate_issued" || curr.event_type === "estimate") &&
         !["payment", "payment_received", "payment_issued"].includes(next.event_type) && days > 30) {
-        result.push({
-          type: "payment_delay",
-          from_event: curr.id,
-          to_event: next.id,
-          days,
-          description: `${days}-day gap after estimate with no payment`,
-        });
+        result.push({ type: "payment_delay", from_event: curr.id, to_event: next.id, days, description: `${days}-day gap after estimate with no payment` });
       }
-
-      // Detect unresolved supplement (>20 days)
       if (curr.event_type === "supplement" &&
         !["payment", "payment_received", "estimate_issued", "denial", "denial_issued"].includes(next.event_type) && days > 20) {
-        result.push({
-          type: "unresolved_supplement",
-          from_event: curr.id,
-          to_event: next.id,
-          days,
-          description: `Supplement unresolved for ${days} days`,
-        });
+        result.push({ type: "unresolved_supplement", from_event: curr.id, to_event: next.id, days, description: `Supplement unresolved for ${days} days` });
       }
     }
     return result;
@@ -219,8 +195,6 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
     const result: Contradiction[] = [];
     const denials = events.filter((e) => e.event_type === "denial" || e.event_type === "denial_issued");
     const payments = events.filter((e) => ["payment", "payment_received", "payment_issued"].includes(e.event_type));
-
-    // Payment after denial without supplement/reversal
     for (const denial of denials) {
       for (const payment of payments) {
         if (new Date(payment.occurred_at) > new Date(denial.occurred_at)) {
@@ -230,11 +204,7 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
               (e.event_type === "supplement" || e.summary?.toLowerCase().includes("revers"))
           );
           if (betweenEvents.length === 0) {
-            result.push({
-              event_a_id: denial.id,
-              event_b_id: payment.id,
-              description: "Payment issued after denial with no documented reversal or supplement",
-            });
+            result.push({ event_a_id: denial.id, event_b_id: payment.id, description: "Payment issued after denial with no documented reversal or supplement" });
           }
         }
       }
@@ -244,6 +214,94 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
 
   const contradictionIds = useMemo(() => new Set(contradictions.flatMap((c) => [c.event_a_id, c.event_b_id])), [contradictions]);
   const gapEventIds = useMemo(() => new Set(gaps.flatMap((g) => [g.from_event, g.to_event])), [gaps]);
+
+  // Escalation & rebuttal support scoring
+  const escalationEvents = useMemo(() => events.filter((e) => e.supports_escalation), [events]);
+  const rebuttalEvents = useMemo(() => events.filter((e) => e.supports_rebuttal), [events]);
+
+  // AI chronology summary
+  const generateChronologySummary = useCallback(async () => {
+    setGeneratingSummary(true);
+    try {
+      const timelineData = events
+        .sort((a, b) => new Date(a.occurred_at).getTime() - new Date(b.occurred_at).getTime())
+        .slice(0, 50)
+        .map((e) => ({
+          date: e.occurred_at?.split("T")[0],
+          type: e.event_type,
+          summary: e.summary,
+          importance: e.importance_score,
+          is_pinned: e.is_pinned,
+          supports_escalation: e.supports_escalation,
+          supports_rebuttal: e.supports_rebuttal,
+        }));
+
+      const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/darwin-copilot`;
+      const resp = await fetch(CHAT_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({
+          claimId,
+          mode: "war_room",
+          userQuestion: `Based on the following claim timeline events, write a concise chronology summary (3-5 paragraphs). Identify which events most strongly support escalation or rebuttal. Highlight carrier delays, contradictions, and procedural failures. End with a strategic assessment of the timeline's strength for the policyholder's position.\n\nTimeline events:\n${JSON.stringify(timelineData, null, 1)}\n\nDetected gaps: ${JSON.stringify(gaps)}\nContradictions: ${JSON.stringify(contradictions)}`,
+        }),
+      });
+
+      if (!resp.ok || !resp.body) throw new Error("Failed to generate summary");
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let accumulated = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let newlineIndex: number;
+        while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
+          let line = buffer.slice(0, newlineIndex);
+          buffer = buffer.slice(newlineIndex + 1);
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") break;
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) {
+              accumulated += content;
+              setChronologySummary(accumulated);
+            }
+          } catch { /* partial */ }
+        }
+      }
+      setShowSummary(true);
+    } catch (err: any) {
+      toast({ title: "Summary failed", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingSummary(false);
+    }
+  }, [claimId, events, gaps, contradictions, toast]);
+
+  // Toggle escalation/rebuttal flags
+  const toggleEventFlag = async (event: TimelineEvent, flag: "supports_escalation" | "supports_rebuttal") => {
+    const newVal = !event[flag];
+    if (!event.id.includes("-") || event.is_manual) {
+      await supabase.from("claim_events").update({ [flag]: newVal }).eq("id", event.id);
+    }
+    setEvents((prev) => prev.map((e) => e.id === event.id ? { ...e, [flag]: newVal } : e));
+  };
+
+  const setDisputeTag = async (event: TimelineEvent, tag: string | null) => {
+    if (!event.id.includes("-") || event.is_manual) {
+      await supabase.from("claim_events").update({ dispute_tag: tag }).eq("id", event.id);
+    }
+    setEvents((prev) => prev.map((e) => e.id === event.id ? { ...e, dispute_tag: tag } : e));
+  };
 
   // Sort & filter
   const filteredEvents = useMemo(() => {
@@ -255,17 +313,13 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
       }
       return true;
     });
-
     if (sortBy === "importance") {
       result = [...result].sort((a, b) => {
-        // Pinned first
         if (a.is_pinned && !b.is_pinned) return -1;
         if (!a.is_pinned && b.is_pinned) return 1;
-        // Then by importance
         return (b.importance_score || 0) - (a.importance_score || 0);
       });
     } else {
-      // Date sort with pinned first
       result = [...result].sort((a, b) => {
         if (a.is_pinned && !b.is_pinned) return -1;
         if (!a.is_pinned && b.is_pinned) return 1;
@@ -275,7 +329,6 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
     return result;
   }, [events, filterType, searchQuery, sortBy]);
 
-  // Group by date
   const grouped = useMemo(() => {
     const acc: Record<string, TimelineEvent[]> = {};
     filteredEvents.forEach((e) => {
@@ -287,7 +340,6 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
 
   const sortedDates = useMemo(() => {
     const keys = Object.keys(grouped);
-    // Pin group always first
     return keys.sort((a, b) => {
       if (a === "📌 Pinned") return -1;
       if (b === "📌 Pinned") return 1;
@@ -297,7 +349,6 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
 
   const togglePin = async (event: TimelineEvent) => {
     const newPinned = !event.is_pinned;
-    // Only pin DB events (not synthetic file/email/payment events)
     if (!event.id.includes("-")) {
       await supabase.from("claim_events").update({ is_pinned: newPinned }).eq("id", event.id);
     }
@@ -307,16 +358,10 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
   const handleAddEvent = async (form: { event_type: string; occurred_at: string; summary: string; actor: string }) => {
     try {
       const { error } = await supabase.from("claim_events").insert({
-        claim_id: claimId,
-        event_type: form.event_type,
+        claim_id: claimId, event_type: form.event_type,
         occurred_at: form.occurred_at ? new Date(form.occurred_at).toISOString() : new Date().toISOString(),
-        summary: form.summary,
-        actor: form.actor || null,
-        date_source: "manual",
-        is_manual: true,
-        is_editable: true,
-        importance_score: getEventMeta(form.event_type).importance,
-        metadata_json: {},
+        summary: form.summary, actor: form.actor || null, date_source: "manual",
+        is_manual: true, is_editable: true, importance_score: getEventMeta(form.event_type).importance, metadata_json: {},
       });
       if (error) throw error;
       toast({ title: "Event added" });
@@ -331,8 +376,7 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
     if (!editingId) return;
     try {
       const { error } = await supabase.from("claim_events").update({
-        summary: editForm.summary,
-        event_type: editForm.event_type,
+        summary: editForm.summary, event_type: editForm.event_type,
         occurred_at: new Date(editForm.occurred_at).toISOString(),
       }).eq("id", editingId);
       if (error) throw error;
@@ -349,7 +393,6 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
     setEditForm({ summary: e.summary || "", event_type: e.event_type, occurred_at: e.occurred_at?.split("T")[0] || "" });
   };
 
-  // Milestone count
   const milestoneCount = events.filter((e) => MILESTONE_TYPES.has(e.event_type)).length;
 
   if (loading) {
@@ -359,6 +402,40 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
   return (
     <TooltipProvider>
       <div className="space-y-3">
+        {/* AI Chronology Summary */}
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm" variant="outline"
+            className="h-7 text-xs gap-1"
+            onClick={generateChronologySummary}
+            disabled={generatingSummary || events.length === 0}
+          >
+            {generatingSummary ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+            AI Chronology Summary
+          </Button>
+          {chronologySummary && (
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowSummary(!showSummary)}>
+              {showSummary ? "Hide" : "Show"} Summary
+            </Button>
+          )}
+          {escalationEvents.length > 0 && (
+            <Badge className="text-[9px] bg-destructive/20 text-destructive">
+              <Scale className="h-2.5 w-2.5 mr-0.5" />{escalationEvents.length} escalation
+            </Badge>
+          )}
+          {rebuttalEvents.length > 0 && (
+            <Badge className="text-[9px] bg-primary/20 text-primary">
+              <BookOpen className="h-2.5 w-2.5 mr-0.5" />{rebuttalEvents.length} rebuttal
+            </Badge>
+          )}
+        </div>
+
+        {showSummary && chronologySummary && (
+          <div className="p-3 rounded-lg border border-primary/30 bg-primary/5 text-xs leading-relaxed whitespace-pre-wrap max-h-[200px] overflow-y-auto">
+            {chronologySummary}
+          </div>
+        )}
+
         {/* Gaps & Contradictions Alerts */}
         {(gaps.length > 0 || contradictions.length > 0) && (
           <div className="space-y-1.5">
@@ -493,6 +570,9 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
                                       </TooltipContent>
                                     </Tooltip>
                                   )}
+                                  {event.supports_escalation && <Badge className="text-[8px] bg-destructive/15 text-destructive">⬆ Escalation</Badge>}
+                                  {event.supports_rebuttal && <Badge className="text-[8px] bg-chart-2/20 text-chart-2">📝 Rebuttal</Badge>}
+                                  {event.dispute_tag && <Badge variant="outline" className="text-[8px] border-chart-3/50 text-chart-3">{event.dispute_tag}</Badge>}
                                   <span className="text-[10px] text-muted-foreground">
                                     {format(parseISO(event.occurred_at), "h:mm a")}
                                   </span>
@@ -523,6 +603,24 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
                                     </div>
                                   </TooltipTrigger>
                                   <TooltipContent className="text-xs">Importance score</TooltipContent>
+                                </Tooltip>
+                                {/* Escalation toggle */}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="sm" className={cn("h-6 w-6 p-0 opacity-0 group-hover:opacity-100", event.supports_escalation && "opacity-100")} onClick={() => toggleEventFlag(event, "supports_escalation")}>
+                                      <Scale className={cn("h-3 w-3", event.supports_escalation ? "text-destructive" : "text-muted-foreground")} />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="text-xs">Mark as escalation support</TooltipContent>
+                                </Tooltip>
+                                {/* Rebuttal toggle */}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button variant="ghost" size="sm" className={cn("h-6 w-6 p-0 opacity-0 group-hover:opacity-100", event.supports_rebuttal && "opacity-100")} onClick={() => toggleEventFlag(event, "supports_rebuttal")}>
+                                      <BookOpen className={cn("h-3 w-3", event.supports_rebuttal ? "text-chart-2" : "text-muted-foreground")} />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="text-xs">Mark as rebuttal evidence</TooltipContent>
                                 </Tooltip>
                                 <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100" onClick={() => togglePin(event)}>
                                   {event.is_pinned ? <PinOff className="h-3 w-3 text-primary" /> : <Pin className="h-3 w-3" />}

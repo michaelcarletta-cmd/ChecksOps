@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Trash2, Save, Loader2, Sparkles, Calculator,
   ChevronDown, ChevronRight, DollarSign, CheckCheck, XCircle,
-  Info, ArrowRightLeft, Tag
+  Info, ArrowRightLeft, Tag, BookOpen, Star, TrendingUp
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +55,9 @@ interface EstimateLine {
   carrier_total: number;
   variance_amount: number;
   sort_order: number;
+  used_in_rebuttal: boolean;
+  recovery_impact_rank: number | null;
+  rebuttal_strength_score: number | null;
 }
 
 interface DarwinEstimateBuilderProps {
@@ -102,6 +105,9 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
         carrier_unit_price: d.carrier_unit_price != null ? Number(d.carrier_unit_price) : null,
         carrier_total: Number(d.carrier_total || 0),
         variance_amount: Number(d.variance_amount || 0),
+        used_in_rebuttal: d.used_in_rebuttal || false,
+        recovery_impact_rank: d.recovery_impact_rank ?? null,
+        rebuttal_strength_score: d.rebuttal_strength_score ?? null,
       })));
       if (data.some((d: any) => Number(d.depreciation_pct) > 0)) setShowDepreciation(true);
       if (data.some((d: any) => d.include_overhead || d.include_profit)) setShowOP(true);
@@ -113,6 +119,30 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
   useEffect(() => { loadLines(); }, [loadLines]);
 
   const pendingSuggestions = useMemo(() => lines.filter((l) => l.is_suggested && !l.is_accepted), [lines]);
+
+  // Compute recovery impact ranking on accepted lines with variance
+  const rankedLines = useMemo(() => {
+    const withVariance = lines
+      .filter((l) => l.is_accepted && l.carrier_quantity != null && l.carrier_unit_price != null)
+      .map((l) => ({ id: l.id, variance: Math.abs(l.quantity * l.unit_price - (l.carrier_quantity! * l.carrier_unit_price!)) }))
+      .sort((a, b) => b.variance - a.variance);
+    const rankMap = new Map<string, number>();
+    withVariance.forEach((v, i) => rankMap.set(v.id, i + 1));
+    return rankMap;
+  }, [lines]);
+
+  // Top 5 disputes
+  const top5Ids = useMemo(() => {
+    const sorted = lines
+      .filter((l) => l.is_accepted && l.carrier_quantity != null && l.carrier_unit_price != null)
+      .map((l) => ({ id: l.id, variance: Math.abs(l.quantity * l.unit_price - (l.carrier_quantity! * l.carrier_unit_price!)) }))
+      .sort((a, b) => b.variance - a.variance)
+      .slice(0, 5)
+      .map((v) => v.id);
+    return new Set(sorted);
+  }, [lines]);
+
+  const rebuttalLines = useMemo(() => lines.filter((l) => l.used_in_rebuttal), [lines]);
 
   const totals = useMemo(() => {
     const accepted = lines.filter((l) => l.is_accepted);
@@ -133,8 +163,16 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
       const trade = l.trade || l.category || "General";
       (groups[trade] = groups[trade] || []).push(l);
     });
+    // Sort lines within each trade by recovery impact (top disputes first)
+    Object.values(groups).forEach((tradeLines) => {
+      tradeLines.sort((a, b) => {
+        const aRank = rankedLines.get(a.id) ?? 9999;
+        const bRank = rankedLines.get(b.id) ?? 9999;
+        return aRank - bRank;
+      });
+    });
     return groups;
-  }, [lines]);
+  }, [lines, rankedLines]);
 
   const updateLine = (id: string, field: string, value: any) => {
     setLines((prev) =>
@@ -161,7 +199,7 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
       overhead_pct: 10, profit_pct: 10, source: "manual", is_suggested: false, is_accepted: true,
       code_reference: null, notes: null, rationale: null, reason_tag: null,
       carrier_quantity: null, carrier_unit_price: null, carrier_total: 0, variance_amount: 0,
-      sort_order: prev.length,
+      sort_order: prev.length, used_in_rebuttal: false, recovery_impact_rank: null, rebuttal_strength_score: null,
     }]);
   };
 
@@ -208,12 +246,15 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
           code_reference: line.code_reference, notes: line.notes, sort_order: line.sort_order,
           reason_tag: line.reason_tag, rationale: line.rationale,
           carrier_quantity: line.carrier_quantity, carrier_unit_price: line.carrier_unit_price,
+          used_in_rebuttal: line.used_in_rebuttal,
+          recovery_impact_rank: rankedLines.get(line.id) ?? null,
+          rebuttal_strength_score: line.rebuttal_strength_score,
         }).eq("id", line.id);
       }
 
       if (toInsert.length > 0) {
         await supabase.from("darwin_estimate_lines").insert(
-          toInsert.map((l) => ({
+          toInsert.map((l, i) => ({
             claim_id: claimId, category: l.category, trade: l.trade, description: l.description,
             quantity: l.quantity, unit: l.unit, unit_price: l.unit_price,
             depreciation_pct: l.depreciation_pct, include_overhead: l.include_overhead,
@@ -222,13 +263,13 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
             is_accepted: l.is_accepted, code_reference: l.code_reference, notes: l.notes,
             sort_order: l.sort_order, reason_tag: l.reason_tag, rationale: l.rationale,
             carrier_quantity: l.carrier_quantity, carrier_unit_price: l.carrier_unit_price,
+            used_in_rebuttal: l.used_in_rebuttal,
           }))
         );
       }
 
       toast({ title: "Estimate saved" });
       loadLines();
-      // Refresh orchestrator after save
       refreshOrchestrator();
     } catch (err: any) {
       toast({ title: "Save failed", description: err.message, variant: "destructive" });
@@ -265,6 +306,7 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
           carrier_unit_price: s.carrier_unit_price != null ? Number(s.carrier_unit_price) : null,
           carrier_total: 0, variance_amount: 0,
           sort_order: lines.length + i,
+          used_in_rebuttal: false, recovery_impact_rank: null, rebuttal_strength_score: null,
         }));
         setLines((prev) => [...prev, ...newLines]);
         toast({ title: `${newLines.length} items suggested`, description: "Review rationale and accept or reject." });
@@ -286,13 +328,13 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
     });
   };
 
-  // Dynamic grid columns
+  // Dynamic grid columns — add rebuttal column
   const gridCols = useMemo(() => {
     let cols = "28px 1fr 60px 50px 80px 80px";
     if (showCarrier) cols += " 60px 80px 80px";
     if (showDepreciation) cols += " 60px 80px";
     if (showOP) cols += " 50px 50px";
-    cols += " 70px 28px";
+    cols += " 70px 28px 28px";
     return cols;
   }, [showCarrier, showDepreciation, showOP]);
 
@@ -311,6 +353,16 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
               <Badge variant="secondary" className="text-[10px]">{lines.length} items</Badge>
               {totals.totalVariance > 0 && showCarrier && (
                 <Badge className="text-[10px] bg-success/20 text-success">+${totals.totalVariance.toLocaleString(undefined, { maximumFractionDigits: 0 })} variance</Badge>
+              )}
+              {top5Ids.size > 0 && (
+                <Badge className="text-[10px] bg-warning/20 text-warning">
+                  <Star className="h-2.5 w-2.5 mr-0.5" />Top {top5Ids.size} disputes
+                </Badge>
+              )}
+              {rebuttalLines.length > 0 && (
+                <Badge className="text-[10px] bg-chart-2/20 text-chart-2">
+                  <BookOpen className="h-2.5 w-2.5 mr-0.5" />{rebuttalLines.length} in rebuttal
+                </Badge>
               )}
             </CardTitle>
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -376,6 +428,7 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
               {showDepreciation && <><div className="text-right">Dep%</div><div className="text-right">ACV</div></>}
               {showOP && <><div className="text-center">OH</div><div className="text-center">P</div></>}
               <div className="text-center"><Tag className="h-2.5 w-2.5 inline" /></div>
+              <div className="text-center"><BookOpen className="h-2.5 w-2.5 inline" /></div>
               <div></div>
             </div>
 
@@ -403,13 +456,17 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
                     const reasonMeta = line.reason_tag ? REASON_TAG_MAP[line.reason_tag] : null;
                     const localVariance = line.carrier_quantity != null && line.carrier_unit_price != null
                       ? (line.quantity * line.unit_price) - (line.carrier_quantity * line.carrier_unit_price) : null;
+                    const isTopDispute = top5Ids.has(line.id);
+                    const rank = rankedLines.get(line.id);
 
                     return (
                       <div
                         key={line.id}
                         className={cn(
                           "grid gap-1 px-4 py-1 items-center border-b border-border/50 text-xs hover:bg-accent/30 transition-colors",
-                          line.is_suggested && !line.is_accepted && "bg-warning/5 border-l-2 border-l-warning"
+                          line.is_suggested && !line.is_accepted && "bg-warning/5 border-l-2 border-l-warning",
+                          isTopDispute && "bg-chart-1/5 border-l-2 border-l-chart-1",
+                          line.used_in_rebuttal && "ring-1 ring-inset ring-chart-2/30"
                         )}
                         style={{ gridTemplateColumns: gridCols }}
                       >
@@ -417,6 +474,17 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
                           <Checkbox checked={line.is_accepted} onCheckedChange={(v) => updateLine(line.id, "is_accepted", !!v)} className="h-3.5 w-3.5" />
                         </div>
                         <div className="flex items-center gap-1 min-w-0">
+                          {isTopDispute && rank && (
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  <TrendingUp className="h-3 w-3 text-chart-1" />
+                                  <span className="text-[9px] font-bold text-chart-1">#{rank}</span>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent className="text-xs">Recovery impact rank #{rank} — top dispute</TooltipContent>
+                            </Tooltip>
+                          )}
                           <Input
                             value={line.description}
                             onChange={(e) => updateLine(line.id, "description", e.target.value)}
@@ -447,7 +515,6 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
                           ${(line.quantity * line.unit_price).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                         </div>
 
-                        {/* Carrier comparison columns */}
                         {showCarrier && (
                           <>
                             <Input type="number" value={line.carrier_quantity ?? ""} placeholder="—"
@@ -494,6 +561,18 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
                               ))}
                             </SelectContent>
                           </Select>
+                        </div>
+
+                        {/* Used in rebuttal toggle */}
+                        <div className="text-center">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => updateLine(line.id, "used_in_rebuttal", !line.used_in_rebuttal)}>
+                                <BookOpen className={cn("h-3 w-3", line.used_in_rebuttal ? "text-chart-2" : "text-muted-foreground/40")} />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent className="text-xs">{line.used_in_rebuttal ? "Used in rebuttal" : "Mark as used in rebuttal"}</TooltipContent>
+                          </Tooltip>
                         </div>
 
                         <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive/60 hover:text-destructive" onClick={() => removeLine(line.id)}>
