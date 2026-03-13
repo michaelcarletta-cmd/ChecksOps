@@ -686,6 +686,24 @@ export function EmailComposer({
             )}
           </div>
 
+          {/* Send via Outlook toggle */}
+          {hasOutlookConnection && (
+            <div className="flex items-center gap-2 p-3 rounded-lg border bg-muted/30">
+              <Checkbox
+                id="send-via-outlook"
+                checked={sendViaOutlook}
+                onCheckedChange={(checked) => setSendViaOutlook(checked === true)}
+              />
+              <label htmlFor="send-via-outlook" className="flex items-center gap-2 text-sm cursor-pointer">
+                <Monitor className="h-4 w-4 text-primary" />
+                <span>Send via Outlook</span>
+              </label>
+              <span className="text-xs text-muted-foreground ml-auto">
+                {sendViaOutlook ? "Email will be sent from your Outlook account" : "Email will be sent from Freedom Claims"}
+              </span>
+            </div>
+          )}
+
           <div className="flex gap-2 justify-end">
             <Button variant="outline" onClick={onClose} disabled={sending}>
               Cancel
@@ -694,12 +712,12 @@ export function EmailComposer({
               {sending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Sending...
+                  Sending{sendViaOutlook ? " via Outlook" : ""}...
                 </>
               ) : (
                 <>
-                  <Send className="h-4 w-4 mr-2" />
-                  Send Email {selectedRecipients.length > 0 && `(${selectedRecipients.length})`} {selectedFiles.length > 0 && `+ ${selectedFiles.length} files`}
+                  {sendViaOutlook ? <Monitor className="h-4 w-4 mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                  Send{sendViaOutlook ? " via Outlook" : ""} {selectedRecipients.length > 0 && `(${selectedRecipients.length})`} {selectedFiles.length > 0 && `+ ${selectedFiles.length} files`}
                 </>
               )}
             </Button>
