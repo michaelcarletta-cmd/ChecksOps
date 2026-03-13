@@ -494,7 +494,8 @@ export function EmailComposer({
       setSelectedFiles([]);
     } catch (error: any) {
       console.error("Error sending email:", error);
-      toast.error(error.message || "Failed to send email");
+      const errorMessage = await getFunctionErrorMessage(error, "Failed to send email");
+      toast.error(errorMessage);
     } finally {
       setSending(false);
     }
