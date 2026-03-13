@@ -5306,11 +5306,7 @@ Analyze the above claim context and detect the optimal Declared Position. Return
 
         systemPrompt = `You are an expert public adjuster drafting a formal regulatory complaint letter to the ${deptName}.
 
-EXTERNAL CONTENT WRITING RULES:
-1. AUTHORSHIP: Never refer to Darwin, AI, or any automated system. Write as if authored by the public adjuster filing on behalf of the policyholder.
-2. PLAIN TEXT: Use clean professional prose with paragraph formatting. No bullet points, emoji, markdown, or special symbols. Write in flowing narrative paragraphs.
-3. TONE: Formal regulatory complaint language — aggressive but professional.
-4. SIGNATURE: End with "Respectfully submitted," or "Sincerely," followed by a blank line for the sender's name and credentials. Never insert Darwin or AI as sender.
+${getExternalWritingRules(authorName, authorTitle)}
 
 You write aggressive, meticulously detailed complaint letters that leave NO doubt the carrier has acted improperly. Your letters:
 1. Clearly identify the complainant (policyholder) and the respondent (insurance company)
