@@ -397,3 +397,97 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
     </div>
   );
 }
+
+interface AdditionalContact {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+}
+
+function AdditionalContacts({ claimId }: { claimId: string }) {
+  const [contacts, setContacts] = useState<AdditionalContact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [newContact, setNewContact] = useState({ name: "", phone: "", email: "" });
+
+  const fetchContacts = async () => {
+    const { data } = await supabase
+      .from("claim_additional_contacts")
+      .select("id, name, phone, email")
+      .eq("claim_id", claimId)
+      .order("created_at", { ascending: true });
+    setContacts(data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchContacts(); }, [claimId]);
+
+  const handleAdd = async () => {
+    if (!newContact.name.trim()) return;
+    setAdding(true);
+    const { error } = await supabase.from("claim_additional_contacts").insert({
+      claim_id: claimId,
+      name: newContact.name.trim(),
+      phone: newContact.phone.trim() || null,
+      email: newContact.email.trim() || null,
+    });
+    if (error) {
+      toast.error("Failed to add contact");
+    } else {
+      setNewContact({ name: "", phone: "", email: "" });
+      fetchContacts();
+    }
+    setAdding(false);
+  };
+
+  const handleDelete = async (id: string) => {
+    await supabase.from("claim_additional_contacts").delete().eq("id", id);
+    setContacts(prev => prev.filter(c => c.id !== id));
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Users className="h-5 w-5 text-primary" />
+          Additional Contacts
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : (
+          <>
+            {contacts.map(c => (
+              <div key={c.id} className="flex items-center justify-between gap-2 rounded-md border p-2">
+                <div className="grid grid-cols-3 gap-3 flex-1 min-w-0 text-sm">
+                  <span className="font-medium truncate">{c.name}</span>
+                  <span className="text-muted-foreground truncate">{c.phone || "—"}</span>
+                  <span className="text-muted-foreground truncate">{c.email || "—"}</span>
+                </div>
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={() => handleDelete(c.id)}>
+                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                </Button>
+              </div>
+            ))}
+            <div className="flex items-end gap-2">
+              <div className="flex-1 space-y-1">
+                <Input placeholder="Name" value={newContact.name} onChange={e => setNewContact(p => ({ ...p, name: e.target.value }))} className="h-8 text-sm" />
+              </div>
+              <div className="flex-1 space-y-1">
+                <Input placeholder="Phone" value={newContact.phone} onChange={e => setNewContact(p => ({ ...p, phone: e.target.value }))} className="h-8 text-sm" />
+              </div>
+              <div className="flex-1 space-y-1">
+                <Input placeholder="Email" value={newContact.email} onChange={e => setNewContact(p => ({ ...p, email: e.target.value }))} className="h-8 text-sm" />
+              </div>
+              <Button size="sm" className="h-8 gap-1" onClick={handleAdd} disabled={!newContact.name.trim() || adding}>
+                <Plus className="h-3.5 w-3.5" /> Add
+              </Button>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
