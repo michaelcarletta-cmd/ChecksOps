@@ -54,7 +54,7 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
         supabase.from('claim_strategy_simulations').select('*').eq('claim_id', claimId).order('score', { ascending: false }),
         supabase.from('claim_photo_findings').select('finding_type, evidence_strength, severity').eq('claim_id', claimId),
         supabase.from('claim_argument_map').select('id').eq('claim_id', claimId),
-        supabase.from('claim_intelligence_summary').select('*').eq('claim_id', claimId).maybeSingle(),
+        supabase.from('claim_intelligence_summary').select('*').eq('claim_id', claimId).order('version', { ascending: false }).limit(1).maybeSingle(),
       ]);
       if (insightsResult.data) setInsights(insightsResult.data);
       if (deadlinesResult.data) setDeadlines(deadlinesResult.data);
@@ -86,7 +86,7 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
           body: { claimId }
         }),
         supabase.functions.invoke('darwin-intelligence-orchestrator', {
-          body: { claimId }
+          body: { claimId, triggerEvent: 'war_room_opened' }
         }),
       ]);
       if (stratResult.error) throw stratResult.error;
@@ -257,15 +257,44 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
             {intelligenceSummary && (
               <Card className="border-2 border-primary/30 bg-gradient-to-r from-primary/5 to-transparent">
                 <CardHeader className="py-3 px-4 bg-primary/5">
-                  <CardTitle className="text-sm flex items-center gap-2">
+                   <CardTitle className="text-sm flex items-center gap-2">
                     <Brain className="h-4 w-4 text-primary" />
                     Darwin Intelligence Briefing
+                    {intelligenceSummary.version && (
+                      <Badge variant="outline" className="text-[9px]">v{intelligenceSummary.version}</Badge>
+                    )}
                     <Badge variant="secondary" className="ml-auto text-[10px]">
                       Confidence: {intelligenceSummary.confidence_score}%
                     </Badge>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 space-y-3">
+                  {/* Change Reason */}
+                  {intelligenceSummary.change_reason && intelligenceSummary.version > 1 && (
+                    <div className="text-[10px] text-muted-foreground italic border-b border-border/40 pb-2">
+                      Changed: {intelligenceSummary.change_reason}
+                    </div>
+                  )}
+
+                  {/* Decomposed Confidence */}
+                  {(intelligenceSummary.evidence_confidence != null) && (
+                    <div className="grid grid-cols-5 gap-1">
+                      {[
+                        { label: 'Evidence', val: intelligenceSummary.evidence_confidence },
+                        { label: 'Financial', val: intelligenceSummary.financial_confidence },
+                        { label: 'Strategy', val: intelligenceSummary.strategy_confidence },
+                        { label: 'Rebuttal', val: intelligenceSummary.rebuttal_confidence },
+                        { label: 'Learning', val: intelligenceSummary.learning_confidence },
+                      ].map(d => (
+                        <div key={d.label} className="text-center">
+                          <div className="text-[9px] text-muted-foreground">{d.label}</div>
+                          <Progress value={d.val} className="h-1 mt-0.5" />
+                          <div className="text-[9px] font-medium">{d.val}%</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Priority Issue */}
                   {intelligenceSummary.most_important_issue && (
                     <div className="p-3 rounded-lg bg-destructive/5 border border-destructive/20">

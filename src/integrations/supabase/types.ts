@@ -3302,65 +3302,108 @@ export type Database = {
       claim_intelligence_summary: {
         Row: {
           carrier_weakest_argument: Json | null
+          change_details: Json | null
+          change_reason: string | null
           claim_id: string
           confidence_factors: Json | null
           confidence_score: number | null
           created_at: string | null
+          evidence_confidence: number | null
+          financial_confidence: number | null
           id: string
           intelligence_sources: Json | null
           largest_recovery_opportunity: Json | null
+          learning_confidence: number | null
           missing_evidence: Json | null
           most_important_issue: string | null
+          pre_scores: Json | null
+          previous_summary_id: string | null
           raw_summary: string | null
+          rebuttal_confidence: number | null
           recommended_next_action: Json | null
+          strategy_confidence: number | null
           strongest_evidence: Json | null
+          trigger_event: string | null
+          trigger_metadata: Json | null
           updated_at: string | null
+          version: number
         }
         Insert: {
           carrier_weakest_argument?: Json | null
+          change_details?: Json | null
+          change_reason?: string | null
           claim_id: string
           confidence_factors?: Json | null
           confidence_score?: number | null
           created_at?: string | null
+          evidence_confidence?: number | null
+          financial_confidence?: number | null
           id?: string
           intelligence_sources?: Json | null
           largest_recovery_opportunity?: Json | null
+          learning_confidence?: number | null
           missing_evidence?: Json | null
           most_important_issue?: string | null
+          pre_scores?: Json | null
+          previous_summary_id?: string | null
           raw_summary?: string | null
+          rebuttal_confidence?: number | null
           recommended_next_action?: Json | null
+          strategy_confidence?: number | null
           strongest_evidence?: Json | null
+          trigger_event?: string | null
+          trigger_metadata?: Json | null
           updated_at?: string | null
+          version?: number
         }
         Update: {
           carrier_weakest_argument?: Json | null
+          change_details?: Json | null
+          change_reason?: string | null
           claim_id?: string
           confidence_factors?: Json | null
           confidence_score?: number | null
           created_at?: string | null
+          evidence_confidence?: number | null
+          financial_confidence?: number | null
           id?: string
           intelligence_sources?: Json | null
           largest_recovery_opportunity?: Json | null
+          learning_confidence?: number | null
           missing_evidence?: Json | null
           most_important_issue?: string | null
+          pre_scores?: Json | null
+          previous_summary_id?: string | null
           raw_summary?: string | null
+          rebuttal_confidence?: number | null
           recommended_next_action?: Json | null
+          strategy_confidence?: number | null
           strongest_evidence?: Json | null
+          trigger_event?: string | null
+          trigger_metadata?: Json | null
           updated_at?: string | null
+          version?: number
         }
         Relationships: [
           {
             foreignKeyName: "claim_intelligence_summary_claim_id_fkey"
             columns: ["claim_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
           {
             foreignKeyName: "claim_intelligence_summary_claim_id_fkey"
             columns: ["claim_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_intelligence_summary_previous_summary_id_fkey"
+            columns: ["previous_summary_id"]
+            isOneToOne: false
+            referencedRelation: "claim_intelligence_summary"
             referencedColumns: ["id"]
           },
         ]
