@@ -23,7 +23,7 @@ import { GapIntelligenceEngine } from "./war-room/GapIntelligenceEngine";
 import { AdaptiveCounterTactics } from "./war-room/AdaptiveCounterTactics";
 import { CarrierArgumentRebuttals } from "./war-room/CarrierArgumentRebuttals";
 
-const CausalityTimeline = lazy(() => import("./CausalityTimeline").then(m => ({ default: m.CausalityTimeline })));
+const WarRoomTimeline = lazy(() => import("./war-room/WarRoomTimeline").then(m => ({ default: m.WarRoomTimeline })));
 
 interface ClaimWarRoomProps {
   claimId: string;
