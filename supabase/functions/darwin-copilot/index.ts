@@ -285,6 +285,8 @@ FORMATTING RULE: NEVER output icon placeholder tokens like [Scales Icon], [Docum
                 'Authorization': `Bearer ${PERPLEXITY_KEY}`,
                 'Content-Type': 'application/json',
               },
+              body: JSON.stringify({
+                model: 'sonar',
                 messages: [
                   { role: 'system', content: 'You are a research assistant for insurance claim disputes and property restoration. Provide factual, citable information from ANY relevant source including: state statutes and insurance regulations, manufacturer bulletins and specs, building codes (IRC/IBC/ASTM), industry technical articles, contractor and engineering guidance, construction repair standards, insurance claim practice resources, case law, and general industry best practices. Do not restrict results to regulatory or manufacturer domains only. Always cite sources. Be concise and authoritative.' },
                   { role: 'user', content: researchQuery },
