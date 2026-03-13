@@ -660,12 +660,12 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
                     onClick={() => setActiveWorkspace(section.key)}
                     aria-pressed={activeWorkspace === section.key}
                     className={cn(
-                      "w-full justify-start gap-2 h-auto py-2.5 text-left",
+                      "w-full justify-start items-start gap-2 h-auto py-2.5 text-left whitespace-normal",
                       activeWorkspace === section.key && "ring-1 ring-primary/30",
                     )}
                   >
-                    <SectionIcon className="h-4 w-4 shrink-0" />
-                    <span className="text-xs leading-4">{section.title}</span>
+                    <SectionIcon className="h-4 w-4 shrink-0 mt-0.5" />
+                    <span className="text-xs leading-4 break-words">{section.title}</span>
                   </Button>
                 );
               })}
