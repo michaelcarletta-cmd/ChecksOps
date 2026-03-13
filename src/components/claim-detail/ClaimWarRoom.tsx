@@ -54,7 +54,7 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
         supabase.from('claim_strategy_simulations').select('*').eq('claim_id', claimId).order('score', { ascending: false }),
         supabase.from('claim_photo_findings').select('finding_type, evidence_strength, severity').eq('claim_id', claimId),
         supabase.from('claim_argument_map').select('id').eq('claim_id', claimId),
-        supabase.from('claim_intelligence_summary').select('*').eq('claim_id', claimId).maybeSingle(),
+        supabase.from('claim_intelligence_summary').select('*').eq('claim_id', claimId).order('version', { ascending: false }).limit(1).maybeSingle(),
       ]);
       if (insightsResult.data) setInsights(insightsResult.data);
       if (deadlinesResult.data) setDeadlines(deadlinesResult.data);
