@@ -250,7 +250,9 @@ CROSS-SURFACE LINKAGE RULES:
 
 If orchestrator intelligence is available, reference its priority issue and recommended action. Cite specific evidence.
 Be direct, strategic, and cite specific evidence from the claim intelligence. Never use generic advice.
-Format with clear headers and bullet points.`;
+Format with clear headers and bullet points.
+
+FORMATTING RULE: NEVER output icon placeholder tokens like [Scales Icon], [Document Icon], [Warning Icon], [Evidence Icon], [Clock Icon], or any bracket-wrapped icon references. These do not render in the UI. Use plain text headings instead (e.g. "Coverage Impact" not "[Scales Icon] COVERAGE IMPACT"). Emoji are acceptable for source labels (📋, 🔁, 🌐, 🎯) but bracketed icon tokens are strictly forbidden.`;
 
     // --- External research via Perplexity for strategy mode ---
     let externalResearch = '';
