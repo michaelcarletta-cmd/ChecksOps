@@ -220,15 +220,29 @@ If orchestrator intelligence is available, START with its priority issue and rec
 Be direct, strategic, and cite specific evidence from the claim intelligence. Never use generic advice.
 Format with clear headers and bullet points.`;
 
+    // Build messages: system prompt + conversation history OR single question
+    const aiMessages: Array<{role: string; content: string}> = [
+      { role: 'system', content: systemPrompt },
+    ];
+
+    if (conversationHistory && Array.isArray(conversationHistory) && conversationHistory.length > 0) {
+      // Use full conversation history for multi-turn strategy conversations
+      for (const msg of conversationHistory) {
+        aiMessages.push({ role: msg.role, content: msg.content });
+      }
+    } else {
+      aiMessages.push({
+        role: 'user',
+        content: userQuestion || `Give me the full Darwin Copilot briefing for this claim in ${copilotMode} mode.`,
+      });
+    }
+
     const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userQuestion || `Give me the full Darwin Copilot briefing for this claim in ${copilotMode} mode.` },
-        ],
+        messages: aiMessages,
         stream: true,
       }),
     });
