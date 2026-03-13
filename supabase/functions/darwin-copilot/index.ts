@@ -54,8 +54,8 @@ Deno.serve(async (req) => {
     // Gather full claim intelligence in parallel — now includes timeline & estimate builder context
     const [
       claimRes, filesRes, estimateRes, photoRes, strategyRes, argsRes, 
-      rebuttalsRes, deadlinesRes, outcomesRes, knowledgeRes, intelSummaryRes,
-      timelineEventsRes, estimateLinesRes
+      rebuttalsRes, deadlinesRes, intelSummaryRes,
+      timelineEventsRes, estimateLinesRes, feedbackRes
     ] = await Promise.all([
       supabase.from('claims').select('*').eq('id', claimId).single(),
       supabase.from('claim_files').select('id, file_name, document_type, folder_key, created_at').eq('claim_id', claimId),
@@ -65,25 +65,142 @@ Deno.serve(async (req) => {
       supabase.from('claim_argument_map').select('*').eq('claim_id', claimId),
       supabase.from('carrier_argument_rebuttals').select('*').eq('claim_id', claimId),
       supabase.from('claim_carrier_deadlines').select('*').eq('claim_id', claimId),
-      supabase.from('claim_outcome_learning').select('*').ilike('carrier', `%${''}`).limit(10),
-      supabase.from('ai_knowledge_chunks').select('content').limit(15),
       supabase.from('claim_intelligence_summary').select('*').eq('claim_id', claimId).maybeSingle(),
-      // Timeline events with escalation/rebuttal flags
       supabase.from('claim_events').select('event_type, occurred_at, summary, importance_score, is_pinned, supports_escalation, supports_rebuttal, dispute_tag')
         .eq('claim_id', claimId).order('occurred_at', { ascending: true }).limit(100),
-      // Estimate builder lines — top disputes and rebuttal-linked
       supabase.from('darwin_estimate_lines').select('description, quantity, unit_price, carrier_quantity, carrier_unit_price, variance_amount, reason_tag, rationale, used_in_rebuttal, recovery_impact_rank')
         .eq('claim_id', claimId).eq('is_accepted', true).order('recovery_impact_rank', { ascending: true }).limit(50),
+      supabase.from('darwin_feedback_events').select('output_type, feedback_type, actual_outcome, actual_recovery_delta, feedback_detail')
+        .eq('claim_id', claimId).order('created_at', { ascending: false }).limit(20),
     ]);
 
     const claim = claimRes.data;
     const carrier = claim?.insurance_company || 'Unknown';
+    const lossType = claim?.damage_type || claim?.loss_type || claim?.type_of_loss || '';
+    const stateCode = claim?.state || '';
+    const denialRationale = claim?.denial_reason || '';
 
-    const { data: carrierOutcomes } = await supabase
-      .from('claim_outcome_learning')
-      .select('outcome, recovery_delta, winning_arguments, key_turning_point')
-      .ilike('carrier', `%${carrier}%`)
-      .limit(10);
+    // ── Contextual cross-claim outcome learning ──────────────
+    // Multi-dimensional query: carrier + loss_type + state for precise pattern matching
+    const outcomeQueries = [
+      // Exact match: carrier + loss type + state
+      supabase.from('claim_outcome_learning')
+        .select('outcome, recovery_delta, winning_arguments, key_turning_point, strategy_sequence, evidence_patterns, denial_rationale, loss_type, carrier, state_code, tags')
+        .ilike('carrier', `%${carrier}%`)
+        .ilike('loss_type', `%${lossType}%`)
+        .limit(10),
+      // Broader: carrier + state (different loss type)
+      supabase.from('claim_outcome_learning')
+        .select('outcome, recovery_delta, winning_arguments, key_turning_point, strategy_sequence, denial_rationale, loss_type, carrier, state_code')
+        .ilike('carrier', `%${carrier}%`)
+        .eq('state_code', stateCode)
+        .limit(10),
+      // Broadest: same loss type across all carriers
+      lossType ? supabase.from('claim_outcome_learning')
+        .select('outcome, recovery_delta, winning_arguments, key_turning_point, loss_type, carrier, state_code')
+        .ilike('loss_type', `%${lossType}%`)
+        .order('created_at', { ascending: false })
+        .limit(10) : null,
+    ].filter(Boolean);
+
+    // ── Contextual knowledge base retrieval ──────────────
+    // Build search terms from claim context for relevant KB chunks
+    const kbSearchTerms = [carrier, lossType, stateCode, denialRationale, claim?.roof_material, claim?.construction_trade]
+      .filter(Boolean).join(' ');
+
+    const kbQueries = [
+      // Priority 1: Manufacturer docs, standards, statutes
+      supabase.from('ai_knowledge_chunks')
+        .select('content, metadata')
+        .or(`content.ilike.%${lossType}%,content.ilike.%${carrier}%,content.ilike.%${claim?.roof_material || 'n/a'}%`)
+        .limit(20),
+      // Priority 2: General relevant chunks
+      supabase.from('ai_knowledge_chunks')
+        .select('content, metadata')
+        .order('created_at', { ascending: false })
+        .limit(10),
+    ];
+
+    // ── Successful argument patterns retrieval ──────────────
+    // Find rebuttals that received positive feedback or were used in won claims
+    const argPatternQuery = supabase.from('carrier_argument_rebuttals')
+      .select('argument_type, principle, carrier_ready_paragraph, what_proves_damage, why_different, confidence, citations, damage_mechanism, exclusion_invoked')
+      .or(`claim_id.neq.${claimId}`)
+      .gte('confidence', 70)
+      .order('confidence', { ascending: false })
+      .limit(15);
+
+    // Execute all secondary queries in parallel
+    const [outcomeResults, kbPriorityRes, kbGeneralRes, argPatternsRes] = await Promise.all([
+      Promise.all(outcomeQueries.map((q: any) => q)),
+      kbQueries[0],
+      kbQueries[1],
+      argPatternQuery,
+    ]);
+
+    // Deduplicate and merge outcome results by claim_id-like uniqueness
+    const seenOutcomes = new Set<string>();
+    const carrierOutcomes: any[] = [];
+    for (const res of outcomeResults) {
+      for (const o of (res?.data || [])) {
+        const key = `${o.carrier}-${o.loss_type}-${o.outcome}-${o.recovery_delta}`;
+        if (!seenOutcomes.has(key)) {
+          seenOutcomes.add(key);
+          carrierOutcomes.push(o);
+        }
+      }
+    }
+
+    // Merge and prioritize KB chunks — deduplicate by content hash
+    const seenKbContent = new Set<string>();
+    const prioritizedKbChunks: string[] = [];
+    const categorizeChunk = (c: any) => {
+      const meta = c.metadata || {};
+      const cat = (meta.category || '').toLowerCase();
+      // Prioritize manufacturer, standards, statutes, codes
+      return ['manufacturer', 'standard', 'statute', 'code', 'regulation', 'technical'].some(t => cat.includes(t));
+    };
+    // Add priority chunks first
+    for (const c of (kbPriorityRes.data || [])) {
+      const hash = c.content.slice(0, 100);
+      if (!seenKbContent.has(hash)) {
+        seenKbContent.add(hash);
+        if (categorizeChunk(c)) {
+          prioritizedKbChunks.unshift(c.content); // high priority first
+        } else {
+          prioritizedKbChunks.push(c.content);
+        }
+      }
+    }
+    // Fill with general chunks
+    for (const c of (kbGeneralRes.data || [])) {
+      const hash = c.content.slice(0, 100);
+      if (!seenKbContent.has(hash) && prioritizedKbChunks.length < 25) {
+        seenKbContent.add(hash);
+        prioritizedKbChunks.push(c.content);
+      }
+    }
+
+    // Build argument pattern library
+    const argPatterns = (argPatternsRes.data || []).map((r: any) => ({
+      type: r.argument_type,
+      principle: r.principle,
+      paragraph: r.carrier_ready_paragraph?.slice(0, 300),
+      proves_damage: r.what_proves_damage?.slice(0, 200),
+      confidence: r.confidence,
+      mechanism: r.damage_mechanism,
+      exclusion: r.exclusion_invoked,
+    }));
+
+    // Feedback patterns for this claim
+    const feedbackPatterns = (feedbackRes.data || []).reduce((acc: any, f: any) => {
+      if (f.feedback_type === 'thumbs_up' || f.feedback_type === 'used_as_is') {
+        acc.successful.push({ type: f.output_type, detail: f.feedback_detail });
+      } else if (f.feedback_type === 'thumbs_down' || f.feedback_type === 'override') {
+        acc.rejected.push({ type: f.output_type, detail: f.feedback_detail });
+      }
+      return acc;
+    }, { successful: [], rejected: [] });
 
     const intelSummary = intelSummaryRes.data;
 
@@ -153,7 +270,9 @@ Deno.serve(async (req) => {
       carrier_arguments: (argsRes.data || []).length,
       rebuttals: (rebuttalsRes.data || []).length,
       deadlines: deadlinesRes.data || [],
-      carrier_outcomes: carrierOutcomes || [],
+      carrier_outcomes: carrierOutcomes,
+      argument_patterns_library: argPatterns.slice(0, 8),
+      feedback_patterns: feedbackPatterns,
       // NEW: cross-surface intelligence
       timeline_intelligence: timelineIntel,
       estimate_builder_intelligence: estimateIntel,
@@ -163,7 +282,27 @@ Deno.serve(async (req) => {
       claimIntel.photo_findings.by_type[f.finding_type] = (claimIntel.photo_findings.by_type[f.finding_type] || 0) + 1;
     });
 
-    const trainingKb = (knowledgeRes.data || []).map((c: any) => c.content).join('\n---\n').slice(0, 4000);
+    // Build contextual KB digest — prioritized by relevance
+    const trainingKb = prioritizedKbChunks.join('\n---\n').slice(0, 6000);
+
+    // Build cross-claim outcome digest with win/loss patterns
+    const outcomeDigest = carrierOutcomes.length > 0 ? (() => {
+      const wins = carrierOutcomes.filter((o: any) => o.outcome === 'won' || o.outcome === 'settled');
+      const losses = carrierOutcomes.filter((o: any) => o.outcome === 'lost' || o.outcome === 'denied');
+      const avgRecovery = wins.length > 0
+        ? wins.reduce((s: number, o: any) => s + (o.recovery_delta || 0), 0) / wins.length
+        : 0;
+      const winningArgs = wins.flatMap((o: any) => (o.winning_arguments || []).map((a: any) => a.argument_type || a.summary)).filter(Boolean);
+      const turningPoints = wins.map((o: any) => o.key_turning_point).filter(Boolean);
+      return {
+        total_outcomes: carrierOutcomes.length,
+        win_rate: ((wins.length / carrierOutcomes.length) * 100).toFixed(1),
+        avg_recovery_delta: avgRecovery,
+        common_winning_arguments: [...new Set(winningArgs)].slice(0, 5),
+        key_turning_points: turningPoints.slice(0, 3),
+        loss_patterns: losses.map((o: any) => o.denial_rationale).filter(Boolean).slice(0, 3),
+      };
+    })() : null;
 
     const modeInstructions: Record<CopilotMode, string> = {
       operational: `Focus on claim operations: status, next steps, pending tasks, deadlines, missing documentation.`,
@@ -242,20 +381,53 @@ ESTIMATE BUILDER INTELLIGENCE (${estimateIntel.total_lines} lines, $${estimateIn
 When explaining recovery opportunity, CITE specific line items and their variance amounts.
 ` : '';
 
+    // Build continuous learning briefs
+    const outcomeLearningBrief = outcomeDigest ? `
+CROSS-CLAIM OUTCOME LEARNING (${outcomeDigest.total_outcomes} similar outcomes, ${outcomeDigest.win_rate}% win rate):
+- AVG RECOVERY DELTA: $${outcomeDigest.avg_recovery_delta.toFixed(0)}
+- WINNING ARGUMENT TYPES: ${outcomeDigest.common_winning_arguments.join(', ') || 'None recorded'}
+- KEY TURNING POINTS: ${outcomeDigest.key_turning_points.join('; ') || 'None recorded'}
+- COMMON LOSS PATTERNS: ${outcomeDigest.loss_patterns.join('; ') || 'None recorded'}
+Use these patterns to inform strategy recommendations. When a winning argument type matches the current dispute, cite it with confidence.
+` : '';
+
+    const argPatternsBrief = argPatterns.length > 0 ? `
+PROVEN ARGUMENT PATTERNS (${argPatterns.length} high-confidence rebuttals from similar disputes):
+${argPatterns.slice(0, 5).map((a: any, i: number) => `${i + 1}. [${a.type}] ${a.principle} (confidence: ${a.confidence}%) — ${a.mechanism || 'general'}`).join('\n')}
+When generating rebuttals, check if a proven argument pattern matches the current dispute type. Adapt the proven language rather than generating from scratch.
+` : '';
+
+    const feedbackBrief = (feedbackPatterns.successful.length > 0 || feedbackPatterns.rejected.length > 0) ? `
+USER FEEDBACK PATTERNS FOR THIS CLAIM:
+- SUCCESSFUL outputs (${feedbackPatterns.successful.length}): ${feedbackPatterns.successful.map((f: any) => f.type).join(', ')}
+- REJECTED outputs (${feedbackPatterns.rejected.length}): ${feedbackPatterns.rejected.map((f: any) => `${f.type}: ${f.detail || 'no detail'}`).join('; ')}
+Lean toward approaches that match successful patterns. Avoid repeating rejected approaches.
+` : '';
+
     const systemPrompt = `You are Darwin Copilot — an embedded intelligence assistant for public adjusters.
 
 MODE: ${copilotMode.toUpperCase()}
 ${modeInstructions[copilotMode]}
 
 ${orchestratorBrief}
+${outcomeLearningBrief}
+${argPatternsBrief}
+${feedbackBrief}
 ${timelineBrief}
 ${estimateBrief}
 
 CLAIM INTELLIGENCE:
 ${JSON.stringify(claimIntel, null, 2).slice(0, 8000)}
 
-TRAINING KNOWLEDGE:
+KNOWLEDGE BASE (contextually retrieved — prioritized by relevance to this claim):
 ${trainingKb}
+
+CONTINUOUS LEARNING RULES:
+1. OUTCOME PATTERN MATCHING: When cross-claim outcomes show a high win rate for a specific argument type against this carrier, recommend that approach with explicit confidence citing the historical data.
+2. ARGUMENT REUSE: When a proven argument pattern matches the current dispute type, adapt its language and cite it as a "proven approach from similar disputes."
+3. FEEDBACK LOOP: If user feedback shows certain output types were rejected, adjust your approach. If outputs were used as-is, replicate that style.
+4. KNOWLEDGE PRIORITY: When knowledge base contains manufacturer documents, standards, or statutes relevant to this claim, cite them as authoritative sources before falling back to general reasoning.
+5. EVIDENCE HIERARCHY: Always prioritize (in order): (a) internal claim evidence, (b) cross-claim outcome patterns, (c) knowledge base documents, (d) external research findings.
 
 ${copilotMode === 'strategy' ? `In STRATEGY mode, you are conversational. Do NOT force the 5-question framework on every reply. Instead:
 - Answer the user's specific question directly
@@ -310,8 +482,6 @@ FORMATTING RULE: NEVER output icon placeholder tokens like [Scales Icon], [Docum
         if (PERPLEXITY_KEY) {
           try {
             // Build a rich, context-aware research query
-            const lossType = claim?.loss_type || claim?.type_of_loss || '';
-            const state = claim?.state || '';
             const trade = claim?.construction_trade || claim?.trade || '';
             const materialType = claim?.roof_material || claim?.material_type || '';
             const disputeTopic = intelSummary?.most_important_issue || '';
@@ -320,7 +490,7 @@ FORMATTING RULE: NEVER output icon placeholder tokens like [Scales Icon], [Docum
             const queryTerms = [
               lastUserMsg,
               lossType && `${lossType} loss`,
-              state && `${state} state`,
+              stateCode && `${stateCode} state`,
               carrier !== 'Unknown' && `carrier: ${carrier}`,
               trade && `trade: ${trade}`,
               materialType && `material: ${materialType}`,
@@ -393,6 +563,52 @@ AUTHORITY RULES FOR SYNTHESIS:
 ${researchContent}`;
                 if (citations.length > 0) {
                   externalResearch += `\n\nSOURCES:\n${citations.map((c: string, i: number) => `[${i + 1}] ${c}`).join('\n')}`;
+                }
+
+                // ── Research Memory: Store high-confidence T1 findings for future reuse ──
+                // Check if content contains T1 sources worth persisting
+                const hasT1Content = researchContent.includes('[T1]');
+                if (hasT1Content) {
+                  try {
+                    // Extract T1 paragraphs for storage
+                    const t1Sections = researchContent.split('\n').filter((line: string) => line.includes('[T1]')).join('\n');
+                    if (t1Sections.length > 50) {
+                      const researchTitle = `Research: ${carrier} - ${lossType || 'General'} - ${state || 'National'}`;
+                      // Create a knowledge document record
+                      const { data: researchDoc } = await supabase.from('ai_knowledge_documents').insert({
+                        file_name: researchTitle,
+                        file_path: `research-memory/${claimId}/${Date.now()}`,
+                        file_type: 'text/plain',
+                        category: 'research_memory',
+                        status: 'completed',
+                        description: `Auto-stored T1 research findings from strategy session. Carrier: ${carrier}, Loss: ${lossType}, State: ${state}. Sources: ${citations.slice(0, 3).join(', ')}`,
+                      }).select('id').single();
+
+                      if (researchDoc?.id) {
+                        // Store as searchable chunks
+                        const researchChunks = t1Sections.match(/.{1,600}/gs) || [t1Sections];
+                        await supabase.from('ai_knowledge_chunks').insert(
+                          researchChunks.map((chunk: string, idx: number) => ({
+                            document_id: researchDoc.id,
+                            content: `[Research Memory] ${researchTitle}\n${chunk}`,
+                            chunk_index: idx,
+                            metadata: {
+                              category: 'research_memory',
+                              carrier,
+                              loss_type: lossType,
+                              state: state,
+                              source_type: 'perplexity_t1',
+                              citations: citations.slice(0, 5),
+                              claim_id: claimId,
+                            },
+                          }))
+                        );
+                        console.log(`Stored ${researchChunks.length} T1 research chunks for future reuse`);
+                      }
+                    }
+                  } catch (memErr) {
+                    console.warn('Research memory storage error (non-fatal):', memErr);
+                  }
                 }
               }
             } else {
