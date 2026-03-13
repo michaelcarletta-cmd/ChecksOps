@@ -30,7 +30,7 @@ async function refreshTokens(refreshToken: string): Promise<{ access_token: stri
       client_secret: MS_CLIENT_SECRET,
       refresh_token: refreshToken,
       grant_type: 'refresh_token',
-      scope: 'https://graph.microsoft.com/Mail.Read offline_access User.Read',
+      scope: 'https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Mail.Send offline_access User.Read',
     }),
   });
 
@@ -396,7 +396,7 @@ async function handleOutlookSync(req: Request): Promise<Response> {
       `client_id=${MS_CLIENT_ID}` +
       `&response_type=code` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      `&scope=${encodeURIComponent('https://graph.microsoft.com/Mail.Read offline_access User.Read')}` +
+      `&scope=${encodeURIComponent('https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Mail.Send offline_access User.Read')}` +
       `&state=${state}` +
       `&response_mode=query` +
       `&prompt=select_account`;

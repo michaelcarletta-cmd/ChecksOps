@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Send, Loader2, FileText, Paperclip, X, Plus } from "lucide-react";
+import { Mail, Send, Loader2, FileText, Paperclip, X, Plus, Monitor } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
@@ -68,6 +68,24 @@ export function EmailComposer({
   const [sending, setSending] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<ClaimFile[]>([]);
   const [showFileSelector, setShowFileSelector] = useState(false);
+  const [sendViaOutlook, setSendViaOutlook] = useState(false);
+
+  // Check if user has an active Outlook connection
+  const { data: hasOutlookConnection } = useQuery({
+    queryKey: ["outlook-connection-check"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
+      const { data } = await supabase
+        .from("email_connections")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .limit(1);
+      return (data?.length || 0) > 0;
+    },
+    enabled: isOpen,
+  });
 
   // Auto-populate for replies or new emails
   useEffect(() => {
@@ -395,24 +413,50 @@ export function EmailComposer({
         : claim.id.slice(0, 8);
       const claimEmail = `claim-${sanitizedPolicyNumber}@claims.freedomclaims.work`;
 
-      const { data, error } = await supabase.functions.invoke("send-email", {
-        body: {
-          recipients: selectedRecipients.map(r => ({
-            email: r.email,
-            name: r.name,
-            type: r.type
-          })),
-          subject: emailSubject,
-          body,
-          claimId,
-          claimEmailCc: claimEmail,
-          attachments: selectedFiles.map(f => ({
-            filePath: f.file_path,
-            fileName: f.file_name,
-            fileType: f.file_type
-          }))
-        }
-      });
+      const recipientPayload = selectedRecipients.map(r => ({
+        email: r.email,
+        name: r.name,
+        type: r.type
+      }));
+
+      const attachmentPayload = selectedFiles.map(f => ({
+        filePath: f.file_path,
+        fileName: f.file_name,
+        fileType: f.file_type
+      }));
+
+      let data: any;
+      let error: any;
+
+      if (sendViaOutlook) {
+        // Send via Outlook (Microsoft Graph API)
+        const result = await supabase.functions.invoke("send-outlook-email", {
+          body: {
+            recipients: recipientPayload,
+            subject: emailSubject,
+            htmlBody: `<div style="font-family: Arial, sans-serif; white-space: pre-wrap;">${body}</div>`,
+            claimId,
+            claimEmailCc: claimEmail,
+            attachments: attachmentPayload,
+          }
+        });
+        data = result.data;
+        error = result.error;
+      } else {
+        // Send via system (Resend)
+        const result = await supabase.functions.invoke("send-email", {
+          body: {
+            recipients: recipientPayload,
+            subject: emailSubject,
+            body,
+            claimId,
+            claimEmailCc: claimEmail,
+            attachments: attachmentPayload,
+          }
+        });
+        data = result.data;
+        error = result.error;
+      }
 
       if (error) throw error;
 
@@ -642,6 +686,24 @@ export function EmailComposer({
             )}
           </div>
 
+          {/* Send via Outlook toggle */}
+          {hasOutlookConnection && (
+            <div className="flex items-center gap-2 p-3 rounded-lg border bg-muted/30">
+              <Checkbox
+                id="send-via-outlook"
+                checked={sendViaOutlook}
+                onCheckedChange={(checked) => setSendViaOutlook(checked === true)}
+              />
+              <label htmlFor="send-via-outlook" className="flex items-center gap-2 text-sm cursor-pointer">
+                <Monitor className="h-4 w-4 text-primary" />
+                <span>Send via Outlook</span>
+              </label>
+              <span className="text-xs text-muted-foreground ml-auto">
+                {sendViaOutlook ? "Email will be sent from your Outlook account" : "Email will be sent from Freedom Claims"}
+              </span>
+            </div>
+          )}
+
           <div className="flex gap-2 justify-end">
             <Button variant="outline" onClick={onClose} disabled={sending}>
               Cancel
@@ -650,12 +712,12 @@ export function EmailComposer({
               {sending ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Sending...
+                  Sending{sendViaOutlook ? " via Outlook" : ""}...
                 </>
               ) : (
                 <>
-                  <Send className="h-4 w-4 mr-2" />
-                  Send Email {selectedRecipients.length > 0 && `(${selectedRecipients.length})`} {selectedFiles.length > 0 && `+ ${selectedFiles.length} files`}
+                  {sendViaOutlook ? <Monitor className="h-4 w-4 mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                  Send{sendViaOutlook ? " via Outlook" : ""} {selectedRecipients.length > 0 && `(${selectedRecipients.length})`} {selectedFiles.length > 0 && `+ ${selectedFiles.length} files`}
                 </>
               )}
             </Button>
