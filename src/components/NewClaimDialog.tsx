@@ -463,6 +463,7 @@ export function NewClaimDialog() {
           p_loss_description: formData.lossDescription || null,
           p_referrer_id: null,
           p_client_id: clientId,
+          p_mortgage_company_id: formData.mortgageCompanyId || null,
         })
         .single();
 
