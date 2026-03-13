@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { User, Calendar, MapPin, Mail, UserPlus, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { User, Calendar, MapPin, Mail, UserPlus, Loader2, Plus, Trash2, Users } from "lucide-react";
 import { format } from "date-fns";
 import { ClaimCustomFields } from "./ClaimCustomFields";
 import { CredentialsDialog } from "@/components/CredentialsDialog";
