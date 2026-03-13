@@ -86,7 +86,7 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
           body: { claimId }
         }),
         supabase.functions.invoke('darwin-intelligence-orchestrator', {
-          body: { claimId }
+          body: { claimId, triggerEvent: 'war_room_opened' }
         }),
       ]);
       if (stratResult.error) throw stratResult.error;
