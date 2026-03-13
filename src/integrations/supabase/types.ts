@@ -3299,6 +3299,72 @@ export type Database = {
           },
         ]
       }
+      claim_intelligence_summary: {
+        Row: {
+          carrier_weakest_argument: Json | null
+          claim_id: string
+          confidence_factors: Json | null
+          confidence_score: number | null
+          created_at: string | null
+          id: string
+          intelligence_sources: Json | null
+          largest_recovery_opportunity: Json | null
+          missing_evidence: Json | null
+          most_important_issue: string | null
+          raw_summary: string | null
+          recommended_next_action: Json | null
+          strongest_evidence: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          carrier_weakest_argument?: Json | null
+          claim_id: string
+          confidence_factors?: Json | null
+          confidence_score?: number | null
+          created_at?: string | null
+          id?: string
+          intelligence_sources?: Json | null
+          largest_recovery_opportunity?: Json | null
+          missing_evidence?: Json | null
+          most_important_issue?: string | null
+          raw_summary?: string | null
+          recommended_next_action?: Json | null
+          strongest_evidence?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          carrier_weakest_argument?: Json | null
+          claim_id?: string
+          confidence_factors?: Json | null
+          confidence_score?: number | null
+          created_at?: string | null
+          id?: string
+          intelligence_sources?: Json | null
+          largest_recovery_opportunity?: Json | null
+          missing_evidence?: Json | null
+          most_important_issue?: string | null
+          raw_summary?: string | null
+          recommended_next_action?: Json | null
+          strongest_evidence?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_intelligence_summary_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_intelligence_summary_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_loss_of_use_expenses: {
         Row: {
           amount: number

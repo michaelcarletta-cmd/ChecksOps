@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
     // Gather full claim intelligence in parallel
     const [
       claimRes, filesRes, estimateRes, photoRes, strategyRes, argsRes, 
-      rebuttalsRes, deadlinesRes, outcomesRes, knowledgeRes
+      rebuttalsRes, deadlinesRes, outcomesRes, knowledgeRes, intelSummaryRes
     ] = await Promise.all([
       supabase.from('claims').select('*').eq('id', claimId).single(),
       supabase.from('claim_files').select('id, file_name, document_type, folder_key, created_at').eq('claim_id', claimId),
@@ -38,6 +38,7 @@ Deno.serve(async (req) => {
       supabase.from('claim_carrier_deadlines').select('*').eq('claim_id', claimId),
       supabase.from('claim_outcome_learning').select('*').ilike('carrier', `%${''}`).limit(10),
       supabase.from('ai_knowledge_chunks').select('content').limit(15),
+      supabase.from('claim_intelligence_summary').select('*').eq('claim_id', claimId).maybeSingle(),
     ]);
 
     const claim = claimRes.data;
@@ -50,8 +51,19 @@ Deno.serve(async (req) => {
       .ilike('carrier', `%${carrier}%`)
       .limit(10);
 
+    const intelSummary = intelSummaryRes.data;
+
     const claimIntel = {
       claim,
+      orchestrator_summary: intelSummary ? {
+        most_important_issue: intelSummary.most_important_issue,
+        strongest_evidence: intelSummary.strongest_evidence,
+        largest_recovery_opportunity: intelSummary.largest_recovery_opportunity,
+        carrier_weakest_argument: intelSummary.carrier_weakest_argument,
+        recommended_next_action: intelSummary.recommended_next_action,
+        missing_evidence: intelSummary.missing_evidence,
+        confidence_score: intelSummary.confidence_score,
+      } : null,
       files: (filesRes.data || []).length,
       estimate_analysis: estimateRes.data?.[0] || null,
       photo_findings: {
@@ -81,13 +93,26 @@ Deno.serve(async (req) => {
       training: `Reference training materials and knowledge base to educate the user on best practices, techniques, and approaches relevant to this claim scenario.`,
     };
 
+    const orchestratorBrief = intelSummary ? `
+DARWIN ORCHESTRATOR INTELLIGENCE (use this as your PRIMARY source — it synthesizes all layers):
+- PRIORITY ISSUE: ${intelSummary.most_important_issue || 'Not computed'}
+- CONFIDENCE: ${intelSummary.confidence_score || 0}%
+- RECOMMENDED ACTION: ${JSON.stringify(intelSummary.recommended_next_action || {})}
+- CARRIER WEAKNESS: ${JSON.stringify(intelSummary.carrier_weakest_argument || {})}
+- RECOVERY OPPORTUNITY: ${JSON.stringify(intelSummary.largest_recovery_opportunity || {})}
+- MISSING EVIDENCE: ${JSON.stringify(intelSummary.missing_evidence || [])}
+- STRONGEST EVIDENCE: ${JSON.stringify(intelSummary.strongest_evidence || [])}
+` : '';
+
     const systemPrompt = `You are Darwin Copilot — an embedded intelligence assistant for public adjusters.
 
 MODE: ${copilotMode.toUpperCase()}
 ${modeInstructions[copilotMode]}
 
+${orchestratorBrief}
+
 CLAIM INTELLIGENCE:
-${JSON.stringify(claimIntel, null, 2).slice(0, 10000)}
+${JSON.stringify(claimIntel, null, 2).slice(0, 8000)}
 
 TRAINING KNOWLEDGE:
 ${trainingKb}
@@ -99,6 +124,7 @@ EVERY response MUST answer these 5 questions:
 4. **What is the carrier's weak point?** — Exploitable weakness in their position
 5. **What action or letter does Darwin recommend NOW?** — Concrete deliverable
 
+If orchestrator intelligence is available, START with its priority issue and recommended action. Cite specific evidence.
 Be direct, strategic, and cite specific evidence from the claim intelligence. Never use generic advice.
 Format with clear headers and bullet points.`;
 

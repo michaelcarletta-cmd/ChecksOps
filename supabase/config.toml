@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.darwin-copilot]
 verify_jwt = false
+
+[functions.darwin-intelligence-orchestrator]
+verify_jwt = false
