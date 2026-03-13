@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
-    const { claimId, mode, userQuestion } = await req.json();
+    const { claimId, mode, userQuestion, conversationHistory } = await req.json();
     if (!claimId) throw new Error('claimId required');
 
     const copilotMode: CopilotMode = mode || 'operational';
