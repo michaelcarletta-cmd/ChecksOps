@@ -638,7 +638,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
         )}
       >
         {/* Left rail */}
-        <div className="hidden md:block flex-shrink-0">
+        <div className="hidden md:block flex-shrink-0 w-52">
           <Card className="border-border/50 md:sticky md:top-4">
             <CardHeader className="py-3">
               <CardTitle className="text-sm flex items-center gap-2">
