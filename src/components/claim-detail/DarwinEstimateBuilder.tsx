@@ -7,12 +7,25 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Trash2, Save, Loader2, Sparkles, Calculator,
-  ChevronDown, ChevronRight, DollarSign, AlertCircle
+  ChevronDown, ChevronRight, DollarSign, CheckCheck, XCircle,
+  Info, ArrowRightLeft, Tag
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const REASON_TAGS = [
+  { value: "code_required", label: "Code Required", color: "bg-chart-1/20 text-chart-1 border-chart-1/30" },
+  { value: "omission", label: "Omission", color: "bg-destructive/20 text-destructive border-destructive/30" },
+  { value: "dependency", label: "Dependency", color: "bg-chart-3/20 text-chart-3 border-chart-3/30" },
+  { value: "pricing_variance", label: "Pricing Variance", color: "bg-warning/20 text-warning border-warning/30" },
+  { value: "rebuttal_support", label: "Rebuttal Support", color: "bg-primary/20 text-primary border-primary/30" },
+  { value: "quantity_dispute", label: "Qty Dispute", color: "bg-chart-5/20 text-chart-5 border-chart-5/30" },
+] as const;
+
+const REASON_TAG_MAP = Object.fromEntries(REASON_TAGS.map((r) => [r.value, r]));
 
 interface EstimateLine {
   id: string;
@@ -35,6 +48,12 @@ interface EstimateLine {
   is_accepted: boolean;
   code_reference: string | null;
   notes: string | null;
+  rationale: string | null;
+  reason_tag: string | null;
+  carrier_quantity: number | null;
+  carrier_unit_price: number | null;
+  carrier_total: number;
+  variance_amount: number;
   sort_order: number;
 }
 
@@ -48,7 +67,6 @@ const TRADES = [
   "Flooring", "Electrical", "Plumbing", "HVAC", "Windows", "Doors",
   "Framing", "Insulation", "General", "Other"
 ];
-
 const UNITS = ["EA", "SF", "LF", "SQ", "HR", "LS", "CY", "GAL"];
 
 export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderProps) => {
@@ -59,6 +77,7 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
   const [collapsedTrades, setCollapsedTrades] = useState<Set<string>>(new Set());
   const [showDepreciation, setShowDepreciation] = useState(false);
   const [showOP, setShowOP] = useState(false);
+  const [showCarrier, setShowCarrier] = useState(false);
   const { toast } = useToast();
 
   const loadLines = useCallback(async () => {
@@ -79,17 +98,22 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
         acv_total: Number(d.acv_total),
         overhead_pct: Number(d.overhead_pct),
         profit_pct: Number(d.profit_pct),
+        carrier_quantity: d.carrier_quantity != null ? Number(d.carrier_quantity) : null,
+        carrier_unit_price: d.carrier_unit_price != null ? Number(d.carrier_unit_price) : null,
+        carrier_total: Number(d.carrier_total || 0),
+        variance_amount: Number(d.variance_amount || 0),
       })));
-      // Show columns if any line uses them
       if (data.some((d: any) => Number(d.depreciation_pct) > 0)) setShowDepreciation(true);
       if (data.some((d: any) => d.include_overhead || d.include_profit)) setShowOP(true);
+      if (data.some((d: any) => d.carrier_quantity != null || d.carrier_unit_price != null)) setShowCarrier(true);
     }
     setLoading(false);
   }, [claimId]);
 
   useEffect(() => { loadLines(); }, [loadLines]);
 
-  // Computed totals
+  const pendingSuggestions = useMemo(() => lines.filter((l) => l.is_suggested && !l.is_accepted), [lines]);
+
   const totals = useMemo(() => {
     const accepted = lines.filter((l) => l.is_accepted);
     const rcv = accepted.reduce((s, l) => s + l.quantity * l.unit_price, 0);
@@ -98,10 +122,11 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
     const opLines = accepted.filter((l) => l.include_overhead || l.include_profit);
     const overhead = opLines.reduce((s, l) => s + (l.include_overhead ? l.quantity * l.unit_price * (l.overhead_pct / 100) : 0), 0);
     const profit = opLines.reduce((s, l) => s + (l.include_profit ? l.quantity * l.unit_price * (l.profit_pct / 100) : 0), 0);
-    return { rcv, dep, acv, overhead, profit, grandTotal: rcv + overhead + profit };
+    const carrierTotal = accepted.reduce((s, l) => s + (l.carrier_quantity != null && l.carrier_unit_price != null ? (l.carrier_quantity * l.carrier_unit_price) : 0), 0);
+    const totalVariance = rcv - carrierTotal;
+    return { rcv, dep, acv, overhead, profit, grandTotal: rcv + overhead + profit, carrierTotal, totalVariance };
   }, [lines]);
 
-  // Group by trade
   const groupedByTrade = useMemo(() => {
     const groups: Record<string, EstimateLine[]> = {};
     lines.forEach((l) => {
@@ -116,120 +141,95 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
       prev.map((l) => {
         if (l.id !== id) return l;
         const updated = { ...l, [field]: value };
-        // Recompute derived values locally
         updated.rcv_total = updated.quantity * updated.unit_price;
         updated.depreciation_amount = updated.rcv_total * (updated.depreciation_pct / 100);
         updated.acv_total = updated.rcv_total - updated.depreciation_amount;
+        if (updated.carrier_quantity != null && updated.carrier_unit_price != null) {
+          updated.carrier_total = updated.carrier_quantity * updated.carrier_unit_price;
+          updated.variance_amount = updated.rcv_total - updated.carrier_total;
+        }
         return updated;
       })
     );
   };
 
   const addLine = () => {
-    const newLine: EstimateLine = {
-      id: `temp-${Date.now()}`,
-      category: "General",
-      trade: "General",
-      description: "",
-      quantity: 1,
-      unit: "EA",
-      unit_price: 0,
-      rcv_total: 0,
-      depreciation_pct: 0,
-      depreciation_amount: 0,
-      acv_total: 0,
-      include_overhead: false,
-      include_profit: false,
-      overhead_pct: 10,
-      profit_pct: 10,
-      source: "manual",
-      is_suggested: false,
-      is_accepted: true,
-      code_reference: null,
-      notes: null,
-      sort_order: lines.length,
-    };
-    setLines((prev) => [...prev, newLine]);
+    setLines((prev) => [...prev, {
+      id: `temp-${Date.now()}`, category: "General", trade: "General", description: "",
+      quantity: 1, unit: "EA", unit_price: 0, rcv_total: 0, depreciation_pct: 0,
+      depreciation_amount: 0, acv_total: 0, include_overhead: false, include_profit: false,
+      overhead_pct: 10, profit_pct: 10, source: "manual", is_suggested: false, is_accepted: true,
+      code_reference: null, notes: null, rationale: null, reason_tag: null,
+      carrier_quantity: null, carrier_unit_price: null, carrier_total: 0, variance_amount: 0,
+      sort_order: prev.length,
+    }]);
   };
 
-  const removeLine = (id: string) => {
-    setLines((prev) => prev.filter((l) => l.id !== id));
+  const removeLine = (id: string) => setLines((prev) => prev.filter((l) => l.id !== id));
+
+  const acceptAllSuggestions = () => {
+    setLines((prev) => prev.map((l) => (l.is_suggested && !l.is_accepted) ? { ...l, is_accepted: true } : l));
+    toast({ title: `${pendingSuggestions.length} suggestions accepted` });
+  };
+
+  const rejectAllSuggestions = () => {
+    setLines((prev) => prev.filter((l) => !(l.is_suggested && !l.is_accepted)));
+    toast({ title: `${pendingSuggestions.length} suggestions removed` });
+  };
+
+  const refreshOrchestrator = async () => {
+    try {
+      await supabase.functions.invoke("darwin-intelligence-orchestrator", {
+        body: { claimId, triggerEvent: "estimate_updated" },
+      });
+    } catch { /* silent */ }
   };
 
   const saveAll = async () => {
     setSaving(true);
     try {
-      // Separate new vs existing
       const toInsert = lines.filter((l) => l.id.startsWith("temp-"));
       const toUpdate = lines.filter((l) => !l.id.startsWith("temp-"));
       const existingIds = toUpdate.map((l) => l.id);
 
-      // Delete removed lines
-      const { data: dbLines } = await supabase
-        .from("darwin_estimate_lines")
-        .select("id")
-        .eq("claim_id", claimId);
+      const { data: dbLines } = await supabase.from("darwin_estimate_lines").select("id").eq("claim_id", claimId);
       const dbIds = dbLines?.map((d: any) => d.id) || [];
       const toDelete = dbIds.filter((id: string) => !existingIds.includes(id));
 
-      const ops: any[] = [];
-
-      if (toDelete.length > 0) {
-        ops.push(supabase.from("darwin_estimate_lines").delete().in("id", toDelete));
-      }
+      if (toDelete.length > 0) await supabase.from("darwin_estimate_lines").delete().in("id", toDelete);
 
       for (const line of toUpdate) {
-        ops.push(
-          supabase.from("darwin_estimate_lines").update({
-            category: line.category,
-            trade: line.trade,
-            description: line.description,
-            quantity: line.quantity,
-            unit: line.unit,
-            unit_price: line.unit_price,
-            depreciation_pct: line.depreciation_pct,
-            include_overhead: line.include_overhead,
-            include_profit: line.include_profit,
-            overhead_pct: line.overhead_pct,
-            profit_pct: line.profit_pct,
-            is_accepted: line.is_accepted,
-            code_reference: line.code_reference,
-            notes: line.notes,
-            sort_order: line.sort_order,
-          }).eq("id", line.id)
-        );
+        await supabase.from("darwin_estimate_lines").update({
+          category: line.category, trade: line.trade, description: line.description,
+          quantity: line.quantity, unit: line.unit, unit_price: line.unit_price,
+          depreciation_pct: line.depreciation_pct, include_overhead: line.include_overhead,
+          include_profit: line.include_profit, overhead_pct: line.overhead_pct,
+          profit_pct: line.profit_pct, is_accepted: line.is_accepted,
+          code_reference: line.code_reference, notes: line.notes, sort_order: line.sort_order,
+          reason_tag: line.reason_tag, rationale: line.rationale,
+          carrier_quantity: line.carrier_quantity, carrier_unit_price: line.carrier_unit_price,
+        }).eq("id", line.id);
       }
 
       if (toInsert.length > 0) {
-        ops.push(
-          supabase.from("darwin_estimate_lines").insert(
-            toInsert.map((l, i) => ({
-              claim_id: claimId,
-              category: l.category,
-              trade: l.trade,
-              description: l.description,
-              quantity: l.quantity,
-              unit: l.unit,
-              unit_price: l.unit_price,
-              depreciation_pct: l.depreciation_pct,
-              include_overhead: l.include_overhead,
-              include_profit: l.include_profit,
-              overhead_pct: l.overhead_pct,
-              profit_pct: l.profit_pct,
-              source: l.source,
-              is_suggested: l.is_suggested,
-              is_accepted: l.is_accepted,
-              code_reference: l.code_reference,
-              notes: l.notes,
-              sort_order: l.sort_order,
-            }))
-          )
+        await supabase.from("darwin_estimate_lines").insert(
+          toInsert.map((l) => ({
+            claim_id: claimId, category: l.category, trade: l.trade, description: l.description,
+            quantity: l.quantity, unit: l.unit, unit_price: l.unit_price,
+            depreciation_pct: l.depreciation_pct, include_overhead: l.include_overhead,
+            include_profit: l.include_profit, overhead_pct: l.overhead_pct,
+            profit_pct: l.profit_pct, source: l.source, is_suggested: l.is_suggested,
+            is_accepted: l.is_accepted, code_reference: l.code_reference, notes: l.notes,
+            sort_order: l.sort_order, reason_tag: l.reason_tag, rationale: l.rationale,
+            carrier_quantity: l.carrier_quantity, carrier_unit_price: l.carrier_unit_price,
+          }))
         );
       }
 
-      await Promise.all(ops);
       toast({ title: "Estimate saved" });
       loadLines();
+      // Refresh orchestrator after save
+      refreshOrchestrator();
     } catch (err: any) {
       toast({ title: "Save failed", description: err.message, variant: "destructive" });
     } finally {
@@ -248,30 +248,26 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
       const suggestions = data?.suggestions || data?.findings || [];
       if (Array.isArray(suggestions) && suggestions.length > 0) {
         const newLines: EstimateLine[] = suggestions.map((s: any, i: number) => ({
-          id: `temp-sug-${Date.now()}-${i}`,
-          category: s.category || "General",
+          id: `temp-sug-${Date.now()}-${i}`, category: s.category || "General",
           trade: s.trade || "General",
           description: s.description || s.item || "Suggested item",
-          quantity: Number(s.quantity) || 1,
-          unit: s.unit || "EA",
+          quantity: Number(s.quantity) || 1, unit: s.unit || "EA",
           unit_price: Number(s.unit_price || s.price) || 0,
           rcv_total: Number(s.quantity || 1) * Number(s.unit_price || s.price || 0),
-          depreciation_pct: Number(s.depreciation_pct) || 0,
-          depreciation_amount: 0,
-          acv_total: 0,
-          include_overhead: false,
-          include_profit: false,
-          overhead_pct: 10,
-          profit_pct: 10,
-          source: "darwin_suggestion",
-          is_suggested: true,
-          is_accepted: false,
+          depreciation_pct: Number(s.depreciation_pct) || 0, depreciation_amount: 0, acv_total: 0,
+          include_overhead: false, include_profit: false, overhead_pct: 10, profit_pct: 10,
+          source: "darwin_suggestion", is_suggested: true, is_accepted: false,
           code_reference: s.code_reference || null,
-          notes: s.rationale || s.notes || null,
+          notes: null,
+          rationale: s.rationale || s.reason || s.notes || "AI-identified gap",
+          reason_tag: s.reason_tag || s.tag || "omission",
+          carrier_quantity: s.carrier_quantity != null ? Number(s.carrier_quantity) : null,
+          carrier_unit_price: s.carrier_unit_price != null ? Number(s.carrier_unit_price) : null,
+          carrier_total: 0, variance_amount: 0,
           sort_order: lines.length + i,
         }));
         setLines((prev) => [...prev, ...newLines]);
-        toast({ title: `${newLines.length} items suggested`, description: "Review and accept the suggested items below." });
+        toast({ title: `${newLines.length} items suggested`, description: "Review rationale and accept or reject." });
       } else {
         toast({ title: "No suggestions", description: "Darwin found no additional missing items." });
       }
@@ -285,234 +281,294 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
   const toggleTrade = (trade: string) => {
     setCollapsedTrades((prev) => {
       const next = new Set(prev);
-      if (next.has(trade)) next.delete(trade);
-      else next.add(trade);
+      next.has(trade) ? next.delete(trade) : next.add(trade);
       return next;
     });
   };
 
+  // Dynamic grid columns
+  const gridCols = useMemo(() => {
+    let cols = "28px 1fr 60px 50px 80px 80px";
+    if (showCarrier) cols += " 60px 80px 80px";
+    if (showDepreciation) cols += " 60px 80px";
+    if (showOP) cols += " 50px 50px";
+    cols += " 70px 28px";
+    return cols;
+  }, [showCarrier, showDepreciation, showOP]);
+
   if (loading) {
-    return (
-      <Card>
-        <CardContent className="p-6 flex items-center justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </CardContent>
-      </Card>
-    );
+    return <Card><CardContent className="p-6 flex items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></CardContent></Card>;
   }
 
   return (
-    <Card>
-      <CardHeader className="py-3 px-4">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Calculator className="h-4 w-4 text-primary" />
-            Darwin Estimate Builder
-            <Badge variant="secondary" className="text-[10px]">{lines.length} items</Badge>
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={suggestMissingItems} disabled={suggesting}>
-              {suggesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-              Suggest Missing
-            </Button>
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={addLine}>
-              <Plus className="h-3 w-3" /> Add Line
-            </Button>
-            <Button size="sm" className="h-7 text-xs gap-1" onClick={saveAll} disabled={saving}>
-              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-              Save
-            </Button>
+    <TooltipProvider>
+      <Card>
+        <CardHeader className="py-3 px-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Calculator className="h-4 w-4 text-primary" />
+              Darwin Estimate Builder
+              <Badge variant="secondary" className="text-[10px]">{lines.length} items</Badge>
+              {totals.totalVariance > 0 && showCarrier && (
+                <Badge className="text-[10px] bg-success/20 text-success">+${totals.totalVariance.toLocaleString(undefined, { maximumFractionDigits: 0 })} variance</Badge>
+              )}
+            </CardTitle>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {pendingSuggestions.length > 0 && (
+                <div className="flex items-center gap-1 mr-2">
+                  <Badge variant="outline" className="text-[10px] border-warning text-warning">{pendingSuggestions.length} pending</Badge>
+                  <Button size="sm" variant="outline" className="h-6 text-[10px] gap-0.5 border-success/50 text-success hover:bg-success/10" onClick={acceptAllSuggestions}>
+                    <CheckCheck className="h-3 w-3" /> Accept All
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-6 text-[10px] gap-0.5 border-destructive/50 text-destructive hover:bg-destructive/10" onClick={rejectAllSuggestions}>
+                    <XCircle className="h-3 w-3" /> Reject All
+                  </Button>
+                </div>
+              )}
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={suggestMissingItems} disabled={suggesting}>
+                {suggesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                Suggest Missing
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={addLine}>
+                <Plus className="h-3 w-3" /> Add Line
+              </Button>
+              <Button size="sm" className="h-7 text-xs gap-1" onClick={saveAll} disabled={saving}>
+                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                Save
+              </Button>
+            </div>
           </div>
-        </div>
-      </CardHeader>
-      <CardContent className="p-0">
-        {/* Column toggles */}
-        <div className="px-4 pb-2 flex gap-3 text-[10px]">
-          <label className="flex items-center gap-1 cursor-pointer">
-            <Checkbox checked={showDepreciation} onCheckedChange={(v) => setShowDepreciation(!!v)} className="h-3 w-3" />
-            Show Depreciation
-          </label>
-          <label className="flex items-center gap-1 cursor-pointer">
-            <Checkbox checked={showOP} onCheckedChange={(v) => setShowOP(!!v)} className="h-3 w-3" />
-            Show O&P
-          </label>
-        </div>
-
-        <ScrollArea className="max-h-[500px]">
-          {/* Table header */}
-          <div className="grid gap-1 px-4 py-2 bg-muted/50 border-y text-[10px] font-medium text-muted-foreground uppercase tracking-wider"
-            style={{ gridTemplateColumns: `28px 1fr 60px 50px 80px 80px ${showDepreciation ? '60px 80px ' : ''}${showOP ? '50px 50px ' : ''}28px` }}
-          >
-            <div></div>
-            <div>Description</div>
-            <div className="text-right">Qty</div>
-            <div>Unit</div>
-            <div className="text-right">Unit Price</div>
-            <div className="text-right">RCV Total</div>
-            {showDepreciation && <><div className="text-right">Dep%</div><div className="text-right">ACV</div></>}
-            {showOP && <><div className="text-center">OH</div><div className="text-center">P</div></>}
-            <div></div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {/* Column toggles */}
+          <div className="px-4 pb-2 flex gap-3 text-[10px] flex-wrap">
+            <label className="flex items-center gap-1 cursor-pointer">
+              <Checkbox checked={showCarrier} onCheckedChange={(v) => setShowCarrier(!!v)} className="h-3 w-3" />
+              Carrier Comparison
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <Checkbox checked={showDepreciation} onCheckedChange={(v) => setShowDepreciation(!!v)} className="h-3 w-3" />
+              Depreciation
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <Checkbox checked={showOP} onCheckedChange={(v) => setShowOP(!!v)} className="h-3 w-3" />
+              O&P
+            </label>
           </div>
 
-          {/* Grouped by trade */}
-          {Object.entries(groupedByTrade).map(([trade, tradeLines]) => {
-            const isCollapsed = collapsedTrades.has(trade);
-            const tradeRcv = tradeLines.filter((l) => l.is_accepted).reduce((s, l) => s + l.quantity * l.unit_price, 0);
+          <ScrollArea className="max-h-[500px]">
+            {/* Table header */}
+            <div className="grid gap-1 px-4 py-2 bg-muted/50 border-y text-[10px] font-medium text-muted-foreground uppercase tracking-wider"
+              style={{ gridTemplateColumns: gridCols }}>
+              <div></div>
+              <div>Description</div>
+              <div className="text-right">Qty</div>
+              <div>Unit</div>
+              <div className="text-right">Unit Price</div>
+              <div className="text-right">RCV Total</div>
+              {showCarrier && (
+                <>
+                  <div className="text-right">C.Qty</div>
+                  <div className="text-right">C.Price</div>
+                  <div className="text-right flex items-center gap-0.5 justify-end"><ArrowRightLeft className="h-2.5 w-2.5" />Var.</div>
+                </>
+              )}
+              {showDepreciation && <><div className="text-right">Dep%</div><div className="text-right">ACV</div></>}
+              {showOP && <><div className="text-center">OH</div><div className="text-center">P</div></>}
+              <div className="text-center"><Tag className="h-2.5 w-2.5 inline" /></div>
+              <div></div>
+            </div>
 
-            return (
-              <div key={trade}>
-                <button
-                  className="flex items-center gap-2 w-full px-4 py-1.5 bg-muted/30 hover:bg-muted/50 transition-colors text-xs font-medium"
-                  onClick={() => toggleTrade(trade)}
-                >
-                  {isCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                  {trade}
-                  <Badge variant="outline" className="text-[9px] ml-auto">{tradeLines.length} items</Badge>
-                  <span className="text-[10px] text-muted-foreground">${tradeRcv.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </button>
-                {!isCollapsed &&
-                  tradeLines.map((line) => (
-                    <div
-                      key={line.id}
-                      className={cn(
-                        "grid gap-1 px-4 py-1 items-center border-b border-border/50 text-xs hover:bg-accent/30 transition-colors",
-                        line.is_suggested && !line.is_accepted && "bg-warning/5 border-l-2 border-l-warning"
-                      )}
-                      style={{ gridTemplateColumns: `28px 1fr 60px 50px 80px 80px ${showDepreciation ? '60px 80px ' : ''}${showOP ? '50px 50px ' : ''}28px` }}
-                    >
-                      <div>
-                        <Checkbox
-                          checked={line.is_accepted}
-                          onCheckedChange={(v) => updateLine(line.id, "is_accepted", !!v)}
-                          className="h-3.5 w-3.5"
-                        />
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Input
-                          value={line.description}
-                          onChange={(e) => updateLine(line.id, "description", e.target.value)}
-                          className="h-6 text-xs border-transparent hover:border-input focus:border-input bg-transparent px-1"
-                        />
-                        {line.is_suggested && !line.is_accepted && (
-                          <Badge className="text-[8px] bg-warning/20 text-warning shrink-0">Suggested</Badge>
+            {/* Grouped by trade */}
+            {Object.entries(groupedByTrade).map(([trade, tradeLines]) => {
+              const isCollapsed = collapsedTrades.has(trade);
+              const tradeRcv = tradeLines.filter((l) => l.is_accepted).reduce((s, l) => s + l.quantity * l.unit_price, 0);
+              const tradeCarrier = showCarrier ? tradeLines.filter((l) => l.is_accepted).reduce((s, l) => s + (l.carrier_quantity != null && l.carrier_unit_price != null ? l.carrier_quantity * l.carrier_unit_price : 0), 0) : 0;
+
+              return (
+                <div key={trade}>
+                  <button className="flex items-center gap-2 w-full px-4 py-1.5 bg-muted/30 hover:bg-muted/50 transition-colors text-xs font-medium" onClick={() => toggleTrade(trade)}>
+                    {isCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                    {trade}
+                    <Badge variant="outline" className="text-[9px] ml-auto">{tradeLines.length} items</Badge>
+                    {showCarrier && tradeCarrier > 0 && (
+                      <span className="text-[10px] text-muted-foreground">C: ${tradeCarrier.toLocaleString(undefined, { minimumFractionDigits: 0 })}</span>
+                    )}
+                    <span className="text-[10px] text-muted-foreground">${tradeRcv.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    {showCarrier && tradeRcv > tradeCarrier && tradeCarrier > 0 && (
+                      <Badge className="text-[8px] bg-success/20 text-success">+${(tradeRcv - tradeCarrier).toLocaleString(undefined, { maximumFractionDigits: 0 })}</Badge>
+                    )}
+                  </button>
+                  {!isCollapsed && tradeLines.map((line) => {
+                    const reasonMeta = line.reason_tag ? REASON_TAG_MAP[line.reason_tag] : null;
+                    const localVariance = line.carrier_quantity != null && line.carrier_unit_price != null
+                      ? (line.quantity * line.unit_price) - (line.carrier_quantity * line.carrier_unit_price) : null;
+
+                    return (
+                      <div
+                        key={line.id}
+                        className={cn(
+                          "grid gap-1 px-4 py-1 items-center border-b border-border/50 text-xs hover:bg-accent/30 transition-colors",
+                          line.is_suggested && !line.is_accepted && "bg-warning/5 border-l-2 border-l-warning"
                         )}
-                        {line.code_reference && (
-                          <Badge variant="outline" className="text-[8px] shrink-0">{line.code_reference}</Badge>
-                        )}
-                      </div>
-                      <Input
-                        type="number"
-                        value={line.quantity}
-                        onChange={(e) => updateLine(line.id, "quantity", Number(e.target.value))}
-                        className="h-6 text-xs text-right border-transparent hover:border-input focus:border-input bg-transparent px-1"
-                      />
-                      <Select value={line.unit} onValueChange={(v) => updateLine(line.id, "unit", v)}>
-                        <SelectTrigger className="h-6 text-[10px] border-transparent hover:border-input bg-transparent px-1">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {UNITS.map((u) => <SelectItem key={u} value={u} className="text-xs">{u}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={line.unit_price}
-                        onChange={(e) => updateLine(line.id, "unit_price", Number(e.target.value))}
-                        className="h-6 text-xs text-right border-transparent hover:border-input focus:border-input bg-transparent px-1"
-                      />
-                      <div className="text-right font-medium text-xs tabular-nums">
-                        ${(line.quantity * line.unit_price).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </div>
-                      {showDepreciation && (
-                        <>
+                        style={{ gridTemplateColumns: gridCols }}
+                      >
+                        <div>
+                          <Checkbox checked={line.is_accepted} onCheckedChange={(v) => updateLine(line.id, "is_accepted", !!v)} className="h-3.5 w-3.5" />
+                        </div>
+                        <div className="flex items-center gap-1 min-w-0">
                           <Input
-                            type="number"
-                            step="0.1"
-                            value={line.depreciation_pct}
-                            onChange={(e) => updateLine(line.id, "depreciation_pct", Number(e.target.value))}
-                            className="h-6 text-xs text-right border-transparent hover:border-input focus:border-input bg-transparent px-1"
+                            value={line.description}
+                            onChange={(e) => updateLine(line.id, "description", e.target.value)}
+                            className="h-6 text-xs border-transparent hover:border-input focus:border-input bg-transparent px-1 flex-1 min-w-0"
                           />
-                          <div className="text-right text-xs tabular-nums text-muted-foreground">
-                            ${(line.quantity * line.unit_price * (1 - line.depreciation_pct / 100)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                          </div>
-                        </>
-                      )}
-                      {showOP && (
-                        <>
-                          <div className="text-center">
-                            <Checkbox
-                              checked={line.include_overhead}
-                              onCheckedChange={(v) => updateLine(line.id, "include_overhead", !!v)}
-                              className="h-3 w-3"
-                            />
-                          </div>
-                          <div className="text-center">
-                            <Checkbox
-                              checked={line.include_profit}
-                              onCheckedChange={(v) => updateLine(line.id, "include_profit", !!v)}
-                              className="h-3 w-3"
-                            />
-                          </div>
-                        </>
-                      )}
-                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive/60 hover:text-destructive" onClick={() => removeLine(line.id)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ))}
-              </div>
-            );
-          })}
+                          {line.is_suggested && !line.is_accepted && (
+                            <Badge className="text-[8px] bg-warning/20 text-warning shrink-0">Suggested</Badge>
+                          )}
+                          {line.code_reference && (
+                            <Badge variant="outline" className="text-[8px] shrink-0">{line.code_reference}</Badge>
+                          )}
+                          {line.rationale && (
+                            <Tooltip>
+                              <TooltipTrigger><Info className="h-3 w-3 text-muted-foreground shrink-0" /></TooltipTrigger>
+                              <TooltipContent className="text-xs max-w-[250px]">{line.rationale}</TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
+                        <Input type="number" value={line.quantity} onChange={(e) => updateLine(line.id, "quantity", Number(e.target.value))}
+                          className="h-6 text-xs text-right border-transparent hover:border-input focus:border-input bg-transparent px-1" />
+                        <Select value={line.unit} onValueChange={(v) => updateLine(line.id, "unit", v)}>
+                          <SelectTrigger className="h-6 text-[10px] border-transparent hover:border-input bg-transparent px-1"><SelectValue /></SelectTrigger>
+                          <SelectContent>{UNITS.map((u) => <SelectItem key={u} value={u} className="text-xs">{u}</SelectItem>)}</SelectContent>
+                        </Select>
+                        <Input type="number" step="0.01" value={line.unit_price} onChange={(e) => updateLine(line.id, "unit_price", Number(e.target.value))}
+                          className="h-6 text-xs text-right border-transparent hover:border-input focus:border-input bg-transparent px-1" />
+                        <div className="text-right font-medium text-xs tabular-nums">
+                          ${(line.quantity * line.unit_price).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </div>
 
-          {lines.length === 0 && (
-            <div className="text-center text-sm text-muted-foreground py-8">
-              No line items yet. Add manually or let Darwin suggest items.
+                        {/* Carrier comparison columns */}
+                        {showCarrier && (
+                          <>
+                            <Input type="number" value={line.carrier_quantity ?? ""} placeholder="—"
+                              onChange={(e) => updateLine(line.id, "carrier_quantity", e.target.value ? Number(e.target.value) : null)}
+                              className="h-6 text-xs text-right border-transparent hover:border-input focus:border-input bg-transparent px-1" />
+                            <Input type="number" step="0.01" value={line.carrier_unit_price ?? ""} placeholder="—"
+                              onChange={(e) => updateLine(line.id, "carrier_unit_price", e.target.value ? Number(e.target.value) : null)}
+                              className="h-6 text-xs text-right border-transparent hover:border-input focus:border-input bg-transparent px-1" />
+                            <div className={cn("text-right text-xs tabular-nums font-medium",
+                              localVariance != null && localVariance > 0 ? "text-success" :
+                              localVariance != null && localVariance < 0 ? "text-destructive" : "text-muted-foreground"
+                            )}>
+                              {localVariance != null ? `${localVariance >= 0 ? '+' : ''}$${localVariance.toLocaleString(undefined, { minimumFractionDigits: 0 })}` : "—"}
+                            </div>
+                          </>
+                        )}
+
+                        {showDepreciation && (
+                          <>
+                            <Input type="number" step="0.1" value={line.depreciation_pct} onChange={(e) => updateLine(line.id, "depreciation_pct", Number(e.target.value))}
+                              className="h-6 text-xs text-right border-transparent hover:border-input focus:border-input bg-transparent px-1" />
+                            <div className="text-right text-xs tabular-nums text-muted-foreground">
+                              ${(line.quantity * line.unit_price * (1 - line.depreciation_pct / 100)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </div>
+                          </>
+                        )}
+                        {showOP && (
+                          <>
+                            <div className="text-center"><Checkbox checked={line.include_overhead} onCheckedChange={(v) => updateLine(line.id, "include_overhead", !!v)} className="h-3 w-3" /></div>
+                            <div className="text-center"><Checkbox checked={line.include_profit} onCheckedChange={(v) => updateLine(line.id, "include_profit", !!v)} className="h-3 w-3" /></div>
+                          </>
+                        )}
+
+                        {/* Reason tag */}
+                        <div>
+                          <Select value={line.reason_tag || "none"} onValueChange={(v) => updateLine(line.id, "reason_tag", v === "none" ? null : v)}>
+                            <SelectTrigger className={cn("h-5 text-[9px] px-1 border-transparent", reasonMeta?.color)}>
+                              <SelectValue placeholder="—" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none" className="text-xs">None</SelectItem>
+                              {REASON_TAGS.map((r) => (
+                                <SelectItem key={r.value} value={r.value} className="text-xs">{r.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive/60 hover:text-destructive" onClick={() => removeLine(line.id)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+
+            {lines.length === 0 && (
+              <div className="text-center text-sm text-muted-foreground py-8">
+                No line items yet. Add manually or let Darwin suggest items.
+              </div>
+            )}
+          </ScrollArea>
+
+          {/* Totals footer */}
+          {lines.length > 0 && (
+            <div className="border-t bg-muted/30 p-4 space-y-1">
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">RCV Total (Darwin)</span>
+                <span className="font-semibold tabular-nums">${totals.rcv.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
+              {showCarrier && totals.carrierTotal > 0 && (
+                <>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">RCV Total (Carrier)</span>
+                    <span className="tabular-nums">${totals.carrierTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground font-medium">Variance</span>
+                    <span className={cn("font-bold tabular-nums", totals.totalVariance > 0 ? "text-success" : "text-destructive")}>
+                      {totals.totalVariance >= 0 ? '+' : ''}${totals.totalVariance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </>
+              )}
+              {showDepreciation && (
+                <>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Depreciation</span>
+                    <span className="tabular-nums text-destructive">-${totals.dep.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">ACV Total</span>
+                    <span className="font-semibold tabular-nums">${totals.acv.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </>
+              )}
+              {showOP && (totals.overhead > 0 || totals.profit > 0) && (
+                <>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Overhead</span>
+                    <span className="tabular-nums">${totals.overhead.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Profit</span>
+                    <span className="tabular-nums">${totals.profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </>
+              )}
+              <div className="flex justify-between text-sm font-bold pt-1 border-t">
+                <span>Grand Total</span>
+                <span className="tabular-nums text-primary">
+                  <DollarSign className="h-3.5 w-3.5 inline" />
+                  {totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
+              </div>
             </div>
           )}
-        </ScrollArea>
-
-        {/* Totals footer */}
-        {lines.length > 0 && (
-          <div className="border-t bg-muted/30 p-4 space-y-1">
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">RCV Total</span>
-              <span className="font-semibold tabular-nums">${totals.rcv.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            </div>
-            {showDepreciation && (
-              <>
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Depreciation</span>
-                  <span className="tabular-nums text-destructive">-${totals.dep.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">ACV Total</span>
-                  <span className="font-semibold tabular-nums">${totals.acv.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
-              </>
-            )}
-            {showOP && (totals.overhead > 0 || totals.profit > 0) && (
-              <>
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Overhead</span>
-                  <span className="tabular-nums">${totals.overhead.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-muted-foreground">Profit</span>
-                  <span className="tabular-nums">${totals.profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                </div>
-              </>
-            )}
-            <div className="flex justify-between text-sm font-bold pt-1 border-t">
-              <span>Grand Total</span>
-              <span className="tabular-nums text-primary">
-                <DollarSign className="h-3.5 w-3.5 inline" />
-                {totals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </TooltipProvider>
   );
 };
