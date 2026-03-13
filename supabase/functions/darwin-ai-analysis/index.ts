@@ -899,6 +899,29 @@ Deno.serve(async (req) => {
 
     if (claimError) throw claimError;
 
+    // ── Fetch calling user's profile for identity injection ──────────────
+    let authorName: string | undefined;
+    let authorTitle: string | undefined;
+    try {
+      const authHeader = req.headers.get('authorization') || '';
+      const token = authHeader.replace('Bearer ', '');
+      if (token) {
+        const userClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY') || supabaseServiceKey);
+        const { data: userData } = await userClient.auth.getUser(token);
+        if (userData?.user?.id) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, title')
+            .eq('id', userData.user.id)
+            .maybeSingle();
+          if (profile?.full_name) authorName = profile.full_name;
+          if (profile?.title) authorTitle = profile.title;
+        }
+      }
+    } catch (profileErr) {
+      console.warn('Could not fetch user profile for identity injection:', profileErr);
+    }
+
     // Resolve storage-backed PDF inputs to base64 so clients can send file paths
     // instead of huge payloads that often fail at the function gateway.
     if (!pdfContent && pdfFilePath) {
