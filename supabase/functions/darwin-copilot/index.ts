@@ -270,7 +270,9 @@ Deno.serve(async (req) => {
       carrier_arguments: (argsRes.data || []).length,
       rebuttals: (rebuttalsRes.data || []).length,
       deadlines: deadlinesRes.data || [],
-      carrier_outcomes: carrierOutcomes || [],
+      carrier_outcomes: carrierOutcomes,
+      argument_patterns_library: argPatterns.slice(0, 8),
+      feedback_patterns: feedbackPatterns,
       // NEW: cross-surface intelligence
       timeline_intelligence: timelineIntel,
       estimate_builder_intelligence: estimateIntel,
@@ -280,7 +282,27 @@ Deno.serve(async (req) => {
       claimIntel.photo_findings.by_type[f.finding_type] = (claimIntel.photo_findings.by_type[f.finding_type] || 0) + 1;
     });
 
-    const trainingKb = (knowledgeRes.data || []).map((c: any) => c.content).join('\n---\n').slice(0, 4000);
+    // Build contextual KB digest — prioritized by relevance
+    const trainingKb = prioritizedKbChunks.join('\n---\n').slice(0, 6000);
+
+    // Build cross-claim outcome digest with win/loss patterns
+    const outcomeDigest = carrierOutcomes.length > 0 ? (() => {
+      const wins = carrierOutcomes.filter((o: any) => o.outcome === 'won' || o.outcome === 'settled');
+      const losses = carrierOutcomes.filter((o: any) => o.outcome === 'lost' || o.outcome === 'denied');
+      const avgRecovery = wins.length > 0
+        ? wins.reduce((s: number, o: any) => s + (o.recovery_delta || 0), 0) / wins.length
+        : 0;
+      const winningArgs = wins.flatMap((o: any) => (o.winning_arguments || []).map((a: any) => a.argument_type || a.summary)).filter(Boolean);
+      const turningPoints = wins.map((o: any) => o.key_turning_point).filter(Boolean);
+      return {
+        total_outcomes: carrierOutcomes.length,
+        win_rate: ((wins.length / carrierOutcomes.length) * 100).toFixed(1),
+        avg_recovery_delta: avgRecovery,
+        common_winning_arguments: [...new Set(winningArgs)].slice(0, 5),
+        key_turning_points: turningPoints.slice(0, 3),
+        loss_patterns: losses.map((o: any) => o.denial_rationale).filter(Boolean).slice(0, 3),
+      };
+    })() : null;
 
     const modeInstructions: Record<CopilotMode, string> = {
       operational: `Focus on claim operations: status, next steps, pending tasks, deadlines, missing documentation.`,
