@@ -460,6 +460,17 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
                   </Button>
                 </div>
               )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.xlsx,.xls,.csv,.txt"
+                className="hidden"
+                onChange={handleImportEstimate}
+              />
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+                {importing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                Import Estimate
+              </Button>
               <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={suggestMissingItems} disabled={suggesting}>
                 {suggesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
                 Suggest Missing
