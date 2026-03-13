@@ -253,6 +253,100 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
               </Card>
             </div>
 
+            {/* === INTELLIGENCE ORCHESTRATOR BRIEFING === */}
+            {intelligenceSummary && (
+              <Card className="border-2 border-primary/30 bg-gradient-to-r from-primary/5 to-transparent">
+                <CardHeader className="py-3 px-4 bg-primary/5">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Brain className="h-4 w-4 text-primary" />
+                    Darwin Intelligence Briefing
+                    <Badge variant="secondary" className="ml-auto text-[10px]">
+                      Confidence: {intelligenceSummary.confidence_score}%
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 space-y-3">
+                  {/* Priority Issue */}
+                  {intelligenceSummary.most_important_issue && (
+                    <div className="p-3 rounded-lg bg-destructive/5 border border-destructive/20">
+                      <div className="text-[10px] font-semibold text-destructive uppercase tracking-wide mb-1">Priority Issue</div>
+                      <p className="text-sm">{intelligenceSummary.most_important_issue}</p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {/* Recovery Opportunity */}
+                    {intelligenceSummary.largest_recovery_opportunity?.description && (
+                      <div className="p-3 rounded-lg bg-success/5 border border-success/20">
+                        <div className="text-[10px] font-semibold text-success uppercase tracking-wide mb-1">Largest Recovery Opportunity</div>
+                        <p className="text-xs">{intelligenceSummary.largest_recovery_opportunity.description}</p>
+                        {intelligenceSummary.largest_recovery_opportunity.estimated_delta > 0 && (
+                          <div className="mt-1 text-sm font-bold text-success">
+                            +${Number(intelligenceSummary.largest_recovery_opportunity.estimated_delta).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Carrier Weakness */}
+                    {intelligenceSummary.carrier_weakest_argument?.argument_summary && (
+                      <div className="p-3 rounded-lg bg-warning/5 border border-warning/20">
+                        <div className="text-[10px] font-semibold text-warning uppercase tracking-wide mb-1">Carrier Weak Point</div>
+                        <p className="text-xs">{intelligenceSummary.carrier_weakest_argument.argument_summary}</p>
+                        <Badge variant="outline" className="text-[9px] mt-1 capitalize">
+                          {(intelligenceSummary.carrier_weakest_argument.weakness_type || '').replace(/_/g, ' ')}
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Recommended Action */}
+                  {intelligenceSummary.recommended_next_action?.action && (
+                    <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                      <div className="text-[10px] font-semibold text-primary uppercase tracking-wide mb-1">
+                        Recommended Next Action
+                        {intelligenceSummary.recommended_next_action.priority && (
+                          <Badge variant="outline" className="ml-2 text-[9px] capitalize">{intelligenceSummary.recommended_next_action.priority}</Badge>
+                        )}
+                      </div>
+                      <p className="text-xs">{intelligenceSummary.recommended_next_action.action}</p>
+                      {intelligenceSummary.recommended_next_action.expected_impact && (
+                        <p className="text-[10px] text-muted-foreground mt-1">Impact: {intelligenceSummary.recommended_next_action.expected_impact}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Missing Evidence */}
+                  {Array.isArray(intelligenceSummary.missing_evidence) && intelligenceSummary.missing_evidence.length > 0 && (
+                    <div>
+                      <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Missing Evidence</div>
+                      <div className="flex flex-wrap gap-1">
+                        {(intelligenceSummary.missing_evidence as any[]).slice(0, 5).map((e: any, i: number) => (
+                          <Badge key={i} variant="outline" className={`text-[9px] ${e.priority === 'critical' ? 'border-destructive text-destructive' : 'border-warning/50 text-warning'}`}>
+                            {typeof e === 'string' ? e : e.item}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Strongest Evidence */}
+                  {Array.isArray(intelligenceSummary.strongest_evidence) && intelligenceSummary.strongest_evidence.length > 0 && (
+                    <div>
+                      <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Strongest Evidence</div>
+                      <div className="flex flex-wrap gap-1">
+                        {(intelligenceSummary.strongest_evidence as any[]).slice(0, 5).map((e: any, i: number) => (
+                          <Badge key={i} variant="secondary" className="text-[9px]">
+                            {e.type}: {e.description?.slice(0, 60)}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* === FOUR QUADRANTS === */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Q1: Evidence-Linked Timeline */}
