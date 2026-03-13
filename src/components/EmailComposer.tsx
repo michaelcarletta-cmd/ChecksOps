@@ -14,6 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { DarwinInlineNudges } from "@/components/claim-detail/DarwinInlineNudges";
 import { MergeFieldButtons } from "@/components/MergeFieldButtons";
+import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 
 interface Recipient {
   email: string;
@@ -493,7 +494,8 @@ export function EmailComposer({
       setSelectedFiles([]);
     } catch (error: any) {
       console.error("Error sending email:", error);
-      toast.error(error.message || "Failed to send email");
+      const errorMessage = await getFunctionErrorMessage(error, "Failed to send email");
+      toast.error(errorMessage);
     } finally {
       setSending(false);
     }

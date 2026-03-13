@@ -106,25 +106,60 @@ Deno.serve(async (req) => {
       return json({ success: false, error: 'Missing required fields: recipients, subject, htmlBody' }, 400);
     }
 
-    // Get user's Outlook connection
-    const { data: connection, error: connError } = await supabase
+    // Get user's active Outlook connections (newest first)
+    const { data: connections, error: connError } = await supabase
       .from('email_connections')
       .select('*')
       .eq('user_id', user.id)
       .eq('is_active', true)
-      .limit(1)
-      .maybeSingle();
+      .order('updated_at', { ascending: false })
+      .limit(5);
 
-    if (connError || !connection) {
+    if (connError || !connections?.length) {
       return json({ success: false, error: 'No active Outlook connection found. Please connect your Outlook account in Settings.' }, 400);
     }
 
-    let accessToken: string;
-    try {
-      accessToken = await getAccessToken(connection, supabase);
-    } catch (tokenErr: any) {
-      await supabase.from('email_connections').update({ last_sync_error: tokenErr.message }).eq('id', connection.id);
-      return json({ success: false, error: tokenErr.message }, 400);
+    let connection: any = null;
+    let accessToken = '';
+    let lastTokenError: string | null = null;
+
+    for (const conn of connections) {
+      try {
+        accessToken = await getAccessToken(conn, supabase);
+        connection = conn;
+
+        if (conn.last_sync_error) {
+          await supabase
+            .from('email_connections')
+            .update({ last_sync_error: null })
+            .eq('id', conn.id);
+        }
+        break;
+      } catch (tokenErr: any) {
+        const message = tokenErr?.message || 'Outlook authentication failed. Please reconnect your account.';
+        lastTokenError = message;
+        await supabase
+          .from('email_connections')
+          .update({ last_sync_error: message })
+          .eq('id', conn.id);
+      }
+    }
+
+    if (!connection || !accessToken) {
+      return json({
+        success: false,
+        error: lastTokenError || 'All active Outlook connections are expired. Please reconnect your Outlook account in Settings.',
+      }, 400);
+    }
+
+    // Keep only the working connection active to avoid stale-token collisions
+    if (connections.length > 1) {
+      await supabase
+        .from('email_connections')
+        .update({ is_active: false })
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .neq('id', connection.id);
     }
 
     // Build Graph API message
