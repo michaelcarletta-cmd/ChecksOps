@@ -405,11 +405,20 @@ interface AdditionalContact {
   email: string | null;
 }
 
+const formatPhoneInput = (value: string): string => {
+  const digits = value.replace(/\D/g, '').slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+};
+
 function AdditionalContacts({ claimId }: { claimId: string }) {
   const [contacts, setContacts] = useState<AdditionalContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [newContact, setNewContact] = useState({ name: "", phone: "", email: "" });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState({ name: "", phone: "", email: "" });
 
   const fetchContacts = async () => {
     const { data } = await supabase
@@ -441,9 +450,33 @@ function AdditionalContacts({ claimId }: { claimId: string }) {
     setAdding(false);
   };
 
+  const handleEdit = (c: AdditionalContact) => {
+    setEditingId(c.id);
+    setEditValues({ name: c.name, phone: c.phone || "", email: c.email || "" });
+  };
+
+  const handleSave = async (id: string) => {
+    if (!editValues.name.trim()) return;
+    const { error } = await supabase
+      .from("claim_additional_contacts")
+      .update({
+        name: editValues.name.trim(),
+        phone: editValues.phone.trim() || null,
+        email: editValues.email.trim() || null,
+      })
+      .eq("id", id);
+    if (error) {
+      toast.error("Failed to update contact");
+    } else {
+      setEditingId(null);
+      fetchContacts();
+    }
+  };
+
   const handleDelete = async (id: string) => {
     await supabase.from("claim_additional_contacts").delete().eq("id", id);
     setContacts(prev => prev.filter(c => c.id !== id));
+    if (editingId === id) setEditingId(null);
   };
 
   return (
@@ -461,14 +494,28 @@ function AdditionalContacts({ claimId }: { claimId: string }) {
           <>
             {contacts.map(c => (
               <div key={c.id} className="flex items-center justify-between gap-2 rounded-md border p-2">
-                <div className="grid grid-cols-3 gap-3 flex-1 min-w-0 text-sm">
-                  <span className="font-medium truncate">{c.name}</span>
-                  <span className="text-muted-foreground truncate">{c.phone || "—"}</span>
-                  <span className="text-muted-foreground truncate">{c.email || "—"}</span>
-                </div>
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={() => handleDelete(c.id)}>
-                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                </Button>
+                {editingId === c.id ? (
+                  <>
+                    <div className="grid grid-cols-3 gap-2 flex-1 min-w-0">
+                      <Input value={editValues.name} onChange={e => setEditValues(p => ({ ...p, name: e.target.value }))} className="h-7 text-sm" />
+                      <Input placeholder="XXX-XXX-XXXX" value={editValues.phone} onChange={e => setEditValues(p => ({ ...p, phone: formatPhoneInput(e.target.value) }))} className="h-7 text-sm" maxLength={12} />
+                      <Input value={editValues.email} onChange={e => setEditValues(p => ({ ...p, email: e.target.value }))} className="h-7 text-sm" />
+                    </div>
+                    <Button variant="ghost" size="sm" className="h-7 px-2 shrink-0 text-xs" onClick={() => handleSave(c.id)}>Save</Button>
+                    <Button variant="ghost" size="sm" className="h-7 px-2 shrink-0 text-xs" onClick={() => setEditingId(null)}>Cancel</Button>
+                  </>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 gap-3 flex-1 min-w-0 text-sm cursor-pointer" onClick={() => handleEdit(c)}>
+                      <span className="font-medium truncate">{c.name}</span>
+                      <span className="text-muted-foreground truncate">{c.phone || "—"}</span>
+                      <span className="text-muted-foreground truncate">{c.email || "—"}</span>
+                    </div>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0" onClick={() => handleDelete(c.id)}>
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  </>
+                )}
               </div>
             ))}
             <div className="flex items-end gap-2">
@@ -476,7 +523,7 @@ function AdditionalContacts({ claimId }: { claimId: string }) {
                 <Input placeholder="Name" value={newContact.name} onChange={e => setNewContact(p => ({ ...p, name: e.target.value }))} className="h-8 text-sm" />
               </div>
               <div className="flex-1 space-y-1">
-                <Input placeholder="Phone" value={newContact.phone} onChange={e => setNewContact(p => ({ ...p, phone: e.target.value }))} className="h-8 text-sm" />
+                <Input placeholder="XXX-XXX-XXXX" value={newContact.phone} onChange={e => setNewContact(p => ({ ...p, phone: formatPhoneInput(e.target.value) }))} className="h-8 text-sm" maxLength={12} />
               </div>
               <div className="flex-1 space-y-1">
                 <Input placeholder="Email" value={newContact.email} onChange={e => setNewContact(p => ({ ...p, email: e.target.value }))} className="h-8 text-sm" />

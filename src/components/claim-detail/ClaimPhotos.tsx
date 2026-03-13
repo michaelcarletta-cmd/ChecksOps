@@ -797,7 +797,7 @@ export function ClaimPhotos({ claimId, claim, isPortalUser = false }: ClaimPhoto
                   <Label>Select Photos</Label>
                   <Input
                     type="file"
-                    accept="image/*"
+                    accept="image/*,video/*"
                     multiple
                     onChange={(e) => setUploadFiles(Array.from(e.target.files || []))}
                     className="mt-1"
