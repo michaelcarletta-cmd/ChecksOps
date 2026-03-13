@@ -413,24 +413,50 @@ export function EmailComposer({
         : claim.id.slice(0, 8);
       const claimEmail = `claim-${sanitizedPolicyNumber}@claims.freedomclaims.work`;
 
-      const { data, error } = await supabase.functions.invoke("send-email", {
-        body: {
-          recipients: selectedRecipients.map(r => ({
-            email: r.email,
-            name: r.name,
-            type: r.type
-          })),
-          subject: emailSubject,
-          body,
-          claimId,
-          claimEmailCc: claimEmail,
-          attachments: selectedFiles.map(f => ({
-            filePath: f.file_path,
-            fileName: f.file_name,
-            fileType: f.file_type
-          }))
-        }
-      });
+      const recipientPayload = selectedRecipients.map(r => ({
+        email: r.email,
+        name: r.name,
+        type: r.type
+      }));
+
+      const attachmentPayload = selectedFiles.map(f => ({
+        filePath: f.file_path,
+        fileName: f.file_name,
+        fileType: f.file_type
+      }));
+
+      let data: any;
+      let error: any;
+
+      if (sendViaOutlook) {
+        // Send via Outlook (Microsoft Graph API)
+        const result = await supabase.functions.invoke("send-outlook-email", {
+          body: {
+            recipients: recipientPayload,
+            subject: emailSubject,
+            htmlBody: `<div style="font-family: Arial, sans-serif; white-space: pre-wrap;">${body}</div>`,
+            claimId,
+            claimEmailCc: claimEmail,
+            attachments: attachmentPayload,
+          }
+        });
+        data = result.data;
+        error = result.error;
+      } else {
+        // Send via system (Resend)
+        const result = await supabase.functions.invoke("send-email", {
+          body: {
+            recipients: recipientPayload,
+            subject: emailSubject,
+            body,
+            claimId,
+            claimEmailCc: claimEmail,
+            attachments: attachmentPayload,
+          }
+        });
+        data = result.data;
+        error = result.error;
+      }
 
       if (error) throw error;
 
