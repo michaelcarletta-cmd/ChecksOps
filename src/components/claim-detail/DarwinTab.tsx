@@ -169,6 +169,7 @@ const analysisTypeLabels: Record<string, { label: string; section: string }> = {
 
 export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
   const [showCopilot, setShowCopilot] = useState(true);
+  const [copilotExpanded, setCopilotExpanded] = useState(false);
   const [copilotView, setCopilotView] = useState<'conversation' | 'dismantler'>('conversation');
   const [activeWorkspace, setActiveWorkspace] = useState<DarwinWorkspaceKey>("claim-intelligence");
   const [autoAnalyses, setAutoAnalyses] = useState<Array<{ id: string; analysis_type: string; created_at: string; input_summary: string }>>([]);
@@ -633,7 +634,9 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
         className={cn(
           "grid gap-4 items-start",
           showCopilot
-            ? "md:grid-cols-[12rem_minmax(0,1fr)] xl:grid-cols-[12rem_minmax(0,1fr)_22rem]"
+            ? copilotExpanded
+              ? "md:grid-cols-[12rem_minmax(0,1fr)] xl:grid-cols-[12rem_minmax(0,1fr)_40rem]"
+              : "md:grid-cols-[12rem_minmax(0,1fr)] xl:grid-cols-[12rem_minmax(0,1fr)_22rem]"
             : "md:grid-cols-[12rem_minmax(0,1fr)]",
         )}
       >
@@ -815,7 +818,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             </div>
 
             {copilotView === 'conversation' ? (
-              <DarwinCopilotPanel claimId={claimId} />
+              <DarwinCopilotPanel claimId={claimId} isExpanded={copilotExpanded} onToggleExpand={() => setCopilotExpanded(e => !e)} />
             ) : (
             <>
             <CardHeader className="py-3 border-b bg-gradient-to-r from-primary/5 to-transparent">
