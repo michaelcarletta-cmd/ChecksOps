@@ -818,7 +818,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             </div>
 
             {copilotView === 'conversation' ? (
-              <DarwinCopilotPanel claimId={claimId} />
+              <DarwinCopilotPanel claimId={claimId} isExpanded={copilotExpanded} onToggleExpand={() => setCopilotExpanded(e => !e)} />
             ) : (
             <>
             <CardHeader className="py-3 border-b bg-gradient-to-r from-primary/5 to-transparent">
