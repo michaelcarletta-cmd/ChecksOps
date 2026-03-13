@@ -1,5 +1,6 @@
 import { useState, useEffect, lazy, Suspense, useMemo, useCallback } from "react";
 import { Brain, Loader2, MessageSquare, FileText, Shield, Calculator, Zap, Search, Clock, Sparkles, Swords, Building2, AlertCircle, Eye, Clipboard, Send, type LucideIcon } from "lucide-react";
+import { DarwinCopilotPanel } from "./DarwinCopilotPanel";
 import { DarwinCockpit } from "./DarwinCockpit";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
