@@ -1,5 +1,6 @@
 import { useState, useEffect, lazy, Suspense, useMemo, useCallback } from "react";
 import { Brain, Loader2, MessageSquare, FileText, Shield, Calculator, Zap, Search, Clock, Sparkles, Swords, Building2, AlertCircle, Eye, Clipboard, Send, type LucideIcon } from "lucide-react";
+import { DarwinCopilotPanel } from "./DarwinCopilotPanel";
 import { DarwinCockpit } from "./DarwinCockpit";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -168,6 +169,7 @@ const analysisTypeLabels: Record<string, { label: string; section: string }> = {
 
 export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
   const [showCopilot, setShowCopilot] = useState(true);
+  const [copilotView, setCopilotView] = useState<'conversation' | 'dismantler'>('conversation');
   const [activeWorkspace, setActiveWorkspace] = useState<DarwinWorkspaceKey>("claim-intelligence");
   const [autoAnalyses, setAutoAnalyses] = useState<Array<{ id: string; analysis_type: string; created_at: string; input_summary: string }>>([]);
   const [dismissedAnalyses, setDismissedAnalyses] = useState<Set<string>>(new Set());
@@ -784,6 +786,38 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
         {showCopilot && (
           <div className="hidden xl:block flex-shrink-0 xl:sticky xl:top-4">
             <Card className="h-[calc(100vh-2rem)] flex flex-col border-primary/20">
+            {/* Panel toggle */}
+            <div className="flex border-b">
+              <button
+                className={cn(
+                  "flex-1 px-3 py-2 text-xs font-medium transition-colors",
+                  copilotView === 'conversation'
+                    ? "bg-primary/10 text-primary border-b-2 border-primary"
+                    : "text-muted-foreground hover:bg-accent/50"
+                )}
+                onClick={() => setCopilotView('conversation')}
+              >
+                <MessageSquare className="h-3 w-3 inline mr-1" />
+                Copilot
+              </button>
+              <button
+                className={cn(
+                  "flex-1 px-3 py-2 text-xs font-medium transition-colors",
+                  copilotView === 'dismantler'
+                    ? "bg-primary/10 text-primary border-b-2 border-primary"
+                    : "text-muted-foreground hover:bg-accent/50"
+                )}
+                onClick={() => setCopilotView('dismantler')}
+              >
+                <Shield className="h-3 w-3 inline mr-1" />
+                Dismantler
+              </button>
+            </div>
+
+            {copilotView === 'conversation' ? (
+              <DarwinCopilotPanel claimId={claimId} />
+            ) : (
+            <>
             <CardHeader className="py-3 border-b bg-gradient-to-r from-primary/5 to-transparent">
               <div className="flex items-center justify-between gap-2">
                 <div>
@@ -1016,6 +1050,8 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
                 </div>
               )}
             </CardContent>
+            </>
+            )}
             </Card>
           </div>
         )}

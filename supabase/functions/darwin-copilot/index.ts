@@ -5,7 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-type CopilotMode = 'operational' | 'rebuttal' | 'estimate' | 'war_room' | 'training';
+type CopilotMode = 'operational' | 'rebuttal' | 'estimate' | 'war_room' | 'training' | 'strategy';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
-    const { claimId, mode, userQuestion } = await req.json();
+    const { claimId, mode, userQuestion, conversationHistory } = await req.json();
     if (!claimId) throw new Error('claimId required');
 
     const copilotMode: CopilotMode = mode || 'operational';
@@ -143,6 +143,20 @@ Deno.serve(async (req) => {
       estimate: `Focus on estimate gaps, supplement opportunities, pricing disparities, code upgrades, and O&P analysis. Reference the top 5 estimate disputes by recovery impact and explain why each matters.`,
       war_room: `Focus on strategic options: which strategy scores highest, predicted outcomes, risk levels, and recommended next moves based on cross-claim learning. Reference timeline milestones, escalation-flagged events, and top estimate disputes to explain which events and line items are driving strategy.`,
       training: `Reference training materials and knowledge base to educate the user on best practices, techniques, and approaches relevant to this claim scenario.`,
+      strategy: `You are in CLAIM STRATEGY CONVERSATION mode. The user wants to reason through disputes step-by-step.
+
+Your job is to be a senior claims strategist who:
+- Evaluates carrier positions and identifies weaknesses in their arguments
+- Suggests specific evidence needed and where to find it
+- Proposes rebuttal paths with concrete language the user can adapt
+- Explains policy interpretation in plain terms
+- Drafts argument language when requested
+- Identifies which timeline events and estimate line items support the strategy
+- References cross-claim outcomes from similar carrier scenarios
+- Cites internal claim evidence (photos, documents, estimates) by name when possible
+- References external standards (building codes, manufacturer specs, industry practices) when relevant
+
+Maintain a conversational, collaborative tone. Ask clarifying questions when the user's intent is ambiguous. Build on prior messages in this conversation. When proposing a strategy, explain WHY it works and what risks exist.`,
     };
 
     const orchestratorBrief = intelSummary ? `
@@ -189,12 +203,18 @@ ${JSON.stringify(claimIntel, null, 2).slice(0, 8000)}
 TRAINING KNOWLEDGE:
 ${trainingKb}
 
-EVERY response MUST answer these 5 questions:
+${copilotMode === 'strategy' ? `In STRATEGY mode, you are conversational. Do NOT force the 5-question framework on every reply. Instead:
+- Answer the user's specific question directly
+- Cite internal evidence (documents, photos, timeline events, estimate lines) with specifics
+- Reference external standards when relevant
+- Propose concrete next steps only when appropriate
+- If drafting language, write it in a professional, carrier-ready tone
+- Ask follow-up questions to deepen the strategy discussion` : `EVERY response MUST answer these 5 questions:
 1. **What matters most right now?** — The single highest-priority item
 2. **What is missing?** — Evidence, documents, or analysis gaps
 3. **What should happen next?** — Specific actionable next step
 4. **What is the carrier's weak point?** — Exploitable weakness in their position
-5. **What action or letter does Darwin recommend NOW?** — Concrete deliverable
+5. **What action or letter does Darwin recommend NOW?** — Concrete deliverable`}
 
 CROSS-SURFACE LINKAGE RULES:
 - When recommending strategy, explain WHICH timeline events support it (by date and type)
@@ -202,19 +222,33 @@ CROSS-SURFACE LINKAGE RULES:
 - When discussing rebuttals, reference both timeline events AND estimate items marked for rebuttal use
 - Always connect timeline milestones to estimate disputes when both are relevant
 
-If orchestrator intelligence is available, START with its priority issue and recommended action. Cite specific evidence.
+If orchestrator intelligence is available, reference its priority issue and recommended action. Cite specific evidence.
 Be direct, strategic, and cite specific evidence from the claim intelligence. Never use generic advice.
 Format with clear headers and bullet points.`;
+
+    // Build messages: system prompt + conversation history OR single question
+    const aiMessages: Array<{role: string; content: string}> = [
+      { role: 'system', content: systemPrompt },
+    ];
+
+    if (conversationHistory && Array.isArray(conversationHistory) && conversationHistory.length > 0) {
+      // Use full conversation history for multi-turn strategy conversations
+      for (const msg of conversationHistory) {
+        aiMessages.push({ role: msg.role, content: msg.content });
+      }
+    } else {
+      aiMessages.push({
+        role: 'user',
+        content: userQuestion || `Give me the full Darwin Copilot briefing for this claim in ${copilotMode} mode.`,
+      });
+    }
 
     const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userQuestion || `Give me the full Darwin Copilot briefing for this claim in ${copilotMode} mode.` },
-        ],
+        messages: aiMessages,
         stream: true,
       }),
     });
