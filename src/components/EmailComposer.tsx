@@ -14,6 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { DarwinInlineNudges } from "@/components/claim-detail/DarwinInlineNudges";
 import { MergeFieldButtons } from "@/components/MergeFieldButtons";
+import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 
 interface Recipient {
   email: string;
