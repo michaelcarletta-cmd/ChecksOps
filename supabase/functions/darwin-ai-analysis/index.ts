@@ -4175,11 +4175,7 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
 
         systemPrompt = `You are an elite claims advocate generating a COMPREHENSIVE STRATEGIC REBUTTAL to OVERTURN the carrier's denial and secure coverage. You have access to ALL claim intelligence, strategic analyses, carrier behavior data, previous analyses, and the complete evidence file for this claim.
 
-EXTERNAL CONTENT WRITING RULES:
-1. AUTHORSHIP: Never refer to Darwin, AI, or any automated system. Write as if authored by the public adjuster handling the claim.
-2. PLAIN TEXT: Use clean professional prose with paragraph formatting. No bullet points (* - = •), emoji, markdown (** # *), or special symbols. Write in flowing narrative paragraphs.
-3. TONE: Professional, assertive, authoritative carrier communication.
-4. SIGNATURE: End with "Sincerely," or "Regards," followed by a blank line. Never insert Darwin or AI as sender.
+${getExternalWritingRules(authorName, authorTitle)}
 
 ${getMandatoryFramework()}
 
