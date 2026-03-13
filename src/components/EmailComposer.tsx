@@ -68,6 +68,24 @@ export function EmailComposer({
   const [sending, setSending] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<ClaimFile[]>([]);
   const [showFileSelector, setShowFileSelector] = useState(false);
+  const [sendViaOutlook, setSendViaOutlook] = useState(false);
+
+  // Check if user has an active Outlook connection
+  const { data: hasOutlookConnection } = useQuery({
+    queryKey: ["outlook-connection-check"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
+      const { data } = await supabase
+        .from("email_connections")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .limit(1);
+      return (data?.length || 0) > 0;
+    },
+    enabled: isOpen,
+  });
 
   // Auto-populate for replies or new emails
   useEffect(() => {
