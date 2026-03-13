@@ -2701,6 +2701,7 @@ export type Database = {
           date_confidence: number | null
           date_evidence: string | null
           date_source: string
+          dispute_tag: string | null
           doc_type: string | null
           event_type: string
           id: string
@@ -2713,6 +2714,8 @@ export type Database = {
           source_artifact_id: string | null
           source_artifact_type: string | null
           summary: string | null
+          supports_escalation: boolean | null
+          supports_rebuttal: boolean | null
           updated_at: string
         }
         Insert: {
@@ -2722,6 +2725,7 @@ export type Database = {
           date_confidence?: number | null
           date_evidence?: string | null
           date_source?: string
+          dispute_tag?: string | null
           doc_type?: string | null
           event_type: string
           id?: string
@@ -2734,6 +2738,8 @@ export type Database = {
           source_artifact_id?: string | null
           source_artifact_type?: string | null
           summary?: string | null
+          supports_escalation?: boolean | null
+          supports_rebuttal?: boolean | null
           updated_at?: string
         }
         Update: {
@@ -2743,6 +2749,7 @@ export type Database = {
           date_confidence?: number | null
           date_evidence?: string | null
           date_source?: string
+          dispute_tag?: string | null
           doc_type?: string | null
           event_type?: string
           id?: string
@@ -2755,6 +2762,8 @@ export type Database = {
           source_artifact_id?: string | null
           source_artifact_type?: string | null
           summary?: string | null
+          supports_escalation?: boolean | null
+          supports_rebuttal?: boolean | null
           updated_at?: string
         }
         Relationships: [
@@ -6328,6 +6337,8 @@ export type Database = {
           rationale: string | null
           rcv_total: number | null
           reason_tag: string | null
+          rebuttal_strength_score: number | null
+          recovery_impact_rank: number | null
           sort_order: number | null
           source: string | null
           source_analysis_id: string | null
@@ -6335,6 +6346,7 @@ export type Database = {
           unit: string | null
           unit_price: number
           updated_at: string | null
+          used_in_rebuttal: boolean | null
           variance_amount: number | null
         }
         Insert: {
@@ -6361,6 +6373,8 @@ export type Database = {
           rationale?: string | null
           rcv_total?: number | null
           reason_tag?: string | null
+          rebuttal_strength_score?: number | null
+          recovery_impact_rank?: number | null
           sort_order?: number | null
           source?: string | null
           source_analysis_id?: string | null
@@ -6368,6 +6382,7 @@ export type Database = {
           unit?: string | null
           unit_price?: number
           updated_at?: string | null
+          used_in_rebuttal?: boolean | null
           variance_amount?: number | null
         }
         Update: {
@@ -6394,6 +6409,8 @@ export type Database = {
           rationale?: string | null
           rcv_total?: number | null
           reason_tag?: string | null
+          rebuttal_strength_score?: number | null
+          recovery_impact_rank?: number | null
           sort_order?: number | null
           source?: string | null
           source_analysis_id?: string | null
@@ -6401,6 +6418,7 @@ export type Database = {
           unit?: string | null
           unit_price?: number
           updated_at?: string | null
+          used_in_rebuttal?: boolean | null
           variance_amount?: number | null
         }
         Relationships: [
