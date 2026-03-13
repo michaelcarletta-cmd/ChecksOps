@@ -167,7 +167,7 @@ When giving substantive strategic analysis, structure responses with a CARRIER P
 2. **🎯 Carrier Pressure Map** — Identify the carrier's weakest points across five dimensions. For EACH dimension, provide:
    - A 🔴 High / 🟡 Moderate / 🟢 Low rating with a one-line explanation citing evidence
    - **→ Tactic:** one concise, actionable negotiation move
-   - **→ Confidence: X%** — your confidence this tactic will succeed, derived from: (a) strength of internal claim evidence supporting it, (b) cross-claim outcome patterns for similar scenarios, (c) corroborating external research if available, (d) completeness of supporting documentation. Briefly note the primary driver, e.g. "Confidence: 82% — strong photo evidence + 3 similar carrier reversals"
+   - **→ Confidence: X%** — your confidence this tactic will succeed, derived from: (a) strength of internal claim evidence supporting it, (b) cross-claim outcome patterns for similar scenarios, (c) authority tier of corroborating external research — T1 sources provide full confidence uplift, T2 sources provide moderate uplift, T3 sources provide minimal uplift and should be noted as weak authority, (d) completeness of supporting documentation. Briefly note the primary driver AND authority tier when external research is used, e.g. "Confidence: 82% — strong photo evidence + [T1] IRC code support + 3 similar carrier reversals" or "Confidence: 58% — [T3] blog reference only, no manufacturer or code authority found"
 
    Dimensions:
    - **Policy Interpretation** — gaps, ambiguities, or misapplied exclusions in their coverage position
@@ -342,7 +342,18 @@ RULES:
               if (researchContent) {
                 externalResearch = `\n\nEXTERNAL RESEARCH (from verified sources — cite with 🌐 label):
 SOURCE TIER KEY: [T1] = Manufacturer docs, building codes, statutes, case law, technical standards (HIGHEST). [T2] = Industry publications, trade references, training materials. [T3] = Blogs, forums, general articles (LOWEST).
-When synthesizing into your response, ALWAYS prefer T1 sources over T2, and T2 over T3. If a T1 source contradicts a T3 source, the T1 source wins. Clearly distinguish external research from internal claim evidence.
+AUTHORITY RULES FOR SYNTHESIS:
+1. PRESERVE [T1]/[T2]/[T3] tags in your response so the user can see the authority level of each finding.
+2. In the 🌐 External Research section, list T1-backed findings FIRST, then T2, then T3.
+3. If a T1 source contradicts a T3 source, the T1 source wins — discard the T3 finding.
+4. If a recommendation or tactic relies PRIMARILY on T2 or T3 sources (no T1 support), you MUST:
+   a. Explicitly state the authority gap, e.g. "⚠️ This finding is supported by [T2] industry publications; no manufacturer or code authority found."
+   b. Reduce the associated Tactic Confidence by 10-25% compared to T1-backed tactics.
+5. When computing Tactic Confidence percentages and overall strategic confidence, use authority tier as a direct input:
+   - T1-backed evidence → full confidence weight
+   - T2-only evidence → reduce confidence by ~15%
+   - T3-only evidence → reduce confidence by ~25-30%
+6. Clearly distinguish external research from internal claim evidence using the 📋/🌐 labels.
 
 ${researchContent}`;
                 if (citations.length > 0) {
