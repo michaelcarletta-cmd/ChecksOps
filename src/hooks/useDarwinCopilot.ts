@@ -43,6 +43,7 @@ export function useDarwinCopilot(claimId: string) {
           mode: overrideMode || mode,
           userQuestion: userContent,
           conversationHistory,
+          ...(extra?.attachedFileIds?.length ? { attachedFileIds: extra.attachedFileIds } : {}),
         }),
         signal: abortRef.current.signal,
       });
