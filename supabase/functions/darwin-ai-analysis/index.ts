@@ -97,6 +97,80 @@ function getMandatoryFramework(): string {
   return MANDATORY_ORDER_OF_OPERATIONS;
 }
 
+// ============================================================================
+// CENTRALIZED EXTERNAL WRITING RULES
+// Injected into all external-facing analysis types (rebuttals, letters, emails,
+// demand packages, DOBI complaints, carrier communications, etc.)
+// ============================================================================
+function getExternalWritingRules(authorName?: string, authorTitle?: string): string {
+  const identityLine = authorName
+    ? `The author of this communication is ${authorName}${authorTitle ? `, ${authorTitle}` : ''}. Write in their voice using first person ("I" or "we"). Use their name in signature blocks.`
+    : `Write as if authored by the public adjuster or claims professional handling the claim. Use first person plural ("we") or the firm name.`;
+
+  return `
+=== EXTERNAL CONTENT WRITING RULES (MANDATORY — NO DEVIATIONS) ===
+1. AUTHORSHIP: ${identityLine} Never refer to Darwin, AI, or any automated system as the author or contributor. The reader must believe a human professional wrote this.
+2. PLAIN TEXT FORMAT: Use clean professional prose with standard paragraph formatting ONLY. Absolutely NO bullet points (* - = • ‣ ◦), NO emoji or unicode symbols, NO markdown formatting (** # * *** _ ~~ \`), NO numbered lists with symbols. Write in flowing narrative paragraphs.
+3. TONE: Professional claim-handling language appropriate for the recipient (carriers, regulators, attorneys). Assertive but composed.
+4. SIGNATURE: End formal letters/emails with "Sincerely," or "Regards," followed by a blank line for the sender's name. ${authorName ? `Use "${authorName}${authorTitle ? `, ${authorTitle}` : ''}" as the signer.` : 'Never insert Darwin or any AI reference as the sender.'}
+5. INTERNAL vs EXTERNAL: This output is EXTERNAL — intended for carriers, regulators, attorneys, or policyholders. All structured formatting (headers, bullet analysis, emoji labels) is strictly prohibited.
+=== END EXTERNAL CONTENT WRITING RULES ===
+`;
+}
+
+// ============================================================================
+// OUTPUT CLEANUP FILTER
+// Strips markdown, bullet points, emoji, and other formatting artifacts from
+// external-facing text before returning to the client.
+// ============================================================================
+const EXTERNAL_FACING_TYPES = new Set([
+  'denial_rebuttal', 'auto_draft_rebuttal', 'engineer_report_rebuttal',
+  'correspondence', 'task_followup', 'document_compilation', 'demand_package',
+  'carrier_email_draft', 'supplement', 'dobi_letter', 'refine_document',
+  'systematic_dismantling', 'one_click_package',
+]);
+
+function stripExternalFormatting(text: string): string {
+  if (!text || typeof text !== 'string') return text;
+
+  let cleaned = text;
+
+  // Remove markdown bold/italic wrappers: **text** → text, *text* → text, ***text*** → text
+  cleaned = cleaned.replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1');
+
+  // Remove markdown headers: ## Header → Header
+  cleaned = cleaned.replace(/^#{1,6}\s+/gm, '');
+
+  // Remove markdown underline/strikethrough: ~~text~~ → text, __text__ → text
+  cleaned = cleaned.replace(/~~([^~]+)~~/g, '$1');
+  cleaned = cleaned.replace(/__([^_]+)__/g, '$1');
+
+  // Remove bullet point characters at start of lines: - item, * item, • item, ‣ item, ◦ item
+  cleaned = cleaned.replace(/^[\s]*[-*•‣◦]\s+/gm, '');
+
+  // Remove numbered list markers that use special chars: 1. item (keep the text)
+  // Only strip if followed by a period and space at the start of line
+  cleaned = cleaned.replace(/^[\s]*\d+\.\s+/gm, '');
+
+  // Remove emoji (common unicode ranges)
+  cleaned = cleaned.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{200D}\u{20E3}\u{FE0F}]/gu, '');
+
+  // Remove markdown code blocks
+  cleaned = cleaned.replace(/```[\s\S]*?```/g, '');
+  cleaned = cleaned.replace(/`([^`]+)`/g, '$1');
+
+  // Remove markdown horizontal rules
+  cleaned = cleaned.replace(/^[-*_]{3,}\s*$/gm, '');
+
+  // Clean up excessive blank lines (more than 2 consecutive)
+  cleaned = cleaned.replace(/\n{4,}/g, '\n\n\n');
+
+  // Trim leading/trailing whitespace on each line
+  cleaned = cleaned.split('\n').map(line => line.trimEnd()).join('\n');
+
+  return cleaned.trim();
+}
+
 const STRUCTURED_DARWIN_ANALYSIS_TYPES = new Set<string>([
   'denial_rebuttal',
   'next_steps',
