@@ -51,8 +51,19 @@ Deno.serve(async (req) => {
       .ilike('carrier', `%${carrier}%`)
       .limit(10);
 
+    const intelSummary = intelSummaryRes.data;
+
     const claimIntel = {
       claim,
+      orchestrator_summary: intelSummary ? {
+        most_important_issue: intelSummary.most_important_issue,
+        strongest_evidence: intelSummary.strongest_evidence,
+        largest_recovery_opportunity: intelSummary.largest_recovery_opportunity,
+        carrier_weakest_argument: intelSummary.carrier_weakest_argument,
+        recommended_next_action: intelSummary.recommended_next_action,
+        missing_evidence: intelSummary.missing_evidence,
+        confidence_score: intelSummary.confidence_score,
+      } : null,
       files: (filesRes.data || []).length,
       estimate_analysis: estimateRes.data?.[0] || null,
       photo_findings: {
