@@ -485,6 +485,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
               <DarwinEngineerReportAnalyzer claimId={claimId} claim={claim} />
             </div>
             <DarwinSupplementGenerator claimId={claimId} claim={claim} />
+            <DarwinEstimateBuilder claimId={claimId} claim={claim} />
             <DarwinCorrespondenceAnalyzer claimId={claimId} claim={claim} />
             <DarwinSmartFollowUps claimId={claimId} claim={claim} />
           </>
