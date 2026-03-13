@@ -403,6 +403,7 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
     }
   };
 
+  const toggleTrade = (trade: string) => {
     setCollapsedTrades((prev) => {
       const next = new Set(prev);
       next.has(trade) ? next.delete(trade) : next.add(trade);
