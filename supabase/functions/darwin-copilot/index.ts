@@ -482,8 +482,6 @@ FORMATTING RULE: NEVER output icon placeholder tokens like [Scales Icon], [Docum
         if (PERPLEXITY_KEY) {
           try {
             // Build a rich, context-aware research query
-            const lossType = claim?.loss_type || claim?.type_of_loss || '';
-            const state = claim?.state || '';
             const trade = claim?.construction_trade || claim?.trade || '';
             const materialType = claim?.roof_material || claim?.material_type || '';
             const disputeTopic = intelSummary?.most_important_issue || '';
