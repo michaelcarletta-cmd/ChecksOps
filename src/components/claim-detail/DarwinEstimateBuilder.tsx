@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Trash2, Save, Loader2, Sparkles, Calculator,
   ChevronDown, ChevronRight, DollarSign, CheckCheck, XCircle,
-  Info, ArrowRightLeft, Tag, BookOpen, Star, TrendingUp
+  Info, ArrowRightLeft, Tag, BookOpen, Star, TrendingUp, Upload
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -77,10 +77,12 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [collapsedTrades, setCollapsedTrades] = useState<Set<string>>(new Set());
   const [showDepreciation, setShowDepreciation] = useState(false);
   const [showOP, setShowOP] = useState(false);
   const [showCarrier, setShowCarrier] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const loadLines = useCallback(async () => {
@@ -320,6 +322,87 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
     }
   };
 
+  const handleImportEstimate = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
+    setImporting(true);
+    try {
+      let extractedText = "";
+
+      // Text-based extraction for common formats
+      if (file.type === "text/csv" || file.name.endsWith(".csv") || file.type === "text/plain" || file.name.endsWith(".txt")) {
+        extractedText = await file.text();
+      } else if (file.type.includes("spreadsheet") || file.name.endsWith(".xlsx") || file.name.endsWith(".xls")) {
+        // Use xlsx library for spreadsheets
+        const { read, utils } = await import("xlsx");
+        const buffer = await file.arrayBuffer();
+        const wb = read(buffer);
+        const allText: string[] = [];
+        wb.SheetNames.forEach((name: string) => {
+          const ws = wb.Sheets[name];
+          allText.push(utils.sheet_to_csv(ws));
+        });
+        extractedText = allText.join("\n\n");
+      } else {
+        // For PDFs and other binary docs, convert to base64 and use vision extraction
+        const buffer = await file.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+        
+        // Use multimodal extraction via a simple edge function call
+        const { data: extractData, error: extractError } = await supabase.functions.invoke("darwin-estimate-import", {
+          body: {
+            claimId,
+            extractedText: `[BASE64_DOCUMENT:${file.type}]${base64.slice(0, 50000)}`,
+            fileName: file.name,
+          },
+        });
+        if (extractError) throw extractError;
+        if (extractData?.error) throw new Error(extractData.error);
+
+        toast({
+          title: `${extractData?.imported || 0} line items imported`,
+          description: `From ${file.name} (${extractData?.document_type || "estimate"})`,
+        });
+        loadLines();
+        if (extractData?.document_type === "carrier_estimate") setShowCarrier(true);
+        refreshOrchestrator();
+        setImporting(false);
+        return;
+      }
+
+      if (!extractedText.trim()) {
+        toast({ title: "No text extracted", description: "Could not read content from this file.", variant: "destructive" });
+        setImporting(false);
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("darwin-estimate-import", {
+        body: {
+          claimId,
+          extractedText,
+          fileName: file.name,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast({
+        title: `${data?.imported || 0} line items imported`,
+        description: `From ${file.name} (${data?.document_type || "estimate"})`,
+      });
+      loadLines();
+      if (data?.document_type === "carrier_estimate") setShowCarrier(true);
+      refreshOrchestrator();
+    } catch (err: any) {
+      toast({ title: "Import failed", description: err.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const toggleTrade = (trade: string) => {
     setCollapsedTrades((prev) => {
       const next = new Set(prev);
@@ -377,6 +460,17 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
                   </Button>
                 </div>
               )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.xlsx,.xls,.csv,.txt"
+                className="hidden"
+                onChange={handleImportEstimate}
+              />
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => fileInputRef.current?.click()} disabled={importing}>
+                {importing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                Import Estimate
+              </Button>
               <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={suggestMissingItems} disabled={suggesting}>
                 {suggesting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
                 Suggest Missing
