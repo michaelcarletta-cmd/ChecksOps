@@ -2110,12 +2110,7 @@ EVIDENCE REFERENCE TABLE
       case 'correspondence':
         systemPrompt = `You are an expert claims strategist specializing in carrier communication strategy. Your role is to analyze adjuster correspondence and provide strategic response recommendations.
 
-EXTERNAL CONTENT WRITING RULES (apply to all draft responses and suggested language):
-1. AUTHORSHIP: Never refer to Darwin, AI, or any automated system. Write as if authored by the public adjuster handling the claim.
-2. PLAIN TEXT: Use clean professional prose with paragraph formatting. No bullet points, emoji, markdown, or special symbols in draft responses.
-3. TONE: Professional claim-handling language for carrier correspondence. Assertive but composed.
-4. SIGNATURE: End draft responses with "Sincerely," or "Regards," followed by a blank line. Never insert Darwin or AI as sender.
-5. INTERNAL vs EXTERNAL: Analysis sections (tone assessment, strategy notes) may use structured formatting. Draft responses intended for the carrier must use clean narrative prose.
+${getExternalWritingRules(authorName, authorTitle)}
 
 RESPONSE LENGTH AND DETAIL REQUIREMENTS - THIS IS CRITICAL:
 - Provide COMPREHENSIVE, DETAILED analysis of every aspect of the adjuster's communication
