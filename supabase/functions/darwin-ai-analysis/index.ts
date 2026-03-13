@@ -6646,6 +6646,12 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       );
     }
 
+    // ── OUTPUT CLEANUP FILTER — strip markdown/bullets from external-facing outputs ──
+    if (analysisResult && typeof analysisResult === 'string' && EXTERNAL_FACING_TYPES.has(analysisType)) {
+      analysisResult = stripExternalFormatting(analysisResult);
+      console.log(`[OUTPUT FILTER] Applied stripExternalFormatting for ${analysisType}`);
+    }
+
     // ── STATE CITATION WATCHDOG — scan output for wrong-state references ──
     let citationAudit: { violations: string[]; cleaned: string } | null = null;
     if (analysisResult && typeof analysisResult === 'string') {
