@@ -2704,6 +2704,8 @@ export type Database = {
           doc_type: string | null
           event_type: string
           id: string
+          is_editable: boolean | null
+          is_manual: boolean | null
           metadata_json: Json
           occurred_at: string
           source_artifact_id: string | null
@@ -2721,6 +2723,8 @@ export type Database = {
           doc_type?: string | null
           event_type: string
           id?: string
+          is_editable?: boolean | null
+          is_manual?: boolean | null
           metadata_json?: Json
           occurred_at: string
           source_artifact_id?: string | null
@@ -2738,6 +2742,8 @@ export type Database = {
           doc_type?: string | null
           event_type?: string
           id?: string
+          is_editable?: boolean | null
+          is_manual?: boolean | null
           metadata_json?: Json
           occurred_at?: string
           source_artifact_id?: string | null
@@ -6284,6 +6290,105 @@ export type Database = {
           },
           {
             foreignKeyName: "darwin_declared_positions_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      darwin_estimate_lines: {
+        Row: {
+          acv_total: number | null
+          category: string
+          claim_id: string
+          code_reference: string | null
+          created_at: string | null
+          depreciation_amount: number | null
+          depreciation_pct: number | null
+          description: string
+          id: string
+          include_overhead: boolean | null
+          include_profit: boolean | null
+          is_accepted: boolean | null
+          is_suggested: boolean | null
+          notes: string | null
+          overhead_pct: number | null
+          profit_pct: number | null
+          quantity: number
+          rcv_total: number | null
+          sort_order: number | null
+          source: string | null
+          source_analysis_id: string | null
+          trade: string | null
+          unit: string | null
+          unit_price: number
+          updated_at: string | null
+        }
+        Insert: {
+          acv_total?: number | null
+          category?: string
+          claim_id: string
+          code_reference?: string | null
+          created_at?: string | null
+          depreciation_amount?: number | null
+          depreciation_pct?: number | null
+          description: string
+          id?: string
+          include_overhead?: boolean | null
+          include_profit?: boolean | null
+          is_accepted?: boolean | null
+          is_suggested?: boolean | null
+          notes?: string | null
+          overhead_pct?: number | null
+          profit_pct?: number | null
+          quantity?: number
+          rcv_total?: number | null
+          sort_order?: number | null
+          source?: string | null
+          source_analysis_id?: string | null
+          trade?: string | null
+          unit?: string | null
+          unit_price?: number
+          updated_at?: string | null
+        }
+        Update: {
+          acv_total?: number | null
+          category?: string
+          claim_id?: string
+          code_reference?: string | null
+          created_at?: string | null
+          depreciation_amount?: number | null
+          depreciation_pct?: number | null
+          description?: string
+          id?: string
+          include_overhead?: boolean | null
+          include_profit?: boolean | null
+          is_accepted?: boolean | null
+          is_suggested?: boolean | null
+          notes?: string | null
+          overhead_pct?: number | null
+          profit_pct?: number | null
+          quantity?: number
+          rcv_total?: number | null
+          sort_order?: number | null
+          source?: string | null
+          source_analysis_id?: string | null
+          trade?: string | null
+          unit?: string | null
+          unit_price?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "darwin_estimate_lines_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "darwin_estimate_lines_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"

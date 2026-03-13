@@ -23,7 +23,7 @@ import { GapIntelligenceEngine } from "./war-room/GapIntelligenceEngine";
 import { AdaptiveCounterTactics } from "./war-room/AdaptiveCounterTactics";
 import { CarrierArgumentRebuttals } from "./war-room/CarrierArgumentRebuttals";
 
-const CausalityTimeline = lazy(() => import("./CausalityTimeline").then(m => ({ default: m.CausalityTimeline })));
+const WarRoomTimeline = lazy(() => import("./war-room/WarRoomTimeline").then(m => ({ default: m.WarRoomTimeline })));
 
 interface ClaimWarRoomProps {
   claimId: string;
@@ -379,16 +379,16 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
             {/* === FOUR QUADRANTS === */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Q1: Evidence-Linked Timeline */}
-              <Card className="border-2">
+              <Card className="border-2 md:col-span-2">
                 <CardHeader className="py-3 px-4 bg-muted/30">
                   <CardTitle className="text-sm flex items-center gap-2">
                     <Clock className="h-4 w-4 text-chart-2" />
-                    Evidence-Linked Timeline
+                    AI Claim Timeline
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="p-4 min-h-[300px]">
+                <CardContent className="p-4">
                   <Suspense fallback={<div className="flex items-center justify-center h-full"><Loader2 className="h-6 w-6 animate-spin" /></div>}>
-                    <CausalityTimeline claimId={claimId} claim={claim} deadlines={deadlines} />
+                    <WarRoomTimeline claimId={claimId} claim={claim} />
                   </Suspense>
                 </CardContent>
               </Card>
