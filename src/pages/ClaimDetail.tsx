@@ -113,8 +113,8 @@ const ClaimDetail = () => {
         },
         (payload) => {
           console.log("Claim updated via realtime:", payload.new);
-          // Update the cache with new data
-          queryClient.setQueryData(["claim", id], payload.new);
+          // Invalidate and refetch to get proper joined data
+          queryClient.invalidateQueries({ queryKey: ["claim", id] });
         }
       )
       .subscribe();
