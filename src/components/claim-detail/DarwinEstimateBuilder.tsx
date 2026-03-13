@@ -172,7 +172,7 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
       const dbIds = dbLines?.map((d: any) => d.id) || [];
       const toDelete = dbIds.filter((id: string) => !existingIds.includes(id));
 
-      const ops: Promise<any>[] = [];
+      const ops: any[] = [];
 
       if (toDelete.length > 0) {
         ops.push(supabase.from("darwin_estimate_lines").delete().in("id", toDelete));
