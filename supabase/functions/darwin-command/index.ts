@@ -155,7 +155,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── Send Client SMS ──
+    // ── Send Client SMS (draft for approval) ──
     if (intent === "send_client_sms") {
       if (!claimId) {
         return new Response(
@@ -189,79 +189,55 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Send SMS directly via Telnyx (service-to-service, no user auth needed)
-      const TELNYX_API_KEY = Deno.env.get("TELNYX_API_KEY");
-      const TELNYX_PHONE_NUMBER = Deno.env.get("TELNYX_PHONE_NUMBER");
-      const TELNYX_MESSAGING_PROFILE_ID = Deno.env.get("TELNYX_MESSAGING_PROFILE_ID");
-
-      if (!TELNYX_API_KEY || !TELNYX_PHONE_NUMBER) {
-        return new Response(
-          JSON.stringify({ intent, error: "SMS not configured. Missing Telnyx credentials." }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
       // Normalize phone to E.164
       const digits = claim.policyholder_phone.replace(/\D/g, "");
       const toE164 = digits.length === 10 ? `+1${digits}` : digits.length === 11 && digits.startsWith("1") ? `+${digits}` : `+${digits}`;
 
-      const telnyxResp = await fetch("https://api.telnyx.com/v2/messages", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${TELNYX_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          from: TELNYX_PHONE_NUMBER,
-          to: toE164,
-          text: msgBody,
-          messaging_profile_id: TELNYX_MESSAGING_PROFILE_ID,
-        }),
-      });
-      const telnyxData = await telnyxResp.json().catch(() => ({}));
-      const smsData: Record<string, any> = {};
-
-      if (!telnyxResp.ok) {
-        smsData.error = telnyxData.errors?.[0]?.detail || "Telnyx API error";
-      } else {
-        smsData.messageId = telnyxData.data?.id;
-        // Insert into sms_messages
-        await supabase.from("sms_messages").insert({
+      // Create pending action for approval instead of sending directly
+      const { data: pendingAction, error: insertError } = await supabase
+        .from("claim_ai_pending_actions")
+        .insert({
           claim_id: claimId,
-          from_number: TELNYX_PHONE_NUMBER,
-          to_number: toE164,
-          message_body: msgBody,
-          status: telnyxData.data?.to?.[0]?.status || "queued",
-          direction: "outbound",
-          telnyx_message_id: smsData.messageId,
-          user_id: createdBy || null,
-        });
-      }
+          action_type: 'sms',
+          draft_content: {
+            to_number: toE164,
+            recipient_type: 'policyholder',
+            recipient_name: claim.policyholder_name || claim.policyholder_phone,
+            message: msgBody,
+          },
+          ai_reasoning: `SMS drafted via Darwin Command Bar for policyholder ${claim.policyholder_name || 'unknown'}.`,
+        })
+        .select()
+        .single();
 
-      if (smsData.error) {
+      if (insertError) {
+        console.error('Failed to create pending SMS action:', insertError);
         return new Response(
-          JSON.stringify({ intent, error: smsData.error || "Failed to send SMS" }),
-          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ intent, error: "Failed to save SMS draft" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
       // Log to claim_updates
       await supabase.from("claim_updates").insert({
         claim_id: claimId,
-        update_type: "communication_log",
-        content: `SMS sent to ${claim.policyholder_name || claim.policyholder_phone}: ${msgBody}`,
+        update_type: "ai_action",
+        content: `🤖 Darwin drafted an SMS to ${claim.policyholder_name || claim.policyholder_phone}. Awaiting approval in Inbox.`,
         user_id: createdBy || null,
       });
 
       return new Response(
         JSON.stringify({
           intent,
-          result: `SMS sent to ${claim.policyholder_name || claim.policyholder_phone}: "${msgBody}"`,
-          messageId: smsData.messageId || null,
-          message: "SMS sent successfully.",
+          result: `SMS draft created for ${claim.policyholder_name || claim.policyholder_phone}. Please review and approve in the Inbox before it is sent.`,
+          pendingActionId: pendingAction.id,
+          message: "SMS draft awaiting your approval.",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // ── Send Client Email ──
+    // ── Send Client Email (draft for approval) ──
     if (intent === "send_client_email") {
       if (!claimId) {
         return new Response(
@@ -312,44 +288,48 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Call send-email edge function
-      const emailResp = await fetch(`${supabaseUrl}/functions/v1/send-email`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${supabaseServiceKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          to: claimData.policyholder_email,
-          recipientName: claimData.policyholder_name || claimData.policyholder_email,
-          subject: `Claim Update – ${claimData.claim_number || "Your Claim"}`,
-          body: emailBody,
-          claimId,
-        }),
-      });
-      const emailData = await emailResp.json().catch(() => ({}));
+      const emailSubject = `Claim Update – ${claimData.claim_number || "Your Claim"}`;
 
-      if (!emailResp.ok || emailData.error) {
+      // Create pending action for approval instead of sending directly
+      const { data: pendingAction, error: insertError } = await supabase
+        .from("claim_ai_pending_actions")
+        .insert({
+          claim_id: claimId,
+          action_type: 'email_response',
+          draft_content: {
+            to_email: claimData.policyholder_email,
+            to_name: claimData.policyholder_name || claimData.policyholder_email,
+            recipient_type: 'policyholder',
+            subject: emailSubject,
+            body: emailBody,
+          },
+          ai_reasoning: `Email drafted via Darwin Command Bar for policyholder ${claimData.policyholder_name || 'unknown'}.`,
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error('Failed to create pending email action:', insertError);
         return new Response(
-          JSON.stringify({ intent, error: emailData.error || "Failed to send email" }),
-          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ intent, error: "Failed to save email draft" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
       // Log to claim_updates
       await supabase.from("claim_updates").insert({
         claim_id: claimId,
-        update_type: "communication_log",
-        content: `Email sent to ${claimData.policyholder_name || claimData.policyholder_email}: ${emailBody}`,
+        update_type: "ai_action",
+        content: `🤖 Darwin drafted an email to ${claimData.policyholder_name || claimData.policyholder_email}. Awaiting approval in Inbox.`,
         user_id: createdBy || null,
       });
 
       return new Response(
         JSON.stringify({
           intent,
-          result: `Email sent to ${claimData.policyholder_name || claimData.policyholder_email}: "${emailBody}"`,
-          messageId: emailData.messageId || null,
-          message: "Email sent successfully.",
+          result: `Email draft created for ${claimData.policyholder_name || claimData.policyholder_email}. Please review and approve in the Inbox before it is sent.`,
+          pendingActionId: pendingAction.id,
+          message: "Email draft awaiting your approval.",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
