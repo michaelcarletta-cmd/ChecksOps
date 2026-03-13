@@ -274,10 +274,25 @@ FORMATTING RULE: NEVER output icon placeholder tokens like [Scales Icon], [Docum
         const PERPLEXITY_KEY = Deno.env.get('PERPLEXITY_API_KEY') || Deno.env.get('PERPLEXITY_API_KEY_1');
         if (PERPLEXITY_KEY) {
           try {
-            // Build a research query grounded in claim context
+            // Build a rich, context-aware research query
             const lossType = claim?.loss_type || claim?.type_of_loss || '';
             const state = claim?.state || '';
-            const researchQuery = `Insurance claim dispute: ${lastUserMsg}. Context: ${lossType} loss in ${state}, carrier: ${carrier}. Focus on policy interpretation, industry standards, manufacturer guidance, building codes, or insurance regulations that apply.`;
+            const trade = claim?.construction_trade || claim?.trade || '';
+            const materialType = claim?.roof_material || claim?.material_type || '';
+            const disputeTopic = intelSummary?.most_important_issue || '';
+
+            // Compose structured query terms from claim context
+            const queryTerms = [
+              lastUserMsg,
+              lossType && `${lossType} loss`,
+              state && `${state} state`,
+              carrier !== 'Unknown' && `carrier: ${carrier}`,
+              trade && `trade: ${trade}`,
+              materialType && `material: ${materialType}`,
+              disputeTopic && `dispute: ${disputeTopic}`,
+            ].filter(Boolean).join('. ');
+
+            const researchQuery = `Insurance claim dispute research: ${queryTerms}. Focus on manufacturer installation standards, building codes, state insurance regulations, technical industry standards, and case law that apply.`;
 
             const perplexityResp = await fetch('https://api.perplexity.ai/chat/completions', {
               method: 'POST',
@@ -288,7 +303,33 @@ FORMATTING RULE: NEVER output icon placeholder tokens like [Scales Icon], [Docum
               body: JSON.stringify({
                 model: 'sonar',
                 messages: [
-                  { role: 'system', content: 'You are a research assistant for insurance claim disputes and property restoration. Provide factual, citable information from ANY relevant source including: state statutes and insurance regulations, manufacturer bulletins and specs, building codes (IRC/IBC/ASTM), industry technical articles, contractor and engineering guidance, construction repair standards, insurance claim practice resources, case law, and general industry best practices. Do not restrict results to regulatory or manufacturer domains only. Always cite sources. Be concise and authoritative.' },
+                  { role: 'system', content: `You are a research assistant for insurance claim disputes and property restoration.
+
+SOURCE TIER PRIORITIES — organize and weight your findings by these tiers:
+
+TIER 1 (HIGHEST AUTHORITY — always prefer these):
+- Manufacturer installation documentation and technical bulletins
+- Building codes (IRC, IBC, ASTM, ASCE)
+- State insurance regulatory guidance and statutes
+- Legal analysis and case law
+- Technical industry standards (NRCA, ARMA, SMACNA)
+
+TIER 2 (STRONG SECONDARY):
+- Insurance industry publications (NAIC, FC&S, ISO)
+- Construction trade references and best practices
+- Engineering or adjuster training materials
+
+TIER 3 (SUPPLEMENTARY ONLY — use when Tier 1/2 unavailable):
+- Contractor blogs and opinion articles
+- Forums and community discussions
+- General explanation articles
+
+RULES:
+- Always lead with Tier 1 sources when available
+- Label each finding with its tier: [T1], [T2], or [T3]
+- Cite specific document names, section numbers, or statute references
+- If only Tier 3 sources exist, explicitly note "No authoritative (Tier 1/2) sources found"
+- Be concise and factual. Always cite sources.` },
                   { role: 'user', content: researchQuery },
                 ],
               }),
@@ -299,7 +340,11 @@ FORMATTING RULE: NEVER output icon placeholder tokens like [Scales Icon], [Docum
               const researchContent = perplexityData.choices?.[0]?.message?.content;
               const citations = perplexityData.citations || [];
               if (researchContent) {
-                externalResearch = `\n\nEXTERNAL RESEARCH (from verified sources — cite with 🌐 label):\n${researchContent}`;
+                externalResearch = `\n\nEXTERNAL RESEARCH (from verified sources — cite with 🌐 label):
+SOURCE TIER KEY: [T1] = Manufacturer docs, building codes, statutes, case law, technical standards (HIGHEST). [T2] = Industry publications, trade references, training materials. [T3] = Blogs, forums, general articles (LOWEST).
+When synthesizing into your response, ALWAYS prefer T1 sources over T2, and T2 over T3. If a T1 source contradicts a T3 source, the T1 source wins. Clearly distinguish external research from internal claim evidence.
+
+${researchContent}`;
                 if (citations.length > 0) {
                   externalResearch += `\n\nSOURCES:\n${citations.map((c: string, i: number) => `[${i + 1}] ${c}`).join('\n')}`;
                 }
