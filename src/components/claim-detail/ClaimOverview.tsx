@@ -303,6 +303,9 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
         </CardContent>
       </Card>
 
+      {/* Additional Contacts */}
+      {!isPortalUser && <AdditionalContacts claimId={claim.id} />}
+
       {/* Loss Information */}
       <Card>
         <CardHeader>
