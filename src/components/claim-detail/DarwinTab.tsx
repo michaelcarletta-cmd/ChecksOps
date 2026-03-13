@@ -786,6 +786,38 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
         {showCopilot && (
           <div className="hidden xl:block flex-shrink-0 xl:sticky xl:top-4">
             <Card className="h-[calc(100vh-2rem)] flex flex-col border-primary/20">
+            {/* Panel toggle */}
+            <div className="flex border-b">
+              <button
+                className={cn(
+                  "flex-1 px-3 py-2 text-xs font-medium transition-colors",
+                  copilotView === 'conversation'
+                    ? "bg-primary/10 text-primary border-b-2 border-primary"
+                    : "text-muted-foreground hover:bg-accent/50"
+                )}
+                onClick={() => setCopilotView('conversation')}
+              >
+                <MessageSquare className="h-3 w-3 inline mr-1" />
+                Copilot
+              </button>
+              <button
+                className={cn(
+                  "flex-1 px-3 py-2 text-xs font-medium transition-colors",
+                  copilotView === 'dismantler'
+                    ? "bg-primary/10 text-primary border-b-2 border-primary"
+                    : "text-muted-foreground hover:bg-accent/50"
+                )}
+                onClick={() => setCopilotView('dismantler')}
+              >
+                <Shield className="h-3 w-3 inline mr-1" />
+                Dismantler
+              </button>
+            </div>
+
+            {copilotView === 'conversation' ? (
+              <DarwinCopilotPanel claimId={claimId} />
+            ) : (
+            <>
             <CardHeader className="py-3 border-b bg-gradient-to-r from-primary/5 to-transparent">
               <div className="flex items-center justify-between gap-2">
                 <div>
