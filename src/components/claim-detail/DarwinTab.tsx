@@ -169,6 +169,7 @@ const analysisTypeLabels: Record<string, { label: string; section: string }> = {
 
 export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
   const [showCopilot, setShowCopilot] = useState(true);
+  const [copilotView, setCopilotView] = useState<'conversation' | 'dismantler'>('conversation');
   const [activeWorkspace, setActiveWorkspace] = useState<DarwinWorkspaceKey>("claim-intelligence");
   const [autoAnalyses, setAutoAnalyses] = useState<Array<{ id: string; analysis_type: string; created_at: string; input_summary: string }>>([]);
   const [dismissedAnalyses, setDismissedAnalyses] = useState<Set<string>>(new Set());
