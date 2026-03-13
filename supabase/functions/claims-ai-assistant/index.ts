@@ -535,6 +535,7 @@ function decideEvidencePlan(params: {
   const lossType = params.claimLossType || "property damage";
   const defaultQuery = `${lossType} insurance claim ${rawQuestion}`.trim();
 
+  // Internal-only mode: no web search
   if (params.sourceMode === "internal_only") {
     return {
       strategy: "internal_only",
@@ -544,65 +545,35 @@ function decideEvidencePlan(params: {
     };
   }
 
-  if (params.isOperationalRequest) {
-    return {
-      strategy: "internal_preferred",
-      reason: "Operational request detected; internal sources are preferred and web search is unnecessary.",
-      shouldSearchWeb: false,
-      searchQuery: null,
-    };
-  }
-
-  if (params.reportType) {
-    return {
-      strategy: "internal_preferred",
-      reason: "Report generation uses claim/internal context first unless recency is explicitly requested.",
-      shouldSearchWeb: false,
-      searchQuery: null,
-    };
-  }
-
-  const asksCurrentInfo = /\b(latest|current|recent|today|new law|updated|as of|202[4-9])\b/i.test(rawQuestion);
+  // For ALL other modes: always search both internal and external in parallel
   const explicitlyRequestsWeb = /\b(web|internet|online|google|external source|search the web)\b/i.test(rawQuestion);
-  const explicitlyRequestsInternal = /\b(internal|in-house|our docs|knowledge base|from my files)\b/i.test(rawQuestion);
+  const asksCurrentInfo = /\b(latest|current|recent|today|new law|updated|as of|202[4-9])\b/i.test(rawQuestion);
   const legalOrCodeHeavy = /\b(regulation|statute|law|legal|code|building code|irc|ibc|astm|manufacturer|department of insurance|doi)\b/i.test(rawQuestion);
 
-  if (explicitlyRequestsInternal) {
-    return {
-      strategy: "internal_preferred",
-      reason: "User explicitly requested in-house/internal evidence.",
-      shouldSearchWeb: false,
-      searchQuery: null,
-    };
-  }
+  let strategy: string = "hybrid_always";
+  let reason = "Dual retrieval: internal claim intelligence + external authoritative sources searched in parallel.";
 
   if (explicitlyRequestsWeb || asksCurrentInfo) {
-    return {
-      strategy: "web_priority",
-      reason: explicitlyRequestsWeb
-        ? "User explicitly requested web/external sources."
-        : "Question asks for current/recent information, so web verification is prioritized.",
-      shouldSearchWeb: true,
-      searchQuery: defaultQuery,
-    };
-  }
-
-  if (legalOrCodeHeavy && params.kbSourceCount === 0) {
-    return {
-      strategy: "hybrid_balanced",
-      reason: "Legal/code question with no matching in-house KB sources found; using web fallback.",
-      shouldSearchWeb: true,
-      searchQuery: defaultQuery,
-    };
+    strategy = "web_priority";
+    reason = explicitlyRequestsWeb
+      ? "User explicitly requested web/external sources. Both internal and external searched."
+      : "Question asks for current/recent information. Both internal and external searched.";
+  } else if (legalOrCodeHeavy) {
+    strategy = "hybrid_balanced";
+    reason = "Legal/code question detected. Both internal KB and external authoritative sources searched.";
+  } else if (params.isOperationalRequest) {
+    strategy = "hybrid_always";
+    reason = "Operational request with parallel external search for corroborating authority.";
+  } else if (params.reportType) {
+    strategy = "hybrid_always";
+    reason = "Report generation with parallel external search for supporting standards and regulations.";
   }
 
   return {
-    strategy: "internal_preferred",
-    reason: params.kbSourceCount > 0
-      ? "Relevant in-house KB sources were found; prioritizing internal evidence."
-      : "No explicit web requirement detected; defaulting to internal-first guidance.",
-    shouldSearchWeb: false,
-    searchQuery: null,
+    strategy,
+    reason,
+    shouldSearchWeb: true,
+    searchQuery: defaultQuery,
   };
 }
 
