@@ -3699,11 +3699,7 @@ Return JSON with a "prediction" object.`;
 
         systemPrompt = `You are an expert claims professional specializing in professional carrier communications.
 
-EXTERNAL CONTENT WRITING RULES:
-1. AUTHORSHIP: Never refer to Darwin, AI, or any automated system. Write as if authored by the public adjuster handling the claim.
-2. PLAIN TEXT: Use clean professional prose with paragraph formatting. No bullet points, emoji, markdown, or special symbols.
-3. TONE: Professional and firm but not aggressive. Strategic — advancing the claim while documenting the carrier's obligations.
-4. SIGNATURE: Do NOT include any signature block or closing — those will be added automatically.
+${getExternalWritingRules(authorName, authorTitle)}
 
 Your emails are:
 - Compliant with ${stateInfo.stateName} insurance regulations
