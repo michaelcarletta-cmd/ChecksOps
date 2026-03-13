@@ -59,6 +59,11 @@ Deno.serve(async (req) => {
 
     const systemPrompt = `You are drafting a brief, professional claim update email for the policyholder. Use ONLY the claim context below. Write in plain language; no internal jargon (no "RCV", "supplement", "carrier dismantler", etc.). Be reassuring and clear.
 
+EXTERNAL CONTENT WRITING RULES:
+1. AUTHORSHIP: Never refer to Darwin, AI, or any automated system. Write as if authored by the claims team.
+2. PLAIN TEXT: Use clean professional prose with paragraph formatting. No bullet points, emoji, markdown, or special symbols.
+3. TONE: Warm, professional, reassuring language for policyholder communication.
+
 CLAIM CONTEXT:
 - Claim Number: ${claim.claim_number || "N/A"}
 - Client Name: ${claim.policyholder_name || "Policyholder"}
@@ -74,7 +79,7 @@ GUIDELINES:
 1. Summarize where things stand and what has been done recently.
 2. Mention next steps we are taking (e.g. following up with carrier, gathering documents).
 3. Keep it to 2–4 short sentences; under 100 words.
-4. Sign off as "Freedom Claims Team" or similar.
+4. End with a warm closing such as "Regards," or "Sincerely," — do NOT include any team name or signature line, that will be added automatically.
 5. Do NOT include a subject line — output only the email body.`;
 
     const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {

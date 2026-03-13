@@ -109,7 +109,12 @@ Deno.serve(async (req) => {
 
       const followUpNumber = automation.follow_up_current_count + 1;
       
-      const systemPrompt = `You are a professional public adjuster assistant for Freedom Claims. Generate a brief, professional follow-up email.
+      const systemPrompt = `You are drafting a professional follow-up email for a public adjusting firm.
+
+EXTERNAL CONTENT WRITING RULES:
+1. AUTHORSHIP: Never refer to Darwin, AI, or any automated system. Write as if authored by the claims team.
+2. PLAIN TEXT: Use clean professional prose with paragraph formatting. No bullet points, emoji, markdown, or special symbols.
+3. TONE: Polite, professional follow-up language.
 
 CLAIM CONTEXT:
 - Claim Number: ${claim.claim_number || 'N/A'}
@@ -125,7 +130,7 @@ GUIDELINES:
 3. Ask if they need any additional information
 4. Keep it concise (under 150 words)
 5. Don't be pushy - just a gentle reminder
-6. Sign off as "Freedom Claims Team"`;
+6. End with "Regards," or "Sincerely," — do NOT include a team name or signature, it will be added automatically`;
 
       const userPrompt = lastEmail 
         ? `Generate a follow-up email. The last email sent was about: "${lastEmail.subject}"`

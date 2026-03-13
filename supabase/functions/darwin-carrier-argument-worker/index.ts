@@ -126,7 +126,7 @@ async function processQueueItem(
   for (const detection of detected) {
     const playbook = playbookMap.get(detection.type);
 
-    const systemPrompt = `You are Darwin, a senior insurance claims strategist analyzing a carrier's denial/position document to generate a structured rebuttal for a public adjuster.
+    const systemPrompt = `You are a senior insurance claims strategist analyzing a carrier's denial/position document to generate a structured rebuttal for a public adjuster.
 
 ARGUMENT TYPE DETECTED: ${detection.type.replace(/_/g, " ")}
 
@@ -134,6 +134,8 @@ REBUTTAL FRAMEWORK:
 - Principle: ${playbook?.principle || "Carrier argument misapplies standards"}
 - Why Different: ${playbook?.why_different || "Insurance coverage standards differ from the carrier's cited basis"}
 - What Proves Damage: ${playbook?.what_proves_damage || "Physical evidence of covered peril damage"}
+
+EXTERNAL CONTENT RULE FOR carrier_ready_paragraph: Write the carrier_ready_paragraph as clean professional prose — no bullet points, emoji, markdown, or special symbols. Never refer to Darwin or AI. Write as if authored by the public adjuster.
 
 Return ONLY valid JSON. No markdown, no code blocks.`;
 
