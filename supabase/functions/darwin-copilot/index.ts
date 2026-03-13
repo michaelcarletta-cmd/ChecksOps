@@ -23,6 +23,34 @@ Deno.serve(async (req) => {
 
     const copilotMode: CopilotMode = mode || 'operational';
 
+    // ── Fetch calling user's profile for identity injection ──────────────
+    let authorName: string | undefined;
+    let authorTitle: string | undefined;
+    try {
+      const authHeader = req.headers.get('authorization') || '';
+      const token = authHeader.replace('Bearer ', '');
+      if (token) {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        const userClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+        const { data: userData } = await userClient.auth.getUser(token);
+        if (userData?.user?.id) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, title')
+            .eq('id', userData.user.id)
+            .maybeSingle();
+          if (profile?.full_name) authorName = profile.full_name;
+          if (profile?.title) authorTitle = profile.title;
+        }
+      }
+    } catch (profileErr) {
+      console.warn('Could not fetch user profile for identity injection:', profileErr);
+    }
+
+    const authorIdentity = authorName
+      ? `The author of all external communications is ${authorName}${authorTitle ? `, ${authorTitle}` : ''}. Write in their voice using first person.`
+      : 'Write as if authored by the public adjuster or claims professional handling the claim.';
+
     // Gather full claim intelligence in parallel — now includes timeline & estimate builder context
     const [
       claimRes, filesRes, estimateRes, photoRes, strategyRes, argsRes, 
