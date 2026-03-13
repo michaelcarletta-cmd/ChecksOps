@@ -566,6 +566,52 @@ ${researchContent}`;
                 if (citations.length > 0) {
                   externalResearch += `\n\nSOURCES:\n${citations.map((c: string, i: number) => `[${i + 1}] ${c}`).join('\n')}`;
                 }
+
+                // ── Research Memory: Store high-confidence T1 findings for future reuse ──
+                // Check if content contains T1 sources worth persisting
+                const hasT1Content = researchContent.includes('[T1]');
+                if (hasT1Content) {
+                  try {
+                    // Extract T1 paragraphs for storage
+                    const t1Sections = researchContent.split('\n').filter((line: string) => line.includes('[T1]')).join('\n');
+                    if (t1Sections.length > 50) {
+                      const researchTitle = `Research: ${carrier} - ${lossType || 'General'} - ${state || 'National'}`;
+                      // Create a knowledge document record
+                      const { data: researchDoc } = await supabase.from('ai_knowledge_documents').insert({
+                        file_name: researchTitle,
+                        file_path: `research-memory/${claimId}/${Date.now()}`,
+                        file_type: 'text/plain',
+                        category: 'research_memory',
+                        status: 'completed',
+                        description: `Auto-stored T1 research findings from strategy session. Carrier: ${carrier}, Loss: ${lossType}, State: ${state}. Sources: ${citations.slice(0, 3).join(', ')}`,
+                      }).select('id').single();
+
+                      if (researchDoc?.id) {
+                        // Store as searchable chunks
+                        const researchChunks = t1Sections.match(/.{1,600}/gs) || [t1Sections];
+                        await supabase.from('ai_knowledge_chunks').insert(
+                          researchChunks.map((chunk: string, idx: number) => ({
+                            document_id: researchDoc.id,
+                            content: `[Research Memory] ${researchTitle}\n${chunk}`,
+                            chunk_index: idx,
+                            metadata: {
+                              category: 'research_memory',
+                              carrier,
+                              loss_type: lossType,
+                              state: state,
+                              source_type: 'perplexity_t1',
+                              citations: citations.slice(0, 5),
+                              claim_id: claimId,
+                            },
+                          }))
+                        );
+                        console.log(`Stored ${researchChunks.length} T1 research chunks for future reuse`);
+                      }
+                    }
+                  } catch (memErr) {
+                    console.warn('Research memory storage error (non-fatal):', memErr);
+                  }
+                }
               }
             } else {
               console.warn('Perplexity research failed:', perplexityResp.status);
