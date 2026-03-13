@@ -11957,99 +11957,194 @@ export type Database = {
         Returns: Json
       }
       can_manage_roles: { Args: { _user_id: string }; Returns: boolean }
-      create_claim_for_staff: {
-        Args: {
-          p_claim_number: string
-          p_client_id: string
-          p_insurance_company_id: string
-          p_insurance_email: string
-          p_insurance_phone: string
-          p_loss_date: string
-          p_loss_description: string
-          p_loss_type_id: string
-          p_policy_number: string
-          p_policyholder_address: string
-          p_policyholder_email: string
-          p_policyholder_name: string
-          p_policyholder_phone: string
-          p_referrer_id: string
-        }
-        Returns: {
-          adjuster_email: string | null
-          adjuster_name: string | null
-          adjuster_phone: string | null
-          ale_limit: number | null
-          automation_mode: Database["public"]["Enums"]["automation_mode"]
-          automation_resume_at: string | null
-          claim_amount: number | null
-          claim_email_id: string | null
-          claim_number: string | null
-          claim_tracking_number: string | null
-          client_id: string | null
-          construction_status: string | null
-          contract_pdf_path: string | null
-          created_at: string | null
-          deductible: number | null
-          dwelling_limit: number | null
-          esign_audit_url: string | null
-          esign_completed_at: string | null
-          esign_document_id: string | null
-          esign_error_message: string | null
-          esign_provider: string | null
-          esign_sent_at: string | null
-          esign_signing_link: string | null
-          esign_status: string | null
-          fedex_tracking_number: string | null
-          fraud_flag: boolean | null
-          fraud_flag_reason: string | null
-          fraud_flagged_at: string | null
-          fraud_flagged_by: string | null
-          geocoded_at: string | null
-          id: string
-          insurance_company: string | null
-          insurance_company_id: string | null
-          insurance_email: string | null
-          insurance_phone: string | null
-          is_closed: boolean
-          jobnimbus_job_id: string | null
-          latitude: number | null
-          loan_number: string | null
-          longitude: number | null
-          loss_date: string | null
-          loss_description: string | null
-          loss_type: string | null
-          loss_type_id: string | null
-          mortgage_company_id: string | null
-          mortgage_portal_password: string | null
-          mortgage_portal_site: string | null
-          mortgage_portal_username: string | null
-          org_id: string | null
-          other_structures_limit: number | null
-          partner_assigned_user_email: string | null
-          partner_assigned_user_id: string | null
-          partner_assigned_user_name: string | null
-          partner_construction_status: string | null
-          personal_property_limit: number | null
-          policy_number: string | null
-          policyholder_address: string | null
-          policyholder_email: string | null
-          policyholder_name: string | null
-          policyholder_phone: string | null
-          referrer_id: string | null
-          signed_pdf_url: string | null
-          ssn_last_four: string | null
-          state_code: string | null
-          status: string | null
-          updated_at: string | null
-          workspace_id: string | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "claims"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
+      create_claim_for_staff:
+        | {
+            Args: {
+              p_claim_number: string
+              p_client_id: string
+              p_insurance_company_id: string
+              p_insurance_email: string
+              p_insurance_phone: string
+              p_loss_date: string
+              p_loss_description: string
+              p_loss_type_id: string
+              p_policy_number: string
+              p_policyholder_address: string
+              p_policyholder_email: string
+              p_policyholder_name: string
+              p_policyholder_phone: string
+              p_referrer_id: string
+            }
+            Returns: {
+              adjuster_email: string | null
+              adjuster_name: string | null
+              adjuster_phone: string | null
+              ale_limit: number | null
+              automation_mode: Database["public"]["Enums"]["automation_mode"]
+              automation_resume_at: string | null
+              claim_amount: number | null
+              claim_email_id: string | null
+              claim_number: string | null
+              claim_tracking_number: string | null
+              client_id: string | null
+              construction_status: string | null
+              contract_pdf_path: string | null
+              created_at: string | null
+              deductible: number | null
+              dwelling_limit: number | null
+              esign_audit_url: string | null
+              esign_completed_at: string | null
+              esign_document_id: string | null
+              esign_error_message: string | null
+              esign_provider: string | null
+              esign_sent_at: string | null
+              esign_signing_link: string | null
+              esign_status: string | null
+              fedex_tracking_number: string | null
+              fraud_flag: boolean | null
+              fraud_flag_reason: string | null
+              fraud_flagged_at: string | null
+              fraud_flagged_by: string | null
+              geocoded_at: string | null
+              id: string
+              insurance_company: string | null
+              insurance_company_id: string | null
+              insurance_email: string | null
+              insurance_phone: string | null
+              is_closed: boolean
+              jobnimbus_job_id: string | null
+              latitude: number | null
+              loan_number: string | null
+              longitude: number | null
+              loss_date: string | null
+              loss_description: string | null
+              loss_type: string | null
+              loss_type_id: string | null
+              mortgage_company_id: string | null
+              mortgage_portal_password: string | null
+              mortgage_portal_site: string | null
+              mortgage_portal_username: string | null
+              org_id: string | null
+              other_structures_limit: number | null
+              partner_assigned_user_email: string | null
+              partner_assigned_user_id: string | null
+              partner_assigned_user_name: string | null
+              partner_construction_status: string | null
+              personal_property_limit: number | null
+              policy_number: string | null
+              policyholder_address: string | null
+              policyholder_email: string | null
+              policyholder_name: string | null
+              policyholder_phone: string | null
+              referrer_id: string | null
+              signed_pdf_url: string | null
+              ssn_last_four: string | null
+              state_code: string | null
+              status: string | null
+              updated_at: string | null
+              workspace_id: string | null
+            }
+            SetofOptions: {
+              from: "*"
+              to: "claims"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
+        | {
+            Args: {
+              p_claim_number: string
+              p_client_id: string
+              p_insurance_company_id: string
+              p_insurance_email: string
+              p_insurance_phone: string
+              p_loss_date: string
+              p_loss_description: string
+              p_loss_type_id: string
+              p_mortgage_company_id?: string
+              p_policy_number: string
+              p_policyholder_address: string
+              p_policyholder_email: string
+              p_policyholder_name: string
+              p_policyholder_phone: string
+              p_referrer_id: string
+            }
+            Returns: {
+              adjuster_email: string | null
+              adjuster_name: string | null
+              adjuster_phone: string | null
+              ale_limit: number | null
+              automation_mode: Database["public"]["Enums"]["automation_mode"]
+              automation_resume_at: string | null
+              claim_amount: number | null
+              claim_email_id: string | null
+              claim_number: string | null
+              claim_tracking_number: string | null
+              client_id: string | null
+              construction_status: string | null
+              contract_pdf_path: string | null
+              created_at: string | null
+              deductible: number | null
+              dwelling_limit: number | null
+              esign_audit_url: string | null
+              esign_completed_at: string | null
+              esign_document_id: string | null
+              esign_error_message: string | null
+              esign_provider: string | null
+              esign_sent_at: string | null
+              esign_signing_link: string | null
+              esign_status: string | null
+              fedex_tracking_number: string | null
+              fraud_flag: boolean | null
+              fraud_flag_reason: string | null
+              fraud_flagged_at: string | null
+              fraud_flagged_by: string | null
+              geocoded_at: string | null
+              id: string
+              insurance_company: string | null
+              insurance_company_id: string | null
+              insurance_email: string | null
+              insurance_phone: string | null
+              is_closed: boolean
+              jobnimbus_job_id: string | null
+              latitude: number | null
+              loan_number: string | null
+              longitude: number | null
+              loss_date: string | null
+              loss_description: string | null
+              loss_type: string | null
+              loss_type_id: string | null
+              mortgage_company_id: string | null
+              mortgage_portal_password: string | null
+              mortgage_portal_site: string | null
+              mortgage_portal_username: string | null
+              org_id: string | null
+              other_structures_limit: number | null
+              partner_assigned_user_email: string | null
+              partner_assigned_user_id: string | null
+              partner_assigned_user_name: string | null
+              partner_construction_status: string | null
+              personal_property_limit: number | null
+              policy_number: string | null
+              policyholder_address: string | null
+              policyholder_email: string | null
+              policyholder_name: string | null
+              policyholder_phone: string | null
+              referrer_id: string | null
+              signed_pdf_url: string | null
+              ssn_last_four: string | null
+              state_code: string | null
+              status: string | null
+              updated_at: string | null
+              workspace_id: string | null
+            }
+            SetofOptions: {
+              from: "*"
+              to: "claims"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
       create_endorsements_from_payees: {
         Args: { p_check_id: string }
         Returns: Json
