@@ -154,7 +154,20 @@ Your job is to be a senior claims strategist who:
 - Identifies which timeline events and estimate line items support the strategy
 - References cross-claim outcomes from similar carrier scenarios
 - Cites internal claim evidence (photos, documents, estimates) by name when possible
-- References external standards (building codes, manufacturer specs, industry practices) when relevant
+
+EXTERNAL RESEARCH may be provided below. When it is, you MUST clearly separate sources in your response using these labels:
+- **📋 Internal Claim Evidence** — facts from this claim's documents, photos, timeline, estimates
+- **🔁 Darwin Cross-Claim Learning** — patterns and outcomes from prior similar claims
+- **🌐 External Research** — industry standards, manufacturer guidance, statutes, regulations, or technical references from outside sources
+
+When synthesizing, structure strategic responses around:
+1. **Claim Issue** — what is being disputed and why
+2. **Carrier Weakness** — where the carrier's position is vulnerable
+3. **Best Argument Path** — the strongest line of reasoning with evidence
+4. **Missing Evidence** — what would strengthen the position
+5. **Recommended Next Move** — concrete actionable step
+
+Only use this 5-part structure when giving substantive strategic analysis. For quick follow-ups or drafting, respond naturally.
 
 Maintain a conversational, collaborative tone. Ask clarifying questions when the user's intent is ambiguous. Build on prior messages in this conversation. When proposing a strategy, explain WHY it works and what risks exist.`,
     };
@@ -226,9 +239,65 @@ If orchestrator intelligence is available, reference its priority issue and reco
 Be direct, strategic, and cite specific evidence from the claim intelligence. Never use generic advice.
 Format with clear headers and bullet points.`;
 
+    // --- External research via Perplexity for strategy mode ---
+    let externalResearch = '';
+    if (copilotMode === 'strategy') {
+      const lastUserMsg = conversationHistory?.length
+        ? conversationHistory[conversationHistory.length - 1]?.content
+        : userQuestion;
+
+      if (lastUserMsg) {
+        const PERPLEXITY_KEY = Deno.env.get('PERPLEXITY_API_KEY') || Deno.env.get('PERPLEXITY_API_KEY_1');
+        if (PERPLEXITY_KEY) {
+          try {
+            // Build a research query grounded in claim context
+            const lossType = claim?.loss_type || claim?.type_of_loss || '';
+            const state = claim?.state || '';
+            const researchQuery = `Insurance claim dispute: ${lastUserMsg}. Context: ${lossType} loss in ${state}, carrier: ${carrier}. Focus on policy interpretation, industry standards, manufacturer guidance, building codes, or insurance regulations that apply.`;
+
+            const perplexityResp = await fetch('https://api.perplexity.ai/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${PERPLEXITY_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: 'sonar',
+                messages: [
+                  { role: 'system', content: 'You are a research assistant for insurance claim disputes. Provide factual, citable information about industry standards, building codes, manufacturer specifications, insurance regulations, statutes, and policy interpretation. Always cite sources. Be concise and authoritative.' },
+                  { role: 'user', content: researchQuery },
+                ],
+              }),
+            });
+
+            if (perplexityResp.ok) {
+              const perplexityData = await perplexityResp.json();
+              const researchContent = perplexityData.choices?.[0]?.message?.content;
+              const citations = perplexityData.citations || [];
+              if (researchContent) {
+                externalResearch = `\n\nEXTERNAL RESEARCH (from verified sources — cite with 🌐 label):\n${researchContent}`;
+                if (citations.length > 0) {
+                  externalResearch += `\n\nSOURCES:\n${citations.map((c: string, i: number) => `[${i + 1}] ${c}`).join('\n')}`;
+                }
+              }
+            } else {
+              console.warn('Perplexity research failed:', perplexityResp.status);
+            }
+          } catch (researchErr) {
+            console.warn('External research error (non-fatal):', researchErr);
+          }
+        }
+      }
+    }
+
+    // Append external research to system prompt if available
+    const finalSystemPrompt = externalResearch
+      ? systemPrompt + externalResearch
+      : systemPrompt;
+
     // Build messages: system prompt + conversation history OR single question
     const aiMessages: Array<{role: string; content: string}> = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: finalSystemPrompt },
     ];
 
     if (conversationHistory && Array.isArray(conversationHistory) && conversationHistory.length > 0) {
