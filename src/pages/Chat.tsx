@@ -399,14 +399,14 @@ export default function Chat() {
       Boolean(evidence.internal?.uploadedDocumentUsed);
     const webUsed = Boolean(evidence.web?.searched && evidence.web?.status === "success");
 
-    let label = "Internal";
-    if (internalUsed && webUsed) label = "Internal + Web";
-    else if (!internalUsed && webUsed) label = "Web";
+    const kbSources = evidence.internal?.knowledgeSourceCount || 0;
+    const claimFileCount = (evidence.internal as any)?.claimFileCount || 0;
+    const externalSourceCount = (evidence.web as any)?.externalSourceCount || (webUsed ? 1 : 0);
 
     return {
-      label,
-      kbSources: evidence.internal?.knowledgeSourceCount || 0,
-      webStatus: evidence.web?.status || "not_requested",
+      kbSources,
+      claimFileCount,
+      externalSourceCount,
       reason: evidence.decisionReason || "",
     };
   };
@@ -515,15 +515,16 @@ export default function Chat() {
                       if (!evidence) return null;
                       return (
                         <div className="mt-2 space-y-1 rounded-md border bg-background/60 p-2">
+                          <p className="text-[10px] font-medium text-muted-foreground mb-1">Evidence Sources</p>
                           <div className="flex flex-wrap gap-1.5">
                             <Badge variant="secondary" className="text-[10px]">
-                              Evidence: {evidence.label}
+                              Internal KB: {evidence.kbSources}
                             </Badge>
                             <Badge variant="outline" className="text-[10px]">
-                              KB sources: {evidence.kbSources}
+                              Claim Files: {evidence.claimFileCount}
                             </Badge>
                             <Badge variant="outline" className="text-[10px]">
-                              Web: {evidence.webStatus}
+                              External Sources: {evidence.externalSourceCount}
                             </Badge>
                           </div>
                           {evidence.reason && (
