@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
         code,
         redirect_uri: redirectUri,
         grant_type: 'authorization_code',
-        scope: 'https://graph.microsoft.com/Mail.Read offline_access User.Read',
+        scope: 'https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Mail.Send offline_access User.Read',
       }),
     });
 
