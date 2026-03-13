@@ -37,6 +37,7 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
   const [strategySimulations, setStrategySimulations] = useState<any[]>([]);
   const [photoIntelSummary, setPhotoIntelSummary] = useState<any>(null);
   const [argumentMapCount, setArgumentMapCount] = useState(0);
+  const [intelligenceSummary, setIntelligenceSummary] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
