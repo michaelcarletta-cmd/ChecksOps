@@ -515,15 +515,16 @@ export default function Chat() {
                       if (!evidence) return null;
                       return (
                         <div className="mt-2 space-y-1 rounded-md border bg-background/60 p-2">
+                          <p className="text-[10px] font-medium text-muted-foreground mb-1">Evidence Sources</p>
                           <div className="flex flex-wrap gap-1.5">
                             <Badge variant="secondary" className="text-[10px]">
-                              Evidence: {evidence.label}
+                              Internal KB: {evidence.kbSources}
                             </Badge>
                             <Badge variant="outline" className="text-[10px]">
-                              KB sources: {evidence.kbSources}
+                              Claim Files: {evidence.claimFileCount}
                             </Badge>
                             <Badge variant="outline" className="text-[10px]">
-                              Web: {evidence.webStatus}
+                              External Sources: {evidence.externalSourceCount}
                             </Badge>
                           </div>
                           {evidence.reason && (
