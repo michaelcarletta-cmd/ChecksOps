@@ -14,7 +14,7 @@ export function useDarwinCopilot(claimId: string) {
   const [mode, setMode] = useState<CopilotMode>('strategy');
   const abortRef = useRef<AbortController | null>(null);
 
-  const askCopilot = useCallback(async (question?: string, overrideMode?: CopilotMode) => {
+  const askCopilot = useCallback(async (question?: string, overrideMode?: CopilotMode, extra?: { htmlContent?: string; attachedFileIds?: string[] }) => {
     const userContent = question || `Give me the full Darwin Copilot briefing for this claim in ${overrideMode || mode} mode.`;
     const userMsg: CopilotMessage = { role: 'user', content: userContent, timestamp: Date.now() };
 
