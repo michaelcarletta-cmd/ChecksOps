@@ -77,17 +77,20 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
   const runAnalysis = async () => {
     setLoading(true);
     try {
-      // Run strategic intelligence + strategy simulation in parallel
-      const [stratResult, simResult] = await Promise.all([
+      // Run strategic intelligence + strategy simulation + orchestrator in parallel
+      const [stratResult, simResult, orchResult] = await Promise.all([
         supabase.functions.invoke('darwin-strategic-intelligence', {
           body: { claimId, analysisType: 'war_room_2' }
         }),
         supabase.functions.invoke('darwin-strategy-simulation', {
           body: { claimId }
         }),
+        supabase.functions.invoke('darwin-intelligence-orchestrator', {
+          body: { claimId }
+        }),
       ]);
       if (stratResult.error) throw stratResult.error;
-      toast({ title: "War Room 2.0 Analysis Complete", description: "Strategic intelligence + strategy simulations updated" });
+      toast({ title: "War Room 2.0 Analysis Complete", description: "Strategic intelligence + orchestrator updated" });
       await loadWarRoomData();
     } catch (error: any) {
       toast({ title: "Analysis Failed", description: error.message, variant: "destructive" });
