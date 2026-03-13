@@ -1,11 +1,16 @@
-import { useState, useRef, useEffect } from "react";
-import { Brain, Send, Trash2, StopCircle, ChevronDown } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Brain, Send, Trash2, StopCircle, Maximize2, Minimize2, Bold, Italic, Underline, Type, Paperclip, X, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useDarwinCopilot, type CopilotMessage } from "@/hooks/useDarwinCopilot";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 type CopilotMode = 'operational' | 'rebuttal' | 'estimate' | 'war_room' | 'training' | 'strategy';
 
@@ -18,15 +23,26 @@ const MODE_LABELS: Record<CopilotMode, string> = {
   training: "Training",
 };
 
-interface DarwinCopilotPanelProps {
-  claimId: string;
+interface ClaimFile {
+  id: string;
+  file_name: string;
+  file_path: string;
 }
 
-export function DarwinCopilotPanel({ claimId }: DarwinCopilotPanelProps) {
+interface DarwinCopilotPanelProps {
+  claimId: string;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
+}
+
+export function DarwinCopilotPanel({ claimId, isExpanded, onToggleExpand }: DarwinCopilotPanelProps) {
   const { messages, loading, mode, setMode, askCopilot, clearConversation, stopGeneration } = useDarwinCopilot(claimId);
-  const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [attachedFiles, setAttachedFiles] = useState<ClaimFile[]>([]);
+  const [showFilePicker, setShowFilePicker] = useState(false);
+  const [claimFiles, setClaimFiles] = useState<ClaimFile[]>([]);
+  const [filesLoading, setFilesLoading] = useState(false);
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -35,11 +51,60 @@ export function DarwinCopilotPanel({ claimId }: DarwinCopilotPanelProps) {
     }
   }, [messages]);
 
+  // Load claim files when picker opens
+  useEffect(() => {
+    if (showFilePicker && claimFiles.length === 0) {
+      setFilesLoading(true);
+      supabase
+        .from("claim_files")
+        .select("id, file_name, file_path")
+        .eq("claim_id", claimId)
+        .order("created_at", { ascending: false })
+        .then(({ data }) => {
+          setClaimFiles(data || []);
+          setFilesLoading(false);
+        });
+    }
+  }, [showFilePicker, claimId]);
+
+  const getEditorContent = useCallback(() => {
+    return editorRef.current?.innerHTML || "";
+  }, []);
+
+  const getEditorText = useCallback(() => {
+    return editorRef.current?.innerText?.trim() || "";
+  }, []);
+
+  const clearEditor = useCallback(() => {
+    if (editorRef.current) {
+      editorRef.current.innerHTML = "";
+    }
+  }, []);
+
+  const execCommand = useCallback((command: string, value?: string) => {
+    document.execCommand(command, false, value);
+    editorRef.current?.focus();
+  }, []);
+
   const handleSend = () => {
-    const trimmed = input.trim();
-    if (!trimmed || loading) return;
-    setInput("");
-    askCopilot(trimmed);
+    const text = getEditorText();
+    if (!text || loading) return;
+
+    // Build message with file context
+    let messageContent = getEditorContent();
+    if (attachedFiles.length > 0) {
+      const fileNames = attachedFiles.map(f => f.file_name).join(", ");
+      messageContent += `\n\n[Attached files: ${fileNames}]`;
+    }
+
+    clearEditor();
+    setAttachedFiles([]);
+
+    // Send with HTML content and file references
+    askCopilot(text, undefined, {
+      htmlContent: messageContent,
+      attachedFileIds: attachedFiles.map(f => f.id),
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -47,6 +112,20 @@ export function DarwinCopilotPanel({ claimId }: DarwinCopilotPanelProps) {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    document.execCommand('insertText', false, text);
+  }, []);
+
+  const toggleFile = (file: ClaimFile) => {
+    setAttachedFiles(prev =>
+      prev.find(f => f.id === file.id)
+        ? prev.filter(f => f.id !== file.id)
+        : [...prev, file]
+    );
   };
 
   const QUICK_PROMPTS = [
@@ -67,6 +146,11 @@ export function DarwinCopilotPanel({ claimId }: DarwinCopilotPanelProps) {
             <span className="text-sm font-semibold">Darwin Copilot</span>
           </div>
           <div className="flex gap-1">
+            {onToggleExpand && (
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onToggleExpand} title={isExpanded ? "Collapse" : "Expand"}>
+                {isExpanded ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+              </Button>
+            )}
             {messages.length > 0 && (
               <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={clearConversation} title="Clear conversation">
                 <Trash2 className="h-3 w-3" />
@@ -101,7 +185,7 @@ export function DarwinCopilotPanel({ claimId }: DarwinCopilotPanelProps) {
                 <button
                   key={i}
                   className="w-full text-left text-[11px] px-2.5 py-1.5 rounded-md border border-border/50 hover:bg-accent/50 hover:border-primary/30 transition-colors text-muted-foreground"
-                  onClick={() => { setInput(""); askCopilot(prompt); }}
+                  onClick={() => { clearEditor(); askCopilot(prompt); }}
                   disabled={loading}
                 >
                   {prompt}
@@ -126,34 +210,127 @@ export function DarwinCopilotPanel({ claimId }: DarwinCopilotPanelProps) {
         )}
       </div>
 
-      {/* Input */}
-      <div className="border-t p-2 space-y-2">
+      {/* Input area */}
+      <div className="border-t p-2 space-y-1.5">
         {loading && (
           <Button variant="ghost" size="sm" className="w-full h-6 text-xs gap-1 text-muted-foreground" onClick={stopGeneration}>
             <StopCircle className="h-3 w-3" /> Stop generating
           </Button>
         )}
+
+        {/* Attached files pills */}
+        {attachedFiles.length > 0 && (
+          <div className="flex flex-wrap gap-1 px-1">
+            {attachedFiles.map(f => (
+              <Badge key={f.id} variant="secondary" className="text-[10px] gap-1 pr-1">
+                <FileText className="h-2.5 w-2.5" />
+                <span className="max-w-[100px] truncate">{f.file_name}</span>
+                <button onClick={() => setAttachedFiles(prev => prev.filter(p => p.id !== f.id))} className="hover:text-destructive">
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        {/* Rich text toolbar */}
+        <div className="flex items-center gap-0.5 px-1">
+          <Button type="button" variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => execCommand('bold')} title="Bold" disabled={loading}>
+            <Bold className="h-3 w-3" />
+          </Button>
+          <Button type="button" variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => execCommand('italic')} title="Italic" disabled={loading}>
+            <Italic className="h-3 w-3" />
+          </Button>
+          <Button type="button" variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => execCommand('underline')} title="Underline" disabled={loading}>
+            <Underline className="h-3 w-3" />
+          </Button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button type="button" variant="ghost" size="sm" className="h-6 w-6 p-0" title="Font Size" disabled={loading}>
+                <Type className="h-3 w-3" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-1" side="top">
+              <div className="flex flex-col gap-0.5">
+                <Button type="button" variant="ghost" size="sm" className="justify-start px-2 py-0.5 h-auto text-xs" onClick={() => execCommand('fontSize', '2')}>Small</Button>
+                <Button type="button" variant="ghost" size="sm" className="justify-start px-2 py-0.5 h-auto text-sm" onClick={() => execCommand('fontSize', '3')}>Normal</Button>
+                <Button type="button" variant="ghost" size="sm" className="justify-start px-2 py-0.5 h-auto text-base" onClick={() => execCommand('fontSize', '4')}>Large</Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          <div className="w-px h-4 bg-border mx-0.5" />
+
+          {/* Attach file from claim */}
+          <Popover open={showFilePicker} onOpenChange={setShowFilePicker}>
+            <PopoverTrigger asChild>
+              <Button type="button" variant="ghost" size="sm" className="h-6 w-6 p-0" title="Attach claim file" disabled={loading}>
+                <Paperclip className="h-3 w-3" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-2" side="top" align="start">
+              <p className="text-xs font-medium mb-1.5">Attach files from claim</p>
+              {filesLoading ? (
+                <p className="text-xs text-muted-foreground py-2 text-center">Loading…</p>
+              ) : claimFiles.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-2 text-center">No files found</p>
+              ) : (
+                <div className="max-h-[200px] overflow-y-auto space-y-0.5">
+                  {claimFiles.map(file => {
+                    const isAttached = attachedFiles.some(f => f.id === file.id);
+                    return (
+                      <button
+                        key={file.id}
+                        className={cn(
+                          "w-full text-left text-[11px] px-2 py-1.5 rounded flex items-center gap-1.5 transition-colors",
+                          isAttached
+                            ? "bg-primary/10 text-primary"
+                            : "hover:bg-accent/50 text-muted-foreground"
+                        )}
+                        onClick={() => toggleFile(file)}
+                      >
+                        <FileText className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{file.file_name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
+        </div>
+
+        {/* Editable input + send */}
         <div className="flex gap-1.5">
-          <Textarea
-            ref={textareaRef}
-            value={input}
-            onChange={e => setInput(e.target.value)}
+          <div
+            ref={editorRef}
+            contentEditable={!loading}
+            className={cn(
+              "flex-1 min-h-[36px] max-h-[120px] overflow-y-auto rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring prose prose-sm max-w-none",
+              loading && "opacity-50 cursor-not-allowed"
+            )}
             onKeyDown={handleKeyDown}
-            placeholder="Ask about strategy, disputes, evidence…"
-            className="min-h-[36px] max-h-[100px] text-xs resize-none"
-            rows={1}
-            disabled={loading}
+            onPaste={handlePaste}
+            data-placeholder="Ask about strategy, disputes, evidence…"
           />
           <Button
             size="sm"
             className="h-9 w-9 p-0 shrink-0"
             onClick={handleSend}
-            disabled={!input.trim() || loading}
+            disabled={loading}
           >
             <Send className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
+
+      <style>{`
+        [contenteditable]:empty:before {
+          content: attr(data-placeholder);
+          color: hsl(var(--muted-foreground));
+          pointer-events: none;
+        }
+      `}</style>
     </div>
   );
 }
@@ -169,10 +346,10 @@ function MessageBubble({ message }: { message: CopilotMessage }) {
           ? "bg-primary text-primary-foreground"
           : "bg-muted/80 text-foreground"
       )}>
-        <div className="whitespace-pre-wrap break-words leading-relaxed">
-          {message.content || (
+        <div className="whitespace-pre-wrap break-words leading-relaxed" dangerouslySetInnerHTML={isUser ? { __html: message.content } : undefined}>
+          {!isUser ? (message.content || (
             <span className="text-muted-foreground italic">Generating…</span>
-          )}
+          )) : undefined}
         </div>
       </div>
     </div>
