@@ -396,14 +396,14 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
       Boolean(evidence.internal?.uploadedDocumentUsed);
     const webUsed = Boolean(evidence.web?.searched && evidence.web?.status === "success");
 
-    let label = "Internal evidence";
-    if (internalUsed && webUsed) label = "Internal + web evidence";
-    else if (!internalUsed && webUsed) label = "Web evidence";
+    const kbSources = evidence.internal?.knowledgeSourceCount || 0;
+    const claimFileCount = (evidence.internal as any)?.claimFileCount || 0;
+    const externalSourceCount = (evidence.web as any)?.externalSourceCount || (webUsed ? 1 : 0);
 
     return {
-      label,
-      kbSources: evidence.internal?.knowledgeSourceCount || 0,
-      webStatus: evidence.web?.status || "not_requested",
+      kbSources,
+      claimFileCount,
+      externalSourceCount,
       reason: evidence.decisionReason || "",
     };
   };
