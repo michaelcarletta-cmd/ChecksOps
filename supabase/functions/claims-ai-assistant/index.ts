@@ -8472,7 +8472,7 @@ ${knowledgeBaseContext || ''}`
         escalationSignalsUsed: Boolean(escalationContext),
         uploadedDocumentUsed: Boolean(hasUploadedDoc),
         claimContextUsed: Boolean(claimId),
-        claimFileCount: files?.length || 0,
+        claimFileCount: claim?.claim_files?.length || 0,
       },
       web: {
         searched: webSearchStatus !== "not_requested",
