@@ -381,20 +381,53 @@ ESTIMATE BUILDER INTELLIGENCE (${estimateIntel.total_lines} lines, $${estimateIn
 When explaining recovery opportunity, CITE specific line items and their variance amounts.
 ` : '';
 
+    // Build continuous learning briefs
+    const outcomeLearningBrief = outcomeDigest ? `
+CROSS-CLAIM OUTCOME LEARNING (${outcomeDigest.total_outcomes} similar outcomes, ${outcomeDigest.win_rate}% win rate):
+- AVG RECOVERY DELTA: $${outcomeDigest.avg_recovery_delta.toFixed(0)}
+- WINNING ARGUMENT TYPES: ${outcomeDigest.common_winning_arguments.join(', ') || 'None recorded'}
+- KEY TURNING POINTS: ${outcomeDigest.key_turning_points.join('; ') || 'None recorded'}
+- COMMON LOSS PATTERNS: ${outcomeDigest.loss_patterns.join('; ') || 'None recorded'}
+Use these patterns to inform strategy recommendations. When a winning argument type matches the current dispute, cite it with confidence.
+` : '';
+
+    const argPatternsBrief = argPatterns.length > 0 ? `
+PROVEN ARGUMENT PATTERNS (${argPatterns.length} high-confidence rebuttals from similar disputes):
+${argPatterns.slice(0, 5).map((a: any, i: number) => `${i + 1}. [${a.type}] ${a.principle} (confidence: ${a.confidence}%) — ${a.mechanism || 'general'}`).join('\n')}
+When generating rebuttals, check if a proven argument pattern matches the current dispute type. Adapt the proven language rather than generating from scratch.
+` : '';
+
+    const feedbackBrief = (feedbackPatterns.successful.length > 0 || feedbackPatterns.rejected.length > 0) ? `
+USER FEEDBACK PATTERNS FOR THIS CLAIM:
+- SUCCESSFUL outputs (${feedbackPatterns.successful.length}): ${feedbackPatterns.successful.map((f: any) => f.type).join(', ')}
+- REJECTED outputs (${feedbackPatterns.rejected.length}): ${feedbackPatterns.rejected.map((f: any) => `${f.type}: ${f.detail || 'no detail'}`).join('; ')}
+Lean toward approaches that match successful patterns. Avoid repeating rejected approaches.
+` : '';
+
     const systemPrompt = `You are Darwin Copilot — an embedded intelligence assistant for public adjusters.
 
 MODE: ${copilotMode.toUpperCase()}
 ${modeInstructions[copilotMode]}
 
 ${orchestratorBrief}
+${outcomeLearningBrief}
+${argPatternsBrief}
+${feedbackBrief}
 ${timelineBrief}
 ${estimateBrief}
 
 CLAIM INTELLIGENCE:
 ${JSON.stringify(claimIntel, null, 2).slice(0, 8000)}
 
-TRAINING KNOWLEDGE:
+KNOWLEDGE BASE (contextually retrieved — prioritized by relevance to this claim):
 ${trainingKb}
+
+CONTINUOUS LEARNING RULES:
+1. OUTCOME PATTERN MATCHING: When cross-claim outcomes show a high win rate for a specific argument type against this carrier, recommend that approach with explicit confidence citing the historical data.
+2. ARGUMENT REUSE: When a proven argument pattern matches the current dispute type, adapt its language and cite it as a "proven approach from similar disputes."
+3. FEEDBACK LOOP: If user feedback shows certain output types were rejected, adjust your approach. If outputs were used as-is, replicate that style.
+4. KNOWLEDGE PRIORITY: When knowledge base contains manufacturer documents, standards, or statutes relevant to this claim, cite them as authoritative sources before falling back to general reasoning.
+5. EVIDENCE HIERARCHY: Always prioritize (in order): (a) internal claim evidence, (b) cross-claim outcome patterns, (c) knowledge base documents, (d) external research findings.
 
 ${copilotMode === 'strategy' ? `In STRATEGY mode, you are conversational. Do NOT force the 5-question framework on every reply. Instead:
 - Answer the user's specific question directly
