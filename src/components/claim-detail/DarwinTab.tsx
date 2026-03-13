@@ -634,7 +634,9 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
         className={cn(
           "grid gap-4 items-start",
           showCopilot
-            ? "md:grid-cols-[12rem_minmax(0,1fr)] xl:grid-cols-[12rem_minmax(0,1fr)_22rem]"
+            ? copilotExpanded
+              ? "md:grid-cols-[12rem_minmax(0,1fr)] xl:grid-cols-[12rem_minmax(0,1fr)_40rem]"
+              : "md:grid-cols-[12rem_minmax(0,1fr)] xl:grid-cols-[12rem_minmax(0,1fr)_22rem]"
             : "md:grid-cols-[12rem_minmax(0,1fr)]",
         )}
       >
