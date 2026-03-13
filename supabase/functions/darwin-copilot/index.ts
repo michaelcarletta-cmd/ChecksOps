@@ -93,13 +93,26 @@ Deno.serve(async (req) => {
       training: `Reference training materials and knowledge base to educate the user on best practices, techniques, and approaches relevant to this claim scenario.`,
     };
 
+    const orchestratorBrief = intelSummary ? `
+DARWIN ORCHESTRATOR INTELLIGENCE (use this as your PRIMARY source — it synthesizes all layers):
+- PRIORITY ISSUE: ${intelSummary.most_important_issue || 'Not computed'}
+- CONFIDENCE: ${intelSummary.confidence_score || 0}%
+- RECOMMENDED ACTION: ${JSON.stringify(intelSummary.recommended_next_action || {})}
+- CARRIER WEAKNESS: ${JSON.stringify(intelSummary.carrier_weakest_argument || {})}
+- RECOVERY OPPORTUNITY: ${JSON.stringify(intelSummary.largest_recovery_opportunity || {})}
+- MISSING EVIDENCE: ${JSON.stringify(intelSummary.missing_evidence || [])}
+- STRONGEST EVIDENCE: ${JSON.stringify(intelSummary.strongest_evidence || [])}
+` : '';
+
     const systemPrompt = `You are Darwin Copilot — an embedded intelligence assistant for public adjusters.
 
 MODE: ${copilotMode.toUpperCase()}
 ${modeInstructions[copilotMode]}
 
+${orchestratorBrief}
+
 CLAIM INTELLIGENCE:
-${JSON.stringify(claimIntel, null, 2).slice(0, 10000)}
+${JSON.stringify(claimIntel, null, 2).slice(0, 8000)}
 
 TRAINING KNOWLEDGE:
 ${trainingKb}
@@ -111,6 +124,7 @@ EVERY response MUST answer these 5 questions:
 4. **What is the carrier's weak point?** — Exploitable weakness in their position
 5. **What action or letter does Darwin recommend NOW?** — Concrete deliverable
 
+If orchestrator intelligence is available, START with its priority issue and recommended action. Cite specific evidence.
 Be direct, strategic, and cite specific evidence from the claim intelligence. Never use generic advice.
 Format with clear headers and bullet points.`;
 
