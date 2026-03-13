@@ -1054,7 +1054,6 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             )}
             </Card>
           </div>
-          </div>
         )}
       </div>
     </div>
