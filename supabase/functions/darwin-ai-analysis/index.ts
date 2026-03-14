@@ -2687,13 +2687,12 @@ Never invent measurements, tests, or observations that are not in evidence.`;
             : (additionalContext?.userContext || additionalContext?.customPrompt || '')
         ).trim();
 
-        // ── Loss Mechanism Extraction (pre-rebuttal) ──
-        const engineerTextForMechanism = content || engineerUserContext || '';
-        const engineerLossMechanism = extractLossMechanism(engineerTextForMechanism);
-        if (engineerLossMechanism.snowmeltIceDamDetected || engineerLossMechanism.isMaintenanceDenialNarrative) {
-          console.log(`[darwin] Engineer Loss Mechanism Extraction: snowmelt=${engineerLossMechanism.snowmeltIceDamDetected}, maintenanceNarrative=${engineerLossMechanism.isMaintenanceDenialNarrative}, keywords=${engineerLossMechanism.matchedKeywords.join(',')}`);
-          systemPrompt += '\n' + engineerLossMechanism.promptInjection;
-        }
+        // ── Universal Engineer Report Dismantler (runs on EVERY engineer report) ──
+        const engineerTextForDismantler = content || engineerUserContext || '';
+        const dismantlerExtraction = runEngineerReportDismantler(engineerTextForDismantler);
+        console.log(`[darwin] EngineerReportDismantler: scenarios=${dismantlerExtraction.activatedScenarios.join(',') || 'none'}, maintenanceNarrative=${dismantlerExtraction.isMaintenanceDenialNarrative}, dualCausation=${dismantlerExtraction.isDualCausation}, keywords=${dismantlerExtraction.matchedKeywords.length}`);
+        // Always inject — the universal core runs on every report; scenario packs are conditional
+        systemPrompt += '\n' + dismantlerExtraction.promptInjection;
 
         userPrompt = `${claimSummary}
 
