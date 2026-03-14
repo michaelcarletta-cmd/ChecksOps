@@ -290,8 +290,11 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "completed": return <Check className="w-4 h-4 text-green-600" />;
+      case "signed": return <Check className="w-4 h-4 text-green-600" />;
       case "in_progress": return <Clock className="w-4 h-4 text-yellow-600" />;
+      case "viewed": return <Clock className="w-4 h-4 text-blue-600" />;
       case "declined": return <X className="w-4 h-4 text-red-600" />;
+      case "failed": return <X className="w-4 h-4 text-red-600" />;
       default: return <Clock className="w-4 h-4 text-muted-foreground" />;
     }
   };
@@ -300,11 +303,27 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
     const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
       completed: "default",
       in_progress: "secondary",
+      failed: "destructive",
       declined: "destructive",
       pending: "outline",
     };
-    const displayStatus = status.replace("_", " ");
-    return <Badge variant={variants[status] || "outline"}>{displayStatus}</Badge>;
+    const labels: Record<string, string> = {
+      pending: "Sent",
+      in_progress: "Partially Signed",
+      completed: "Completed",
+      failed: "Failed",
+      declined: "Declined",
+      draft: "Draft",
+    };
+    return <Badge variant={variants[status] || "outline"}>{labels[status] || status.replace("_", " ")}</Badge>;
+  };
+
+  const getSignerStatusLabel = (signer: any) => {
+    if (signer.status === "signed") return `Signed ${new Date(signer.signed_at!).toLocaleDateString()}`;
+    if (signer.viewed_at) return `Viewed ${new Date(signer.viewed_at).toLocaleDateString()}`;
+    if (signer.delivery_status === "sent") return "Email sent";
+    if (signer.delivery_status === "failed") return "Send failed";
+    return signer.status;
   };
 
   const handleOpenDocument = async (request: any) => {
