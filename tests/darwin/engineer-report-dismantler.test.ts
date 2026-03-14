@@ -602,6 +602,19 @@ describe("EngineerReportDismantler — missing testing detection", () => {
     expect(result.criticalTestingNotPerformed.length).toBeGreaterThan(0);
   });
 
+  it("low-slope snowmelt report flags membrane methodology and timing gaps", () => {
+    const result = runEngineerReportDismantler(loadFixture("engineer-snowmelt-with-wind-refs.txt"));
+    const lowSlopeMissing = result.criticalTestingNotPerformed.filter(t => t.startsWith("[low_slope_snow_ice_ponding]"));
+
+    expect(lowSlopeMissing).toContain("[low_slope_snow_ice_ponding] membrane core cuts");
+    expect(lowSlopeMissing).toContain("[low_slope_snow_ice_ponding] seam adhesion/peel testing");
+    expect(lowSlopeMissing).toContain("[low_slope_snow_ice_ponding] drainage-capacity analysis");
+    expect(lowSlopeMissing).toContain("[low_slope_snow_ice_ponding] snow-water equivalent/runoff analysis");
+    expect(lowSlopeMissing).toContain("[low_slope_snow_ice_ponding] leak-path tracing");
+    expect(lowSlopeMissing).toContain("[low_slope_snow_ice_ponding] moisture mapping");
+    expect(lowSlopeMissing).toContain("[low_slope_snow_ice_ponding] proof of timing of openings");
+  });
+
   it("detects missing fire investigation tests", () => {
     const result = runEngineerReportDismantler(loadFixture("engineer-fire-with-electrical-maintenance.txt"));
     const fireMissing = result.criticalTestingNotPerformed.filter(t => t.startsWith("[fire_causation]"));
