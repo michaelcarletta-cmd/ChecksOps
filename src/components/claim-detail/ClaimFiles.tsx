@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ClaimTemplates } from "./ClaimTemplates";
-import { SendForSignatureButton } from "./SendForSignatureButton";
+
 import { EstimateUploadDialog } from "./EstimateUploadDialog";
 
 
@@ -835,7 +835,6 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
       {isStaffOrAdmin && claim && (
         <TabsContent value="templates" className="mt-4 space-y-4">
           <ClaimTemplates claimId={claimId} claim={claim} />
-          <SendForSignatureButton claim={claim} onUpdate={() => {}} />
         </TabsContent>
       )}
 
