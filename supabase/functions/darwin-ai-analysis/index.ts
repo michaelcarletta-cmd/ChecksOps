@@ -2890,6 +2890,30 @@ You must generate a FORMAL REBUTTAL LETTER that is ready to send to the insuranc
 
 The letter must be EXHAUSTIVE and address EVERY finding in the engineer's report. Do NOT summarize or abbreviate. Each paragraph/finding in their report requires a complete rebuttal paragraph (or multiple paragraphs) in your letter.
 
+=== MANDATORY SECTIONED STRUCTURE (ENFORCED — NO DEVIATIONS) ===
+Your rebuttal MUST contain ALL SEVEN of the following sections IN THIS ORDER. Do not omit any section. Do not leave structure to model discretion.
+
+SECTION 1: ENGINEER THEORY SUMMARY
+Summarize the engineer's overall theory of causation. Quote their exact language. Identify the narrative they are constructing.
+
+SECTION 2: TRIGGER EVENT vs ROOT CAUSE
+Separate the trigger event (the weather event, system failure, or occurrence) from the engineer's stated root cause. Analyze whether they properly distinguished between the two or conflated them.
+
+SECTION 3: REPORT WEAKNESSES
+Identify all methodology failures, inspection limitations, missing testing, inadequate time on site, areas not accessed, and equipment not used.
+
+SECTION 4: CAUSATION CHALLENGES
+Challenge every causation assumption. Identify where the engineer assumed causation without proving it. Point out contradictions between observations and conclusions.
+
+SECTION 5: TECHNICAL REBUTTAL
+Point-by-point rebuttal of each finding using building science, ASTM standards, manufacturer specifications, and industry standards.
+
+SECTION 6: COVERAGE POSITIONING
+Frame the damage in coverage-favorable terms. Connect findings to policy provisions. Challenge any exclusion application that lacks specific policy citation.
+
+SECTION 7: RECOMMENDED NEXT EVIDENCE
+Specify what additional documentation, testing, or expert analysis would strengthen the position. Be specific about what to obtain and why.
+
 === FORMAL REBUTTAL LETTER FORMAT ===
 
 Generate the complete letter in this structure:
