@@ -186,9 +186,9 @@ const SCENARIO_KEYWORDS_WEIGHTED: Record<string, WeightedKeyword[]> = {
 
 const SCENARIO_MISSING_TESTING_MAP: Record<string, string[]> = {
   low_slope_snow_ice_ponding: [
-    'snow load calculations', 'snow-water equivalent analysis', 'drainage capacity evaluation',
-    'freeze-thaw analysis', 'roof deflection measurements', 'moisture mapping',
-    'attic/thermal inspection', 'core cuts', 'infrared scanning', 'destructive testing',
+    'membrane core cuts', 'seam adhesion/peel testing', 'drainage-capacity analysis',
+    'snow-water equivalent/runoff analysis', 'leak-path tracing', 'moisture mapping',
+    'proof of timing of openings',
   ],
   hail_impact: [
     'test squares (10x10 per slope)', 'soft-metal collateral review', 'mat fracture inspection',
@@ -600,6 +600,18 @@ describe("EngineerReportDismantler — missing testing detection", () => {
     const result = runEngineerReportDismantler(loadFixture("engineer-wind-with-hail-refs.txt"));
     // Should detect missing tests across activated scenarios
     expect(result.criticalTestingNotPerformed.length).toBeGreaterThan(0);
+  });
+
+  it("low-slope scenario required testing map is membrane-focused", () => {
+    const lowSlopeTests = SCENARIO_MISSING_TESTING_MAP.low_slope_snow_ice_ponding;
+
+    expect(lowSlopeTests).toContain("membrane core cuts");
+    expect(lowSlopeTests).toContain("seam adhesion/peel testing");
+    expect(lowSlopeTests).toContain("drainage-capacity analysis");
+    expect(lowSlopeTests).toContain("snow-water equivalent/runoff analysis");
+    expect(lowSlopeTests).toContain("leak-path tracing");
+    expect(lowSlopeTests).toContain("moisture mapping");
+    expect(lowSlopeTests).toContain("proof of timing of openings");
   });
 
   it("detects missing fire investigation tests", () => {

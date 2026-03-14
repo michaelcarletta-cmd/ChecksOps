@@ -162,7 +162,19 @@ function stripExternalFormatting(text: string): string {
   return cleaned.trim();
 }
 
-const REQUIRED_LOW_SLOPE_OPENING = 'The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering.';
+const REQUIRED_LOW_SLOPE_OPENING = 'The engineering report attributes the water intrusion to snow/ice meltwater penetrated age-related and maintenance-deferred openings in the low-slope roof covering.';
+
+const LOW_SLOPE_FORBIDDEN_RULES: Array<{ regex: RegExp; supportTerms: string[] }> = [
+  { regex: /\bshingle(?:s)?\b/i, supportTerms: ['shingle'] },
+  { regex: /\bthermal\s+seal(?:ing)?\b/i, supportTerms: ['thermal seal', 'thermal sealing', 'seal strip'] },
+  { regex: /\buplift\s+check(?:s)?\b/i, supportTerms: ['uplift check', 'uplift checks'] },
+  { regex: /\buplift\s+resistance\b/i, supportTerms: ['uplift resistance'] },
+  { regex: /\bgranul(?:e|ar)\s+loss\b/i, supportTerms: ['granule loss', 'granular loss'] },
+  { regex: /\bfractured\s+tab(?:s)?\b/i, supportTerms: ['fractured tab', 'fractured tabs', 'tab fracture', 'fractured shingle tab'] },
+  { regex: /\bARMA\b/i, supportTerms: ['arma'] },
+  { regex: /\bfastener\s+pull-?out\b/i, supportTerms: ['fastener pull-out', 'fastener pullout'] },
+  { regex: /\bwind-?driven\s+rain\b/i, supportTerms: ['wind-driven rain'] },
+];
 
 function enforceEngineerRebuttalLowSlopeOpening(result: string, primaryScenario: string | null): string {
   if (!result || primaryScenario !== 'low_slope_snow_ice_ponding') return result;
@@ -194,6 +206,73 @@ function enforceEngineerRebuttalLowSlopeOpening(result: string, primaryScenario:
 
   lines[firstBodyLineIdx] = `${required} ${firstBodyLine}`;
   return lines.join('\n');
+}
+
+function suppressLowSlopeUnsupportedBoilerplate(result: string, engineerTheoryCorpus: string): string {
+  const theory = engineerTheoryCorpus.toLowerCase();
+
+  const filteredLines = result
+    .split('\n')
+    .filter((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return true;
+
+      return !LOW_SLOPE_FORBIDDEN_RULES.some((rule) => {
+        const supported = rule.supportTerms.some((term) => theory.includes(term.toLowerCase()));
+        return !supported && rule.regex.test(trimmed);
+      });
+    });
+
+  return filteredLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: string | null, engineerTheoryCorpus: string): string {
+  if (!result || primaryScenario !== 'low_slope_snow_ice_ponding') return result;
+
+  let updated = enforceEngineerRebuttalLowSlopeOpening(result, primaryScenario);
+  updated = suppressLowSlopeUnsupportedBoilerplate(updated, engineerTheoryCorpus);
+
+  const lower = updated.toLowerCase();
+  const hasMethodologyPack = [
+    /membrane core cuts?/i,
+    /seam adhesion|peel testing/i,
+    /drainage[-\s]capacity analysis/i,
+    /snow[-\s]water equivalent|runoff analysis/i,
+    /leak[-\s]path tracing/i,
+    /moisture mapping/i,
+    /proof of timing of openings|timing of openings/i,
+  ].every((pattern) => pattern.test(updated));
+
+  if (!hasMethodologyPack) {
+    updated += `\n\nLOW-SLOPE MEMBRANE METHODOLOGY FAILURES (MANDATORY):
+- no membrane core cuts
+- no seam adhesion/peel testing
+- no drainage-capacity analysis
+- no snow-water equivalent/runoff analysis
+- no leak-path tracing
+- no moisture mapping
+- no proof of timing of openings`;
+  }
+
+  const hasContradictionAttack = /snow impeded drainage/i.test(lower)
+    && /standing water/i.test(lower)
+    && /freeze[-\s]thaw/i.test(lower)
+    && /without proving deterioration alone caused the loss|deterioration alone caused the loss/i.test(lower);
+
+  if (!hasContradictionAttack) {
+    updated += `\n\nCONTRADICTION IN THE ENGINEER'S OWN ANALYSIS:
+The report admits snow impeded drainage, standing water existed, and freeze-thaw can worsen openings, yet still blames maintenance without proving deterioration alone caused the loss.`;
+  }
+
+  const hasStructuralVsWatertightness = /structural snow[-\s]load analysis/i.test(lower)
+    && /membrane watertightness analysis/i.test(lower);
+
+  if (!hasStructuralVsWatertightness) {
+    updated += `\n\nSTRUCTURAL VS MEMBRANE DISTINCTION:
+Structural snow-load analysis is not membrane watertightness analysis. A report can address framing load capacity while still failing to prove membrane-entry pathways, timing of openings, and causation for interior leakage.`;
+  }
+
+  return updated.trim();
 }
 
 const STRUCTURED_DARWIN_ANALYSIS_TYPES = new Set<string>([
@@ -739,9 +818,9 @@ interface ScenarioActivation {
 // ── Scenario-specific missing-testing maps ──────────────────────────────────
 const SCENARIO_MISSING_TESTING_MAP: Record<string, string[]> = {
   low_slope_snow_ice_ponding: [
-    'snow load calculations', 'snow-water equivalent analysis', 'drainage capacity evaluation',
-    'freeze-thaw analysis', 'roof deflection measurements', 'moisture mapping',
-    'attic/thermal inspection', 'core cuts', 'infrared scanning', 'destructive testing',
+    'membrane core cuts', 'seam adhesion/peel testing', 'drainage-capacity analysis',
+    'snow-water equivalent/runoff analysis', 'leak-path tracing', 'moisture mapping',
+    'proof of timing of openings',
   ],
   hail_impact: [
     'test squares (10x10 per slope)', 'soft-metal collateral review', 'mat fracture inspection',
@@ -1229,31 +1308,38 @@ function buildScenarioAttackVectors(primary: string, allActive: Set<string>): st
   if (primary === 'low_slope_snow_ice_ponding') {
     return `=== LOW-SLOPE / SNOW / ICE / MEMBRANE ATTACK APPROACH ===
 MANDATORY THEORY SUMMARY (OPENING SENTENCE):
-"The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering."
+"The engineering report attributes the water intrusion to snow/ice meltwater penetrated age-related and maintenance-deferred openings in the low-slope roof covering."
 
-Do NOT default to generic storm/wind envelope rhetoric in this scenario.
-Unless the engineer's causation conclusion explicitly relies on wind-shingle mechanics, do NOT use:
-- high-wind or pressure event
-- fastener pull-out testing
-- uplift resistance
+Do NOT default to generic storm/wind/shingle language in this scenario.
+Unless the engineer's causation conclusion explicitly relies on it, do NOT use:
+- shingle
+- thermal seal
+- uplift checks
+- granular loss
+- fractured tabs
+- ARMA
+- fastener pull-out
 - wind-driven rain
+- high-wind/pressure event
+- uplift resistance
 - structural racking
 - fastener back-out
 
 For EVERY finding in their report, ask and answer:
-- What destructive membrane testing was performed (core cuts, seam adhesion/peel tests)?
+- What destructive membrane testing was performed (membrane core cuts, seam adhesion/peel testing)?
 - What drainage-capacity analysis was performed (drain size, obstruction, discharge rate)?
-- What snow-water equivalent / runoff analysis was performed?
+- What snow-water equivalent/runoff analysis was performed?
 - What leak-path tracing was performed from entry point to interior manifestation?
 - What moisture mapping (IR and/or meter-based) was performed?
-- Did the engineer differentiate event-driven membrane stress from pre-existing deterioration with DATED evidence?
-- Where is proof of timing for the alleged openings?
+- Where is proof of timing of openings?
+- Did the engineer distinguish structural snow-load analysis from membrane watertightness analysis?
 
 When the engineer claims "deterioration" or "deferred maintenance," ATTACK THIS with:
-- No membrane core cuts or seam testing = no objective basis to time openings
+- No membrane core cuts or seam adhesion/peel testing = no objective basis to time openings
+- No drainage/runoff/leak-path/moisture mapping analysis = no objective basis for causation
 - Admitted snow impeded drainage + standing water + freeze-thaw stress contradicts a deterioration-only conclusion
 - Susceptibility to damage is not proof that deterioration alone caused the loss
-- Standing water, ice dams, and snowmelt infiltration are event-driven hydraulic loading forces
+- Structural snow-load discussion does not prove membrane watertightness causation
 - The report must prove deterioration ALONE caused the loss; assumptions are insufficient`;
   }
 
@@ -1411,11 +1497,13 @@ If the engineer characterizes damage as "deterioration" or "deferred maintenance
 
 "The engineer's attribution of water intrusion to 'deterioration' or 'deferred maintenance' without performing destructive membrane testing represents a fundamental methodology failure.
 
-Without core cuts, seam adhesion/peel testing, leak-path tracing, moisture mapping, and drainage-capacity analysis, the engineer has NO objective basis to determine whether membrane openings existed BEFORE the snow/ice event or were CAUSED/ACTIVATED by event-driven hydraulic loading and freeze-thaw cycling.
+Without membrane core cuts, seam adhesion/peel testing, drainage-capacity analysis, snow-water equivalent/runoff analysis, leak-path tracing, moisture mapping, and proof of timing of openings, the engineer has NO objective basis to determine whether membrane openings existed BEFORE the snow/ice event or were CAUSED/ACTIVATED by event-driven hydraulic loading and freeze-thaw cycling.
 
-Susceptibility to damage is not proof of causation. A membrane system near end-of-life can be more vulnerable to event-driven failure, but vulnerability does not prove deterioration alone caused this loss.
+The report admits snow impeded drainage, standing water existed, and freeze-thaw can worsen openings, yet still blames maintenance without proving deterioration alone caused the loss.
 
-The report acknowledges snow impeded drainage, standing water existed, and freeze-thaw can worsen openings. That admission directly conflicts with any deterioration-only conclusion unless timing and causation are proven with objective testing."`;
+Structural snow-load analysis is not membrane watertightness analysis. Discussing structural loading does not prove membrane entry pathways, opening timing, or leakage causation.
+
+Susceptibility to damage is not proof of causation. A membrane system near end-of-life can be more vulnerable to event-driven failure, but vulnerability does not prove deterioration alone caused this loss."`;
   }
 
   if (primary === 'wind_uplift') {
@@ -2271,6 +2359,7 @@ Deno.serve(async (req) => {
     let systemPrompt = '';
     let userPrompt = '';
     let engineerRebuttalPrimaryScenario: string | null = null;
+    let engineerTheoryCorpusForFilters = '';
 
     // Build photo summary for context
     const analyzedPhotoCount = context.photos?.filter((p: any) => p.ai_analyzed_at)?.length || 0;
@@ -3313,14 +3402,17 @@ Be specific, professional, and provide communications that are ready to copy and
         const scenarioSpecificFallacyBlock = buildScenarioFallacyBlock(primarySc, allActiveScenarios);
         const scenarioSpecificUnaddressedDamage = buildScenarioUnaddressedDamage(primarySc);
 
-        const lowSlopeTheoryOpening = 'The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering.';
+        const lowSlopeTheoryOpening = REQUIRED_LOW_SLOPE_OPENING;
         const engineerTheoryCorpus = [
           dismantlerExtraction.engineerStatedCause,
           ...dismantlerExtraction.engineerTheorySentences,
         ].filter(Boolean).join(' ').toLowerCase();
+        engineerTheoryCorpusForFilters = engineerTheoryCorpus;
+
         const windCausationTerms = [
           'wind uplift', 'wind-driven rain', 'high wind', 'pressure event',
           'fastener', 'shingle', 'uplift resistance', 'structural racking', 'fastener back-out',
+          'thermal seal', 'granular loss', 'fractured tabs', 'arma',
         ];
         const lowSlopeTheoryExplicitlyReliesOnWind = windCausationTerms.some((term) => engineerTheoryCorpus.includes(term));
 
@@ -3331,9 +3423,9 @@ OPENING SENTENCE REQUIREMENT (use this exact sentence first in the opening):
 
 After that opening sentence, challenge timing, methodology, and causation logic in that order.
 
-Do NOT use generic storm/wind/shingle envelope arguments unless the engineer's causation theory explicitly relies on them.
+Do NOT use generic storm/wind/shingle boilerplate unless the engineer's causation theory explicitly relies on it.
 Detected wind-centric causation reliance in extracted theory: ${lowSlopeTheoryExplicitlyReliesOnWind ? 'YES' : 'NO'}.
-${lowSlopeTheoryExplicitlyReliesOnWind ? 'If you use wind-centric language, tie it to a direct engineer quote and explain why it is material.' : 'Do NOT use high-wind/pressure, uplift resistance, fastener pull-out, wind-driven rain, structural racking, or fastener back-out arguments in this rebuttal.'}
+${lowSlopeTheoryExplicitlyReliesOnWind ? 'If you use any wind/shingle language, tie it to direct engineer theory text and explain why it is material.' : 'Do NOT use shingle, thermal seal, uplift checks, granular loss, fractured tabs, ARMA, fastener pull-out, wind-driven rain, high-wind/pressure, uplift resistance, structural racking, or fastener back-out arguments in this rebuttal.'}
 
 MANDATORY LOW-SLOPE METHODOLOGY ATTACKS:
 - no membrane core cuts
@@ -3342,9 +3434,13 @@ MANDATORY LOW-SLOPE METHODOLOGY ATTACKS:
 - no snow-water equivalent/runoff analysis
 - no leak-path tracing
 - no moisture mapping
+- no proof of timing of openings
 
 MANDATORY CONTRADICTION ATTACK:
-If the report admits snow impeded drainage, standing water existed, and freeze-thaw can worsen openings, then attack any deterioration-only conclusion unless timing and causation are proven with objective testing.
+The report admits snow impeded drainage, standing water existed, and freeze-thaw can worsen openings, yet still blames maintenance without proving deterioration alone caused the loss.
+
+MANDATORY DISTINCTION:
+Structural snow-load analysis is not membrane watertightness analysis.
 
 EVIDENCE GROUNDING RULE:
 Do not insert damage facts unless grounded in direct report language or documented claim file evidence.`
@@ -3463,7 +3559,10 @@ The letter must be EXHAUSTIVE and address EVERY finding in the engineer's report
 ${primarySc === 'low_slope_snow_ice_ponding' ? `LOW-SLOPE REPORT ENFORCEMENT:
 - Opening first sentence MUST be exactly: "${lowSlopeTheoryOpening}"
 - Then challenge timing proof, methodology gaps, and causation logic (in that order)
-- Do NOT use wind-centric arguments unless directly quoted from the engineer's causation theory
+- Focus on: no membrane core cuts, no seam adhesion/peel testing, no drainage-capacity analysis, no snow-water equivalent/runoff analysis, no leak-path tracing, no moisture mapping, and no proof of timing of openings
+- Force contradiction attack: report admits snow impeded drainage + standing water + freeze-thaw worsening potential, yet blames maintenance without proving deterioration alone
+- Distinguish structural snow-load analysis from membrane watertightness analysis
+- Suppress shingle/wind/uplift boilerplate unless directly supported by extracted engineer theory text
 - Do NOT add damage facts not grounded in report text or documented file evidence` : ''}
 
 === MANDATORY SECTIONED STRUCTURE (ENFORCED — NO DEVIATIONS) ===
@@ -7539,7 +7638,11 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     if (analysisType === 'engineer_report_rebuttal' && typeof analysisResult === 'string') {
       const lowSlopeFallbackFromReportText = /snowmelt|ponding water|low-slope|ice dam|membrane/i.test(String(content || ''));
       const enforcedScenario = engineerRebuttalPrimaryScenario || (lowSlopeFallbackFromReportText ? 'low_slope_snow_ice_ponding' : null);
-      analysisResult = enforceEngineerRebuttalLowSlopeOpening(analysisResult, enforcedScenario);
+      analysisResult = enforceLowSlopeRebuttalRequirements(
+        analysisResult,
+        enforcedScenario,
+        engineerTheoryCorpusForFilters,
+      );
     }
 
     endStep(parseStep, 'completed', `resultLength=${analysisResult.length}`);
