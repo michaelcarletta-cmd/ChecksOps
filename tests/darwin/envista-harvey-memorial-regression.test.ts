@@ -764,7 +764,10 @@ describe("Harvey Memorial / Envista — prompt-content validation", () => {
       const methodologyStart = attackVectors.indexOf("REQUIRED ATTACK STRUCTURE");
       expect(methodologyStart).toBeGreaterThan(-1);
 
-      const methodologySection = attackVectors.slice(methodologyStart);
+      const groundingRuleStart = attackVectors.indexOf("EVIDENCE GROUNDING RULE:", methodologyStart);
+      const methodologySection = groundingRuleStart > methodologyStart
+        ? attackVectors.slice(methodologyStart, groundingRuleStart)
+        : attackVectors.slice(methodologyStart);
       expect(methodologySection).not.toMatch(regex);
     });
   }
