@@ -3559,7 +3559,10 @@ The letter must be EXHAUSTIVE and address EVERY finding in the engineer's report
 ${primarySc === 'low_slope_snow_ice_ponding' ? `LOW-SLOPE REPORT ENFORCEMENT:
 - Opening first sentence MUST be exactly: "${lowSlopeTheoryOpening}"
 - Then challenge timing proof, methodology gaps, and causation logic (in that order)
-- Do NOT use wind-centric arguments unless directly quoted from the engineer's causation theory
+- Focus on: no membrane core cuts, no seam adhesion/peel testing, no drainage-capacity analysis, no snow-water equivalent/runoff analysis, no leak-path tracing, no moisture mapping, and no proof of timing of openings
+- Force contradiction attack: report admits snow impeded drainage + standing water + freeze-thaw worsening potential, yet blames maintenance without proving deterioration alone
+- Distinguish structural snow-load analysis from membrane watertightness analysis
+- Suppress shingle/wind/uplift boilerplate unless directly supported by extracted engineer theory text
 - Do NOT add damage facts not grounded in report text or documented file evidence` : ''}
 
 === MANDATORY SECTIONED STRUCTURE (ENFORCED — NO DEVIATIONS) ===
