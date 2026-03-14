@@ -564,7 +564,9 @@ export default function Sign() {
                     />
                   )}
                 </div>
-              ))}
+                );
+              })}
+
             </div>
 
             <div className="pt-2 pb-6 space-y-3">
