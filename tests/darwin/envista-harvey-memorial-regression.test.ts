@@ -740,12 +740,16 @@ describe("Harvey Memorial / Envista — prompt-content validation", () => {
   const forbiddenTerms = [
     { label: "shingle", regex: /\bshingle\b/i },
     { label: "thermal seal", regex: /\bthermal\s+seal\b/i },
+    { label: "seal strip", regex: /\bseal\s+strip\b/i },
     { label: "uplift checks", regex: /\buplift\s+check/i },
     { label: "ARMA", regex: /\bARMA\b/ },
     { label: "granular loss", regex: /\bgranul(?:e|ar)\s+loss\b/i },
     { label: "fractured tabs", regex: /\bfractured\s+tab/i },
     { label: "fastener pull-out", regex: /\bfastener\s+pull-?out\b/i },
     { label: "wind-driven rain", regex: /\bwind-?driven\s+rain\b/i },
+    { label: "hand tab test", regex: /\bhand[-\s]?tab\s+test/i },
+    { label: "lift test", regex: /\blift\s+test/i },
+    { label: "GAF/CertainTeed/Owens Corning", regex: /\b(?:GAF|CertainTeed|Owens\s+Corning)\b/i },
   ];
 
   // These terms appear in the "do NOT use" instruction list (allowed there), but
