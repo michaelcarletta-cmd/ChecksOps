@@ -5334,28 +5334,138 @@ State: ${stateInfo.stateName}
 Applicable Regulations: ${stateInfo.adminCode}
 Insurance Code: ${stateInfo.insuranceCode}`;
 
-        // Fetch carrier deadlines for timeline violations
-        const { data: carrierDeadlines } = await supabase
-          .from('claim_carrier_deadlines')
-          .select('*')
-          .eq('claim_id', claimId)
-          .order('deadline_date', { ascending: true });
+        // Fetch carrier deadlines, communications, prior analyses, timeline events, and state regulations in parallel
+        const [
+          { data: carrierDeadlines },
+          { data: communicationsLog },
+          { data: priorAnalyses },
+          { data: timelineEvents },
+          { data: stateRegs },
+        ] = await Promise.all([
+          supabase.from('claim_carrier_deadlines').select('*').eq('claim_id', claimId).order('deadline_date', { ascending: true }),
+          supabase.from('claim_communications_diary').select('*').eq('claim_id', claimId).order('communication_date', { ascending: true }),
+          supabase.from('darwin_analysis_results').select('analysis_type, result, created_at').eq('claim_id', claimId)
+            .in('analysis_type', ['denial_rebuttal', 'compliance_check', 'systematic_dismantling', 'position_detection'])
+            .order('created_at', { ascending: false }).limit(5),
+          supabase.from('claim_events').select('event_type, occurred_at, summary, importance_score, actor, source_artifact_type')
+            .eq('claim_id', claimId).order('occurred_at', { ascending: true }).limit(150),
+          supabase.from('state_insurance_regulations').select('*').eq('state_code', state).order('regulation_type'),
+        ]);
 
-        // Fetch communications diary for documented interactions
-        const { data: communicationsLog } = await supabase
-          .from('claim_communications_diary')
-          .select('*')
-          .eq('claim_id', claimId)
-          .order('communication_date', { ascending: true });
+        // ── Timeline-based violation detection for DOBI letter ──────────────
+        interface DetectedViolation {
+          issue: string;
+          regulation_title: string;
+          citation: string;
+          supporting_events: string[];
+          severity: 'high' | 'medium' | 'low';
+        }
+        const autoDetectedViolations: DetectedViolation[] = [];
+        const regs = stateRegs || [];
+        const tlEvents = timelineEvents || [];
+        const claimCreated = claim.created_at ? new Date(claim.created_at) : null;
+        const claimLossDate = claim.loss_date ? new Date(claim.loss_date) : null;
 
-        // Fetch darwin analysis results for prior findings
-        const { data: priorAnalyses } = await supabase
-          .from('darwin_analysis_results')
-          .select('analysis_type, result, created_at')
-          .eq('claim_id', claimId)
-          .in('analysis_type', ['denial_rebuttal', 'compliance_check', 'systematic_dismantling', 'position_detection'])
-          .order('created_at', { ascending: false })
-          .limit(5);
+        // Detect: delayed acknowledgment
+        if (claimCreated) {
+          const firstResponse = tlEvents.find((e: any) =>
+            ['carrier_response', 'acknowledgment', 'carrier_contact', 'inspection_scheduled'].includes(e.event_type)
+          );
+          const ackReg = regs.find((r: any) => r.regulation_type === 'acknowledgment' || r.regulation_title?.toLowerCase().includes('acknowledg'));
+          const ackDays = ackReg?.deadline_days || 15;
+          if (firstResponse) {
+            const gap = Math.floor((new Date(firstResponse.occurred_at).getTime() - claimCreated.getTime()) / 86400000);
+            if (gap > ackDays) {
+              autoDetectedViolations.push({
+                issue: `Carrier took ${gap} days to acknowledge claim (${ackDays}-day statutory deadline)`,
+                regulation_title: ackReg?.regulation_title || 'Acknowledgment deadline',
+                citation: ackReg?.regulation_citation || 'Unfair claims settlement practices',
+                supporting_events: [`Claim filed: ${claimCreated.toISOString().split('T')[0]}`, `First response: ${firstResponse.occurred_at?.split('T')[0]}`],
+                severity: gap > ackDays * 2 ? 'high' : 'medium',
+              });
+            }
+          } else {
+            const daysSince = Math.floor((Date.now() - claimCreated.getTime()) / 86400000);
+            if (daysSince > 15) {
+              autoDetectedViolations.push({
+                issue: `No carrier acknowledgment — ${daysSince} days since claim filed`,
+                regulation_title: ackReg?.regulation_title || 'Acknowledgment deadline',
+                citation: ackReg?.regulation_citation || 'Unfair claims settlement practices',
+                supporting_events: [`Claim filed: ${claimCreated.toISOString().split('T')[0]}`],
+                severity: 'high',
+              });
+            }
+          }
+        }
+
+        // Detect: missed deadlines
+        for (const dl of (carrierDeadlines || [])) {
+          if (dl.days_overdue && dl.days_overdue > 0) {
+            const matchedReg = regs.find((r: any) =>
+              r.regulation_type === dl.deadline_type || r.regulation_title?.toLowerCase().includes(dl.deadline_type?.toLowerCase() || '')
+            );
+            autoDetectedViolations.push({
+              issue: `${dl.deadline_type} deadline exceeded by ${dl.days_overdue} days`,
+              regulation_title: matchedReg?.regulation_title || dl.deadline_type,
+              citation: matchedReg?.regulation_citation || 'Claims handling regulation',
+              supporting_events: [`Trigger: ${dl.trigger_date}`, `Deadline: ${dl.deadline_date}`, dl.bad_faith_potential ? 'BAD FAITH POTENTIAL' : ''],
+              severity: dl.bad_faith_potential ? 'high' : 'medium',
+            });
+          }
+        }
+
+        // Detect: denial without investigation
+        const denials = tlEvents.filter((e: any) => ['denial', 'denial_issued'].includes(e.event_type));
+        const investigations = tlEvents.filter((e: any) => ['inspection', 'investigation', 'site_visit', 'engineer_inspection'].includes(e.event_type));
+        for (const denial of denials) {
+          const priorInvestigation = investigations.find((e: any) => new Date(e.occurred_at) < new Date(denial.occurred_at));
+          if (!priorInvestigation) {
+            const investReg = regs.find((r: any) => r.regulation_title?.toLowerCase().includes('investigation') || r.regulation_type === 'investigation');
+            autoDetectedViolations.push({
+              issue: 'Denial issued without prior documented investigation',
+              regulation_title: investReg?.regulation_title || 'Duty to investigate',
+              citation: investReg?.regulation_citation || 'Failure to conduct reasonable investigation',
+              supporting_events: [`Denial: ${denial.occurred_at?.split('T')[0]}`, `Summary: ${denial.summary || 'N/A'}`],
+              severity: 'high',
+            });
+          }
+        }
+
+        // Detect: extended inactivity gaps (>30 days)
+        const sortedTl = [...tlEvents].sort((a: any, b: any) => new Date(a.occurred_at).getTime() - new Date(b.occurred_at).getTime());
+        for (let i = 1; i < sortedTl.length; i++) {
+          const gap = (new Date(sortedTl[i].occurred_at).getTime() - new Date(sortedTl[i - 1].occurred_at).getTime()) / 86400000;
+          if (gap > 30) {
+            const delayReg = regs.find((r: any) => r.regulation_title?.toLowerCase().includes('delay') || r.regulation_type === 'prompt_handling');
+            autoDetectedViolations.push({
+              issue: `${Math.floor(gap)}-day gap in claim activity`,
+              regulation_title: delayReg?.regulation_title || 'Prompt claims handling',
+              citation: delayReg?.regulation_citation || 'Prompt handling requirements',
+              supporting_events: [`Before: ${sortedTl[i - 1].occurred_at?.split('T')[0]} (${sortedTl[i - 1].event_type})`, `After: ${sortedTl[i].occurred_at?.split('T')[0]} (${sortedTl[i].event_type})`],
+              severity: gap > 60 ? 'high' : 'low',
+            });
+          }
+        }
+
+        // Build timeline chronology section for the DOBI letter
+        let timelineSection = '';
+        if (tlEvents.length > 0) {
+          timelineSection = `\n=== CLAIM TIMELINE CHRONOLOGY (${tlEvents.length} events) ===
+CRITICAL: Use this chronological timeline to construct the Statement of Facts. Reference specific dates and events to demonstrate the carrier's pattern of conduct.
+
+${tlEvents.map((e: any) => `- ${e.occurred_at?.split('T')[0]} | ${e.event_type}${e.actor ? ` (${e.actor})` : ''}: ${e.summary || 'No summary'}${e.importance_score && e.importance_score >= 7 ? ' *** HIGH IMPORTANCE ***' : ''}`).join('\n')}\n`;
+        }
+
+        // Build auto-detected violations section
+        let autoViolationsSection = '';
+        if (autoDetectedViolations.length > 0) {
+          autoViolationsSection = `\n=== TIMELINE-DETECTED REGULATORY VIOLATIONS (${autoDetectedViolations.length} auto-detected) ===
+These violations were automatically detected by analyzing claim events against statutory requirements. INCORPORATE these into the complaint letter alongside the user-selected violations.
+
+${autoDetectedViolations.map((v, i) => `${i + 1}. [${v.severity.toUpperCase()}] ${v.issue}
+   Statute: ${v.regulation_title} (${v.citation})
+   Evidence: ${v.supporting_events.filter(Boolean).join(' → ')}`).join('\n')}\n`;
+        }
 
         // Build email communications section
         let emailSection = '';
