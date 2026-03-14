@@ -51,11 +51,11 @@ Deno.serve(async (req) => {
       ? `The author of all external communications is ${authorName}${authorTitle ? `, ${authorTitle}` : ''}. Write in their voice using first person.`
       : 'Write as if authored by the public adjuster or claims professional handling the claim.';
 
-    // Gather full claim intelligence in parallel — now includes timeline & estimate builder context
+    // Gather full claim intelligence in parallel — now includes timeline, estimate builder, & regulatory context
     const [
       claimRes, filesRes, estimateRes, photoRes, strategyRes, argsRes, 
       rebuttalsRes, deadlinesRes, intelSummaryRes,
-      timelineEventsRes, estimateLinesRes, feedbackRes
+      timelineEventsRes, estimateLinesRes, feedbackRes, regulationsRes
     ] = await Promise.all([
       supabase.from('claims').select('*').eq('id', claimId).single(),
       supabase.from('claim_files').select('id, file_name, document_type, folder_key, created_at').eq('claim_id', claimId),
@@ -72,6 +72,8 @@ Deno.serve(async (req) => {
         .eq('claim_id', claimId).eq('is_accepted', true).order('recovery_impact_rank', { ascending: true }).limit(50),
       supabase.from('darwin_feedback_events').select('output_type, feedback_type, actual_outcome, actual_recovery_delta, feedback_detail')
         .eq('claim_id', claimId).order('created_at', { ascending: false }).limit(20),
+      // Fetch state regulations for violation detection (state resolved after claim loads)
+      supabase.from('state_insurance_regulations').select('*').order('regulation_type'),
     ]);
 
     const claim = claimRes.data;
