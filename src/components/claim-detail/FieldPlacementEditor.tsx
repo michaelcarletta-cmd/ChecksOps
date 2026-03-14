@@ -468,6 +468,25 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
             <Trash2 className="w-4 h-4 mr-2" />
             Clear All
           </Button>
+          
+          {/* Apply document type display labels */}
+          {fields.length > 0 && (
+            <Select value={selectedDocType} onValueChange={(docType) => {
+              setSelectedDocType(docType);
+              applyDocTypeLabels(docType);
+            }}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Apply label template..." />
+              </SelectTrigger>
+              <SelectContent>
+                {DOCUMENT_TYPE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
 
