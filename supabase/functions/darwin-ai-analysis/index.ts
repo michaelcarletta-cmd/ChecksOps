@@ -165,23 +165,102 @@ function stripExternalFormatting(text: string): string {
 const REQUIRED_LOW_SLOPE_OPENING = 'The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering.';
 
 const LOW_SLOPE_FORBIDDEN_RULES: Array<{ regex: RegExp; supportTerms: string[] }> = [
-  { regex: /\bshingle(?:s)?\b/i, supportTerms: ['shingle'] },
+  { regex: /\bshingle(?:s)?\b/i, supportTerms: ['shingle', 'shingles'] },
+  { regex: /\barchitectural\s+shingle(?:s)?\b/i, supportTerms: ['architectural shingle', 'architectural shingles'] },
   { regex: /\bthermal\s+seal(?:ing)?\b/i, supportTerms: ['thermal seal', 'thermal sealing'] },
   { regex: /\bseal\s+strip\b/i, supportTerms: ['seal strip'] },
+  { regex: /\bseal\s+failure\b/i, supportTerms: ['seal failure'] },
+  { regex: /\bfactory\s+seal(?:\s+failure)?\b/i, supportTerms: ['factory seal', 'factory seal failure'] },
   { regex: /\buplift\s+check(?:s)?\b/i, supportTerms: ['uplift check', 'uplift checks'] },
   { regex: /\buplift\s+resistance\b/i, supportTerms: ['uplift resistance'] },
-  { regex: /\bgranul(?:e|ar)\s+loss\b/i, supportTerms: ['granule loss', 'granular loss'] },
+  { regex: /\buplift\s+test(?:ing|s)?\b/i, supportTerms: ['uplift test', 'uplift testing', 'uplift tests'] },
+  { regex: /\blift\s+test(?:s)?\b/i, supportTerms: ['lift test', 'lift tests'] },
+  { regex: /\bgranul(?:e|ar)s?(?:\s+loss)?\b/i, supportTerms: ['granule', 'granules', 'granular', 'granule loss', 'granular loss'] },
   { regex: /\bfractured\s+tab(?:s)?\b/i, supportTerms: ['fractured tab', 'fractured tabs', 'tab fracture', 'fractured shingle tab'] },
   { regex: /\bARMA\b/i, supportTerms: ['arma'] },
   { regex: /\bfastener\s+pull-?out\b/i, supportTerms: ['fastener pull-out', 'fastener pullout'] },
   { regex: /\bwind-?driven\s+rain\b/i, supportTerms: ['wind-driven rain'] },
   { regex: /\bhand[-\s]?tab\s+test(?:s)?\b/i, supportTerms: ['hand-tab test', 'hand tab test', 'hand-tab tests', 'hand tab tests'] },
-  { regex: /\blift\s+test(?:s)?\b/i, supportTerms: ['lift test', 'lift tests'] },
   { regex: /\b(?:GAF|CertainTeed|Owens\s+Corning)\b/i, supportTerms: ['gaf', 'certainteed', 'owens corning'] },
   { regex: /\bcreased\s+shingle\s+tab(?:s)?\b/i, supportTerms: ['creased shingle tab', 'creased shingle tabs'] },
   { regex: /\bfractured\s+shingle(?:s)?\b/i, supportTerms: ['fractured shingle', 'fractured shingles'] },
   { regex: /\bwind\s+uplift\s+mechanics?\b/i, supportTerms: ['wind uplift mechanic', 'wind uplift mechanics'] },
+  { regex: /\bthermal\s+expansion\s+of\s+shingle(?:s)?\b/i, supportTerms: ['thermal expansion of shingle', 'thermal expansion of shingles'] },
+  { regex: /\bstructural\s+racking\b/i, supportTerms: ['structural racking'] },
+  { regex: /\bhigh[-\s]?wind(?:\s+pressure)?\b/i, supportTerms: ['high wind', 'high wind pressure'] },
+  { regex: /\bwind\s+pressure\b/i, supportTerms: ['wind pressure'] },
+  { regex: /\bpressure\s+event\b/i, supportTerms: ['pressure event'] },
 ];
+
+const LOW_SLOPE_FORBIDDEN_BULLET_LIST = [
+  'shingle / shingles',
+  'granules / granular loss',
+  'uplift test',
+  'seal failure / factory seal',
+  'thermal expansion of shingles',
+  'architectural shingles',
+  'structural racking',
+  'high wind pressure language',
+  'thermal seal',
+  'seal strip',
+  'uplift checks',
+  'fractured tabs',
+  'ARMA',
+  'fastener pull-out',
+  'wind-driven rain',
+  'hand tab test',
+  'lift test',
+  'GAF / CertainTeed / Owens Corning references',
+].map((item) => `- ${item}`).join('\n');
+
+function buildLowSlopeSupportCorpus(
+  engineerCausationSentence: string,
+  claimFactsPack: any,
+  claimFiles: Array<{ file_name?: string | null; document_classification?: string | null; extracted_text?: string | null }> = [],
+  userContext = '',
+): string {
+  const corpusParts: string[] = [];
+  const pushIfPresent = (value: string | null | undefined) => {
+    if (typeof value === 'string' && value.trim()) corpusParts.push(value.trim());
+  };
+
+  pushIfPresent(engineerCausationSentence);
+  pushIfPresent(userContext);
+
+  const docs = Array.isArray(claimFactsPack?.documents) ? claimFactsPack.documents : [];
+  for (const doc of docs.slice(0, 30)) {
+    pushIfPresent([doc?.docName, doc?.category, doc?.folderKey].filter(Boolean).join(' '));
+  }
+
+  const objections = Array.isArray(claimFactsPack?.objections) ? claimFactsPack.objections : [];
+  for (const objection of objections.slice(0, 20)) {
+    pushIfPresent(objection?.verbatim);
+    pushIfPresent(objection?.source?.docName);
+  }
+
+  const estimateHighlights = Array.isArray(claimFactsPack?.estimate?.lineItemHighlights)
+    ? claimFactsPack.estimate.lineItemHighlights
+    : [];
+  for (const highlight of estimateHighlights.slice(0, 20)) {
+    pushIfPresent(highlight?.label);
+  }
+
+  const supplementalEvidence = claimFiles
+    .filter((file) => {
+      const classification = String(file?.document_classification || '').toLowerCase();
+      const fileName = String(file?.file_name || '').toLowerCase();
+      const isEngineerReport = classification.includes('engineer') || fileName.includes('engineer');
+      return !isEngineerReport && typeof file?.extracted_text === 'string' && file.extracted_text.length > 80;
+    })
+    .slice(0, 12);
+
+  for (const file of supplementalEvidence) {
+    pushIfPresent(file.file_name || '');
+    pushIfPresent(file.extracted_text?.slice(0, 1800) || '');
+  }
+
+  return corpusParts.join('\n').toLowerCase();
+}
 
 const LOW_SLOPE_PRIORITY_ORDER = `PRIORITY ORDER (MANDATORY):
 1) timing of openings
@@ -233,8 +312,8 @@ function enforceEngineerRebuttalLowSlopeOpening(result: string, primaryScenario:
   return lines.join('\n');
 }
 
-function suppressLowSlopeUnsupportedBoilerplate(result: string, engineerTheoryCorpus: string): string {
-  const theory = engineerTheoryCorpus.toLowerCase();
+function suppressLowSlopeUnsupportedBoilerplate(result: string, supportCorpus: string): string {
+  const theory = String(supportCorpus || '').toLowerCase();
   const unsupportedRules = LOW_SLOPE_FORBIDDEN_RULES.filter((rule) => {
     const supported = rule.supportTerms.some((term) => theory.includes(term.toLowerCase()));
     return !supported;
@@ -242,24 +321,34 @@ function suppressLowSlopeUnsupportedBoilerplate(result: string, engineerTheoryCo
 
   if (unsupportedRules.length === 0) return result.trim();
 
+  const shouldRemoveSegment = (segment: string) => unsupportedRules.some((rule) => rule.regex.test(segment));
+
   const filteredLines = result
     .split('\n')
     .map((line) => {
       const trimmed = line.trim();
       if (!trimmed) return '';
-      if (unsupportedRules.some((rule) => rule.regex.test(trimmed))) return '';
-      return line;
+      if (shouldRemoveSegment(trimmed)) return '';
+
+      const sentenceChunks = trimmed.match(/[^.!?]+[.!?]?/g) || [trimmed];
+      const keptChunks = sentenceChunks
+        .map((chunk) => chunk.trim())
+        .filter(Boolean)
+        .filter((chunk) => !shouldRemoveSegment(chunk));
+
+      if (keptChunks.length === 0) return '';
+      return keptChunks.join(' ').replace(/\s{2,}/g, ' ').trim();
     })
     .filter(Boolean);
 
   return filteredLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: string | null, engineerTheoryCorpus: string): string {
+function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: string | null, supportCorpus: string): string {
   if (!result || primaryScenario !== 'low_slope_snow_ice_ponding') return result;
 
   let updated = enforceEngineerRebuttalLowSlopeOpening(result, primaryScenario);
-  updated = suppressLowSlopeUnsupportedBoilerplate(updated, engineerTheoryCorpus);
+  updated = suppressLowSlopeUnsupportedBoilerplate(updated, supportCorpus);
 
   const lower = updated.toLowerCase();
 
@@ -310,7 +399,7 @@ ${LOW_SLOPE_STRUCTURAL_DISTINCTION} Even if framing can carry snow load, that do
     updated += `\n\n${sectionsToAppend.join('\n\n')}`;
   }
 
-  return updated.trim();
+  return suppressLowSlopeUnsupportedBoilerplate(updated.trim(), supportCorpus);
 }
 
 const STRUCTURED_DARWIN_ANALYSIS_TYPES = new Set<string>([
@@ -1349,19 +1438,8 @@ MANDATORY THEORY SUMMARY (OPENING SENTENCE):
 "The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering."
 
 Do NOT default to generic storm/wind/shingle language in this scenario.
-Unless the engineer's causation sentence explicitly relies on it, do NOT use:
-- shingle / shingles
-- thermal seal
-- seal strip
-- uplift checks
-- granular loss
-- fractured tabs
-- ARMA
-- fastener pull-out
-- wind-driven rain
-- hand tab test
-- lift test
-- GAF / CertainTeed / Owens Corning references
+Unless the engineer's causation sentence OR documented claim-file evidence explicitly relies on it, do NOT use:
+${LOW_SLOPE_FORBIDDEN_BULLET_LIST}
 
 ${LOW_SLOPE_PRIORITY_ORDER}
 
@@ -1381,7 +1459,7 @@ ${LOW_SLOPE_STRUCTURAL_DISTINCTION}
 Even if roof framing can carry load, that does not prove membrane watertightness.
 
 EVIDENCE GROUNDING RULE:
-Do not insert damage descriptions (e.g., creased shingle tabs, fractured shingles, wind uplift mechanics) unless those terms appear in the engineer’s causation sentence.`;
+Do not insert damage descriptions (e.g., creased shingle tabs, fractured shingles, wind uplift mechanics) unless those terms appear in the engineer’s causation sentence or documented claim-file evidence.`;
   }
 
   const blocks: string[] = [];
@@ -2400,7 +2478,7 @@ Deno.serve(async (req) => {
     let systemPrompt = '';
     let userPrompt = '';
     let engineerRebuttalPrimaryScenario: string | null = null;
-    let engineerTheoryCorpusForFilters = '';
+    let lowSlopeSupportCorpusForFilters = '';
 
     // Build photo summary for context
     const analyzedPhotoCount = context.photos?.filter((p: any) => p.ai_analyzed_at)?.length || 0;
@@ -3450,14 +3528,14 @@ Be specific, professional, and provide communications that are ready to copy and
           || ''
         );
         const engineerTheoryCorpus = engineerCausationSentence.toLowerCase();
-        engineerTheoryCorpusForFilters = engineerTheoryCorpus;
+        lowSlopeSupportCorpusForFilters = buildLowSlopeSupportCorpus(
+          engineerCausationSentence,
+          claimFactsPack,
+          Array.isArray(context.files) ? context.files : [],
+          engineerUserContext,
+        );
 
-        const windCausationTerms = [
-          'wind uplift', 'wind-driven rain', 'high wind', 'pressure event',
-          'fastener', 'shingle', 'uplift resistance', 'structural racking', 'fastener back-out',
-          'thermal seal', 'seal strip', 'granular loss', 'fractured tabs', 'arma',
-          'hand tab test', 'hand-tab test', 'lift test', 'gaf', 'certainteed', 'owens corning',
-        ];
+        const windCausationTerms = Array.from(new Set(LOW_SLOPE_FORBIDDEN_RULES.flatMap((rule) => rule.supportTerms.map((term) => term.toLowerCase()))));
         const lowSlopeTheoryExplicitlyReliesOnWind = windCausationTerms.some((term) => engineerTheoryCorpus.includes(term));
 
         const lowSlopeScopeGuard = primarySc === 'low_slope_snow_ice_ponding'
@@ -3472,9 +3550,9 @@ SECTION 1 — TIMING FAILURE
 SECTION 2 — DRAINAGE / SNOWMELT ANALYSIS FAILURE
 SECTION 3 — ENGINEER CONTRADICTION
 
-Do NOT use generic storm/wind/shingle boilerplate unless the engineer's causation sentence explicitly relies on it.
+Do NOT use generic storm/wind/shingle boilerplate unless the engineer's causation sentence or documented claim-file evidence explicitly relies on it.
 Detected wind-centric causation reliance in extracted theory: ${lowSlopeTheoryExplicitlyReliesOnWind ? 'YES' : 'NO'}.
-${lowSlopeTheoryExplicitlyReliesOnWind ? 'If you use any wind/shingle language, tie it to direct engineer theory text and explain why it is material.' : 'Do NOT use shingle, thermal seal, seal strip, uplift checks, granular loss, fractured tabs, ARMA, fastener pull-out, wind-driven rain, hand tab test, lift test, or GAF/CertainTeed/Owens Corning references in this rebuttal.'}
+${lowSlopeTheoryExplicitlyReliesOnWind ? 'If you use any wind/shingle language, tie it to direct engineer theory text and explain why it is material.' : `Do NOT use:\n${LOW_SLOPE_FORBIDDEN_BULLET_LIST}`}
 
 MANDATORY LOW-SLOPE METHODOLOGY ATTACKS:
 - no membrane core cuts
@@ -3494,7 +3572,7 @@ MANDATORY DISTINCTION:
 ${LOW_SLOPE_STRUCTURAL_DISTINCTION}
 
 EVIDENCE GROUNDING RULE:
-Do not insert damage facts unless grounded in direct report language or documented claim file evidence. Do not insert creased shingle tabs, fractured shingles, or wind uplift mechanics unless those terms appear in the engineer’s causation sentence.`
+Do not insert damage facts unless grounded in direct report language or documented claim file evidence. Do not insert creased shingle tabs, fractured shingles, wind uplift mechanics, structural racking, or high-wind pressure language unless those terms appear in the engineer’s causation sentence or documented claim-file evidence.`
           : '';
 
         const lowSlopeOpeningDirective = primarySc === 'low_slope_snow_ice_ponding'
@@ -7692,7 +7770,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       analysisResult = enforceLowSlopeRebuttalRequirements(
         analysisResult,
         enforcedScenario,
-        engineerTheoryCorpusForFilters,
+        lowSlopeSupportCorpusForFilters,
       );
     }
 

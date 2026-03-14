@@ -225,23 +225,53 @@ const SCENARIO_MISSING_TESTING_MAP: Record<string, string[]> = {
 };
 
 const LOW_SLOPE_FORBIDDEN_RULES: Array<{ regex: RegExp; supportTerms: string[] }> = [
-  { regex: /\bshingle(?:s)?\b/i, supportTerms: ["shingle"] },
-  { regex: /\bthermal\s+seal(?:ing)?\b/i, supportTerms: ["thermal seal","thermal sealing"] },
+  { regex: /\bshingle(?:s)?\b/i, supportTerms: ["shingle", "shingles"] },
+  { regex: /\barchitectural\s+shingle(?:s)?\b/i, supportTerms: ["architectural shingle", "architectural shingles"] },
+  { regex: /\bthermal\s+seal(?:ing)?\b/i, supportTerms: ["thermal seal", "thermal sealing"] },
   { regex: /\bseal\s+strip\b/i, supportTerms: ["seal strip"] },
-  { regex: /\buplift\s+check(?:s)?\b/i, supportTerms: ["uplift check","uplift checks"] },
+  { regex: /\bseal\s+failure\b/i, supportTerms: ["seal failure"] },
+  { regex: /\bfactory\s+seal(?:\s+failure)?\b/i, supportTerms: ["factory seal", "factory seal failure"] },
+  { regex: /\buplift\s+check(?:s)?\b/i, supportTerms: ["uplift check", "uplift checks"] },
   { regex: /\buplift\s+resistance\b/i, supportTerms: ["uplift resistance"] },
-  { regex: /\bgranul(?:e|ar)\s+loss\b/i, supportTerms: ["granule loss","granular loss"] },
-  { regex: /\bfractured\s+tab(?:s)?\b/i, supportTerms: ["fractured tab","fractured tabs","tab fracture","fractured shingle tab"] },
+  { regex: /\buplift\s+test(?:ing|s)?\b/i, supportTerms: ["uplift test", "uplift testing", "uplift tests"] },
+  { regex: /\blift\s+test(?:s)?\b/i, supportTerms: ["lift test", "lift tests"] },
+  { regex: /\bgranul(?:e|ar)s?(?:\s+loss)?\b/i, supportTerms: ["granule", "granules", "granular", "granule loss", "granular loss"] },
+  { regex: /\bfractured\s+tab(?:s)?\b/i, supportTerms: ["fractured tab", "fractured tabs", "tab fracture", "fractured shingle tab"] },
   { regex: /\bARMA\b/i, supportTerms: ["arma"] },
-  { regex: /\bfastener\s+pull-?out\b/i, supportTerms: ["fastener pull-out","fastener pullout"] },
+  { regex: /\bfastener\s+pull-?out\b/i, supportTerms: ["fastener pull-out", "fastener pullout"] },
   { regex: /\bwind-?driven\s+rain\b/i, supportTerms: ["wind-driven rain"] },
-  { regex: /\bhand[-\s]?tab\s+test(?:s)?\b/i, supportTerms: ["hand-tab test","hand tab test","hand-tab tests","hand tab tests"] },
-  { regex: /\blift\s+test(?:s)?\b/i, supportTerms: ["lift test","lift tests"] },
-  { regex: /\b(?:GAF|CertainTeed|Owens\s+Corning)\b/i, supportTerms: ["gaf","certainteed","owens corning"] },
-  { regex: /\bcreased\s+shingle\s+tab(?:s)?\b/i, supportTerms: ["creased shingle tab","creased shingle tabs"] },
-  { regex: /\bfractured\s+shingle(?:s)?\b/i, supportTerms: ["fractured shingle","fractured shingles"] },
-  { regex: /\bwind\s+uplift\s+mechanics?\b/i, supportTerms: ["wind uplift mechanic","wind uplift mechanics"] },
+  { regex: /\bhand[-\s]?tab\s+test(?:s)?\b/i, supportTerms: ["hand-tab test", "hand tab test", "hand-tab tests", "hand tab tests"] },
+  { regex: /\b(?:GAF|CertainTeed|Owens\s+Corning)\b/i, supportTerms: ["gaf", "certainteed", "owens corning"] },
+  { regex: /\bcreased\s+shingle\s+tab(?:s)?\b/i, supportTerms: ["creased shingle tab", "creased shingle tabs"] },
+  { regex: /\bfractured\s+shingle(?:s)?\b/i, supportTerms: ["fractured shingle", "fractured shingles"] },
+  { regex: /\bwind\s+uplift\s+mechanics?\b/i, supportTerms: ["wind uplift mechanic", "wind uplift mechanics"] },
+  { regex: /\bthermal\s+expansion\s+of\s+shingle(?:s)?\b/i, supportTerms: ["thermal expansion of shingle", "thermal expansion of shingles"] },
+  { regex: /\bstructural\s+racking\b/i, supportTerms: ["structural racking"] },
+  { regex: /\bhigh[-\s]?wind(?:\s+pressure)?\b/i, supportTerms: ["high wind", "high wind pressure"] },
+  { regex: /\bwind\s+pressure\b/i, supportTerms: ["wind pressure"] },
+  { regex: /\bpressure\s+event\b/i, supportTerms: ["pressure event"] },
 ];
+
+const LOW_SLOPE_FORBIDDEN_BULLET_LIST = [
+  "shingle / shingles",
+  "granules / granular loss",
+  "uplift test",
+  "seal failure / factory seal",
+  "thermal expansion of shingles",
+  "architectural shingles",
+  "structural racking",
+  "high wind pressure language",
+  "thermal seal",
+  "seal strip",
+  "uplift checks",
+  "fractured tabs",
+  "ARMA",
+  "fastener pull-out",
+  "wind-driven rain",
+  "hand tab test",
+  "lift test",
+  "GAF / CertainTeed / Owens Corning references",
+].map((item) => `- ${item}`).join("\n");
 
 // ─── Dismantler (mirrored) ───────────────────────────────────────────────────
 
@@ -435,19 +465,8 @@ MANDATORY THEORY SUMMARY (OPENING SENTENCE):
 "${REQUIRED_LOW_SLOPE_OPENING}"
 
 Do NOT default to generic storm/wind/shingle language in this scenario.
-Unless the engineer's causation sentence explicitly relies on it, do NOT use:
-- shingle / shingles
-- thermal seal
-- seal strip
-- uplift checks
-- granular loss
-- fractured tabs
-- ARMA
-- fastener pull-out
-- wind-driven rain
-- hand tab test
-- lift test
-- GAF / CertainTeed / Owens Corning references
+Unless the engineer's causation sentence OR documented claim-file evidence explicitly relies on it, do NOT use:
+${LOW_SLOPE_FORBIDDEN_BULLET_LIST}
 
 ${LOW_SLOPE_PRIORITY_ORDER}
 
@@ -467,7 +486,7 @@ ${LOW_SLOPE_STRUCTURAL_DISTINCTION}
 Even if roof framing can carry load, that does not prove membrane watertightness.
 
 EVIDENCE GROUNDING RULE:
-Do not insert damage descriptions (e.g., creased shingle tabs, fractured shingles, wind uplift mechanics) unless those terms appear in the engineer’s causation sentence.`;
+Do not insert damage descriptions (e.g., creased shingle tabs, fractured shingles, wind uplift mechanics) unless those terms appear in the engineer’s causation sentence or documented claim-file evidence.`;
   }
   return "";
 }
@@ -488,9 +507,9 @@ SECTION 1 — TIMING FAILURE
 SECTION 2 — DRAINAGE / SNOWMELT ANALYSIS FAILURE
 SECTION 3 — ENGINEER CONTRADICTION
 
-Do NOT use generic storm/wind/shingle boilerplate unless the engineer's causation sentence explicitly relies on it.
+Do NOT use generic storm/wind/shingle boilerplate unless the engineer's causation sentence or documented claim-file evidence explicitly relies on it.
 Detected wind-centric causation reliance in extracted theory: ${lowSlopeTheoryExplicitlyReliesOnWind ? "YES" : "NO"}.
-${lowSlopeTheoryExplicitlyReliesOnWind ? "If you use any wind/shingle language, tie it to direct engineer theory text and explain why it is material." : "Do NOT use shingle, thermal seal, seal strip, uplift checks, granular loss, fractured tabs, ARMA, fastener pull-out, wind-driven rain, hand tab test, lift test, or GAF/CertainTeed/Owens Corning references in this rebuttal."}
+${lowSlopeTheoryExplicitlyReliesOnWind ? "If you use any wind/shingle language, tie it to direct engineer theory text and explain why it is material." : `Do NOT use:\n${LOW_SLOPE_FORBIDDEN_BULLET_LIST}`}
 
 MANDATORY LOW-SLOPE METHODOLOGY ATTACKS:
 - no membrane core cuts
@@ -510,7 +529,7 @@ MANDATORY DISTINCTION:
 ${LOW_SLOPE_STRUCTURAL_DISTINCTION}
 
 EVIDENCE GROUNDING RULE:
-Do not insert damage facts unless grounded in direct report language or documented claim file evidence. Do not insert creased shingle tabs, fractured shingles, or wind uplift mechanics unless those terms appear in the engineer’s causation sentence.`;
+Do not insert damage facts unless grounded in direct report language or documented claim file evidence. Do not insert creased shingle tabs, fractured shingles, wind uplift mechanics, structural racking, or high-wind pressure language unless those terms appear in the engineer’s causation sentence or documented claim-file evidence.`;
 }
 
 // ─── Enforcement functions (mirrored) ────────────────────────────────────────
@@ -542,8 +561,8 @@ function enforceEngineerRebuttalLowSlopeOpening(result: string, primaryScenario:
   return lines.join("\n");
 }
 
-function suppressLowSlopeUnsupportedBoilerplate(result: string, engineerTheoryCorpus: string): string {
-  const theory = engineerTheoryCorpus.toLowerCase();
+function suppressLowSlopeUnsupportedBoilerplate(result: string, supportCorpus: string): string {
+  const theory = String(supportCorpus || "").toLowerCase();
   const unsupportedRules = LOW_SLOPE_FORBIDDEN_RULES.filter((rule) => {
     const supported = rule.supportTerms.some((term) => theory.includes(term.toLowerCase()));
     return !supported;
@@ -551,24 +570,34 @@ function suppressLowSlopeUnsupportedBoilerplate(result: string, engineerTheoryCo
 
   if (unsupportedRules.length === 0) return result.trim();
 
+  const shouldRemoveSegment = (segment: string) => unsupportedRules.some((rule) => rule.regex.test(segment));
+
   const filteredLines = result
     .split("\n")
     .map((line) => {
       const trimmed = line.trim();
       if (!trimmed) return "";
-      if (unsupportedRules.some((rule) => rule.regex.test(trimmed))) return "";
-      return line;
+      if (shouldRemoveSegment(trimmed)) return "";
+
+      const sentenceChunks = trimmed.match(/[^.!?]+[.!?]?/g) || [trimmed];
+      const keptChunks = sentenceChunks
+        .map((chunk) => chunk.trim())
+        .filter(Boolean)
+        .filter((chunk) => !shouldRemoveSegment(chunk));
+
+      if (keptChunks.length === 0) return "";
+      return keptChunks.join(" ").replace(/\s{2,}/g, " ").trim();
     })
     .filter(Boolean);
 
   return filteredLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: string | null, engineerTheoryCorpus: string): string {
+function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: string | null, supportCorpus: string): string {
   if (!result || primaryScenario !== "low_slope_snow_ice_ponding") return result;
 
   let updated = enforceEngineerRebuttalLowSlopeOpening(result, primaryScenario);
-  updated = suppressLowSlopeUnsupportedBoilerplate(updated, engineerTheoryCorpus);
+  updated = suppressLowSlopeUnsupportedBoilerplate(updated, supportCorpus);
 
   const lower = updated.toLowerCase();
 
@@ -619,7 +648,7 @@ ${LOW_SLOPE_STRUCTURAL_DISTINCTION} Even if framing can carry snow load, that do
     updated += `\n\n${sectionsToAppend.join("\n\n")}`;
   }
 
-  return updated.trim();
+  return suppressLowSlopeUnsupportedBoilerplate(updated.trim(), supportCorpus);
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -694,12 +723,7 @@ describe("Harvey Memorial / Envista — prompt-content validation", () => {
     || ""
   ).toLowerCase();
 
-  const windCausationTerms = [
-    "wind uplift","wind-driven rain","high wind","pressure event",
-    "fastener","shingle","uplift resistance","structural racking","fastener back-out",
-    "thermal seal","seal strip","granular loss","fractured tabs","arma",
-    "hand tab test","hand-tab test","lift test","gaf","certainteed","owens corning",
-  ];
+  const windCausationTerms = Array.from(new Set(LOW_SLOPE_FORBIDDEN_RULES.flatMap((rule) => rule.supportTerms.map((term) => term.toLowerCase()))));
   const lowSlopeTheoryExplicitlyReliesOnWind = windCausationTerms.some(t => engineerTheoryCorpus.includes(t));
 
   const scopeGuard = buildScopeGuard(primarySc, lowSlopeTheoryExplicitlyReliesOnWind);
@@ -740,11 +764,17 @@ describe("Harvey Memorial / Envista — prompt-content validation", () => {
 
   const forbiddenTerms = [
     { label: "shingle", regex: /\bshingle\b/i },
+    { label: "granules/granular loss", regex: /\bgranul(?:e|ar)s?(?:\s+loss)?\b/i },
+    { label: "uplift test", regex: /\buplift\s+test(?:ing|s)?\b/i },
+    { label: "seal failure/factory seal", regex: /\bseal\s+failure\b|\bfactory\s+seal(?:\s+failure)?\b/i },
+    { label: "thermal expansion of shingles", regex: /\bthermal\s+expansion\s+of\s+shingle(?:s)?\b/i },
+    { label: "architectural shingles", regex: /\barchitectural\s+shingle(?:s)?\b/i },
+    { label: "structural racking", regex: /\bstructural\s+racking\b/i },
+    { label: "high wind pressure", regex: /\bhigh[-\s]?wind(?:\s+pressure)?\b|\bwind\s+pressure\b/i },
     { label: "thermal seal", regex: /\bthermal\s+seal\b/i },
     { label: "seal strip", regex: /\bseal\s+strip\b/i },
     { label: "uplift checks", regex: /\buplift\s+check/i },
     { label: "ARMA", regex: /\bARMA\b/ },
-    { label: "granular loss", regex: /\bgranul(?:e|ar)\s+loss\b/i },
     { label: "fractured tabs", regex: /\bfractured\s+tab/i },
     { label: "fastener pull-out", regex: /\bfastener\s+pull-?out\b/i },
     { label: "wind-driven rain", regex: /\bwind-?driven\s+rain\b/i },
@@ -797,11 +827,13 @@ We have reviewed the engineering report and find it fundamentally flawed.
 
 The shingle damage observed on the property is inconsistent with the engineer's conclusions.
 The ARMA Technical Bulletin 201 and GAF guidance documents that seal strip adhesion degrades over time.
-The engineer failed to perform uplift checks, hand tab tests, and lift tests on the affected areas.
-Granular loss patterns suggest storm-related damage rather than normal aging.
+The engineer failed to perform uplift checks, uplift tests, hand tab tests, and lift tests on the affected areas.
+Granules and granular loss patterns suggest storm-related damage rather than normal aging.
 The fractured tabs and fractured shingles observed are consistent with wind uplift mechanics and wind-driven rain penetration.
 Fastener pull-out testing was not performed, undermining the engineer's conclusions.
 Thermal sealing analysis was omitted from the inspection.
+The report references seal failure, factory seal concerns, and thermal expansion of shingles.
+Architectural shingles showed structural racking and high wind pressure effects in multiple areas.
 
 The membrane seams near the drainage obstruction area showed signs of stress.
 The engineer performed no membrane core cuts to determine water intrusion pathways.
@@ -863,7 +895,14 @@ The engineer's methodology was fundamentally inadequate for a low-slope membrane
     expect(enforced).not.toMatch(/\bshingle\b/i);
     expect(enforced).not.toMatch(/\bARMA\b/i);
     expect(enforced).not.toMatch(/\buplift\s+check/i);
-    expect(enforced).not.toMatch(/\bgranul(?:e|ar)\s+loss\b/i);
+    expect(enforced).not.toMatch(/\buplift\s+test(?:ing|s)?\b/i);
+    expect(enforced).not.toMatch(/\bgranul(?:e|ar)s?(?:\s+loss)?\b/i);
+    expect(enforced).not.toMatch(/\bseal\s+failure\b/i);
+    expect(enforced).not.toMatch(/\bfactory\s+seal(?:\s+failure)?\b/i);
+    expect(enforced).not.toMatch(/\bthermal\s+expansion\s+of\s+shingle(?:s)?\b/i);
+    expect(enforced).not.toMatch(/\barchitectural\s+shingle(?:s)?\b/i);
+    expect(enforced).not.toMatch(/\bstructural\s+racking\b/i);
+    expect(enforced).not.toMatch(/\bhigh[-\s]?wind(?:\s+pressure)?\b|\bwind\s+pressure\b/i);
     expect(enforced).not.toMatch(/\bfractured\s+tab/i);
     expect(enforced).not.toMatch(/\bfractured\s+shingle/i);
     expect(enforced).not.toMatch(/\bfastener\s+pull-?out\b/i);
