@@ -211,7 +211,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
 
     const updatedFields = [...fields, newField];
     setFields(updatedFields);
-    onFieldsChange(updatedFields);
+    emitFieldsAsPercentages(updatedFields);
     toast({ title: `${type} field added to page ${currentPage}` });
   };
 
@@ -280,12 +280,32 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
     };
   }, [draggingField, resizingField, dragOffset, resizeStart]);
 
-  // Sync fields to parent after drag/resize ends
+  // Sync fields to parent after drag/resize ends — convert to percentages
   useEffect(() => {
     if (!draggingField && !resizingField) {
-      onFieldsChange(fields);
+      emitFieldsAsPercentages(fields);
     }
   }, [draggingField, resizingField]);
+
+  // Convert pixel coordinates to percentages (0-100) relative to overlay size
+  const emitFieldsAsPercentages = useCallback((pixelFields: Field[]) => {
+    const overlay = overlayRef.current;
+    if (!overlay || pixelFields.length === 0) {
+      onFieldsChange(pixelFields.length === 0 ? [] : pixelFields);
+      return;
+    }
+    const rect = overlay.getBoundingClientRect();
+    const ow = rect.width || 600;
+    const oh = rect.height || 800;
+    const converted = pixelFields.map(f => ({
+      ...f,
+      x: parseFloat(((f.x / ow) * 100).toFixed(4)),
+      y: parseFloat(((f.y / oh) * 100).toFixed(4)),
+      width: parseFloat(((f.width / ow) * 100).toFixed(4)),
+      height: parseFloat(((f.height / oh) * 100).toFixed(4)),
+    }));
+    onFieldsChange(converted);
+  }, [onFieldsChange]);
 
   const handleResizeMouseDown = (e: React.MouseEvent, fieldId: string) => {
     e.preventDefault();
@@ -306,7 +326,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
   const removeField = (fieldId: string) => {
     const updatedFields = fields.filter(f => f.id !== fieldId);
     setFields(updatedFields);
-    onFieldsChange(updatedFields);
+    emitFieldsAsPercentages(updatedFields);
     toast({ title: "Field removed" });
   };
 
@@ -316,14 +336,31 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
     toast({ title: "All fields cleared" });
   };
 
+  // Load template — templates are stored in percentages, convert back to pixels for display
+  const pixelsFromPercent = useCallback((percentFields: Field[]): Field[] => {
+    const overlay = overlayRef.current;
+    const ow = overlay ? overlay.getBoundingClientRect().width : 600;
+    const oh = overlay ? overlay.getBoundingClientRect().height : 800;
+    return percentFields.map(f => ({
+      ...f,
+      x: (f.x / 100) * ow,
+      y: (f.y / 100) * oh,
+      width: (f.width / 100) * ow,
+      height: (f.height / 100) * oh,
+    }));
+  }, []);
+
   const loadTemplate = (templateId: string) => {
     const template = templates?.find(t => t.id === templateId);
     if (!template) return;
 
     clearAllFields();
     const templateFields = (Array.isArray(template.field_data) ? template.field_data : []) as unknown as Field[];
-    setFields(templateFields);
-    onFieldsChange(templateFields);
+    // Templates may be in percentages — check if values look like percentages (< 100)
+    const looksLikePercent = templateFields.length > 0 && templateFields.every(f => f.x <= 100 && f.y <= 100);
+    const displayFields = looksLikePercent ? pixelsFromPercent(templateFields) : templateFields;
+    setFields(displayFields);
+    emitFieldsAsPercentages(displayFields);
     toast({ title: `Template "${template.name}" loaded` });
   };
 

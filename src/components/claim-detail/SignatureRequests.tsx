@@ -235,9 +235,9 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
   });
 
   const resendMutation = useMutation({
-    mutationFn: async (requestId: string) => {
+    mutationFn: async ({ requestId, targetSignerIds }: { requestId: string; targetSignerIds?: string[] }) => {
       const { data, error } = await supabase.functions.invoke("send-signature-request", {
-        body: { requestId, skipEmail: false },
+        body: { requestId, skipEmail: false, targetSignerIds },
       });
       if (error) {
         throw new Error(await getFunctionErrorMessage(error, "Could not resend"));
@@ -650,11 +650,11 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => resendMutation.mutate(request.id)}
+                        onClick={() => resendMutation.mutate({ requestId: request.id })}
                         disabled={resendMutation.isPending}
                       >
                         <RefreshCw className={`w-3 h-3 mr-1 ${resendMutation.isPending ? "animate-spin" : ""}`} />
-                        Resend
+                        Resend All
                       </Button>
                     )}
                     {getStatusBadge(request)}
@@ -692,9 +692,23 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                           <span>{signer.signer_name}</span>
                           <span className="text-muted-foreground">({signer.signer_email})</span>
                         </div>
-                        <Badge variant="outline" className="text-xs">
-                          {getSignerStatusLabel(signer)}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          {signer.delivery_status === "failed" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                              onClick={() => resendMutation.mutate({ requestId: request.id, targetSignerIds: [signer.id] })}
+                              disabled={resendMutation.isPending}
+                            >
+                              <RefreshCw className="w-3 h-3 mr-1" />
+                              Retry
+                            </Button>
+                          )}
+                          <Badge variant={signer.delivery_status === "failed" ? "destructive" : "outline"} className="text-xs">
+                            {getSignerStatusLabel(signer)}
+                          </Badge>
+                        </div>
                       </div>
                     ))}
                   </div>

@@ -80,8 +80,9 @@ async function sendResend(to: string, subject: string, html: string) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) throw new Error("RESEND_API_KEY not configured");
 
+  const fromEmail = Deno.env.get("FROM_EMAIL") || "claims@freedomclaims.work";
   const body = {
-    from: "Freedom Claims <claims@freedomclaims.work>",
+    from: `Freedom Claims <${fromEmail}>`,
     to: [to],
     subject,
     html,
@@ -231,7 +232,7 @@ Deno.serve(async (req) => {
     // Generate tokens for each signer, store hash, keep raw for link
     const TOKEN_EXPIRY_HOURS = 72;
     const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_HOURS * 60 * 60 * 1000).toISOString();
-    const appUrl = "https://freedomclaims.lovable.app";
+    const appUrl = Deno.env.get("SIGN_BASE_URL") || "https://freedomclaims.work";
 
     const signerLinks: { signer_id: string; signer_name: string; signer_email: string; sign_url: string }[] = [];
 

@@ -130,23 +130,44 @@ async function generateFlattenedPdf(
           font: helvetica,
           color: rgb(0, 0, 0),
         });
-      } else if (field.field_type === "checkbox") {
-        // Draw a checkbox mark
+    } else if (field.field_type === "checkbox") {
+        // Draw checkbox using vector primitives
+        const boxSize = Math.min(h * 0.7, w * 0.7, 14);
+        const boxX = x + 2;
+        const boxY = y + (h - boxSize) / 2;
+
+        // Draw box outline
+        page.drawRectangle({
+          x: boxX,
+          y: boxY,
+          width: boxSize,
+          height: boxSize,
+          borderColor: rgb(0.2, 0.2, 0.2),
+          borderWidth: 1.2,
+          color: rgb(1, 1, 1),
+        });
+
         if (field.value) {
-          page.drawText("☑", {
-            x,
-            y: y + h / 2 - 6,
-            size: 14,
-            font: helvetica,
-            color: rgb(0, 0, 0),
+          // Draw checkmark using two lines (✓ shape)
+          const margin = boxSize * 0.2;
+          const lx = boxX + margin;
+          const ly = boxY + margin;
+          const rx = boxX + boxSize - margin;
+          const ry = boxY + boxSize - margin;
+          const midX = boxX + boxSize * 0.38;
+          const midY = boxY + margin;
+
+          page.drawLine({
+            start: { x: lx, y: ly + (ry - ly) * 0.5 },
+            end: { x: midX, y: midY },
+            thickness: 1.8,
+            color: rgb(0.1, 0.4, 0.1),
           });
-        } else {
-          page.drawText("☐", {
-            x,
-            y: y + h / 2 - 6,
-            size: 14,
-            font: helvetica,
-            color: rgb(0.5, 0.5, 0.5),
+          page.drawLine({
+            start: { x: midX, y: midY },
+            end: { x: rx, y: ry },
+            thickness: 1.8,
+            color: rgb(0.1, 0.4, 0.1),
           });
         }
       }
