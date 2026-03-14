@@ -38,16 +38,24 @@ async function generateFlattenedPdf(
   request: any,
   allSignersWithValues: any[],
 ): Promise<Uint8Array> {
-  // Download the original PDF from storage
+  // Download the original document from storage
   const { data: fileData, error: downloadErr } = await sb.storage
     .from("claim-files")
     .download(request.document_path);
 
   if (downloadErr || !fileData) {
-    throw new Error(`Failed to download original PDF: ${downloadErr?.message || "not found"}`);
+    throw new Error(`Failed to download original document: ${downloadErr?.message || "not found"}`);
   }
 
   const pdfBytes = await fileData.arrayBuffer();
+  const headerBytes = new Uint8Array(pdfBytes.slice(0, 5));
+  const headerStr = String.fromCharCode(...headerBytes);
+
+  // If not a PDF, generate a standalone signed certificate
+  if (headerStr !== "%PDF-") {
+    return await generateSignedCertificatePdf(request, allSignersWithValues);
+  }
+
   const pdfDoc = await PDFDocument.load(pdfBytes);
   const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
