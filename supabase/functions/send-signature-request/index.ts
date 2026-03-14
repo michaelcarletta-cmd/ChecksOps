@@ -48,6 +48,30 @@ async function failRequest(sb: any, id: string, error: string) {
     .eq("id", id);
 }
 
+function respond(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Token hashing
+// ---------------------------------------------------------------------------
+
+async function hashToken(raw: string): Promise<string> {
+  const data = new TextEncoder().encode(raw);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function generateRawToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 // ---------------------------------------------------------------------------
 // Resend email delivery
 // ---------------------------------------------------------------------------
@@ -99,20 +123,17 @@ function emailHtml(signer: any, request: any, signUrl: string): string {
     <tr>
       <td align="center" style="padding:40px 20px;">
         <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-          <!-- Header -->
           <tr>
             <td style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:30px 40px;text-align:center;">
               <h1 style="color:#ffffff;margin:0;font-size:26px;font-weight:700;">&#128221; Signature Required</h1>
             </td>
           </tr>
-          <!-- Body -->
           <tr>
             <td style="padding:30px 40px;">
               <p style="font-size:16px;color:#333333;margin:0 0 16px;">Hello <strong>${signer.signer_name}</strong>,</p>
               <p style="font-size:16px;color:#333333;margin:0 0 24px;">
                 You have been requested to electronically sign a document. This will only take a moment.
               </p>
-              <!-- Document info card -->
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f8f9fa;border-left:4px solid #667eea;border-radius:6px;margin:0 0 28px;">
                 <tr>
                   <td style="padding:18px 20px;">
@@ -122,34 +143,23 @@ function emailHtml(signer: any, request: any, signUrl: string): string {
                   </td>
                 </tr>
               </table>
-              <!-- CTA Button -->
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
                 <tr>
                   <td align="center" style="padding:8px 0 28px;">
-                    <!--[if mso]>
-                    <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${signUrl}" style="height:52px;v-text-anchor:middle;width:280px;" arcsize="50%" fillcolor="#667eea">
-                      <w:anchorlock/>
-                      <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:18px;font-weight:bold;">✍️ Click Here to Sign</center>
-                    </v:roundrect>
-                    <![endif]-->
-                    <!--[if !mso]><!-->
                     <a href="${signUrl}" target="_blank" style="display:inline-block;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#ffffff;padding:14px 40px;text-decoration:none;border-radius:50px;font-size:18px;font-weight:bold;box-shadow:0 4px 15px rgba(102,126,234,0.4);">&#9997;&#65039; Click Here to Sign</a>
-                    <!--<![endif]-->
                   </td>
                 </tr>
               </table>
-              <!-- Fallback link -->
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#e9ecef;border-radius:6px;">
                 <tr>
                   <td style="padding:14px 18px;">
-                    <p style="margin:0 0 8px;font-size:13px;color:#666666;"><strong>Can&#39;t click the button?</strong> Copy and paste this link into your browser:</p>
+                    <p style="margin:0 0 8px;font-size:13px;color:#666666;"><strong>Can&#39;t click the button?</strong> Copy and paste this link:</p>
                     <p style="margin:0;"><a href="${signUrl}" style="color:#667eea;word-break:break-all;font-size:12px;">${signUrl}</a></p>
                   </td>
                 </tr>
               </table>
             </td>
           </tr>
-          <!-- Footer -->
           <tr>
             <td style="padding:20px 40px;border-top:1px solid #dee2e6;">
               <p style="color:#6c757d;font-size:13px;margin:0 0 6px;">&#128231; Questions? Contact Freedom Claims support</p>
@@ -188,7 +198,6 @@ Deno.serve(async (req) => {
 
     if (!requestId) throw new Error("requestId is required");
 
-    // ── log: start ──
     await log(sb, {
       request_id: requestId, signer_id: null, claim_id: null,
       stage: "function_start", status: "ok",
@@ -196,7 +205,7 @@ Deno.serve(async (req) => {
       payload: { requestId, skipEmail },
     });
 
-    // ── load request + signers + claim ──
+    // Load request + signers + claim
     const { data: request, error: reqErr } = await sb
       .from("signature_requests")
       .select("*, signature_signers(*), claims(id, claim_number, policyholder_name, policyholder_email, policy_number)")
@@ -219,36 +228,79 @@ Deno.serve(async (req) => {
       payload: { document_name: request.document_name },
     });
 
-    // ── manual bypass (generate links, skip email) ──
-    if (skipEmail) {
-      const missingTokenSigners = signersArr.filter((s: any) => !s.access_token);
-      if (missingTokenSigners.length > 0) {
-        const msg = `${missingTokenSigners.length} signer(s) missing access_token`;
-        await log(sb, {
-          request_id: requestId, signer_id: null, claim_id: claimId,
-          stage: "manual_bypass_validation", status: "error",
-          message: msg,
-          payload: { missing_signer_ids: missingTokenSigners.map((s: any) => s.id) },
-        });
-        await failRequest(sb, requestId, msg);
-        throw new Error(msg);
-      }
+    // Generate tokens for each signer, store hash, keep raw for link
+    const TOKEN_EXPIRY_HOURS = 72;
+    const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_HOURS * 60 * 60 * 1000).toISOString();
+    const appUrl = "https://freedomclaims.lovable.app";
 
-      const signerLinks = signersArr.map((s: any) => ({
-        signer_id: s.id,
-        signer_name: s.signer_name,
-        signer_email: s.signer_email,
-        sign_url: `https://freedomclaims.lovable.app/sign?token=${s.access_token}`,
-      }));
+    const signerLinks: { signer_id: string; signer_name: string; signer_email: string; sign_url: string }[] = [];
+
+    for (const signer of signersArr) {
+      const rawToken = generateRawToken();
+      const tokenHash = await hashToken(rawToken);
+
+      await sb.from("signature_signers").update({
+        access_token: rawToken, // kept temporarily for backwards compat, will be cleared after send
+        token_hash: tokenHash,
+        expires_at: expiresAt,
+      }).eq("id", signer.id);
+
+      signer._rawToken = rawToken;
+      signer._signUrl = `${appUrl}/sign?token=${rawToken}`;
+
+      signerLinks.push({
+        signer_id: signer.id,
+        signer_name: signer.signer_name,
+        signer_email: signer.signer_email,
+        sign_url: signer._signUrl,
+      });
+    }
+
+    // Also normalize field_data into signature_fields table if present
+    const fieldData: any[] = request.field_data || [];
+    if (fieldData.length > 0) {
+      // Check if fields already exist for this request
+      const { data: existingFields } = await sb
+        .from("signature_fields")
+        .select("id")
+        .eq("signature_request_id", requestId)
+        .limit(1);
+
+      if (!existingFields || existingFields.length === 0) {
+        const fieldRows = fieldData.map((f: any) => ({
+          id: f.id, // preserve the frontend-generated UUID
+          signature_request_id: requestId,
+          signer_index: f.signerIndex ?? 0,
+          field_type: f.type,
+          label: f.label || null,
+          page: f.page ?? 1,
+          x: f.x ?? 0,
+          y: f.y ?? 0,
+          width: f.width ?? 200,
+          height: f.height ?? 50,
+          required: f.required !== false,
+          placeholder: f.placeholder || null,
+          checkbox_label: f.checkboxLabel || null,
+        }));
+        await sb.from("signature_fields").insert(fieldRows);
+      }
+    }
+
+    // Manual bypass mode
+    if (skipEmail) {
+      // Clear raw tokens from DB after capturing links
+      for (const signer of signersArr) {
+        await sb.from("signature_signers").update({ access_token: null }).eq("id", signer.id);
+      }
 
       await sb.from("signature_requests").update({
         status: "pending",
         delivery_mode: "manual_bypass",
         provider_status: "manual_bypass",
         last_attempted_at: new Date().toISOString(),
+        last_error: null,
       }).eq("id", requestId);
 
-      // Update claim reference
       if (claimId) {
         await sb.from("claims").update({
           latest_signature_request_id: requestId,
@@ -263,21 +315,20 @@ Deno.serve(async (req) => {
         payload: { signerLinks },
       });
 
-      return respond({ success: true, mode: "manual_bypass", signerLinks });
+      return respond({ ok: true, mode: "manual_bypass", signerLinks });
     }
 
-    // ── Resend email delivery ──
-    const appUrl = "https://freedomclaims.lovable.app";
+    // Resend email delivery
     const results: { signer_id: string; success: boolean; error?: string }[] = [];
 
     for (const signer of signersArr) {
-      const signUrl = `${appUrl}/sign?token=${signer.access_token}`;
+      const signUrl = signer._signUrl;
 
       await log(sb, {
         request_id: requestId, signer_id: signer.id, claim_id: claimId,
         stage: "email_sending", status: "in_progress",
         message: `Sending to ${signer.signer_email}`,
-        payload: { signUrl },
+        payload: null,
       });
 
       try {
@@ -291,6 +342,7 @@ Deno.serve(async (req) => {
         const resendId = emailRes?.id || null;
 
         await sb.from("signature_signers").update({
+          access_token: null, // clear raw token after email sent
           delivery_status: "sent",
           email_sent_at: new Date().toISOString(),
           email_provider_message_id: resendId,
@@ -300,13 +352,14 @@ Deno.serve(async (req) => {
           request_id: requestId, signer_id: signer.id, claim_id: claimId,
           stage: "email_sent", status: "ok",
           message: `Resend success — id ${resendId}`,
-          payload: { emailRes, resendId },
+          payload: { resendId },
         });
 
         results.push({ signer_id: signer.id, success: true });
       } catch (emailErr: any) {
         const errMsg = emailErr.message || "Unknown email error";
         await sb.from("signature_signers").update({
+          access_token: null,
           delivery_status: "failed",
           delivery_error: errMsg,
         }).eq("id", signer.id);
@@ -315,7 +368,7 @@ Deno.serve(async (req) => {
           request_id: requestId, signer_id: signer.id, claim_id: claimId,
           stage: "email_failed", status: "error",
           message: errMsg,
-          payload: { error: errMsg, response: emailErr.response, statusCode: emailErr.statusCode },
+          payload: { error: errMsg },
         });
 
         results.push({ signer_id: signer.id, success: false, error: errMsg });
@@ -326,14 +379,7 @@ Deno.serve(async (req) => {
     const someFailed = results.some((r) => !r.success);
     const allSucceeded = results.every((r) => r.success);
 
-    let providerStatus: string;
-    if (allSucceeded) {
-      providerStatus = "emails_sent";
-    } else if (allFailed) {
-      providerStatus = "emails_failed";
-    } else {
-      providerStatus = "emails_partially_failed";
-    }
+    const providerStatus = allSucceeded ? "emails_sent" : allFailed ? "emails_failed" : "emails_partially_failed";
 
     await sb.from("signature_requests").update({
       status: allFailed ? "failed" : "pending",
@@ -344,7 +390,6 @@ Deno.serve(async (req) => {
       provider_status: providerStatus,
     }).eq("id", requestId);
 
-    // Update claim reference
     if (claimId) {
       await sb.from("claims").update({
         latest_signature_request_id: requestId,
@@ -352,7 +397,6 @@ Deno.serve(async (req) => {
       }).eq("id", claimId);
     }
 
-    // Log to claim_updates timeline
     if (claimId && !allFailed) {
       const signerNames = signersArr.map((s: any) => s.signer_name).join(", ");
       await sb.from("claim_updates").insert({
@@ -369,7 +413,14 @@ Deno.serve(async (req) => {
       payload: { results },
     });
 
-    return respond({ success: !allFailed, mode: "resend_direct", results });
+    return respond({
+      ok: !allFailed,
+      mode: "resend_direct",
+      results,
+      sent: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+      total: results.length,
+    });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     console.error("send-signature-request error:", msg);
@@ -383,15 +434,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ error: msg, stage: "function_error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return respond({ ok: false, stage: "function_error", error: msg }, 500);
   }
 });
-
-function respond(data: unknown) {
-  return new Response(JSON.stringify(data), {
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}

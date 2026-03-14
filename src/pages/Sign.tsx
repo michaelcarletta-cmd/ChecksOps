@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, FileSignature, Check, AlertTriangle } from "lucide-react";
+import { Loader2, FileSignature, Check, AlertTriangle, Clock } from "lucide-react";
 
 export default function Sign() {
   const [searchParams] = useSearchParams();
@@ -22,7 +22,9 @@ export default function Sign() {
   const [documentUrl, setDocumentUrl] = useState<string | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
   const [error, setError] = useState<string | null>(null);
+  const [errorStage, setErrorStage] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [fields, setFields] = useState<any[]>([]);
   
   const canvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
   const [drawingFields, setDrawingFields] = useState<Record<string, boolean>>({});
@@ -53,6 +55,19 @@ export default function Sign() {
       const data = await response.json();
 
       if (!response.ok || data?.ok === false) {
+        setErrorStage(data?.stage || null);
+        
+        // Handle specific error stages
+        if (data?.stage === "signer_order_blocked") {
+          setError(data.error);
+          setLoading(false);
+          return;
+        }
+        if (data?.stage === "token_expired") {
+          setError(data.error);
+          setLoading(false);
+          return;
+        }
         throw new Error(data?.error || "Failed to load document");
       }
 
@@ -67,6 +82,30 @@ export default function Sign() {
       setSigner(data.signer);
       setRequest(data.request);
       setDocumentUrl(data.signedUrl);
+
+      // Use normalized fields if available, fall back to field_data
+      if (data.fields && data.fields.length > 0) {
+        setFields(data.fields.map((f: any) => ({
+          id: f.id,
+          type: f.field_type,
+          label: f.label,
+          required: f.required,
+          page: f.page,
+          x: f.x,
+          y: f.y,
+          width: f.width,
+          height: f.height,
+          placeholder: f.placeholder,
+          checkboxLabel: f.checkbox_label,
+          signerIndex: f.signer_index,
+        })));
+      } else {
+        // Backwards compat: use field_data from request
+        const signerFields = (data.request.field_data || []).filter(
+          (f: any) => f.signerIndex === data.signer.signing_order - 1
+        );
+        setFields(signerFields);
+      }
 
     } catch (err: any) {
       console.error("Error fetching signer data:", err);
@@ -141,11 +180,6 @@ export default function Sign() {
   const handleSign = async () => {
     setValidationErrors([]);
     
-    // Get placed fields for this signer
-    const fields = (request.field_data || []).filter(
-      (f: any) => f.signerIndex === signer.signing_order - 1
-    );
-
     // Collect signature data and field values
     const collectedValues: Record<string, any> = {};
     for (const field of fields) {
@@ -178,7 +212,6 @@ export default function Sign() {
       const data = await response.json();
 
       if (!response.ok || data?.ok === false) {
-        // Handle validation errors specifically
         if (data?.validationErrors) {
           setValidationErrors(data.validationErrors);
           toast({
@@ -216,6 +249,49 @@ export default function Sign() {
     );
   }
 
+  // Signer order blocked — show waiting message
+  if (errorStage === "signer_order_blocked") {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Clock className="w-6 h-6 text-amber-500" />
+              <CardTitle>Waiting for Prior Signer</CardTitle>
+            </div>
+            <CardDescription>
+              {error}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              You'll be able to sign once the previous signer(s) have completed. Please check back later.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Token expired
+  if (errorStage === "token_expired") {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-6 h-6 text-destructive" />
+              <CardTitle>Link Expired</CardTitle>
+            </div>
+            <CardDescription>
+              {error}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
   if (error || !signer || !request) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
@@ -248,10 +324,6 @@ export default function Sign() {
       </div>
     );
   }
-
-  const signerFields = (request.field_data || []).filter(
-    (field: any) => field.signerIndex === signer.signing_order - 1
-  );
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-muted/30">
@@ -299,7 +371,7 @@ export default function Sign() {
 
           <div className="space-y-4">
             <Label>Complete Required Fields</Label>
-            {signerFields.map((field: any) => (
+            {fields.map((field: any) => (
               <div key={field.id} className="space-y-2">
                 <Label className="text-sm font-medium">
                   {field.label}
@@ -345,7 +417,7 @@ export default function Sign() {
                       }
                     />
                     <label htmlFor={field.id} className="text-sm text-muted-foreground cursor-pointer">
-                      {field.checkboxLabel || "I agree"}
+                      {field.checkboxLabel || field.label || "I agree"}
                     </label>
                   </div>
                 ) : field.type === "date" ? (

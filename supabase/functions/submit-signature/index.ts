@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
+import { PDFDocument, rgb, StandardFonts } from "npm:pdf-lib@1.17.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,6 +22,144 @@ async function log(sb: any, entry: Record<string, unknown>) {
   }
 }
 
+async function hashToken(raw: string): Promise<string> {
+  const data = new TextEncoder().encode(raw);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// ---------------------------------------------------------------------------
+// PDF Flattening — embed signatures/fields onto original PDF
+// ---------------------------------------------------------------------------
+
+async function generateFlattenedPdf(
+  sb: any,
+  request: any,
+  allSignersWithValues: any[],
+): Promise<Uint8Array> {
+  // Download the original PDF from storage
+  const { data: fileData, error: downloadErr } = await sb.storage
+    .from("claim-files")
+    .download(request.document_path);
+
+  if (downloadErr || !fileData) {
+    throw new Error(`Failed to download original PDF: ${downloadErr?.message || "not found"}`);
+  }
+
+  const pdfBytes = await fileData.arrayBuffer();
+  const pdfDoc = await PDFDocument.load(pdfBytes);
+  const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+  // Process each signer's field values
+  for (const signer of allSignersWithValues) {
+    const fieldValues = signer.field_values || {};
+
+    for (const [fieldId, fieldEntry] of Object.entries(fieldValues)) {
+      const field = fieldEntry as any;
+      if (!field) continue;
+
+      const pageIndex = (field.page || 1) - 1;
+      const pages = pdfDoc.getPages();
+      if (pageIndex < 0 || pageIndex >= pages.length) continue;
+
+      const page = pages[pageIndex];
+      const pageHeight = page.getHeight();
+      const pageWidth = page.getWidth();
+
+      // field.x and field.y are percentages (0-100) from field placement editor
+      const x = (field.x / 100) * pageWidth;
+      const y = pageHeight - ((field.y / 100) * pageHeight) - ((field.height || 5) / 100) * pageHeight;
+      const w = (field.width / 100) * pageWidth;
+      const h = ((field.height || 5) / 100) * pageHeight;
+
+      if (field.field_type === "signature" && field.value && typeof field.value === "string" && field.value.startsWith("data:")) {
+        try {
+          // Extract base64 from data URI
+          const base64Data = field.value.split(",")[1];
+          if (!base64Data) continue;
+
+          const imgBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+
+          let embeddedImage;
+          if (field.value.includes("image/png")) {
+            embeddedImage = await pdfDoc.embedPng(imgBytes);
+          } else {
+            // Try PNG first (canvas.toDataURL() defaults to PNG)
+            try {
+              embeddedImage = await pdfDoc.embedPng(imgBytes);
+            } catch {
+              embeddedImage = await pdfDoc.embedJpg(imgBytes);
+            }
+          }
+
+          const aspectRatio = embeddedImage.width / embeddedImage.height;
+          const drawH = Math.min(h, w / aspectRatio);
+          const drawW = drawH * aspectRatio;
+
+          page.drawImage(embeddedImage, {
+            x,
+            y: y + (h - drawH), // align to top of field area
+            width: drawW,
+            height: drawH,
+          });
+        } catch (imgErr) {
+          console.error("Failed to embed signature image:", imgErr);
+          // Draw placeholder text if image embedding fails
+          page.drawText("[Signature on file]", {
+            x,
+            y: y + h / 2 - 5,
+            size: 10,
+            font: helvetica,
+            color: rgb(0.3, 0.3, 0.3),
+          });
+        }
+      } else if (field.field_type === "date" && field.value) {
+        page.drawText(String(field.value), {
+          x,
+          y: y + h / 2 - 5,
+          size: 11,
+          font: helvetica,
+          color: rgb(0, 0, 0),
+        });
+      } else if (field.field_type === "text" && field.value) {
+        page.drawText(String(field.value), {
+          x,
+          y: y + h / 2 - 5,
+          size: 11,
+          font: helvetica,
+          color: rgb(0, 0, 0),
+        });
+      } else if (field.field_type === "checkbox") {
+        // Draw a checkbox mark
+        if (field.value) {
+          page.drawText("☑", {
+            x,
+            y: y + h / 2 - 6,
+            size: 14,
+            font: helvetica,
+            color: rgb(0, 0, 0),
+          });
+        } else {
+          page.drawText("☐", {
+            x,
+            y: y + h / 2 - 6,
+            size: 14,
+            font: helvetica,
+            color: rgb(0.5, 0.5, 0.5),
+          });
+        }
+      }
+    }
+  }
+
+  return await pdfDoc.save();
+}
+
+// ---------------------------------------------------------------------------
+// Main handler
+// ---------------------------------------------------------------------------
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -38,16 +177,17 @@ Deno.serve(async (req) => {
       return respond({ ok: false, stage: "validate_token", error: "Missing token" }, 400);
     }
 
-    // Capture IP and user agent for audit
     const ipAddress = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       req.headers.get("cf-connecting-ip") || "unknown";
     const userAgent = req.headers.get("user-agent") || "unknown";
 
-    // Look up signer by access token
+    // Hash token and look up by hash
+    const tokenHash = await hashToken(token);
+
     const { data: signer, error: signerError } = await sb
       .from("signature_signers")
       .select("*, signature_requests(*, claims(id, claim_number, policyholder_name))")
-      .eq("access_token", token)
+      .eq("token_hash", tokenHash)
       .maybeSingle();
 
     if (signerError) {
@@ -59,7 +199,12 @@ Deno.serve(async (req) => {
       return respond({ ok: false, stage: "fetch_signer", error: "Invalid or expired signing token" }, 404);
     }
 
-    // Prevent double-submit race condition
+    // Check expiry
+    if (signer.expires_at && new Date(signer.expires_at) < new Date()) {
+      return respond({ ok: false, stage: "token_expired", error: "This signing link has expired. Please request a new one." }, 403);
+    }
+
+    // Prevent double-submit
     if (signer.status === "signed") {
       return respond({ ok: false, stage: "already_signed", error: "Document already signed", alreadySigned: true }, 400);
     }
@@ -67,15 +212,47 @@ Deno.serve(async (req) => {
     const request = signer.signature_requests;
     const claimId = request.claim_id;
 
-    // Validate required fields
-    const signerFields = (request.field_data || []).filter(
-      (f: any) => f.signerIndex === signer.signing_order - 1
-    );
+    // Enforce signer ordering
+    if (signer.signing_order > 1) {
+      const { data: priorSigners } = await sb
+        .from("signature_signers")
+        .select("id, status, signing_order")
+        .eq("signature_request_id", request.id)
+        .lt("signing_order", signer.signing_order)
+        .neq("status", "signed");
+
+      if (priorSigners && priorSigners.length > 0) {
+        return respond({ ok: false, stage: "signer_order_blocked", error: "A prior signer must complete before you can sign." }, 403);
+      }
+    }
+
+    // Validate required fields (use normalized fields if available, fall back to field_data)
+    const { data: normalizedFields } = await sb
+      .from("signature_fields")
+      .select("*")
+      .eq("signature_request_id", request.id)
+      .eq("signer_index", signer.signing_order - 1);
+
+    const signerFields = normalizedFields && normalizedFields.length > 0
+      ? normalizedFields.map((f: any) => ({
+          id: f.id,
+          type: f.field_type,
+          label: f.label,
+          required: f.required,
+          page: f.page,
+          x: f.x,
+          y: f.y,
+          width: f.width,
+          height: f.height,
+        }))
+      : (request.field_data || []).filter(
+          (f: any) => f.signerIndex === signer.signing_order - 1
+        );
 
     const validationErrors: string[] = [];
     for (const field of signerFields) {
       const value = fieldValues?.[field.id];
-      const isRequired = field.required !== false; // default to required
+      const isRequired = field.required !== false;
 
       if (isRequired) {
         if (field.type === "signature") {
@@ -83,7 +260,6 @@ Deno.serve(async (req) => {
             validationErrors.push(`Signature field "${field.label || "Signature"}" is required`);
           }
         } else if (field.type === "checkbox") {
-          // Checkbox: value should be truthy
           if (!value) {
             validationErrors.push(`Checkbox "${field.label || "Checkbox"}" must be checked`);
           }
@@ -97,17 +273,13 @@ Deno.serve(async (req) => {
 
     if (validationErrors.length > 0) {
       await log(sb, {
-        request_id: request.id,
-        signer_id: signer.id,
-        claim_id: claimId,
-        stage: "field_validation_failed",
-        status: "error",
+        request_id: request.id, signer_id: signer.id, claim_id: claimId,
+        stage: "field_validation_failed", status: "error",
         message: validationErrors.join("; "),
-        payload: { validationErrors, fieldValues: Object.keys(fieldValues || {}) },
+        payload: { validationErrors },
       });
       return respond({
-        ok: false,
-        stage: "field_validation",
+        ok: false, stage: "field_validation",
         error: validationErrors.join("; "),
         validationErrors,
       }, 400);
@@ -129,7 +301,18 @@ Deno.serve(async (req) => {
       };
     }
 
-    // Update the signer record — use conditional update to prevent race condition
+    // Save to normalized signature_field_values table
+    if (normalizedFields && normalizedFields.length > 0) {
+      const valueRows = normalizedFields.map((f: any) => ({
+        field_id: f.id,
+        signer_id: signer.id,
+        value: fieldValues?.[f.id] != null ? String(fieldValues[f.id]) : null,
+        checked: f.field_type === "checkbox" ? (!!fieldValues?.[f.id]) : false,
+      }));
+      await sb.from("signature_field_values").insert(valueRows);
+    }
+
+    // Update the signer record — conditional update to prevent race condition
     const { data: updated, error: updateError } = await sb
       .from("signature_signers")
       .update({
@@ -140,7 +323,7 @@ Deno.serve(async (req) => {
         user_agent: userAgent,
       })
       .eq("id", signer.id)
-      .neq("status", "signed") // race condition guard
+      .neq("status", "signed")
       .select("id")
       .maybeSingle();
 
@@ -150,28 +333,20 @@ Deno.serve(async (req) => {
     }
 
     if (!updated) {
-      // Another request beat us — already signed
       return respond({ ok: false, stage: "already_signed", error: "Document already signed", alreadySigned: true }, 400);
     }
 
-    // Log the sign event
     await log(sb, {
-      request_id: request.id,
-      signer_id: signer.id,
-      claim_id: claimId,
-      stage: "signer_signed",
-      status: "ok",
+      request_id: request.id, signer_id: signer.id, claim_id: claimId,
+      stage: "signer_signed", status: "ok",
       message: `${signer.signer_name} signed the document`,
-      payload: {
-        ip_address: ipAddress,
-        fields_completed: Object.keys(normalizedValues).length,
-      },
+      payload: { ip_address: ipAddress, fields_completed: Object.keys(normalizedValues).length },
     });
 
     // Check if all signers have signed
     const { data: allSigners, error: allSignersError } = await sb
       .from("signature_signers")
-      .select("id, status")
+      .select("id, status, field_values, signing_order, signer_name")
       .eq("signature_request_id", request.id);
 
     if (allSignersError) {
@@ -185,39 +360,47 @@ Deno.serve(async (req) => {
       // ── COMPLETION FLOW ──
       const completedAt = new Date().toISOString();
 
-      // Update request to completed
-      await sb
-        .from("signature_requests")
-        .update({
-          status: "completed",
-          completed_at: completedAt,
-          last_error: null,
-        })
-        .eq("id", request.id);
+      await sb.from("signature_requests").update({
+        status: "completed",
+        completed_at: completedAt,
+        last_error: null,
+        completion_status: "pending",
+      }).eq("id", request.id);
 
-      // Log completion
       await log(sb, {
-        request_id: request.id,
-        signer_id: null,
-        claim_id: claimId,
-        stage: "request_completed",
-        status: "ok",
+        request_id: request.id, signer_id: null, claim_id: claimId,
+        stage: "request_completed", status: "ok",
         message: `All ${allSigners!.length} signers completed — "${request.document_name}"`,
         payload: { signer_count: allSigners!.length },
       });
 
-      // Attempt to create a record in claim_files for the signed document
-      // (the original document path serves as the signed copy since field values are stored in DB)
+      // Attempt PDF flattening
       try {
-        // Upload a metadata marker — the actual PDF flattening with embedded signatures
-        // would require a PDF library. For now we attach the original + field_values as the signed record.
-        const finalPdfPath = request.document_path;
+        const flattenedBytes = await generateFlattenedPdf(sb, request, allSigners!);
+
+        // Upload to storage
+        const finalPath = `claim-files/signed/${claimId}/${request.id}-final.pdf`;
+        const blob = new Blob([flattenedBytes], { type: "application/pdf" });
+
+        const { error: uploadError } = await sb.storage
+          .from("claim-files")
+          .upload(`signed/${claimId}/${request.id}-final.pdf`, blob, {
+            contentType: "application/pdf",
+            upsert: true,
+          });
+
+        if (uploadError) {
+          throw new Error(`Upload failed: ${uploadError.message}`);
+        }
+
+        const storagePath = `signed/${claimId}/${request.id}-final.pdf`;
 
         await sb.from("signature_requests").update({
-          final_pdf_path: finalPdfPath,
+          final_pdf_path: storagePath,
+          completion_status: "completed",
         }).eq("id", request.id);
 
-        // Attach signed document to claim files if not already there
+        // Attach to claim files
         const signedFileName = `SIGNED - ${request.document_name}`;
         const { data: existingFile } = await sb
           .from("claim_files")
@@ -230,41 +413,49 @@ Deno.serve(async (req) => {
           await sb.from("claim_files").insert({
             claim_id: claimId,
             file_name: signedFileName,
-            file_path: finalPdfPath,
+            file_path: storagePath,
             file_type: "application/pdf",
           });
         }
 
-        // Log to claim timeline
+        // Claim timeline
         await sb.from("claim_updates").insert({
           claim_id: claimId,
-          content: `✅ All signatures completed for "${request.document_name}"`,
+          content: `✅ All signatures completed for "${request.document_name}" — signed PDF generated`,
           update_type: "esign",
         });
 
+        await log(sb, {
+          request_id: request.id, signer_id: null, claim_id: claimId,
+          stage: "pdf_flattened", status: "ok",
+          message: "Final signed PDF generated and uploaded",
+          payload: { final_pdf_path: storagePath },
+        });
       } catch (completionErr) {
         const errMsg = completionErr instanceof Error ? completionErr.message : "Unknown error";
-        console.error("Completion post-processing error:", errMsg);
+        console.error("PDF flattening error:", errMsg);
+
+        await sb.from("signature_requests").update({
+          completion_status: "failed",
+          last_error: `PDF generation failed: ${errMsg}`,
+        }).eq("id", request.id);
 
         await log(sb, {
-          request_id: request.id,
-          signer_id: null,
-          claim_id: claimId,
-          stage: "completion_failed",
-          status: "error",
-          message: `Post-processing failed: ${errMsg}`,
+          request_id: request.id, signer_id: null, claim_id: claimId,
+          stage: "completion_failed", status: "error",
+          message: `PDF flattening failed: ${errMsg}`,
           payload: null,
         });
 
-        // Don't fail the response — the signature was captured successfully
-        // The completion artifacts can be retried
+        // Still log timeline entry — signatures are captured
+        await sb.from("claim_updates").insert({
+          claim_id: claimId,
+          content: `⚠️ Signatures completed for "${request.document_name}" but PDF generation failed — retry available`,
+          update_type: "esign",
+        });
       }
     } else {
-      // Update request to in_progress
-      await sb
-        .from("signature_requests")
-        .update({ status: "in_progress" })
-        .eq("id", request.id);
+      await sb.from("signature_requests").update({ status: "in_progress" }).eq("id", request.id);
     }
 
     return respond({

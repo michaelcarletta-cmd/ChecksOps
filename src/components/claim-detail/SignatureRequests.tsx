@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { FileSignature, Plus, Loader2, Mail, Check, Clock, X, ChevronRight, ChevronLeft, ExternalLink, Link2 } from "lucide-react";
+import { FileSignature, Plus, Loader2, Mail, Check, Clock, X, ChevronRight, ChevronLeft, ExternalLink, Link2, RefreshCw, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { FieldPlacementEditor } from "./FieldPlacementEditor";
 import { SignatureDiagnostics } from "./SignatureDiagnostics";
@@ -23,7 +23,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1); // 1: template, 2: fields, 3: signers
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
   const [signers, setSigners] = useState([
     { name: claim.policyholder_name || "", email: claim.policyholder_email || "", type: "policyholder", order: 1 }
   ]);
@@ -34,7 +34,6 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
   const [generatedDocxData, setGeneratedDocxData] = useState<Uint8Array | null>(null);
   const [sourceType, setSourceType] = useState<"template" | "claim_file">("template");
   const [selectedClaimFile, setSelectedClaimFile] = useState<any>(null);
-
 
   const { data: templates } = useQuery({
     queryKey: ["document-templates"],
@@ -48,7 +47,6 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
     },
   });
 
-  // Fetch claim PDF files for direct signature use
   const { data: claimPdfFiles } = useQuery({
     queryKey: ["claim-pdf-files", claimId],
     queryFn: async () => {
@@ -85,7 +83,6 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
     mutationFn: async () => {
       if (!selectedTemplate) throw new Error("No template selected");
 
-      // Generate document from template
       const { data: docData, error: docError } = await supabase.functions.invoke(
         "generate-document",
         { body: { templateId: selectedTemplate.id, claimId } }
@@ -93,7 +90,6 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
       if (docError) throw docError;
       if (docData.error) throw new Error(docData.error);
 
-      // Handle both PDF and Word document responses
       const isPDF = docData.isPDF;
       setIsDocxTemplate(!isPDF);
       
@@ -107,7 +103,6 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         ? "application/pdf" 
         : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-      // Upload to storage
       const fileName = `signatures/${claimId}/${Date.now()}-${docData.fileName}`;
       const blob = new Blob([contentUint8], { type: mimeType });
       
@@ -116,7 +111,6 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         .upload(fileName, blob);
       if (uploadError) throw uploadError;
 
-      // Get signed URL for field placement (only useful for PDFs)
       const { data: urlData } = await supabase.storage
         .from("claim-files")
         .createSignedUrl(fileName, 3600);
@@ -127,7 +121,6 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         setGeneratedDocUrl(urlData?.signedUrl || null);
         setGeneratedDocxData(null);
       } else {
-        // For DOCX, store the raw data for client-side rendering
         setGeneratedDocUrl(null);
         setGeneratedDocxData(contentUint8);
       }
@@ -135,7 +128,6 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
       return { fileName, url: urlData?.signedUrl, isPDF };
     },
     onSuccess: () => {
-      // Always go to field placement step
       setCurrentStep(2);
       toast({ title: "Document generated! Now place signature fields." });
     },
@@ -148,7 +140,6 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
     mutationFn: async () => {
       if (!selectedClaimFile) throw new Error("No file selected");
 
-      // Get signed URL for the existing PDF
       const { data: urlData, error } = await supabase.storage
         .from("claim-files")
         .createSignedUrl(selectedClaimFile.file_path, 3600);
@@ -177,7 +168,6 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         ? selectedClaimFile?.file_name || "Document" 
         : selectedTemplate?.name || "Document";
 
-      // Create signature request record
       const { data: request, error: requestError } = await supabase
         .from("signature_requests")
         .insert({
@@ -185,13 +175,12 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
           document_name: docName,
           document_path: generatedDocPath,
           field_data: placedFields,
-          status: "pending",
+          status: "draft",
         })
         .select()
         .single();
       if (requestError) throw requestError;
 
-      // Create signers
       const signersData = signers.map((s) => ({
         signature_request_id: request.id,
         signer_name: s.name,
@@ -205,16 +194,14 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
         .insert(signersData);
       if (signersError) throw signersError;
 
-      // Delegate ALL delivery orchestration to the edge function
       const { data, error } = await supabase.functions.invoke("send-signature-request", {
         body: { requestId: request.id, skipEmail },
       });
       if (error) {
         throw new Error(await getFunctionErrorMessage(error, "Could not send signature request"));
       }
-      if (data?.error) throw new Error(data.error);
+      if (data && !data.ok) throw new Error(data.error || "Send failed");
 
-      // Copy links to clipboard in manual bypass mode
       if (skipEmail && data?.signerLinks) {
         const links = data.signerLinks.map((l: any) => l.sign_url).join("\n");
         navigator.clipboard.writeText(links);
@@ -226,9 +213,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
       const mode = (data as any)?.mode;
       const title = mode === "manual_bypass"
         ? "Sign links generated & copied to clipboard"
-        : mode === "make_signnow"
-          ? "Sent to SignNow via Make.com"
-          : "Signature request created and emails sent";
+        : "Signature request created and emails sent";
       toast({ title });
       setIsCreateOpen(false);
       setCurrentStep(1);
@@ -249,6 +234,26 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
     },
   });
 
+  const resendMutation = useMutation({
+    mutationFn: async (requestId: string) => {
+      const { data, error } = await supabase.functions.invoke("send-signature-request", {
+        body: { requestId, skipEmail: false },
+      });
+      if (error) {
+        throw new Error(await getFunctionErrorMessage(error, "Could not resend"));
+      }
+      if (data && !data.ok) throw new Error(data.error || "Resend failed");
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: "Signature request resent" });
+      queryClient.invalidateQueries({ queryKey: ["signature-requests"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Resend failed", description: error.message, variant: "destructive" });
+    },
+  });
+
   const addSigner = () => {
     setSigners([...signers, { name: "", email: "", type: "other", order: signers.length + 1 }]);
   };
@@ -265,13 +270,11 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
 
   const deleteRequestMutation = useMutation({
     mutationFn: async (request: any) => {
-      // Delete document from storage
       const { error: storageError } = await supabase.storage
         .from("claim-files")
         .remove([request.document_path]);
       if (storageError) console.error("Storage deletion error:", storageError);
 
-      // Delete signature request (will cascade delete signers)
       const { error } = await supabase
         .from("signature_requests")
         .delete()
@@ -299,23 +302,39 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (request: any) => {
+    const status = request.status;
+    const completionStatus = request.completion_status;
+
     const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
       completed: "default",
       in_progress: "secondary",
       failed: "destructive",
       declined: "destructive",
       pending: "outline",
+      draft: "outline",
     };
-    const labels: Record<string, string> = {
-      pending: "Sent",
-      in_progress: "Partially Signed",
-      completed: "Completed",
-      failed: "Failed",
-      declined: "Declined",
-      draft: "Draft",
-    };
-    return <Badge variant={variants[status] || "outline"}>{labels[status] || status.replace("_", " ")}</Badge>;
+
+    let label = status;
+    if (status === "completed" && completionStatus === "failed") {
+      label = "Signed — PDF Failed";
+    } else {
+      const labels: Record<string, string> = {
+        pending: "Sent",
+        in_progress: "Partially Signed",
+        completed: "Completed",
+        failed: "Failed",
+        declined: "Declined",
+        draft: "Draft",
+      };
+      label = labels[status] || status.replace("_", " ");
+    }
+
+    const variant = status === "completed" && completionStatus === "failed"
+      ? "destructive" as const
+      : (variants[status] || "outline") as "default" | "secondary" | "destructive" | "outline";
+
+    return <Badge variant={variant}>{label}</Badge>;
   };
 
   const getSignerStatusLabel = (signer: any) => {
@@ -328,13 +347,13 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
 
   const handleOpenDocument = async (request: any) => {
     try {
-      if (!request.document_path) {
-        throw new Error("No document path found for this request");
-      }
+      // Prefer final signed PDF if available
+      const path = request.final_pdf_path || request.document_path;
+      if (!path) throw new Error("No document path found");
 
       const { data, error } = await supabase.storage
         .from("claim-files")
-        .createSignedUrl(request.document_path, 3600);
+        .createSignedUrl(path, 3600);
 
       if (error || !data?.signedUrl) {
         throw new Error(error?.message || "Unable to generate document link");
@@ -443,7 +462,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
               </div>
             )}
 
-            {/* Step 2: Field Placement (works for both PDF and DOCX) */}
+            {/* Step 2: Field Placement */}
             {currentStep === 2 && (generatedDocUrl || generatedDocxData) && (
               <FieldPlacementEditor
                 documentUrl={generatedDocUrl || undefined}
@@ -558,9 +577,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                     </Button>
                   )}
                   {currentStep === 2 && (
-                    <Button
-                      onClick={() => setCurrentStep(3)}
-                    >
+                    <Button onClick={() => setCurrentStep(3)}>
                       Next
                       <ChevronRight className="w-4 h-4 ml-2" />
                     </Button>
@@ -617,6 +634,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                       <CardDescription>
                         Created {new Date(request.created_at).toLocaleDateString()}
                         {request.sent_at && ` · Sent ${new Date(request.sent_at).toLocaleDateString()}`}
+                        {request.completed_at && ` · Completed ${new Date(request.completed_at).toLocaleDateString()}`}
                       </CardDescription>
                     </div>
                   </div>
@@ -626,9 +644,20 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                       size="sm"
                       onClick={() => handleOpenDocument(request)}
                     >
-                      Open Document
+                      {request.final_pdf_path ? "View Signed PDF" : "Open Document"}
                     </Button>
-                    {getStatusBadge(request.status)}
+                    {(request.status === "failed" || request.status === "pending") && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => resendMutation.mutate(request.id)}
+                        disabled={resendMutation.isPending}
+                      >
+                        <RefreshCw className={`w-3 h-3 mr-1 ${resendMutation.isPending ? "animate-spin" : ""}`} />
+                        Resend
+                      </Button>
+                    )}
+                    {getStatusBadge(request)}
                     <Button
                       variant="ghost"
                       size="icon"
@@ -640,7 +669,16 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                   </div>
                 </div>
                 {request.last_error && (
-                  <p className="text-xs text-destructive mt-1">⚠ {request.last_error}</p>
+                  <div className="flex items-center gap-1.5 mt-1.5 text-xs text-destructive">
+                    <AlertTriangle className="w-3 h-3" />
+                    {request.last_error}
+                  </div>
+                )}
+                {request.completion_status === "failed" && (
+                  <div className="flex items-center gap-1.5 mt-1 text-xs text-amber-600">
+                    <AlertTriangle className="w-3 h-3" />
+                    Signatures captured but final PDF generation failed — admin action needed
+                  </div>
                 )}
               </CardHeader>
               <CardContent>

@@ -10389,10 +10389,112 @@ export type Database = {
         }
         Relationships: []
       }
+      signature_field_values: {
+        Row: {
+          checked: boolean | null
+          field_id: string
+          id: string
+          signer_id: string
+          submitted_at: string
+          value: string | null
+        }
+        Insert: {
+          checked?: boolean | null
+          field_id: string
+          id?: string
+          signer_id: string
+          submitted_at?: string
+          value?: string | null
+        }
+        Update: {
+          checked?: boolean | null
+          field_id?: string
+          id?: string
+          signer_id?: string
+          submitted_at?: string
+          value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signature_field_values_field_id_fkey"
+            columns: ["field_id"]
+            isOneToOne: false
+            referencedRelation: "signature_fields"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "signature_field_values_signer_id_fkey"
+            columns: ["signer_id"]
+            isOneToOne: false
+            referencedRelation: "signature_signers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      signature_fields: {
+        Row: {
+          checkbox_label: string | null
+          created_at: string
+          field_type: string
+          height: number
+          id: string
+          label: string | null
+          page: number
+          placeholder: string | null
+          required: boolean
+          signature_request_id: string
+          signer_index: number
+          width: number
+          x: number
+          y: number
+        }
+        Insert: {
+          checkbox_label?: string | null
+          created_at?: string
+          field_type: string
+          height?: number
+          id?: string
+          label?: string | null
+          page?: number
+          placeholder?: string | null
+          required?: boolean
+          signature_request_id: string
+          signer_index?: number
+          width?: number
+          x?: number
+          y?: number
+        }
+        Update: {
+          checkbox_label?: string | null
+          created_at?: string
+          field_type?: string
+          height?: number
+          id?: string
+          label?: string | null
+          page?: number
+          placeholder?: string | null
+          required?: boolean
+          signature_request_id?: string
+          signer_index?: number
+          width?: number
+          x?: number
+          y?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signature_fields_signature_request_id_fkey"
+            columns: ["signature_request_id"]
+            isOneToOne: false
+            referencedRelation: "signature_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       signature_requests: {
         Row: {
           claim_id: string
           completed_at: string | null
+          completion_status: string | null
           created_at: string | null
           created_by: string | null
           delivery_mode: string | null
@@ -10413,6 +10515,7 @@ export type Database = {
         Insert: {
           claim_id: string
           completed_at?: string | null
+          completion_status?: string | null
           created_at?: string | null
           created_by?: string | null
           delivery_mode?: string | null
@@ -10433,6 +10536,7 @@ export type Database = {
         Update: {
           claim_id?: string
           completed_at?: string | null
+          completion_status?: string | null
           created_at?: string | null
           created_by?: string | null
           delivery_mode?: string | null
@@ -10475,6 +10579,7 @@ export type Database = {
           delivery_status: string | null
           email_provider_message_id: string | null
           email_sent_at: string | null
+          expires_at: string | null
           field_values: Json | null
           id: string
           ip_address: string | null
@@ -10486,6 +10591,7 @@ export type Database = {
           signer_type: string
           signing_order: number
           status: string
+          token_hash: string | null
           user_agent: string | null
           viewed_at: string | null
         }
@@ -10496,6 +10602,7 @@ export type Database = {
           delivery_status?: string | null
           email_provider_message_id?: string | null
           email_sent_at?: string | null
+          expires_at?: string | null
           field_values?: Json | null
           id?: string
           ip_address?: string | null
@@ -10507,6 +10614,7 @@ export type Database = {
           signer_type: string
           signing_order?: number
           status?: string
+          token_hash?: string | null
           user_agent?: string | null
           viewed_at?: string | null
         }
@@ -10517,6 +10625,7 @@ export type Database = {
           delivery_status?: string | null
           email_provider_message_id?: string | null
           email_sent_at?: string | null
+          expires_at?: string | null
           field_values?: Json | null
           id?: string
           ip_address?: string | null
@@ -10528,6 +10637,7 @@ export type Database = {
           signer_type?: string
           signing_order?: number
           status?: string
+          token_hash?: string | null
           user_agent?: string | null
           viewed_at?: string | null
         }
