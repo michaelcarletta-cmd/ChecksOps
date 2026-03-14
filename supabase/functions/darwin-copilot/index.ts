@@ -563,6 +563,7 @@ ${argPatternsBrief}
 ${feedbackBrief}
 ${timelineBrief}
 ${estimateBrief}
+${regulatoryViolationBrief}
 
 CLAIM INTELLIGENCE:
 ${JSON.stringify(claimIntel, null, 2).slice(0, 8000)}
