@@ -3444,10 +3444,12 @@ Be specific, professional, and provide communications that are ready to copy and
         const scenarioSpecificUnaddressedDamage = buildScenarioUnaddressedDamage(primarySc);
 
         const lowSlopeTheoryOpening = REQUIRED_LOW_SLOPE_OPENING;
-        const engineerTheoryCorpus = [
-          dismantlerExtraction.engineerStatedCause,
-          ...dismantlerExtraction.engineerTheorySentences,
-        ].filter(Boolean).join(' ').toLowerCase();
+        const engineerCausationSentence = String(
+          dismantlerExtraction.engineerStatedCause
+          || dismantlerExtraction.engineerTheorySentences[0]
+          || ''
+        );
+        const engineerTheoryCorpus = engineerCausationSentence.toLowerCase();
         engineerTheoryCorpusForFilters = engineerTheoryCorpus;
 
         const windCausationTerms = [
