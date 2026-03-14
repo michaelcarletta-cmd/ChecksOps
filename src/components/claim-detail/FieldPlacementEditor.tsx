@@ -211,7 +211,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
 
     const updatedFields = [...fields, newField];
     setFields(updatedFields);
-    onFieldsChange(updatedFields);
+    emitFieldsAsPercentages(updatedFields);
     toast({ title: `${type} field added to page ${currentPage}` });
   };
 
