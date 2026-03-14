@@ -356,8 +356,11 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
 
     clearAllFields();
     const templateFields = (Array.isArray(template.field_data) ? template.field_data : []) as unknown as Field[];
-    setFields(templateFields);
-    onFieldsChange(templateFields);
+    // Templates may be in percentages — check if values look like percentages (< 100)
+    const looksLikePercent = templateFields.length > 0 && templateFields.every(f => f.x <= 100 && f.y <= 100);
+    const displayFields = looksLikePercent ? pixelsFromPercent(templateFields) : templateFields;
+    setFields(displayFields);
+    emitFieldsAsPercentages(displayFields);
     toast({ title: `Template "${template.name}" loaded` });
   };
 
