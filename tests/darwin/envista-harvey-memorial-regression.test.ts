@@ -544,14 +544,23 @@ function enforceEngineerRebuttalLowSlopeOpening(result: string, primaryScenario:
 
 function suppressLowSlopeUnsupportedBoilerplate(result: string, engineerTheoryCorpus: string): string {
   const theory = engineerTheoryCorpus.toLowerCase();
-  const filteredLines = result.split("\n").filter((line) => {
-    const trimmed = line.trim();
-    if (!trimmed) return true;
-    return !LOW_SLOPE_FORBIDDEN_RULES.some((rule) => {
-      const supported = rule.supportTerms.some((term) => theory.includes(term.toLowerCase()));
-      return !supported && rule.regex.test(trimmed);
-    });
+  const unsupportedRules = LOW_SLOPE_FORBIDDEN_RULES.filter((rule) => {
+    const supported = rule.supportTerms.some((term) => theory.includes(term.toLowerCase()));
+    return !supported;
   });
+
+  if (unsupportedRules.length === 0) return result.trim();
+
+  const filteredLines = result
+    .split("\n")
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return "";
+      if (unsupportedRules.some((rule) => rule.regex.test(trimmed))) return "";
+      return line;
+    })
+    .filter(Boolean);
+
   return filteredLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
@@ -561,44 +570,53 @@ function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: st
   let updated = enforceEngineerRebuttalLowSlopeOpening(result, primaryScenario);
   updated = suppressLowSlopeUnsupportedBoilerplate(updated, engineerTheoryCorpus);
 
+  const lower = updated.toLowerCase();
+
+  const sectionsToAppend: string[] = [];
+
+  const hasPriorityOrder = /priority order \(mandatory\)/i.test(lower)
+    || /1\)\s*timing of openings/i.test(lower);
+  if (!hasPriorityOrder) sectionsToAppend.push(LOW_SLOPE_PRIORITY_ORDER);
+
+  const hasTimingFailureSection = /section\s*1\s*[—-]\s*timing failure/i.test(lower)
+    || (/timing of openings/i.test(lower) && /months|years/i.test(lower) && /no objective testing|no testing|without testing|no proof/i.test(lower));
+  if (!hasTimingFailureSection) sectionsToAppend.push(LOW_SLOPE_TIMING_FAILURE_SECTION);
+
   const hasMethodologyPack = [
     /membrane core cuts?/i,
     /seam adhesion|peel testing/i,
-    /drainage[-\s]capacity analysis/i,
-    /snow[-\s]water equivalent|runoff analysis/i,
     /leak[-\s]path tracing/i,
     /moisture mapping/i,
-    /proof of timing of openings|timing of openings/i,
   ].every((pattern) => pattern.test(updated));
-
   if (!hasMethodologyPack) {
-    updated += `\n\nLOW-SLOPE MEMBRANE METHODOLOGY FAILURES (MANDATORY):
+    sectionsToAppend.push(`LOW-SLOPE MEMBRANE METHODOLOGY FAILURES (MANDATORY):
 - no membrane core cuts
 - no seam adhesion/peel testing
-- no drainage-capacity analysis
-- no snow-water equivalent/runoff analysis
 - no leak-path tracing
 - no moisture mapping
-- no proof of timing of openings`;
+- no proof of timing of openings`);
   }
 
-  const lower = updated.toLowerCase();
-  const hasContradictionAttack = /snow impeded drainage/i.test(lower)
-    && /standing water/i.test(lower)
-    && /freeze[-\s]thaw/i.test(lower)
-    && /without proving deterioration alone caused the loss|deterioration alone caused the loss/i.test(lower);
+  const hasDrainageFailureSection = /section\s*2\s*[—-]\s*drainage\s*\/\s*snowmelt analysis failure/i.test(lower)
+    || (/drainage[-\s]capacity/i.test(lower) && /snow[-\s]water equivalent|runoff analysis/i.test(lower));
+  if (!hasDrainageFailureSection) sectionsToAppend.push(LOW_SLOPE_DRAINAGE_FAILURE_SECTION);
 
-  if (!hasContradictionAttack) {
-    updated += `\n\nCONTRADICTION IN THE ENGINEER'S OWN ANALYSIS:
-The report admits snow impeded drainage, standing water existed, and freeze-thaw can worsen openings, yet still blames maintenance without proving deterioration alone caused the loss.`;
-  }
+  const hasContradictionAttack = /section\s*3\s*[—-]\s*engineer contradiction/i.test(lower)
+    || (/snow impeded drainage/i.test(lower)
+      && /standing water (was present|existed)/i.test(lower)
+      && /freeze[-\s]thaw/i.test(lower)
+      && /did not create or expand the openings|deterioration alone caused the loss|without proving/i.test(lower));
+  if (!hasContradictionAttack) sectionsToAppend.push(LOW_SLOPE_CONTRADICTION_SECTION);
 
-  const hasStructuralVsWatertightness = /structural snow[-\s]load analysis/i.test(updated.toLowerCase())
-    && /membrane watertightness analysis/i.test(updated.toLowerCase());
-
+  const hasStructuralVsWatertightness = /structural snow[-\s]load analysis is not membrane watertightness analysis/i.test(lower)
+    || (/structural snow[-\s]load analysis/i.test(lower) && /membrane watertightness analysis/i.test(lower));
   if (!hasStructuralVsWatertightness) {
-    updated += `\n\nSTRUCTURAL VS MEMBRANE DISTINCTION:
-Structural snow-load analysis is not membrane watertightness analysis. A report can address framing load capacity while still failing to prove membrane-entry pathways, timing of openings, and causation for interior leakage.`;
+    sectionsToAppend.push(`STRUCTURAL VS WATERTIGHTNESS DISTINCTION:
+${LOW_SLOPE_STRUCTURAL_DISTINCTION} Even if framing can carry snow load, that does not prove membrane watertightness or entry-path causation.`);
+  }
+
+  if (sectionsToAppend.length > 0) {
+    updated += `\n\n${sectionsToAppend.join("\n\n")}`;
   }
 
   return updated.trim();
