@@ -147,6 +147,25 @@ export const TemplatesSettings = () => {
     },
   });
 
+  const updateFieldTemplateMutation = useMutation({
+    mutationFn: async ({ templateId, fieldData }: { templateId: string; fieldData: any[] }) => {
+      const { error } = await supabase
+        .from("signature_field_templates")
+        .update({ field_data: fieldData })
+        .eq("id", templateId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Field display labels saved");
+      setEditingFieldTemplateId(null);
+      setEditingFieldData(null);
+      queryClient.invalidateQueries({ queryKey: ["signature-field-templates"] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
   const handleDownload = async (template: any) => {
     try {
       const { data, error } = await supabase.storage
