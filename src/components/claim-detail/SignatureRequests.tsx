@@ -685,9 +685,36 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                   </div>
                 )}
                 {request.completion_status === "failed" && (
-                  <div className="flex items-center gap-1.5 mt-1 text-xs text-amber-600">
-                    <AlertTriangle className="w-3 h-3" />
-                    Signatures captured but final PDF generation failed — admin action needed
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                      <AlertTriangle className="w-3 h-3" />
+                      Signatures captured but final PDF generation failed
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={async () => {
+                        toast({ title: "Retrying PDF generation..." });
+                        try {
+                          const { data, error } = await supabase.functions.invoke("retry-pdf-generation", {
+                            body: { requestId: request.id },
+                          });
+                          if (error) throw error;
+                          if (data?.ok) {
+                            toast({ title: "✅ Signed PDF generated successfully!" });
+                            queryClient.invalidateQueries({ queryKey: ["signature-requests", claimId] });
+                          } else {
+                            toast({ title: "PDF generation failed", description: data?.error, variant: "destructive" });
+                          }
+                        } catch (err: any) {
+                          toast({ title: "Retry failed", description: err.message, variant: "destructive" });
+                        }
+                      }}
+                    >
+                      <RefreshCw className="w-3 h-3 mr-1" />
+                      Retry PDF
+                    </Button>
                   </div>
                 )}
               </CardHeader>

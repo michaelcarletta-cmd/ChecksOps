@@ -30,6 +30,93 @@ async function hashToken(raw: string): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// Standalone signed certificate for non-PDF originals (e.g. DOCX)
+// ---------------------------------------------------------------------------
+
+async function generateSignedCertificatePdf(
+  request: any,
+  allSignersWithValues: any[],
+): Promise<Uint8Array> {
+  const pdfDoc = await PDFDocument.create();
+  const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const page = pdfDoc.addPage([612, 792]); // Letter size
+  const { height } = page.getSize();
+  let y = height - 60;
+
+  // Title
+  page.drawText("Certificate of Signature Completion", {
+    x: 50, y, size: 18, font: helveticaBold, color: rgb(0.1, 0.1, 0.1),
+  });
+  y -= 30;
+
+  // Document info
+  page.drawText(`Document: ${request.document_name || "Untitled"}`, {
+    x: 50, y, size: 11, font: helvetica, color: rgb(0.2, 0.2, 0.2),
+  });
+  y -= 18;
+  page.drawText(`Completed: ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}`, {
+    x: 50, y, size: 11, font: helvetica, color: rgb(0.2, 0.2, 0.2),
+  });
+  y -= 30;
+
+  // Separator line
+  page.drawLine({
+    start: { x: 50, y }, end: { x: 562, y },
+    thickness: 1, color: rgb(0.7, 0.7, 0.7),
+  });
+  y -= 30;
+
+  // Each signer
+  for (const signer of allSignersWithValues) {
+    page.drawText(signer.signer_name || "Unknown Signer", {
+      x: 50, y, size: 13, font: helveticaBold, color: rgb(0.1, 0.1, 0.1),
+    });
+    y -= 18;
+
+    const fieldValues = signer.field_values || {};
+    for (const [, fieldEntry] of Object.entries(fieldValues)) {
+      const field = fieldEntry as any;
+      if (!field) continue;
+
+      if (field.field_type === "signature" && field.value && typeof field.value === "string" && field.value.startsWith("data:")) {
+        try {
+          const base64Data = field.value.split(",")[1];
+          if (!base64Data) continue;
+          const imgBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+          let embeddedImage;
+          try { embeddedImage = await pdfDoc.embedPng(imgBytes); } catch { embeddedImage = await pdfDoc.embedJpg(imgBytes); }
+          const aspectRatio = embeddedImage.width / embeddedImage.height;
+          const drawH = Math.min(50, 200 / aspectRatio);
+          const drawW = drawH * aspectRatio;
+          page.drawImage(embeddedImage, { x: 60, y: y - drawH, width: drawW, height: drawH });
+          y -= drawH + 10;
+        } catch {
+          page.drawText("[Signature on file]", { x: 60, y, size: 10, font: helvetica, color: rgb(0.4, 0.4, 0.4) });
+          y -= 16;
+        }
+      } else if (field.value) {
+        const label = field.field_label || field.field_type || "Field";
+        page.drawText(`${label}: ${String(field.value)}`, {
+          x: 60, y, size: 10, font: helvetica, color: rgb(0.3, 0.3, 0.3),
+        });
+        y -= 16;
+      }
+    }
+    y -= 20;
+
+    // Next page if running out of space
+    if (y < 80) {
+      const newPage = pdfDoc.addPage([612, 792]);
+      y = 792 - 60;
+    }
+  }
+
+  return await pdfDoc.save();
+}
+
+// ---------------------------------------------------------------------------
 // PDF Flattening — embed signatures/fields onto original PDF
 // ---------------------------------------------------------------------------
 
@@ -38,16 +125,24 @@ async function generateFlattenedPdf(
   request: any,
   allSignersWithValues: any[],
 ): Promise<Uint8Array> {
-  // Download the original PDF from storage
+  // Download the original document from storage
   const { data: fileData, error: downloadErr } = await sb.storage
     .from("claim-files")
     .download(request.document_path);
 
   if (downloadErr || !fileData) {
-    throw new Error(`Failed to download original PDF: ${downloadErr?.message || "not found"}`);
+    throw new Error(`Failed to download original document: ${downloadErr?.message || "not found"}`);
   }
 
   const pdfBytes = await fileData.arrayBuffer();
+  const headerBytes = new Uint8Array(pdfBytes.slice(0, 5));
+  const headerStr = String.fromCharCode(...headerBytes);
+
+  // If not a PDF, generate a standalone signed certificate
+  if (headerStr !== "%PDF-") {
+    return await generateSignedCertificatePdf(request, allSignersWithValues);
+  }
+
   const pdfDoc = await PDFDocument.load(pdfBytes);
   const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
