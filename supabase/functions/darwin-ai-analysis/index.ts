@@ -2484,6 +2484,14 @@ Never invent measurements, tests, or observations that are not in evidence.`;
             : (additionalContext?.userContext || additionalContext?.customPrompt || '')
         ).trim();
 
+        // ── Loss Mechanism Extraction (pre-rebuttal) ──
+        const engineerTextForMechanism = content || engineerUserContext || '';
+        const engineerLossMechanism = extractLossMechanism(engineerTextForMechanism);
+        if (engineerLossMechanism.snowmeltIceDamDetected || engineerLossMechanism.isMaintenanceDenialNarrative) {
+          console.log(`[darwin] Engineer Loss Mechanism Extraction: snowmelt=${engineerLossMechanism.snowmeltIceDamDetected}, maintenanceNarrative=${engineerLossMechanism.isMaintenanceDenialNarrative}, keywords=${engineerLossMechanism.matchedKeywords.join(',')}`);
+          systemPrompt += '\n' + engineerLossMechanism.promptInjection;
+        }
+
         userPrompt = `${claimSummary}
 
 STATE JURISDICTION: ${stateInfo.stateName} (${stateInfo.state})
