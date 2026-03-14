@@ -650,11 +650,11 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => resendMutation.mutate(request.id)}
+                        onClick={() => resendMutation.mutate({ requestId: request.id })}
                         disabled={resendMutation.isPending}
                       >
                         <RefreshCw className={`w-3 h-3 mr-1 ${resendMutation.isPending ? "animate-spin" : ""}`} />
-                        Resend
+                        Resend All
                       </Button>
                     )}
                     {getStatusBadge(request)}
