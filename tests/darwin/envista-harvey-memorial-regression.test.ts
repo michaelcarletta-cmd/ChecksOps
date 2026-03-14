@@ -776,10 +776,11 @@ describe("Harvey Memorial / Envista — prompt-content validation", () => {
 
 describe("Harvey Memorial / Envista — final-output enforcement", () => {
   const dismantler = runEngineerReportDismantler(ENVISTA_REPORT_TEXT);
-  const engineerTheoryCorpus = [
-    dismantler.engineerStatedCause,
-    ...dismantler.engineerTheorySentences,
-  ].filter(Boolean).join(" ").toLowerCase();
+  const engineerTheoryCorpus = String(
+    dismantler.engineerStatedCause
+    || dismantler.engineerTheorySentences[0]
+    || ""
+  ).toLowerCase();
 
   // Simulate a raw AI-generated rebuttal with wind/shingle boilerplate injected
   const SAMPLE_RAW_REBUTTAL = `RE: Rebuttal to Engineering Report
