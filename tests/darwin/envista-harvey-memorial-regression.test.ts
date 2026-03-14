@@ -465,19 +465,8 @@ MANDATORY THEORY SUMMARY (OPENING SENTENCE):
 "${REQUIRED_LOW_SLOPE_OPENING}"
 
 Do NOT default to generic storm/wind/shingle language in this scenario.
-Unless the engineer's causation sentence explicitly relies on it, do NOT use:
-- shingle / shingles
-- thermal seal
-- seal strip
-- uplift checks
-- granular loss
-- fractured tabs
-- ARMA
-- fastener pull-out
-- wind-driven rain
-- hand tab test
-- lift test
-- GAF / CertainTeed / Owens Corning references
+Unless the engineer's causation sentence OR documented claim-file evidence explicitly relies on it, do NOT use:
+${LOW_SLOPE_FORBIDDEN_BULLET_LIST}
 
 ${LOW_SLOPE_PRIORITY_ORDER}
 
@@ -497,7 +486,7 @@ ${LOW_SLOPE_STRUCTURAL_DISTINCTION}
 Even if roof framing can carry load, that does not prove membrane watertightness.
 
 EVIDENCE GROUNDING RULE:
-Do not insert damage descriptions (e.g., creased shingle tabs, fractured shingles, wind uplift mechanics) unless those terms appear in the engineer’s causation sentence.`;
+Do not insert damage descriptions (e.g., creased shingle tabs, fractured shingles, wind uplift mechanics) unless those terms appear in the engineer’s causation sentence or documented claim-file evidence.`;
   }
   return "";
 }
