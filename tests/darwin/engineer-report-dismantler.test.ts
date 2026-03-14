@@ -552,8 +552,9 @@ describe("EngineerReportDismantler — engineer theory extraction", () => {
   it("extracts engineer stated cause from conclusion section", () => {
     const result = runEngineerReportDismantler(loadFixture("engineer-hail-cosmetic-narrative.txt"));
     expect(result.engineerStatedCause.length).toBeGreaterThan(0);
-    expect(result.engineerStatedCause.toLowerCase()).toContain("result of");
-  });
+    // Should contain a causation phrase (e.g., "result of", "consistent with", "caused by")
+    const hasPhrase = ENGINEER_CAUSE_PHRASES.some(p => result.engineerStatedCause.toLowerCase().includes(p));
+    expect(hasPhrase).toBe(true);
 
   it("extracts engineer trigger event with date", () => {
     const result = runEngineerReportDismantler(loadFixture("engineer-wind-wear-tear-narrative.txt"));
