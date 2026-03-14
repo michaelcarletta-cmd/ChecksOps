@@ -1,0 +1,16 @@
+BUILDING ENVELOPE INVESTIGATION REPORT
+Date of Inspection: February 10, 2026
+Property: 654 Cedar Blvd, Seattle WA
+
+EXECUTIVE SUMMARY:
+We investigated reported water intrusion at the second-floor bedroom wall following a storm event on January 28, 2026 with sustained winds of 45 mph and heavy rain. Our investigation concludes the water intrusion is the result of sealant failure and deferred maintenance of the building envelope, not storm damage.
+
+FINDINGS:
+Water staining was observed on the interior wall at the window frame. The exterior facade is stucco over masonry veneer. We identified sealant failure at the window head flashing and sill joint. The sealant appears aged and cracked. No water testing was performed to trace the intrusion path from the penetration point to the interior damage. The kick-out flashing at the roof-to-wall intersection was not inspected due to access limitations.
+
+Concealed moisture was detected using a pin-type moisture meter at the window frame area. Latent moisture conditions suggest ongoing water migration through the wall assembly. We did not perform infrared scanning to map the full extent of moisture behind the stucco facade. Wind-driven rain calculations per ASCE 7 were not conducted.
+
+The building is 15 years old. Sealants have a typical service life of 10-15 years. The failure of the sealant at the window is consistent with normal aging and not sudden storm damage. The leak path appears to follow capillary action through the wall assembly.
+
+CONCLUSION:
+The water intrusion is caused by long-term leakage through failed sealant joints and is not storm related. The sealant failure constitutes deferred maintenance. The homeowner should re-seal all window and wall penetration points as part of routine building envelope maintenance.

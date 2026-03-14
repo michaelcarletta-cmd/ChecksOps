@@ -1,0 +1,16 @@
+FIRE INVESTIGATION REPORT
+Date of Inspection: February 5, 2026
+Property: 321 Pine Rd, Phoenix AZ
+
+EXECUTIVE SUMMARY:
+A fire occurred on January 30, 2026 causing significant damage to the kitchen and adjacent living area. Our investigation identifies the point of origin as the kitchen counter area near an electrical outlet. The fire cause is determined to be an overloaded circuit from multiple appliances connected to a single outlet via power strips.
+
+FINDINGS:
+We observed char patterns radiating from the kitchen counter area. A V-pattern was identified on the wall behind the counter. The electrical outlet showed signs of arcing. We did not perform arc mapping of the electrical system. No conductor examination per NFPA 921 Chapter 9 was conducted. The fire department report was not reviewed as part of this investigation. We did not interview occupants about activities prior to the fire.
+
+The burn pattern suggests the fire originated at the electrical outlet. Multiple power strips were observed connected to the single outlet (daisy-chained). This constitutes an electrical fire caused by overloading.
+
+We did not systematically rule out alternative ignition sources. The kitchen contained a gas stove and multiple small appliances. No accelerant testing was performed. Scene evidence was partially destroyed by fire suppression activities.
+
+CONCLUSION:
+The fire was caused by electrical overloading at the outlet, which constitutes negligence and improper use. This is not an accidental fire but rather the result of hazardous electrical practices by the occupant.
