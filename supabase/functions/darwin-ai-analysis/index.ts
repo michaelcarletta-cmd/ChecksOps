@@ -3346,6 +3346,8 @@ SECONDARY SCENARIOS: ${dismantlerExtraction.secondaryScenarios.join(', ') || 'no
 
 ${scenarioAttackVectors}
 
+${lowSlopeScopeGuard}
+
 IMPORTANT: This claim is in ${stateInfo.stateName}. Cite ${stateInfo.stateName} statutes and administrative codes. NEVER cite case law—stick to FACTS, CODES, STANDARDS, and REGULATIONS.
 
 === RESPONSE REQUIREMENTS - OVERWHELMING AND IRREFUTABLE ===
