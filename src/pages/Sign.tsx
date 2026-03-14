@@ -86,21 +86,34 @@ export default function Sign() {
       setDocumentUrl(data.signedUrl);
 
       // Use normalized fields if available, fall back to field_data
+      // Cross-reference field_data for display metadata
+      const fieldDataMap = new Map<string, any>();
+      (data.request.field_data || []).forEach((fd: any) => {
+        fieldDataMap.set(fd.id, fd);
+      });
+
       if (data.fields && data.fields.length > 0) {
-        setFields(data.fields.map((f: any) => ({
-          id: f.id,
-          type: f.field_type,
-          label: f.label,
-          required: f.required,
-          page: f.page,
-          x: f.x,
-          y: f.y,
-          width: f.width,
-          height: f.height,
-          placeholder: f.placeholder,
-          checkboxLabel: f.checkbox_label,
-          signerIndex: f.signer_index,
-        })));
+        setFields(data.fields.map((f: any) => {
+          const fdMeta = fieldDataMap.get(f.id) || {};
+          return {
+            id: f.id,
+            type: f.field_type,
+            label: f.label,
+            required: f.required,
+            page: f.page,
+            x: f.x,
+            y: f.y,
+            width: f.width,
+            height: f.height,
+            placeholder: f.placeholder,
+            checkboxLabel: f.checkbox_label,
+            signerIndex: f.signer_index,
+            display_label: fdMeta.display_label,
+            display_help_text: fdMeta.display_help_text,
+            display_section: fdMeta.display_section,
+            display_order: fdMeta.display_order,
+          };
+        }));
       } else {
         // Backwards compat: use field_data from request
         const signerFields = (data.request.field_data || []).filter(
