@@ -62,7 +62,6 @@ export default function Sign() {
     }
     return { completed, total, allDone: total > 0 && completed === total };
   }, [fields, fieldValues, drawingFields, isCanvasDrawn]);
-  const [drawingFields, setDrawingFields] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (token) {
