@@ -5589,6 +5589,7 @@ export type Database = {
           insurance_phone: string | null
           is_closed: boolean
           jobnimbus_job_id: string | null
+          latest_signature_request_id: string | null
           latitude: number | null
           loan_number: string | null
           longitude: number | null
@@ -5658,6 +5659,7 @@ export type Database = {
           insurance_phone?: string | null
           is_closed?: boolean
           jobnimbus_job_id?: string | null
+          latest_signature_request_id?: string | null
           latitude?: number | null
           loan_number?: string | null
           longitude?: number | null
@@ -5727,6 +5729,7 @@ export type Database = {
           insurance_phone?: string | null
           is_closed?: boolean
           jobnimbus_job_id?: string | null
+          latest_signature_request_id?: string | null
           latitude?: number | null
           loan_number?: string | null
           longitude?: number | null
@@ -5771,6 +5774,13 @@ export type Database = {
             columns: ["insurance_company_id"]
             isOneToOne: false
             referencedRelation: "insurance_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claims_latest_signature_request_id_fkey"
+            columns: ["latest_signature_request_id"]
+            isOneToOne: false
+            referencedRelation: "signature_requests"
             referencedColumns: ["id"]
           },
           {
@@ -10390,6 +10400,7 @@ export type Database = {
           document_path: string
           field_data: Json | null
           id: string
+          last_attempted_at: string | null
           last_error: string | null
           last_provider_response: string | null
           provider_message_id: string | null
@@ -10408,6 +10419,7 @@ export type Database = {
           document_path: string
           field_data?: Json | null
           id?: string
+          last_attempted_at?: string | null
           last_error?: string | null
           last_provider_response?: string | null
           provider_message_id?: string | null
@@ -10426,6 +10438,7 @@ export type Database = {
           document_path?: string
           field_data?: Json | null
           id?: string
+          last_attempted_at?: string | null
           last_error?: string | null
           last_provider_response?: string | null
           provider_message_id?: string | null
@@ -12013,6 +12026,7 @@ export type Database = {
               insurance_phone: string | null
               is_closed: boolean
               jobnimbus_job_id: string | null
+              latest_signature_request_id: string | null
               latitude: number | null
               loan_number: string | null
               longitude: number | null
@@ -12107,6 +12121,7 @@ export type Database = {
               insurance_phone: string | null
               is_closed: boolean
               jobnimbus_job_id: string | null
+              latest_signature_request_id: string | null
               latitude: number | null
               loan_number: string | null
               longitude: number | null
