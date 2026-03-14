@@ -7535,6 +7535,11 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       structuredResult = parseStructuredResponse(analysisResult);
       analysisResult = JSON.stringify(structuredResult, null, 2);
     }
+
+    if (analysisType === 'engineer_report_rebuttal' && typeof analysisResult === 'string') {
+      analysisResult = enforceEngineerRebuttalLowSlopeOpening(analysisResult, engineerRebuttalPrimaryScenario);
+    }
+
     endStep(parseStep, 'completed', `resultLength=${analysisResult.length}`);
     
     console.log(`Darwin AI Analysis completed for ${analysisType}, result length: ${analysisResult.length}`);
