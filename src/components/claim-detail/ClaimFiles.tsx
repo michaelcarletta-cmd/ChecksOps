@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ClaimTemplates } from "./ClaimTemplates";
-import { SendForSignatureButton } from "./SendForSignatureButton";
+
 import { EstimateUploadDialog } from "./EstimateUploadDialog";
 
 
