@@ -485,7 +485,7 @@ export default function Sign() {
       <div className="max-w-3xl mx-auto">
         {/* Step 1: Review Document */}
         {activeStep === "review" && (
-          <div className="p-4 space-y-4">
+          <div ref={documentSectionRef} className="p-4 space-y-4">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
               <p className="font-medium">Please review this document carefully before signing.</p>
               <p className="text-blue-600 text-xs mt-1">Scroll through the full document, then proceed to sign.</p>
