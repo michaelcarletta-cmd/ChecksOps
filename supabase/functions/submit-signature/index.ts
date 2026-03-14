@@ -207,7 +207,7 @@ Deno.serve(async (req) => {
 
     const { data: signer, error: signerError } = await sb
       .from("signature_signers")
-      .select("*, signature_requests(*, claims(id, claim_number, policyholder_name))")
+      .select("*, signature_requests!inner(*, claims!signature_requests_claim_id_fkey(id, claim_number, policyholder_name))")
       .eq("token_hash", tokenHash)
       .maybeSingle();
 
