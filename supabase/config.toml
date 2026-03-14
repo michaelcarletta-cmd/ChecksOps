@@ -54,3 +54,6 @@ verify_jwt = false
 
 [functions.darwin-intelligence-orchestrator]
 verify_jwt = false
+
+[functions.darwin-ai-analysis]
+verify_jwt = false
