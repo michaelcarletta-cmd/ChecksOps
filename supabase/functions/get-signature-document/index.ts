@@ -21,6 +21,13 @@ async function log(sb: any, entry: Record<string, unknown>) {
   }
 }
 
+async function hashToken(raw: string): Promise<string> {
+  const data = new TextEncoder().encode(raw);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -38,11 +45,13 @@ Deno.serve(async (req) => {
       return respond({ ok: false, stage: "validate_token", error: "Missing or invalid token" }, 400);
     }
 
-    // Look up signer by access token
+    // Hash the incoming token and look up by hash
+    const tokenHash = await hashToken(token);
+
     const { data: signer, error: signerError } = await sb
       .from("signature_signers")
       .select("*, signature_requests(*, claims(id, claim_number, policyholder_name))")
-      .eq("access_token", token)
+      .eq("token_hash", tokenHash)
       .maybeSingle();
 
     if (signerError) {
@@ -54,8 +63,45 @@ Deno.serve(async (req) => {
       return respond({ ok: false, stage: "fetch_signer", error: "Signature request not found or link has expired" }, 404);
     }
 
+    // Check token expiry
+    if (signer.expires_at) {
+      const expiresAt = new Date(signer.expires_at);
+      if (expiresAt < new Date()) {
+        await log(sb, {
+          request_id: signer.signature_requests.id,
+          signer_id: signer.id,
+          claim_id: signer.signature_requests.claim_id,
+          stage: "token_expired",
+          status: "error",
+          message: `Token expired at ${signer.expires_at}`,
+          payload: null,
+        });
+        return respond({ ok: false, stage: "token_expired", error: "This signing link has expired. Please request a new one." }, 403);
+      }
+    }
+
     const request = signer.signature_requests;
     const claimId = request.claim_id;
+
+    // Enforce signer ordering — block if a prior signer hasn't completed
+    if (signer.signing_order > 1) {
+      const { data: priorSigners } = await sb
+        .from("signature_signers")
+        .select("id, status, signing_order, signer_name")
+        .eq("signature_request_id", request.id)
+        .lt("signing_order", signer.signing_order)
+        .neq("status", "signed");
+
+      if (priorSigners && priorSigners.length > 0) {
+        const waitingFor = priorSigners.map((s: any) => s.signer_name).join(", ");
+        return respond({
+          ok: false,
+          stage: "signer_order_blocked",
+          error: `Please wait — ${waitingFor} must sign before you.`,
+          waitingFor: priorSigners.map((s: any) => ({ name: s.signer_name, order: s.signing_order })),
+        }, 403);
+      }
+    }
 
     // Mark as viewed (first time only)
     if (!signer.viewed_at) {
@@ -64,7 +110,6 @@ Deno.serve(async (req) => {
         .update({ viewed_at: new Date().toISOString() })
         .eq("id", signer.id);
 
-      // Log viewed event
       await log(sb, {
         request_id: request.id,
         signer_id: signer.id,
@@ -75,7 +120,6 @@ Deno.serve(async (req) => {
         payload: { signer_email: signer.signer_email },
       });
 
-      // Update request status if it was just "pending"
       if (request.status === "pending") {
         await sb
           .from("signature_requests")
@@ -84,14 +128,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Generate signed URL — 4 hours to give signers plenty of time
+    // Generate signed URL — 4 hours
     const documentPath = request.document_path;
     let signedUrl: string | null = null;
 
     if (documentPath) {
       const { data: urlData, error: urlError } = await sb.storage
         .from("claim-files")
-        .createSignedUrl(documentPath, 14400); // 4 hours
+        .createSignedUrl(documentPath, 14400);
 
       if (urlError) {
         console.error("Error creating signed URL:", urlError);
@@ -103,6 +147,13 @@ Deno.serve(async (req) => {
     if (!signedUrl) {
       return respond({ ok: false, stage: "document_url", error: "Document not found in storage" }, 404);
     }
+
+    // Load normalized fields for this signer
+    const { data: fields } = await sb
+      .from("signature_fields")
+      .select("*")
+      .eq("signature_request_id", request.id)
+      .eq("signer_index", signer.signing_order - 1);
 
     return respond({
       ok: true,
@@ -120,9 +171,10 @@ Deno.serve(async (req) => {
         id: request.id,
         document_name: request.document_name,
         document_path: request.document_path,
-        field_data: request.field_data,
+        field_data: request.field_data, // backwards compat
         status: request.status,
       },
+      fields: fields || [], // normalized fields
       signedUrl,
     });
   } catch (error) {
