@@ -3424,6 +3424,12 @@ You must generate a FORMAL REBUTTAL LETTER that is ready to send to the insuranc
 
 The letter must be EXHAUSTIVE and address EVERY finding in the engineer's report. Do NOT summarize or abbreviate. Each paragraph/finding in their report requires a complete rebuttal paragraph (or multiple paragraphs) in your letter.
 
+${primarySc === 'low_slope_snow_ice_ponding' ? `LOW-SLOPE REPORT ENFORCEMENT:
+- Opening first sentence MUST be exactly: "${lowSlopeTheoryOpening}"
+- Then challenge timing proof, methodology gaps, and causation logic (in that order)
+- Do NOT use wind-centric arguments unless directly quoted from the engineer's causation theory
+- Do NOT add damage facts not grounded in report text or documented file evidence` : ''}
+
 === MANDATORY SECTIONED STRUCTURE (ENFORCED — NO DEVIATIONS) ===
 Your rebuttal MUST contain ALL SEVEN of the following sections IN THIS ORDER. Do not omit any section. Do not leave structure to model discretion.
 
