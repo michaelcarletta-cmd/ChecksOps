@@ -1677,6 +1677,14 @@ When generating rebuttals:
 8. Include specific documentation requests that put them on the defensive
 9. Provide a formal rebuttal letter that makes them reconsider their denial`;
 
+        // ── Loss Mechanism Extraction (pre-rebuttal) ──
+        const denialTextForMechanism = content || '';
+        const lossMechanism = extractLossMechanism(denialTextForMechanism);
+        if (lossMechanism.snowmeltIceDamDetected || lossMechanism.isMaintenanceDenialNarrative) {
+          console.log(`[darwin] Loss Mechanism Extraction: snowmelt=${lossMechanism.snowmeltIceDamDetected}, maintenanceNarrative=${lossMechanism.isMaintenanceDenialNarrative}, keywords=${lossMechanism.matchedKeywords.join(',')}`);
+          systemPrompt += '\n' + lossMechanism.promptInjection;
+        }
+
         userPrompt = `${claimSummary}
 
 STATE JURISDICTION: ${stateInfo.stateName} (${stateInfo.state})
