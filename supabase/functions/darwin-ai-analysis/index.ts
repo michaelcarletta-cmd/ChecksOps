@@ -818,9 +818,9 @@ interface ScenarioActivation {
 // ── Scenario-specific missing-testing maps ──────────────────────────────────
 const SCENARIO_MISSING_TESTING_MAP: Record<string, string[]> = {
   low_slope_snow_ice_ponding: [
-    'snow load calculations', 'snow-water equivalent analysis', 'drainage capacity evaluation',
-    'freeze-thaw analysis', 'roof deflection measurements', 'moisture mapping',
-    'attic/thermal inspection', 'core cuts', 'infrared scanning', 'destructive testing',
+    'membrane core cuts', 'seam adhesion/peel testing', 'drainage-capacity analysis',
+    'snow-water equivalent/runoff analysis', 'leak-path tracing', 'moisture mapping',
+    'proof of timing of openings',
   ],
   hail_impact: [
     'test squares (10x10 per slope)', 'soft-metal collateral review', 'mat fracture inspection',
