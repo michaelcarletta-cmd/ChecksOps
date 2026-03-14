@@ -364,46 +364,54 @@ function parseStructuredResponse(rawResponse: string): DarwinStructuredResult {
   return ensureStructuredResult(parsed);
 }
 
-// Extract text from PDF using pdf.js (Deno-compatible, no AI, lower memory usage)
+// Extract text from PDF using raw-byte parsing (no external runtime imports)
 async function extractTextFromPDFNative(base64Content: string, fileName: string): Promise<string> {
   console.log(`Native PDF extraction for: ${fileName}`);
-  
+
   try {
-    // Get pdf.js dynamically
-    const pdfjs = await getPdfJs();
-    
     // Decode base64 to bytes
     const binaryString = atob(base64Content);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
     }
-    
-    // Load PDF using pdf.js
-    const loadingTask = pdfjs.getDocument({ data: bytes.buffer });
-    const pdf = await loadingTask.promise;
-    
+
+    // Raw PDF text parsing (BT/ET blocks + ASCII fallback)
+    const rawText = new TextDecoder('latin1').decode(bytes);
     const textParts: string[] = [];
-    
-    // Extract text from each page
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item: any) => item.str)
-        .join(' ');
-      if (pageText.trim()) {
-        textParts.push(pageText);
+
+    const btEtRegex = /BT\s([\s\S]*?)ET/g;
+    let btEtMatch: RegExpExecArray | null;
+    while ((btEtMatch = btEtRegex.exec(rawText)) !== null) {
+      const block = btEtMatch[1];
+      const strRegex = /\(([^)]*)\)/g;
+      let strMatch: RegExpExecArray | null;
+      while ((strMatch = strRegex.exec(block)) !== null) {
+        const decoded = strMatch[1]
+          .replace(/\\n/g, '\n')
+          .replace(/\\r/g, '\r')
+          .replace(/\\\(/g, '(')
+          .replace(/\\\)/g, ')')
+          .replace(/\\\\/g, '\\');
+        if (decoded.trim()) textParts.push(decoded);
       }
     }
-    
-    const extractedText = textParts.join('\n\n');
-    console.log(`Native extraction got ${extractedText.length} characters from ${pdf.numPages} pages`);
-    
-    if (!extractedText || extractedText.trim().length < 100) {
+
+    if (textParts.length < 5) {
+      const asciiRegex = /[A-Za-z0-9][A-Za-z0-9 ,.\-\/#:@$%&()]{4,}/g;
+      let asciiMatch: RegExpExecArray | null;
+      while ((asciiMatch = asciiRegex.exec(rawText)) !== null) {
+        textParts.push(asciiMatch[0].trim());
+      }
+    }
+
+    const extractedText = textParts.join(' ').replace(/\s+/g, ' ').trim();
+    console.log(`Native extraction got ${extractedText.length} characters`);
+
+    if (!extractedText || extractedText.length < 100) {
       throw new Error('PDF appears to be scanned/image-based with minimal text');
     }
-    
+
     return extractedText;
   } catch (error) {
     console.error('Native PDF extraction failed:', error);
