@@ -506,7 +506,7 @@ export const TemplatesSettings = () => {
 
                     {editingFieldTemplateId === template.id && editingFieldData && (
                       <div className="border-t p-4 space-y-4">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
                           <h5 className="text-sm font-semibold text-foreground">Edit Signer-Facing Labels</h5>
                           <div className="flex gap-2">
                             <Button
@@ -530,6 +530,56 @@ export const TemplatesSettings = () => {
                             </Button>
                           </div>
                         </div>
+
+                        {/* Document Type Preset Dropdown */}
+                        <div className="flex items-end gap-2 p-3 rounded-md border border-dashed bg-muted/20">
+                          <div className="flex-1 space-y-1">
+                            <Label className="text-xs font-medium">Auto-fill from Document Type</Label>
+                            <Select
+                              onValueChange={(docType) => {
+                                const templateDef = SIGNER_DISPLAY_TEMPLATES[docType];
+                                if (!templateDef || !editingFieldData) return;
+                                const updated = editingFieldData.map((field: any) => {
+                                  const fieldType = field.type || field.field_type || "text";
+                                  // Count how many fields of this type come before (and including) this one
+                                  const sameTypeBefore = editingFieldData
+                                    .slice(0, editingFieldData.indexOf(field) + 1)
+                                    .filter((f: any) => (f.type || f.field_type || "text") === fieldType).length;
+                                  const key = getFieldTemplateKey(fieldType, sameTypeBefore);
+                                  const meta = templateDef.fields[key];
+                                  if (meta) {
+                                    return {
+                                      ...field,
+                                      display_label: meta.display_label,
+                                      display_help_text: meta.display_help_text,
+                                      display_section: meta.display_section,
+                                      display_order: meta.display_order,
+                                    };
+                                  }
+                                  return field;
+                                });
+                                setEditingFieldData(updated);
+                                toast.success(`Applied "${templateDef.label}" labels — review and save.`);
+                              }}
+                            >
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue placeholder="Choose document type..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {DOCUMENT_TYPE_OPTIONS.map((opt) => (
+                                  <SelectItem key={opt.value} value={opt.value}>
+                                    <div className="flex flex-col">
+                                      <span>{opt.label}</span>
+                                      <span className="text-xs text-muted-foreground">{opt.description}</span>
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Wand2 className="w-4 h-4 text-muted-foreground mb-2" />
+                        </div>
+
                         <div className="space-y-3">
                           {editingFieldData.map((field: any, idx: number) => (
                             <div key={idx} className="border rounded-md p-3 space-y-2 bg-muted/30">
