@@ -162,6 +162,40 @@ function stripExternalFormatting(text: string): string {
   return cleaned.trim();
 }
 
+const REQUIRED_LOW_SLOPE_OPENING = 'The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering.';
+
+function enforceEngineerRebuttalLowSlopeOpening(result: string, primaryScenario: string | null): string {
+  if (!result || primaryScenario !== 'low_slope_snow_ice_ponding') return result;
+
+  const required = REQUIRED_LOW_SLOPE_OPENING;
+  const requiredLower = required.toLowerCase();
+  const lines = result.split('\n');
+
+  const dateOfLossIdx = lines.findIndex((line) => /^\s*Date of Loss\s*:/i.test(line));
+  const searchStart = dateOfLossIdx >= 0 ? dateOfLossIdx + 1 : 0;
+
+  let firstBodyLineIdx = -1;
+  for (let i = searchStart; i < lines.length; i += 1) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    if (/^(RE\s*:|Claim Number\s*:|Policy Number\s*:|Insured\s*:|Property Address\s*:|Date of Loss\s*:)/i.test(line)) continue;
+    firstBodyLineIdx = i;
+    break;
+  }
+
+  if (firstBodyLineIdx < 0) {
+    return `${required}\n\n${result}`.trim();
+  }
+
+  const firstBodyLine = lines[firstBodyLineIdx].trim();
+  if (firstBodyLine.toLowerCase().startsWith(requiredLower)) {
+    return result;
+  }
+
+  lines[firstBodyLineIdx] = `${required} ${firstBodyLine}`;
+  return lines.join('\n');
+}
+
 const STRUCTURED_DARWIN_ANALYSIS_TYPES = new Set<string>([
   'denial_rebuttal',
   'next_steps',
