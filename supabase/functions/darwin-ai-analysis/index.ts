@@ -3756,6 +3756,16 @@ ${primarySc === 'low_slope_snow_ice_ponding' ? `LOW-SLOPE REPORT ENFORCEMENT:
 - Suppress shingle/wind/uplift boilerplate unless directly quoted from the engineer causation sentence
 - Do NOT add damage facts unless grounded in direct report text` : ''}
 
+=== NON-NEGOTIABLE FORENSIC FOUNDATION (MUST APPEAR IN EVERY ENGINEER REBUTTAL) ===
+Include these exact section headings somewhere in the rebuttal:
+1) Engineer Theory Extraction
+2) Required Testing Not Performed
+3) Causation Proof Failure
+
+Engineer Theory Extraction must quote the engineer's stated cause directly from the report.
+Required Testing Not Performed must list the forensic tests required to scientifically prove that cause and explicitly mark whether each appears in the report.
+Causation Proof Failure must explicitly state that when required testing was not performed, the engineer has not scientifically proven the conclusion and the causation statement is speculative.
+
 === MANDATORY SECTIONED STRUCTURE (ENFORCED — NO DEVIATIONS) ===
 Your rebuttal MUST contain ALL SEVEN of the following sections IN THIS ORDER. Do not omit any section. Do not leave structure to model discretion.
 
