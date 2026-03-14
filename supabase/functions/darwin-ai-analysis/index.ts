@@ -685,26 +685,95 @@ MANDATORY REBUTTAL ARGUMENTS:
 === END SCENARIO PACK ===`,
 };
 
-// ── Universal extraction interface ──────────────────────────────────────────
+// ── Universal extraction interfaces ─────────────────────────────────────────
 interface ScenarioActivation {
   scenario: string;
   matchedKeywords: string[];
   score: number;
+  theoryRelevanceScore: number;
   reason: string;
 }
 
+// ── Scenario-specific missing-testing maps ──────────────────────────────────
+const SCENARIO_MISSING_TESTING_MAP: Record<string, string[]> = {
+  low_slope_snow_ice_ponding: [
+    'snow load calculations', 'snow-water equivalent analysis', 'drainage capacity evaluation',
+    'freeze-thaw analysis', 'roof deflection measurements', 'moisture mapping',
+    'attic/thermal inspection', 'core cuts', 'infrared scanning', 'destructive testing',
+  ],
+  hail_impact: [
+    'test squares (10x10 per slope)', 'soft-metal collateral review', 'mat fracture inspection',
+    'directional hit analysis', 'functional vs cosmetic analysis', 'slope/elevation sampling',
+    'brittle fracture testing', 'random vs pattern analysis', 'material age assessment',
+  ],
+  wind_uplift: [
+    'hand-tab test', 'uplift resistance testing', 'seal strip condition testing',
+    'fastener pattern review', 'directional wind correlation', 'brittle test',
+    'slope-by-slope analysis', 'wind speed microclimate analysis', 'progressive damage tracing',
+  ],
+  plumbing_freeze_burst: [
+    'freeze exposure timeline', 'plumbing insulation review', 'code compliance review (IRC P2603.5)',
+    'failure-point inspection', 'pressure-related analysis', 'maintenance records review',
+    'pipe material assessment', 'temperature monitoring data',
+  ],
+  fire_causation: [
+    'origin and cause analysis (NFPA 921)', 'arc mapping', 'evidence preservation documentation',
+    'systematic elimination of alternatives', 'conductor examination', 'fire pattern analysis',
+    'witness statements', 'electrical system inspection',
+  ],
+  water_intrusion_envelope: [
+    'leak path tracing', 'destructive water testing', 'flashing inspection (all points)',
+    'moisture mapping', 'envelope detail review', 'wind-driven rain analysis (ASCE 7)',
+    'sealant age assessment', 'infrared thermography',
+  ],
+  structural_movement_settlement: [
+    'geotechnical review', 'monitoring data (dated measurements)', 'crack pattern mapping',
+    'elevation survey', 'soil/moisture analysis', 'structural load analysis',
+    'timeline documentation', 'differential vs uniform classification',
+  ],
+  mechanical_failure: [
+    'maintenance records review', 'manufacturer defect review', 'component testing',
+    'service history analysis', 'failure-mode analysis', 'age vs expected service life',
+    'product recall check', 'code compliance review',
+  ],
+};
+
+// ── Engineer theory signal phrases ──────────────────────────────────────────
+const ENGINEER_CAUSE_PHRASES = [
+  'caused by', 'resulted from', 'attributed to', 'consistent with', 'due to',
+  'the damage was caused by', 'the observed condition was the result of',
+  'not related to', 'not caused by', 'instead caused by',
+  'the cause of the damage', 'we conclude', 'our conclusion', 'it is our opinion',
+  'in our professional opinion', 'the evidence indicates', 'the findings suggest',
+  'the observed damage is', 'the primary cause', 'the root cause',
+];
+
+const ENGINEER_EXCLUSION_PHRASES = [
+  'not related to', 'not caused by', 'not storm related', 'not hail related',
+  'not wind related', 'not sudden', 'pre-existing', 'long-term', 'deterioration',
+  'maintenance', 'installation defect', 'wear and tear', 'repeated seepage',
+  'weathering', 'latent defect', 'cosmetic only', 'workmanship',
+];
+
 interface EngineerReportDismantlerResult {
-  /** Scenario keys that activated (may be multiple for dual-causation). */
+  // ── Primary/Secondary scenario model ──
+  primaryScenario: string | null;
+  secondaryScenarios: string[];
+  // ── Engineer theory extraction ──
+  engineerStatedCause: string;
+  engineerTheorySentences: string[];
+  engineerTriggerEvent: string;
+  engineerExclusionNarrative: string[];
+  // ── Missing testing ──
+  criticalTestingNotPerformed: string[];
+  // ── Scenario scoring ──
+  scenarioTheoryAlignment: Record<string, number>;
+  // ── Legacy compatible fields ──
   activatedScenarios: string[];
-  /** All matched keywords across all scenarios. */
   matchedKeywords: string[];
-  /** True when weather/trigger event + exclusion/deterioration language both present. */
   isMaintenanceDenialNarrative: boolean;
-  /** True when dual/concurrent causation language detected. */
   isDualCausation: boolean;
-  /** The full prompt injection block for the AI system prompt. */
   promptInjection: string;
-  /** Structured extraction signals for UI, debugging, analytics, QA. */
   signals: {
     triggerEventSignals: string[];
     engineerCauseSignals: string[];
@@ -717,45 +786,153 @@ interface EngineerReportDismantlerResult {
     isMaintenanceDenialNarrative: boolean;
     recommendedRebuttalAngles: string[];
   };
-  /** Debug log entries for each scenario activation decision. */
   scenarioActivationLog: ScenarioActivation[];
 }
 
 function runEngineerReportDismantler(documentText: string): EngineerReportDismantlerResult {
   const textLower = documentText.toLowerCase();
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // STEP 1: UNIVERSAL DISMANTLER CORE
+  // ══════════════════════════════════════════════════════════════════════════
+
   // ── Detect trigger events (universal) ──
   const triggerEventSignals = TRIGGER_EVENT_KEYWORDS.filter(kw => textLower.includes(kw));
 
-  // ── Detect exclusion narrative signals (broadened beyond just deterioration) ──
+  // ── Detect exclusion narrative signals ──
   const denialNarrativeSignals = EXCLUSION_NARRATIVE_KEYWORDS.filter(kw => textLower.includes(kw));
 
-  // ── Detect activated scenarios via weighted scoring ──
+  // ══════════════════════════════════════════════════════════════════════════
+  // STEP 2: ENGINEER THEORY EXTRACTION
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // Split into sentences for theory extraction
+  const sentences = documentText.split(/[.!?\n]+/).map(s => s.trim()).filter(s => s.length > 10);
+  const sentencesLower = sentences.map(s => s.toLowerCase());
+
+  // Extract engineer's stated cause sentences
+  const engineerTheorySentences: string[] = [];
+  const engineerExclusionNarrative: string[] = [];
+  let engineerStatedCause = '';
+  let engineerTriggerEvent = '';
+
+  for (let i = 0; i < sentences.length; i++) {
+    const sl = sentencesLower[i];
+    // Detect cause statements
+    const isCauseStatement = ENGINEER_CAUSE_PHRASES.some(phrase => sl.includes(phrase));
+    if (isCauseStatement) {
+      engineerTheorySentences.push(sentences[i]);
+    }
+    // Detect exclusion narrative statements
+    const isExclusion = ENGINEER_EXCLUSION_PHRASES.some(phrase => sl.includes(phrase));
+    if (isExclusion && isCauseStatement) {
+      engineerExclusionNarrative.push(sentences[i]);
+    }
+  }
+
+  // Extract the primary stated cause (prefer conclusion section)
+  const conclusionIdx = sentencesLower.findIndex(s =>
+    s.includes('conclusion') || s.includes('summary') || s.includes('opinion') || s.includes('determination')
+  );
+  if (conclusionIdx >= 0) {
+    // Look for cause statements near/after conclusion header
+    for (let i = conclusionIdx; i < Math.min(conclusionIdx + 5, sentences.length); i++) {
+      const sl = sentencesLower[i];
+      if (ENGINEER_CAUSE_PHRASES.some(p => sl.includes(p))) {
+        engineerStatedCause = sentences[i];
+        break;
+      }
+    }
+  }
+  // Fallback: use first cause statement
+  if (!engineerStatedCause && engineerTheorySentences.length > 0) {
+    engineerStatedCause = engineerTheorySentences[engineerTheorySentences.length - 1];
+  }
+
+  // Extract trigger event
+  for (const s of sentences) {
+    const sl = s.toLowerCase();
+    const hasTrigger = TRIGGER_EVENT_KEYWORDS.some(kw => sl.includes(kw));
+    const hasDate = /\b(january|february|march|april|may|june|july|august|september|october|november|december|date of loss|loss date|event date)\b/i.test(s);
+    if (hasTrigger && hasDate) {
+      engineerTriggerEvent = s;
+      break;
+    }
+  }
+  if (!engineerTriggerEvent) {
+    // Fallback: first sentence with a trigger keyword
+    for (const s of sentences) {
+      if (TRIGGER_EVENT_KEYWORDS.some(kw => s.toLowerCase().includes(kw))) {
+        engineerTriggerEvent = s;
+        break;
+      }
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // STEP 3: SCENARIO SCORING / RANKING
+  // ══════════════════════════════════════════════════════════════════════════
+
   const scenarioScores: Record<string, number> = {};
+  const scenarioTheoryAlignment: Record<string, number> = {};
   const scenarioActivationLog: ScenarioActivation[] = [];
   const activatedScenarios: string[] = [];
   const allMatchedKeywords: string[] = [];
 
+  // Identify conclusion section text for boosting
+  const conclusionText = conclusionIdx >= 0
+    ? sentencesLower.slice(conclusionIdx).join(' ')
+    : '';
+  const engineerCauseText = engineerStatedCause.toLowerCase();
+
   for (const [scenario, weightedKws] of Object.entries(SCENARIO_KEYWORDS_WEIGHTED)) {
     const matched: string[] = [];
-    let score = 0;
+    let rawScore = 0;
+    let conclusionBoost = 0;
+    let theoryBoost = 0;
+    let frequencyBonus = 0;
+
     for (const { term, weight } of weightedKws) {
       if (textLower.includes(term)) {
         matched.push(term);
-        score += weight;
+        rawScore += weight;
+
+        // (C) Boost if keyword appears in conclusion section
+        if (conclusionText.includes(term)) {
+          conclusionBoost += weight;
+        }
+        // (D) Boost if keyword appears near engineer theory phrases
+        if (engineerCauseText.includes(term)) {
+          theoryBoost += weight * 2;
+        }
+        // (B) Frequency bonus: count occurrences beyond first
+        const regex = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        const occurrences = (documentText.match(regex) || []).length;
+        if (occurrences > 1) {
+          frequencyBonus += Math.min(occurrences - 1, 3); // cap at 3 extra
+        }
       }
     }
-    scenarioScores[scenario] = score;
 
-    // Activation: one strong keyword (score >= 2 from single hit) OR total score >= 2
+    const totalScore = rawScore;
+    scenarioScores[scenario] = totalScore;
+
+    // Theory alignment = how well this scenario matches engineer's actual stated cause
+    const alignmentScore = rawScore + conclusionBoost + theoryBoost + frequencyBonus;
+    scenarioTheoryAlignment[scenario] = alignmentScore;
+
+    // Activation: one strong keyword OR total score >= 2
     const hasStrongHit = weightedKws.some(kw => kw.weight === 2 && textLower.includes(kw.term));
-    const activated = hasStrongHit || score >= 2;
+    const activated = hasStrongHit || totalScore >= 2;
 
     const reason = activated
-      ? (hasStrongHit ? `strong keyword present (score=${score})` : `total score=${score} >= 2`)
-      : `score=${score} below threshold`;
+      ? `ACTIVATED: raw=${rawScore}, conclusion_boost=${conclusionBoost}, theory_boost=${theoryBoost}, freq_bonus=${frequencyBonus}, alignment=${alignmentScore}${hasStrongHit ? ' [strong keyword]' : ''}`
+      : `NOT ACTIVATED: raw=${rawScore}, alignment=${alignmentScore} — below threshold`;
 
-    scenarioActivationLog.push({ scenario, matchedKeywords: matched, score, reason });
+    scenarioActivationLog.push({
+      scenario, matchedKeywords: matched, score: totalScore,
+      theoryRelevanceScore: alignmentScore, reason,
+    });
 
     if (activated) {
       activatedScenarios.push(scenario);
@@ -763,13 +940,56 @@ function runEngineerReportDismantler(documentText: string): EngineerReportDisman
     }
   }
 
-  // ── Detect maintenance denial narrative (trigger + exclusion co-occurrence) ──
+  // ══════════════════════════════════════════════════════════════════════════
+  // STEP 4: PRIMARY SCENARIO SELECTION
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // Primary = highest theory-alignment score among activated scenarios
+  // Exclusion narrative keywords alone do NOT determine primary scenario
+  let primaryScenario: string | null = null;
+  const secondaryScenarios: string[] = [];
+
+  if (activatedScenarios.length > 0) {
+    // Sort by theory alignment (highest first)
+    const sorted = [...activatedScenarios].sort(
+      (a, b) => (scenarioTheoryAlignment[b] || 0) - (scenarioTheoryAlignment[a] || 0)
+    );
+    primaryScenario = sorted[0];
+    secondaryScenarios.push(...sorted.slice(1));
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // STEP 5: MISSING-TESTING DETECTION
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const criticalTestingNotPerformed: string[] = [];
+  const scenariosToCheck = primaryScenario
+    ? [primaryScenario, ...secondaryScenarios]
+    : activatedScenarios;
+
+  for (const scenario of scenariosToCheck) {
+    const requiredTests = SCENARIO_MISSING_TESTING_MAP[scenario];
+    if (!requiredTests) continue;
+    for (const test of requiredTests) {
+      // Check if the test or close variant is mentioned as performed
+      const testLower = test.toLowerCase();
+      const testWords = testLower.split(/[\s/()]+/).filter(w => w.length > 3);
+      const mentioned = testWords.some(w => textLower.includes(w));
+      if (!mentioned) {
+        criticalTestingNotPerformed.push(`[${scenario}] ${test}`);
+      }
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // STEP 6: DUAL-CAUSATION & NARRATIVE DETECTION
+  // ══════════════════════════════════════════════════════════════════════════
+
   const weatherAnalysisPresent = WEATHER_ANALYSIS_KEYWORDS.some(kw => textLower.includes(kw));
   const triggerPresent = triggerEventSignals.length > 0 || weatherAnalysisPresent;
   const exclusionPresent = denialNarrativeSignals.length > 0;
   const isMaintenanceDenialNarrative = triggerPresent && exclusionPresent;
 
-  // ── Detect dual/concurrent causation (broadened) ──
   const explicitDualCausation = DUAL_CAUSATION_KEYWORDS.some(kw => textLower.includes(kw));
   const multipleScenarios = activatedScenarios.length >= 2;
   const triggerPlusDeterioration = triggerEventSignals.length > 0 && exclusionPresent;
@@ -782,22 +1002,43 @@ function runEngineerReportDismantler(documentText: string): EngineerReportDisman
   if (denialNarrativeSignals.length > 0) recommendedRebuttalAngles.push('exclusion language rebuttal');
   for (const s of activatedScenarios) recommendedRebuttalAngles.push(`${s} technical rebuttal`);
 
-  // ── Debug logging ──
+  // ══════════════════════════════════════════════════════════════════════════
+  // DEBUG LOGGING
+  // ══════════════════════════════════════════════════════════════════════════
+
+  console.log(`[EngineerReportDismantler] === UNIVERSAL DISMANTLER EXECUTION ===`);
   console.log(`[EngineerReportDismantler] Trigger signals: ${triggerEventSignals.length}, Exclusion signals: ${denialNarrativeSignals.length}`);
+  console.log(`[EngineerReportDismantler] Engineer stated cause: "${engineerStatedCause.substring(0, 120)}..."`);
+  console.log(`[EngineerReportDismantler] Engineer trigger event: "${engineerTriggerEvent.substring(0, 120)}..."`);
+  console.log(`[EngineerReportDismantler] Engineer exclusion narrative sentences: ${engineerExclusionNarrative.length}`);
   console.log(`[EngineerReportDismantler] isDualCausation=${isDualCausation} (explicit=${explicitDualCausation}, multiScenario=${multipleScenarios}, trigger+deterioration=${triggerPlusDeterioration})`);
   console.log(`[EngineerReportDismantler] isMaintenanceDenialNarrative=${isMaintenanceDenialNarrative}`);
+  console.log(`[EngineerReportDismantler] PRIMARY SCENARIO: ${primaryScenario || 'none'}`);
+  console.log(`[EngineerReportDismantler] SECONDARY SCENARIOS: ${secondaryScenarios.join(', ') || 'none'}`);
+  console.log(`[EngineerReportDismantler] Critical testing not performed: ${criticalTestingNotPerformed.length} items`);
   for (const entry of scenarioActivationLog) {
     if (entry.matchedKeywords.length > 0) {
       console.log(`[EngineerReportDismantler] Scenario "${entry.scenario}": ${entry.reason}, keywords=[${entry.matchedKeywords.join(', ')}]`);
     }
   }
 
-  // ── BUILD UNIVERSAL PROMPT INJECTION (always runs) ──
+  // ══════════════════════════════════════════════════════════════════════════
+  // STEP 7: BUILD PROMPT INJECTION
+  // ══════════════════════════════════════════════════════════════════════════
+
   let promptInjection = `
 === UNIVERSAL ENGINEER REPORT DISMANTLER (MANDATORY — RUNS ON EVERY REPORT/DENIAL) ===
 
 YOU MUST EXTRACT AND ADDRESS ALL OF THE FOLLOWING IN YOUR REBUTTAL.
 This extraction controls the structure of every engineer report rebuttal regardless of loss type.
+
+=== PRE-EXTRACTED ENGINEER THEORY (from document analysis) ===
+ENGINEER'S STATED CAUSE: "${engineerStatedCause || 'Not explicitly identified — you must extract from report'}"
+ENGINEER'S TRIGGER EVENT: "${engineerTriggerEvent || 'Not explicitly identified — you must extract from report'}"
+ENGINEER'S EXCLUSION NARRATIVE: ${engineerExclusionNarrative.length > 0 ? engineerExclusionNarrative.map(s => `"${s}"`).join(' | ') : 'None detected — check report for implicit exclusion reasoning'}
+ENGINEER THEORY SENTENCES: ${engineerTheorySentences.length > 0 ? engineerTheorySentences.slice(0, 5).map(s => `"${s}"`).join(' | ') : 'None extracted'}
+
+CRITICAL INSTRUCTION: Your rebuttal MUST BEGIN by summarizing the engineer's actual causation theory before applying any scenario-specific arguments. You are attacking THEIR theory, not a generic peril.
 
 1. TRIGGER EVENT — What weather event, system failure, or occurrence initiated the claimed loss? Identify the specific date and conditions.
 2. ENGINEER STATED CAUSE — What does the engineer conclude caused the damage? Quote their exact language.
@@ -814,7 +1055,18 @@ This extraction controls the structure of every engineer report rebuttal regardl
 13. RECOMMENDED NEXT EVIDENCE — What additional documentation, testing, or expert analysis would strengthen our position? Be specific about what to obtain and why.
 `;
 
-  // ── CLASSIFICATION RULE ──
+  // ── MISSING TESTING INJECTION ──
+  if (criticalTestingNotPerformed.length > 0) {
+    promptInjection += `
+=== CRITICAL TESTING NOT PERFORMED (auto-detected) ===
+The following tests are standard for the identified loss type(s) but do NOT appear in the engineer's report.
+EMPHASIZE these omissions in your rebuttal — missing methodology is often the most devastating argument.
+${criticalTestingNotPerformed.map(t => `- ${t}`).join('\n')}
+=== END MISSING TESTING ===
+`;
+  }
+
+  // ── DUAL CAUSATION ALERT ──
   if (isDualCausation) {
     promptInjection += `
 === DUAL/CONCURRENT CAUSATION ALERT ===
@@ -835,7 +1087,6 @@ ACTIVATED LOSS PATTERNS: ${activatedScenarios.join(', ') || 'none (universal ana
     promptInjection += `
 === MAINTENANCE / EXCLUSION DENIAL NARRATIVE FLAGGED ===
 This document contains BOTH event/trigger language AND exclusion/deterioration/maintenance conclusions.
-This is a common carrier tactic: acknowledge the event occurred but attribute all damage to maintenance, workmanship, or pre-existing conditions.
 You MUST aggressively challenge this narrative by:
 1. Separating the event causation from any pre-existing condition claims
 2. Demanding specific evidence that differentiates event damage from alleged deterioration
@@ -846,19 +1097,38 @@ DETECTED EXCLUSION LANGUAGE: ${denialNarrativeSignals.slice(0, 15).join(', ')}
 `;
   }
 
-  // ── APPEND ACTIVATED SCENARIO KNOWLEDGE PACKS ──
-  if (activatedScenarios.length > 0) {
+  // ── SCENARIO PACKS: PRIMARY FIRST, THEN SECONDARY ──
+  if (primaryScenario || secondaryScenarios.length > 0) {
     promptInjection += `
-=== ACTIVATED SCENARIO-SPECIFIC KNOWLEDGE PACKS ===
-The following specialized knowledge packs have been activated based on document content.
+=== SCENARIO-SPECIFIC KNOWLEDGE PACKS ===
+PRIMARY SCENARIO: ${primaryScenario || 'none'}
+SECONDARY SCENARIOS: ${secondaryScenarios.join(', ') || 'none'}
+
 PRIORITY RULE: The universal extraction above controls the reasoning structure.
-These packs ONLY ENHANCE the rebuttal with scenario-specific technical arguments.
-They DO NOT replace the universal analysis.
-MATCHED KEYWORDS: ${[...new Set(allMatchedKeywords)].join(', ')}
+PRIMARY scenario pack arguments are the main technical rebuttal enhancement.
+SECONDARY scenario packs provide supporting arguments ONLY — they do not replace or override the primary scenario.
+
+PROMPT INJECTION ORDER (ENFORCED):
+1. First summarize the engineer's actual causation theory
+2. Then explain the trigger event
+3. Then explain the difference between trigger event and the exclusion/root-cause narrative
+4. Then attack the primary scenario using scenario-specific rebuttal logic
+5. Then add secondary scenario arguments only if they materially support the rebuttal
+6. Then identify missing testing and contradictions
+7. Then address coverage positioning
+
 `;
-    for (const scenario of activatedScenarios) {
-      const pack = SCENARIO_KNOWLEDGE_PACKS[scenario];
-      if (pack) promptInjection += pack + '\n';
+    if (primaryScenario) {
+      const primaryPack = SCENARIO_KNOWLEDGE_PACKS[primaryScenario];
+      if (primaryPack) {
+        promptInjection += `--- PRIMARY SCENARIO PACK ---\n${primaryPack}\n`;
+      }
+    }
+    for (const sec of secondaryScenarios) {
+      const secPack = SCENARIO_KNOWLEDGE_PACKS[sec];
+      if (secPack) {
+        promptInjection += `--- SECONDARY SCENARIO PACK: ${sec} ---\n${secPack}\n`;
+      }
     }
     promptInjection += `=== END SCENARIO-SPECIFIC PACKS ===\n`;
   }
@@ -867,20 +1137,23 @@ MATCHED KEYWORDS: ${[...new Set(allMatchedKeywords)].join(', ')}
   promptInjection += `
 === FINAL PROMPT RULE (ENFORCED) ===
 1. Generate the rebuttal from the UNIVERSAL DISMANTLER FINDINGS FIRST (items 1-13 above).
-2. THEN supplement with any activated scenario-specific knowledge pack arguments.
-3. NEVER let scenario-specific arguments override or replace the universal forensic extraction.
-4. If NO scenario packs activated, the universal analysis alone is sufficient for a complete rebuttal.
-5. NEVER classify this report as a single peril if the content reflects dual-causation, concurrent causation, or trigger-event-versus-root-cause reasoning.
+2. Attack the engineer's ACTUAL STATED THEORY — not a generic peril assumption.
+3. Use the PRIMARY SCENARIO pack as the main technical enhancement.
+4. Use SECONDARY SCENARIO packs only for supporting arguments.
+5. NEVER let scenario-specific arguments override or replace the universal forensic extraction.
+6. If NO scenario packs activated, the universal analysis alone is sufficient for a complete rebuttal.
+7. NEVER classify this report as a single peril if the content reflects dual-causation, concurrent causation, or trigger-event-versus-root-cause reasoning.
+8. Exclusion narratives (wear and tear, maintenance, workmanship, etc.) are NOT physical-loss scenarios — they are carrier defense strategies to be challenged.
 === END UNIVERSAL ENGINEER REPORT DISMANTLER ===
 `;
 
   // ── Build structured signals object ──
   const signals = {
     triggerEventSignals,
-    engineerCauseSignals: [] as string[], // populated by AI at runtime
+    engineerCauseSignals: engineerTheorySentences,
     denialNarrativeSignals,
     contradictionSignals: [] as string[], // populated by AI at runtime
-    missingTestingSignals: [] as string[], // populated by AI at runtime
+    missingTestingSignals: criticalTestingNotPerformed,
     scenarioScores,
     activatedScenarios: [...activatedScenarios],
     isDualCausation,
@@ -889,6 +1162,14 @@ MATCHED KEYWORDS: ${[...new Set(allMatchedKeywords)].join(', ')}
   };
 
   return {
+    primaryScenario,
+    secondaryScenarios,
+    engineerStatedCause,
+    engineerTheorySentences,
+    engineerTriggerEvent,
+    engineerExclusionNarrative,
+    criticalTestingNotPerformed,
+    scenarioTheoryAlignment,
     activatedScenarios,
     matchedKeywords: [...new Set(allMatchedKeywords)],
     isMaintenanceDenialNarrative,
@@ -2065,7 +2346,7 @@ When generating rebuttals:
         // ── Universal Engineer Report Dismantler (ALWAYS runs on denial rebuttals) ──
         const denialTextForDismantler = content || '';
         const denialDismantler = runEngineerReportDismantler(denialTextForDismantler);
-        console.log(`[darwin] Denial EngineerReportDismantler: scenarios=${denialDismantler.activatedScenarios.join(',') || 'none'}, maintenanceNarrative=${denialDismantler.isMaintenanceDenialNarrative}, dualCausation=${denialDismantler.isDualCausation}, triggerSignals=${denialDismantler.signals.triggerEventSignals.length}, exclusionSignals=${denialDismantler.signals.denialNarrativeSignals.length}`);
+        console.log(`[darwin] Denial EngineerReportDismantler: primary=${denialDismantler.primaryScenario || 'none'}, secondary=[${denialDismantler.secondaryScenarios.join(',')}], maintenanceNarrative=${denialDismantler.isMaintenanceDenialNarrative}, dualCausation=${denialDismantler.isDualCausation}, engineerCause="${denialDismantler.engineerStatedCause.substring(0, 80)}", missingTests=${denialDismantler.criticalTestingNotPerformed.length}`);
         // Always inject — universal core runs on every denial; scenario packs are conditional within
         systemPrompt += '\n' + denialDismantler.promptInjection;
 
@@ -2871,7 +3152,7 @@ Never invent measurements, tests, or observations that are not in evidence.`;
         // ── Universal Engineer Report Dismantler (runs on EVERY engineer report) ──
         const engineerTextForDismantler = content || engineerUserContext || '';
         const dismantlerExtraction = runEngineerReportDismantler(engineerTextForDismantler);
-        console.log(`[darwin] EngineerReportDismantler: scenarios=${dismantlerExtraction.activatedScenarios.join(',') || 'none'}, maintenanceNarrative=${dismantlerExtraction.isMaintenanceDenialNarrative}, dualCausation=${dismantlerExtraction.isDualCausation}, keywords=${dismantlerExtraction.matchedKeywords.length}`);
+        console.log(`[darwin] EngineerReportDismantler: primary=${dismantlerExtraction.primaryScenario || 'none'}, secondary=[${dismantlerExtraction.secondaryScenarios.join(',')}], maintenanceNarrative=${dismantlerExtraction.isMaintenanceDenialNarrative}, dualCausation=${dismantlerExtraction.isDualCausation}, engineerCause="${dismantlerExtraction.engineerStatedCause.substring(0, 80)}", missingTests=${dismantlerExtraction.criticalTestingNotPerformed.length}`);
         // Always inject — the universal core runs on every report; scenario packs are conditional
         systemPrompt += '\n' + dismantlerExtraction.promptInjection;
 

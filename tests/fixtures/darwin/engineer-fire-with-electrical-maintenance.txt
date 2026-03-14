@@ -1,0 +1,16 @@
+FIRE INVESTIGATION REPORT
+Date of Investigation: January 30, 2026
+Property: 678 Pine Road, Atlanta GA
+
+EXECUTIVE SUMMARY:
+A fire occurred at this residential property on January 15, 2026. The fire was reported at approximately 2:30 AM. Our investigation focused on determining the point of origin and cause of the fire. The fire originated in the utility room area near the electrical panel.
+
+FINDINGS:
+Burn pattern analysis identified the point of origin in the northeast corner of the utility room, adjacent to the main electrical panel. V-pattern char marks on the wall are consistent with a fire originating at or near the panel. The electrical panel showed signs of overloaded circuit conditions, with multiple tandem breakers installed in slots not rated for tandem use.
+
+We did not perform arc mapping. Evidence preservation was limited as the fire department performed extensive overhaul. Conductor examination was not conducted on the wiring within the panel. The fire investigation followed general principles but did not fully comply with NFPA 921 methodology for systematic elimination of all potential ignition sources.
+
+The homeowner reported no prior electrical issues, but the panel is a known model with recall history. We did not investigate manufacturer recall status.
+
+CONCLUSION:
+The fire is attributed to deferred maintenance of the electrical system and improper installation of tandem breakers (workmanship defect). The condition was a pre-existing hazard that existed for years before the fire event. The fire was not a sudden, accidental occurrence but rather the inevitable result of long-term electrical deficiencies.

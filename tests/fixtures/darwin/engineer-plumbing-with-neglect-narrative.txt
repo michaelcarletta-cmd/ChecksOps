@@ -1,0 +1,16 @@
+ENGINEERING ASSESSMENT REPORT
+Date of Inspection: February 20, 2026
+Property: 432 Maple Drive, Chicago IL
+
+EXECUTIVE SUMMARY:
+This residential property experienced a pipe burst during the polar vortex event of February 2026. Temperatures dropped to -22°F for 48 consecutive hours. The frozen pipe split at a joint in the crawl space. Our investigation focused on the failure point, insulation conditions, and building code compliance.
+
+FINDINGS:
+The copper pipe supply line in the crawl space burst at a soldered joint. The failure is consistent with ice expansion forces from a freeze burst event. The pipe was located along an exterior wall with minimal insulation. We did not find evidence of pipe insulation in this section, though insulation may have been removed during repair.
+
+The plumbing system is original to the 1985 construction. Several joints show corrosion and galvanic reaction between copper and brass fittings. The water heater supply line showed signs of prior leaking (water staining on adjacent framing).
+
+We did not review maintenance records. No pressure testing was performed on the remaining system. Building code compliance with IRC P2603.5 was not evaluated.
+
+CONCLUSION:
+The pipe failure is attributed to a latent defect in the plumbing system, specifically the corroded joint which was a pre-existing condition that would have failed regardless of the freeze event. The lack of insulation constitutes deferred maintenance and a construction defect. The freeze event was merely the precipitating event that exposed an already-failing system.
