@@ -1370,22 +1370,35 @@ function buildScenarioPointByPoint(primary: string, allActive: Set<string>, stat
 }
 
 function buildScenarioFallacyBlock(primary: string, allActive: Set<string>): string {
-  if (primary === 'wind_uplift' || allActive.has('wind_uplift')) {
-    return `[ASTM WIND RATING FALLACY REBUTTAL - If applicable]
-If the engineer cited ASTM D3161 or D7158 wind ratings, demolish this argument using the ASTM Wind Rating Fallacy analysis from the system prompt.`;
-  }
-  if (primary === 'low_slope_snow_ice_ponding' || allActive.has('low_slope_snow_ice_ponding')) {
+  // Primary scenario controls fallacy selection; do not let secondary scenarios override it.
+  if (primary === 'low_slope_snow_ice_ponding') {
     return `[MEMBRANE DETERIORATION FALLACY REBUTTAL - MANDATORY]
 If the engineer characterizes damage as "deterioration" or "deferred maintenance" without destructive testing:
 
 "The engineer's attribution of water intrusion to 'deterioration' or 'deferred maintenance' without performing destructive membrane testing represents a fundamental methodology failure.
 
-Without core cuts, seam peel tests, or adhesion pull tests, the engineer has NO objective basis to determine whether membrane openings existed BEFORE the snow/ice event or were CAUSED by the event's hydraulic loading and freeze-thaw cycling.
+Without core cuts, seam adhesion/peel testing, leak-path tracing, moisture mapping, and drainage-capacity analysis, the engineer has NO objective basis to determine whether membrane openings existed BEFORE the snow/ice event or were CAUSED/ACTIVATED by event-driven hydraulic loading and freeze-thaw cycling.
 
-Susceptibility to damage is not proof of causation. A membrane system that is at or near the end of its expected service life is MORE vulnerable to event-driven failure, not LESS. This increased vulnerability makes the weather event the proximate cause of the loss, not the age of the system.
+Susceptibility to damage is not proof of causation. A membrane system near end-of-life can be more vulnerable to event-driven failure, but vulnerability does not prove deterioration alone caused this loss.
 
-The engineer acknowledges that snow impeded drainage, created ponding conditions, and increased water burden on the membrane. These are event-driven forces that exceed the membrane's design tolerances—this is physical loss from a covered event, not gradual deterioration."`;
+The report acknowledges snow impeded drainage, standing water existed, and freeze-thaw can worsen openings. That admission directly conflicts with any deterioration-only conclusion unless timing and causation are proven with objective testing."`;
   }
+
+  if (primary === 'wind_uplift') {
+    return `[ASTM WIND RATING FALLACY REBUTTAL - If applicable]
+If the engineer cited ASTM D3161 or D7158 wind ratings, demolish this argument using the ASTM Wind Rating Fallacy analysis from the system prompt.`;
+  }
+
+  if (!primary && allActive.has('low_slope_snow_ice_ponding')) {
+    return `[MEMBRANE DETERIORATION FALLACY REBUTTAL - MANDATORY]
+Apply the membrane-deterioration fallacy analysis and require objective membrane/drainage testing before any deterioration-only attribution.`;
+  }
+
+  if (!primary && allActive.has('wind_uplift')) {
+    return `[ASTM WIND RATING FALLACY REBUTTAL - If applicable]
+If the engineer cited ASTM D3161 or D7158 wind ratings, demolish this argument using the ASTM Wind Rating Fallacy analysis from the system prompt.`;
+  }
+
   return '';
 }
 
