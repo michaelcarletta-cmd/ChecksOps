@@ -3423,9 +3423,9 @@ OPENING SENTENCE REQUIREMENT (use this exact sentence first in the opening):
 
 After that opening sentence, challenge timing, methodology, and causation logic in that order.
 
-Do NOT use generic storm/wind/shingle envelope arguments unless the engineer's causation theory explicitly relies on them.
+Do NOT use generic storm/wind/shingle boilerplate unless the engineer's causation theory explicitly relies on it.
 Detected wind-centric causation reliance in extracted theory: ${lowSlopeTheoryExplicitlyReliesOnWind ? 'YES' : 'NO'}.
-${lowSlopeTheoryExplicitlyReliesOnWind ? 'If you use wind-centric language, tie it to a direct engineer quote and explain why it is material.' : 'Do NOT use high-wind/pressure, uplift resistance, fastener pull-out, wind-driven rain, structural racking, or fastener back-out arguments in this rebuttal.'}
+${lowSlopeTheoryExplicitlyReliesOnWind ? 'If you use any wind/shingle language, tie it to direct engineer theory text and explain why it is material.' : 'Do NOT use shingle, thermal seal, uplift checks, granular loss, fractured tabs, ARMA, fastener pull-out, wind-driven rain, high-wind/pressure, uplift resistance, structural racking, or fastener back-out arguments in this rebuttal.'}
 
 MANDATORY LOW-SLOPE METHODOLOGY ATTACKS:
 - no membrane core cuts
@@ -3434,9 +3434,13 @@ MANDATORY LOW-SLOPE METHODOLOGY ATTACKS:
 - no snow-water equivalent/runoff analysis
 - no leak-path tracing
 - no moisture mapping
+- no proof of timing of openings
 
 MANDATORY CONTRADICTION ATTACK:
-If the report admits snow impeded drainage, standing water existed, and freeze-thaw can worsen openings, then attack any deterioration-only conclusion unless timing and causation are proven with objective testing.
+The report admits snow impeded drainage, standing water existed, and freeze-thaw can worsen openings, yet still blames maintenance without proving deterioration alone caused the loss.
+
+MANDATORY DISTINCTION:
+Structural snow-load analysis is not membrane watertightness analysis.
 
 EVIDENCE GROUNDING RULE:
 Do not insert damage facts unless grounded in direct report language or documented claim file evidence.`
