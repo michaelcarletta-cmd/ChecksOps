@@ -2359,6 +2359,7 @@ Deno.serve(async (req) => {
     let systemPrompt = '';
     let userPrompt = '';
     let engineerRebuttalPrimaryScenario: string | null = null;
+    let engineerTheoryCorpusForFilters = '';
 
     // Build photo summary for context
     const analyzedPhotoCount = context.photos?.filter((p: any) => p.ai_analyzed_at)?.length || 0;
