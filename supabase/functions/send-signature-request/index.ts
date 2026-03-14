@@ -209,7 +209,7 @@ Deno.serve(async (req) => {
     // Load request + signers + claim
     const { data: request, error: reqErr } = await sb
       .from("signature_requests")
-      .select("*, signature_signers(*), claims(id, claim_number, policyholder_name, policyholder_email, policy_number)")
+      .select("*, signature_signers(*), claims!signature_requests_claim_id_fkey(id, claim_number, policyholder_name, policyholder_email, policy_number)")
       .eq("id", requestId)
       .single();
 
