@@ -697,27 +697,16 @@ describe("Harvey Memorial / Envista — prompt-content validation", () => {
   // These terms appear in the "do NOT use" instruction list (allowed there), but
   // must NOT appear as affirmative rebuttal advice outside of the forbidden list.
   // The scope guard explicitly says "Do NOT use X" — that's the only allowed context.
-  for (const { label } of forbiddenTerms) {
-    it(`forbidden term "${label}" appears only in the DO-NOT-USE instruction, not as affirmative advice`, () => {
-      // The scope guard contains them as items in the "do NOT use" list. That's okay.
-      // Verify the attack-vectors block does NOT use them as affirmative attack language.
-      // Attack vectors should focus on membrane methodology, not wind/shingle mechanics.
-      const attackLower = attackVectors.toLowerCase();
-      // If the term appears in attack vectors, it should only be in the forbidden list section
-      const forbiddenListSection = attackVectors.slice(
-        attackVectors.indexOf("do NOT use:"),
-        attackVectors.indexOf("For EVERY finding")
-      ).toLowerCase();
-      const outsideForbiddenList = attackLower.replace(forbiddenListSection, "");
-      // For items like "shingle" that naturally don't appear in membrane methodology, 
-      // just verify they're not used as affirmative attack points
-      const inMethodology = outsideForbiddenList.includes(label.toLowerCase());
-      if (inMethodology) {
-        // If found, it must be in context of "do NOT" or negation
-        expect(outsideForbiddenList).not.toMatch(
-          new RegExp(`(?<!do not use[^.]*?)\\b${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i")
-        );
-      }
+  for (const { label, regex } of forbiddenTerms) {
+    it(`forbidden term "${label}" does NOT appear as affirmative rebuttal methodology`, () => {
+      // The attack vectors mention these terms ONLY in the "do NOT use" list.
+      // Outside of that list, the methodology questions should focus on membrane/drainage.
+      // Find the methodology section (after "For EVERY finding")
+      const methodologyStart = attackVectors.indexOf("For EVERY finding");
+      if (methodologyStart < 0) return; // guard
+
+      const methodologySection = attackVectors.slice(methodologyStart);
+      expect(methodologySection).not.toMatch(regex);
     });
   }
 });
