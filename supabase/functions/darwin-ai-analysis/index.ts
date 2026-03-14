@@ -427,60 +427,162 @@ async function extractTextFromPDFNative(base64Content: string, fileName: string)
 // Classification rule: never reduce to single peril if dual/concurrent causation present.
 // ============================================================================
 
-// ── Scenario keyword banks ──────────────────────────────────────────────────
-const SCENARIO_KEYWORDS: Record<string, string[]> = {
+// ── TRIGGER EVENT KEYWORDS (universal, all loss types) ──────────────────────
+const TRIGGER_EVENT_KEYWORDS = [
+  'storm', 'wind', 'hail', 'rain', 'snow', 'ice', 'freeze',
+  'plumbing leak', 'pipe burst', 'fire', 'lightning', 'impact',
+  'collapse', 'mechanical failure', 'water intrusion', 'drain backup',
+  'sewer backup', 'tree impact', 'vehicle impact', 'tornado', 'hurricane',
+  'tropical storm', 'thunderstorm', 'blizzard', 'ice storm', 'flood',
+  'earthquake', 'explosion', 'power surge', 'electrical failure',
+  'date of loss', 'loss date', 'event date', 'incident date',
+  'weather event', 'storm event', 'occurrence',
+];
+
+// ── EXCLUSION NARRATIVE KEYWORDS (broader than just deterioration) ───────────
+const EXCLUSION_NARRATIVE_KEYWORDS = [
+  // deterioration / maintenance
+  'wear and tear', 'deterioration', 'age-related', 'aging', 'maintenance',
+  'deferred maintenance', 'normal aging', 'expected life', 'service life',
+  'end of useful life', 'pre-existing', 'long-term', 'gradual',
+  'prior to the loss', 'cosmetic', 'granule loss',
+  // workmanship / construction / latent
+  'installation defect', 'workmanship', 'construction defect', 'latent defect',
+  'inherent vice', 'improper installation', 'faulty workmanship',
+  // seepage / moisture
+  'repeated seepage', 'long-term leakage',
+  // material degradation
+  'rot', 'corrosion', 'rust', 'oxidation', 'marring', 'scratching',
+  // cosmetic / not storm
+  'cosmetic only', 'not storm related', 'not hail related', 'not wind related',
+  'not sudden', 'not covered',
+];
+
+// ── Scenario keyword banks with strong/medium weighting ─────────────────────
+type WeightedKeyword = { term: string; weight: 2 | 1 };
+
+const SCENARIO_KEYWORDS_WEIGHTED: Record<string, WeightedKeyword[]> = {
   low_slope_snow_ice_ponding: [
-    'snow meltwater', 'freeze thaw', 'freeze-thaw', 'snow-water equivalent',
-    'standing water', 'negative drainage', 'ponding water', 'drainage obstruction',
-    'ice dam', 'ice damming', 'snowmelt', 'snow melt', 'meltwater',
-    'ponding', 'hydraulic loading', 'snow load', 'ice buildup',
-    'ice barrier', 'low slope', 'low-slope', 'flat roof', 'built-up roof',
-    'membrane', 'tpo', 'epdm', 'modified bitumen',
+    // strong (2)
+    { term: 'ice dam', weight: 2 }, { term: 'ice damming', weight: 2 },
+    { term: 'snowmelt', weight: 2 }, { term: 'ponding water', weight: 2 },
+    { term: 'snow-water equivalent', weight: 2 }, { term: 'hydraulic loading', weight: 2 },
+    { term: 'negative drainage', weight: 2 }, { term: 'drainage obstruction', weight: 2 },
+    // medium (1)
+    { term: 'snow meltwater', weight: 1 }, { term: 'freeze thaw', weight: 1 },
+    { term: 'freeze-thaw', weight: 1 }, { term: 'standing water', weight: 1 },
+    { term: 'snow melt', weight: 1 }, { term: 'meltwater', weight: 1 },
+    { term: 'ponding', weight: 1 }, { term: 'snow load', weight: 1 },
+    { term: 'ice buildup', weight: 1 }, { term: 'ice barrier', weight: 1 },
+    { term: 'low slope', weight: 1 }, { term: 'low-slope', weight: 1 },
+    { term: 'flat roof', weight: 1 }, { term: 'built-up roof', weight: 1 },
+    { term: 'membrane', weight: 1 }, { term: 'tpo', weight: 1 },
+    { term: 'epdm', weight: 1 }, { term: 'modified bitumen', weight: 1 },
   ],
   hail_impact: [
-    'hail', 'hailstone', 'hail impact', 'impact damage', 'impact mark',
-    'bruising', 'granule loss', 'granule displacement', 'indentation',
-    'soft metal', 'collateral damage', 'spatter mark', 'test square',
-    'hail size', 'diameter', 'impact pattern',
+    // strong (2)
+    { term: 'hail impact', weight: 2 }, { term: 'test square', weight: 2 },
+    { term: 'granule displacement', weight: 2 }, { term: 'functional damage', weight: 2 },
+    { term: 'mat fracture', weight: 2 }, { term: 'brittle fracture', weight: 2 },
+    { term: 'circular fracture', weight: 2 },
+    // medium (1)
+    { term: 'hail', weight: 1 }, { term: 'hailstone', weight: 1 },
+    { term: 'impact damage', weight: 1 }, { term: 'impact mark', weight: 1 },
+    { term: 'bruising', weight: 1 }, { term: 'granule loss', weight: 1 },
+    { term: 'indentation', weight: 1 }, { term: 'soft metal', weight: 1 },
+    { term: 'collateral damage', weight: 1 }, { term: 'spatter mark', weight: 1 },
+    { term: 'hail size', weight: 1 }, { term: 'diameter', weight: 1 },
+    { term: 'impact pattern', weight: 1 }, { term: 'spoliation', weight: 1 },
+    { term: 'random hits', weight: 1 }, { term: 'directional impacts', weight: 1 },
+    { term: 'cosmetic damage', weight: 1 },
   ],
   wind_uplift: [
-    'wind uplift', 'wind damage', 'uplift', 'peel back', 'creasing',
-    'tab lift', 'seal strip', 'adhesive failure', 'gust', 'sustained wind',
-    'prevailing wind', 'windward', 'leeward', 'wind-driven rain',
-    'blow off', 'blow-off', 'lifted shingle', 'mechanical damage',
+    // strong (2)
+    { term: 'wind uplift', weight: 2 }, { term: 'peel back', weight: 2 },
+    { term: 'tab lift', weight: 2 }, { term: 'lifted tab', weight: 2 },
+    { term: 'unsealed tab', weight: 2 }, { term: 'loss of seal', weight: 2 },
+    { term: 'creased tab', weight: 2 },
+    // medium (1)
+    { term: 'wind damage', weight: 1 }, { term: 'uplift', weight: 1 },
+    { term: 'creasing', weight: 1 }, { term: 'crease', weight: 1 },
+    { term: 'seal strip', weight: 1 }, { term: 'adhesive failure', weight: 1 },
+    { term: 'gust', weight: 1 }, { term: 'sustained wind', weight: 1 },
+    { term: 'prevailing wind', weight: 1 }, { term: 'windward', weight: 1 },
+    { term: 'leeward', weight: 1 }, { term: 'wind-driven rain', weight: 1 },
+    { term: 'blow off', weight: 1 }, { term: 'blow-off', weight: 1 },
+    { term: 'lifted shingle', weight: 1 }, { term: 'mechanical damage', weight: 1 },
+    { term: 'thermal sealing', weight: 1 }, { term: 'repairability', weight: 1 },
+    { term: 'brittle test', weight: 1 }, { term: 'hand seal', weight: 1 },
   ],
   plumbing_freeze_burst: [
-    'pipe burst', 'frozen pipe', 'freeze burst', 'plumbing failure',
-    'water supply line', 'copper pipe', 'pex', 'galvanized',
-    'expansion', 'ice expansion', 'pipe split', 'water damage',
-    'supply line', 'drain line', 'water heater', 'pressure relief',
+    // strong (2)
+    { term: 'pipe burst', weight: 2 }, { term: 'frozen pipe', weight: 2 },
+    { term: 'freeze burst', weight: 2 }, { term: 'pipe split', weight: 2 },
+    // medium (1)
+    { term: 'plumbing failure', weight: 1 }, { term: 'water supply line', weight: 1 },
+    { term: 'copper pipe', weight: 1 }, { term: 'pex', weight: 1 },
+    { term: 'galvanized', weight: 1 }, { term: 'expansion', weight: 1 },
+    { term: 'ice expansion', weight: 1 }, { term: 'water damage', weight: 1 },
+    { term: 'supply line', weight: 1 }, { term: 'drain line', weight: 1 },
+    { term: 'water heater', weight: 1 }, { term: 'pressure relief', weight: 1 },
   ],
   fire_causation: [
-    'fire', 'combustion', 'ignition', 'char', 'smoke damage',
-    'point of origin', 'burn pattern', 'v-pattern', 'arc mapping',
-    'accelerant', 'fire investigation', 'fire cause', 'electrical fire',
-    'overloaded circuit', 'arson', 'accidental fire',
+    // strong (2)
+    { term: 'point of origin', weight: 2 }, { term: 'burn pattern', weight: 2 },
+    { term: 'v-pattern', weight: 2 }, { term: 'arc mapping', weight: 2 },
+    { term: 'fire investigation', weight: 2 },
+    // medium (1)
+    { term: 'fire', weight: 1 }, { term: 'combustion', weight: 1 },
+    { term: 'ignition', weight: 1 }, { term: 'char', weight: 1 },
+    { term: 'smoke damage', weight: 1 }, { term: 'accelerant', weight: 1 },
+    { term: 'fire cause', weight: 1 }, { term: 'electrical fire', weight: 1 },
+    { term: 'overloaded circuit', weight: 1 }, { term: 'arson', weight: 1 },
+    { term: 'accidental fire', weight: 1 },
   ],
   structural_movement_settlement: [
-    'settlement', 'foundation', 'structural movement', 'subsidence',
-    'heaving', 'lateral movement', 'differential settlement',
-    'crack pattern', 'stair-step crack', 'shear crack', 'bearing wall',
-    'load path', 'footing', 'pier', 'underpinning', 'soil movement',
-    'expansive soil', 'clay soil', 'hydrostatic pressure',
+    // strong (2)
+    { term: 'differential settlement', weight: 2 }, { term: 'structural movement', weight: 2 },
+    { term: 'stair-step crack', weight: 2 }, { term: 'lateral movement', weight: 2 },
+    // medium (1)
+    { term: 'settlement', weight: 1 }, { term: 'foundation', weight: 1 },
+    { term: 'subsidence', weight: 1 }, { term: 'heaving', weight: 1 },
+    { term: 'crack pattern', weight: 1 }, { term: 'shear crack', weight: 1 },
+    { term: 'bearing wall', weight: 1 }, { term: 'load path', weight: 1 },
+    { term: 'footing', weight: 1 }, { term: 'pier', weight: 1 },
+    { term: 'underpinning', weight: 1 }, { term: 'soil movement', weight: 1 },
+    { term: 'expansive soil', weight: 1 }, { term: 'clay soil', weight: 1 },
+    { term: 'hydrostatic pressure', weight: 1 },
   ],
   mechanical_failure: [
-    'mechanical failure', 'equipment failure', 'hvac', 'compressor',
-    'condensation', 'refrigerant leak', 'ductwork', 'blower',
-    'motor failure', 'bearing failure', 'appliance', 'water heater',
-    'sump pump', 'ejector pump', 'backflow',
+    // strong (2)
+    { term: 'mechanical failure', weight: 2 }, { term: 'equipment failure', weight: 2 },
+    { term: 'motor failure', weight: 2 }, { term: 'bearing failure', weight: 2 },
+    // medium (1)
+    { term: 'hvac', weight: 1 }, { term: 'compressor', weight: 1 },
+    { term: 'condensation', weight: 1 }, { term: 'refrigerant leak', weight: 1 },
+    { term: 'ductwork', weight: 1 }, { term: 'blower', weight: 1 },
+    { term: 'appliance', weight: 1 }, { term: 'water heater', weight: 1 },
+    { term: 'sump pump', weight: 1 }, { term: 'ejector pump', weight: 1 },
+    { term: 'backflow', weight: 1 },
   ],
   water_intrusion_envelope: [
-    'water intrusion', 'envelope failure', 'building envelope',
-    'weather barrier', 'vapor barrier', 'moisture barrier',
-    'flashing failure', 'sealant failure', 'caulk failure',
-    'window leak', 'door leak', 'wall penetration',
-    'weep hole', 'kick-out flashing', 'head flashing',
-    'housewrap', 'tyvek', 'moisture migration',
+    // strong (2)
+    { term: 'water intrusion', weight: 2 }, { term: 'envelope failure', weight: 2 },
+    { term: 'building envelope', weight: 2 }, { term: 'intrusion path', weight: 2 },
+    { term: 'penetration point', weight: 2 },
+    // medium (1)
+    { term: 'weather barrier', weight: 1 }, { term: 'vapor barrier', weight: 1 },
+    { term: 'moisture barrier', weight: 1 }, { term: 'flashing failure', weight: 1 },
+    { term: 'sealant failure', weight: 1 }, { term: 'caulk failure', weight: 1 },
+    { term: 'window leak', weight: 1 }, { term: 'door leak', weight: 1 },
+    { term: 'wall penetration', weight: 1 }, { term: 'weep hole', weight: 1 },
+    { term: 'kick-out flashing', weight: 1 }, { term: 'head flashing', weight: 1 },
+    { term: 'housewrap', weight: 1 }, { term: 'tyvek', weight: 1 },
+    { term: 'moisture migration', weight: 1 }, { term: 'latent moisture', weight: 1 },
+    { term: 'concealed moisture', weight: 1 }, { term: 'stucco', weight: 1 },
+    { term: 'masonry veneer', weight: 1 }, { term: 'veneer', weight: 1 },
+    { term: 'facade', weight: 1 }, { term: 'water track', weight: 1 },
+    { term: 'leak path', weight: 1 }, { term: 'capillary action', weight: 1 },
   ],
 };
 
@@ -488,13 +590,6 @@ const WEATHER_ANALYSIS_KEYWORDS = [
   'weather data', 'weather analysis', 'meteorological', 'storm event',
   'wind speed', 'precipitation', 'temperature record', 'freeze-thaw cycle',
   'snow accumulation', 'rainfall', 'weather report', 'historical weather',
-];
-
-const DETERIORATION_KEYWORDS = [
-  'wear and tear', 'deterioration', 'age-related', 'aging', 'maintenance',
-  'deferred maintenance', 'normal aging', 'expected life', 'service life',
-  'end of useful life', 'pre-existing', 'long-term', 'gradual',
-  'prior to the loss', 'cosmetic', 'granule loss',
 ];
 
 const DUAL_CAUSATION_KEYWORDS = [
@@ -512,8 +607,8 @@ MANDATORY REBUTTAL ARGUMENTS:
 - CAUSATION ASSUMPTIONS: Challenge any assumption that damage is "maintenance" without testing. The engineer must prove damage existed BEFORE the weather event with dated documentation.
 - LACK OF TESTING: Did the engineer perform moisture mapping, infrared scanning, core cuts, or destructive testing to determine water intrusion pathways? If not, conclusions are speculative.
 - SNOWMELT HYDRAULIC LOADING: Snow accumulation creates sustained hydraulic pressure on roofing systems. Even properly maintained roofs can fail under prolonged snowmelt conditions. Cite building science on hydrostatic pressure vs. design limitations.
-- DRAINAGE OBSTRUCTION: Ice dams, debris accumulation, and freeze-thaw cycling can obstruct designed drainage pathways, causing water to back up under shingles, flashing, and membrane systems. This is a COVERED PERIL, not maintenance.
-- FREEZE-THAW EFFECTS: Repeated freeze-thaw cycling causes mechanical damage to roofing materials, sealants, and flashing. Ice expansion exerts ~2,000 PSI of force—far exceeding material design tolerances. This is physical damage from a weather event, not wear and tear.
+- DRAINAGE OBSTRUCTION: Ice dams, debris accumulation, and freeze-thaw cycling can obstruct designed drainage pathways, causing water to back up under shingles, flashing, and membrane systems. Drainage obstruction, snow/ice backup, and freeze-thaw effects may constitute event-driven physical loss and should not be automatically recast as maintenance absent proof.
+- FREEZE-THAW EFFECTS: Repeated freeze-thaw cycling causes mechanical damage to roofing materials, sealants, and flashing. Ice expansion can exert substantial force—far exceeding material design tolerances. This is physical damage from a weather event, not wear and tear.
 - NEGATIVE DRAINAGE: If ponding or negative drainage conditions exist, determine whether these are design deficiencies (potentially covered) or maintenance issues. The engineer must provide specific evidence, not assumptions.
 - LOW-SLOPE MEMBRANE SCIENCE: EPDM, TPO, and modified bitumen systems have specific failure modes under ice/snow loading (seam stress, puncture from ice crystals, thermal shock). Challenge generic "deterioration" language.
 === END SCENARIO PACK ===`,
@@ -543,7 +638,7 @@ MANDATORY REBUTTAL ARGUMENTS:
   plumbing_freeze_burst: `
 === SCENARIO KNOWLEDGE PACK: PLUMBING FREEZE BURST ===
 MANDATORY REBUTTAL ARGUMENTS:
-- ICE EXPANSION PHYSICS: Water expands ~9% when freezing, generating pressures exceeding 25,000 PSI. Even properly maintained plumbing systems can fail under sustained freeze conditions.
+- ICE EXPANSION PHYSICS: Water expands approximately 9% when freezing, generating pressures far beyond normal material tolerances. Even properly maintained plumbing systems can fail under sustained freeze conditions.
 - MAINTAINED vs. NEGLECTED: The engineer must provide specific evidence of neglect (e.g., heat was intentionally turned off, pipes were never insulated where required by code). General assertions of "maintenance" are insufficient.
 - BUILDING CODE COMPLIANCE: Was the plumbing installed per IRC P2603.5 (protection against freezing)? If so, the system met code—failure under extreme conditions is a covered event.
 - SUDDEN vs. GRADUAL: Freeze burst is a SUDDEN event even if the temperature drop was gradual. The policy covers sudden and accidental discharge.
@@ -591,45 +686,115 @@ MANDATORY REBUTTAL ARGUMENTS:
 };
 
 // ── Universal extraction interface ──────────────────────────────────────────
+interface ScenarioActivation {
+  scenario: string;
+  matchedKeywords: string[];
+  score: number;
+  reason: string;
+}
+
 interface EngineerReportDismantlerResult {
   /** Scenario keys that activated (may be multiple for dual-causation). */
   activatedScenarios: string[];
   /** All matched keywords across all scenarios. */
   matchedKeywords: string[];
-  /** True when weather analysis + deterioration language both present. */
+  /** True when weather/trigger event + exclusion/deterioration language both present. */
   isMaintenanceDenialNarrative: boolean;
   /** True when dual/concurrent causation language detected. */
   isDualCausation: boolean;
   /** The full prompt injection block for the AI system prompt. */
   promptInjection: string;
+  /** Structured extraction signals for UI, debugging, analytics, QA. */
+  signals: {
+    triggerEventSignals: string[];
+    engineerCauseSignals: string[];
+    denialNarrativeSignals: string[];
+    contradictionSignals: string[];
+    missingTestingSignals: string[];
+    scenarioScores: Record<string, number>;
+    activatedScenarios: string[];
+    isDualCausation: boolean;
+    isMaintenanceDenialNarrative: boolean;
+    recommendedRebuttalAngles: string[];
+  };
+  /** Debug log entries for each scenario activation decision. */
+  scenarioActivationLog: ScenarioActivation[];
 }
 
 function runEngineerReportDismantler(documentText: string): EngineerReportDismantlerResult {
   const textLower = documentText.toLowerCase();
 
-  // ── Detect activated scenarios ──
+  // ── Detect trigger events (universal) ──
+  const triggerEventSignals = TRIGGER_EVENT_KEYWORDS.filter(kw => textLower.includes(kw));
+
+  // ── Detect exclusion narrative signals (broadened beyond just deterioration) ──
+  const denialNarrativeSignals = EXCLUSION_NARRATIVE_KEYWORDS.filter(kw => textLower.includes(kw));
+
+  // ── Detect activated scenarios via weighted scoring ──
+  const scenarioScores: Record<string, number> = {};
+  const scenarioActivationLog: ScenarioActivation[] = [];
   const activatedScenarios: string[] = [];
   const allMatchedKeywords: string[] = [];
-  for (const [scenario, keywords] of Object.entries(SCENARIO_KEYWORDS)) {
-    const hits = keywords.filter(kw => textLower.includes(kw));
-    if (hits.length >= 2) { // require ≥2 keyword hits to activate a scenario
+
+  for (const [scenario, weightedKws] of Object.entries(SCENARIO_KEYWORDS_WEIGHTED)) {
+    const matched: string[] = [];
+    let score = 0;
+    for (const { term, weight } of weightedKws) {
+      if (textLower.includes(term)) {
+        matched.push(term);
+        score += weight;
+      }
+    }
+    scenarioScores[scenario] = score;
+
+    // Activation: one strong keyword (score >= 2 from single hit) OR total score >= 2
+    const hasStrongHit = weightedKws.some(kw => kw.weight === 2 && textLower.includes(kw.term));
+    const activated = hasStrongHit || score >= 2;
+
+    const reason = activated
+      ? (hasStrongHit ? `strong keyword present (score=${score})` : `total score=${score} >= 2`)
+      : `score=${score} below threshold`;
+
+    scenarioActivationLog.push({ scenario, matchedKeywords: matched, score, reason });
+
+    if (activated) {
       activatedScenarios.push(scenario);
-      allMatchedKeywords.push(...hits);
+      allMatchedKeywords.push(...matched);
     }
   }
 
-  // ── Detect maintenance denial narrative ──
+  // ── Detect maintenance denial narrative (trigger + exclusion co-occurrence) ──
   const weatherAnalysisPresent = WEATHER_ANALYSIS_KEYWORDS.some(kw => textLower.includes(kw));
-  const deteriorationPresent = DETERIORATION_KEYWORDS.some(kw => textLower.includes(kw));
-  const isMaintenanceDenialNarrative = weatherAnalysisPresent && deteriorationPresent;
+  const triggerPresent = triggerEventSignals.length > 0 || weatherAnalysisPresent;
+  const exclusionPresent = denialNarrativeSignals.length > 0;
+  const isMaintenanceDenialNarrative = triggerPresent && exclusionPresent;
 
-  // ── Detect dual/concurrent causation ──
-  const isDualCausation = DUAL_CAUSATION_KEYWORDS.some(kw => textLower.includes(kw))
-    || activatedScenarios.length >= 2;
+  // ── Detect dual/concurrent causation (broadened) ──
+  const explicitDualCausation = DUAL_CAUSATION_KEYWORDS.some(kw => textLower.includes(kw));
+  const multipleScenarios = activatedScenarios.length >= 2;
+  const triggerPlusDeterioration = triggerEventSignals.length > 0 && exclusionPresent;
+  const isDualCausation = explicitDualCausation || multipleScenarios || triggerPlusDeterioration;
+
+  // ── Build recommended rebuttal angles ──
+  const recommendedRebuttalAngles: string[] = [];
+  if (isDualCausation) recommendedRebuttalAngles.push('dual/concurrent causation analysis');
+  if (isMaintenanceDenialNarrative) recommendedRebuttalAngles.push('challenge maintenance narrative');
+  if (denialNarrativeSignals.length > 0) recommendedRebuttalAngles.push('exclusion language rebuttal');
+  for (const s of activatedScenarios) recommendedRebuttalAngles.push(`${s} technical rebuttal`);
+
+  // ── Debug logging ──
+  console.log(`[EngineerReportDismantler] Trigger signals: ${triggerEventSignals.length}, Exclusion signals: ${denialNarrativeSignals.length}`);
+  console.log(`[EngineerReportDismantler] isDualCausation=${isDualCausation} (explicit=${explicitDualCausation}, multiScenario=${multipleScenarios}, trigger+deterioration=${triggerPlusDeterioration})`);
+  console.log(`[EngineerReportDismantler] isMaintenanceDenialNarrative=${isMaintenanceDenialNarrative}`);
+  for (const entry of scenarioActivationLog) {
+    if (entry.matchedKeywords.length > 0) {
+      console.log(`[EngineerReportDismantler] Scenario "${entry.scenario}": ${entry.reason}, keywords=[${entry.matchedKeywords.join(', ')}]`);
+    }
+  }
 
   // ── BUILD UNIVERSAL PROMPT INJECTION (always runs) ──
   let promptInjection = `
-=== UNIVERSAL ENGINEER REPORT DISMANTLER (MANDATORY — RUNS ON EVERY ENGINEER REPORT) ===
+=== UNIVERSAL ENGINEER REPORT DISMANTLER (MANDATORY — RUNS ON EVERY REPORT/DENIAL) ===
 
 YOU MUST EXTRACT AND ADDRESS ALL OF THE FOLLOWING IN YOUR REBUTTAL.
 This extraction controls the structure of every engineer report rebuttal regardless of loss type.
@@ -637,7 +802,7 @@ This extraction controls the structure of every engineer report rebuttal regardl
 1. TRIGGER EVENT — What weather event, system failure, or occurrence initiated the claimed loss? Identify the specific date and conditions.
 2. ENGINEER STATED CAUSE — What does the engineer conclude caused the damage? Quote their exact language.
 3. COMPETING CAUSATION THEORIES — What other causes were mentioned, discussed, or dismissed? Were they properly ruled out with testing and evidence, or simply asserted?
-4. DENIAL NARRATIVE — What is the overall narrative the engineer is constructing? (e.g., "maintenance neglect," "pre-existing condition," "normal aging") Identify the narrative strategy.
+4. DENIAL NARRATIVE — What is the overall narrative the engineer is constructing? (e.g., "maintenance neglect," "pre-existing condition," "normal aging," "workmanship," "installation defect," "cosmetic only") Identify the narrative strategy.
 5. PHYSICAL EVIDENCE RELIED ON — What specific physical evidence does the engineer cite to support their conclusions? Is it sufficient, properly documented, and correctly interpreted?
 6. TESTING PERFORMED — What tests, measurements, or analyses did the engineer actually perform? (core cuts, moisture readings, thermal imaging, test squares, material sampling, etc.)
 7. TESTING NOT PERFORMED — What tests SHOULD have been performed given the damage type and loss mechanism but were NOT? This is often the most devastating rebuttal angle.
@@ -650,7 +815,7 @@ This extraction controls the structure of every engineer report rebuttal regardl
 `;
 
   // ── CLASSIFICATION RULE ──
-  if (isDualCausation || activatedScenarios.length >= 2) {
+  if (isDualCausation) {
     promptInjection += `
 === DUAL/CONCURRENT CAUSATION ALERT ===
 CRITICAL: This report reflects DUAL CAUSATION, CONCURRENT CAUSATION, or trigger-event-versus-root-cause reasoning.
@@ -659,8 +824,8 @@ DO NOT reduce this report to a single peril label. You MUST:
 - Analyze each cause independently against coverage
 - Apply the efficient proximate cause doctrine or anti-concurrent causation clause analysis as appropriate
 - State clearly that the engineer's single-cause attribution is an oversimplification
-DETECTED DUAL-CAUSATION INDICATORS: ${[...new Set(allMatchedKeywords)].join(', ')}
-ACTIVATED LOSS PATTERNS: ${activatedScenarios.join(', ')}
+DETECTED SIGNALS: trigger events=[${triggerEventSignals.slice(0, 10).join(', ')}], exclusion language=[${denialNarrativeSignals.slice(0, 10).join(', ')}]
+ACTIVATED LOSS PATTERNS: ${activatedScenarios.join(', ') || 'none (universal analysis only)'}
 === END DUAL CAUSATION ALERT ===
 `;
   }
@@ -668,14 +833,15 @@ ACTIVATED LOSS PATTERNS: ${activatedScenarios.join(', ')}
   // ── MAINTENANCE DENIAL NARRATIVE FLAG ──
   if (isMaintenanceDenialNarrative) {
     promptInjection += `
-=== MAINTENANCE DENIAL NARRATIVE FLAGGED ===
-This document contains BOTH weather/event analysis AND deterioration/maintenance conclusions.
-This is a common carrier tactic: acknowledge the event occurred but attribute all damage to "maintenance" or "wear and tear."
+=== MAINTENANCE / EXCLUSION DENIAL NARRATIVE FLAGGED ===
+This document contains BOTH event/trigger language AND exclusion/deterioration/maintenance conclusions.
+This is a common carrier tactic: acknowledge the event occurred but attribute all damage to maintenance, workmanship, or pre-existing conditions.
 You MUST aggressively challenge this narrative by:
 1. Separating the event causation from any pre-existing condition claims
 2. Demanding specific evidence that differentiates event damage from alleged deterioration
 3. Pointing out that acknowledging the event while denying it caused damage requires rigorous testing—not assumptions
 4. Identifying whether the engineer provided DATED documentation of pre-event condition
+DETECTED EXCLUSION LANGUAGE: ${denialNarrativeSignals.slice(0, 15).join(', ')}
 === END MAINTENANCE DENIAL NARRATIVE ===
 `;
   }
@@ -708,12 +874,28 @@ MATCHED KEYWORDS: ${[...new Set(allMatchedKeywords)].join(', ')}
 === END UNIVERSAL ENGINEER REPORT DISMANTLER ===
 `;
 
+  // ── Build structured signals object ──
+  const signals = {
+    triggerEventSignals,
+    engineerCauseSignals: [] as string[], // populated by AI at runtime
+    denialNarrativeSignals,
+    contradictionSignals: [] as string[], // populated by AI at runtime
+    missingTestingSignals: [] as string[], // populated by AI at runtime
+    scenarioScores,
+    activatedScenarios: [...activatedScenarios],
+    isDualCausation,
+    isMaintenanceDenialNarrative,
+    recommendedRebuttalAngles,
+  };
+
   return {
     activatedScenarios,
     matchedKeywords: [...new Set(allMatchedKeywords)],
     isMaintenanceDenialNarrative,
     isDualCausation,
     promptInjection,
+    signals,
+    scenarioActivationLog,
   };
 }
 
@@ -1880,13 +2062,12 @@ When generating rebuttals:
 8. Include specific documentation requests that put them on the defensive
 9. Provide a formal rebuttal letter that makes them reconsider their denial`;
 
-        // ── Universal Engineer Report Dismantler (also runs on denial rebuttals for forensic extraction) ──
+        // ── Universal Engineer Report Dismantler (ALWAYS runs on denial rebuttals) ──
         const denialTextForDismantler = content || '';
         const denialDismantler = runEngineerReportDismantler(denialTextForDismantler);
-        if (denialDismantler.activatedScenarios.length > 0 || denialDismantler.isMaintenanceDenialNarrative) {
-          console.log(`[darwin] Denial EngineerReportDismantler: scenarios=${denialDismantler.activatedScenarios.join(',') || 'none'}, maintenanceNarrative=${denialDismantler.isMaintenanceDenialNarrative}, keywords=${denialDismantler.matchedKeywords.length}`);
-          systemPrompt += '\n' + denialDismantler.promptInjection;
-        }
+        console.log(`[darwin] Denial EngineerReportDismantler: scenarios=${denialDismantler.activatedScenarios.join(',') || 'none'}, maintenanceNarrative=${denialDismantler.isMaintenanceDenialNarrative}, dualCausation=${denialDismantler.isDualCausation}, triggerSignals=${denialDismantler.signals.triggerEventSignals.length}, exclusionSignals=${denialDismantler.signals.denialNarrativeSignals.length}`);
+        // Always inject — universal core runs on every denial; scenario packs are conditional within
+        systemPrompt += '\n' + denialDismantler.promptInjection;
 
         userPrompt = `${claimSummary}
 
@@ -2708,6 +2889,30 @@ ${engineerUserContext ? `ADDITIONAL CONTEXT/OBSERVATIONS:\n${engineerUserContext
 You must generate a FORMAL REBUTTAL LETTER that is ready to send to the insurance company. This is NOT an internal analysis—this IS the document we submit to the carrier.
 
 The letter must be EXHAUSTIVE and address EVERY finding in the engineer's report. Do NOT summarize or abbreviate. Each paragraph/finding in their report requires a complete rebuttal paragraph (or multiple paragraphs) in your letter.
+
+=== MANDATORY SECTIONED STRUCTURE (ENFORCED — NO DEVIATIONS) ===
+Your rebuttal MUST contain ALL SEVEN of the following sections IN THIS ORDER. Do not omit any section. Do not leave structure to model discretion.
+
+SECTION 1: ENGINEER THEORY SUMMARY
+Summarize the engineer's overall theory of causation. Quote their exact language. Identify the narrative they are constructing.
+
+SECTION 2: TRIGGER EVENT vs ROOT CAUSE
+Separate the trigger event (the weather event, system failure, or occurrence) from the engineer's stated root cause. Analyze whether they properly distinguished between the two or conflated them.
+
+SECTION 3: REPORT WEAKNESSES
+Identify all methodology failures, inspection limitations, missing testing, inadequate time on site, areas not accessed, and equipment not used.
+
+SECTION 4: CAUSATION CHALLENGES
+Challenge every causation assumption. Identify where the engineer assumed causation without proving it. Point out contradictions between observations and conclusions.
+
+SECTION 5: TECHNICAL REBUTTAL
+Point-by-point rebuttal of each finding using building science, ASTM standards, manufacturer specifications, and industry standards.
+
+SECTION 6: COVERAGE POSITIONING
+Frame the damage in coverage-favorable terms. Connect findings to policy provisions. Challenge any exclusion application that lacks specific policy citation.
+
+SECTION 7: RECOMMENDED NEXT EVIDENCE
+Specify what additional documentation, testing, or expert analysis would strengthen the position. Be specific about what to obtain and why.
 
 === FORMAL REBUTTAL LETTER FORMAT ===
 

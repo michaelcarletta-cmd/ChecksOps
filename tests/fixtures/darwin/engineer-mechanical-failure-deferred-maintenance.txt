@@ -1,0 +1,16 @@
+MECHANICAL SYSTEMS FAILURE REPORT
+Date of Inspection: February 8, 2026
+Property: 246 Birch Ln, Atlanta GA
+
+EXECUTIVE SUMMARY:
+We investigated an HVAC system failure that occurred on January 22, 2026, resulting in water damage from condensation overflow. The air handler's drain pan overflowed when the condensate drain line became blocked. Our investigation concludes this was caused by deferred maintenance and not a covered mechanical failure.
+
+FINDINGS:
+The HVAC system is a 10-year-old split system with the air handler located in the attic. The condensate drain line was fully blocked with algae and sedite buildup. The secondary drain pan had a crack, allowing overflow water to damage the ceiling below. The blower motor was operational but showed bearing wear. No maintenance records were available for review, but we assume regular maintenance was not performed based on the condition of the system.
+
+The equipment failure resulted in approximately 50 gallons of water damage to the second-floor ceiling and first-floor living room below. The compressor unit showed signs of refrigerant leak at a service valve. No manufacturer recall or known defect was investigated for this model. The system warranty status was not checked.
+
+We did not review any HVAC service contracts or maintenance logs. The homeowner stated they had the system serviced annually but could not produce records.
+
+CONCLUSION:
+The drain blockage and resulting water damage are the result of deferred maintenance and neglect. The system failed due to lack of proper maintenance over an extended period. This is not a sudden mechanical failure but rather gradual deterioration from inadequate upkeep. The resulting water damage is consequential to a non-covered maintenance condition.

@@ -1,0 +1,14 @@
+PLUMBING FAILURE INVESTIGATION REPORT
+Date of Inspection: January 25, 2026
+Property: 789 Elm St, Denver CO
+
+EXECUTIVE SUMMARY:
+We investigated a pipe burst that occurred on January 12, 2026 during a freeze event where temperatures dropped to -15°F. A copper pipe in the exterior wall of the second-floor bathroom split, resulting in significant water damage to the first and second floors. Our investigation concludes this was caused by deferred maintenance and failure to properly insulate the plumbing system.
+
+FINDINGS:
+The frozen pipe was a 3/4" copper supply line running through an exterior wall cavity. The pipe split occurred at a joint fitting. We observed no pipe insulation in the wall cavity where the failure occurred. Building code IRC P2603.5 requires protection against freezing for pipes in exterior walls. The homeowner reported the thermostat was set to 68°F during the freeze event. We did not review maintenance records for the plumbing system. No prior plumbing failures were reported at this address.
+
+Ice expansion within the pipe generated pressures that caused the copper to fracture. The lack of insulation in the wall cavity exposed the pipe to freezing temperatures, which constitutes a pre-existing condition and maintenance deficiency.
+
+CONCLUSION:
+The pipe burst was caused by improper installation and deferred maintenance. The absence of pipe insulation is a latent defect and construction defect that predates the loss. The freeze event merely revealed a pre-existing condition. This is not sudden and accidental damage from a covered peril.
