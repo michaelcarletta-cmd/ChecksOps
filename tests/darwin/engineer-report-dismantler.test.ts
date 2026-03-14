@@ -647,7 +647,7 @@ describe("EngineerReportDismantler — structural output fields", () => {
   });
 
   it("signals.missingTestingSignals populated from criticalTestingNotPerformed", () => {
-    const result = runEngineerReportDismantler(loadFixture("engineer-wind-wear-tear-narrative.txt"));
+    const result = runEngineerReportDismantler(loadFixture("engineer-hail-cosmetic-narrative.txt"));
     expect(result.signals.missingTestingSignals.length).toBeGreaterThan(0);
     expect(result.signals.missingTestingSignals).toEqual(result.criticalTestingNotPerformed);
   });
