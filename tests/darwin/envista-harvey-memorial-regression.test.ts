@@ -688,10 +688,11 @@ describe("Harvey Memorial / Envista — prompt-content validation", () => {
 
   const attackVectors = buildScenarioAttackVectors(primarySc, allActive);
 
-  const engineerTheoryCorpus = [
-    dismantler.engineerStatedCause,
-    ...dismantler.engineerTheorySentences,
-  ].filter(Boolean).join(" ").toLowerCase();
+  const engineerTheoryCorpus = String(
+    dismantler.engineerStatedCause
+    || dismantler.engineerTheorySentences[0]
+    || ""
+  ).toLowerCase();
 
   const windCausationTerms = [
     "wind uplift","wind-driven rain","high wind","pressure event",
