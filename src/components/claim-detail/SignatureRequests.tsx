@@ -235,9 +235,9 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
   });
 
   const resendMutation = useMutation({
-    mutationFn: async (requestId: string) => {
+    mutationFn: async ({ requestId, targetSignerIds }: { requestId: string; targetSignerIds?: string[] }) => {
       const { data, error } = await supabase.functions.invoke("send-signature-request", {
-        body: { requestId, skipEmail: false },
+        body: { requestId, skipEmail: false, targetSignerIds },
       });
       if (error) {
         throw new Error(await getFunctionErrorMessage(error, "Could not resend"));
