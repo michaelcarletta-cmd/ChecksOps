@@ -1188,6 +1188,209 @@ PROMPT INJECTION ORDER (ENFORCED):
   };
 }
 
+// ── Scenario-conditional system prompt builders ─────────────────────────────
+
+function buildScenarioAttackVectors(primary: string, allActive: Set<string>): string {
+  const blocks: string[] = [];
+
+  if (primary === 'low_slope_snow_ice_ponding' || allActive.has('low_slope_snow_ice_ponding')) {
+    blocks.push(`=== LOW-SLOPE / SNOW / ICE / MEMBRANE ATTACK APPROACH ===
+For EVERY finding in their report, ask and answer:
+- What destructive membrane testing was performed (core cuts, seam peel tests, adhesion pull tests)?
+- What drainage capacity analysis was performed?
+- What freeze-thaw cycle analysis was conducted?
+- What moisture mapping or infrared scanning was done?
+- Were snow load calculations performed to quantify the hydraulic loading event?
+- Was the snow-water equivalent calculated for the event?
+- Did the engineer differentiate between event-driven membrane stress and pre-existing deterioration with DATED evidence?
+- Where is the documentation of pre-event membrane condition?
+
+When the engineer claims damage is "deterioration" or "deferred maintenance," ATTACK THIS with:
+- What specific testing differentiates event-induced membrane failure from age-related degradation?
+- What DATED pre-event documentation proves the condition existed BEFORE the snow/ice event?
+- Susceptibility to damage does not prove the damage was caused by deterioration alone—it proves the OPPOSITE: that the event was the proximate cause
+- Acknowledging snow impeded drainage and increased water burden while simultaneously blaming maintenance is a LOGICAL CONTRADICTION
+- Standing water, ice dams, and snowmelt infiltration are EVENT-DRIVEN forces that exceed design tolerances—not "normal wear"
+- The engineer's own observations of ponding, drainage obstruction, and snowmelt infiltration confirm the event created conditions BEYOND what normal maintenance prevents`);
+  }
+
+  if (primary === 'hail_impact' || allActive.has('hail_impact')) {
+    blocks.push(`=== HAIL IMPACT ATTACK APPROACH ===
+For EVERY finding, ask and answer:
+- Were proper test squares (10x10) performed on each slope/elevation?
+- Was soft-metal collateral damage inspected (vents, flashing, gutters, AC units)?
+- Was mat fracture vs granule loss properly differentiated?
+- Was functional vs cosmetic damage analysis performed per manufacturer specifications?
+- Were directional impact patterns analyzed and correlated with weather data?`);
+  }
+
+  if (primary === 'wind_uplift' || allActive.has('wind_uplift')) {
+    blocks.push(`=== WIND UPLIFT ATTACK APPROACH ===
+For EVERY finding, ask and answer:
+- Were hand-tab tests performed to assess actual seal strip adhesion?
+- Was fastener pattern and spacing evaluated?
+- Was directional wind correlation performed against weather data?
+- Was progressive damage tracing done (initial lift → rain infiltration → water damage)?
+
+=== CRITICAL: ASTM WIND RATING FALLACY — DESTROY THIS ARGUMENT ===
+When engineers cite ASTM D3161 or D7158 wind ratings to claim shingles "should have resisted" storm winds, this is FUNDAMENTALLY FLAWED reasoning:
+1. ASTM D3161/D7158 testing is performed ONLY on NEW, factory-fresh shingles under controlled laboratory conditions
+2. Seal strip adhesion degrades DRAMATICALLY over time (UV, thermal cycling, oxidation)
+3. ARMA Technical Bulletin 201 documents this degradation is EXPECTED and NORMAL
+4. By 10-15 years, seal strip effectiveness may be reduced 50% or MORE
+5. NO manufacturer warrants that aged shingles maintain original ratings
+Any engineer applying new-product test standards to aged materials is either incompetent or deliberately misleading the carrier.`);
+  }
+
+  if (primary === 'plumbing_freeze_burst' || allActive.has('plumbing_freeze_burst')) {
+    blocks.push(`=== PLUMBING FREEZE BURST ATTACK APPROACH ===
+- Was the freeze exposure timeline established with temperature data?
+- Was plumbing insulation reviewed against code requirements (IRC P2603.5)?
+- Was the failure point microscopically examined for freeze-expansion characteristics?
+- Were maintenance records actually obtained or just assumed absent?`);
+  }
+
+  if (primary === 'fire_causation' || allActive.has('fire_causation')) {
+    blocks.push(`=== FIRE CAUSATION ATTACK APPROACH ===
+- Was NFPA 921 methodology systematically followed?
+- Was arc mapping performed?
+- Were alternative causes systematically eliminated?
+- Was evidence properly preserved for independent examination?`);
+  }
+
+  if (primary === 'water_intrusion_envelope' || allActive.has('water_intrusion_envelope')) {
+    blocks.push(`=== WATER INTRUSION / ENVELOPE ATTACK APPROACH ===
+- Was destructive water testing performed to trace the intrusion path?
+- Were all flashing points inspected (head, sill, jamb, kick-out, step, counter)?
+- Was wind-driven rain exposure calculated per ASCE 7?
+- Was sealant age and condition properly assessed?`);
+  }
+
+  if (primary === 'structural_movement_settlement' || allActive.has('structural_movement_settlement')) {
+    blocks.push(`=== STRUCTURAL MOVEMENT ATTACK APPROACH ===
+- Was geotechnical analysis performed?
+- Were dated monitoring measurements provided?
+- Was differential vs uniform settlement properly classified?
+- Was a specific trigger event (plumbing leak, excavation, weather) considered?`);
+  }
+
+  if (blocks.length === 0) {
+    blocks.push(`=== UNIVERSAL ATTACK APPROACH ===
+For EVERY finding in their report, ask and answer:
+- What testing SHOULD have been performed but wasn't?
+- What evidence did they photograph but then ignore in their conclusions?
+- What assumptions did they make that are unsupported?
+- What industry standards or building codes contradict their findings?`);
+  }
+
+  return blocks.join('\n\n');
+}
+
+function scenarioAttackVectorsTechnical(primary: string, allActive: Set<string>): string {
+  const items: string[] = [];
+
+  if (primary === 'low_slope_snow_ice_ponding' || allActive.has('low_slope_snow_ice_ponding')) {
+    items.push(
+      '13. No destructive membrane testing (core cuts, seam peel tests, adhesion tests)',
+      '14. No drainage capacity analysis or snow load calculations',
+      '15. No freeze-thaw cycle analysis or snow-water equivalent calculation',
+      '16. Conflating event-driven membrane stress with pre-existing deterioration without dated evidence',
+      '17. Acknowledging snow/ice burden while blaming maintenance—a logical contradiction',
+    );
+  } else if (primary === 'wind_uplift' || allActive.has('wind_uplift')) {
+    items.push(
+      '13. ASTM wind rating fallacy—applying new-product standards to aged materials',
+      '14. Ignoring seal strip degradation and material aging',
+      '15. Failure to consider storm-specific conditions—wind speed, direction, duration, debris',
+      '16. Mischaracterizing damage mechanisms—conflating uplift damage with wear',
+      '17. Reliance on visual inspection when destructive testing was warranted',
+    );
+  } else if (primary === 'hail_impact' || allActive.has('hail_impact')) {
+    items.push(
+      '13. Inadequate test square methodology or no test squares at all',
+      '14. Failure to inspect soft-metal collateral surfaces',
+      '15. Conflating functional and cosmetic damage classifications',
+      '16. Ignoring mat fracture indicators',
+      '17. Applying new-material standards to aged materials',
+    );
+  } else {
+    items.push(
+      '13. Failure to perform scenario-appropriate testing',
+      '14. Mischaracterizing damage mechanisms',
+      '15. Failure to consider event-specific conditions',
+      '16. Reliance on visual inspection when physical testing was warranted',
+      '17. Unsupported conclusions about causation timeline',
+    );
+  }
+
+  return items.join('\n');
+}
+
+function buildScenarioEvAuditFields(primary: string, allActive: Set<string>): string {
+  if (primary === 'low_slope_snow_ice_ponding' || allActive.has('low_slope_snow_ice_ponding')) {
+    return `6. Whether membrane failure modes were independently evaluated (not just visual "deterioration" characterization)
+7. Whether drainage capacity, snow load, and freeze-thaw effects were analyzed or omitted`;
+  }
+  if (primary === 'wind_uplift' || allActive.has('wind_uplift')) {
+    return `6. Whether wind damage mechanisms were independently evaluated (not just hail-focused reasoning)
+7. Whether all relevant roof elevations/components were inspected or omitted`;
+  }
+  if (primary === 'hail_impact' || allActive.has('hail_impact')) {
+    return `6. Whether hail damage was evaluated per slope/elevation with proper test squares
+7. Whether functional vs cosmetic determination was supported by manufacturer specifications`;
+  }
+  return `6. Whether the primary damage mechanism was independently evaluated with appropriate testing
+7. Whether all relevant areas/components were inspected or omitted`;
+}
+
+function buildScenarioPointByPoint(primary: string, allActive: Set<string>, stateInfo: any): string {
+  if (primary === 'low_slope_snow_ice_ponding' || allActive.has('low_slope_snow_ice_ponding')) {
+    return `- Whether the statement conflates event-driven membrane stress with pre-existing conditions without testing
+- What membrane-specific testing (core cuts, seam peel, adhesion pull) contradicts or would contradict the conclusion
+- Cite applicable membrane manufacturer specifications, ASTM D4637 (EPDM), ASTM D6878 (TPO), or relevant standards`;
+  }
+  if (primary === 'wind_uplift' || allActive.has('wind_uplift')) {
+    return `- Whether they used generalized observation where slope-by-slope or section-by-section analysis was required
+- What building codes (IRC, IBC), ASTM standards, or manufacturer specifications they violated or ignored
+[Cite specific codes: IRC Section X, IBC Section Y, ASTM D3161, ARMA TB-201, ${stateInfo.adminCode}, etc.]`;
+  }
+  return `- Whether they used generalized observation where detailed analysis was required
+- What building codes, industry standards, or manufacturer specifications they violated or ignored`;
+}
+
+function buildScenarioFallacyBlock(primary: string, allActive: Set<string>): string {
+  if (primary === 'wind_uplift' || allActive.has('wind_uplift')) {
+    return `[ASTM WIND RATING FALLACY REBUTTAL - If applicable]
+If the engineer cited ASTM D3161 or D7158 wind ratings, demolish this argument using the ASTM Wind Rating Fallacy analysis from the system prompt.`;
+  }
+  if (primary === 'low_slope_snow_ice_ponding' || allActive.has('low_slope_snow_ice_ponding')) {
+    return `[MEMBRANE DETERIORATION FALLACY REBUTTAL - MANDATORY]
+If the engineer characterizes damage as "deterioration" or "deferred maintenance" without destructive testing:
+
+"The engineer's attribution of water intrusion to 'deterioration' or 'deferred maintenance' without performing destructive membrane testing represents a fundamental methodology failure.
+
+Without core cuts, seam peel tests, or adhesion pull tests, the engineer has NO objective basis to determine whether membrane openings existed BEFORE the snow/ice event or were CAUSED by the event's hydraulic loading and freeze-thaw cycling.
+
+Susceptibility to damage is not proof of causation. A membrane system that is at or near the end of its expected service life is MORE vulnerable to event-driven failure, not LESS. This increased vulnerability makes the weather event the proximate cause of the loss, not the age of the system.
+
+The engineer acknowledges that snow impeded drainage, created ponding conditions, and increased water burden on the membrane. These are event-driven forces that exceed the membrane's design tolerances—this is physical loss from a covered event, not gradual deterioration."`;
+  }
+  return '';
+}
+
+function buildScenarioUnaddressedDamage(primary: string): string {
+  if (primary === 'low_slope_snow_ice_ponding') {
+    return `Identify any event-driven damage indicators (membrane stress at seams, ice-dam-induced displacement, ponding-area membrane deformation, drainage pathway obstruction damage, freeze-thaw-induced material cracking) that were present but not properly analyzed.`;
+  }
+  if (primary === 'wind_uplift') {
+    return `Identify any recent physical damage indicators (displaced materials, uplift, fresh fractures, torn tabs, impact-consistent deformation, newly exposed substrate) that were present but not properly analyzed.`;
+  }
+  if (primary === 'hail_impact') {
+    return `Identify any impact damage indicators (circular fractures, mat exposure, granule displacement patterns, soft-metal denting) that were present but not properly analyzed.`;
+  }
+  return `Identify any recent physical damage indicators consistent with the claimed loss that were present but not properly analyzed.`;
+}
+
 function fileNameFromStoragePath(path: string): string {
   const parts = String(path || '').split('/');
   return parts[parts.length - 1] || 'document.pdf';
