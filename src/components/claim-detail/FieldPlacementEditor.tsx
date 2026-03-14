@@ -403,6 +403,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
   };
 
 
+  const colors: Record<string, string> = {
     signature: "#3b82f6",
     date: "#10b981",
     text: "#8b5cf6",
