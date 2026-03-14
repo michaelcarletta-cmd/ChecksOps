@@ -555,6 +555,7 @@ describe("EngineerReportDismantler — engineer theory extraction", () => {
     // Should contain a causation phrase (e.g., "result of", "consistent with", "caused by")
     const hasPhrase = ENGINEER_CAUSE_PHRASES.some(p => result.engineerStatedCause.toLowerCase().includes(p));
     expect(hasPhrase).toBe(true);
+  });
 
   it("extracts engineer trigger event with date", () => {
     const result = runEngineerReportDismantler(loadFixture("engineer-wind-wear-tear-narrative.txt"));
