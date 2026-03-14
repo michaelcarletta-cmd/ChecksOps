@@ -514,6 +514,21 @@ ESTIMATE BUILDER INTELLIGENCE (${estimateIntel.total_lines} lines, $${estimateIn
 When explaining recovery opportunity, CITE specific line items and their variance amounts.
 ` : '';
 
+    // Build regulatory violation brief from timeline analysis
+    const regulatoryViolationBrief = detectedViolations.length > 0 ? `
+REGULATORY VIOLATION ANALYSIS (${detectedViolations.length} violations detected from timeline intelligence):
+${detectedViolations.map((v, i) => `${i + 1}. [${v.severity.toUpperCase()}] ${v.issue}
+   Regulation: ${v.regulation} (${v.citation})
+   Evidence: ${v.supporting_events.join(' → ')}
+   Action: ${v.recommended_action}`).join('\n')}
+
+ESCALATION GUIDANCE:
+- ${detectedViolations.filter(v => v.severity === 'high').length} HIGH severity violations detected — consider regulatory complaint (DOBI/DOI)
+- When recommending escalation strategies, REFERENCE these detected violations by number and cite the specific regulation
+- High-severity violations (missed deadlines, denial without investigation, no acknowledgment) are strong bad faith indicators
+- Multiple violations compound regulatory exposure — note when 2+ violations create a pattern of unfair claims handling
+` : '';
+
     // Build continuous learning briefs
     const outcomeLearningBrief = outcomeDigest ? `
 CROSS-CLAIM OUTCOME LEARNING (${outcomeDigest.total_outcomes} similar outcomes, ${outcomeDigest.win_rate}% win rate):
