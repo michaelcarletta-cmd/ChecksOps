@@ -375,19 +375,68 @@ export default function Sign() {
 
   return (
     <div className="min-h-screen bg-white text-gray-900">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FileSignature className="w-5 h-5 text-blue-600" />
-            <span className="font-semibold text-gray-900 text-sm truncate max-w-[200px]">
-              {request.document_name}
+      {/* Sticky Summary Bar */}
+      <div className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-3xl mx-auto px-3 py-2 space-y-1.5">
+          {/* Row 1: Doc name + signer */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <FileSignature className="w-4 h-4 text-blue-600 shrink-0" />
+              <span className="font-semibold text-gray-900 text-xs truncate">
+                {request.document_name}
+              </span>
+            </div>
+            <span className="text-[11px] text-gray-500 shrink-0">
+              <span className="hidden sm:inline">Signing as </span>
+              <span className="font-medium text-gray-700">{signer.signer_name}</span>
             </span>
           </div>
-          <div className="flex items-center gap-1 text-xs text-gray-500">
-            <span className="hidden sm:inline">Signing as</span>
-            <span className="font-medium text-gray-700">{signer.signer_name}</span>
-          </div>
+
+          {/* Row 2: Progress bar + actions */}
+          {activeStep === "sign" && progressInfo.total > 0 && (
+            <div className="flex items-center gap-2">
+              <div className="flex-1 flex items-center gap-2 min-w-0">
+                <Progress
+                  value={(progressInfo.completed / progressInfo.total) * 100}
+                  className="h-1.5 flex-1 bg-gray-100"
+                />
+                <span className="text-[11px] font-medium text-gray-500 shrink-0 tabular-nums">
+                  {progressInfo.completed}/{progressInfo.total}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveStep("review");
+                    documentSectionRef.current?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 hover:text-blue-800 px-2 py-1 rounded border border-blue-200 hover:bg-blue-50 transition-colors"
+                >
+                  <Eye className="w-3 h-3" />
+                  <span className="hidden xs:inline">Doc</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (progressInfo.allDone) {
+                      handleSign();
+                    } else {
+                      submitBtnRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    }
+                  }}
+                  className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded transition-colors ${
+                    progressInfo.allDone
+                      ? "bg-blue-600 text-white hover:bg-blue-700"
+                      : "text-gray-500 border border-gray-200 hover:bg-gray-50"
+                  }`}
+                >
+                  <Send className="w-3 h-3" />
+                  <span className="hidden xs:inline">Finish</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
