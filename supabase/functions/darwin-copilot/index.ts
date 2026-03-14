@@ -351,9 +351,46 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Deduplicate and sort by severity
-    const severityOrder = { high: 0, medium: 1, low: 2 };
-    detectedViolations.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+    // ── Violation prioritization scoring ──────────────
+    // Score each violation on 5 dimensions to surface strongest escalation points
+    function scoreViolation(v: typeof detectedViolations[0]): number {
+      let score = 0;
+      // 1. Timeline evidence quality (more supporting events = stronger)
+      score += Math.min(v.supporting_events.length * 8, 24);
+      // 2. Clarity of statutory match (has real citation vs generic)
+      if (v.citation && !v.citation.includes('State unfair') && !v.citation.includes('State claims') && !v.citation.includes('State prompt')) score += 20;
+      else score += 5;
+      // 3. Severity of conduct
+      if (v.severity === 'high') score += 30;
+      else if (v.severity === 'medium') score += 15;
+      else score += 5;
+      // 4. Days overdue / magnitude (extract from issue text)
+      const daysMatch = v.issue.match(/(\d+)[- ]day/);
+      if (daysMatch) {
+        const days = parseInt(daysMatch[1]);
+        score += Math.min(days / 3, 15); // cap at 15
+      }
+      const pctMatch = v.issue.match(/(\d+)%/);
+      if (pctMatch) {
+        const pct = parseInt(pctMatch[1]);
+        if (pct < 50) score += 12; // large gap
+      }
+      // 5. Bad-faith potential (keywords)
+      const badFaithKeywords = ['without investigation', 'no carrier', 'no acknowledgment', 'bad faith', 'lowball'];
+      if (badFaithKeywords.some(k => v.issue.toLowerCase().includes(k) || v.recommended_action.toLowerCase().includes(k))) score += 15;
+      return score;
+    }
+
+    // Score and sort violations
+    const scoredViolations = detectedViolations.map(v => ({ ...v, _score: scoreViolation(v) }));
+    scoredViolations.sort((a, b) => b._score - a._score);
+    // Replace original array with scored order
+    detectedViolations.length = 0;
+    detectedViolations.push(...scoredViolations.map(({ _score, ...rest }) => rest));
+
+    // Detect cumulative pattern: 3+ low/medium violations = systemic unfair handling
+    const lowerViolations = scoredViolations.filter(v => v.severity !== 'high');
+    const hasCumulativePattern = lowerViolations.length >= 3;
     const estimateLines = estimateLinesRes.data || [];
     const topDisputes = estimateLines.filter((l: any) => l.recovery_impact_rank != null && l.recovery_impact_rank <= 5);
     const rebuttalLinkedLines = estimateLines.filter((l: any) => l.used_in_rebuttal);
@@ -514,19 +551,28 @@ ESTIMATE BUILDER INTELLIGENCE (${estimateIntel.total_lines} lines, $${estimateIn
 When explaining recovery opportunity, CITE specific line items and their variance amounts.
 ` : '';
 
-    // Build regulatory violation brief from timeline analysis
+    // Build regulatory violation brief from timeline analysis — prioritized by strength score
     const regulatoryViolationBrief = detectedViolations.length > 0 ? `
-REGULATORY VIOLATION ANALYSIS (${detectedViolations.length} violations detected from timeline intelligence):
-${detectedViolations.map((v, i) => `${i + 1}. [${v.severity.toUpperCase()}] ${v.issue}
+REGULATORY VIOLATION ANALYSIS (${detectedViolations.length} violations detected — RANKED BY STRENGTH, strongest first):
+
+TOP ESCALATION POINTS (surface these first in strategy recommendations):
+${detectedViolations.slice(0, 3).map((v, i) => `★ ${i + 1}. [${v.severity.toUpperCase()}] ${v.issue}
    Regulation: ${v.regulation} (${v.citation})
    Evidence: ${v.supporting_events.join(' → ')}
-   Action: ${v.recommended_action}`).join('\n')}
+   Action: ${v.recommended_action}
+   WHY STRONGEST: ${v.severity === 'high' ? 'High-severity conduct violation' : 'Clear statutory match with documented evidence'}${v.issue.toLowerCase().includes('without investigation') || v.issue.toLowerCase().includes('no acknowledgment') ? ' — strong bad faith indicator' : ''}`).join('\n')}
+${detectedViolations.length > 3 ? `
+SECONDARY VIOLATIONS:
+${detectedViolations.slice(3).map((v, i) => `${i + 4}. [${v.severity.toUpperCase()}] ${v.issue}
+   Regulation: ${v.regulation} (${v.citation})
+   Evidence: ${v.supporting_events.join(' → ')}`).join('\n')}` : ''}
+${hasCumulativePattern ? `
+⚠ CUMULATIVE PATTERN DETECTED: ${lowerViolations.length} individual violations (delayed responses, inactivity gaps, procedural lapses) collectively establish a PATTERN OF UNFAIR CLAIM HANDLING under state unfair claims settlement practices. When recommending escalation, explicitly frame these as a systemic pattern — not isolated incidents — as this significantly strengthens regulatory complaints and bad faith exposure.` : ''}
 
 ESCALATION GUIDANCE:
 - ${detectedViolations.filter(v => v.severity === 'high').length} HIGH severity violations detected — consider regulatory complaint (DOBI/DOI)
-- When recommending escalation strategies, REFERENCE these detected violations by number and cite the specific regulation
+- In Strategy mode, LEAD with the top 3 strongest violations when recommending escalation and explain WHY each is a strong escalation point (evidence quality, statutory clarity, conduct severity)
 - High-severity violations (missed deadlines, denial without investigation, no acknowledgment) are strong bad faith indicators
-- Multiple violations compound regulatory exposure — note when 2+ violations create a pattern of unfair claims handling
 ` : '';
 
     // Build continuous learning briefs
