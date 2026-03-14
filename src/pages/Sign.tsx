@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, FileSignature, Check, AlertTriangle, Clock } from "lucide-react";
+import { resolveFieldDisplay, detectDocumentType } from "@/lib/signer-display-templates";
 
 export default function Sign() {
   const [searchParams] = useSearchParams();
