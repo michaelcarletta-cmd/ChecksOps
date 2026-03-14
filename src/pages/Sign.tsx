@@ -27,6 +27,7 @@ export default function Sign() {
   const [fields, setFields] = useState<any[]>([]);
   
   const canvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
+  const [activeStep, setActiveStep] = useState<"review" | "sign">("review");
   const [drawingFields, setDrawingFields] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
