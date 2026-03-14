@@ -375,8 +375,34 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
     emitFieldsAsPercentages(displayFields);
     toast({ title: `Template "${template.name}" loaded` });
   };
+  // Apply document type display labels to existing fields
+  const applyDocTypeLabels = (docType: string) => {
+    const template = SIGNER_DISPLAY_TEMPLATES[docType];
+    if (!template) return;
 
-  const colors: Record<string, string> = {
+    // Count fields by type to assign indexed keys
+    const typeCounts: Record<string, number> = {};
+    const updated = fields.map(f => {
+      typeCounts[f.type] = (typeCounts[f.type] || 0) + 1;
+      const key = getFieldTemplateKey(f.type, typeCounts[f.type]);
+      const meta = template.fields[key];
+      if (meta) {
+        return {
+          ...f,
+          display_label: meta.display_label,
+          display_help_text: meta.display_help_text,
+          display_section: meta.display_section,
+          display_order: meta.display_order,
+        };
+      }
+      return f;
+    });
+    setFields(updated);
+    emitFieldsAsPercentages(updated);
+    toast({ title: `Applied "${template.label}" labels to ${Object.keys(typeCounts).length > 0 ? 'fields' : 'no fields'}` });
+  };
+
+
     signature: "#3b82f6",
     date: "#10b981",
     text: "#8b5cf6",
