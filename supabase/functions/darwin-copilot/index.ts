@@ -51,11 +51,11 @@ Deno.serve(async (req) => {
       ? `The author of all external communications is ${authorName}${authorTitle ? `, ${authorTitle}` : ''}. Write in their voice using first person.`
       : 'Write as if authored by the public adjuster or claims professional handling the claim.';
 
-    // Gather full claim intelligence in parallel — now includes timeline & estimate builder context
+    // Gather full claim intelligence in parallel — now includes timeline, estimate builder, & regulatory context
     const [
       claimRes, filesRes, estimateRes, photoRes, strategyRes, argsRes, 
       rebuttalsRes, deadlinesRes, intelSummaryRes,
-      timelineEventsRes, estimateLinesRes, feedbackRes
+      timelineEventsRes, estimateLinesRes, feedbackRes, regulationsRes
     ] = await Promise.all([
       supabase.from('claims').select('*').eq('id', claimId).single(),
       supabase.from('claim_files').select('id, file_name, document_type, folder_key, created_at').eq('claim_id', claimId),
@@ -72,6 +72,8 @@ Deno.serve(async (req) => {
         .eq('claim_id', claimId).eq('is_accepted', true).order('recovery_impact_rank', { ascending: true }).limit(50),
       supabase.from('darwin_feedback_events').select('output_type, feedback_type, actual_outcome, actual_recovery_delta, feedback_detail')
         .eq('claim_id', claimId).order('created_at', { ascending: false }).limit(20),
+      // Fetch state regulations for violation detection (state resolved after claim loads)
+      supabase.from('state_insurance_regulations').select('*').order('regulation_type'),
     ]);
 
     const claim = claimRes.data;
@@ -220,7 +222,138 @@ Deno.serve(async (req) => {
       dispute_tagged: disputeTaggedEvents.map((e: any) => ({ date: e.occurred_at?.split('T')[0], type: e.event_type, summary: e.summary, dispute: e.dispute_tag })),
     };
 
-    // Build estimate builder intelligence digest
+    // ── Timeline-based regulatory violation detection ──────────────
+    const claimState = claim?.state_code || stateCode || '';
+    const stateRegs = (regulationsRes.data || []).filter((r: any) => r.state_code === claimState);
+    const detectedViolations: Array<{
+      issue: string;
+      regulation: string;
+      citation: string;
+      supporting_events: string[];
+      recommended_action: string;
+      severity: 'high' | 'medium' | 'low';
+    }> = [];
+
+    const deadlines = deadlinesRes.data || [];
+    const lossDate = claim?.loss_date ? new Date(claim.loss_date) : null;
+    const claimCreatedAt = claim?.created_at ? new Date(claim.created_at) : null;
+
+    // Pattern 1: Delayed acknowledgment / response
+    if (claimCreatedAt) {
+      const firstCarrierResponse = timelineEvents.find((e: any) =>
+        ['carrier_response', 'acknowledgment', 'carrier_contact', 'inspection_scheduled'].includes(e.event_type)
+      );
+      if (firstCarrierResponse) {
+        const daysToRespond = Math.floor((new Date(firstCarrierResponse.occurred_at).getTime() - claimCreatedAt.getTime()) / 86400000);
+        const ackReg = stateRegs.find((r: any) => r.regulation_type === 'acknowledgment' || r.regulation_title?.toLowerCase().includes('acknowledg'));
+        const ackDeadlineDays = ackReg?.deadline_days || 15;
+        if (daysToRespond > ackDeadlineDays) {
+          detectedViolations.push({
+            issue: `Carrier took ${daysToRespond} days to respond (${ackDeadlineDays}-day deadline)`,
+            regulation: ackReg?.regulation_title || 'Acknowledgment deadline',
+            citation: ackReg?.regulation_citation || 'State unfair claims settlement practices',
+            supporting_events: [`Claim filed: ${claimCreatedAt.toISOString().split('T')[0]}`, `First response: ${firstCarrierResponse.occurred_at?.split('T')[0]}`],
+            recommended_action: 'Cite delayed acknowledgment in regulatory complaint or demand letter',
+            severity: daysToRespond > ackDeadlineDays * 2 ? 'high' : 'medium',
+          });
+        }
+      } else {
+        // No carrier response found at all
+        const daysSinceFiled = Math.floor((Date.now() - claimCreatedAt.getTime()) / 86400000);
+        if (daysSinceFiled > 15) {
+          const ackReg = stateRegs.find((r: any) => r.regulation_type === 'acknowledgment' || r.regulation_title?.toLowerCase().includes('acknowledg'));
+          detectedViolations.push({
+            issue: `No carrier response detected — ${daysSinceFiled} days since claim filed`,
+            regulation: ackReg?.regulation_title || 'Acknowledgment deadline',
+            citation: ackReg?.regulation_citation || 'State unfair claims settlement practices',
+            supporting_events: [`Claim filed: ${claimCreatedAt.toISOString().split('T')[0]}`, 'No acknowledgment event in timeline'],
+            recommended_action: 'Send formal demand for acknowledgment citing regulatory deadline',
+            severity: 'high',
+          });
+        }
+      }
+    }
+
+    // Pattern 2: Missed carrier deadlines (from deadline tracking)
+    for (const dl of deadlines) {
+      if (dl.days_overdue && dl.days_overdue > 0) {
+        const matchedReg = stateRegs.find((r: any) =>
+          r.regulation_type === dl.deadline_type ||
+          r.regulation_title?.toLowerCase().includes(dl.deadline_type?.toLowerCase() || '')
+        );
+        detectedViolations.push({
+          issue: `${dl.deadline_type} deadline missed by ${dl.days_overdue} days`,
+          regulation: matchedReg?.regulation_title || dl.deadline_type,
+          citation: matchedReg?.regulation_citation || 'State claims handling regulation',
+          supporting_events: [`Trigger: ${dl.trigger_date}`, `Deadline: ${dl.deadline_date}`, `Status: ${dl.status}`],
+          recommended_action: dl.bad_faith_potential ? 'Document bad faith pattern — escalate to regulatory complaint' : 'Cite deadline violation in next carrier communication',
+          severity: dl.bad_faith_potential ? 'high' : 'medium',
+        });
+      }
+    }
+
+    // Pattern 3: Denial without investigation
+    const denialEvents = timelineEvents.filter((e: any) => ['denial', 'denial_issued'].includes(e.event_type));
+    const investigationEvents = timelineEvents.filter((e: any) => ['inspection', 'investigation', 'site_visit', 'engineer_inspection'].includes(e.event_type));
+    for (const denial of denialEvents) {
+      const denialDate = new Date(denial.occurred_at);
+      const priorInvestigation = investigationEvents.find((e: any) => new Date(e.occurred_at) < denialDate);
+      if (!priorInvestigation) {
+        const investReg = stateRegs.find((r: any) =>
+          r.regulation_title?.toLowerCase().includes('investigation') || r.regulation_type === 'investigation'
+        );
+        detectedViolations.push({
+          issue: 'Denial issued without documented investigation or inspection',
+          regulation: investReg?.regulation_title || 'Duty to investigate',
+          citation: investReg?.regulation_citation || 'Unfair claims settlement practices — failure to investigate',
+          supporting_events: [`Denial date: ${denial.occurred_at?.split('T')[0]}`, 'No prior inspection or investigation event found in timeline'],
+          recommended_action: 'Challenge denial on grounds of inadequate investigation — strong bad faith indicator',
+          severity: 'high',
+        });
+      }
+    }
+
+    // Pattern 4: Unexplained payment gaps (payment much less than estimate)
+    const paymentEvents = timelineEvents.filter((e: any) => ['payment', 'payment_received', 'payment_issued'].includes(e.event_type));
+    if (paymentEvents.length > 0 && estimateIntel.darwin_rcv > 0 && estimateIntel.carrier_rcv > 0) {
+      const gapRatio = estimateIntel.carrier_rcv / estimateIntel.darwin_rcv;
+      if (gapRatio < 0.5) {
+        const lowballReg = stateRegs.find((r: any) =>
+          r.regulation_title?.toLowerCase().includes('settlement') || r.regulation_type === 'fair_settlement'
+        );
+        detectedViolations.push({
+          issue: `Carrier payment represents only ${(gapRatio * 100).toFixed(0)}% of documented damage — potential lowball settlement`,
+          regulation: lowballReg?.regulation_title || 'Fair settlement practices',
+          citation: lowballReg?.regulation_citation || 'Unfair claims settlement — inadequate payment',
+          supporting_events: [`Darwin RCV: $${estimateIntel.darwin_rcv.toFixed(0)}`, `Carrier RCV: $${estimateIntel.carrier_rcv.toFixed(0)}`, `Gap: $${estimateIntel.total_variance.toFixed(0)}`],
+          recommended_action: 'Demand itemized explanation for payment shortfall — supplement or appraisal',
+          severity: 'high',
+        });
+      }
+    }
+
+    // Pattern 5: Long delays between events (carrier inaction)
+    const sortedEvents = [...timelineEvents].sort((a: any, b: any) => new Date(a.occurred_at).getTime() - new Date(b.occurred_at).getTime());
+    for (let i = 1; i < sortedEvents.length; i++) {
+      const gap = (new Date(sortedEvents[i].occurred_at).getTime() - new Date(sortedEvents[i - 1].occurred_at).getTime()) / 86400000;
+      if (gap > 30) {
+        const delayReg = stateRegs.find((r: any) =>
+          r.regulation_title?.toLowerCase().includes('delay') || r.regulation_type === 'prompt_handling'
+        );
+        detectedViolations.push({
+          issue: `${Math.floor(gap)}-day gap in claim activity between events`,
+          regulation: delayReg?.regulation_title || 'Prompt claims handling',
+          citation: delayReg?.regulation_citation || 'State prompt handling requirements',
+          supporting_events: [`Before: ${sortedEvents[i - 1].occurred_at?.split('T')[0]} (${sortedEvents[i - 1].event_type})`, `After: ${sortedEvents[i].occurred_at?.split('T')[0]} (${sortedEvents[i].event_type})`],
+          recommended_action: 'Document delay pattern for regulatory leverage',
+          severity: gap > 60 ? 'high' : 'low',
+        });
+      }
+    }
+
+    // Deduplicate and sort by severity
+    const severityOrder = { high: 0, medium: 1, low: 2 };
+    detectedViolations.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
     const estimateLines = estimateLinesRes.data || [];
     const topDisputes = estimateLines.filter((l: any) => l.recovery_impact_rank != null && l.recovery_impact_rank <= 5);
     const rebuttalLinkedLines = estimateLines.filter((l: any) => l.used_in_rebuttal);
@@ -381,6 +514,21 @@ ESTIMATE BUILDER INTELLIGENCE (${estimateIntel.total_lines} lines, $${estimateIn
 When explaining recovery opportunity, CITE specific line items and their variance amounts.
 ` : '';
 
+    // Build regulatory violation brief from timeline analysis
+    const regulatoryViolationBrief = detectedViolations.length > 0 ? `
+REGULATORY VIOLATION ANALYSIS (${detectedViolations.length} violations detected from timeline intelligence):
+${detectedViolations.map((v, i) => `${i + 1}. [${v.severity.toUpperCase()}] ${v.issue}
+   Regulation: ${v.regulation} (${v.citation})
+   Evidence: ${v.supporting_events.join(' → ')}
+   Action: ${v.recommended_action}`).join('\n')}
+
+ESCALATION GUIDANCE:
+- ${detectedViolations.filter(v => v.severity === 'high').length} HIGH severity violations detected — consider regulatory complaint (DOBI/DOI)
+- When recommending escalation strategies, REFERENCE these detected violations by number and cite the specific regulation
+- High-severity violations (missed deadlines, denial without investigation, no acknowledgment) are strong bad faith indicators
+- Multiple violations compound regulatory exposure — note when 2+ violations create a pattern of unfair claims handling
+` : '';
+
     // Build continuous learning briefs
     const outcomeLearningBrief = outcomeDigest ? `
 CROSS-CLAIM OUTCOME LEARNING (${outcomeDigest.total_outcomes} similar outcomes, ${outcomeDigest.win_rate}% win rate):
@@ -415,6 +563,7 @@ ${argPatternsBrief}
 ${feedbackBrief}
 ${timelineBrief}
 ${estimateBrief}
+${regulatoryViolationBrief}
 
 CLAIM INTELLIGENCE:
 ${JSON.stringify(claimIntel, null, 2).slice(0, 8000)}
