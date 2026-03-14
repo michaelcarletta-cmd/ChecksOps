@@ -1,0 +1,18 @@
+BUILDING ENVELOPE INVESTIGATION REPORT
+Date of Inspection: March 1, 2026
+Property: 901 Birch Court, Denver CO
+
+EXECUTIVE SUMMARY:
+This property experienced water intrusion following a severe wind-driven rain event on February 10, 2026 with sustained winds of 50 mph and heavy rainfall. Water damage was reported at multiple window locations and along the east-facing wall. Our investigation focused on the building envelope and intrusion path analysis.
+
+FINDINGS:
+Water intrusion was identified at three window locations on the east (windward) elevation. The intrusion path follows the window head flashing and sill flashing details. Sealant failure was observed at multiple penetration points along the east facade. The stucco finish showed no visible cracking or damage.
+
+Moisture mapping with a moisture meter identified elevated readings within the wall cavity behind the east elevation windows. Latent moisture was detected extending 18 inches below the window sill at each location. Concealed moisture was also found behind the masonry veneer at the northeast corner.
+
+Flashing inspection revealed the kick-out flashing at the roof-to-wall intersection was not installed per manufacturer specifications. The head flashing at the east windows relies on sealant rather than mechanical integration.
+
+We did not perform destructive water testing. Wind-driven rain calculations per ASCE 7 were not performed. Leak path tracing beyond moisture meter readings was not conducted.
+
+CONCLUSION:
+The water intrusion is the result of construction defect and workmanship failure in the flashing details and sealant application. These are latent defects in the building envelope that existed since construction. The storm event did not cause the intrusion—it merely revealed the pre-existing deficiencies. The water damage is not storm related and is the result of long-term leakage that has been ongoing since construction.
