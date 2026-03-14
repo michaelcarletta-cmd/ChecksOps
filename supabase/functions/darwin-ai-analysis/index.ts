@@ -2551,6 +2551,11 @@ Deno.serve(async (req) => {
     let systemPrompt = '';
     let userPrompt = '';
     let engineerRebuttalPrimaryScenario: string | null = null;
+    let engineerRebuttalSecondaryScenarios: string[] = [];
+    let engineerRebuttalStatedCause = '';
+    let engineerRebuttalTheorySentences: string[] = [];
+    let engineerRebuttalCriticalTestingNotPerformed: string[] = [];
+    let engineerRebuttalReportText = '';
     let lowSlopeSupportCorpusForFilters = '';
 
     // Build photo summary for context
