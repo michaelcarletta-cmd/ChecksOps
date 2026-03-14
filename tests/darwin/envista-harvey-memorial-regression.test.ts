@@ -16,6 +16,24 @@ import * as path from "path";
 const REQUIRED_LOW_SLOPE_OPENING =
   "The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering.";
 
+const LOW_SLOPE_PRIORITY_ORDER = `PRIORITY ORDER (MANDATORY):
+1) timing of openings
+2) missing membrane testing
+3) drainage/snowmelt mechanics
+4) contradiction in engineer reasoning
+Do NOT prioritize wind mechanics.`;
+
+const LOW_SLOPE_TIMING_FAILURE_SECTION = `SECTION 1 — TIMING FAILURE:
+The report asserts openings developed over months or years but provides no objective testing that proves timing. Without membrane core cuts, seam adhesion/peel testing, moisture mapping, and leak-path tracing, the report cannot establish whether openings pre-dated the event or were created/expanded during snow/ice loading.`;
+
+const LOW_SLOPE_DRAINAGE_FAILURE_SECTION = `SECTION 2 — DRAINAGE / SNOWMELT ANALYSIS FAILURE:
+The report acknowledges snow and drainage conditions but does not quantify drainage capacity, snow-water equivalent, or runoff behavior. Without those analyses, the causation opinion is unsupported.`;
+
+const LOW_SLOPE_CONTRADICTION_SECTION = `SECTION 3 — ENGINEER CONTRADICTION:
+The report admits snow impeded drainage, standing water was present, and freeze-thaw cycles can worsen openings, yet it concludes deterioration alone caused the loss without proving the event did not create or expand the openings.`;
+
+const LOW_SLOPE_STRUCTURAL_DISTINCTION = "Structural snow-load analysis is not membrane watertightness analysis.";
+
 const TRIGGER_EVENT_KEYWORDS = [
   "storm","wind","hail","rain","snow","ice","freeze",
   "plumbing leak","pipe burst","fire","lightning","impact",
