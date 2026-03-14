@@ -162,7 +162,7 @@ function stripExternalFormatting(text: string): string {
   return cleaned.trim();
 }
 
-const REQUIRED_LOW_SLOPE_OPENING = 'The engineering report attributes the water intrusion to snow/ice meltwater penetrated age-related and maintenance-deferred openings in the low-slope roof covering.';
+const REQUIRED_LOW_SLOPE_OPENING = 'The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering.';
 
 const LOW_SLOPE_FORBIDDEN_RULES: Array<{ regex: RegExp; supportTerms: string[] }> = [
   { regex: /\bshingle(?:s)?\b/i, supportTerms: ['shingle'] },
