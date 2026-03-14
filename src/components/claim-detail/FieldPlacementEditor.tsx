@@ -336,6 +336,20 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
     toast({ title: "All fields cleared" });
   };
 
+  // Load template — templates are stored in percentages, convert back to pixels for display
+  const pixelsFromPercent = useCallback((percentFields: Field[]): Field[] => {
+    const overlay = overlayRef.current;
+    const ow = overlay ? overlay.getBoundingClientRect().width : 600;
+    const oh = overlay ? overlay.getBoundingClientRect().height : 800;
+    return percentFields.map(f => ({
+      ...f,
+      x: (f.x / 100) * ow,
+      y: (f.y / 100) * oh,
+      width: (f.width / 100) * ow,
+      height: (f.height / 100) * oh,
+    }));
+  }, []);
+
   const loadTemplate = (templateId: string) => {
     const template = templates?.find(t => t.id === templateId);
     if (!template) return;
