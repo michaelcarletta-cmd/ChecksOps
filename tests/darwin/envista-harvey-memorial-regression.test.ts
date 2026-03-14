@@ -764,11 +764,17 @@ describe("Harvey Memorial / Envista — prompt-content validation", () => {
 
   const forbiddenTerms = [
     { label: "shingle", regex: /\bshingle\b/i },
+    { label: "granules/granular loss", regex: /\bgranul(?:e|ar)s?(?:\s+loss)?\b/i },
+    { label: "uplift test", regex: /\buplift\s+test(?:ing|s)?\b/i },
+    { label: "seal failure/factory seal", regex: /\bseal\s+failure\b|\bfactory\s+seal(?:\s+failure)?\b/i },
+    { label: "thermal expansion of shingles", regex: /\bthermal\s+expansion\s+of\s+shingle(?:s)?\b/i },
+    { label: "architectural shingles", regex: /\barchitectural\s+shingle(?:s)?\b/i },
+    { label: "structural racking", regex: /\bstructural\s+racking\b/i },
+    { label: "high wind pressure", regex: /\bhigh[-\s]?wind(?:\s+pressure)?\b|\bwind\s+pressure\b/i },
     { label: "thermal seal", regex: /\bthermal\s+seal\b/i },
     { label: "seal strip", regex: /\bseal\s+strip\b/i },
     { label: "uplift checks", regex: /\buplift\s+check/i },
     { label: "ARMA", regex: /\bARMA\b/ },
-    { label: "granular loss", regex: /\bgranul(?:e|ar)\s+loss\b/i },
     { label: "fractured tabs", regex: /\bfractured\s+tab/i },
     { label: "fastener pull-out", regex: /\bfastener\s+pull-?out\b/i },
     { label: "wind-driven rain", regex: /\bwind-?driven\s+rain\b/i },
