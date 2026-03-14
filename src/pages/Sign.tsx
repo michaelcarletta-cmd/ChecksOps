@@ -326,7 +326,6 @@ export default function Sign() {
     );
   }
 
-  const [activeStep, setActiveStep] = useState<"review" | "sign">("review");
 
   return (
     <div className="min-h-screen bg-white text-gray-900">
