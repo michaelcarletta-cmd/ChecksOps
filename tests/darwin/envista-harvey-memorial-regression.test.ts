@@ -860,9 +860,15 @@ The engineer's methodology was fundamentally inadequate for a low-slope membrane
     expect(enforced).not.toMatch(/\buplift\s+check/i);
     expect(enforced).not.toMatch(/\bgranul(?:e|ar)\s+loss\b/i);
     expect(enforced).not.toMatch(/\bfractured\s+tab/i);
+    expect(enforced).not.toMatch(/\bfractured\s+shingle/i);
     expect(enforced).not.toMatch(/\bfastener\s+pull-?out\b/i);
     expect(enforced).not.toMatch(/\bthermal\s+seal/i);
+    expect(enforced).not.toMatch(/\bseal\s+strip/i);
     expect(enforced).not.toMatch(/\bwind-?driven\s+rain\b/i);
+    expect(enforced).not.toMatch(/\bhand[-\s]?tab\s+test/i);
+    expect(enforced).not.toMatch(/\blift\s+test/i);
+    expect(enforced).not.toMatch(/\b(?:GAF|CertainTeed|Owens\s+Corning)\b/i);
+    expect(enforced).not.toMatch(/\bwind\s+uplift\s+mechanics?\b/i);
   });
 
   it("retains legitimate membrane-focused content", () => {
