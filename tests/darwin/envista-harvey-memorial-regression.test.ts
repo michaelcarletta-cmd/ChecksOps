@@ -723,12 +723,7 @@ describe("Harvey Memorial / Envista — prompt-content validation", () => {
     || ""
   ).toLowerCase();
 
-  const windCausationTerms = [
-    "wind uplift","wind-driven rain","high wind","pressure event",
-    "fastener","shingle","uplift resistance","structural racking","fastener back-out",
-    "thermal seal","seal strip","granular loss","fractured tabs","arma",
-    "hand tab test","hand-tab test","lift test","gaf","certainteed","owens corning",
-  ];
+  const windCausationTerms = Array.from(new Set(LOW_SLOPE_FORBIDDEN_RULES.flatMap((rule) => rule.supportTerms.map((term) => term.toLowerCase()))));
   const lowSlopeTheoryExplicitlyReliesOnWind = windCausationTerms.some(t => engineerTheoryCorpus.includes(t));
 
   const scopeGuard = buildScopeGuard(primarySc, lowSlopeTheoryExplicitlyReliesOnWind);
