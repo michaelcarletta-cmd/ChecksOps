@@ -397,10 +397,13 @@ Deno.serve(async (req) => {
 
       // Attempt PDF flattening
       try {
+        if (!claimId) {
+          throw new Error("Cannot generate final PDF: claim_id is missing on the signature request");
+        }
+
         const flattenedBytes = await generateFlattenedPdf(sb, request, allSigners!);
 
         // Upload to storage
-        const finalPath = `claim-files/signed/${claimId}/${request.id}-final.pdf`;
         const blob = new Blob([flattenedBytes], { type: "application/pdf" });
 
         const { error: uploadError } = await sb.storage
