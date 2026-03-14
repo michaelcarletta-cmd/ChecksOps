@@ -616,6 +616,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                       <CardTitle className="text-base">{request.document_name}</CardTitle>
                       <CardDescription>
                         Created {new Date(request.created_at).toLocaleDateString()}
+                        {request.sent_at && ` · Sent ${new Date(request.sent_at).toLocaleDateString()}`}
                       </CardDescription>
                     </div>
                   </div>
@@ -638,6 +639,9 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                     </Button>
                   </div>
                 </div>
+                {request.last_error && (
+                  <p className="text-xs text-destructive mt-1">⚠ {request.last_error}</p>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
@@ -651,7 +655,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                           <span className="text-muted-foreground">({signer.signer_email})</span>
                         </div>
                         <Badge variant="outline" className="text-xs">
-                          {signer.status === "signed" ? `Signed ${new Date(signer.signed_at!).toLocaleDateString()}` : signer.status}
+                          {getSignerStatusLabel(signer)}
                         </Badge>
                       </div>
                     ))}
