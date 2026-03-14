@@ -760,9 +760,9 @@ describe("Harvey Memorial / Envista — prompt-content validation", () => {
     it(`forbidden term "${label}" does NOT appear as affirmative rebuttal methodology`, () => {
       // The attack vectors mention these terms ONLY in the "do NOT use" list.
       // Outside of that list, the methodology questions should focus on membrane/drainage.
-      // Find the methodology section (after "For EVERY finding")
-      const methodologyStart = attackVectors.indexOf("For EVERY finding");
-      if (methodologyStart < 0) return; // guard
+      // Find the methodology section (after the required attack structure heading)
+      const methodologyStart = attackVectors.indexOf("REQUIRED ATTACK STRUCTURE");
+      expect(methodologyStart).toBeGreaterThan(-1);
 
       const methodologySection = attackVectors.slice(methodologyStart);
       expect(methodologySection).not.toMatch(regex);
