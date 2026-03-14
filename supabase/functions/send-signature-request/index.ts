@@ -80,8 +80,9 @@ async function sendResend(to: string, subject: string, html: string) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) throw new Error("RESEND_API_KEY not configured");
 
+  const fromEmail = Deno.env.get("FROM_EMAIL") || "claims@freedomclaims.work";
   const body = {
-    from: "Freedom Claims <claims@freedomclaims.work>",
+    from: `Freedom Claims <${fromEmail}>`,
     to: [to],
     subject,
     html,
