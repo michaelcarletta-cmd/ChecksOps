@@ -1,0 +1,2 @@
+ALTER TABLE public.signature_requests DROP CONSTRAINT valid_status;
+ALTER TABLE public.signature_requests ADD CONSTRAINT valid_status CHECK (status = ANY (ARRAY['draft'::text, 'pending'::text, 'in_progress'::text, 'completed'::text, 'declined'::text, 'failed'::text, 'cancelled'::text, 'expired'::text]));
