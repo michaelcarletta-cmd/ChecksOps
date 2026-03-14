@@ -3572,7 +3572,7 @@ MANDATORY DISTINCTION:
 ${LOW_SLOPE_STRUCTURAL_DISTINCTION}
 
 EVIDENCE GROUNDING RULE:
-Do not insert damage facts unless grounded in direct report language or documented claim file evidence. Do not insert creased shingle tabs, fractured shingles, or wind uplift mechanics unless those terms appear in the engineer’s causation sentence.`
+Do not insert damage facts unless grounded in direct report language or documented claim file evidence. Do not insert creased shingle tabs, fractured shingles, wind uplift mechanics, structural racking, or high-wind pressure language unless those terms appear in the engineer’s causation sentence or documented claim-file evidence.`
           : '';
 
         const lowSlopeOpeningDirective = primarySc === 'low_slope_snow_ice_ponding'
