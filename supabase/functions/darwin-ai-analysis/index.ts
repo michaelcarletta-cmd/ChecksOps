@@ -3649,7 +3649,24 @@ SECTION 3 — ENGINEER CONTRADICTION
 Do NOT use generic storm/wind/shingle boilerplate unless it is directly quoted from the engineer's causation sentence.
 Detected wind-centric causation reliance in extracted theory: ${lowSlopeTheoryExplicitlyReliesOnWind ? 'YES' : 'NO'}.
 ${lowSlopeTheoryExplicitlyReliesOnWind ? 'If you use any wind/shingle language, quote the exact engineer causation sentence and explain why that quote is material.' : `Do NOT use:\n${LOW_SLOPE_FORBIDDEN_BULLET_LIST}`}
-...
+
+MANDATORY LOW-SLOPE METHODOLOGY ATTACKS:
+- no membrane core cuts
+- no seam adhesion/peel testing
+- no leak-path tracing
+- no moisture mapping
+- no proof of timing of openings
+
+MANDATORY DRAINAGE / SNOWMELT ANALYSIS FAILURE ATTACK:
+- no drainage-capacity analysis
+- no snow-water equivalent/runoff analysis
+
+MANDATORY CONTRADICTION ATTACK:
+${LOW_SLOPE_CONTRADICTION_SECTION.replace('SECTION 3 — ENGINEER CONTRADICTION:\n', '')}
+
+MANDATORY DISTINCTION:
+${LOW_SLOPE_STRUCTURAL_DISTINCTION}
+
 EVIDENCE GROUNDING RULE:
 Do not insert damage facts unless grounded in direct report language. Do not insert creased shingle tabs, fractured shingles, wind uplift mechanics, structural racking, or high-wind pressure language unless those terms appear as direct quote text in the engineer’s causation sentence.`
           : '';
