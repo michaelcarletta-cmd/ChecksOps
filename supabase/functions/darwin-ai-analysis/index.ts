@@ -3747,8 +3747,8 @@ ${primarySc === 'low_slope_snow_ice_ponding' ? `LOW-SLOPE REPORT ENFORCEMENT:
 - Focus on: no membrane core cuts, no seam adhesion/peel testing, no drainage-capacity analysis, no snow-water equivalent/runoff analysis, no leak-path tracing, no moisture mapping, and no proof of timing of openings
 - Force contradiction attack: report admits snow impeded drainage + standing water + freeze-thaw worsening potential, yet blames maintenance without proving deterioration alone
 - Distinguish structural snow-load analysis from membrane watertightness analysis
-- Suppress shingle/wind/uplift boilerplate unless directly supported by extracted engineer theory text
-- Do NOT add damage facts not grounded in report text or documented file evidence` : ''}
+- Suppress shingle/wind/uplift boilerplate unless directly quoted from the engineer causation sentence
+- Do NOT add damage facts unless grounded in direct report text` : ''}
 
 === MANDATORY SECTIONED STRUCTURE (ENFORCED — NO DEVIATIONS) ===
 Your rebuttal MUST contain ALL SEVEN of the following sections IN THIS ORDER. Do not omit any section. Do not leave structure to model discretion.
