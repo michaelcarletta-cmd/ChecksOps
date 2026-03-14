@@ -419,6 +419,101 @@ async function extractTextFromPDFNative(base64Content: string, fileName: string)
   }
 }
 
+// ============================================================================
+// LOSS MECHANISM EXTRACTION — pre-rebuttal pattern detection
+// Extracts trigger event, engineer stated cause, alternative causes, evidence
+// cited, and inspection limitations. Detects snowmelt/ice dam/ponding patterns
+// and flags "maintenance denial narratives".
+// ============================================================================
+
+const SNOWMELT_ICE_DAM_KEYWORDS = [
+  'snow meltwater', 'freeze thaw', 'freeze-thaw', 'snow-water equivalent',
+  'standing water', 'negative drainage', 'ponding water', 'drainage obstruction',
+  'ice dam', 'ice damming', 'snowmelt', 'snow melt', 'meltwater',
+  'ponding', 'hydraulic loading', 'snow load', 'ice buildup',
+];
+
+const WEATHER_ANALYSIS_KEYWORDS = [
+  'weather data', 'weather analysis', 'meteorological', 'storm event',
+  'wind speed', 'precipitation', 'temperature record', 'freeze-thaw cycle',
+  'snow accumulation', 'rainfall', 'weather report', 'historical weather',
+];
+
+const DETERIORATION_KEYWORDS = [
+  'wear and tear', 'deterioration', 'age-related', 'aging', 'maintenance',
+  'deferred maintenance', 'normal aging', 'expected life', 'service life',
+  'end of useful life', 'pre-existing', 'long-term', 'gradual',
+  'prior to the loss', 'cosmetic', 'granule loss',
+];
+
+interface LossMechanismExtraction {
+  snowmeltIceDamDetected: boolean;
+  matchedKeywords: string[];
+  isMaintenanceDenialNarrative: boolean;
+  weatherAnalysisPresent: boolean;
+  deteriorationConclusionsPresent: boolean;
+  promptInjection: string;
+}
+
+function extractLossMechanism(documentText: string): LossMechanismExtraction {
+  const textLower = documentText.toLowerCase();
+
+  const matchedKeywords = SNOWMELT_ICE_DAM_KEYWORDS.filter(kw => textLower.includes(kw));
+  const snowmeltIceDamDetected = matchedKeywords.length > 0;
+
+  const weatherAnalysisPresent = WEATHER_ANALYSIS_KEYWORDS.some(kw => textLower.includes(kw));
+  const deteriorationConclusionsPresent = DETERIORATION_KEYWORDS.some(kw => textLower.includes(kw));
+
+  const isMaintenanceDenialNarrative = weatherAnalysisPresent && deteriorationConclusionsPresent;
+
+  let promptInjection = '';
+
+  if (snowmeltIceDamDetected || isMaintenanceDenialNarrative) {
+    promptInjection = `
+=== LOSS MECHANISM EXTRACTION (AUTO-DETECTED — OVERRIDES DEFAULT WIND CLASSIFICATION) ===
+CRITICAL: The document contains indicators of a snowmelt / ice dam / ponding water loss mechanism.
+This analysis MUST override any default wind or hail classification. Treat the primary peril as water intrusion from snowmelt, ice damming, or drainage failure.
+
+DETECTED KEYWORDS: ${matchedKeywords.join(', ') || 'None (narrative pattern detected)'}
+${isMaintenanceDenialNarrative ? `
+*** MAINTENANCE DENIAL NARRATIVE FLAGGED ***
+This document contains BOTH weather analysis AND deterioration/maintenance conclusions.
+This is a common carrier tactic: acknowledge the weather event occurred but attribute all damage to "maintenance" or "wear and tear."
+You MUST aggressively challenge this narrative by:
+1. Separating the weather event causation from any pre-existing condition claims
+2. Demanding specific evidence that differentiates storm damage from alleged deterioration
+3. Pointing out that the carrier cannot acknowledge the weather event while simultaneously denying it caused damage without rigorous testing
+` : ''}
+
+YOU MUST EXTRACT AND ADDRESS THE FOLLOWING IN YOUR REBUTTAL:
+1. TRIGGER EVENT — What weather event or condition initiated the loss? (snowmelt, ice dam formation, freeze-thaw cycling, ponding)
+2. ENGINEER STATED CAUSE — What does the engineer/carrier claim caused the damage? (Quote exactly)
+3. ALTERNATIVE CAUSES DISCUSSED — What other causes were mentioned and dismissed? Were they properly ruled out with testing?
+4. EVIDENCE CITED — What specific evidence did the engineer/carrier cite to support their conclusion? Is it sufficient?
+5. INSPECTION LIMITATIONS — What was NOT inspected, tested, or considered? (moisture testing, thermal imaging, drainage analysis, ice dam formation patterns)
+
+MANDATORY REBUTTAL ARGUMENTS FOR SNOWMELT/ICE DAM/PONDING CLAIMS:
+- CAUSATION ASSUMPTIONS: Challenge any assumption that damage is "maintenance" without testing. The engineer must prove the damage existed BEFORE the weather event with dated documentation.
+- LACK OF TESTING: Did the engineer perform moisture mapping, infrared scanning, or destructive testing to determine water intrusion pathways? If not, their conclusions are speculative.
+- SNOWMELT HYDRAULIC LOADING: Snow accumulation creates sustained hydraulic pressure on roofing systems. Even properly maintained roofs can fail under prolonged snowmelt conditions. Cite building science research on hydrostatic pressure vs. design limitations.
+- DRAINAGE OBSTRUCTION: Ice dams, debris accumulation, and freeze-thaw cycling can obstruct designed drainage pathways, causing water to back up under shingles, flashing, and membrane systems. This is a COVERED PERIL, not maintenance.
+- FREEZE-THAW EFFECTS: Repeated freeze-thaw cycling causes mechanical damage to roofing materials, sealants, and flashing. This is physical damage from a weather event, not wear and tear. Ice expansion exerts ~2,000 PSI of force — far exceeding material design tolerances.
+- NEGATIVE DRAINAGE: If the property exhibits negative drainage or ponding conditions, determine whether these are design deficiencies (covered under structural damage) or maintenance issues. The engineer must provide specific evidence, not assumptions.
+
+=== END LOSS MECHANISM EXTRACTION ===
+`;
+  }
+
+  return {
+    snowmeltIceDamDetected,
+    matchedKeywords,
+    isMaintenanceDenialNarrative,
+    weatherAnalysisPresent,
+    deteriorationConclusionsPresent,
+    promptInjection,
+  };
+}
+
 function fileNameFromStoragePath(path: string): string {
   const parts = String(path || '').split('/');
   return parts[parts.length - 1] || 'document.pdf';
@@ -1582,6 +1677,14 @@ When generating rebuttals:
 8. Include specific documentation requests that put them on the defensive
 9. Provide a formal rebuttal letter that makes them reconsider their denial`;
 
+        // ── Loss Mechanism Extraction (pre-rebuttal) ──
+        const denialTextForMechanism = content || '';
+        const lossMechanism = extractLossMechanism(denialTextForMechanism);
+        if (lossMechanism.snowmeltIceDamDetected || lossMechanism.isMaintenanceDenialNarrative) {
+          console.log(`[darwin] Loss Mechanism Extraction: snowmelt=${lossMechanism.snowmeltIceDamDetected}, maintenanceNarrative=${lossMechanism.isMaintenanceDenialNarrative}, keywords=${lossMechanism.matchedKeywords.join(',')}`);
+          systemPrompt += '\n' + lossMechanism.promptInjection;
+        }
+
         userPrompt = `${claimSummary}
 
 STATE JURISDICTION: ${stateInfo.stateName} (${stateInfo.state})
@@ -2380,6 +2483,14 @@ Never invent measurements, tests, or observations that are not in evidence.`;
             ? additionalContext
             : (additionalContext?.userContext || additionalContext?.customPrompt || '')
         ).trim();
+
+        // ── Loss Mechanism Extraction (pre-rebuttal) ──
+        const engineerTextForMechanism = content || engineerUserContext || '';
+        const engineerLossMechanism = extractLossMechanism(engineerTextForMechanism);
+        if (engineerLossMechanism.snowmeltIceDamDetected || engineerLossMechanism.isMaintenanceDenialNarrative) {
+          console.log(`[darwin] Engineer Loss Mechanism Extraction: snowmelt=${engineerLossMechanism.snowmeltIceDamDetected}, maintenanceNarrative=${engineerLossMechanism.isMaintenanceDenialNarrative}, keywords=${engineerLossMechanism.matchedKeywords.join(',')}`);
+          systemPrompt += '\n' + engineerLossMechanism.promptInjection;
+        }
 
         userPrompt = `${claimSummary}
 
