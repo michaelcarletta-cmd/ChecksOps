@@ -481,29 +481,36 @@ function buildScopeGuard(
 OPENING SENTENCE REQUIREMENT (use this exact sentence first in the opening):
 "${REQUIRED_LOW_SLOPE_OPENING}"
 
-After that opening sentence, challenge timing, methodology, and causation logic in that order.
+${LOW_SLOPE_PRIORITY_ORDER}
 
-Do NOT use generic storm/wind/shingle boilerplate unless the engineer's causation theory explicitly relies on it.
+After that opening sentence, follow this required structure:
+SECTION 1 — TIMING FAILURE
+SECTION 2 — DRAINAGE / SNOWMELT ANALYSIS FAILURE
+SECTION 3 — ENGINEER CONTRADICTION
+
+Do NOT use generic storm/wind/shingle boilerplate unless the engineer's causation sentence explicitly relies on it.
 Detected wind-centric causation reliance in extracted theory: ${lowSlopeTheoryExplicitlyReliesOnWind ? "YES" : "NO"}.
-${lowSlopeTheoryExplicitlyReliesOnWind ? "If you use any wind/shingle language, tie it to direct engineer theory text and explain why it is material." : "Do NOT use shingle, thermal seal, uplift checks, granular loss, fractured tabs, ARMA, fastener pull-out, wind-driven rain, high-wind/pressure, uplift resistance, structural racking, or fastener back-out arguments in this rebuttal."}
+${lowSlopeTheoryExplicitlyReliesOnWind ? "If you use any wind/shingle language, tie it to direct engineer theory text and explain why it is material." : "Do NOT use shingle, thermal seal, seal strip, uplift checks, granular loss, fractured tabs, ARMA, fastener pull-out, wind-driven rain, hand tab test, lift test, or GAF/CertainTeed/Owens Corning references in this rebuttal."}
 
 MANDATORY LOW-SLOPE METHODOLOGY ATTACKS:
 - no membrane core cuts
 - no seam adhesion/peel testing
-- no drainage-capacity analysis
-- no snow-water equivalent/runoff analysis
 - no leak-path tracing
 - no moisture mapping
 - no proof of timing of openings
 
+MANDATORY DRAINAGE / SNOWMELT ANALYSIS FAILURE ATTACK:
+- no drainage-capacity analysis
+- no snow-water equivalent/runoff analysis
+
 MANDATORY CONTRADICTION ATTACK:
-The report admits snow impeded drainage, standing water existed, and freeze-thaw can worsen openings, yet still blames maintenance without proving deterioration alone caused the loss.
+${LOW_SLOPE_CONTRADICTION_SECTION.replace("SECTION 3 — ENGINEER CONTRADICTION:\n", "")}
 
 MANDATORY DISTINCTION:
-Structural snow-load analysis is not membrane watertightness analysis.
+${LOW_SLOPE_STRUCTURAL_DISTINCTION}
 
 EVIDENCE GROUNDING RULE:
-Do not insert damage facts unless grounded in direct report language or documented claim file evidence.`;
+Do not insert damage facts unless grounded in direct report language or documented claim file evidence. Do not insert creased shingle tabs, fractured shingles, or wind uplift mechanics unless those terms appear in the engineer’s causation sentence.`;
 }
 
 // ─── Enforcement functions (mirrored) ────────────────────────────────────────
