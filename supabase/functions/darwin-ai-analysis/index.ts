@@ -1497,11 +1497,13 @@ If the engineer characterizes damage as "deterioration" or "deferred maintenance
 
 "The engineer's attribution of water intrusion to 'deterioration' or 'deferred maintenance' without performing destructive membrane testing represents a fundamental methodology failure.
 
-Without core cuts, seam adhesion/peel testing, leak-path tracing, moisture mapping, and drainage-capacity analysis, the engineer has NO objective basis to determine whether membrane openings existed BEFORE the snow/ice event or were CAUSED/ACTIVATED by event-driven hydraulic loading and freeze-thaw cycling.
+Without membrane core cuts, seam adhesion/peel testing, drainage-capacity analysis, snow-water equivalent/runoff analysis, leak-path tracing, moisture mapping, and proof of timing of openings, the engineer has NO objective basis to determine whether membrane openings existed BEFORE the snow/ice event or were CAUSED/ACTIVATED by event-driven hydraulic loading and freeze-thaw cycling.
 
-Susceptibility to damage is not proof of causation. A membrane system near end-of-life can be more vulnerable to event-driven failure, but vulnerability does not prove deterioration alone caused this loss.
+The report admits snow impeded drainage, standing water existed, and freeze-thaw can worsen openings, yet still blames maintenance without proving deterioration alone caused the loss.
 
-The report acknowledges snow impeded drainage, standing water existed, and freeze-thaw can worsen openings. That admission directly conflicts with any deterioration-only conclusion unless timing and causation are proven with objective testing."`;
+Structural snow-load analysis is not membrane watertightness analysis. Discussing structural loading does not prove membrane entry pathways, opening timing, or leakage causation.
+
+Susceptibility to damage is not proof of causation. A membrane system near end-of-life can be more vulnerable to event-driven failure, but vulnerability does not prove deterioration alone caused this loss."`;
   }
 
   if (primary === 'wind_uplift') {
