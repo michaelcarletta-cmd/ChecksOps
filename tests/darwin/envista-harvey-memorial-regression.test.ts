@@ -226,7 +226,8 @@ const SCENARIO_MISSING_TESTING_MAP: Record<string, string[]> = {
 
 const LOW_SLOPE_FORBIDDEN_RULES: Array<{ regex: RegExp; supportTerms: string[] }> = [
   { regex: /\bshingle(?:s)?\b/i, supportTerms: ["shingle"] },
-  { regex: /\bthermal\s+seal(?:ing)?\b/i, supportTerms: ["thermal seal","thermal sealing","seal strip"] },
+  { regex: /\bthermal\s+seal(?:ing)?\b/i, supportTerms: ["thermal seal","thermal sealing"] },
+  { regex: /\bseal\s+strip\b/i, supportTerms: ["seal strip"] },
   { regex: /\buplift\s+check(?:s)?\b/i, supportTerms: ["uplift check","uplift checks"] },
   { regex: /\buplift\s+resistance\b/i, supportTerms: ["uplift resistance"] },
   { regex: /\bgranul(?:e|ar)\s+loss\b/i, supportTerms: ["granule loss","granular loss"] },
@@ -234,6 +235,12 @@ const LOW_SLOPE_FORBIDDEN_RULES: Array<{ regex: RegExp; supportTerms: string[] }
   { regex: /\bARMA\b/i, supportTerms: ["arma"] },
   { regex: /\bfastener\s+pull-?out\b/i, supportTerms: ["fastener pull-out","fastener pullout"] },
   { regex: /\bwind-?driven\s+rain\b/i, supportTerms: ["wind-driven rain"] },
+  { regex: /\bhand[-\s]?tab\s+test(?:s)?\b/i, supportTerms: ["hand-tab test","hand tab test","hand-tab tests","hand tab tests"] },
+  { regex: /\blift\s+test(?:s)?\b/i, supportTerms: ["lift test","lift tests"] },
+  { regex: /\b(?:GAF|CertainTeed|Owens\s+Corning)\b/i, supportTerms: ["gaf","certainteed","owens corning"] },
+  { regex: /\bcreased\s+shingle\s+tab(?:s)?\b/i, supportTerms: ["creased shingle tab","creased shingle tabs"] },
+  { regex: /\bfractured\s+shingle(?:s)?\b/i, supportTerms: ["fractured shingle","fractured shingles"] },
+  { regex: /\bwind\s+uplift\s+mechanics?\b/i, supportTerms: ["wind uplift mechanic","wind uplift mechanics"] },
 ];
 
 // ─── Dismantler (mirrored) ───────────────────────────────────────────────────
