@@ -827,11 +827,13 @@ We have reviewed the engineering report and find it fundamentally flawed.
 
 The shingle damage observed on the property is inconsistent with the engineer's conclusions.
 The ARMA Technical Bulletin 201 and GAF guidance documents that seal strip adhesion degrades over time.
-The engineer failed to perform uplift checks, hand tab tests, and lift tests on the affected areas.
-Granular loss patterns suggest storm-related damage rather than normal aging.
+The engineer failed to perform uplift checks, uplift tests, hand tab tests, and lift tests on the affected areas.
+Granules and granular loss patterns suggest storm-related damage rather than normal aging.
 The fractured tabs and fractured shingles observed are consistent with wind uplift mechanics and wind-driven rain penetration.
 Fastener pull-out testing was not performed, undermining the engineer's conclusions.
 Thermal sealing analysis was omitted from the inspection.
+The report references seal failure, factory seal concerns, and thermal expansion of shingles.
+Architectural shingles showed structural racking and high wind pressure effects in multiple areas.
 
 The membrane seams near the drainage obstruction area showed signs of stress.
 The engineer performed no membrane core cuts to determine water intrusion pathways.
