@@ -3550,9 +3550,9 @@ SECTION 1 — TIMING FAILURE
 SECTION 2 — DRAINAGE / SNOWMELT ANALYSIS FAILURE
 SECTION 3 — ENGINEER CONTRADICTION
 
-Do NOT use generic storm/wind/shingle boilerplate unless the engineer's causation sentence explicitly relies on it.
+Do NOT use generic storm/wind/shingle boilerplate unless the engineer's causation sentence or documented claim-file evidence explicitly relies on it.
 Detected wind-centric causation reliance in extracted theory: ${lowSlopeTheoryExplicitlyReliesOnWind ? 'YES' : 'NO'}.
-${lowSlopeTheoryExplicitlyReliesOnWind ? 'If you use any wind/shingle language, tie it to direct engineer theory text and explain why it is material.' : 'Do NOT use shingle, thermal seal, seal strip, uplift checks, granular loss, fractured tabs, ARMA, fastener pull-out, wind-driven rain, hand tab test, lift test, or GAF/CertainTeed/Owens Corning references in this rebuttal.'}
+${lowSlopeTheoryExplicitlyReliesOnWind ? 'If you use any wind/shingle language, tie it to direct engineer theory text and explain why it is material.' : `Do NOT use:\n${LOW_SLOPE_FORBIDDEN_BULLET_LIST}`}
 
 MANDATORY LOW-SLOPE METHODOLOGY ATTACKS:
 - no membrane core cuts
