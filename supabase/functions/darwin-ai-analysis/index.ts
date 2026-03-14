@@ -162,7 +162,19 @@ function stripExternalFormatting(text: string): string {
   return cleaned.trim();
 }
 
-const REQUIRED_LOW_SLOPE_OPENING = 'The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering.';
+const REQUIRED_LOW_SLOPE_OPENING = 'The engineering report attributes the water intrusion to snow/ice meltwater penetrated age-related and maintenance-deferred openings in the low-slope roof covering.';
+
+const LOW_SLOPE_FORBIDDEN_RULES: Array<{ regex: RegExp; supportTerms: string[] }> = [
+  { regex: /\bshingle(?:s)?\b/i, supportTerms: ['shingle'] },
+  { regex: /\bthermal\s+seal(?:ing)?\b/i, supportTerms: ['thermal seal', 'thermal sealing', 'seal strip'] },
+  { regex: /\buplift\s+check(?:s)?\b/i, supportTerms: ['uplift check', 'uplift checks'] },
+  { regex: /\buplift\s+resistance\b/i, supportTerms: ['uplift resistance'] },
+  { regex: /\bgranul(?:e|ar)\s+loss\b/i, supportTerms: ['granule loss', 'granular loss'] },
+  { regex: /\bfractured\s+tab(?:s)?\b/i, supportTerms: ['fractured tab', 'fractured tabs', 'tab fracture', 'fractured shingle tab'] },
+  { regex: /\bARMA\b/i, supportTerms: ['arma'] },
+  { regex: /\bfastener\s+pull-?out\b/i, supportTerms: ['fastener pull-out', 'fastener pullout'] },
+  { regex: /\bwind-?driven\s+rain\b/i, supportTerms: ['wind-driven rain'] },
+];
 
 function enforceEngineerRebuttalLowSlopeOpening(result: string, primaryScenario: string | null): string {
   if (!result || primaryScenario !== 'low_slope_snow_ice_ponding') return result;
@@ -194,6 +206,73 @@ function enforceEngineerRebuttalLowSlopeOpening(result: string, primaryScenario:
 
   lines[firstBodyLineIdx] = `${required} ${firstBodyLine}`;
   return lines.join('\n');
+}
+
+function suppressLowSlopeUnsupportedBoilerplate(result: string, engineerTheoryCorpus: string): string {
+  const theory = engineerTheoryCorpus.toLowerCase();
+
+  const filteredLines = result
+    .split('\n')
+    .filter((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return true;
+
+      return !LOW_SLOPE_FORBIDDEN_RULES.some((rule) => {
+        const supported = rule.supportTerms.some((term) => theory.includes(term.toLowerCase()));
+        return !supported && rule.regex.test(trimmed);
+      });
+    });
+
+  return filteredLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: string | null, engineerTheoryCorpus: string): string {
+  if (!result || primaryScenario !== 'low_slope_snow_ice_ponding') return result;
+
+  let updated = enforceEngineerRebuttalLowSlopeOpening(result, primaryScenario);
+  updated = suppressLowSlopeUnsupportedBoilerplate(updated, engineerTheoryCorpus);
+
+  const lower = updated.toLowerCase();
+  const hasMethodologyPack = [
+    /membrane core cuts?/i,
+    /seam adhesion|peel testing/i,
+    /drainage[-\s]capacity analysis/i,
+    /snow[-\s]water equivalent|runoff analysis/i,
+    /leak[-\s]path tracing/i,
+    /moisture mapping/i,
+    /proof of timing of openings|timing of openings/i,
+  ].every((pattern) => pattern.test(updated));
+
+  if (!hasMethodologyPack) {
+    updated += `\n\nLOW-SLOPE MEMBRANE METHODOLOGY FAILURES (MANDATORY):
+- no membrane core cuts
+- no seam adhesion/peel testing
+- no drainage-capacity analysis
+- no snow-water equivalent/runoff analysis
+- no leak-path tracing
+- no moisture mapping
+- no proof of timing of openings`;
+  }
+
+  const hasContradictionAttack = /snow impeded drainage/i.test(lower)
+    && /standing water/i.test(lower)
+    && /freeze[-\s]thaw/i.test(lower)
+    && /without proving deterioration alone caused the loss|deterioration alone caused the loss/i.test(lower);
+
+  if (!hasContradictionAttack) {
+    updated += `\n\nCONTRADICTION IN THE ENGINEER'S OWN ANALYSIS:
+The report admits snow impeded drainage, standing water existed, and freeze-thaw can worsen openings, yet still blames maintenance without proving deterioration alone caused the loss.`;
+  }
+
+  const hasStructuralVsWatertightness = /structural snow[-\s]load analysis/i.test(lower)
+    && /membrane watertightness analysis/i.test(lower);
+
+  if (!hasStructuralVsWatertightness) {
+    updated += `\n\nSTRUCTURAL VS MEMBRANE DISTINCTION:
+Structural snow-load analysis is not membrane watertightness analysis. A report can address framing load capacity while still failing to prove membrane-entry pathways, timing of openings, and causation for interior leakage.`;
+  }
+
+  return updated.trim();
 }
 
 const STRUCTURED_DARWIN_ANALYSIS_TYPES = new Set<string>([
