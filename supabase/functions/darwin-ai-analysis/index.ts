@@ -3402,14 +3402,17 @@ Be specific, professional, and provide communications that are ready to copy and
         const scenarioSpecificFallacyBlock = buildScenarioFallacyBlock(primarySc, allActiveScenarios);
         const scenarioSpecificUnaddressedDamage = buildScenarioUnaddressedDamage(primarySc);
 
-        const lowSlopeTheoryOpening = 'The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering.';
+        const lowSlopeTheoryOpening = REQUIRED_LOW_SLOPE_OPENING;
         const engineerTheoryCorpus = [
           dismantlerExtraction.engineerStatedCause,
           ...dismantlerExtraction.engineerTheorySentences,
         ].filter(Boolean).join(' ').toLowerCase();
+        engineerTheoryCorpusForFilters = engineerTheoryCorpus;
+
         const windCausationTerms = [
           'wind uplift', 'wind-driven rain', 'high wind', 'pressure event',
           'fastener', 'shingle', 'uplift resistance', 'structural racking', 'fastener back-out',
+          'thermal seal', 'granular loss', 'fractured tabs', 'arma',
         ];
         const lowSlopeTheoryExplicitlyReliesOnWind = windCausationTerms.some((term) => engineerTheoryCorpus.includes(term));
 
