@@ -351,9 +351,46 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Deduplicate and sort by severity
-    const severityOrder = { high: 0, medium: 1, low: 2 };
-    detectedViolations.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+    // ── Violation prioritization scoring ──────────────
+    // Score each violation on 5 dimensions to surface strongest escalation points
+    function scoreViolation(v: typeof detectedViolations[0]): number {
+      let score = 0;
+      // 1. Timeline evidence quality (more supporting events = stronger)
+      score += Math.min(v.supporting_events.length * 8, 24);
+      // 2. Clarity of statutory match (has real citation vs generic)
+      if (v.citation && !v.citation.includes('State unfair') && !v.citation.includes('State claims') && !v.citation.includes('State prompt')) score += 20;
+      else score += 5;
+      // 3. Severity of conduct
+      if (v.severity === 'high') score += 30;
+      else if (v.severity === 'medium') score += 15;
+      else score += 5;
+      // 4. Days overdue / magnitude (extract from issue text)
+      const daysMatch = v.issue.match(/(\d+)[- ]day/);
+      if (daysMatch) {
+        const days = parseInt(daysMatch[1]);
+        score += Math.min(days / 3, 15); // cap at 15
+      }
+      const pctMatch = v.issue.match(/(\d+)%/);
+      if (pctMatch) {
+        const pct = parseInt(pctMatch[1]);
+        if (pct < 50) score += 12; // large gap
+      }
+      // 5. Bad-faith potential (keywords)
+      const badFaithKeywords = ['without investigation', 'no carrier', 'no acknowledgment', 'bad faith', 'lowball'];
+      if (badFaithKeywords.some(k => v.issue.toLowerCase().includes(k) || v.recommended_action.toLowerCase().includes(k))) score += 15;
+      return score;
+    }
+
+    // Score and sort violations
+    const scoredViolations = detectedViolations.map(v => ({ ...v, _score: scoreViolation(v) }));
+    scoredViolations.sort((a, b) => b._score - a._score);
+    // Replace original array with scored order
+    detectedViolations.length = 0;
+    detectedViolations.push(...scoredViolations.map(({ _score, ...rest }) => rest));
+
+    // Detect cumulative pattern: 3+ low/medium violations = systemic unfair handling
+    const lowerViolations = scoredViolations.filter(v => v.severity !== 'high');
+    const hasCumulativePattern = lowerViolations.length >= 3;
     const estimateLines = estimateLinesRes.data || [];
     const topDisputes = estimateLines.filter((l: any) => l.recovery_impact_rank != null && l.recovery_impact_rank <= 5);
     const rebuttalLinkedLines = estimateLines.filter((l: any) => l.used_in_rebuttal);
