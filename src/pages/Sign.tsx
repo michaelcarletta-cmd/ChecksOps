@@ -29,7 +29,39 @@ export default function Sign() {
   const [fields, setFields] = useState<any[]>([]);
   
   const canvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
+  const submitBtnRef = useRef<HTMLButtonElement | null>(null);
+  const documentSectionRef = useRef<HTMLDivElement | null>(null);
   const [activeStep, setActiveStep] = useState<"review" | "sign">("review");
+  const [drawingFields, setDrawingFields] = useState<Record<string, boolean>>({});
+
+  // UI-only progress: count completed required fields
+  const isCanvasDrawn = useCallback((fieldId: string) => {
+    const canvas = canvasRefs.current[fieldId];
+    if (!canvas) return false;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return false;
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let i = 3; i < pixels.length; i += 4) {
+      if (pixels[i] > 0) return true;
+    }
+    return false;
+  }, []);
+
+  const progressInfo = useMemo(() => {
+    const requiredFields = fields.filter((f: any) => f.required !== false);
+    const total = requiredFields.length;
+    let completed = 0;
+    for (const field of requiredFields) {
+      if (field.type === "signature") {
+        if (isCanvasDrawn(field.id)) completed++;
+      } else if (field.type === "checkbox") {
+        if (fieldValues[field.id]) completed++;
+      } else {
+        if (fieldValues[field.id] && String(fieldValues[field.id]).trim() !== "") completed++;
+      }
+    }
+    return { completed, total, allDone: total > 0 && completed === total };
+  }, [fields, fieldValues, drawingFields, isCanvasDrawn]);
   const [drawingFields, setDrawingFields] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
