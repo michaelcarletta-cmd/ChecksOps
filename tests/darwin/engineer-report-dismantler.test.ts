@@ -164,6 +164,8 @@ const SCENARIO_KEYWORDS_WEIGHTED: Record<string, WeightedKeyword[]> = {
     { term: 'snowmelt', weight: 2 }, { term: 'ponding water', weight: 2 },
     { term: 'snow-water equivalent', weight: 2 }, { term: 'hydraulic loading', weight: 2 },
     { term: 'negative drainage', weight: 2 }, { term: 'drainage obstruction', weight: 2 },
+    { term: 'snowmelt infiltration', weight: 2 }, { term: 'membrane deterioration', weight: 2 },
+    { term: 'drainage deficien', weight: 2 }, { term: 'membrane system', weight: 2 },
     { term: 'snow meltwater', weight: 1 }, { term: 'freeze thaw', weight: 1 },
     { term: 'freeze-thaw', weight: 1 }, { term: 'standing water', weight: 1 },
     { term: 'snow melt', weight: 1 }, { term: 'meltwater', weight: 1 },
@@ -173,6 +175,12 @@ const SCENARIO_KEYWORDS_WEIGHTED: Record<string, WeightedKeyword[]> = {
     { term: 'flat roof', weight: 1 }, { term: 'built-up roof', weight: 1 },
     { term: 'membrane', weight: 1 }, { term: 'tpo', weight: 1 },
     { term: 'epdm', weight: 1 }, { term: 'modified bitumen', weight: 1 },
+    { term: 'interior water damage', weight: 1 }, { term: 'water intrusion', weight: 1 },
+    { term: 'roof covering', weight: 1 }, { term: 'seam', weight: 1 },
+    { term: 'membrane seam', weight: 1 }, { term: 'clogged drain', weight: 1 },
+    { term: 'snow event', weight: 1 }, { term: 'inadequate slope', weight: 1 },
+    { term: 'drainage system', weight: 1 }, { term: 'parapet', weight: 1 },
+    { term: 'ice formation', weight: 1 }, { term: 'roof slope', weight: 1 },
   ],
 };
 

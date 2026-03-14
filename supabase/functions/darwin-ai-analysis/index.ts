@@ -468,6 +468,8 @@ const SCENARIO_KEYWORDS_WEIGHTED: Record<string, WeightedKeyword[]> = {
     { term: 'snowmelt', weight: 2 }, { term: 'ponding water', weight: 2 },
     { term: 'snow-water equivalent', weight: 2 }, { term: 'hydraulic loading', weight: 2 },
     { term: 'negative drainage', weight: 2 }, { term: 'drainage obstruction', weight: 2 },
+    { term: 'snowmelt infiltration', weight: 2 }, { term: 'membrane deterioration', weight: 2 },
+    { term: 'drainage deficien', weight: 2 }, { term: 'membrane system', weight: 2 },
     // medium (1)
     { term: 'snow meltwater', weight: 1 }, { term: 'freeze thaw', weight: 1 },
     { term: 'freeze-thaw', weight: 1 }, { term: 'standing water', weight: 1 },
@@ -478,6 +480,12 @@ const SCENARIO_KEYWORDS_WEIGHTED: Record<string, WeightedKeyword[]> = {
     { term: 'flat roof', weight: 1 }, { term: 'built-up roof', weight: 1 },
     { term: 'membrane', weight: 1 }, { term: 'tpo', weight: 1 },
     { term: 'epdm', weight: 1 }, { term: 'modified bitumen', weight: 1 },
+    { term: 'interior water damage', weight: 1 }, { term: 'water intrusion', weight: 1 },
+    { term: 'roof covering', weight: 1 }, { term: 'seam', weight: 1 },
+    { term: 'membrane seam', weight: 1 }, { term: 'clogged drain', weight: 1 },
+    { term: 'snow event', weight: 1 }, { term: 'inadequate slope', weight: 1 },
+    { term: 'drainage system', weight: 1 }, { term: 'parapet', weight: 1 },
+    { term: 'ice formation', weight: 1 }, { term: 'roof slope', weight: 1 },
   ],
   hail_impact: [
     // strong (2)
@@ -1178,6 +1186,209 @@ PROMPT INJECTION ORDER (ENFORCED):
     signals,
     scenarioActivationLog,
   };
+}
+
+// ── Scenario-conditional system prompt builders ─────────────────────────────
+
+function buildScenarioAttackVectors(primary: string, allActive: Set<string>): string {
+  const blocks: string[] = [];
+
+  if (primary === 'low_slope_snow_ice_ponding' || allActive.has('low_slope_snow_ice_ponding')) {
+    blocks.push(`=== LOW-SLOPE / SNOW / ICE / MEMBRANE ATTACK APPROACH ===
+For EVERY finding in their report, ask and answer:
+- What destructive membrane testing was performed (core cuts, seam peel tests, adhesion pull tests)?
+- What drainage capacity analysis was performed?
+- What freeze-thaw cycle analysis was conducted?
+- What moisture mapping or infrared scanning was done?
+- Were snow load calculations performed to quantify the hydraulic loading event?
+- Was the snow-water equivalent calculated for the event?
+- Did the engineer differentiate between event-driven membrane stress and pre-existing deterioration with DATED evidence?
+- Where is the documentation of pre-event membrane condition?
+
+When the engineer claims damage is "deterioration" or "deferred maintenance," ATTACK THIS with:
+- What specific testing differentiates event-induced membrane failure from age-related degradation?
+- What DATED pre-event documentation proves the condition existed BEFORE the snow/ice event?
+- Susceptibility to damage does not prove the damage was caused by deterioration alone—it proves the OPPOSITE: that the event was the proximate cause
+- Acknowledging snow impeded drainage and increased water burden while simultaneously blaming maintenance is a LOGICAL CONTRADICTION
+- Standing water, ice dams, and snowmelt infiltration are EVENT-DRIVEN forces that exceed design tolerances—not "normal wear"
+- The engineer's own observations of ponding, drainage obstruction, and snowmelt infiltration confirm the event created conditions BEYOND what normal maintenance prevents`);
+  }
+
+  if (primary === 'hail_impact' || allActive.has('hail_impact')) {
+    blocks.push(`=== HAIL IMPACT ATTACK APPROACH ===
+For EVERY finding, ask and answer:
+- Were proper test squares (10x10) performed on each slope/elevation?
+- Was soft-metal collateral damage inspected (vents, flashing, gutters, AC units)?
+- Was mat fracture vs granule loss properly differentiated?
+- Was functional vs cosmetic damage analysis performed per manufacturer specifications?
+- Were directional impact patterns analyzed and correlated with weather data?`);
+  }
+
+  if (primary === 'wind_uplift' || allActive.has('wind_uplift')) {
+    blocks.push(`=== WIND UPLIFT ATTACK APPROACH ===
+For EVERY finding, ask and answer:
+- Were hand-tab tests performed to assess actual seal strip adhesion?
+- Was fastener pattern and spacing evaluated?
+- Was directional wind correlation performed against weather data?
+- Was progressive damage tracing done (initial lift → rain infiltration → water damage)?
+
+=== CRITICAL: ASTM WIND RATING FALLACY — DESTROY THIS ARGUMENT ===
+When engineers cite ASTM D3161 or D7158 wind ratings to claim shingles "should have resisted" storm winds, this is FUNDAMENTALLY FLAWED reasoning:
+1. ASTM D3161/D7158 testing is performed ONLY on NEW, factory-fresh shingles under controlled laboratory conditions
+2. Seal strip adhesion degrades DRAMATICALLY over time (UV, thermal cycling, oxidation)
+3. ARMA Technical Bulletin 201 documents this degradation is EXPECTED and NORMAL
+4. By 10-15 years, seal strip effectiveness may be reduced 50% or MORE
+5. NO manufacturer warrants that aged shingles maintain original ratings
+Any engineer applying new-product test standards to aged materials is either incompetent or deliberately misleading the carrier.`);
+  }
+
+  if (primary === 'plumbing_freeze_burst' || allActive.has('plumbing_freeze_burst')) {
+    blocks.push(`=== PLUMBING FREEZE BURST ATTACK APPROACH ===
+- Was the freeze exposure timeline established with temperature data?
+- Was plumbing insulation reviewed against code requirements (IRC P2603.5)?
+- Was the failure point microscopically examined for freeze-expansion characteristics?
+- Were maintenance records actually obtained or just assumed absent?`);
+  }
+
+  if (primary === 'fire_causation' || allActive.has('fire_causation')) {
+    blocks.push(`=== FIRE CAUSATION ATTACK APPROACH ===
+- Was NFPA 921 methodology systematically followed?
+- Was arc mapping performed?
+- Were alternative causes systematically eliminated?
+- Was evidence properly preserved for independent examination?`);
+  }
+
+  if (primary === 'water_intrusion_envelope' || allActive.has('water_intrusion_envelope')) {
+    blocks.push(`=== WATER INTRUSION / ENVELOPE ATTACK APPROACH ===
+- Was destructive water testing performed to trace the intrusion path?
+- Were all flashing points inspected (head, sill, jamb, kick-out, step, counter)?
+- Was wind-driven rain exposure calculated per ASCE 7?
+- Was sealant age and condition properly assessed?`);
+  }
+
+  if (primary === 'structural_movement_settlement' || allActive.has('structural_movement_settlement')) {
+    blocks.push(`=== STRUCTURAL MOVEMENT ATTACK APPROACH ===
+- Was geotechnical analysis performed?
+- Were dated monitoring measurements provided?
+- Was differential vs uniform settlement properly classified?
+- Was a specific trigger event (plumbing leak, excavation, weather) considered?`);
+  }
+
+  if (blocks.length === 0) {
+    blocks.push(`=== UNIVERSAL ATTACK APPROACH ===
+For EVERY finding in their report, ask and answer:
+- What testing SHOULD have been performed but wasn't?
+- What evidence did they photograph but then ignore in their conclusions?
+- What assumptions did they make that are unsupported?
+- What industry standards or building codes contradict their findings?`);
+  }
+
+  return blocks.join('\n\n');
+}
+
+function scenarioAttackVectorsTechnical(primary: string, allActive: Set<string>): string {
+  const items: string[] = [];
+
+  if (primary === 'low_slope_snow_ice_ponding' || allActive.has('low_slope_snow_ice_ponding')) {
+    items.push(
+      '13. No destructive membrane testing (core cuts, seam peel tests, adhesion tests)',
+      '14. No drainage capacity analysis or snow load calculations',
+      '15. No freeze-thaw cycle analysis or snow-water equivalent calculation',
+      '16. Conflating event-driven membrane stress with pre-existing deterioration without dated evidence',
+      '17. Acknowledging snow/ice burden while blaming maintenance—a logical contradiction',
+    );
+  } else if (primary === 'wind_uplift' || allActive.has('wind_uplift')) {
+    items.push(
+      '13. ASTM wind rating fallacy—applying new-product standards to aged materials',
+      '14. Ignoring seal strip degradation and material aging',
+      '15. Failure to consider storm-specific conditions—wind speed, direction, duration, debris',
+      '16. Mischaracterizing damage mechanisms—conflating uplift damage with wear',
+      '17. Reliance on visual inspection when destructive testing was warranted',
+    );
+  } else if (primary === 'hail_impact' || allActive.has('hail_impact')) {
+    items.push(
+      '13. Inadequate test square methodology or no test squares at all',
+      '14. Failure to inspect soft-metal collateral surfaces',
+      '15. Conflating functional and cosmetic damage classifications',
+      '16. Ignoring mat fracture indicators',
+      '17. Applying new-material standards to aged materials',
+    );
+  } else {
+    items.push(
+      '13. Failure to perform scenario-appropriate testing',
+      '14. Mischaracterizing damage mechanisms',
+      '15. Failure to consider event-specific conditions',
+      '16. Reliance on visual inspection when physical testing was warranted',
+      '17. Unsupported conclusions about causation timeline',
+    );
+  }
+
+  return items.join('\n');
+}
+
+function buildScenarioEvAuditFields(primary: string, allActive: Set<string>): string {
+  if (primary === 'low_slope_snow_ice_ponding' || allActive.has('low_slope_snow_ice_ponding')) {
+    return `6. Whether membrane failure modes were independently evaluated (not just visual "deterioration" characterization)
+7. Whether drainage capacity, snow load, and freeze-thaw effects were analyzed or omitted`;
+  }
+  if (primary === 'wind_uplift' || allActive.has('wind_uplift')) {
+    return `6. Whether wind damage mechanisms were independently evaluated (not just hail-focused reasoning)
+7. Whether all relevant roof elevations/components were inspected or omitted`;
+  }
+  if (primary === 'hail_impact' || allActive.has('hail_impact')) {
+    return `6. Whether hail damage was evaluated per slope/elevation with proper test squares
+7. Whether functional vs cosmetic determination was supported by manufacturer specifications`;
+  }
+  return `6. Whether the primary damage mechanism was independently evaluated with appropriate testing
+7. Whether all relevant areas/components were inspected or omitted`;
+}
+
+function buildScenarioPointByPoint(primary: string, allActive: Set<string>, stateInfo: any): string {
+  if (primary === 'low_slope_snow_ice_ponding' || allActive.has('low_slope_snow_ice_ponding')) {
+    return `- Whether the statement conflates event-driven membrane stress with pre-existing conditions without testing
+- What membrane-specific testing (core cuts, seam peel, adhesion pull) contradicts or would contradict the conclusion
+- Cite applicable membrane manufacturer specifications, ASTM D4637 (EPDM), ASTM D6878 (TPO), or relevant standards`;
+  }
+  if (primary === 'wind_uplift' || allActive.has('wind_uplift')) {
+    return `- Whether they used generalized observation where slope-by-slope or section-by-section analysis was required
+- What building codes (IRC, IBC), ASTM standards, or manufacturer specifications they violated or ignored
+[Cite specific codes: IRC Section X, IBC Section Y, ASTM D3161, ARMA TB-201, ${stateInfo.adminCode}, etc.]`;
+  }
+  return `- Whether they used generalized observation where detailed analysis was required
+- What building codes, industry standards, or manufacturer specifications they violated or ignored`;
+}
+
+function buildScenarioFallacyBlock(primary: string, allActive: Set<string>): string {
+  if (primary === 'wind_uplift' || allActive.has('wind_uplift')) {
+    return `[ASTM WIND RATING FALLACY REBUTTAL - If applicable]
+If the engineer cited ASTM D3161 or D7158 wind ratings, demolish this argument using the ASTM Wind Rating Fallacy analysis from the system prompt.`;
+  }
+  if (primary === 'low_slope_snow_ice_ponding' || allActive.has('low_slope_snow_ice_ponding')) {
+    return `[MEMBRANE DETERIORATION FALLACY REBUTTAL - MANDATORY]
+If the engineer characterizes damage as "deterioration" or "deferred maintenance" without destructive testing:
+
+"The engineer's attribution of water intrusion to 'deterioration' or 'deferred maintenance' without performing destructive membrane testing represents a fundamental methodology failure.
+
+Without core cuts, seam peel tests, or adhesion pull tests, the engineer has NO objective basis to determine whether membrane openings existed BEFORE the snow/ice event or were CAUSED by the event's hydraulic loading and freeze-thaw cycling.
+
+Susceptibility to damage is not proof of causation. A membrane system that is at or near the end of its expected service life is MORE vulnerable to event-driven failure, not LESS. This increased vulnerability makes the weather event the proximate cause of the loss, not the age of the system.
+
+The engineer acknowledges that snow impeded drainage, created ponding conditions, and increased water burden on the membrane. These are event-driven forces that exceed the membrane's design tolerances—this is physical loss from a covered event, not gradual deterioration."`;
+  }
+  return '';
+}
+
+function buildScenarioUnaddressedDamage(primary: string): string {
+  if (primary === 'low_slope_snow_ice_ponding') {
+    return `Identify any event-driven damage indicators (membrane stress at seams, ice-dam-induced displacement, ponding-area membrane deformation, drainage pathway obstruction damage, freeze-thaw-induced material cracking) that were present but not properly analyzed.`;
+  }
+  if (primary === 'wind_uplift') {
+    return `Identify any recent physical damage indicators (displaced materials, uplift, fresh fractures, torn tabs, impact-consistent deformation, newly exposed substrate) that were present but not properly analyzed.`;
+  }
+  if (primary === 'hail_impact') {
+    return `Identify any impact damage indicators (circular fractures, mat exposure, granule displacement patterns, soft-metal denting) that were present but not properly analyzed.`;
+  }
+  return `Identify any recent physical damage indicators consistent with the claimed loss that were present but not properly analyzed.`;
 }
 
 function fileNameFromStoragePath(path: string): string {
@@ -3021,7 +3232,27 @@ Based on this task and the claim context, provide:
 Be specific, professional, and provide communications that are ready to copy and use.`;
         break;
 
-      case 'engineer_report_rebuttal':
+      case 'engineer_report_rebuttal': {
+        // ── Universal Engineer Report Dismantler (runs on EVERY engineer report) ──
+        const engineerUserContext = String(
+          typeof additionalContext === 'string'
+            ? additionalContext
+            : (additionalContext?.userContext || additionalContext?.customPrompt || '')
+        ).trim();
+        const engineerTextForDismantler = content || engineerUserContext || '';
+        const dismantlerExtraction = runEngineerReportDismantler(engineerTextForDismantler);
+        console.log(`[darwin] EngineerReportDismantler: primary=${dismantlerExtraction.primaryScenario || 'none'}, secondary=[${dismantlerExtraction.secondaryScenarios.join(',')}], maintenanceNarrative=${dismantlerExtraction.isMaintenanceDenialNarrative}, dualCausation=${dismantlerExtraction.isDualCausation}, engineerCause="${dismantlerExtraction.engineerStatedCause.substring(0, 80)}", missingTests=${dismantlerExtraction.criticalTestingNotPerformed.length}`);
+
+        // Build scenario-specific attack vectors based on primary scenario
+        const primarySc = dismantlerExtraction.primaryScenario || '';
+        const allActiveScenarios = new Set([primarySc, ...dismantlerExtraction.secondaryScenarios].filter(Boolean));
+
+        const scenarioAttackVectors = buildScenarioAttackVectors(primarySc, allActiveScenarios);
+        const scenarioSpecificEvAuditFields = buildScenarioEvAuditFields(primarySc, allActiveScenarios);
+        const scenarioSpecificPointByPoint = buildScenarioPointByPoint(primarySc, allActiveScenarios, stateInfo);
+        const scenarioSpecificFallacyBlock = buildScenarioFallacyBlock(primarySc, allActiveScenarios);
+        const scenarioSpecificUnaddressedDamage = buildScenarioUnaddressedDamage(primarySc);
+
         systemPrompt = `You are the most formidable engineering report analyst in the public adjusting industry. Carrier-hired engineers produce flawed, biased, and methodologically deficient reports with alarming regularity—and your job is to EXPOSE every single flaw with devastating technical precision. You are SMARTER than their engineer. You know MORE about building science. You understand exactly where their analysis fails.
 
 ${getExternalWritingRules(authorName, authorTitle)}
@@ -3042,19 +3273,11 @@ Do NOT simply state the engineer is wrong. PROVE IT with:
 - Logical fallacies in their reasoning
 - Industry standards they failed to follow
 
-=== AGGRESSIVE TECHNICAL REBUTTAL APPROACH ===
-For EVERY finding in their report, ask and answer:
-- What testing SHOULD have been performed but wasn't?
-- What evidence did they photograph but then ignore in their conclusions?
-- What assumptions did they make that are unsupported?
-- What industry standards or building codes contradict their findings?
-- What did they conveniently fail to document?
+=== SCENARIO-SPECIFIC ATTACK APPROACH ===
+PRIMARY SCENARIO DETECTED: ${primarySc || 'universal'}
+SECONDARY SCENARIOS: ${dismantlerExtraction.secondaryScenarios.join(', ') || 'none'}
 
-When the engineer claims damage is "wear and tear," ATTACK THIS with:
-- What specific physical evidence supports this characterization?
-- What testing was performed to differentiate storm damage from aging?
-- Where is the documentation of pre-storm condition?
-- What manufacturer or industry standard defines the damage pattern they observed as wear versus impact?
+${scenarioAttackVectors}
 
 IMPORTANT: This claim is in ${stateInfo.stateName}. Cite ${stateInfo.stateName} statutes and administrative codes. NEVER cite case law—stick to FACTS, CODES, STANDARDS, and REGULATIONS.
 
@@ -3064,39 +3287,15 @@ IMPORTANT: This claim is in ${stateInfo.stateName}. Cite ${stateInfo.stateName} 
   * Quote their EXACT statement
   * Explain PRECISELY why it is wrong, incomplete, or misleading
   * Provide the CORRECT technical analysis with supporting evidence
-  * Cite applicable building codes (IRC, IBC), ASTM standards, manufacturer specs
+  * Cite applicable building codes (IRC, IBC), industry standards, manufacturer specs
   * Reference ${stateInfo.adminCode} requirements they ignored
 - Your rebuttal should be 3-4x the length of their report
 - Use language that is AUTHORITATIVE and UNEQUIVOCAL—you are the expert, not them
 - Make the engineer's conclusions look like amateur work compared to your analysis
 
-=== CRITICAL: ASTM WIND RATING FALLACY - DESTROY THIS ARGUMENT ===
-When engineers cite ASTM D3161 or D7158 wind ratings to claim shingles "should have resisted" storm winds, this is FUNDAMENTALLY FLAWED reasoning. DEMOLISH this argument:
-
-1. ASTM D3161/D7158 testing is performed ONLY on NEW, factory-fresh shingles under controlled laboratory conditions—NOT aged, weathered materials in real-world environments
-2. These ratings are certification standards for new products, NOT performance guarantees for installed materials
-3. The engineer is committing a basic scientific error: applying laboratory test data to field conditions with completely different variables
-4. Seal strip adhesion degrades DRAMATICALLY over time:
-   - UV exposure breaks down asphalt polymers
-   - Thermal cycling (freeze/thaw, day/night) stresses adhesive bonds
-   - Oxidation hardens and embrittles seal strips
-   - ARMA Technical Bulletin 201 documents this degradation is EXPECTED and NORMAL
-5. By 10-15 years, seal strip effectiveness may be reduced 50% or MORE
-6. Shingles at 75%+ of design life have SUBSTANTIALLY compromised wind resistance regardless of original rating
-7. NO manufacturer warrants that aged shingles maintain original ratings—warranties cover manufacturing defects, NOT aged material performance
-8. The engineer's logic is equivalent to claiming a 15-year-old car tire should perform identically to a new tire because both passed the same factory certification—an ABSURD standard
-9. Ask: "Would this engineer testify under oath that a 20-year-old shingle has the same wind resistance as a new shingle?" The answer is obviously NO.
-
-Any engineer applying new-product test standards to aged materials is either incompetent or deliberately misleading the carrier.
-
 === REPAIRABILITY OVER MATCHING ===
 - NEVER argue "matching"—PA and NJ have NO matching requirements
 - Argue materials are NON-REPAIRABLE due to: manufacturing discontinuation, material degradation, code requirements, compromised structural integrity
-- When engineers claim "repair is feasible," counter with:
-  * What manufacturer specification allows partial repairs to this material?
-  * What building code permits the proposed repair method?
-  * How does the proposed repair restore pre-loss structural integrity?
-  * What warranty does the engineer provide for the adequacy of repairs?
 
 FORMATTING: Plain text only. NO markdown (**, #, *, etc.).
 
@@ -3104,38 +3303,33 @@ FORMATTING: Plain text only. NO markdown (**, #, *, etc.).
 METHODOLOGY FAILURES:
 1. Time on site—was 30-60 minutes adequate to inspect an entire property?
 2. Areas NOT accessed—roof, attic, crawlspace, wall cavities?
-3. Testing NOT performed—core samples, moisture readings, material testing?
-4. Equipment NOT used—drone, thermal imaging, moisture meters?
+3. Testing NOT performed—what scenario-critical tests were omitted?
+4. Equipment NOT used—drone, thermal imaging, moisture meters, core sampling?
 
 LOGICAL FAILURES:
 5. Conclusions not supported by observations—where are the logical leaps?
 6. Evidence photographed but ignored—did they document damage then dismiss it?
 7. Cherry-picked evidence—selective reporting favoring denial?
-8. Failure to consider alternative causes—did they actually rule out storm damage?
+8. Failure to consider alternative causes—did they actually rule out the claimed peril?
 
 BIAS INDICATORS:
 9. Carrier-friendly language and framing
 10. Predetermined conclusions obvious from report structure
 11. Dismissive characterizations of clear damage
-12. Failure to acknowledge ANY storm-related damage
+12. Failure to acknowledge ANY event-related damage
 
 TECHNICAL FAILURES:
-13. ASTM wind rating fallacy—applying new-product standards to aged materials
-14. Ignoring seal strip degradation and material aging
-15. Failure to consider storm-specific conditions—wind speed, direction, duration, debris
-16. Mischaracterizing damage mechanisms—conflating impact damage with wear
-17. Reliance on visual inspection when destructive testing was warranted
+${scenarioAttackVectorsTechnical(primarySc, allActiveScenarios)}
 
 === EVIDENTIARY SUFFICIENCY AUDIT (MANDATORY) ===
 Before finalizing the rebuttal letter, run a section-by-section evidentiary sufficiency audit for the engineer's major conclusions.
 For EACH material conclusion, explicitly identify:
 1. The exact statement being evaluated
-2. Whether quantifiable support is present (measurements, counts, test values, slope-by-slope observations, weather correlation)
+2. Whether quantifiable support is present (measurements, counts, test values, observations)
 3. What quantifiable data is missing
 4. Any assumption leap between observation and conclusion
 5. Contradictory evidence from the same report, photos, or other claim evidence
-6. Whether wind damage mechanisms were independently evaluated (not just hail)
-7. Whether all relevant roof elevations/components were inspected or omitted
+${scenarioSpecificEvAuditFields}
 8. Whether photos/data were misinterpreted to favor denial
 9. Whether recent physical damage consistent with the loss event was acknowledged or dismissed without objective basis
 
@@ -3143,17 +3337,7 @@ Use a support rating for every conclusion: Unsupported, Weakly Supported, Partia
 If quantifiable support is missing, say so directly and explain why the conclusion is unreliable.
 Never invent measurements, tests, or observations that are not in evidence.`;
 
-        const engineerUserContext = String(
-          typeof additionalContext === 'string'
-            ? additionalContext
-            : (additionalContext?.userContext || additionalContext?.customPrompt || '')
-        ).trim();
-
-        // ── Universal Engineer Report Dismantler (runs on EVERY engineer report) ──
-        const engineerTextForDismantler = content || engineerUserContext || '';
-        const dismantlerExtraction = runEngineerReportDismantler(engineerTextForDismantler);
-        console.log(`[darwin] EngineerReportDismantler: primary=${dismantlerExtraction.primaryScenario || 'none'}, secondary=[${dismantlerExtraction.secondaryScenarios.join(',')}], maintenanceNarrative=${dismantlerExtraction.isMaintenanceDenialNarrative}, dualCausation=${dismantlerExtraction.isDualCausation}, engineerCause="${dismantlerExtraction.engineerStatedCause.substring(0, 80)}", missingTests=${dismantlerExtraction.criticalTestingNotPerformed.length}`);
-        // Always inject — the universal core runs on every report; scenario packs are conditional
+        // Always inject dismantler findings
         systemPrompt += '\n' + dismantlerExtraction.promptInjection;
 
         userPrompt = `${claimSummary}
@@ -3187,7 +3371,7 @@ SECTION 4: CAUSATION CHALLENGES
 Challenge every causation assumption. Identify where the engineer assumed causation without proving it. Point out contradictions between observations and conclusions.
 
 SECTION 5: TECHNICAL REBUTTAL
-Point-by-point rebuttal of each finding using building science, ASTM standards, manufacturer specifications, and industry standards.
+Point-by-point rebuttal of each finding using building science, industry standards, manufacturer specifications, and applicable codes.
 
 SECTION 6: COVERAGE POSITIONING
 Frame the damage in coverage-favorable terms. Connect findings to policy provisions. Challenge any exclusion application that lacks specific policy citation.
@@ -3218,18 +3402,17 @@ For EACH major conclusion in the engineer report, provide:
 - Missing quantifiable data needed to support the conclusion
 - Assumption leap (what they assumed but did not prove)
 - Contradictory evidence from report/photos/weather/other inspections
-- Wind mechanism review status (state whether uplift/creasing/seal tab/fastener analysis was actually done)
+${scenarioSpecificEvAuditFields}
 - Inspection scope gap (areas/slopes/components not inspected)
 - Photo/data interpretation error (if the evidence was documented but misinterpreted)
 - Support rating: Unsupported / Weakly Supported / Partially Supported / Supported
-If the engineer states "no wind damage," explicitly analyze whether they performed a separate wind-causation evaluation instead of only hail-focused reasoning.
 
 [METHODOLOGY FAILURES - Full section]
 Explain in detail why the engineer's inspection and methodology were inadequate:
 - Time on site inadequate for comprehensive inspection
 - Areas not accessed or examined
-- Testing not performed (destructive testing, core samples, moisture analysis)
-- Equipment not used (drone, thermal imaging, moisture meters)
+- Testing not performed (specific to the loss type)
+- Equipment not used
 - Reliance on visual inspection when physical testing was warranted
 For EACH methodology failure, explain specifically what SHOULD have been done and WHY it matters.
 
@@ -3244,28 +3427,10 @@ This conclusion is [incorrect/unsupported/misleading] for the following reasons:
 - Why their conclusion is wrong factually
 - What evidence contradicts their conclusion
 - Whether the statement is vague/sweeping and lacks quantifiable support
-- Whether they used generalized observation where slope-by-slope or section-by-section analysis was required
-- What building codes, ASTM standards, or manufacturer specifications they violated or ignored
+${scenarioSpecificPointByPoint}
 - What they should have concluded based on the actual evidence
 
-[Cite specific codes: IRC Section X, IBC Section Y, ASTM D3161, ARMA TB-201, ${stateInfo.adminCode}, etc.]"
-
-REPEAT THIS STRUCTURE FOR EVERY FINDING IN THEIR REPORT. Do not skip any findings.
-
-[ASTM WIND RATING FALLACY REBUTTAL - If applicable]
-If the engineer cited ASTM D3161 or D7158 wind ratings:
-
-"The engineer's reliance on ASTM D3161/D7158 wind ratings to conclude the shingles 'should have resisted' storm winds represents a fundamental misapplication of laboratory testing standards.
-
-These ASTM tests are certification standards for NEW, factory-fresh materials under controlled laboratory conditions. They are NOT performance guarantees for aged, field-installed materials. The engineer commits a basic scientific error by applying laboratory test data to materials with [X] years of environmental exposure.
-
-Seal strip adhesion degrades significantly over the service life of shingles due to:
-- UV exposure breaking down asphalt polymers
-- Thermal cycling stressing adhesive bonds
-- Oxidation hardening and embrittling seal strips
-As documented in ARMA Technical Bulletin 201, this degradation is expected and normal.
-
-No manufacturer warrants that aged shingles maintain original wind ratings. To suggest otherwise is either incompetent or deliberately misleading."
+${scenarioSpecificFallacyBlock}
 
 [EVIDENCE OF BIAS - Full section]
 Detail the indicators of bias in the report:
@@ -3274,10 +3439,10 @@ Detail the indicators of bias in the report:
 - Evidence photographed but then dismissed or ignored in conclusions
 - Use of photos/data in a way that selectively favors denial over objective interpretation
 - Predetermined conclusions obvious from report structure
-- Failure to acknowledge ANY storm-related damage (statistically improbable)
+- Failure to acknowledge ANY event-related damage (statistically improbable)
 
-[UNADDRESSED RECENT PHYSICAL DAMAGE - Full section]
-Identify any recent physical damage indicators (for example: displaced materials, uplift, fresh fractures, torn tabs, impact-consistent deformation, newly exposed substrate) that were present but not properly analyzed.
+[UNADDRESSED PHYSICAL DAMAGE - Full section]
+${scenarioSpecificUnaddressedDamage}
 Explain why dismissing these indicators without objective testing is assumption-driven and unreliable.
 
 [REGULATORY VIOLATIONS - Full section]
@@ -3301,10 +3466,11 @@ Professional closing with signature block
 - The letter should be 3-4x the length of the engineer's report
 - Use plain text only - NO markdown formatting
 - Be AUTHORITATIVE and UNEQUIVOCAL - we are RIGHT and they are WRONG
-- Include specific citations to IRC, IBC, ASTM, manufacturer specs, and ${stateInfo.adminCode}
+- Include specific citations to applicable codes, standards, and ${stateInfo.adminCode}
 - NEVER cite case law - only statutes, regulations, codes, and industry standards
 - Make this letter so comprehensive that the carrier has no choice but to reconsider their position`;
         break;
+      }
 
       case 'claim_briefing':
         systemPrompt = `You are Darwin, an expert public adjuster AI assistant. Your role is to provide comprehensive claim briefings that help public adjusters quickly get up to speed on a claim's status, history, and strategic considerations.
