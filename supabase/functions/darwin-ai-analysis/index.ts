@@ -312,8 +312,8 @@ function enforceEngineerRebuttalLowSlopeOpening(result: string, primaryScenario:
   return lines.join('\n');
 }
 
-function suppressLowSlopeUnsupportedBoilerplate(result: string, engineerTheoryCorpus: string): string {
-  const theory = engineerTheoryCorpus.toLowerCase();
+function suppressLowSlopeUnsupportedBoilerplate(result: string, supportCorpus: string): string {
+  const theory = String(supportCorpus || '').toLowerCase();
   const unsupportedRules = LOW_SLOPE_FORBIDDEN_RULES.filter((rule) => {
     const supported = rule.supportTerms.some((term) => theory.includes(term.toLowerCase()));
     return !supported;
@@ -321,24 +321,34 @@ function suppressLowSlopeUnsupportedBoilerplate(result: string, engineerTheoryCo
 
   if (unsupportedRules.length === 0) return result.trim();
 
+  const shouldRemoveSegment = (segment: string) => unsupportedRules.some((rule) => rule.regex.test(segment));
+
   const filteredLines = result
     .split('\n')
     .map((line) => {
       const trimmed = line.trim();
       if (!trimmed) return '';
-      if (unsupportedRules.some((rule) => rule.regex.test(trimmed))) return '';
-      return line;
+      if (shouldRemoveSegment(trimmed)) return '';
+
+      const sentenceChunks = trimmed.match(/[^.!?]+[.!?]?/g) || [trimmed];
+      const keptChunks = sentenceChunks
+        .map((chunk) => chunk.trim())
+        .filter(Boolean)
+        .filter((chunk) => !shouldRemoveSegment(chunk));
+
+      if (keptChunks.length === 0) return '';
+      return keptChunks.join(' ').replace(/\s{2,}/g, ' ').trim();
     })
     .filter(Boolean);
 
   return filteredLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: string | null, engineerTheoryCorpus: string): string {
+function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: string | null, supportCorpus: string): string {
   if (!result || primaryScenario !== 'low_slope_snow_ice_ponding') return result;
 
   let updated = enforceEngineerRebuttalLowSlopeOpening(result, primaryScenario);
-  updated = suppressLowSlopeUnsupportedBoilerplate(updated, engineerTheoryCorpus);
+  updated = suppressLowSlopeUnsupportedBoilerplate(updated, supportCorpus);
 
   const lower = updated.toLowerCase();
 
@@ -389,7 +399,7 @@ ${LOW_SLOPE_STRUCTURAL_DISTINCTION} Even if framing can carry snow load, that do
     updated += `\n\n${sectionsToAppend.join('\n\n')}`;
   }
 
-  return updated.trim();
+  return suppressLowSlopeUnsupportedBoilerplate(updated.trim(), supportCorpus);
 }
 
 const STRUCTURED_DARWIN_ANALYSIS_TYPES = new Set<string>([
