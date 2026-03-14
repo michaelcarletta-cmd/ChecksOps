@@ -165,23 +165,102 @@ function stripExternalFormatting(text: string): string {
 const REQUIRED_LOW_SLOPE_OPENING = 'The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering.';
 
 const LOW_SLOPE_FORBIDDEN_RULES: Array<{ regex: RegExp; supportTerms: string[] }> = [
-  { regex: /\bshingle(?:s)?\b/i, supportTerms: ['shingle'] },
+  { regex: /\bshingle(?:s)?\b/i, supportTerms: ['shingle', 'shingles'] },
+  { regex: /\barchitectural\s+shingle(?:s)?\b/i, supportTerms: ['architectural shingle', 'architectural shingles'] },
   { regex: /\bthermal\s+seal(?:ing)?\b/i, supportTerms: ['thermal seal', 'thermal sealing'] },
   { regex: /\bseal\s+strip\b/i, supportTerms: ['seal strip'] },
+  { regex: /\bseal\s+failure\b/i, supportTerms: ['seal failure'] },
+  { regex: /\bfactory\s+seal(?:\s+failure)?\b/i, supportTerms: ['factory seal', 'factory seal failure'] },
   { regex: /\buplift\s+check(?:s)?\b/i, supportTerms: ['uplift check', 'uplift checks'] },
   { regex: /\buplift\s+resistance\b/i, supportTerms: ['uplift resistance'] },
-  { regex: /\bgranul(?:e|ar)\s+loss\b/i, supportTerms: ['granule loss', 'granular loss'] },
+  { regex: /\buplift\s+test(?:ing|s)?\b/i, supportTerms: ['uplift test', 'uplift testing', 'uplift tests'] },
+  { regex: /\blift\s+test(?:s)?\b/i, supportTerms: ['lift test', 'lift tests'] },
+  { regex: /\bgranul(?:e|ar)s?(?:\s+loss)?\b/i, supportTerms: ['granule', 'granules', 'granular', 'granule loss', 'granular loss'] },
   { regex: /\bfractured\s+tab(?:s)?\b/i, supportTerms: ['fractured tab', 'fractured tabs', 'tab fracture', 'fractured shingle tab'] },
   { regex: /\bARMA\b/i, supportTerms: ['arma'] },
   { regex: /\bfastener\s+pull-?out\b/i, supportTerms: ['fastener pull-out', 'fastener pullout'] },
   { regex: /\bwind-?driven\s+rain\b/i, supportTerms: ['wind-driven rain'] },
   { regex: /\bhand[-\s]?tab\s+test(?:s)?\b/i, supportTerms: ['hand-tab test', 'hand tab test', 'hand-tab tests', 'hand tab tests'] },
-  { regex: /\blift\s+test(?:s)?\b/i, supportTerms: ['lift test', 'lift tests'] },
   { regex: /\b(?:GAF|CertainTeed|Owens\s+Corning)\b/i, supportTerms: ['gaf', 'certainteed', 'owens corning'] },
   { regex: /\bcreased\s+shingle\s+tab(?:s)?\b/i, supportTerms: ['creased shingle tab', 'creased shingle tabs'] },
   { regex: /\bfractured\s+shingle(?:s)?\b/i, supportTerms: ['fractured shingle', 'fractured shingles'] },
   { regex: /\bwind\s+uplift\s+mechanics?\b/i, supportTerms: ['wind uplift mechanic', 'wind uplift mechanics'] },
+  { regex: /\bthermal\s+expansion\s+of\s+shingle(?:s)?\b/i, supportTerms: ['thermal expansion of shingle', 'thermal expansion of shingles'] },
+  { regex: /\bstructural\s+racking\b/i, supportTerms: ['structural racking'] },
+  { regex: /\bhigh[-\s]?wind(?:\s+pressure)?\b/i, supportTerms: ['high wind', 'high wind pressure'] },
+  { regex: /\bwind\s+pressure\b/i, supportTerms: ['wind pressure'] },
+  { regex: /\bpressure\s+event\b/i, supportTerms: ['pressure event'] },
 ];
+
+const LOW_SLOPE_FORBIDDEN_BULLET_LIST = [
+  'shingle / shingles',
+  'granules / granular loss',
+  'uplift test',
+  'seal failure / factory seal',
+  'thermal expansion of shingles',
+  'architectural shingles',
+  'structural racking',
+  'high wind pressure language',
+  'thermal seal',
+  'seal strip',
+  'uplift checks',
+  'fractured tabs',
+  'ARMA',
+  'fastener pull-out',
+  'wind-driven rain',
+  'hand tab test',
+  'lift test',
+  'GAF / CertainTeed / Owens Corning references',
+].map((item) => `- ${item}`).join('\n');
+
+function buildLowSlopeSupportCorpus(
+  engineerCausationSentence: string,
+  claimFactsPack: any,
+  claimFiles: Array<{ file_name?: string | null; document_classification?: string | null; extracted_text?: string | null }> = [],
+  userContext = '',
+): string {
+  const corpusParts: string[] = [];
+  const pushIfPresent = (value: string | null | undefined) => {
+    if (typeof value === 'string' && value.trim()) corpusParts.push(value.trim());
+  };
+
+  pushIfPresent(engineerCausationSentence);
+  pushIfPresent(userContext);
+
+  const docs = Array.isArray(claimFactsPack?.documents) ? claimFactsPack.documents : [];
+  for (const doc of docs.slice(0, 30)) {
+    pushIfPresent([doc?.docName, doc?.category, doc?.folderKey].filter(Boolean).join(' '));
+  }
+
+  const objections = Array.isArray(claimFactsPack?.objections) ? claimFactsPack.objections : [];
+  for (const objection of objections.slice(0, 20)) {
+    pushIfPresent(objection?.verbatim);
+    pushIfPresent(objection?.source?.docName);
+  }
+
+  const estimateHighlights = Array.isArray(claimFactsPack?.estimate?.lineItemHighlights)
+    ? claimFactsPack.estimate.lineItemHighlights
+    : [];
+  for (const highlight of estimateHighlights.slice(0, 20)) {
+    pushIfPresent(highlight?.label);
+  }
+
+  const supplementalEvidence = claimFiles
+    .filter((file) => {
+      const classification = String(file?.document_classification || '').toLowerCase();
+      const fileName = String(file?.file_name || '').toLowerCase();
+      const isEngineerReport = classification.includes('engineer') || fileName.includes('engineer');
+      return !isEngineerReport && typeof file?.extracted_text === 'string' && file.extracted_text.length > 80;
+    })
+    .slice(0, 12);
+
+  for (const file of supplementalEvidence) {
+    pushIfPresent(file.file_name || '');
+    pushIfPresent(file.extracted_text?.slice(0, 1800) || '');
+  }
+
+  return corpusParts.join('\n').toLowerCase();
+}
 
 const LOW_SLOPE_PRIORITY_ORDER = `PRIORITY ORDER (MANDATORY):
 1) timing of openings
