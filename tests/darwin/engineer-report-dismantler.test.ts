@@ -588,10 +588,9 @@ describe("EngineerReportDismantler — missing testing detection", () => {
     expect(hailMissing.length).toBeGreaterThan(0);
   });
 
-  it("detects missing wind tests", () => {
-    const result = runEngineerReportDismantler(loadFixture("engineer-wind-wear-tear-narrative.txt"));
-    // The fixture mentions some wind terms but not all required tests
-    // At minimum, criticalTestingNotPerformed should have SOME entries for wind
+  it("detects missing wind tests from multi-scenario report", () => {
+    const result = runEngineerReportDismantler(loadFixture("engineer-wind-with-hail-refs.txt"));
+    // Should detect missing tests across activated scenarios
     expect(result.criticalTestingNotPerformed.length).toBeGreaterThan(0);
   });
 
