@@ -280,12 +280,32 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
     };
   }, [draggingField, resizingField, dragOffset, resizeStart]);
 
-  // Sync fields to parent after drag/resize ends
+  // Sync fields to parent after drag/resize ends — convert to percentages
   useEffect(() => {
     if (!draggingField && !resizingField) {
-      onFieldsChange(fields);
+      emitFieldsAsPercentages(fields);
     }
   }, [draggingField, resizingField]);
+
+  // Convert pixel coordinates to percentages (0-100) relative to overlay size
+  const emitFieldsAsPercentages = useCallback((pixelFields: Field[]) => {
+    const overlay = overlayRef.current;
+    if (!overlay || pixelFields.length === 0) {
+      onFieldsChange(pixelFields.length === 0 ? [] : pixelFields);
+      return;
+    }
+    const rect = overlay.getBoundingClientRect();
+    const ow = rect.width || 600;
+    const oh = rect.height || 800;
+    const converted = pixelFields.map(f => ({
+      ...f,
+      x: parseFloat(((f.x / ow) * 100).toFixed(4)),
+      y: parseFloat(((f.y / oh) * 100).toFixed(4)),
+      width: parseFloat(((f.width / ow) * 100).toFixed(4)),
+      height: parseFloat(((f.height / oh) * 100).toFixed(4)),
+    }));
+    onFieldsChange(converted);
+  }, [onFieldsChange]);
 
   const handleResizeMouseDown = (e: React.MouseEvent, fieldId: string) => {
     e.preventDefault();
