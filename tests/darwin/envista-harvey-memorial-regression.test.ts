@@ -895,7 +895,14 @@ The engineer's methodology was fundamentally inadequate for a low-slope membrane
     expect(enforced).not.toMatch(/\bshingle\b/i);
     expect(enforced).not.toMatch(/\bARMA\b/i);
     expect(enforced).not.toMatch(/\buplift\s+check/i);
-    expect(enforced).not.toMatch(/\bgranul(?:e|ar)\s+loss\b/i);
+    expect(enforced).not.toMatch(/\buplift\s+test(?:ing|s)?\b/i);
+    expect(enforced).not.toMatch(/\bgranul(?:e|ar)s?(?:\s+loss)?\b/i);
+    expect(enforced).not.toMatch(/\bseal\s+failure\b/i);
+    expect(enforced).not.toMatch(/\bfactory\s+seal(?:\s+failure)?\b/i);
+    expect(enforced).not.toMatch(/\bthermal\s+expansion\s+of\s+shingle(?:s)?\b/i);
+    expect(enforced).not.toMatch(/\barchitectural\s+shingle(?:s)?\b/i);
+    expect(enforced).not.toMatch(/\bstructural\s+racking\b/i);
+    expect(enforced).not.toMatch(/\bhigh[-\s]?wind(?:\s+pressure)?\b|\bwind\s+pressure\b/i);
     expect(enforced).not.toMatch(/\bfractured\s+tab/i);
     expect(enforced).not.toMatch(/\bfractured\s+shingle/i);
     expect(enforced).not.toMatch(/\bfastener\s+pull-?out\b/i);
