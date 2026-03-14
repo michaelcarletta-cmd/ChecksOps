@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -6,8 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, FileSignature, Check, AlertTriangle, Clock } from "lucide-react";
+import { Loader2, FileSignature, Check, AlertTriangle, Clock, Eye, Send } from "lucide-react";
 import { resolveFieldDisplay, detectDocumentType } from "@/lib/signer-display-templates";
 
 export default function Sign() {
