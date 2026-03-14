@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Upload, FileText, Trash2, Download, Loader2, Info, Layout, Mail, MessageSquare, ChevronDown } from "lucide-react";
+import { Upload, FileText, Trash2, Download, Loader2, Info, Layout, Mail, MessageSquare, ChevronDown, Edit, Save, X } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
@@ -32,6 +32,8 @@ export const TemplatesSettings = () => {
   const queryClient = useQueryClient();
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [deleteFieldTemplateId, setDeleteFieldTemplateId] = useState<string | null>(null);
+  const [editingFieldTemplateId, setEditingFieldTemplateId] = useState<string | null>(null);
+  const [editingFieldData, setEditingFieldData] = useState<any[] | null>(null);
   const [templateForm, setTemplateForm] = useState({
     name: "",
     description: "",
@@ -138,6 +140,25 @@ export const TemplatesSettings = () => {
     onSuccess: () => {
       toast.success("Field template deleted");
       setDeleteFieldTemplateId(null);
+      queryClient.invalidateQueries({ queryKey: ["signature-field-templates"] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const updateFieldTemplateMutation = useMutation({
+    mutationFn: async ({ templateId, fieldData }: { templateId: string; fieldData: any[] }) => {
+      const { error } = await supabase
+        .from("signature_field_templates")
+        .update({ field_data: fieldData })
+        .eq("id", templateId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Field display labels saved");
+      setEditingFieldTemplateId(null);
+      setEditingFieldData(null);
       queryClient.invalidateQueries({ queryKey: ["signature-field-templates"] });
     },
     onError: (error: Error) => {
@@ -421,48 +442,149 @@ export const TemplatesSettings = () => {
                 return (
                   <div
                     key={template.id}
-                    className="flex items-start justify-between p-4 border rounded-lg bg-card hover:bg-accent/5 transition-colors"
+                    className="border rounded-lg bg-card hover:bg-accent/5 transition-colors"
                   >
-                    <div className="space-y-2 flex-1">
-                      <div className="flex items-center gap-2">
-                        <Layout className="w-4 h-4 text-primary" />
-                        <h4 className="font-medium">{template.name}</h4>
+                    <div className="flex items-start justify-between p-4">
+                      <div className="space-y-2 flex-1">
+                        <div className="flex items-center gap-2">
+                          <Layout className="w-4 h-4 text-primary" />
+                          <h4 className="font-medium">{template.name}</h4>
+                        </div>
+                        {template.description && (
+                          <p className="text-sm text-muted-foreground">{template.description}</p>
+                        )}
+                        <div className="flex gap-2 flex-wrap">
+                          <Badge variant="outline" className="text-xs">
+                            {fieldCount} total fields
+                          </Badge>
+                          {signatureCount > 0 && (
+                            <Badge variant="outline" className="text-xs bg-blue-500/10">
+                              {signatureCount} signature
+                            </Badge>
+                          )}
+                          {dateCount > 0 && (
+                            <Badge variant="outline" className="text-xs bg-green-500/10">
+                              {dateCount} date
+                            </Badge>
+                          )}
+                          {textCount > 0 && (
+                            <Badge variant="outline" className="text-xs bg-purple-500/10">
+                              {textCount} text
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Created {new Date(template.created_at).toLocaleDateString()}
+                        </p>
                       </div>
-                      {template.description && (
-                        <p className="text-sm text-muted-foreground">{template.description}</p>
-                      )}
-                      <div className="flex gap-2 flex-wrap">
-                        <Badge variant="outline" className="text-xs">
-                          {fieldCount} total fields
-                        </Badge>
-                        {signatureCount > 0 && (
-                          <Badge variant="outline" className="text-xs bg-blue-500/10">
-                            {signatureCount} signature
-                          </Badge>
-                        )}
-                        {dateCount > 0 && (
-                          <Badge variant="outline" className="text-xs bg-green-500/10">
-                            {dateCount} date
-                          </Badge>
-                        )}
-                        {textCount > 0 && (
-                          <Badge variant="outline" className="text-xs bg-purple-500/10">
-                            {textCount} text
-                          </Badge>
-                        )}
+                      <div className="flex gap-1 ml-4">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            if (editingFieldTemplateId === template.id) {
+                              setEditingFieldTemplateId(null);
+                              setEditingFieldData(null);
+                            } else {
+                              setEditingFieldTemplateId(template.id);
+                              setEditingFieldData(JSON.parse(JSON.stringify(fieldData || [])));
+                            }
+                          }}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeleteFieldTemplateId(template.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        Created {new Date(template.created_at).toLocaleDateString()}
-                      </p>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setDeleteFieldTemplateId(template.id)}
-                      className="ml-4"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+
+                    {editingFieldTemplateId === template.id && editingFieldData && (
+                      <div className="border-t p-4 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h5 className="text-sm font-semibold text-foreground">Edit Signer-Facing Labels</h5>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setEditingFieldTemplateId(null);
+                                setEditingFieldData(null);
+                              }}
+                            >
+                              <X className="w-3 h-3 mr-1" />
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => updateFieldTemplateMutation.mutate({ templateId: template.id, fieldData: editingFieldData })}
+                              disabled={updateFieldTemplateMutation.isPending}
+                            >
+                              {updateFieldTemplateMutation.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Save className="w-3 h-3 mr-1" />}
+                              Save
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="space-y-3">
+                          {editingFieldData.map((field: any, idx: number) => (
+                            <div key={idx} className="border rounded-md p-3 space-y-2 bg-muted/30">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Badge variant="secondary" className="text-xs capitalize">{field.type || "text"}</Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  Page {field.page || "?"}
+                                  {field.signerIndex !== undefined && ` · Signer ${field.signerIndex + 1}`}
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                <div>
+                                  <Label className="text-xs">Display Label</Label>
+                                  <Input
+                                    value={field.display_label || ""}
+                                    onChange={(e) => {
+                                      const updated = [...editingFieldData];
+                                      updated[idx] = { ...updated[idx], display_label: e.target.value || undefined };
+                                      setEditingFieldData(updated);
+                                    }}
+                                    placeholder="e.g., Owner Signature"
+                                    className="h-8 text-sm"
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-xs">Section Group</Label>
+                                  <Input
+                                    value={field.display_section || ""}
+                                    onChange={(e) => {
+                                      const updated = [...editingFieldData];
+                                      updated[idx] = { ...updated[idx], display_section: e.target.value || undefined };
+                                      setEditingFieldData(updated);
+                                    }}
+                                    placeholder="e.g., Signatures"
+                                    className="h-8 text-sm"
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <Label className="text-xs">Help Text</Label>
+                                <Input
+                                  value={field.display_help_text || ""}
+                                  onChange={(e) => {
+                                    const updated = [...editingFieldData];
+                                    updated[idx] = { ...updated[idx], display_help_text: e.target.value || undefined };
+                                    setEditingFieldData(updated);
+                                  }}
+                                  placeholder="e.g., Sign here to approve and authorize the contract terms."
+                                  className="h-8 text-sm"
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
