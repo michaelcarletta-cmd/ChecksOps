@@ -1,34 +1,4 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-
-// Use resilient dynamic import for pdf.js to avoid external CDN outages.
-let pdfjsLibPromise: Promise<any> | null = null;
-async function getPdfJs() {
-  if (!pdfjsLibPromise) {
-    pdfjsLibPromise = (async () => {
-      const candidates = [
-        "npm:pdfjs-dist@3.11.174/build/pdf.mjs",
-        "https://esm.sh/pdfjs-dist@3.11.174/build/pdf.mjs",
-        "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.mjs",
-      ];
-
-      let lastError: unknown = null;
-      for (const specifier of candidates) {
-        try {
-          const mod: any = await import(specifier);
-          const pdfjs = mod?.getDocument ? mod : (mod?.default?.getDocument ? mod.default : mod);
-          if (pdfjs?.getDocument) return pdfjs;
-        } catch (err) {
-          lastError = err;
-          console.warn(`[pdf.js] Failed to load from ${specifier}:`, err);
-        }
-      }
-
-      throw new Error(`Failed to load pdf.js from all sources. Last error: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
-    })();
-  }
-
-  return pdfjsLibPromise;
-}
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
