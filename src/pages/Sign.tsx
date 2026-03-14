@@ -325,137 +325,229 @@ export default function Sign() {
     );
   }
 
+  const [activeStep, setActiveStep] = useState<"review" | "sign">("review");
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-muted/30">
-      <Card className="max-w-2xl w-full">
-        <CardHeader>
+    <div className="min-h-screen bg-white text-gray-900">
+      {/* Header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
+        <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <FileSignature className="w-6 h-6" />
-            <CardTitle>Sign Document</CardTitle>
+            <FileSignature className="w-5 h-5 text-blue-600" />
+            <span className="font-semibold text-gray-900 text-sm truncate max-w-[200px]">
+              {request.document_name}
+            </span>
           </div>
-          <CardDescription>
-            {request.document_name}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <p className="text-sm">
-              <span className="font-medium">Signer:</span> {signer.signer_name}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Please review the document and complete all required fields below
-            </p>
+          <div className="flex items-center gap-1 text-xs text-gray-500">
+            <span className="hidden sm:inline">Signing as</span>
+            <span className="font-medium text-gray-700">{signer.signer_name}</span>
           </div>
+        </div>
+      </div>
 
-          {documentUrl && (
-            <div className="border rounded-lg overflow-hidden bg-muted">
-              <iframe
-                src={documentUrl}
-                className="w-full h-96"
-                title="Document Preview"
-              />
+      {/* Step tabs */}
+      <div className="bg-gray-50 border-b border-gray-200">
+        <div className="max-w-3xl mx-auto flex">
+          <button
+            onClick={() => setActiveStep("review")}
+            className={`flex-1 py-3 text-center text-sm font-medium transition-colors relative ${
+              activeStep === "review"
+                ? "text-blue-600"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <span className={`w-5 h-5 rounded-full text-xs flex items-center justify-center font-bold ${
+                activeStep === "review" ? "bg-blue-600 text-white" : "bg-gray-300 text-white"
+              }`}>1</span>
+              Review Document
+            </span>
+            {activeStep === "review" && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+            )}
+          </button>
+          <button
+            onClick={() => setActiveStep("sign")}
+            className={`flex-1 py-3 text-center text-sm font-medium transition-colors relative ${
+              activeStep === "sign"
+                ? "text-blue-600"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <span className={`w-5 h-5 rounded-full text-xs flex items-center justify-center font-bold ${
+                activeStep === "sign" ? "bg-blue-600 text-white" : "bg-gray-300 text-white"
+              }`}>2</span>
+              Sign & Complete
+            </span>
+            {activeStep === "sign" && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+            )}
+          </button>
+        </div>
+      </div>
+
+      <div className="max-w-3xl mx-auto">
+        {/* Step 1: Review Document */}
+        {activeStep === "review" && (
+          <div className="p-4 space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+              <p className="font-medium">Please review this document carefully before signing.</p>
+              <p className="text-blue-600 text-xs mt-1">Scroll through the full document, then proceed to sign.</p>
             </div>
-          )}
 
-          {validationErrors.length > 0 && (
-            <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 space-y-1">
-              <div className="flex items-center gap-2 text-destructive text-sm font-medium">
-                <AlertTriangle className="w-4 h-4" />
-                Please complete all required fields
+            {documentUrl && (
+              <div className="border border-gray-200 rounded-lg overflow-hidden shadow-sm bg-white">
+                <iframe
+                  src={documentUrl}
+                  className="w-full bg-white"
+                  style={{ height: "70vh", minHeight: "400px" }}
+                  title="Document Preview"
+                />
               </div>
-              {validationErrors.map((err, i) => (
-                <p key={i} className="text-sm text-destructive/80 ml-6">• {err}</p>
+            )}
+
+            <Button
+              onClick={() => setActiveStep("sign")}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+              size="lg"
+            >
+              I've Reviewed — Continue to Sign
+            </Button>
+          </div>
+        )}
+
+        {/* Step 2: Sign & Complete */}
+        {activeStep === "sign" && (
+          <div className="p-4 space-y-5">
+            {validationErrors.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-1">
+                <div className="flex items-center gap-2 text-red-700 text-sm font-medium">
+                  <AlertTriangle className="w-4 h-4" />
+                  Please complete all required fields
+                </div>
+                {validationErrors.map((err, i) => (
+                  <p key={i} className="text-sm text-red-600 ml-6">• {err}</p>
+                ))}
+              </div>
+            )}
+
+            <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+              <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Signing</p>
+              <p className="text-sm font-medium text-gray-900">{request.document_name}</p>
+              <p className="text-xs text-gray-500 mt-0.5">as {signer.signer_name}</p>
+            </div>
+
+            <div className="space-y-5">
+              {fields.map((field: any, index: number) => (
+                <div key={field.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">
+                      {index + 1}
+                    </span>
+                    <Label className="text-sm font-semibold text-gray-900">
+                      {field.label}
+                      {field.required !== false && <span className="text-red-500 ml-1">*</span>}
+                    </Label>
+                  </div>
+
+                  {field.type === "signature" ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-gray-500">
+                        Draw your signature below using your finger or mouse
+                      </p>
+                      <div className="border-2 border-dashed border-blue-300 rounded-lg p-1 bg-white">
+                        <canvas
+                          ref={(el) => (canvasRefs.current[field.id] = el)}
+                          width={400}
+                          height={150}
+                          className="w-full rounded cursor-crosshair bg-white"
+                          style={{ touchAction: "none" }}
+                          onMouseDown={(e) => startDrawing(field.id, e)}
+                          onMouseMove={(e) => draw(field.id, e)}
+                          onMouseUp={() => stopDrawing(field.id)}
+                          onMouseLeave={() => stopDrawing(field.id)}
+                          onTouchStart={(e) => { e.preventDefault(); startDrawing(field.id, e); }}
+                          onTouchMove={(e) => { e.preventDefault(); draw(field.id, e); }}
+                          onTouchEnd={() => stopDrawing(field.id)}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => clearSignature(field.id)}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        ↺ Clear & Redo
+                      </button>
+                    </div>
+                  ) : field.type === "checkbox" ? (
+                    <div className="flex items-start space-x-2">
+                      <Checkbox
+                        id={field.id}
+                        checked={!!fieldValues[field.id]}
+                        onCheckedChange={(checked) =>
+                          setFieldValues((prev) => ({ ...prev, [field.id]: checked }))
+                        }
+                        className="mt-0.5"
+                      />
+                      <label htmlFor={field.id} className="text-sm text-gray-700 cursor-pointer leading-snug">
+                        {field.checkboxLabel || field.label || "I agree"}
+                      </label>
+                    </div>
+                  ) : field.type === "date" ? (
+                    <Input
+                      type="date"
+                      value={fieldValues[field.id] || ""}
+                      onChange={(e) =>
+                        setFieldValues((prev) => ({ ...prev, [field.id]: e.target.value }))
+                      }
+                      className="bg-white border-gray-300 text-gray-900"
+                    />
+                  ) : (
+                    <Input
+                      type="text"
+                      value={fieldValues[field.id] || ""}
+                      onChange={(e) =>
+                        setFieldValues((prev) => ({ ...prev, [field.id]: e.target.value }))
+                      }
+                      placeholder={field.placeholder || "Enter text"}
+                      className="bg-white border-gray-300 text-gray-900"
+                    />
+                  )}
+                </div>
               ))}
             </div>
-          )}
 
-          <div className="space-y-4">
-            <Label>Complete Required Fields</Label>
-            {fields.map((field: any) => (
-              <div key={field.id} className="space-y-2">
-                <Label className="text-sm font-medium">
-                  {field.label}
-                  {field.required !== false && <span className="text-destructive ml-1">*</span>}
-                </Label>
-                {field.type === "signature" ? (
-                  <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground">
-                      Draw your signature using your mouse or touchscreen
-                    </p>
-                    <div className="border-2 border-dashed rounded-lg p-2 bg-background">
-                      <canvas
-                        ref={(el) => (canvasRefs.current[field.id] = el)}
-                        width={400}
-                        height={120}
-                        className="w-full border rounded cursor-crosshair bg-white"
-                        style={{ touchAction: "none" }}
-                        onMouseDown={(e) => startDrawing(field.id, e)}
-                        onMouseMove={(e) => draw(field.id, e)}
-                        onMouseUp={() => stopDrawing(field.id)}
-                        onMouseLeave={() => stopDrawing(field.id)}
-                        onTouchStart={(e) => { e.preventDefault(); startDrawing(field.id, e); }}
-                        onTouchMove={(e) => { e.preventDefault(); draw(field.id, e); }}
-                        onTouchEnd={() => stopDrawing(field.id)}
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => clearSignature(field.id)}
-                    >
-                      Clear Signature
-                    </Button>
-                  </div>
-                ) : field.type === "checkbox" ? (
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id={field.id}
-                      checked={!!fieldValues[field.id]}
-                      onCheckedChange={(checked) =>
-                        setFieldValues((prev) => ({ ...prev, [field.id]: checked }))
-                      }
-                    />
-                    <label htmlFor={field.id} className="text-sm text-muted-foreground cursor-pointer">
-                      {field.checkboxLabel || field.label || "I agree"}
-                    </label>
-                  </div>
-                ) : field.type === "date" ? (
-                  <Input
-                    type="date"
-                    value={fieldValues[field.id] || ""}
-                    onChange={(e) =>
-                      setFieldValues((prev) => ({ ...prev, [field.id]: e.target.value }))
-                    }
-                    className="bg-background"
-                  />
+            <div className="pt-2 pb-6 space-y-3">
+              <Button
+                onClick={handleSign}
+                disabled={signing}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                size="lg"
+              >
+                {signing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Submitting Signature...
+                  </>
                 ) : (
-                  <Input
-                    type="text"
-                    value={fieldValues[field.id] || ""}
-                    onChange={(e) =>
-                      setFieldValues((prev) => ({ ...prev, [field.id]: e.target.value }))
-                    }
-                    placeholder={field.placeholder || "Enter text"}
-                    className="bg-background"
-                  />
+                  <>
+                    <Check className="w-4 h-4 mr-2" />
+                    Complete Signature
+                  </>
                 )}
-              </div>
-            ))}
+              </Button>
+              <button
+                type="button"
+                onClick={() => setActiveStep("review")}
+                className="w-full text-center text-sm text-gray-500 hover:text-gray-700"
+              >
+                ← Back to Document Review
+              </button>
+            </div>
           </div>
-
-          <Button onClick={handleSign} disabled={signing} className="w-full">
-            {signing ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Signing...
-              </>
-            ) : (
-              "Complete Signature"
-            )}
-          </Button>
-        </CardContent>
-      </Card>
+        )}
+      </div>
     </div>
   );
 }
