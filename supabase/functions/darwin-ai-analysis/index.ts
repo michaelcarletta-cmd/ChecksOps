@@ -3152,7 +3152,7 @@ Never invent measurements, tests, or observations that are not in evidence.`;
         // ── Universal Engineer Report Dismantler (runs on EVERY engineer report) ──
         const engineerTextForDismantler = content || engineerUserContext || '';
         const dismantlerExtraction = runEngineerReportDismantler(engineerTextForDismantler);
-        console.log(`[darwin] EngineerReportDismantler: scenarios=${dismantlerExtraction.activatedScenarios.join(',') || 'none'}, maintenanceNarrative=${dismantlerExtraction.isMaintenanceDenialNarrative}, dualCausation=${dismantlerExtraction.isDualCausation}, keywords=${dismantlerExtraction.matchedKeywords.length}`);
+        console.log(`[darwin] EngineerReportDismantler: primary=${dismantlerExtraction.primaryScenario || 'none'}, secondary=[${dismantlerExtraction.secondaryScenarios.join(',')}], maintenanceNarrative=${dismantlerExtraction.isMaintenanceDenialNarrative}, dualCausation=${dismantlerExtraction.isDualCausation}, engineerCause="${dismantlerExtraction.engineerStatedCause.substring(0, 80)}", missingTests=${dismantlerExtraction.criticalTestingNotPerformed.length}`);
         // Always inject — the universal core runs on every report; scenario packs are conditional
         systemPrompt += '\n' + dismantlerExtraction.promptInjection;
 
