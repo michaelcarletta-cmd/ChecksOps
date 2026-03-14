@@ -3467,7 +3467,7 @@ Property Address: ${claim.policyholder_address || '[Property Address]'}
 Date of Loss: ${claim.loss_date || '[Date of Loss]'}
 
 [OPENING - 1-2 paragraphs]
-State that we have reviewed the engineering report dated [DATE], prepared by [ENGINEER NAME/FIRM]. Summarize that the report is fundamentally flawed and cannot be relied upon to support a coverage determination.
+${lowSlopeOpeningDirective}
 
 [EVIDENTIARY SUFFICIENCY AUDIT - REQUIRED FIRST BODY SECTION]
 Create a section titled: "Evidentiary Sufficiency Audit of Engineer Conclusions."
