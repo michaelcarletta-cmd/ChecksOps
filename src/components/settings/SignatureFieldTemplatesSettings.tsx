@@ -343,37 +343,101 @@ export function SignatureFieldTemplatesSettings({ embedded = false }: SignatureF
             </div>
 
             {editingTemplate && !samplePdfUrl && (
-              <div className="p-4 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground mb-2">
-                  Current fields: {editingTemplate.field_data?.length || 0} placed
-                </p>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {Object.entries(getFieldTypeCounts(editingTemplate.field_data || [])).map(([type, count]) => (
-                    <Badge key={type} variant="secondary">
-                      {type}: {count as number}
-                    </Badge>
-                  ))}
+              <div className="space-y-4">
+                <div className="p-4 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Current fields: {editingTemplate.field_data?.length || 0} placed
+                  </p>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {Object.entries(getFieldTypeCounts(editingTemplate.field_data || [])).map(([type, count]) => (
+                      <Badge key={type} variant="secondary">
+                        {type}: {count as number}
+                      </Badge>
+                    ))}
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                  >
+                    {isUploading ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Upload className="w-4 h-4 mr-2" />
+                    )}
+                    Upload PDF to Edit Fields
+                  </Button>
                 </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                >
-                  {isUploading ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Upload className="w-4 h-4 mr-2" />
-                  )}
-                  Upload PDF to Edit Fields
-                </Button>
+
+                {/* Inline display label editing for existing fields */}
+                {(editingTemplate.field_data?.length || 0) > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium">Signer-Facing Labels</p>
+                    <p className="text-xs text-muted-foreground">
+                      Edit what the signer sees for each field. These are display-only and do not affect field IDs or submission.
+                    </p>
+                    {(editingTemplate.field_data as any[]).map((field: any, idx: number) => (
+                      <div key={field.id || idx} className="border rounded-lg p-3 space-y-2 bg-background">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs capitalize">{field.type}</Badge>
+                          <span className="text-xs text-muted-foreground">Page {field.page ?? 1}</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-xs">Display Label</Label>
+                            <Input
+                              value={field.display_label || ""}
+                              onChange={(e) => {
+                                const updated = [...editingTemplate.field_data as any[]];
+                                updated[idx] = { ...updated[idx], display_label: e.target.value || undefined };
+                                setEditingTemplate({ ...editingTemplate, field_data: updated });
+                                setPlacedFields(updated);
+                              }}
+                              placeholder="e.g., Owner Signature"
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Section Group</Label>
+                            <Input
+                              value={field.display_section || ""}
+                              onChange={(e) => {
+                                const updated = [...editingTemplate.field_data as any[]];
+                                updated[idx] = { ...updated[idx], display_section: e.target.value || undefined };
+                                setEditingTemplate({ ...editingTemplate, field_data: updated });
+                                setPlacedFields(updated);
+                              }}
+                              placeholder="e.g., Signatures"
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="text-xs">Help Text</Label>
+                          <Input
+                            value={field.display_help_text || ""}
+                            onChange={(e) => {
+                              const updated = [...editingTemplate.field_data as any[]];
+                              updated[idx] = { ...updated[idx], display_help_text: e.target.value || undefined };
+                              setEditingTemplate({ ...editingTemplate, field_data: updated });
+                              setPlacedFields(updated);
+                            }}
+                            placeholder="e.g., Sign here to approve the contract terms."
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
