@@ -7770,7 +7770,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       analysisResult = enforceLowSlopeRebuttalRequirements(
         analysisResult,
         enforcedScenario,
-        engineerTheoryCorpusForFilters,
+        lowSlopeSupportCorpusForFilters,
       );
     }
 
