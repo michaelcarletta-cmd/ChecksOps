@@ -29,10 +29,9 @@ async function log(sb: any, e: LogEntry) {
 }
 
 async function failRequest(sb: any, id: string, error: string) {
-  // Only set status=failed if not already in a deliberate terminal/error state
   const { data: current } = await sb
     .from("signature_requests")
-    .select("status, provider_status")
+    .select("status")
     .eq("id", id)
     .single();
 
@@ -44,19 +43,16 @@ async function failRequest(sb: any, id: string, error: string) {
     .update({
       ...(alreadyTerminal ? {} : { status: "failed" }),
       last_error: error,
+      last_attempted_at: new Date().toISOString(),
     })
     .eq("id", id);
 }
 
 // ---------------------------------------------------------------------------
-// Resend direct send
+// Resend email delivery
 // ---------------------------------------------------------------------------
 
-async function sendResend(
-  to: string,
-  subject: string,
-  html: string,
-) {
+async function sendResend(to: string, subject: string, html: string) {
   const apiKey = Deno.env.get("RESEND_API_KEY");
   if (!apiKey) throw new Error("RESEND_API_KEY not configured");
 
@@ -87,77 +83,7 @@ async function sendResend(
 }
 
 // ---------------------------------------------------------------------------
-// Make / SignNow send (server-side)
-// ---------------------------------------------------------------------------
-
-async function sendMake(
-  webhookUrl: string,
-  request: any,
-  claim: any,
-  documentSignedUrl: string,
-  callbackUrl: string,
-  traceId: string,
-) {
-  const payload = {
-    request_id: request.id,
-    trace_id: traceId,
-    claim_id: request.claim_id,
-    claim_number: claim.claim_number,
-    policy_number: claim.policy_number,
-    policyholder_name: claim.policyholder_name,
-    policyholder_email: claim.policyholder_email,
-    document_name: request.document_name,
-    document_url: documentSignedUrl,
-    field_data: request.field_data,
-    signers: (request.signature_signers || []).map((s: any) => ({
-      name: s.signer_name,
-      email: s.signer_email,
-      type: s.signer_type,
-      order: s.signing_order,
-    })),
-    callback_url: callbackUrl,
-  };
-
-  const res = await fetch(webhookUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  const text = await res.text();
-  let json: any = null;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    // response may not be JSON
-  }
-
-  return { ok: res.ok, status: res.status, body: json ?? text };
-}
-
-/** Extract a provider-side ID from Make/SignNow response */
-function extractProviderId(body: any): string | null {
-  if (!body || typeof body !== "object") return null;
-  // Common SignNow / Make response fields
-  const candidates = [
-    body.envelope_id,
-    body.envelopeId,
-    body.document_id,
-    body.documentId,
-    body.request_id,
-    body.requestId,
-    body.workflow_id,
-    body.workflowId,
-    body.id,
-  ];
-  for (const v of candidates) {
-    if (v && typeof v === "string") return v;
-  }
-  return null;
-}
-
-// ---------------------------------------------------------------------------
-// Email HTML builder — full valid HTML with CTA button
+// Email HTML builder
 // ---------------------------------------------------------------------------
 
 function emailHtml(signer: any, request: any, signUrl: string): string {
@@ -284,7 +210,6 @@ Deno.serve(async (req) => {
     }
 
     claimId = request.claim_id;
-    const claim = request.claims;
     const signersArr: any[] = request.signature_signers || [];
 
     await log(sb, {
@@ -294,34 +219,8 @@ Deno.serve(async (req) => {
       payload: { document_name: request.document_name },
     });
 
-    // ── load company branding ONCE ──
-    const { data: branding } = await sb
-      .from("company_branding")
-      .select("signnow_make_webhook_url")
-      .limit(1)
-      .maybeSingle();
-
-    // ── determine delivery mode ──
-    let deliveryMode: "manual_bypass" | "make_signnow" | "resend_direct";
-
+    // ── manual bypass (generate links, skip email) ──
     if (skipEmail) {
-      deliveryMode = "manual_bypass";
-    } else {
-      deliveryMode = branding?.signnow_make_webhook_url
-        ? "make_signnow"
-        : "resend_direct";
-    }
-
-    await log(sb, {
-      request_id: requestId, signer_id: null, claim_id: claimId,
-      stage: "delivery_mode_resolved", status: "ok",
-      message: `Delivery mode: ${deliveryMode}`,
-      payload: { deliveryMode },
-    });
-
-    // ── manual bypass ──
-    if (deliveryMode === "manual_bypass") {
-      // Validate every signer has an access_token
       const missingTokenSigners = signersArr.filter((s: any) => !s.access_token);
       if (missingTokenSigners.length > 0) {
         const msg = `${missingTokenSigners.length} signer(s) missing access_token`;
@@ -346,7 +245,16 @@ Deno.serve(async (req) => {
         status: "pending",
         delivery_mode: "manual_bypass",
         provider_status: "manual_bypass",
+        last_attempted_at: new Date().toISOString(),
       }).eq("id", requestId);
+
+      // Update claim reference
+      if (claimId) {
+        await sb.from("claims").update({
+          latest_signature_request_id: requestId,
+          updated_at: new Date().toISOString(),
+        }).eq("id", claimId);
+      }
 
       await log(sb, {
         request_id: requestId, signer_id: null, claim_id: claimId,
@@ -358,80 +266,7 @@ Deno.serve(async (req) => {
       return respond({ success: true, mode: "manual_bypass", signerLinks });
     }
 
-    // ── make_signnow ──
-    if (deliveryMode === "make_signnow") {
-      const webhookUrl = branding!.signnow_make_webhook_url!;
-
-      // Generate a signed URL for the document — 72h for Make ingestion + retries
-      const { data: urlData } = await sb.storage
-        .from("claim-files")
-        .createSignedUrl(request.document_path, 259200); // 72 hours
-
-      if (!urlData?.signedUrl) {
-        const msg = "Could not generate signed URL for document";
-        await log(sb, { request_id: requestId, signer_id: null, claim_id: claimId, stage: "document_url", status: "error", message: msg, payload: null });
-        throw new Error(msg);
-      }
-
-      const callbackUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/signature-webhook`;
-      const traceId = `esign-${requestId}`;
-
-      await log(sb, {
-        request_id: requestId, signer_id: null, claim_id: claimId,
-        stage: "make_webhook_sending", status: "in_progress",
-        message: `POSTing to Make webhook`,
-        payload: { webhookUrl: webhookUrl.substring(0, 60) + "...", traceId },
-      });
-
-      const makeResult = await sendMake(webhookUrl, request, claim, urlData.signedUrl, callbackUrl, traceId);
-
-      const providerId = extractProviderId(makeResult.body);
-
-      await log(sb, {
-        request_id: requestId, signer_id: null, claim_id: claimId,
-        stage: "make_webhook_response", status: makeResult.ok ? "ok" : "error",
-        message: `Make responded ${makeResult.status}`,
-        payload: { status: makeResult.status, body: makeResult.body, provider_id: providerId },
-      });
-
-      if (!makeResult.ok) {
-        await sb.from("signature_requests").update({
-          status: "failed",
-          delivery_mode: "make_signnow",
-          last_error: `Make webhook returned ${makeResult.status}`,
-          last_provider_response: typeof makeResult.body === "string" ? makeResult.body : JSON.stringify(makeResult.body),
-        }).eq("id", requestId);
-
-        throw new Error(`Make webhook failed with status ${makeResult.status}`);
-      }
-
-      await sb.from("signature_requests").update({
-        status: "pending",
-        delivery_mode: "make_signnow",
-        sent_at: new Date().toISOString(),
-        provider_status: "submitted_to_provider",
-        provider_message_id: providerId,
-        last_provider_response: typeof makeResult.body === "string" ? makeResult.body : JSON.stringify(makeResult.body),
-      }).eq("id", requestId);
-
-      // Mark signers as queued — not yet delivered
-      for (const signer of signersArr) {
-        await sb.from("signature_signers").update({
-          delivery_status: "submitted_to_provider",
-        }).eq("id", signer.id);
-      }
-
-      await log(sb, {
-        request_id: requestId, signer_id: null, claim_id: claimId,
-        stage: "function_complete", status: "ok",
-        message: "Submitted to Make/SignNow",
-        payload: { provider_id: providerId },
-      });
-
-      return respond({ success: true, mode: "make_signnow", provider_id: providerId });
-    }
-
-    // ── resend_direct ──
+    // ── Resend email delivery ──
     const appUrl = "https://freedomclaims.lovable.app";
     const results: { signer_id: string; success: boolean; error?: string }[] = [];
 
@@ -505,8 +340,27 @@ Deno.serve(async (req) => {
       delivery_mode: "resend_direct",
       sent_at: allFailed ? null : new Date().toISOString(),
       last_error: allFailed ? "All emails failed" : someFailed ? "Some emails failed" : null,
+      last_attempted_at: new Date().toISOString(),
       provider_status: providerStatus,
     }).eq("id", requestId);
+
+    // Update claim reference
+    if (claimId) {
+      await sb.from("claims").update({
+        latest_signature_request_id: requestId,
+        updated_at: new Date().toISOString(),
+      }).eq("id", claimId);
+    }
+
+    // Log to claim_updates timeline
+    if (claimId && !allFailed) {
+      const signerNames = signersArr.map((s: any) => s.signer_name).join(", ");
+      await sb.from("claim_updates").insert({
+        claim_id: claimId,
+        content: `📝 Signature request sent for "${request.document_name}" to ${signerNames}`,
+        update_type: "esign",
+      });
+    }
 
     await log(sb, {
       request_id: requestId, signer_id: null, claim_id: claimId,
@@ -529,7 +383,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ error: msg }), {
+    return new Response(JSON.stringify({ error: msg, stage: "function_error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

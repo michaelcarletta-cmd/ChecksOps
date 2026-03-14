@@ -27,8 +27,6 @@ verify_jwt = false
 [functions.send-signature-request]
 verify_jwt = false
 
-[functions.esign-send]
-verify_jwt = false
 
 [functions.composite-endorsement-signatures]
 verify_jwt = false
