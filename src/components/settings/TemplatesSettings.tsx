@@ -32,6 +32,8 @@ export const TemplatesSettings = () => {
   const queryClient = useQueryClient();
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [deleteFieldTemplateId, setDeleteFieldTemplateId] = useState<string | null>(null);
+  const [editingFieldTemplateId, setEditingFieldTemplateId] = useState<string | null>(null);
+  const [editingFieldData, setEditingFieldData] = useState<any[] | null>(null);
   const [templateForm, setTemplateForm] = useState({
     name: "",
     description: "",
