@@ -164,6 +164,16 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
   const createRequestMutation = useMutation({
     mutationFn: async ({ skipEmail = false }: { skipEmail?: boolean }) => {
       if (!generatedDocPath) throw new Error("Missing required data");
+
+      // Guard against stale/missing storage files to avoid sending broken sign links
+      const { data: docCheck, error: docCheckError } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(generatedDocPath, 60);
+
+      if (docCheckError || !docCheck?.signedUrl) {
+        throw new Error("Document file is missing in storage. Please regenerate the document before sending.");
+      }
+
       const docName = sourceType === "claim_file" 
         ? selectedClaimFile?.file_name || "Document" 
         : selectedTemplate?.name || "Document";
