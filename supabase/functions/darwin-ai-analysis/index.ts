@@ -3304,6 +3304,7 @@ Be specific, professional, and provide communications that are ready to copy and
 
         // Build scenario-specific attack vectors based on primary scenario
         const primarySc = dismantlerExtraction.primaryScenario || '';
+        engineerRebuttalPrimaryScenario = primarySc || null;
         const allActiveScenarios = new Set([primarySc, ...dismantlerExtraction.secondaryScenarios].filter(Boolean));
 
         const scenarioAttackVectors = buildScenarioAttackVectors(primarySc, allActiveScenarios);
