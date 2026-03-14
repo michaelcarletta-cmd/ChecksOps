@@ -2346,7 +2346,7 @@ When generating rebuttals:
         // ── Universal Engineer Report Dismantler (ALWAYS runs on denial rebuttals) ──
         const denialTextForDismantler = content || '';
         const denialDismantler = runEngineerReportDismantler(denialTextForDismantler);
-        console.log(`[darwin] Denial EngineerReportDismantler: scenarios=${denialDismantler.activatedScenarios.join(',') || 'none'}, maintenanceNarrative=${denialDismantler.isMaintenanceDenialNarrative}, dualCausation=${denialDismantler.isDualCausation}, triggerSignals=${denialDismantler.signals.triggerEventSignals.length}, exclusionSignals=${denialDismantler.signals.denialNarrativeSignals.length}`);
+        console.log(`[darwin] Denial EngineerReportDismantler: primary=${denialDismantler.primaryScenario || 'none'}, secondary=[${denialDismantler.secondaryScenarios.join(',')}], maintenanceNarrative=${denialDismantler.isMaintenanceDenialNarrative}, dualCausation=${denialDismantler.isDualCausation}, engineerCause="${denialDismantler.engineerStatedCause.substring(0, 80)}", missingTests=${denialDismantler.criticalTestingNotPerformed.length}`);
         // Always inject — universal core runs on every denial; scenario packs are conditional within
         systemPrompt += '\n' + denialDismantler.promptInjection;
 
