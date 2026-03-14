@@ -1308,31 +1308,38 @@ function buildScenarioAttackVectors(primary: string, allActive: Set<string>): st
   if (primary === 'low_slope_snow_ice_ponding') {
     return `=== LOW-SLOPE / SNOW / ICE / MEMBRANE ATTACK APPROACH ===
 MANDATORY THEORY SUMMARY (OPENING SENTENCE):
-"The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering."
+"The engineering report attributes the water intrusion to snow/ice meltwater penetrated age-related and maintenance-deferred openings in the low-slope roof covering."
 
-Do NOT default to generic storm/wind envelope rhetoric in this scenario.
-Unless the engineer's causation conclusion explicitly relies on wind-shingle mechanics, do NOT use:
-- high-wind or pressure event
-- fastener pull-out testing
-- uplift resistance
+Do NOT default to generic storm/wind/shingle language in this scenario.
+Unless the engineer's causation conclusion explicitly relies on it, do NOT use:
+- shingle
+- thermal seal
+- uplift checks
+- granular loss
+- fractured tabs
+- ARMA
+- fastener pull-out
 - wind-driven rain
+- high-wind/pressure event
+- uplift resistance
 - structural racking
 - fastener back-out
 
 For EVERY finding in their report, ask and answer:
-- What destructive membrane testing was performed (core cuts, seam adhesion/peel tests)?
+- What destructive membrane testing was performed (membrane core cuts, seam adhesion/peel testing)?
 - What drainage-capacity analysis was performed (drain size, obstruction, discharge rate)?
-- What snow-water equivalent / runoff analysis was performed?
+- What snow-water equivalent/runoff analysis was performed?
 - What leak-path tracing was performed from entry point to interior manifestation?
 - What moisture mapping (IR and/or meter-based) was performed?
-- Did the engineer differentiate event-driven membrane stress from pre-existing deterioration with DATED evidence?
-- Where is proof of timing for the alleged openings?
+- Where is proof of timing of openings?
+- Did the engineer distinguish structural snow-load analysis from membrane watertightness analysis?
 
 When the engineer claims "deterioration" or "deferred maintenance," ATTACK THIS with:
-- No membrane core cuts or seam testing = no objective basis to time openings
+- No membrane core cuts or seam adhesion/peel testing = no objective basis to time openings
+- No drainage/runoff/leak-path/moisture mapping analysis = no objective basis for causation
 - Admitted snow impeded drainage + standing water + freeze-thaw stress contradicts a deterioration-only conclusion
 - Susceptibility to damage is not proof that deterioration alone caused the loss
-- Standing water, ice dams, and snowmelt infiltration are event-driven hydraulic loading forces
+- Structural snow-load discussion does not prove membrane watertightness causation
 - The report must prove deterioration ALONE caused the loss; assumptions are insufficient`;
   }
 
