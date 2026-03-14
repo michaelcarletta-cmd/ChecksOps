@@ -31,6 +31,10 @@ interface Field {
   required: boolean;
   signerIndex?: number;
   page?: number;
+  display_label?: string;
+  display_help_text?: string;
+  display_section?: string;
+  display_order?: number;
 }
 
 interface FieldPlacementEditorProps {
