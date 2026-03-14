@@ -470,49 +470,102 @@ export default function Sign() {
             </button>
 
             <div className="space-y-5">
-              {fields.map((field: any, index: number) => {
-                // Build a descriptive label based on field type, page, and position
-                const pageNum = field.page ?? 1;
-                const yPos = field.y;
-                let positionHint = "";
-                if (yPos != null) {
-                  if (yPos < 0.33) positionHint = "upper section";
-                  else if (yPos < 0.66) positionHint = "middle section";
-                  else positionHint = "lower section";
-                }
-
-                // Count fields of same type on same page for disambiguation
-                const sameTypeOnPage = fields.filter(
-                  (f: any) => f.type === field.type && (f.page ?? 1) === pageNum
-                );
-                const typeLabel = field.type === "signature" ? "Signature" 
-                  : field.type === "checkbox" ? "Checkbox"
-                  : field.type === "date" ? "Date"
-                  : "Text";
+              {(() => {
+                // Detect document type for template-based labels
+                const detectedDocType = detectDocumentType(request.document_name || "");
                 
-                let displayLabel = field.label;
-                // Override generic/duplicate labels with contextual ones
-                if (!field.label || field.label === `${typeLabel} ${index + 1}` || sameTypeOnPage.length > 1) {
-                  const indexOnPage = sameTypeOnPage.indexOf(field) + 1;
-                  displayLabel = sameTypeOnPage.length > 1
-                    ? `${typeLabel} field ${indexOnPage} on page ${pageNum}`
-                    : `${typeLabel} field on page ${pageNum}`;
-                }
+                // Pre-compute type counts for template key resolution
+                const typeCounters: Record<string, number> = {};
+                const fieldsWithDisplay = fields.map((field: any) => {
+                  const fieldType = field.type || "text";
+                  typeCounters[fieldType] = (typeCounters[fieldType] || 0) + 1;
+                  const indexAmongSameType = typeCounters[fieldType];
+                  
+                  const displayMeta = resolveFieldDisplay(field, detectedDocType, indexAmongSameType);
+                  return { ...field, _displayMeta: displayMeta, _indexAmongType: indexAmongSameType };
+                });
 
-                return (
+                // Group by section if display_section exists
+                const sections = new Map<string, typeof fieldsWithDisplay>();
+                fieldsWithDisplay.forEach(f => {
+                  const section = f._displayMeta?.display_section || "__default__";
+                  if (!sections.has(section)) sections.set(section, []);
+                  sections.get(section)!.push(f);
+                });
+
+                // Sort within sections by display_order if available
+                sections.forEach((sectionFields) => {
+                  sectionFields.sort((a: any, b: any) => {
+                    const orderA = a._displayMeta?.display_order ?? 999;
+                    const orderB = b._displayMeta?.display_order ?? 999;
+                    return orderA - orderB;
+                  });
+                });
+
+                let globalIndex = 0;
+
+                return Array.from(sections.entries()).map(([sectionName, sectionFields]) => (
+                  <div key={sectionName} className="space-y-3">
+                    {sectionName !== "__default__" && (
+                      <div className="border-b border-gray-200 pb-1 pt-2">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{sectionName}</p>
+                      </div>
+                    )}
+                    {sectionFields.map((field: any) => {
+                      const currentIndex = globalIndex++;
+                      const pageNum = field.page ?? 1;
+                      const yPos = field.y;
+                      let positionHint = "";
+                      if (yPos != null) {
+                        if (yPos < 33) positionHint = "upper section";
+                        else if (yPos < 66) positionHint = "middle section";
+                        else positionHint = "lower section";
+                      }
+
+                      const displayMeta = field._displayMeta;
+                      
+                      // Use display_label if available, otherwise fallback
+                      let displayLabel = displayMeta?.display_label;
+                      if (!displayLabel) {
+                        const typeLabel = field.type === "signature" ? "Signature" 
+                          : field.type === "checkbox" ? "Checkbox"
+                          : field.type === "date" ? "Date"
+                          : "Text";
+                        const sameTypeOnPage = fields.filter(
+                          (f: any) => f.type === field.type && (f.page ?? 1) === pageNum
+                        );
+                        if (!field.label || sameTypeOnPage.length > 1) {
+                          const indexOnPage = sameTypeOnPage.indexOf(field) + 1;
+                          displayLabel = sameTypeOnPage.length > 1
+                            ? `${typeLabel} field ${indexOnPage} on page ${pageNum}`
+                            : `${typeLabel} field on page ${pageNum}`;
+                        } else {
+                          displayLabel = field.label;
+                        }
+                      }
+
+                      const helpText = displayMeta?.display_help_text;
+
+                      return (
                 <div key={field.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">
-                      {index + 1}
+                      {currentIndex + 1}
                     </span>
                     <Label className="text-sm font-semibold text-gray-900">
                       {displayLabel}
                       {field.required !== false && <span className="text-red-500 ml-1">*</span>}
                     </Label>
                   </div>
-                  <p className="text-xs text-gray-400 mb-3 ml-8">
-                    This field applies to page {pageNum} of the document above{positionHint ? ` — ${positionHint}` : ""}
-                  </p>
+                  {helpText ? (
+                    <p className="text-xs text-gray-500 mb-3 ml-8">
+                      {helpText}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-400 mb-3 ml-8">
+                      This field applies to page {pageNum} of the document above{positionHint ? ` — ${positionHint}` : ""}
+                    </p>
+                  )}
 
                   {field.type === "signature" ? (
                     <div className="space-y-2">
