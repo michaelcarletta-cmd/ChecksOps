@@ -14,7 +14,7 @@ import * as path from "path";
 // ─── Constants (mirrored from edge function) ─────────────────────────────────
 
 const REQUIRED_LOW_SLOPE_OPENING =
-  "The engineering report attributes the water intrusion to snow/ice meltwater penetrated age-related and maintenance-deferred openings in the low-slope roof covering.";
+  "The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering.";
 
 const TRIGGER_EVENT_KEYWORDS = [
   "storm","wind","hail","rain","snow","ice","freeze",

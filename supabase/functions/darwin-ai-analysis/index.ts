@@ -1308,7 +1308,7 @@ function buildScenarioAttackVectors(primary: string, allActive: Set<string>): st
   if (primary === 'low_slope_snow_ice_ponding') {
     return `=== LOW-SLOPE / SNOW / ICE / MEMBRANE ATTACK APPROACH ===
 MANDATORY THEORY SUMMARY (OPENING SENTENCE):
-"The engineering report attributes the water intrusion to snow/ice meltwater penetrated age-related and maintenance-deferred openings in the low-slope roof covering."
+"The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering."
 
 Do NOT default to generic storm/wind/shingle language in this scenario.
 Unless the engineer's causation conclusion explicitly relies on it, do NOT use:
