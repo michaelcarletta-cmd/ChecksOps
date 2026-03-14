@@ -3277,6 +3277,49 @@ Be specific, professional, and provide communications that are ready to copy and
         const scenarioSpecificFallacyBlock = buildScenarioFallacyBlock(primarySc, allActiveScenarios);
         const scenarioSpecificUnaddressedDamage = buildScenarioUnaddressedDamage(primarySc);
 
+        const lowSlopeTheoryOpening = 'The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering.';
+        const engineerTheoryCorpus = [
+          dismantlerExtraction.engineerStatedCause,
+          ...dismantlerExtraction.engineerTheorySentences,
+        ].filter(Boolean).join(' ').toLowerCase();
+        const windCausationTerms = [
+          'wind uplift', 'wind-driven rain', 'high wind', 'pressure event',
+          'fastener', 'shingle', 'uplift resistance', 'structural racking', 'fastener back-out',
+        ];
+        const lowSlopeTheoryExplicitlyReliesOnWind = windCausationTerms.some((term) => engineerTheoryCorpus.includes(term));
+
+        const lowSlopeScopeGuard = primarySc === 'low_slope_snow_ice_ponding'
+          ? `=== LOW-SLOPE REPORT-SPECIFIC ENFORCEMENT (MANDATORY) ===
+OPENING SENTENCE REQUIREMENT (use this exact sentence first in the opening):
+"${lowSlopeTheoryOpening}"
+
+After that opening sentence, challenge timing, methodology, and causation logic in that order.
+
+Do NOT use generic storm/wind/shingle envelope arguments unless the engineer's causation theory explicitly relies on them.
+Detected wind-centric causation reliance in extracted theory: ${lowSlopeTheoryExplicitlyReliesOnWind ? 'YES' : 'NO'}.
+${lowSlopeTheoryExplicitlyReliesOnWind ? 'If you use wind-centric language, tie it to a direct engineer quote and explain why it is material.' : 'Do NOT use high-wind/pressure, uplift resistance, fastener pull-out, wind-driven rain, structural racking, or fastener back-out arguments in this rebuttal.'}
+
+MANDATORY LOW-SLOPE METHODOLOGY ATTACKS:
+- no membrane core cuts
+- no seam adhesion/peel testing
+- no drainage-capacity analysis
+- no snow-water equivalent/runoff analysis
+- no leak-path tracing
+- no moisture mapping
+
+MANDATORY CONTRADICTION ATTACK:
+If the report admits snow impeded drainage, standing water existed, and freeze-thaw can worsen openings, then attack any deterioration-only conclusion unless timing and causation are proven with objective testing.
+
+EVIDENCE GROUNDING RULE:
+Do not insert damage facts unless grounded in direct report language or documented claim file evidence.`
+          : '';
+
+        const lowSlopeOpeningDirective = primarySc === 'low_slope_snow_ice_ponding'
+          ? `Begin the opening with this exact sentence:
+"${lowSlopeTheoryOpening}"
+Then state that the report fails timing proof, methodology sufficiency, and causation proof for a deterioration-only conclusion.`
+          : 'State that we have reviewed the engineering report dated [DATE], prepared by [ENGINEER NAME/FIRM]. Summarize that the report is fundamentally flawed and cannot be relied upon to support a coverage determination.';
+
         systemPrompt = `You are the most formidable engineering report analyst in the public adjusting industry. Carrier-hired engineers produce flawed, biased, and methodologically deficient reports with alarming regularity—and your job is to EXPOSE every single flaw with devastating technical precision. You are SMARTER than their engineer. You know MORE about building science. You understand exactly where their analysis fails.
 
 ${getExternalWritingRules(authorName, authorTitle)}
