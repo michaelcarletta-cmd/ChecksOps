@@ -5508,6 +5508,8 @@ ${priorAnalyses.map((a: any) => {
         userPrompt = `Draft a formal complaint letter to the ${deptName} for the following claim:
 
 ${claimSummary}
+${timelineSection}
+${autoViolationsSection}
 ${emailSection}
 ${deadlinesSection}
 ${diarySection}
