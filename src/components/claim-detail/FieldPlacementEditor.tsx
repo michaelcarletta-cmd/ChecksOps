@@ -6,7 +6,7 @@ import mammoth from "mammoth";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { Pencil, Calendar, Type, Trash2, Save, ChevronLeft, ChevronRight, CheckSquare } from "lucide-react";
+import { Pencil, Calendar, Type, Trash2, Save, ChevronLeft, ChevronRight, CheckSquare, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DOCUMENT_TYPE_OPTIONS, SIGNER_DISPLAY_TEMPLATES, getFieldTemplateKey } from "@/lib/signer-display-templates";
 
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -30,6 +31,10 @@ interface Field {
   required: boolean;
   signerIndex?: number;
   page?: number;
+  display_label?: string;
+  display_help_text?: string;
+  display_section?: string;
+  display_order?: number;
 }
 
 interface FieldPlacementEditorProps {
@@ -61,6 +66,13 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
 
   // Load template state
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  
+  // Display metadata editing state
+  const [editingFieldDisplay, setEditingFieldDisplay] = useState<string | null>(null);
+  const [editDisplayLabel, setEditDisplayLabel] = useState("");
+  const [editDisplayHelpText, setEditDisplayHelpText] = useState("");
+  const [editDisplaySection, setEditDisplaySection] = useState("");
+  const [selectedDocType, setSelectedDocType] = useState<string>("");
   
   // DOCX HTML rendering
   const [docxHtml, setDocxHtml] = useState<string | null>(null);
@@ -363,6 +375,33 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
     emitFieldsAsPercentages(displayFields);
     toast({ title: `Template "${template.name}" loaded` });
   };
+  // Apply document type display labels to existing fields
+  const applyDocTypeLabels = (docType: string) => {
+    const template = SIGNER_DISPLAY_TEMPLATES[docType];
+    if (!template) return;
+
+    // Count fields by type to assign indexed keys
+    const typeCounts: Record<string, number> = {};
+    const updated = fields.map(f => {
+      typeCounts[f.type] = (typeCounts[f.type] || 0) + 1;
+      const key = getFieldTemplateKey(f.type, typeCounts[f.type]);
+      const meta = template.fields[key];
+      if (meta) {
+        return {
+          ...f,
+          display_label: meta.display_label,
+          display_help_text: meta.display_help_text,
+          display_section: meta.display_section,
+          display_order: meta.display_order,
+        };
+      }
+      return f;
+    });
+    setFields(updated);
+    emitFieldsAsPercentages(updated);
+    toast({ title: `Applied "${template.label}" labels to ${Object.keys(typeCounts).length > 0 ? 'fields' : 'no fields'}` });
+  };
+
 
   const colors: Record<string, string> = {
     signature: "#3b82f6",
@@ -456,6 +495,25 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
             <Trash2 className="w-4 h-4 mr-2" />
             Clear All
           </Button>
+          
+          {/* Apply document type display labels */}
+          {fields.length > 0 && (
+            <Select value={selectedDocType} onValueChange={(docType) => {
+              setSelectedDocType(docType);
+              applyDocTypeLabels(docType);
+            }}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Apply label template..." />
+              </SelectTrigger>
+              <SelectContent>
+                {DOCUMENT_TYPE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
 
@@ -682,26 +740,101 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
           </div>
         </div>
 
-        {/* Field list */}
+        {/* Field list with display label editing */}
         {fields.length > 0 && (
           <div className="mt-4">
             <Label className="text-sm mb-2 block">
-              Placed Fields ({fields.length}) - Double-click field to remove, or click badge below
+              Placed Fields ({fields.length}) — Double-click to remove · Click <Tag className="w-3 h-3 inline" /> to edit signer-facing label
             </Label>
             <div className="flex flex-wrap gap-2">
               {fields.map((field) => (
-                <Badge 
-                  key={field.id} 
-                  variant="outline"
-                  className={`cursor-pointer hover:bg-destructive/10 ${field.page === currentPage ? 'ring-2 ring-primary' : ''}`}
-                  onClick={() => removeField(field.id)}
-                >
-                  {field.label} {field.page && `(P${field.page})`} {field.signerIndex !== undefined && `S${field.signerIndex + 1}`}
-                </Badge>
+                <div key={field.id} className="flex items-center gap-1">
+                  <Badge 
+                    variant="outline"
+                    className={`cursor-pointer hover:bg-destructive/10 ${field.page === currentPage ? 'ring-2 ring-primary' : ''}`}
+                    onClick={() => removeField(field.id)}
+                  >
+                    {field.display_label || field.label} {field.page && `(P${field.page})`} {field.signerIndex !== undefined && `S${field.signerIndex + 1}`}
+                  </Badge>
+                  <button
+                    type="button"
+                    className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                    title="Edit signer-facing label"
+                    onClick={() => {
+                      setEditingFieldDisplay(field.id);
+                      setEditDisplayLabel(field.display_label || "");
+                      setEditDisplayHelpText(field.display_help_text || "");
+                      setEditDisplaySection(field.display_section || "");
+                    }}
+                  >
+                    <Tag className="w-3 h-3" />
+                  </button>
+                </div>
               ))}
             </div>
           </div>
         )}
+
+        {/* Display metadata edit dialog */}
+        <Dialog open={!!editingFieldDisplay} onOpenChange={(open) => { if (!open) setEditingFieldDisplay(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit Signer-Facing Label</DialogTitle>
+              <DialogDescription>
+                These labels are shown to the signer on the signing page. They do not affect field IDs or submission data.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label>Display Label</Label>
+                <Input
+                  value={editDisplayLabel}
+                  onChange={(e) => setEditDisplayLabel(e.target.value)}
+                  placeholder="e.g., Owner Signature"
+                />
+              </div>
+              <div>
+                <Label>Help Text</Label>
+                <Textarea
+                  value={editDisplayHelpText}
+                  onChange={(e) => setEditDisplayHelpText(e.target.value)}
+                  placeholder="e.g., Sign here to approve the contract terms."
+                  rows={2}
+                />
+              </div>
+              <div>
+                <Label>Section Group (optional)</Label>
+                <Input
+                  value={editDisplaySection}
+                  onChange={(e) => setEditDisplaySection(e.target.value)}
+                  placeholder="e.g., Signatures, Identification"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingFieldDisplay(null)}>Cancel</Button>
+              <Button onClick={() => {
+                if (!editingFieldDisplay) return;
+                const updated = fields.map(f => 
+                  f.id === editingFieldDisplay 
+                    ? {
+                        ...f,
+                        display_label: editDisplayLabel || undefined,
+                        display_help_text: editDisplayHelpText || undefined,
+                        display_section: editDisplaySection || undefined,
+                      }
+                    : f
+                );
+                setFields(updated);
+                emitFieldsAsPercentages(updated);
+                setEditingFieldDisplay(null);
+                toast({ title: "Field label updated" });
+              }}>
+                Save Label
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </Card>
     </div>
   );
