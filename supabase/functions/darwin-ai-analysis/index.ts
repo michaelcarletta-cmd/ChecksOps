@@ -420,18 +420,69 @@ async function extractTextFromPDFNative(base64Content: string, fileName: string)
 }
 
 // ============================================================================
-// LOSS MECHANISM EXTRACTION — pre-rebuttal pattern detection
-// Extracts trigger event, engineer stated cause, alternative causes, evidence
-// cited, and inspection limitations. Detects snowmelt/ice dam/ponding patterns
-// and flags "maintenance denial narratives".
+// UNIVERSAL ENGINEER REPORT DISMANTLER — forensic causation engine
+// Runs on EVERY engineer report. Extracts universal forensic structure, then
+// activates scenario-specific knowledge packs when content matches a pattern.
+// Priority rule: universal core always controls reasoning; scenario packs enhance only.
+// Classification rule: never reduce to single peril if dual/concurrent causation present.
 // ============================================================================
 
-const SNOWMELT_ICE_DAM_KEYWORDS = [
-  'snow meltwater', 'freeze thaw', 'freeze-thaw', 'snow-water equivalent',
-  'standing water', 'negative drainage', 'ponding water', 'drainage obstruction',
-  'ice dam', 'ice damming', 'snowmelt', 'snow melt', 'meltwater',
-  'ponding', 'hydraulic loading', 'snow load', 'ice buildup',
-];
+// ── Scenario keyword banks ──────────────────────────────────────────────────
+const SCENARIO_KEYWORDS: Record<string, string[]> = {
+  low_slope_snow_ice_ponding: [
+    'snow meltwater', 'freeze thaw', 'freeze-thaw', 'snow-water equivalent',
+    'standing water', 'negative drainage', 'ponding water', 'drainage obstruction',
+    'ice dam', 'ice damming', 'snowmelt', 'snow melt', 'meltwater',
+    'ponding', 'hydraulic loading', 'snow load', 'ice buildup',
+    'ice barrier', 'low slope', 'low-slope', 'flat roof', 'built-up roof',
+    'membrane', 'tpo', 'epdm', 'modified bitumen',
+  ],
+  hail_impact: [
+    'hail', 'hailstone', 'hail impact', 'impact damage', 'impact mark',
+    'bruising', 'granule loss', 'granule displacement', 'indentation',
+    'soft metal', 'collateral damage', 'spatter mark', 'test square',
+    'hail size', 'diameter', 'impact pattern',
+  ],
+  wind_uplift: [
+    'wind uplift', 'wind damage', 'uplift', 'peel back', 'creasing',
+    'tab lift', 'seal strip', 'adhesive failure', 'gust', 'sustained wind',
+    'prevailing wind', 'windward', 'leeward', 'wind-driven rain',
+    'blow off', 'blow-off', 'lifted shingle', 'mechanical damage',
+  ],
+  plumbing_freeze_burst: [
+    'pipe burst', 'frozen pipe', 'freeze burst', 'plumbing failure',
+    'water supply line', 'copper pipe', 'pex', 'galvanized',
+    'expansion', 'ice expansion', 'pipe split', 'water damage',
+    'supply line', 'drain line', 'water heater', 'pressure relief',
+  ],
+  fire_causation: [
+    'fire', 'combustion', 'ignition', 'char', 'smoke damage',
+    'point of origin', 'burn pattern', 'v-pattern', 'arc mapping',
+    'accelerant', 'fire investigation', 'fire cause', 'electrical fire',
+    'overloaded circuit', 'arson', 'accidental fire',
+  ],
+  structural_movement_settlement: [
+    'settlement', 'foundation', 'structural movement', 'subsidence',
+    'heaving', 'lateral movement', 'differential settlement',
+    'crack pattern', 'stair-step crack', 'shear crack', 'bearing wall',
+    'load path', 'footing', 'pier', 'underpinning', 'soil movement',
+    'expansive soil', 'clay soil', 'hydrostatic pressure',
+  ],
+  mechanical_failure: [
+    'mechanical failure', 'equipment failure', 'hvac', 'compressor',
+    'condensation', 'refrigerant leak', 'ductwork', 'blower',
+    'motor failure', 'bearing failure', 'appliance', 'water heater',
+    'sump pump', 'ejector pump', 'backflow',
+  ],
+  water_intrusion_envelope: [
+    'water intrusion', 'envelope failure', 'building envelope',
+    'weather barrier', 'vapor barrier', 'moisture barrier',
+    'flashing failure', 'sealant failure', 'caulk failure',
+    'window leak', 'door leak', 'wall penetration',
+    'weep hole', 'kick-out flashing', 'head flashing',
+    'housewrap', 'tyvek', 'moisture migration',
+  ],
+};
 
 const WEATHER_ANALYSIS_KEYWORDS = [
   'weather data', 'weather analysis', 'meteorological', 'storm event',
@@ -446,70 +497,222 @@ const DETERIORATION_KEYWORDS = [
   'prior to the loss', 'cosmetic', 'granule loss',
 ];
 
-interface LossMechanismExtraction {
-  snowmeltIceDamDetected: boolean;
+const DUAL_CAUSATION_KEYWORDS = [
+  'concurrent cause', 'concurrent causation', 'dual causation',
+  'contributing cause', 'multiple causes', 'contributing factor',
+  'anti-concurrent', 'efficient proximate cause', 'trigger event',
+  'root cause', 'precipitating event', 'aggravating factor',
+];
+
+// ── Scenario-specific knowledge packs ───────────────────────────────────────
+const SCENARIO_KNOWLEDGE_PACKS: Record<string, string> = {
+  low_slope_snow_ice_ponding: `
+=== SCENARIO KNOWLEDGE PACK: LOW-SLOPE / SNOW / ICE / SNOWMELT / PONDING ===
+MANDATORY REBUTTAL ARGUMENTS:
+- CAUSATION ASSUMPTIONS: Challenge any assumption that damage is "maintenance" without testing. The engineer must prove damage existed BEFORE the weather event with dated documentation.
+- LACK OF TESTING: Did the engineer perform moisture mapping, infrared scanning, core cuts, or destructive testing to determine water intrusion pathways? If not, conclusions are speculative.
+- SNOWMELT HYDRAULIC LOADING: Snow accumulation creates sustained hydraulic pressure on roofing systems. Even properly maintained roofs can fail under prolonged snowmelt conditions. Cite building science on hydrostatic pressure vs. design limitations.
+- DRAINAGE OBSTRUCTION: Ice dams, debris accumulation, and freeze-thaw cycling can obstruct designed drainage pathways, causing water to back up under shingles, flashing, and membrane systems. This is a COVERED PERIL, not maintenance.
+- FREEZE-THAW EFFECTS: Repeated freeze-thaw cycling causes mechanical damage to roofing materials, sealants, and flashing. Ice expansion exerts ~2,000 PSI of force—far exceeding material design tolerances. This is physical damage from a weather event, not wear and tear.
+- NEGATIVE DRAINAGE: If ponding or negative drainage conditions exist, determine whether these are design deficiencies (potentially covered) or maintenance issues. The engineer must provide specific evidence, not assumptions.
+- LOW-SLOPE MEMBRANE SCIENCE: EPDM, TPO, and modified bitumen systems have specific failure modes under ice/snow loading (seam stress, puncture from ice crystals, thermal shock). Challenge generic "deterioration" language.
+=== END SCENARIO PACK ===`,
+
+  hail_impact: `
+=== SCENARIO KNOWLEDGE PACK: HAIL IMPACT ===
+MANDATORY REBUTTAL ARGUMENTS:
+- TEST SQUARE METHODOLOGY: Was a proper test square (10×10) performed on each slope/elevation? If not, the sampling is statistically invalid.
+- ASTM D3161/D7158 FALLACY: Wind ratings are lab tests on NEW materials. Applying them to aged, weathered shingles is fundamentally flawed science. Seal strip adhesion degrades over time (UV, thermal cycling, oxidation). ARMA Technical Bulletin 201 documents this.
+- GRANULE LOSS DIFFERENTIATION: The engineer must differentiate between impact-caused granule loss (circular, with exposed mat) and weathering granule loss (diffuse, uniform). Failure to do so is a methodology failure.
+- SOFT METAL COLLATERAL: Were soft metal surfaces (vents, flashing, gutters, AC units) inspected for impact marks? Absence of this analysis undermines conclusions.
+- FUNCTIONAL VS. COSMETIC: Any impact that fractures the mat, displaces sealant, or compromises the waterproof membrane is FUNCTIONAL damage regardless of visual appearance.
+- AGED MATERIAL RESPONSE: Aged shingles respond differently to impact than new shingles (more brittle, less flexible). The engineer cannot use new-material standards to assess aged-material damage.
+=== END SCENARIO PACK ===`,
+
+  wind_uplift: `
+=== SCENARIO KNOWLEDGE PACK: WIND UPLIFT ===
+MANDATORY REBUTTAL ARGUMENTS:
+- SEAL STRIP DEGRADATION: Seal strip adhesion degrades with age. By 10-15 years, effectiveness may be reduced 50%+. The engineer cannot claim shingles "should have resisted" wind based on new-product ratings.
+- WIND MECHANICS: Turbulence, vortex shedding, and corner/edge effects create localized pressures FAR exceeding ambient wind speeds. Was site-specific wind analysis performed?
+- PROGRESSIVE DAMAGE: Wind damage is often progressive—initial tab lift leads to subsequent rain infiltration, which may appear as "water damage" rather than "wind damage." The engineer must trace the causal chain.
+- DIRECTIONAL ANALYSIS: Did the engineer correlate damage patterns with recorded wind direction? Failure to do so means damage attribution is speculative.
+- CREASING vs. MANUFACTURING: The engineer must differentiate wind creasing (field-formed, irregular) from manufacturing defects (factory-formed, uniform). What testing was done?
+- FASTENER ANALYSIS: Were fastener locations, types, and patterns evaluated? Improper fastening increases wind vulnerability but does not negate coverage.
+=== END SCENARIO PACK ===`,
+
+  plumbing_freeze_burst: `
+=== SCENARIO KNOWLEDGE PACK: PLUMBING FREEZE BURST ===
+MANDATORY REBUTTAL ARGUMENTS:
+- ICE EXPANSION PHYSICS: Water expands ~9% when freezing, generating pressures exceeding 25,000 PSI. Even properly maintained plumbing systems can fail under sustained freeze conditions.
+- MAINTAINED vs. NEGLECTED: The engineer must provide specific evidence of neglect (e.g., heat was intentionally turned off, pipes were never insulated where required by code). General assertions of "maintenance" are insufficient.
+- BUILDING CODE COMPLIANCE: Was the plumbing installed per IRC P2603.5 (protection against freezing)? If so, the system met code—failure under extreme conditions is a covered event.
+- SUDDEN vs. GRADUAL: Freeze burst is a SUDDEN event even if the temperature drop was gradual. The policy covers sudden and accidental discharge.
+- SCOPE OF RESULTING DAMAGE: Water damage from the burst is consequential damage from a covered peril regardless of what caused the pipe to freeze.
+=== END SCENARIO PACK ===`,
+
+  fire_causation: `
+=== SCENARIO KNOWLEDGE PACK: FIRE CAUSATION ===
+MANDATORY REBUTTAL ARGUMENTS:
+- NFPA 921 COMPLIANCE: Did the investigation follow NFPA 921 (Guide for Fire and Explosion Investigations)? Was systematic methodology (scientific method) applied?
+- ORIGIN DETERMINATION: Was the point of origin properly established using fire patterns, witness statements, and physical evidence? Challenge conclusions not supported by pattern analysis.
+- ELECTRICAL ANALYSIS: If electrical cause is alleged, was arc mapping performed? Were conductor examinations conducted per NFPA 921 Chapter 9?
+- EXCLUSION OF CAUSES: The investigator must systematically eliminate causes, not just pick the most convenient one. Challenge any conclusion that skips the elimination process.
+- SPOLIATION: Was evidence preserved for independent examination? Premature scene release or evidence destruction undermines the investigation.
+=== END SCENARIO PACK ===`,
+
+  structural_movement_settlement: `
+=== SCENARIO KNOWLEDGE PACK: STRUCTURAL MOVEMENT / SETTLEMENT ===
+MANDATORY REBUTTAL ARGUMENTS:
+- DIFFERENTIAL vs. UNIFORM: The engineer must distinguish between differential settlement (potentially sudden, covered) and uniform settlement (gradual). What monitoring data supports their characterization?
+- TRIGGER EVENT: Was there a specific trigger (plumbing leak, excavation, drought/saturation cycle, seismic event) that accelerated movement? This is a covered event, not gradual deterioration.
+- SOIL ANALYSIS: Was geotechnical analysis performed? Without soil data, settlement conclusions are speculative.
+- CRACK PATTERN ANALYSIS: Crack patterns tell a story—stair-step vs. horizontal vs. vertical cracks indicate different mechanisms. Did the engineer properly classify and interpret crack patterns?
+- TIMELINE EVIDENCE: The engineer must establish WHEN movement occurred. Without dated measurements or monitoring, attributing damage to "long-term" settlement is an assumption, not a finding.
+=== END SCENARIO PACK ===`,
+
+  mechanical_failure: `
+=== SCENARIO KNOWLEDGE PACK: MECHANICAL FAILURE ===
+MANDATORY REBUTTAL ARGUMENTS:
+- SUDDEN vs. GRADUAL: Mechanical failures are sudden events even if the underlying wear was gradual. The failure itself is the covered occurrence.
+- MAINTENANCE RECORDS: The engineer must review actual maintenance records, not assume maintenance was deferred. Challenge assumptions made without documentation.
+- MANUFACTURER DEFECT: Was a manufacturing defect considered? Product recalls, known failure modes, and warranty claims data should be reviewed.
+- RESULTING DAMAGE: Consequential damage (water damage from HVAC condensation overflow, smoke damage from electrical failure) is covered regardless of the mechanical failure cause.
+=== END SCENARIO PACK ===`,
+
+  water_intrusion_envelope: `
+=== SCENARIO KNOWLEDGE PACK: WATER INTRUSION / ENVELOPE FAILURE ===
+MANDATORY REBUTTAL ARGUMENTS:
+- STORM-DRIVEN vs. CHRONIC: Wind-driven rain intrusion is a covered peril. The engineer must differentiate between storm-caused intrusion and chronic leaking with specific evidence (staining patterns, moisture testing, timeline analysis).
+- FLASHING ANALYSIS: Was every flashing point inspected (head, sill, jamb, kick-out, step, counter)? Failure to inspect all flashing points means the conclusion is incomplete.
+- BUILDING SCIENCE: Water follows gravity and capillary action. The point of entry may be far from the point of damage appearance. Did the engineer perform water testing to trace the intrusion path?
+- SEALANT AGE: Sealants have limited service life (5-20 years depending on type). Storm forces applied to aged sealant cause failure—this is covered damage, not maintenance.
+- WIND-DRIVEN RAIN CALCULATIONS: Was the wind-driven rain exposure calculated? ASCE 7 provides methods. Without this analysis, claiming intrusion is not storm-related is unsupported.
+=== END SCENARIO PACK ===`,
+};
+
+// ── Universal extraction interface ──────────────────────────────────────────
+interface EngineerReportDismantlerResult {
+  /** Scenario keys that activated (may be multiple for dual-causation). */
+  activatedScenarios: string[];
+  /** All matched keywords across all scenarios. */
   matchedKeywords: string[];
+  /** True when weather analysis + deterioration language both present. */
   isMaintenanceDenialNarrative: boolean;
-  weatherAnalysisPresent: boolean;
-  deteriorationConclusionsPresent: boolean;
+  /** True when dual/concurrent causation language detected. */
+  isDualCausation: boolean;
+  /** The full prompt injection block for the AI system prompt. */
   promptInjection: string;
 }
 
-function extractLossMechanism(documentText: string): LossMechanismExtraction {
+function runEngineerReportDismantler(documentText: string): EngineerReportDismantlerResult {
   const textLower = documentText.toLowerCase();
 
-  const matchedKeywords = SNOWMELT_ICE_DAM_KEYWORDS.filter(kw => textLower.includes(kw));
-  const snowmeltIceDamDetected = matchedKeywords.length > 0;
+  // ── Detect activated scenarios ──
+  const activatedScenarios: string[] = [];
+  const allMatchedKeywords: string[] = [];
+  for (const [scenario, keywords] of Object.entries(SCENARIO_KEYWORDS)) {
+    const hits = keywords.filter(kw => textLower.includes(kw));
+    if (hits.length >= 2) { // require ≥2 keyword hits to activate a scenario
+      activatedScenarios.push(scenario);
+      allMatchedKeywords.push(...hits);
+    }
+  }
 
+  // ── Detect maintenance denial narrative ──
   const weatherAnalysisPresent = WEATHER_ANALYSIS_KEYWORDS.some(kw => textLower.includes(kw));
-  const deteriorationConclusionsPresent = DETERIORATION_KEYWORDS.some(kw => textLower.includes(kw));
+  const deteriorationPresent = DETERIORATION_KEYWORDS.some(kw => textLower.includes(kw));
+  const isMaintenanceDenialNarrative = weatherAnalysisPresent && deteriorationPresent;
 
-  const isMaintenanceDenialNarrative = weatherAnalysisPresent && deteriorationConclusionsPresent;
+  // ── Detect dual/concurrent causation ──
+  const isDualCausation = DUAL_CAUSATION_KEYWORDS.some(kw => textLower.includes(kw))
+    || activatedScenarios.length >= 2;
 
-  let promptInjection = '';
+  // ── BUILD UNIVERSAL PROMPT INJECTION (always runs) ──
+  let promptInjection = `
+=== UNIVERSAL ENGINEER REPORT DISMANTLER (MANDATORY — RUNS ON EVERY ENGINEER REPORT) ===
 
-  if (snowmeltIceDamDetected || isMaintenanceDenialNarrative) {
-    promptInjection = `
-=== LOSS MECHANISM EXTRACTION (AUTO-DETECTED — OVERRIDES DEFAULT WIND CLASSIFICATION) ===
-CRITICAL: The document contains indicators of a snowmelt / ice dam / ponding water loss mechanism.
-This analysis MUST override any default wind or hail classification. Treat the primary peril as water intrusion from snowmelt, ice damming, or drainage failure.
+YOU MUST EXTRACT AND ADDRESS ALL OF THE FOLLOWING IN YOUR REBUTTAL.
+This extraction controls the structure of every engineer report rebuttal regardless of loss type.
 
-DETECTED KEYWORDS: ${matchedKeywords.join(', ') || 'None (narrative pattern detected)'}
-${isMaintenanceDenialNarrative ? `
-*** MAINTENANCE DENIAL NARRATIVE FLAGGED ***
-This document contains BOTH weather analysis AND deterioration/maintenance conclusions.
-This is a common carrier tactic: acknowledge the weather event occurred but attribute all damage to "maintenance" or "wear and tear."
-You MUST aggressively challenge this narrative by:
-1. Separating the weather event causation from any pre-existing condition claims
-2. Demanding specific evidence that differentiates storm damage from alleged deterioration
-3. Pointing out that the carrier cannot acknowledge the weather event while simultaneously denying it caused damage without rigorous testing
-` : ''}
+1. TRIGGER EVENT — What weather event, system failure, or occurrence initiated the claimed loss? Identify the specific date and conditions.
+2. ENGINEER STATED CAUSE — What does the engineer conclude caused the damage? Quote their exact language.
+3. COMPETING CAUSATION THEORIES — What other causes were mentioned, discussed, or dismissed? Were they properly ruled out with testing and evidence, or simply asserted?
+4. DENIAL NARRATIVE — What is the overall narrative the engineer is constructing? (e.g., "maintenance neglect," "pre-existing condition," "normal aging") Identify the narrative strategy.
+5. PHYSICAL EVIDENCE RELIED ON — What specific physical evidence does the engineer cite to support their conclusions? Is it sufficient, properly documented, and correctly interpreted?
+6. TESTING PERFORMED — What tests, measurements, or analyses did the engineer actually perform? (core cuts, moisture readings, thermal imaging, test squares, material sampling, etc.)
+7. TESTING NOT PERFORMED — What tests SHOULD have been performed given the damage type and loss mechanism but were NOT? This is often the most devastating rebuttal angle.
+8. INSPECTION LIMITATIONS — What areas were not accessed? How long was the inspection? What equipment was not used? What conditions limited the inspection?
+9. CAUSATION ASSUMPTIONS — Where does the engineer ASSUME causation without proving it? Identify every instance where they leap from observation to conclusion without supporting evidence.
+10. CONTRADICTIONS — Where does the engineer's own report contradict itself? Where do their observations conflict with their conclusions? Where does their data undermine their narrative?
+11. REBUTTAL ANGLES — For each major conclusion, identify the strongest technical, scientific, and regulatory counter-arguments.
+12. COVERAGE RELEVANCE — How do the engineer's findings relate to policy coverage? Are they conflating coverage questions with scope questions? Are they applying exclusions without citing policy language?
+13. RECOMMENDED NEXT EVIDENCE — What additional documentation, testing, or expert analysis would strengthen our position? Be specific about what to obtain and why.
+`;
 
-YOU MUST EXTRACT AND ADDRESS THE FOLLOWING IN YOUR REBUTTAL:
-1. TRIGGER EVENT — What weather event or condition initiated the loss? (snowmelt, ice dam formation, freeze-thaw cycling, ponding)
-2. ENGINEER STATED CAUSE — What does the engineer/carrier claim caused the damage? (Quote exactly)
-3. ALTERNATIVE CAUSES DISCUSSED — What other causes were mentioned and dismissed? Were they properly ruled out with testing?
-4. EVIDENCE CITED — What specific evidence did the engineer/carrier cite to support their conclusion? Is it sufficient?
-5. INSPECTION LIMITATIONS — What was NOT inspected, tested, or considered? (moisture testing, thermal imaging, drainage analysis, ice dam formation patterns)
-
-MANDATORY REBUTTAL ARGUMENTS FOR SNOWMELT/ICE DAM/PONDING CLAIMS:
-- CAUSATION ASSUMPTIONS: Challenge any assumption that damage is "maintenance" without testing. The engineer must prove the damage existed BEFORE the weather event with dated documentation.
-- LACK OF TESTING: Did the engineer perform moisture mapping, infrared scanning, or destructive testing to determine water intrusion pathways? If not, their conclusions are speculative.
-- SNOWMELT HYDRAULIC LOADING: Snow accumulation creates sustained hydraulic pressure on roofing systems. Even properly maintained roofs can fail under prolonged snowmelt conditions. Cite building science research on hydrostatic pressure vs. design limitations.
-- DRAINAGE OBSTRUCTION: Ice dams, debris accumulation, and freeze-thaw cycling can obstruct designed drainage pathways, causing water to back up under shingles, flashing, and membrane systems. This is a COVERED PERIL, not maintenance.
-- FREEZE-THAW EFFECTS: Repeated freeze-thaw cycling causes mechanical damage to roofing materials, sealants, and flashing. This is physical damage from a weather event, not wear and tear. Ice expansion exerts ~2,000 PSI of force — far exceeding material design tolerances.
-- NEGATIVE DRAINAGE: If the property exhibits negative drainage or ponding conditions, determine whether these are design deficiencies (covered under structural damage) or maintenance issues. The engineer must provide specific evidence, not assumptions.
-
-=== END LOSS MECHANISM EXTRACTION ===
+  // ── CLASSIFICATION RULE ──
+  if (isDualCausation || activatedScenarios.length >= 2) {
+    promptInjection += `
+=== DUAL/CONCURRENT CAUSATION ALERT ===
+CRITICAL: This report reflects DUAL CAUSATION, CONCURRENT CAUSATION, or trigger-event-versus-root-cause reasoning.
+DO NOT reduce this report to a single peril label. You MUST:
+- Identify ALL contributing causes separately
+- Analyze each cause independently against coverage
+- Apply the efficient proximate cause doctrine or anti-concurrent causation clause analysis as appropriate
+- State clearly that the engineer's single-cause attribution is an oversimplification
+DETECTED DUAL-CAUSATION INDICATORS: ${[...new Set(allMatchedKeywords)].join(', ')}
+ACTIVATED LOSS PATTERNS: ${activatedScenarios.join(', ')}
+=== END DUAL CAUSATION ALERT ===
 `;
   }
 
+  // ── MAINTENANCE DENIAL NARRATIVE FLAG ──
+  if (isMaintenanceDenialNarrative) {
+    promptInjection += `
+=== MAINTENANCE DENIAL NARRATIVE FLAGGED ===
+This document contains BOTH weather/event analysis AND deterioration/maintenance conclusions.
+This is a common carrier tactic: acknowledge the event occurred but attribute all damage to "maintenance" or "wear and tear."
+You MUST aggressively challenge this narrative by:
+1. Separating the event causation from any pre-existing condition claims
+2. Demanding specific evidence that differentiates event damage from alleged deterioration
+3. Pointing out that acknowledging the event while denying it caused damage requires rigorous testing—not assumptions
+4. Identifying whether the engineer provided DATED documentation of pre-event condition
+=== END MAINTENANCE DENIAL NARRATIVE ===
+`;
+  }
+
+  // ── APPEND ACTIVATED SCENARIO KNOWLEDGE PACKS ──
+  if (activatedScenarios.length > 0) {
+    promptInjection += `
+=== ACTIVATED SCENARIO-SPECIFIC KNOWLEDGE PACKS ===
+The following specialized knowledge packs have been activated based on document content.
+PRIORITY RULE: The universal extraction above controls the reasoning structure.
+These packs ONLY ENHANCE the rebuttal with scenario-specific technical arguments.
+They DO NOT replace the universal analysis.
+MATCHED KEYWORDS: ${[...new Set(allMatchedKeywords)].join(', ')}
+`;
+    for (const scenario of activatedScenarios) {
+      const pack = SCENARIO_KNOWLEDGE_PACKS[scenario];
+      if (pack) promptInjection += pack + '\n';
+    }
+    promptInjection += `=== END SCENARIO-SPECIFIC PACKS ===\n`;
+  }
+
+  // ── FINAL PROMPT RULE ──
+  promptInjection += `
+=== FINAL PROMPT RULE (ENFORCED) ===
+1. Generate the rebuttal from the UNIVERSAL DISMANTLER FINDINGS FIRST (items 1-13 above).
+2. THEN supplement with any activated scenario-specific knowledge pack arguments.
+3. NEVER let scenario-specific arguments override or replace the universal forensic extraction.
+4. If NO scenario packs activated, the universal analysis alone is sufficient for a complete rebuttal.
+5. NEVER classify this report as a single peril if the content reflects dual-causation, concurrent causation, or trigger-event-versus-root-cause reasoning.
+=== END UNIVERSAL ENGINEER REPORT DISMANTLER ===
+`;
+
   return {
-    snowmeltIceDamDetected,
-    matchedKeywords,
+    activatedScenarios,
+    matchedKeywords: [...new Set(allMatchedKeywords)],
     isMaintenanceDenialNarrative,
-    weatherAnalysisPresent,
-    deteriorationConclusionsPresent,
+    isDualCausation,
     promptInjection,
   };
 }
