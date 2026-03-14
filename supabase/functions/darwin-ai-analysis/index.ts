@@ -1880,12 +1880,12 @@ When generating rebuttals:
 8. Include specific documentation requests that put them on the defensive
 9. Provide a formal rebuttal letter that makes them reconsider their denial`;
 
-        // ── Loss Mechanism Extraction (pre-rebuttal) ──
-        const denialTextForMechanism = content || '';
-        const lossMechanism = extractLossMechanism(denialTextForMechanism);
-        if (lossMechanism.snowmeltIceDamDetected || lossMechanism.isMaintenanceDenialNarrative) {
-          console.log(`[darwin] Loss Mechanism Extraction: snowmelt=${lossMechanism.snowmeltIceDamDetected}, maintenanceNarrative=${lossMechanism.isMaintenanceDenialNarrative}, keywords=${lossMechanism.matchedKeywords.join(',')}`);
-          systemPrompt += '\n' + lossMechanism.promptInjection;
+        // ── Universal Engineer Report Dismantler (also runs on denial rebuttals for forensic extraction) ──
+        const denialTextForDismantler = content || '';
+        const denialDismantler = runEngineerReportDismantler(denialTextForDismantler);
+        if (denialDismantler.activatedScenarios.length > 0 || denialDismantler.isMaintenanceDenialNarrative) {
+          console.log(`[darwin] Denial EngineerReportDismantler: scenarios=${denialDismantler.activatedScenarios.join(',') || 'none'}, maintenanceNarrative=${denialDismantler.isMaintenanceDenialNarrative}, keywords=${denialDismantler.matchedKeywords.length}`);
+          systemPrompt += '\n' + denialDismantler.promptInjection;
         }
 
         userPrompt = `${claimSummary}
