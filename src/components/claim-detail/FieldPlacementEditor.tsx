@@ -713,26 +713,101 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
           </div>
         </div>
 
-        {/* Field list */}
+        {/* Field list with display label editing */}
         {fields.length > 0 && (
           <div className="mt-4">
             <Label className="text-sm mb-2 block">
-              Placed Fields ({fields.length}) - Double-click field to remove, or click badge below
+              Placed Fields ({fields.length}) — Double-click to remove · Click <Tag className="w-3 h-3 inline" /> to edit signer-facing label
             </Label>
             <div className="flex flex-wrap gap-2">
               {fields.map((field) => (
-                <Badge 
-                  key={field.id} 
-                  variant="outline"
-                  className={`cursor-pointer hover:bg-destructive/10 ${field.page === currentPage ? 'ring-2 ring-primary' : ''}`}
-                  onClick={() => removeField(field.id)}
-                >
-                  {field.label} {field.page && `(P${field.page})`} {field.signerIndex !== undefined && `S${field.signerIndex + 1}`}
-                </Badge>
+                <div key={field.id} className="flex items-center gap-1">
+                  <Badge 
+                    variant="outline"
+                    className={`cursor-pointer hover:bg-destructive/10 ${field.page === currentPage ? 'ring-2 ring-primary' : ''}`}
+                    onClick={() => removeField(field.id)}
+                  >
+                    {field.display_label || field.label} {field.page && `(P${field.page})`} {field.signerIndex !== undefined && `S${field.signerIndex + 1}`}
+                  </Badge>
+                  <button
+                    type="button"
+                    className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                    title="Edit signer-facing label"
+                    onClick={() => {
+                      setEditingFieldDisplay(field.id);
+                      setEditDisplayLabel(field.display_label || "");
+                      setEditDisplayHelpText(field.display_help_text || "");
+                      setEditDisplaySection(field.display_section || "");
+                    }}
+                  >
+                    <Tag className="w-3 h-3" />
+                  </button>
+                </div>
               ))}
             </div>
           </div>
         )}
+
+        {/* Display metadata edit dialog */}
+        <Dialog open={!!editingFieldDisplay} onOpenChange={(open) => { if (!open) setEditingFieldDisplay(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit Signer-Facing Label</DialogTitle>
+              <DialogDescription>
+                These labels are shown to the signer on the signing page. They do not affect field IDs or submission data.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label>Display Label</Label>
+                <Input
+                  value={editDisplayLabel}
+                  onChange={(e) => setEditDisplayLabel(e.target.value)}
+                  placeholder="e.g., Owner Signature"
+                />
+              </div>
+              <div>
+                <Label>Help Text</Label>
+                <Textarea
+                  value={editDisplayHelpText}
+                  onChange={(e) => setEditDisplayHelpText(e.target.value)}
+                  placeholder="e.g., Sign here to approve the contract terms."
+                  rows={2}
+                />
+              </div>
+              <div>
+                <Label>Section Group (optional)</Label>
+                <Input
+                  value={editDisplaySection}
+                  onChange={(e) => setEditDisplaySection(e.target.value)}
+                  placeholder="e.g., Signatures, Identification"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingFieldDisplay(null)}>Cancel</Button>
+              <Button onClick={() => {
+                if (!editingFieldDisplay) return;
+                const updated = fields.map(f => 
+                  f.id === editingFieldDisplay 
+                    ? {
+                        ...f,
+                        display_label: editDisplayLabel || undefined,
+                        display_help_text: editDisplayHelpText || undefined,
+                        display_section: editDisplaySection || undefined,
+                      }
+                    : f
+                );
+                setFields(updated);
+                emitFieldsAsPercentages(updated);
+                setEditingFieldDisplay(null);
+                toast({ title: "Field label updated" });
+              }}>
+                Save Label
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </Card>
     </div>
   );
