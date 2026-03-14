@@ -3591,6 +3591,12 @@ Be specific, professional, and provide communications that are ready to copy and
         // Build scenario-specific attack vectors based on primary scenario
         const primarySc = dismantlerExtraction.primaryScenario || '';
         engineerRebuttalPrimaryScenario = primarySc || null;
+        engineerRebuttalSecondaryScenarios = [...dismantlerExtraction.secondaryScenarios];
+        engineerRebuttalStatedCause = String(dismantlerExtraction.engineerStatedCause || '').trim();
+        engineerRebuttalTheorySentences = [...(dismantlerExtraction.engineerTheorySentences || [])];
+        engineerRebuttalCriticalTestingNotPerformed = [...(dismantlerExtraction.criticalTestingNotPerformed || [])];
+        engineerRebuttalReportText = engineerTextForDismantler;
+
         const allActiveScenarios = new Set([primarySc, ...dismantlerExtraction.secondaryScenarios].filter(Boolean));
 
         const scenarioAttackVectors = buildScenarioAttackVectors(primarySc, allActiveScenarios);
@@ -3606,12 +3612,7 @@ Be specific, professional, and provide communications that are ready to copy and
           || ''
         );
         const engineerTheoryCorpus = engineerCausationSentence.toLowerCase();
-        lowSlopeSupportCorpusForFilters = buildLowSlopeSupportCorpus(
-          engineerCausationSentence,
-          claimFactsPack,
-          Array.isArray(context.files) ? context.files : [],
-          engineerUserContext,
-        );
+        lowSlopeSupportCorpusForFilters = buildLowSlopeSupportCorpus(engineerCausationSentence);
 
         const windCausationTerms = Array.from(new Set(LOW_SLOPE_FORBIDDEN_RULES.flatMap((rule) => rule.supportTerms.map((term) => term.toLowerCase()))));
         const lowSlopeTheoryExplicitlyReliesOnWind = windCausationTerms.some((term) => engineerTheoryCorpus.includes(term));
