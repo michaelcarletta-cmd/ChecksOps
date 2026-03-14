@@ -213,53 +213,10 @@ const LOW_SLOPE_FORBIDDEN_BULLET_LIST = [
   'GAF / CertainTeed / Owens Corning references',
 ].map((item) => `- ${item}`).join('\n');
 
-function buildLowSlopeSupportCorpus(
-  engineerCausationSentence: string,
-  claimFactsPack: any,
-  claimFiles: Array<{ file_name?: string | null; document_classification?: string | null; extracted_text?: string | null }> = [],
-  userContext = '',
-): string {
-  const corpusParts: string[] = [];
-  const pushIfPresent = (value: string | null | undefined) => {
-    if (typeof value === 'string' && value.trim()) corpusParts.push(value.trim());
-  };
-
-  pushIfPresent(engineerCausationSentence);
-  pushIfPresent(userContext);
-
-  const docs = Array.isArray(claimFactsPack?.documents) ? claimFactsPack.documents : [];
-  for (const doc of docs.slice(0, 30)) {
-    pushIfPresent([doc?.docName, doc?.category, doc?.folderKey].filter(Boolean).join(' '));
-  }
-
-  const objections = Array.isArray(claimFactsPack?.objections) ? claimFactsPack.objections : [];
-  for (const objection of objections.slice(0, 20)) {
-    pushIfPresent(objection?.verbatim);
-    pushIfPresent(objection?.source?.docName);
-  }
-
-  const estimateHighlights = Array.isArray(claimFactsPack?.estimate?.lineItemHighlights)
-    ? claimFactsPack.estimate.lineItemHighlights
-    : [];
-  for (const highlight of estimateHighlights.slice(0, 20)) {
-    pushIfPresent(highlight?.label);
-  }
-
-  const supplementalEvidence = claimFiles
-    .filter((file) => {
-      const classification = String(file?.document_classification || '').toLowerCase();
-      const fileName = String(file?.file_name || '').toLowerCase();
-      const isEngineerReport = classification.includes('engineer') || fileName.includes('engineer');
-      return !isEngineerReport && typeof file?.extracted_text === 'string' && file.extracted_text.length > 80;
-    })
-    .slice(0, 12);
-
-  for (const file of supplementalEvidence) {
-    pushIfPresent(file.file_name || '');
-    pushIfPresent(file.extracted_text?.slice(0, 1800) || '');
-  }
-
-  return corpusParts.join('\n').toLowerCase();
+function buildLowSlopeSupportCorpus(engineerCausationSentence: string): string {
+  // Strict rule: for low-slope membrane snowmelt scenarios, suppression gates are based ONLY
+  // on the engineer's causation sentence (direct report quote), not broader claim-file context.
+  return String(engineerCausationSentence || '').toLowerCase();
 }
 
 const LOW_SLOPE_PRIORITY_ORDER = `PRIORITY ORDER (MANDATORY):
@@ -279,6 +236,139 @@ const LOW_SLOPE_CONTRADICTION_SECTION = `SECTION 3 — ENGINEER CONTRADICTION:
 The report admits snow impeded drainage, standing water was present, and freeze-thaw cycles can worsen openings, yet it concludes deterioration alone caused the loss without proving the event did not create or expand the openings.`;
 
 const LOW_SLOPE_STRUCTURAL_DISTINCTION = 'Structural snow-load analysis is not membrane watertightness analysis.';
+
+interface EngineerRebuttalEnforcementContext {
+  engineerStatedCause: string;
+  engineerTheorySentences: string[];
+  primaryScenario: string | null;
+  secondaryScenarios: string[];
+  criticalTestingNotPerformed: string[];
+  reportText: string;
+}
+
+const DEFAULT_ENGINEER_REQUIRED_TESTS = [
+  'material sampling/core verification',
+  'moisture mapping',
+  'leak-path tracing',
+  'causation timeline analysis',
+];
+
+function parseTaggedMissingTest(testEntry: string): { scenario: string | null; testName: string } {
+  const match = String(testEntry || '').match(/^\[([^\]]+)\]\s*(.+)$/);
+  if (!match) return { scenario: null, testName: String(testEntry || '').trim() };
+  return {
+    scenario: match[1]?.trim() || null,
+    testName: match[2]?.trim() || '',
+  };
+}
+
+function getEngineerRequiredTests(context: EngineerRebuttalEnforcementContext): string[] {
+  const scenarioCandidates = [
+    context.primaryScenario,
+    ...(Array.isArray(context.secondaryScenarios) ? context.secondaryScenarios : []),
+  ].filter((value): value is string => typeof value === 'string' && value.length > 0);
+
+  const scenarioFromMissing = (context.criticalTestingNotPerformed || [])
+    .map((entry) => parseTaggedMissingTest(entry).scenario)
+    .filter((value): value is string => typeof value === 'string' && value.length > 0);
+
+  const scenarioList = Array.from(new Set([...scenarioCandidates, ...scenarioFromMissing]));
+
+  const scenarioMappedTests = scenarioList.flatMap((scenario) => SCENARIO_MISSING_TESTING_MAP[scenario] || []);
+  const taggedMissingTests = (context.criticalTestingNotPerformed || [])
+    .map((entry) => parseTaggedMissingTest(entry).testName)
+    .filter(Boolean);
+
+  const merged = Array.from(new Set([...scenarioMappedTests, ...taggedMissingTests]));
+  return merged.length > 0 ? merged : [...DEFAULT_ENGINEER_REQUIRED_TESTS];
+}
+
+function isTestMentionedInReport(reportText: string, testName: string): boolean {
+  const textLower = String(reportText || '').toLowerCase();
+  if (!textLower) return false;
+
+  const normalizedTest = String(testName || '').toLowerCase().trim();
+  if (!normalizedTest) return false;
+  if (textLower.includes(normalizedTest)) return true;
+
+  const ignoredTokens = new Set(['analysis', 'testing', 'review', 'inspection', 'proof', 'assessment', 'evaluation']);
+  const tokens = normalizedTest
+    .split(/[\s/()\-]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 4 && !ignoredTokens.has(token));
+
+  if (tokens.length === 0) return false;
+  return tokens.some((token) => textLower.includes(token));
+}
+
+function buildEngineerTheoryExtractionSection(context: EngineerRebuttalEnforcementContext): string {
+  const quotedCause = String(
+    context.engineerStatedCause
+    || context.engineerTheorySentences?.[0]
+    || 'No explicit engineer causation sentence was extracted from the report.'
+  ).trim();
+
+  return `Engineer Theory Extraction
+Engineer-stated cause (direct quote from report):
+"${quotedCause}"`;
+}
+
+function buildRequiredTestingNotPerformedSection(context: EngineerRebuttalEnforcementContext): string {
+  const requiredTests = getEngineerRequiredTests(context);
+  const testLines = requiredTests.map((testName) => {
+    const appearsInReport = isTestMentionedInReport(context.reportText, testName);
+    return `- ${testName}: ${appearsInReport ? 'Appears in report (identified in text)' : 'Not documented in report'}`;
+  });
+
+  return `Required Testing Not Performed
+The following forensic testing is required to scientifically prove the engineer's causation theory, with report presence status:
+${testLines.join('\n')}`;
+}
+
+function buildCausationProofFailureSection(context: EngineerRebuttalEnforcementContext): string {
+  const requiredTests = getEngineerRequiredTests(context);
+  const missingCount = requiredTests.filter((testName) => !isTestMentionedInReport(context.reportText, testName)).length;
+
+  const proofStatement = missingCount > 0
+    ? `Because ${missingCount} required forensic test(s) are not documented, the engineer has not scientifically proven their conclusion and the causation statement is therefore speculative.`
+    : 'Core forensic tests are referenced in the report text; causation still must be tied to quantifiable, test-backed findings rather than assumption.';
+
+  return `Causation Proof Failure
+${proofStatement}`;
+}
+
+function enforceEngineerRebuttalMandatorySections(result: string, context: EngineerRebuttalEnforcementContext): string {
+  if (!result) return result;
+
+  let updated = result.trim();
+  const lower = updated.toLowerCase();
+  const additions: string[] = [];
+
+  const hasTheorySection = /engineer theory extraction/i.test(lower);
+  if (!hasTheorySection) {
+    additions.push(buildEngineerTheoryExtractionSection(context));
+  }
+
+  const hasRequiredTestingSection = /required testing not performed/i.test(lower);
+  if (!hasRequiredTestingSection) {
+    additions.push(buildRequiredTestingNotPerformedSection(context));
+  }
+
+  const hasCausationProofFailureSection = /causation proof failure/i.test(lower);
+  const hasSpeculativeFailureStatement = /has not scientifically proven their conclusion and the causation statement is therefore speculative/i.test(lower);
+  const missingTestsExist = getEngineerRequiredTests(context)
+    .some((testName) => !isTestMentionedInReport(context.reportText, testName));
+
+  if (!hasCausationProofFailureSection || (missingTestsExist && !hasSpeculativeFailureStatement)) {
+    additions.push(buildCausationProofFailureSection(context));
+  }
+
+  if (additions.length > 0) {
+    updated += `\n\n${additions.join('\n\n')}`;
+  }
+
+  return updated;
+}
 
 function enforceEngineerRebuttalLowSlopeOpening(result: string, primaryScenario: string | null): string {
   if (!result || primaryScenario !== 'low_slope_snow_ice_ponding') return result;
@@ -1438,7 +1528,7 @@ MANDATORY THEORY SUMMARY (OPENING SENTENCE):
 "The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering."
 
 Do NOT default to generic storm/wind/shingle language in this scenario.
-Unless the engineer's causation sentence OR documented claim-file evidence explicitly relies on it, do NOT use:
+Unless a wind/shingle mechanic is directly quoted from the engineer's causation sentence, do NOT use:
 ${LOW_SLOPE_FORBIDDEN_BULLET_LIST}
 
 ${LOW_SLOPE_PRIORITY_ORDER}
@@ -1459,7 +1549,7 @@ ${LOW_SLOPE_STRUCTURAL_DISTINCTION}
 Even if roof framing can carry load, that does not prove membrane watertightness.
 
 EVIDENCE GROUNDING RULE:
-Do not insert damage descriptions (e.g., creased shingle tabs, fractured shingles, wind uplift mechanics) unless those terms appear in the engineer’s causation sentence or documented claim-file evidence.`;
+Do not insert damage descriptions (e.g., creased shingle tabs, fractured shingles, wind uplift mechanics) unless those terms appear as direct quote text in the engineer’s causation sentence.`;
   }
 
   const blocks: string[] = [];
@@ -2478,6 +2568,11 @@ Deno.serve(async (req) => {
     let systemPrompt = '';
     let userPrompt = '';
     let engineerRebuttalPrimaryScenario: string | null = null;
+    let engineerRebuttalSecondaryScenarios: string[] = [];
+    let engineerRebuttalStatedCause = '';
+    let engineerRebuttalTheorySentences: string[] = [];
+    let engineerRebuttalCriticalTestingNotPerformed: string[] = [];
+    let engineerRebuttalReportText = '';
     let lowSlopeSupportCorpusForFilters = '';
 
     // Build photo summary for context
@@ -3513,6 +3608,12 @@ Be specific, professional, and provide communications that are ready to copy and
         // Build scenario-specific attack vectors based on primary scenario
         const primarySc = dismantlerExtraction.primaryScenario || '';
         engineerRebuttalPrimaryScenario = primarySc || null;
+        engineerRebuttalSecondaryScenarios = [...dismantlerExtraction.secondaryScenarios];
+        engineerRebuttalStatedCause = String(dismantlerExtraction.engineerStatedCause || '').trim();
+        engineerRebuttalTheorySentences = [...(dismantlerExtraction.engineerTheorySentences || [])];
+        engineerRebuttalCriticalTestingNotPerformed = [...(dismantlerExtraction.criticalTestingNotPerformed || [])];
+        engineerRebuttalReportText = engineerTextForDismantler;
+
         const allActiveScenarios = new Set([primarySc, ...dismantlerExtraction.secondaryScenarios].filter(Boolean));
 
         const scenarioAttackVectors = buildScenarioAttackVectors(primarySc, allActiveScenarios);
@@ -3528,12 +3629,7 @@ Be specific, professional, and provide communications that are ready to copy and
           || ''
         );
         const engineerTheoryCorpus = engineerCausationSentence.toLowerCase();
-        lowSlopeSupportCorpusForFilters = buildLowSlopeSupportCorpus(
-          engineerCausationSentence,
-          claimFactsPack,
-          Array.isArray(context.files) ? context.files : [],
-          engineerUserContext,
-        );
+        lowSlopeSupportCorpusForFilters = buildLowSlopeSupportCorpus(engineerCausationSentence);
 
         const windCausationTerms = Array.from(new Set(LOW_SLOPE_FORBIDDEN_RULES.flatMap((rule) => rule.supportTerms.map((term) => term.toLowerCase()))));
         const lowSlopeTheoryExplicitlyReliesOnWind = windCausationTerms.some((term) => engineerTheoryCorpus.includes(term));
@@ -3550,9 +3646,9 @@ SECTION 1 — TIMING FAILURE
 SECTION 2 — DRAINAGE / SNOWMELT ANALYSIS FAILURE
 SECTION 3 — ENGINEER CONTRADICTION
 
-Do NOT use generic storm/wind/shingle boilerplate unless the engineer's causation sentence or documented claim-file evidence explicitly relies on it.
+Do NOT use generic storm/wind/shingle boilerplate unless it is directly quoted from the engineer's causation sentence.
 Detected wind-centric causation reliance in extracted theory: ${lowSlopeTheoryExplicitlyReliesOnWind ? 'YES' : 'NO'}.
-${lowSlopeTheoryExplicitlyReliesOnWind ? 'If you use any wind/shingle language, tie it to direct engineer theory text and explain why it is material.' : `Do NOT use:\n${LOW_SLOPE_FORBIDDEN_BULLET_LIST}`}
+${lowSlopeTheoryExplicitlyReliesOnWind ? 'If you use any wind/shingle language, quote the exact engineer causation sentence and explain why that quote is material.' : `Do NOT use:\n${LOW_SLOPE_FORBIDDEN_BULLET_LIST}`}
 
 MANDATORY LOW-SLOPE METHODOLOGY ATTACKS:
 - no membrane core cuts
@@ -3572,7 +3668,7 @@ MANDATORY DISTINCTION:
 ${LOW_SLOPE_STRUCTURAL_DISTINCTION}
 
 EVIDENCE GROUNDING RULE:
-Do not insert damage facts unless grounded in direct report language or documented claim file evidence. Do not insert creased shingle tabs, fractured shingles, wind uplift mechanics, structural racking, or high-wind pressure language unless those terms appear in the engineer’s causation sentence or documented claim-file evidence.`
+Do not insert damage facts unless grounded in direct report language. Do not insert creased shingle tabs, fractured shingles, wind uplift mechanics, structural racking, or high-wind pressure language unless those terms appear as direct quote text in the engineer’s causation sentence.`
           : '';
 
         const lowSlopeOpeningDirective = primarySc === 'low_slope_snow_ice_ponding'
@@ -3691,8 +3787,18 @@ ${primarySc === 'low_slope_snow_ice_ponding' ? `LOW-SLOPE REPORT ENFORCEMENT:
 - Focus on: no membrane core cuts, no seam adhesion/peel testing, no drainage-capacity analysis, no snow-water equivalent/runoff analysis, no leak-path tracing, no moisture mapping, and no proof of timing of openings
 - Force contradiction attack: report admits snow impeded drainage + standing water + freeze-thaw worsening potential, yet blames maintenance without proving deterioration alone
 - Distinguish structural snow-load analysis from membrane watertightness analysis
-- Suppress shingle/wind/uplift boilerplate unless directly supported by extracted engineer theory text
-- Do NOT add damage facts not grounded in report text or documented file evidence` : ''}
+- Suppress shingle/wind/uplift boilerplate unless directly quoted from the engineer causation sentence
+- Do NOT add damage facts unless grounded in direct report text` : ''}
+
+=== NON-NEGOTIABLE FORENSIC FOUNDATION (MUST APPEAR IN EVERY ENGINEER REBUTTAL) ===
+Include these exact section headings somewhere in the rebuttal:
+1) Engineer Theory Extraction
+2) Required Testing Not Performed
+3) Causation Proof Failure
+
+Engineer Theory Extraction must quote the engineer's stated cause directly from the report.
+Required Testing Not Performed must list the forensic tests required to scientifically prove that cause and explicitly mark whether each appears in the report.
+Causation Proof Failure must explicitly state that when required testing was not performed, the engineer has not scientifically proven the conclusion and the causation statement is speculative.
 
 === MANDATORY SECTIONED STRUCTURE (ENFORCED — NO DEVIATIONS) ===
 Your rebuttal MUST contain ALL SEVEN of the following sections IN THIS ORDER. Do not omit any section. Do not leave structure to model discretion.
@@ -7765,6 +7871,15 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     }
 
     if (analysisType === 'engineer_report_rebuttal' && typeof analysisResult === 'string') {
+      analysisResult = enforceEngineerRebuttalMandatorySections(analysisResult, {
+        engineerStatedCause: engineerRebuttalStatedCause,
+        engineerTheorySentences: engineerRebuttalTheorySentences,
+        primaryScenario: engineerRebuttalPrimaryScenario,
+        secondaryScenarios: engineerRebuttalSecondaryScenarios,
+        criticalTestingNotPerformed: engineerRebuttalCriticalTestingNotPerformed,
+        reportText: engineerRebuttalReportText || String(content || ''),
+      });
+
       const lowSlopeFallbackFromReportText = /snowmelt|ponding water|low-slope|ice dam|membrane/i.test(String(content || ''));
       const enforcedScenario = engineerRebuttalPrimaryScenario || (lowSlopeFallbackFromReportText ? 'low_slope_snow_ice_ponding' : null);
       analysisResult = enforceLowSlopeRebuttalRequirements(

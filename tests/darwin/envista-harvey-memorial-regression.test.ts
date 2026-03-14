@@ -465,7 +465,7 @@ MANDATORY THEORY SUMMARY (OPENING SENTENCE):
 "${REQUIRED_LOW_SLOPE_OPENING}"
 
 Do NOT default to generic storm/wind/shingle language in this scenario.
-Unless the engineer's causation sentence OR documented claim-file evidence explicitly relies on it, do NOT use:
+Unless a wind/shingle mechanic is directly quoted from the engineer's causation sentence, do NOT use:
 ${LOW_SLOPE_FORBIDDEN_BULLET_LIST}
 
 ${LOW_SLOPE_PRIORITY_ORDER}
@@ -486,7 +486,7 @@ ${LOW_SLOPE_STRUCTURAL_DISTINCTION}
 Even if roof framing can carry load, that does not prove membrane watertightness.
 
 EVIDENCE GROUNDING RULE:
-Do not insert damage descriptions (e.g., creased shingle tabs, fractured shingles, wind uplift mechanics) unless those terms appear in the engineer’s causation sentence or documented claim-file evidence.`;
+Do not insert damage descriptions (e.g., creased shingle tabs, fractured shingles, wind uplift mechanics) unless those terms appear as direct quote text in the engineer’s causation sentence.`;
   }
   return "";
 }
@@ -507,9 +507,9 @@ SECTION 1 — TIMING FAILURE
 SECTION 2 — DRAINAGE / SNOWMELT ANALYSIS FAILURE
 SECTION 3 — ENGINEER CONTRADICTION
 
-Do NOT use generic storm/wind/shingle boilerplate unless the engineer's causation sentence or documented claim-file evidence explicitly relies on it.
+Do NOT use generic storm/wind/shingle boilerplate unless it is directly quoted from the engineer's causation sentence.
 Detected wind-centric causation reliance in extracted theory: ${lowSlopeTheoryExplicitlyReliesOnWind ? "YES" : "NO"}.
-${lowSlopeTheoryExplicitlyReliesOnWind ? "If you use any wind/shingle language, tie it to direct engineer theory text and explain why it is material." : `Do NOT use:\n${LOW_SLOPE_FORBIDDEN_BULLET_LIST}`}
+${lowSlopeTheoryExplicitlyReliesOnWind ? "If you use any wind/shingle language, quote the exact engineer causation sentence and explain why that quote is material." : `Do NOT use:\n${LOW_SLOPE_FORBIDDEN_BULLET_LIST}`}
 
 MANDATORY LOW-SLOPE METHODOLOGY ATTACKS:
 - no membrane core cuts
@@ -529,7 +529,7 @@ MANDATORY DISTINCTION:
 ${LOW_SLOPE_STRUCTURAL_DISTINCTION}
 
 EVIDENCE GROUNDING RULE:
-Do not insert damage facts unless grounded in direct report language or documented claim file evidence. Do not insert creased shingle tabs, fractured shingles, wind uplift mechanics, structural racking, or high-wind pressure language unless those terms appear in the engineer’s causation sentence or documented claim-file evidence.`;
+Do not insert damage facts unless grounded in direct report language. Do not insert creased shingle tabs, fractured shingles, wind uplift mechanics, structural racking, or high-wind pressure language unless those terms appear as direct quote text in the engineer’s causation sentence.`;
 }
 
 // ─── Enforcement functions (mirrored) ────────────────────────────────────────
@@ -649,6 +649,114 @@ ${LOW_SLOPE_STRUCTURAL_DISTINCTION} Even if framing can carry snow load, that do
   }
 
   return suppressLowSlopeUnsupportedBoilerplate(updated.trim(), supportCorpus);
+}
+
+interface EngineerRebuttalEnforcementContext {
+  engineerStatedCause: string;
+  engineerTheorySentences: string[];
+  primaryScenario: string | null;
+  secondaryScenarios: string[];
+  criticalTestingNotPerformed: string[];
+  reportText: string;
+}
+
+const DEFAULT_ENGINEER_REQUIRED_TESTS = [
+  "material sampling/core verification",
+  "moisture mapping",
+  "leak-path tracing",
+  "causation timeline analysis",
+];
+
+function parseTaggedMissingTest(testEntry: string): { scenario: string | null; testName: string } {
+  const match = String(testEntry || "").match(/^\[([^\]]+)\]\s*(.+)$/);
+  if (!match) return { scenario: null, testName: String(testEntry || "").trim() };
+  return {
+    scenario: match[1]?.trim() || null,
+    testName: match[2]?.trim() || "",
+  };
+}
+
+function getEngineerRequiredTests(context: EngineerRebuttalEnforcementContext): string[] {
+  const scenarioCandidates = [
+    context.primaryScenario,
+    ...(Array.isArray(context.secondaryScenarios) ? context.secondaryScenarios : []),
+  ].filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  const scenarioFromMissing = (context.criticalTestingNotPerformed || [])
+    .map((entry) => parseTaggedMissingTest(entry).scenario)
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  const scenarioList = Array.from(new Set([...scenarioCandidates, ...scenarioFromMissing]));
+  const scenarioMappedTests = scenarioList.flatMap((scenario) => SCENARIO_MISSING_TESTING_MAP[scenario] || []);
+  const taggedMissingTests = (context.criticalTestingNotPerformed || [])
+    .map((entry) => parseTaggedMissingTest(entry).testName)
+    .filter(Boolean);
+
+  const merged = Array.from(new Set([...scenarioMappedTests, ...taggedMissingTests]));
+  return merged.length > 0 ? merged : [...DEFAULT_ENGINEER_REQUIRED_TESTS];
+}
+
+function isTestMentionedInReport(reportText: string, testName: string): boolean {
+  const textLower = String(reportText || "").toLowerCase();
+  if (!textLower) return false;
+
+  const normalizedTest = String(testName || "").toLowerCase().trim();
+  if (!normalizedTest) return false;
+  if (textLower.includes(normalizedTest)) return true;
+
+  const ignoredTokens = new Set(["analysis", "testing", "review", "inspection", "proof", "assessment", "evaluation"]);
+  const tokens = normalizedTest
+    .split(/[\s/()\-]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 4 && !ignoredTokens.has(token));
+
+  if (tokens.length === 0) return false;
+  return tokens.some((token) => textLower.includes(token));
+}
+
+function enforceEngineerRebuttalMandatorySections(result: string, context: EngineerRebuttalEnforcementContext): string {
+  if (!result) return result;
+
+  const quotedCause = String(
+    context.engineerStatedCause
+    || context.engineerTheorySentences?.[0]
+    || "No explicit engineer causation sentence was extracted from the report."
+  ).trim();
+
+  const requiredTests = getEngineerRequiredTests(context);
+  const testingLines = requiredTests.map((testName) => {
+    const appears = isTestMentionedInReport(context.reportText, testName);
+    return `- ${testName}: ${appears ? "Appears in report (identified in text)" : "Not documented in report"}`;
+  });
+
+  const missingCount = requiredTests.filter((testName) => !isTestMentionedInReport(context.reportText, testName)).length;
+  const causationStatement = missingCount > 0
+    ? `Because ${missingCount} required forensic test(s) are not documented, the engineer has not scientifically proven their conclusion and the causation statement is therefore speculative.`
+    : "Core forensic tests are referenced in the report text; causation still must be tied to quantifiable, test-backed findings rather than assumption.";
+
+  let updated = result.trim();
+  const lower = updated.toLowerCase();
+  const additions: string[] = [];
+
+  if (!/engineer theory extraction/i.test(lower)) {
+    additions.push(`Engineer Theory Extraction\nEngineer-stated cause (direct quote from report):\n"${quotedCause}"`);
+  }
+
+  if (!/required testing not performed/i.test(lower)) {
+    additions.push(`Required Testing Not Performed\nThe following forensic testing is required to scientifically prove the engineer's causation theory, with report presence status:\n${testingLines.join("\n")}`);
+  }
+
+  const hasCausationProofFailureSection = /causation proof failure/i.test(lower);
+  const hasSpeculativeFailureStatement = /has not scientifically proven their conclusion and the causation statement is therefore speculative/i.test(lower);
+  if (!hasCausationProofFailureSection || (missingCount > 0 && !hasSpeculativeFailureStatement)) {
+    additions.push(`Causation Proof Failure\n${causationStatement}`);
+  }
+
+  if (additions.length > 0) {
+    updated += `\n\n${additions.join("\n\n")}`;
+  }
+
+  return updated;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -852,6 +960,15 @@ The engineer's methodology was fundamentally inadequate for a low-slope membrane
     engineerTheoryCorpus,
   );
 
+  const enforcedWithMandatorySections = enforceEngineerRebuttalMandatorySections(enforced, {
+    engineerStatedCause: dismantler.engineerStatedCause,
+    engineerTheorySentences: dismantler.engineerTheorySentences,
+    primaryScenario: dismantler.primaryScenario,
+    secondaryScenarios: dismantler.secondaryScenarios,
+    criticalTestingNotPerformed: dismantler.criticalTestingNotPerformed,
+    reportText: ENVISTA_REPORT_TEXT,
+  });
+
   it("output starts with the required low-slope opening", () => {
     // Find the first non-header body line
     const lines = enforced.split("\n");
@@ -919,5 +1036,21 @@ The engineer's methodology was fundamentally inadequate for a low-slope membrane
     expect(enforced).toMatch(/membrane seam/i);
     expect(enforced).toMatch(/drainage obstruction/i);
     expect(enforced).toMatch(/low-slope membrane/i);
+  });
+
+  it("includes Engineer Theory Extraction section with direct quoted cause", () => {
+    expect(enforcedWithMandatorySections).toMatch(/Engineer Theory Extraction/i);
+    expect(enforcedWithMandatorySections).toContain(`"${dismantler.engineerStatedCause}"`);
+  });
+
+  it("includes Required Testing Not Performed section with report presence status", () => {
+    expect(enforcedWithMandatorySections).toMatch(/Required Testing Not Performed/i);
+    expect(enforcedWithMandatorySections).toMatch(/membrane core cuts/i);
+    expect(enforcedWithMandatorySections).toMatch(/Not documented in report|Appears in report/i);
+  });
+
+  it("includes Causation Proof Failure section with speculative-causation statement when testing is missing", () => {
+    expect(enforcedWithMandatorySections).toMatch(/Causation Proof Failure/i);
+    expect(enforcedWithMandatorySections).toMatch(/has not scientifically proven their conclusion and the causation statement is therefore speculative/i);
   });
 });
