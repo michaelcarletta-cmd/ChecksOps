@@ -2062,13 +2062,12 @@ When generating rebuttals:
 8. Include specific documentation requests that put them on the defensive
 9. Provide a formal rebuttal letter that makes them reconsider their denial`;
 
-        // ── Universal Engineer Report Dismantler (also runs on denial rebuttals for forensic extraction) ──
+        // ── Universal Engineer Report Dismantler (ALWAYS runs on denial rebuttals) ──
         const denialTextForDismantler = content || '';
         const denialDismantler = runEngineerReportDismantler(denialTextForDismantler);
-        if (denialDismantler.activatedScenarios.length > 0 || denialDismantler.isMaintenanceDenialNarrative) {
-          console.log(`[darwin] Denial EngineerReportDismantler: scenarios=${denialDismantler.activatedScenarios.join(',') || 'none'}, maintenanceNarrative=${denialDismantler.isMaintenanceDenialNarrative}, keywords=${denialDismantler.matchedKeywords.length}`);
-          systemPrompt += '\n' + denialDismantler.promptInjection;
-        }
+        console.log(`[darwin] Denial EngineerReportDismantler: scenarios=${denialDismantler.activatedScenarios.join(',') || 'none'}, maintenanceNarrative=${denialDismantler.isMaintenanceDenialNarrative}, dualCausation=${denialDismantler.isDualCausation}, triggerSignals=${denialDismantler.signals.triggerEventSignals.length}, exclusionSignals=${denialDismantler.signals.denialNarrativeSignals.length}`);
+        // Always inject — universal core runs on every denial; scenario packs are conditional within
+        systemPrompt += '\n' + denialDismantler.promptInjection;
 
         userPrompt = `${claimSummary}
 
