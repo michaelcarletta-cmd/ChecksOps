@@ -551,19 +551,28 @@ ESTIMATE BUILDER INTELLIGENCE (${estimateIntel.total_lines} lines, $${estimateIn
 When explaining recovery opportunity, CITE specific line items and their variance amounts.
 ` : '';
 
-    // Build regulatory violation brief from timeline analysis
+    // Build regulatory violation brief from timeline analysis — prioritized by strength score
     const regulatoryViolationBrief = detectedViolations.length > 0 ? `
-REGULATORY VIOLATION ANALYSIS (${detectedViolations.length} violations detected from timeline intelligence):
-${detectedViolations.map((v, i) => `${i + 1}. [${v.severity.toUpperCase()}] ${v.issue}
+REGULATORY VIOLATION ANALYSIS (${detectedViolations.length} violations detected — RANKED BY STRENGTH, strongest first):
+
+TOP ESCALATION POINTS (surface these first in strategy recommendations):
+${detectedViolations.slice(0, 3).map((v, i) => `★ ${i + 1}. [${v.severity.toUpperCase()}] ${v.issue}
    Regulation: ${v.regulation} (${v.citation})
    Evidence: ${v.supporting_events.join(' → ')}
-   Action: ${v.recommended_action}`).join('\n')}
+   Action: ${v.recommended_action}
+   WHY STRONGEST: ${v.severity === 'high' ? 'High-severity conduct violation' : 'Clear statutory match with documented evidence'}${v.issue.toLowerCase().includes('without investigation') || v.issue.toLowerCase().includes('no acknowledgment') ? ' — strong bad faith indicator' : ''}`).join('\n')}
+${detectedViolations.length > 3 ? `
+SECONDARY VIOLATIONS:
+${detectedViolations.slice(3).map((v, i) => `${i + 4}. [${v.severity.toUpperCase()}] ${v.issue}
+   Regulation: ${v.regulation} (${v.citation})
+   Evidence: ${v.supporting_events.join(' → ')}`).join('\n')}` : ''}
+${hasCumulativePattern ? `
+⚠ CUMULATIVE PATTERN DETECTED: ${lowerViolations.length} individual violations (delayed responses, inactivity gaps, procedural lapses) collectively establish a PATTERN OF UNFAIR CLAIM HANDLING under state unfair claims settlement practices. When recommending escalation, explicitly frame these as a systemic pattern — not isolated incidents — as this significantly strengthens regulatory complaints and bad faith exposure.` : ''}
 
 ESCALATION GUIDANCE:
 - ${detectedViolations.filter(v => v.severity === 'high').length} HIGH severity violations detected — consider regulatory complaint (DOBI/DOI)
-- When recommending escalation strategies, REFERENCE these detected violations by number and cite the specific regulation
+- In Strategy mode, LEAD with the top 3 strongest violations when recommending escalation and explain WHY each is a strong escalation point (evidence quality, statutory clarity, conduct severity)
 - High-severity violations (missed deadlines, denial without investigation, no acknowledgment) are strong bad faith indicators
-- Multiple violations compound regulatory exposure — note when 2+ violations create a pattern of unfair claims handling
 ` : '';
 
     // Build continuous learning briefs

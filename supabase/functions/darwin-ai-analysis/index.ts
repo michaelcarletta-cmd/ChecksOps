@@ -5456,15 +5456,48 @@ CRITICAL: Use this chronological timeline to construct the Statement of Facts. R
 ${tlEvents.map((e: any) => `- ${e.occurred_at?.split('T')[0]} | ${e.event_type}${e.actor ? ` (${e.actor})` : ''}: ${e.summary || 'No summary'}${e.importance_score && e.importance_score >= 7 ? ' *** HIGH IMPORTANCE ***' : ''}`).join('\n')}\n`;
         }
 
-        // Build auto-detected violations section
-        let autoViolationsSection = '';
-        if (autoDetectedViolations.length > 0) {
-          autoViolationsSection = `\n=== TIMELINE-DETECTED REGULATORY VIOLATIONS (${autoDetectedViolations.length} auto-detected) ===
-These violations were automatically detected by analyzing claim events against statutory requirements. INCORPORATE these into the complaint letter alongside the user-selected violations.
+        // ── Violation prioritization scoring ──────────────
+        function scoreViolationDobi(v: DetectedViolation): number {
+          let score = 0;
+          score += Math.min(v.supporting_events.filter(Boolean).length * 8, 24);
+          if (v.citation && !v.citation.includes('Unfair claims') && !v.citation.includes('Claims handling') && !v.citation.includes('Prompt handling')) score += 20;
+          else score += 5;
+          if (v.severity === 'high') score += 30;
+          else if (v.severity === 'medium') score += 15;
+          else score += 5;
+          const daysMatch = v.issue.match(/(\d+)[- ]day/);
+          if (daysMatch) score += Math.min(parseInt(daysMatch[1]) / 3, 15);
+          const badFaithKw = ['without', 'no carrier', 'no acknowledgment'];
+          if (badFaithKw.some(k => v.issue.toLowerCase().includes(k))) score += 15;
+          return score;
+        }
 
-${autoDetectedViolations.map((v, i) => `${i + 1}. [${v.severity.toUpperCase()}] ${v.issue}
+        const scoredAutoViolations = autoDetectedViolations
+          .map(v => ({ ...v, _score: scoreViolationDobi(v) }))
+          .sort((a, b) => b._score - a._score);
+
+        const topViolations = scoredAutoViolations.slice(0, 3);
+        const secondaryViolations = scoredAutoViolations.slice(3);
+        const lowerViolationsDobi = scoredAutoViolations.filter(v => v.severity !== 'high');
+        const hasCumulativePatternDobi = lowerViolationsDobi.length >= 3;
+
+        // Build auto-detected violations section — prioritized by strength
+        let autoViolationsSection = '';
+        if (scoredAutoViolations.length > 0) {
+          autoViolationsSection = `\n=== TIMELINE-DETECTED REGULATORY VIOLATIONS (${scoredAutoViolations.length} auto-detected — RANKED BY STRENGTH) ===
+CRITICAL INSTRUCTION: The violations below are ranked from strongest to weakest. In the OPENING SUMMARY of the complaint, lead with the top violations. In the STATEMENT OF FACTS, present the strongest violations first with full evidentiary detail before listing secondary violations.
+
+PRIMARY VIOLATIONS (strongest — feature prominently in opening and throughout letter):
+${topViolations.map((v, i) => `★ ${i + 1}. [${v.severity.toUpperCase()}] ${v.issue}
    Statute: ${v.regulation_title} (${v.citation})
-   Evidence: ${v.supporting_events.filter(Boolean).join(' → ')}`).join('\n')}\n`;
+   Evidence: ${v.supporting_events.filter(Boolean).join(' → ')}`).join('\n')}
+${secondaryViolations.length > 0 ? `
+SECONDARY VIOLATIONS (supporting — include after primary violations):
+${secondaryViolations.map((v, i) => `${i + topViolations.length + 1}. [${v.severity.toUpperCase()}] ${v.issue}
+   Statute: ${v.regulation_title} (${v.citation})
+   Evidence: ${v.supporting_events.filter(Boolean).join(' → ')}`).join('\n')}` : ''}
+${hasCumulativePatternDobi ? `
+⚠ CUMULATIVE PATTERN: ${lowerViolationsDobi.length} individual lower-severity violations collectively establish a PATTERN OF UNFAIR CLAIM HANDLING. In the complaint letter, explicitly identify this as a systemic pattern of conduct — not isolated incidents — citing the state's unfair claims settlement practices act. Frame the pattern as evidence that the carrier's conduct constitutes a general business practice of claims mishandling.` : ''}\n`;
         }
 
         // Build email communications section
