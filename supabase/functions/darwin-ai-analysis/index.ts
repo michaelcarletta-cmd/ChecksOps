@@ -1528,28 +1528,11 @@ MANDATORY THEORY SUMMARY (OPENING SENTENCE):
 "The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering."
 
 Do NOT default to generic storm/wind/shingle language in this scenario.
-Unless the engineer's causation sentence OR documented claim-file evidence explicitly relies on it, do NOT use:
+Unless a wind/shingle mechanic is directly quoted from the engineer's causation sentence, do NOT use:
 ${LOW_SLOPE_FORBIDDEN_BULLET_LIST}
-
-${LOW_SLOPE_PRIORITY_ORDER}
-
-REQUIRED ATTACK STRUCTURE (MANDATORY):
-SECTION 1 — TIMING FAILURE
-- Explain the report alleges openings developed over months/years without proving timing.
-- Explicitly cite missing membrane core cuts, seam adhesion/peel testing, moisture mapping, and leak-path tracing.
-
-SECTION 2 — DRAINAGE / SNOWMELT ANALYSIS FAILURE
-- Explain the report admits snow and drainage issues but does not quantify drainage capacity, snow-water equivalent, or runoff analysis.
-
-SECTION 3 — ENGINEER CONTRADICTION
-- State the report admits snow impeded drainage, standing water was present, and freeze-thaw can worsen openings, yet still concludes deterioration alone caused the loss without proving the event did not create or expand openings.
-
-MANDATORY DISTINCTION:
-${LOW_SLOPE_STRUCTURAL_DISTINCTION}
-Even if roof framing can carry load, that does not prove membrane watertightness.
-
+...
 EVIDENCE GROUNDING RULE:
-Do not insert damage descriptions (e.g., creased shingle tabs, fractured shingles, wind uplift mechanics) unless those terms appear in the engineer’s causation sentence or documented claim-file evidence.`;
+Do not insert damage descriptions (e.g., creased shingle tabs, fractured shingles, wind uplift mechanics) unless those terms appear as direct quote text in the engineer’s causation sentence.`;
   }
 
   const blocks: string[] = [];
