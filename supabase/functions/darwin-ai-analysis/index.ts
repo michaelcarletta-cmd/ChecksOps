@@ -3528,14 +3528,14 @@ Be specific, professional, and provide communications that are ready to copy and
           || ''
         );
         const engineerTheoryCorpus = engineerCausationSentence.toLowerCase();
-        engineerTheoryCorpusForFilters = engineerTheoryCorpus;
+        lowSlopeSupportCorpusForFilters = buildLowSlopeSupportCorpus(
+          engineerCausationSentence,
+          claimFactsPack,
+          Array.isArray(context.files) ? context.files : [],
+          engineerUserContext,
+        );
 
-        const windCausationTerms = [
-          'wind uplift', 'wind-driven rain', 'high wind', 'pressure event',
-          'fastener', 'shingle', 'uplift resistance', 'structural racking', 'fastener back-out',
-          'thermal seal', 'seal strip', 'granular loss', 'fractured tabs', 'arma',
-          'hand tab test', 'hand-tab test', 'lift test', 'gaf', 'certainteed', 'owens corning',
-        ];
+        const windCausationTerms = Array.from(new Set(LOW_SLOPE_FORBIDDEN_RULES.flatMap((rule) => rule.supportTerms.map((term) => term.toLowerCase()))));
         const lowSlopeTheoryExplicitlyReliesOnWind = windCausationTerms.some((term) => engineerTheoryCorpus.includes(term));
 
         const lowSlopeScopeGuard = primarySc === 'low_slope_snow_ice_ponding'
