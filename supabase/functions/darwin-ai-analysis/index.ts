@@ -1349,36 +1349,39 @@ MANDATORY THEORY SUMMARY (OPENING SENTENCE):
 "The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering."
 
 Do NOT default to generic storm/wind/shingle language in this scenario.
-Unless the engineer's causation conclusion explicitly relies on it, do NOT use:
-- shingle
+Unless the engineer's causation sentence explicitly relies on it, do NOT use:
+- shingle / shingles
 - thermal seal
+- seal strip
 - uplift checks
 - granular loss
 - fractured tabs
 - ARMA
 - fastener pull-out
 - wind-driven rain
-- high-wind/pressure event
-- uplift resistance
-- structural racking
-- fastener back-out
+- hand tab test
+- lift test
+- GAF / CertainTeed / Owens Corning references
 
-For EVERY finding in their report, ask and answer:
-- What destructive membrane testing was performed (membrane core cuts, seam adhesion/peel testing)?
-- What drainage-capacity analysis was performed (drain size, obstruction, discharge rate)?
-- What snow-water equivalent/runoff analysis was performed?
-- What leak-path tracing was performed from entry point to interior manifestation?
-- What moisture mapping (IR and/or meter-based) was performed?
-- Where is proof of timing of openings?
-- Did the engineer distinguish structural snow-load analysis from membrane watertightness analysis?
+${LOW_SLOPE_PRIORITY_ORDER}
 
-When the engineer claims "deterioration" or "deferred maintenance," ATTACK THIS with:
-- No membrane core cuts or seam adhesion/peel testing = no objective basis to time openings
-- No drainage/runoff/leak-path/moisture mapping analysis = no objective basis for causation
-- Admitted snow impeded drainage + standing water + freeze-thaw stress contradicts a deterioration-only conclusion
-- Susceptibility to damage is not proof that deterioration alone caused the loss
-- Structural snow-load discussion does not prove membrane watertightness causation
-- The report must prove deterioration ALONE caused the loss; assumptions are insufficient`;
+REQUIRED ATTACK STRUCTURE (MANDATORY):
+SECTION 1 — TIMING FAILURE
+- Explain the report alleges openings developed over months/years without proving timing.
+- Explicitly cite missing membrane core cuts, seam adhesion/peel testing, moisture mapping, and leak-path tracing.
+
+SECTION 2 — DRAINAGE / SNOWMELT ANALYSIS FAILURE
+- Explain the report admits snow and drainage issues but does not quantify drainage capacity, snow-water equivalent, or runoff analysis.
+
+SECTION 3 — ENGINEER CONTRADICTION
+- State the report admits snow impeded drainage, standing water was present, and freeze-thaw can worsen openings, yet still concludes deterioration alone caused the loss without proving the event did not create or expand openings.
+
+MANDATORY DISTINCTION:
+${LOW_SLOPE_STRUCTURAL_DISTINCTION}
+Even if roof framing can carry load, that does not prove membrane watertightness.
+
+EVIDENCE GROUNDING RULE:
+Do not insert damage descriptions (e.g., creased shingle tabs, fractured shingles, wind uplift mechanics) unless those terms appear in the engineer’s causation sentence.`;
   }
 
   const blocks: string[] = [];
