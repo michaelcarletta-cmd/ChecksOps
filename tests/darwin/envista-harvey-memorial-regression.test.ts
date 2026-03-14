@@ -926,6 +926,15 @@ The engineer's methodology was fundamentally inadequate for a low-slope membrane
     engineerTheoryCorpus,
   );
 
+  const enforcedWithMandatorySections = enforceEngineerRebuttalMandatorySections(enforced, {
+    engineerStatedCause: dismantler.engineerStatedCause,
+    engineerTheorySentences: dismantler.engineerTheorySentences,
+    primaryScenario: dismantler.primaryScenario,
+    secondaryScenarios: dismantler.secondaryScenarios,
+    criticalTestingNotPerformed: dismantler.criticalTestingNotPerformed,
+    reportText: ENVISTA_REPORT_TEXT,
+  });
+
   it("output starts with the required low-slope opening", () => {
     // Find the first non-header body line
     const lines = enforced.split("\n");
