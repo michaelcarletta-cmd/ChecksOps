@@ -1,34 +1,4 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-
-// Use resilient dynamic import for pdf.js to avoid external CDN outages.
-let pdfjsLibPromise: Promise<any> | null = null;
-async function getPdfJs() {
-  if (!pdfjsLibPromise) {
-    pdfjsLibPromise = (async () => {
-      const candidates = [
-        "npm:pdfjs-dist@3.11.174/build/pdf.mjs",
-        "https://esm.sh/pdfjs-dist@3.11.174/build/pdf.mjs",
-        "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.mjs",
-      ];
-
-      let lastError: unknown = null;
-      for (const specifier of candidates) {
-        try {
-          const mod: any = await import(specifier);
-          const pdfjs = mod?.getDocument ? mod : (mod?.default?.getDocument ? mod.default : mod);
-          if (pdfjs?.getDocument) return pdfjs;
-        } catch (err) {
-          lastError = err;
-          console.warn(`[pdf.js] Failed to load from ${specifier}:`, err);
-        }
-      }
-
-      throw new Error(`Failed to load pdf.js from all sources. Last error: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
-    })();
-  }
-
-  return pdfjsLibPromise;
-}
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -394,46 +364,54 @@ function parseStructuredResponse(rawResponse: string): DarwinStructuredResult {
   return ensureStructuredResult(parsed);
 }
 
-// Extract text from PDF using pdf.js (Deno-compatible, no AI, lower memory usage)
+// Extract text from PDF using raw-byte parsing (no external runtime imports)
 async function extractTextFromPDFNative(base64Content: string, fileName: string): Promise<string> {
   console.log(`Native PDF extraction for: ${fileName}`);
-  
+
   try {
-    // Get pdf.js dynamically
-    const pdfjs = await getPdfJs();
-    
     // Decode base64 to bytes
     const binaryString = atob(base64Content);
     const bytes = new Uint8Array(binaryString.length);
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
     }
-    
-    // Load PDF using pdf.js
-    const loadingTask = pdfjs.getDocument({ data: bytes.buffer });
-    const pdf = await loadingTask.promise;
-    
+
+    // Raw PDF text parsing (BT/ET blocks + ASCII fallback)
+    const rawText = new TextDecoder('latin1').decode(bytes);
     const textParts: string[] = [];
-    
-    // Extract text from each page
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item: any) => item.str)
-        .join(' ');
-      if (pageText.trim()) {
-        textParts.push(pageText);
+
+    const btEtRegex = /BT\s([\s\S]*?)ET/g;
+    let btEtMatch: RegExpExecArray | null;
+    while ((btEtMatch = btEtRegex.exec(rawText)) !== null) {
+      const block = btEtMatch[1];
+      const strRegex = /\(([^)]*)\)/g;
+      let strMatch: RegExpExecArray | null;
+      while ((strMatch = strRegex.exec(block)) !== null) {
+        const decoded = strMatch[1]
+          .replace(/\\n/g, '\n')
+          .replace(/\\r/g, '\r')
+          .replace(/\\\(/g, '(')
+          .replace(/\\\)/g, ')')
+          .replace(/\\\\/g, '\\');
+        if (decoded.trim()) textParts.push(decoded);
       }
     }
-    
-    const extractedText = textParts.join('\n\n');
-    console.log(`Native extraction got ${extractedText.length} characters from ${pdf.numPages} pages`);
-    
-    if (!extractedText || extractedText.trim().length < 100) {
+
+    if (textParts.length < 5) {
+      const asciiRegex = /[A-Za-z0-9][A-Za-z0-9 ,.\-\/#:@$%&()]{4,}/g;
+      let asciiMatch: RegExpExecArray | null;
+      while ((asciiMatch = asciiRegex.exec(rawText)) !== null) {
+        textParts.push(asciiMatch[0].trim());
+      }
+    }
+
+    const extractedText = textParts.join(' ').replace(/\s+/g, ' ').trim();
+    console.log(`Native extraction got ${extractedText.length} characters`);
+
+    if (!extractedText || extractedText.length < 100) {
       throw new Error('PDF appears to be scanned/image-based with minimal text');
     }
-    
+
     return extractedText;
   } catch (error) {
     console.error('Native PDF extraction failed:', error);
