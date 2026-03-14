@@ -432,24 +432,73 @@ export default function Sign() {
               </div>
             )}
 
-            <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-              <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-1">Signing</p>
-              <p className="text-sm font-medium text-gray-900">{request.document_name}</p>
-              <p className="text-xs text-gray-500 mt-0.5">as {signer.signer_name}</p>
+            {/* Context card */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+              <p className="text-sm font-semibold text-blue-900">{request.document_name}</p>
+              {request.claim_number && (
+                <p className="text-xs text-blue-700">Claim: {request.claim_number}</p>
+              )}
+              {request.policyholder_name && (
+                <p className="text-xs text-blue-700">Policyholder: {request.policyholder_name}</p>
+              )}
+              <p className="text-xs text-blue-600 mt-1">
+                The fields below apply to the document shown above. Please review the document before signing.
+              </p>
             </div>
 
+            {/* View Document Again button */}
+            <button
+              type="button"
+              onClick={() => setActiveStep("review")}
+              className="w-full flex items-center justify-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium py-2 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+            >
+              ↑ View Document Again
+            </button>
+
             <div className="space-y-5">
-              {fields.map((field: any, index: number) => (
+              {fields.map((field: any, index: number) => {
+                // Build a descriptive label based on field type, page, and position
+                const pageNum = field.page ?? 1;
+                const yPos = field.y;
+                let positionHint = "";
+                if (yPos != null) {
+                  if (yPos < 0.33) positionHint = "upper section";
+                  else if (yPos < 0.66) positionHint = "middle section";
+                  else positionHint = "lower section";
+                }
+
+                // Count fields of same type on same page for disambiguation
+                const sameTypeOnPage = fields.filter(
+                  (f: any) => f.type === field.type && (f.page ?? 1) === pageNum
+                );
+                const typeLabel = field.type === "signature" ? "Signature" 
+                  : field.type === "checkbox" ? "Checkbox"
+                  : field.type === "date" ? "Date"
+                  : "Text";
+                
+                let displayLabel = field.label;
+                // Override generic/duplicate labels with contextual ones
+                if (!field.label || field.label === `${typeLabel} ${index + 1}` || sameTypeOnPage.length > 1) {
+                  const indexOnPage = sameTypeOnPage.indexOf(field) + 1;
+                  displayLabel = sameTypeOnPage.length > 1
+                    ? `${typeLabel} field ${indexOnPage} on page ${pageNum}`
+                    : `${typeLabel} field on page ${pageNum}`;
+                }
+
+                return (
                 <div key={field.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                  <div className="flex items-center gap-2 mb-3">
+                  <div className="flex items-center gap-2 mb-1">
                     <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">
                       {index + 1}
                     </span>
                     <Label className="text-sm font-semibold text-gray-900">
-                      {field.label}
+                      {displayLabel}
                       {field.required !== false && <span className="text-red-500 ml-1">*</span>}
                     </Label>
                   </div>
+                  <p className="text-xs text-gray-400 mb-3 ml-8">
+                    This field applies to page {pageNum} of the document above{positionHint ? ` — ${positionHint}` : ""}
+                  </p>
 
                   {field.type === "signature" ? (
                     <div className="space-y-2">
@@ -515,7 +564,9 @@ export default function Sign() {
                     />
                   )}
                 </div>
-              ))}
+                );
+              })}
+
             </div>
 
             <div className="pt-2 pb-6 space-y-3">
