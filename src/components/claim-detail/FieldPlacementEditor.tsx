@@ -326,7 +326,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
   const removeField = (fieldId: string) => {
     const updatedFields = fields.filter(f => f.id !== fieldId);
     setFields(updatedFields);
-    onFieldsChange(updatedFields);
+    emitFieldsAsPercentages(updatedFields);
     toast({ title: "Field removed" });
   };
 
