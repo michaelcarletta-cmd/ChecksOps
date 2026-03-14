@@ -1003,4 +1003,20 @@ The engineer's methodology was fundamentally inadequate for a low-slope membrane
     expect(enforced).toMatch(/drainage obstruction/i);
     expect(enforced).toMatch(/low-slope membrane/i);
   });
+
+  it("includes Engineer Theory Extraction section with direct quoted cause", () => {
+    expect(enforcedWithMandatorySections).toMatch(/Engineer Theory Extraction/i);
+    expect(enforcedWithMandatorySections).toContain(`"${dismantler.engineerStatedCause}"`);
+  });
+
+  it("includes Required Testing Not Performed section with report presence status", () => {
+    expect(enforcedWithMandatorySections).toMatch(/Required Testing Not Performed/i);
+    expect(enforcedWithMandatorySections).toMatch(/membrane core cuts/i);
+    expect(enforcedWithMandatorySections).toMatch(/Not documented in report|Appears in report/i);
+  });
+
+  it("includes Causation Proof Failure section with speculative-causation statement when testing is missing", () => {
+    expect(enforcedWithMandatorySections).toMatch(/Causation Proof Failure/i);
+    expect(enforcedWithMandatorySections).toMatch(/has not scientifically proven their conclusion and the causation statement is therefore speculative/i);
+  });
 });
