@@ -6,7 +6,7 @@ import mammoth from "mammoth";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
-import { Pencil, Calendar, Type, Trash2, Save, ChevronLeft, ChevronRight, CheckSquare } from "lucide-react";
+import { Pencil, Calendar, Type, Trash2, Save, ChevronLeft, ChevronRight, CheckSquare, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DOCUMENT_TYPE_OPTIONS, SIGNER_DISPLAY_TEMPLATES, getFieldTemplateKey } from "@/lib/signer-display-templates";
 
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
