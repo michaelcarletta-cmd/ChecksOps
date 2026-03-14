@@ -10399,6 +10399,7 @@ export type Database = {
           document_name: string
           document_path: string
           field_data: Json | null
+          final_pdf_path: string | null
           id: string
           last_attempted_at: string | null
           last_error: string | null
@@ -10418,6 +10419,7 @@ export type Database = {
           document_name: string
           document_path: string
           field_data?: Json | null
+          final_pdf_path?: string | null
           id?: string
           last_attempted_at?: string | null
           last_error?: string | null
@@ -10437,6 +10439,7 @@ export type Database = {
           document_name?: string
           document_path?: string
           field_data?: Json | null
+          final_pdf_path?: string | null
           id?: string
           last_attempted_at?: string | null
           last_error?: string | null
@@ -10474,6 +10477,7 @@ export type Database = {
           email_sent_at: string | null
           field_values: Json | null
           id: string
+          ip_address: string | null
           signature_data: string | null
           signature_request_id: string
           signed_at: string | null
@@ -10482,6 +10486,8 @@ export type Database = {
           signer_type: string
           signing_order: number
           status: string
+          user_agent: string | null
+          viewed_at: string | null
         }
         Insert: {
           access_token?: string
@@ -10492,6 +10498,7 @@ export type Database = {
           email_sent_at?: string | null
           field_values?: Json | null
           id?: string
+          ip_address?: string | null
           signature_data?: string | null
           signature_request_id: string
           signed_at?: string | null
@@ -10500,6 +10507,8 @@ export type Database = {
           signer_type: string
           signing_order?: number
           status?: string
+          user_agent?: string | null
+          viewed_at?: string | null
         }
         Update: {
           access_token?: string
@@ -10510,6 +10519,7 @@ export type Database = {
           email_sent_at?: string | null
           field_values?: Json | null
           id?: string
+          ip_address?: string | null
           signature_data?: string | null
           signature_request_id?: string
           signed_at?: string | null
@@ -10518,6 +10528,8 @@ export type Database = {
           signer_type?: string
           signing_order?: number
           status?: string
+          user_agent?: string | null
+          viewed_at?: string | null
         }
         Relationships: [
           {
