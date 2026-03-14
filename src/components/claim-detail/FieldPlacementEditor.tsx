@@ -67,6 +67,13 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
   // Load template state
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   
+  // Display metadata editing state
+  const [editingFieldDisplay, setEditingFieldDisplay] = useState<string | null>(null);
+  const [editDisplayLabel, setEditDisplayLabel] = useState("");
+  const [editDisplayHelpText, setEditDisplayHelpText] = useState("");
+  const [editDisplaySection, setEditDisplaySection] = useState("");
+  const [selectedDocType, setSelectedDocType] = useState<string>("");
+  
   // DOCX HTML rendering
   const [docxHtml, setDocxHtml] = useState<string | null>(null);
   const docxContainerRef = useRef<HTMLDivElement>(null);
