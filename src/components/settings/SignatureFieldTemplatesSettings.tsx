@@ -82,9 +82,12 @@ export function SignatureFieldTemplatesSettings({ embedded = false }: SignatureF
         updated_at: new Date().toISOString(),
       };
 
-      // Only update field_data if we have placed fields (meaning PDF was loaded)
+      // Update field_data if we have placed fields (from PDF editor or inline label edits)
       if (placedFields.length > 0) {
         updateData.field_data = placedFields;
+      } else if (editingTemplate?.field_data?.length > 0) {
+        // Preserve existing field_data with any inline display edits
+        updateData.field_data = editingTemplate.field_data;
       }
 
       const { error } = await supabase
