@@ -1191,30 +1191,41 @@ PROMPT INJECTION ORDER (ENFORCED):
 // ── Scenario-conditional system prompt builders ─────────────────────────────
 
 function buildScenarioAttackVectors(primary: string, allActive: Set<string>): string {
-  const blocks: string[] = [];
+  // Primary scenario controls rebuttal focus; secondary scenarios are supporting context only.
+  if (primary === 'low_slope_snow_ice_ponding') {
+    return `=== LOW-SLOPE / SNOW / ICE / MEMBRANE ATTACK APPROACH ===
+MANDATORY THEORY SUMMARY (OPENING SENTENCE):
+"The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering."
 
-  if (primary === 'low_slope_snow_ice_ponding' || allActive.has('low_slope_snow_ice_ponding')) {
-    blocks.push(`=== LOW-SLOPE / SNOW / ICE / MEMBRANE ATTACK APPROACH ===
+Do NOT default to generic storm/wind envelope rhetoric in this scenario.
+Unless the engineer's causation conclusion explicitly relies on wind-shingle mechanics, do NOT use:
+- high-wind or pressure event
+- fastener pull-out testing
+- uplift resistance
+- wind-driven rain
+- structural racking
+- fastener back-out
+
 For EVERY finding in their report, ask and answer:
-- What destructive membrane testing was performed (core cuts, seam peel tests, adhesion pull tests)?
-- What drainage capacity analysis was performed?
-- What freeze-thaw cycle analysis was conducted?
-- What moisture mapping or infrared scanning was done?
-- Were snow load calculations performed to quantify the hydraulic loading event?
-- Was the snow-water equivalent calculated for the event?
-- Did the engineer differentiate between event-driven membrane stress and pre-existing deterioration with DATED evidence?
-- Where is the documentation of pre-event membrane condition?
+- What destructive membrane testing was performed (core cuts, seam adhesion/peel tests)?
+- What drainage-capacity analysis was performed (drain size, obstruction, discharge rate)?
+- What snow-water equivalent / runoff analysis was performed?
+- What leak-path tracing was performed from entry point to interior manifestation?
+- What moisture mapping (IR and/or meter-based) was performed?
+- Did the engineer differentiate event-driven membrane stress from pre-existing deterioration with DATED evidence?
+- Where is proof of timing for the alleged openings?
 
-When the engineer claims damage is "deterioration" or "deferred maintenance," ATTACK THIS with:
-- What specific testing differentiates event-induced membrane failure from age-related degradation?
-- What DATED pre-event documentation proves the condition existed BEFORE the snow/ice event?
-- Susceptibility to damage does not prove the damage was caused by deterioration alone—it proves the OPPOSITE: that the event was the proximate cause
-- Acknowledging snow impeded drainage and increased water burden while simultaneously blaming maintenance is a LOGICAL CONTRADICTION
-- Standing water, ice dams, and snowmelt infiltration are EVENT-DRIVEN forces that exceed design tolerances—not "normal wear"
-- The engineer's own observations of ponding, drainage obstruction, and snowmelt infiltration confirm the event created conditions BEYOND what normal maintenance prevents`);
+When the engineer claims "deterioration" or "deferred maintenance," ATTACK THIS with:
+- No membrane core cuts or seam testing = no objective basis to time openings
+- Admitted snow impeded drainage + standing water + freeze-thaw stress contradicts a deterioration-only conclusion
+- Susceptibility to damage is not proof that deterioration alone caused the loss
+- Standing water, ice dams, and snowmelt infiltration are event-driven hydraulic loading forces
+- The report must prove deterioration ALONE caused the loss; assumptions are insufficient`;
   }
 
-  if (primary === 'hail_impact' || allActive.has('hail_impact')) {
+  const blocks: string[] = [];
+
+  if (primary === 'hail_impact' || (!primary && allActive.has('hail_impact'))) {
     blocks.push(`=== HAIL IMPACT ATTACK APPROACH ===
 For EVERY finding, ask and answer:
 - Were proper test squares (10x10) performed on each slope/elevation?
@@ -1224,7 +1235,7 @@ For EVERY finding, ask and answer:
 - Were directional impact patterns analyzed and correlated with weather data?`);
   }
 
-  if (primary === 'wind_uplift' || allActive.has('wind_uplift')) {
+  if (primary === 'wind_uplift' || (!primary && allActive.has('wind_uplift'))) {
     blocks.push(`=== WIND UPLIFT ATTACK APPROACH ===
 For EVERY finding, ask and answer:
 - Were hand-tab tests performed to assess actual seal strip adhesion?
@@ -1242,7 +1253,7 @@ When engineers cite ASTM D3161 or D7158 wind ratings to claim shingles "should h
 Any engineer applying new-product test standards to aged materials is either incompetent or deliberately misleading the carrier.`);
   }
 
-  if (primary === 'plumbing_freeze_burst' || allActive.has('plumbing_freeze_burst')) {
+  if (primary === 'plumbing_freeze_burst' || (!primary && allActive.has('plumbing_freeze_burst'))) {
     blocks.push(`=== PLUMBING FREEZE BURST ATTACK APPROACH ===
 - Was the freeze exposure timeline established with temperature data?
 - Was plumbing insulation reviewed against code requirements (IRC P2603.5)?
@@ -1250,7 +1261,7 @@ Any engineer applying new-product test standards to aged materials is either inc
 - Were maintenance records actually obtained or just assumed absent?`);
   }
 
-  if (primary === 'fire_causation' || allActive.has('fire_causation')) {
+  if (primary === 'fire_causation' || (!primary && allActive.has('fire_causation'))) {
     blocks.push(`=== FIRE CAUSATION ATTACK APPROACH ===
 - Was NFPA 921 methodology systematically followed?
 - Was arc mapping performed?
@@ -1258,7 +1269,7 @@ Any engineer applying new-product test standards to aged materials is either inc
 - Was evidence properly preserved for independent examination?`);
   }
 
-  if (primary === 'water_intrusion_envelope' || allActive.has('water_intrusion_envelope')) {
+  if (primary === 'water_intrusion_envelope' || (!primary && allActive.has('water_intrusion_envelope'))) {
     blocks.push(`=== WATER INTRUSION / ENVELOPE ATTACK APPROACH ===
 - Was destructive water testing performed to trace the intrusion path?
 - Were all flashing points inspected (head, sill, jamb, kick-out, step, counter)?
@@ -1266,7 +1277,7 @@ Any engineer applying new-product test standards to aged materials is either inc
 - Was sealant age and condition properly assessed?`);
   }
 
-  if (primary === 'structural_movement_settlement' || allActive.has('structural_movement_settlement')) {
+  if (primary === 'structural_movement_settlement' || (!primary && allActive.has('structural_movement_settlement'))) {
     blocks.push(`=== STRUCTURAL MOVEMENT ATTACK APPROACH ===
 - Was geotechnical analysis performed?
 - Were dated monitoring measurements provided?
