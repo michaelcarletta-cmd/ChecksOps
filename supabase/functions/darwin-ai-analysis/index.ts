@@ -5186,6 +5186,21 @@ Be specific, professional, and provide communications that are ready to copy and
           `[darwin][engineer_report_rebuttal] scenario diagnostics: primary=${engineerRebuttalPrimaryScenario || 'none'} rule_pack=${scenarioRulePackLoaded} suppressed=[${scenarioSuppressedRulePacks.join(',') || 'none'}] matched_terms=[${scenarioDetectionMatchedTerms.join(',') || 'none'}] source_origin=${engineerRebuttalSourceTextOrigin} source_length=${engineerRebuttalSourceTextLength} used_engineer_report_text=${engineerRebuttalUsedEngineerReportText}`
         );
 
+        // Build deterministic rebuttal as fallback/reference
+        deterministicRebuttalText = buildDeterministicEngineerRebuttal(engineerIntelligence, {
+          claimNumber: claim.claim_number || undefined,
+          policyNumber: claim.policy_number || undefined,
+          insured: claim.insured_name || undefined,
+          propertyAddress: claim.loss_address || undefined,
+          dateOfLoss: claim.loss_date || undefined,
+          carrierName: claim.carrier_name || undefined,
+          authorName,
+          authorTitle,
+          companyName: 'Freedom Adjustment',
+          state: resolvedState || undefined,
+        });
+        console.log(`[darwin][engineer-intel] Deterministic rebuttal built: ${deterministicRebuttalText.length} chars`);
+
         const allActiveScenarios = new Set([primarySc, ...scopedSecondaryScenarios].filter(Boolean));
 
         const scenarioAttackVectors = buildScenarioAttackVectors(primarySc, allActiveScenarios);
