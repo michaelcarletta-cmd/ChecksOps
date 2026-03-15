@@ -2661,7 +2661,9 @@ export type Database = {
           manufacturer_references: Json | null
           recipient: string | null
           scope_positions: Json | null
+          segment_id: string | null
           sender: string | null
+          source_scope: string
           summary: string | null
           testing_missing: Json | null
           testing_performed: Json | null
@@ -2690,7 +2692,9 @@ export type Database = {
           manufacturer_references?: Json | null
           recipient?: string | null
           scope_positions?: Json | null
+          segment_id?: string | null
           sender?: string | null
+          source_scope?: string
           summary?: string | null
           testing_missing?: Json | null
           testing_performed?: Json | null
@@ -2719,7 +2723,9 @@ export type Database = {
           manufacturer_references?: Json | null
           recipient?: string | null
           scope_positions?: Json | null
+          segment_id?: string | null
           sender?: string | null
+          source_scope?: string
           summary?: string | null
           testing_missing?: Json | null
           testing_performed?: Json | null
@@ -2745,6 +2751,13 @@ export type Database = {
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_document_intelligence_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "claim_file_segments"
             referencedColumns: ["id"]
           },
         ]
@@ -3072,6 +3085,97 @@ export type Database = {
           },
         ]
       }
+      claim_file_segments: {
+        Row: {
+          automation_safe: boolean
+          claim_id: string
+          classification_candidates: Json
+          classification_confidence: number | null
+          classification_reasoning: Json
+          clean_text: string | null
+          created_at: string
+          document_family: string | null
+          end_page: number | null
+          extracted_text: string | null
+          file_id: string
+          id: string
+          review_required: boolean
+          segment_classification: string | null
+          segment_index: number
+          segment_label: string | null
+          source_method: string
+          start_page: number | null
+          text_excerpt: string | null
+          updated_at: string
+        }
+        Insert: {
+          automation_safe?: boolean
+          claim_id: string
+          classification_candidates?: Json
+          classification_confidence?: number | null
+          classification_reasoning?: Json
+          clean_text?: string | null
+          created_at?: string
+          document_family?: string | null
+          end_page?: number | null
+          extracted_text?: string | null
+          file_id: string
+          id?: string
+          review_required?: boolean
+          segment_classification?: string | null
+          segment_index: number
+          segment_label?: string | null
+          source_method?: string
+          start_page?: number | null
+          text_excerpt?: string | null
+          updated_at?: string
+        }
+        Update: {
+          automation_safe?: boolean
+          claim_id?: string
+          classification_candidates?: Json
+          classification_confidence?: number | null
+          classification_reasoning?: Json
+          clean_text?: string | null
+          created_at?: string
+          document_family?: string | null
+          end_page?: number | null
+          extracted_text?: string | null
+          file_id?: string
+          id?: string
+          review_required?: boolean
+          segment_classification?: string | null
+          segment_index?: number
+          segment_label?: string | null
+          source_method?: string
+          start_page?: number | null
+          text_excerpt?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_file_segments_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_file_segments_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_file_segments_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "claim_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_files: {
         Row: {
           automation_safe: boolean
@@ -3098,6 +3202,7 @@ export type Database = {
           file_size: number | null
           file_type: string | null
           folder_id: string | null
+          has_virtual_segments: boolean
           id: string
           is_latest_version: boolean | null
           is_mixed_document: boolean
@@ -3116,6 +3221,9 @@ export type Database = {
           processed_by_darwin: boolean | null
           processing_error: string | null
           ready_for_analysis: boolean | null
+          segment_count: number
+          segmentation_status: string | null
+          segmentation_summary: Json
           source: string | null
           text_quality_status: string | null
           uploaded_at: string | null
@@ -3148,6 +3256,7 @@ export type Database = {
           file_size?: number | null
           file_type?: string | null
           folder_id?: string | null
+          has_virtual_segments?: boolean
           id?: string
           is_latest_version?: boolean | null
           is_mixed_document?: boolean
@@ -3166,6 +3275,9 @@ export type Database = {
           processed_by_darwin?: boolean | null
           processing_error?: string | null
           ready_for_analysis?: boolean | null
+          segment_count?: number
+          segmentation_status?: string | null
+          segmentation_summary?: Json
           source?: string | null
           text_quality_status?: string | null
           uploaded_at?: string | null
@@ -3198,6 +3310,7 @@ export type Database = {
           file_size?: number | null
           file_type?: string | null
           folder_id?: string | null
+          has_virtual_segments?: boolean
           id?: string
           is_latest_version?: boolean | null
           is_mixed_document?: boolean
@@ -3216,6 +3329,9 @@ export type Database = {
           processed_by_darwin?: boolean | null
           processing_error?: string | null
           ready_for_analysis?: boolean | null
+          segment_count?: number
+          segmentation_status?: string | null
+          segmentation_summary?: Json
           source?: string | null
           text_quality_status?: string | null
           uploaded_at?: string | null
@@ -8262,6 +8378,8 @@ export type Database = {
           payload: Json
           priority: number
           run_after: string
+          segment_id: string | null
+          source_scope: string
           status: string
           updated_at: string
         }
@@ -8279,6 +8397,8 @@ export type Database = {
           payload?: Json
           priority?: number
           run_after?: string
+          segment_id?: string | null
+          source_scope?: string
           status?: string
           updated_at?: string
         }
@@ -8296,6 +8416,8 @@ export type Database = {
           payload?: Json
           priority?: number
           run_after?: string
+          segment_id?: string | null
+          source_scope?: string
           status?: string
           updated_at?: string
         }
@@ -8319,6 +8441,13 @@ export type Database = {
             columns: ["file_id"]
             isOneToOne: true
             referencedRelation: "claim_files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_intelligence_queue_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "claim_file_segments"
             referencedColumns: ["id"]
           },
         ]

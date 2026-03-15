@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { runSmartClassification, type DocumentClassification as SmartDocClassification } from './classification-v2.ts';
 import { analyzePacketText } from './packet-intelligence.ts';
+import { classifyVirtualSegments } from './segment-intelligence.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -124,6 +125,22 @@ async function updateClaimMasterStateDocIntelSummary(
   if (error) {
     console.error('[ClaimMasterState] document_intelligence update error:', error.message);
   }
+}
+
+function mapDocumentType(classification: string): string {
+  const docTypeMap: Record<string, string> = {
+    denial: 'denial_letter',
+    estimate: 'carrier_estimate',
+    approval: 'coverage_letter',
+    rfi: 'carrier_correspondence',
+    engineering_report: 'engineering_report',
+    policy: 'policy_document',
+    correspondence: 'carrier_correspondence',
+    invoice: 'invoice',
+    photo: 'photos_report',
+    other: 'other',
+  };
+  return docTypeMap[classification] || classification;
 }
 
 async function verifyClassification(
@@ -419,6 +436,21 @@ Deno.serve(async (req) => {
       !finalMixed &&
       !finalReviewRequired;
 
+    const segmentationResult =
+      packetAnalysis &&
+      packetAnalysis.mixed_document &&
+      cleanText.length >= 2000
+        ? classifyVirtualSegments({
+            cleanText,
+            smartClassification,
+          })
+        : {
+            has_segments: false,
+            segment_count: 0,
+            summary: {},
+            segments: [],
+          };
+
     const classificationResult = {
       ...baseClassificationResult,
       classification: finalClassification as DocumentClassification,
@@ -470,6 +502,10 @@ Deno.serve(async (req) => {
         packet_mixed_confidence: packetAnalysis?.mixed_confidence || null,
         packet_review_required: packetAnalysis?.review_required || false,
         processing_error: null,
+        has_virtual_segments: segmentationResult.has_segments,
+        segment_count: segmentationResult.segment_count,
+        segmentation_status: segmentationResult.has_segments ? 'segmented' : 'not_segmented',
+        segmentation_summary: segmentationResult.summary,
       };
       // Store extracted and clean text
       if (textContent && textContent.length > 50 && !textContent.startsWith('[PDF Document')) {
@@ -484,6 +520,51 @@ Deno.serve(async (req) => {
         .from('claim_files')
         .update(updatePayload)
         .eq('id', fileId);
+
+      // === VIRTUAL SEGMENT STORAGE ===
+      if (fileId) {
+        if (segmentationResult.has_segments) {
+          await supabase
+            .from('claim_file_segments')
+            .delete()
+            .eq('file_id', fileId);
+
+          const segmentRows = segmentationResult.segments.map((segment) => ({
+            claim_id: targetClaimId,
+            file_id: fileId,
+            segment_index: segment.segment_index,
+            segment_label: segment.segment_label,
+            start_page: segment.start_page,
+            end_page: segment.end_page,
+            text_excerpt: segment.text_excerpt,
+            extracted_text: segment.extracted_text.substring(0, 100000),
+            clean_text: segment.clean_text.substring(0, 100000),
+            segment_classification: segment.segment_classification,
+            classification_confidence: segment.classification_confidence,
+            classification_candidates: segment.classification_candidates,
+            classification_reasoning: segment.classification_reasoning,
+            review_required: segment.review_required,
+            automation_safe: segment.automation_safe,
+            document_family: segment.document_family,
+            source_method: 'virtual_segmentation',
+          }));
+
+          const { error: segmentError } = await supabase
+            .from('claim_file_segments')
+            .insert(segmentRows);
+
+          if (segmentError) {
+            console.error('[Segmentation] Failed to store segments:', segmentError.message);
+          } else {
+            console.log(`[Segmentation] Stored ${segmentRows.length} virtual segments for file ${fileId}`);
+          }
+        } else {
+          await supabase
+            .from('claim_file_segments')
+            .delete()
+            .eq('file_id', fileId);
+        }
+      }
 
       // Log review-required classifications
       if (targetClaimId && (finalReviewRequired || finalMixed)) {
@@ -513,14 +594,56 @@ Deno.serve(async (req) => {
     // === STEP 4: DURABLE DOCUMENT INTELLIGENCE QUEUE ===
     if (readyForAnalysis && targetClaimId && fileId && cleanText.length >= 100) {
       try {
-        await enqueueDocumentIntelligenceJob(supabase, {
-          claim_id: targetClaimId,
-          file_id: fileId,
-          document_type: mappedDocType,
-          document_classification: classificationResult.classification,
-          confidence_score: classificationResult.confidence,
-          summary: classificationResult.metadata?.summary,
-        });
+        if (segmentationResult.has_segments) {
+          const { data: savedSegments, error: savedSegmentsError } = await supabase
+            .from('claim_file_segments')
+            .select('id, segment_index, segment_label, segment_classification, classification_confidence')
+            .eq('file_id', fileId)
+            .order('segment_index', { ascending: true });
+
+          if (savedSegmentsError) {
+            throw savedSegmentsError;
+          }
+
+          for (const segment of savedSegments || []) {
+            const queueRow = {
+              claim_id: targetClaimId,
+              file_id: fileId,
+              segment_id: segment.id,
+              source_scope: 'segment',
+              status: 'pending',
+              priority: Number(segment.classification_confidence || 0) >= 0.85 ? 100 : 50,
+              run_after: new Date().toISOString(),
+              payload: {
+                claim_id: targetClaimId,
+                file_id: fileId,
+                segment_id: segment.id,
+                source_scope: 'segment',
+                document_type: mapDocumentType(segment.segment_classification || 'other'),
+                document_classification: segment.segment_classification || 'other',
+                confidence_score: Number(segment.classification_confidence || 0.5),
+                summary: segment.segment_label,
+              },
+            };
+
+            const { error: queueError } = await supabase
+              .from('document_intelligence_queue')
+              .upsert(queueRow, { onConflict: 'segment_id' });
+
+            if (queueError) {
+              console.error('[DocIntelQueue] segment enqueue error:', queueError.message);
+            }
+          }
+        } else {
+          await enqueueDocumentIntelligenceJob(supabase, {
+            claim_id: targetClaimId,
+            file_id: fileId,
+            document_type: mappedDocType,
+            document_classification: classificationResult.classification,
+            confidence_score: classificationResult.confidence,
+            summary: classificationResult.metadata?.summary,
+          });
+        }
 
         await updateClaimMasterStateDocIntelSummary(supabase, targetClaimId, {
           last_document_type: mappedDocType,
