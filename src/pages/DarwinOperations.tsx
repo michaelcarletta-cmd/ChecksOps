@@ -241,6 +241,139 @@ const DarwinOperations = () => {
 
   const step2Disabled = (textCoverage !== null && textCoverage < 30) || textBackfill.status === "running";
 
+  // === STEP 5: INTELLIGENCE COVERAGE ===
+  const INTEL_DOC_TYPES = [
+    "engineering_report", "carrier_denial", "denial_letter", "denial",
+    "coverage_letter", "approval", "carrier_correspondence", "correspondence",
+    "carrier_email", "rfi", "estimate", "carrier_estimate",
+    "policy_document", "policy", "expert_report", "inspection_report",
+  ];
+
+  const fetchIntelCoverage = useCallback(async () => {
+    try {
+      const [{ count: totalSupported }, { count: withIntel }, { count: readyCount }, { count: blockedCount }, { count: reprocessCount }] = await Promise.all([
+        supabase.from("claim_files").select("id", { count: "exact", head: true })
+          .or(INTEL_DOC_TYPES.map((t) => `document_classification.eq.${t}`).join(",") + "," + INTEL_DOC_TYPES.map((t) => `document_type.eq.${t}`).join(",")),
+        supabase.from("claim_document_intelligence").select("id", { count: "exact", head: true }),
+        supabase.from("claim_files").select("id", { count: "exact", head: true }).eq("ready_for_analysis", true)
+          .or(INTEL_DOC_TYPES.map((t) => `document_classification.eq.${t}`).join(",") + "," + INTEL_DOC_TYPES.map((t) => `document_type.eq.${t}`).join(",")),
+        supabase.from("claim_files").select("id", { count: "exact", head: true }).eq("ready_for_analysis", false)
+          .or(INTEL_DOC_TYPES.map((t) => `document_classification.eq.${t}`).join(",") + "," + INTEL_DOC_TYPES.map((t) => `document_type.eq.${t}`).join(",")),
+        supabase.from("claim_files").select("id", { count: "exact", head: true }).eq("needs_reprocessing", true),
+      ]);
+
+      const total = totalSupported ?? 0;
+      const intel = withIntel ?? 0;
+      setIntelCoverage({
+        totalSupported: total,
+        withIntelligence: intel,
+        withoutIntelligence: Math.max(total - intel, 0),
+        readyForAnalysis: readyCount ?? 0,
+        blocked: blockedCount ?? 0,
+        needsReprocessing: reprocessCount ?? 0,
+        coveragePct: total > 0 ? Math.round((intel / total) * 100) : 0,
+      });
+
+      // Per-type coverage for key types
+      const keyTypes = [
+        { label: "Engineering Report", types: ["engineering_report", "expert_report", "inspection_report"] },
+        { label: "Denial / Coverage Letter", types: ["denial", "denial_letter", "carrier_denial", "coverage_letter", "approval"] },
+        { label: "Carrier Email / Correspondence", types: ["carrier_email", "correspondence", "carrier_correspondence", "rfi"] },
+        { label: "Estimate", types: ["estimate", "carrier_estimate"] },
+        { label: "Policy Document", types: ["policy", "policy_document"] },
+      ];
+
+      const byTypeResults: IntelCoverageByType[] = [];
+      for (const kt of keyTypes) {
+        const orFilter = kt.types.map((t) => `document_classification.eq.${t}`).join(",") + "," + kt.types.map((t) => `document_type.eq.${t}`).join(",");
+        const { count: typeTotal } = await supabase.from("claim_files").select("id", { count: "exact", head: true }).or(orFilter);
+        // For per-type intel, we need to match document_type in claim_document_intelligence
+        const { count: typeIntel } = await supabase.from("claim_document_intelligence").select("id", { count: "exact", head: true })
+          .or(kt.types.map((t) => `document_type.eq.${t}`).join(","));
+        const tt = typeTotal ?? 0;
+        const ti = typeIntel ?? 0;
+        byTypeResults.push({
+          type: kt.label,
+          total: tt,
+          withIntel: ti,
+          missing: Math.max(tt - ti, 0),
+          coveragePct: tt > 0 ? Math.round((ti / tt) * 100) : 0,
+        });
+      }
+      setIntelCoverageByType(byTypeResults);
+    } catch (err) {
+      console.error("[IntelCoverage] fetch error:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchIntelCoverage();
+  }, [fetchIntelCoverage]);
+
+  useEffect(() => {
+    if (intelBackfill.status === "complete" || intelBackfill.status === "running") {
+      fetchIntelCoverage();
+    }
+  }, [intelBackfill.status, intelBackfill.processed, fetchIntelCoverage]);
+
+  const runIntelBackfillBatch = useCallback(async (cursor: string | null, prev: IntelBackfillState) => {
+    if (intelBackfillAbortRef.current) return;
+
+    const { data, error } = await supabase.functions.invoke("backfill-document-intelligence", {
+      body: { cursor },
+    });
+
+    if (error || !data?.success) {
+      setIntelBackfill((s) => ({
+        ...s,
+        status: "error",
+        errorMessage: error?.message || data?.error || "Unknown error",
+      }));
+      return;
+    }
+
+    const next: IntelBackfillState = {
+      status: (data.remaining || 0) > 0 ? "running" : "complete",
+      processed: prev.processed + (data.processed || 0),
+      succeeded: prev.succeeded + (data.succeeded || 0),
+      failed: prev.failed + (data.failed || 0),
+      skipped: prev.skipped + (data.skipped || 0),
+      remaining: data.remaining || 0,
+      cursor: data.cursor,
+    };
+
+    if (data.coverage) {
+      setIntelCoverage(data.coverage);
+    }
+
+    setIntelBackfill(next);
+
+    if ((data.remaining || 0) > 0 && !intelBackfillAbortRef.current) {
+      setTimeout(() => runIntelBackfillBatch(data.cursor, next), 500);
+    } else if ((data.remaining || 0) === 0) {
+      toast({
+        title: "Intelligence Backfill Complete",
+        description: `${next.succeeded} files now have document intelligence. ${next.failed} failed. ${next.skipped} skipped.`,
+      });
+      fetchIntelCoverage();
+    }
+  }, [fetchIntelCoverage]);
+
+  const startIntelBackfill = () => {
+    intelBackfillAbortRef.current = false;
+    const initial: IntelBackfillState = {
+      status: "running",
+      processed: 0,
+      succeeded: 0,
+      failed: 0,
+      skipped: 0,
+      remaining: 1,
+      cursor: null,
+    };
+    setIntelBackfill(initial);
+    runIntelBackfillBatch(null, initial);
+  };
+
   // Fetch server-side job locks on mount (heartbeat-aware)
   const [serverJobs, setServerJobs] = useState<Record<string, string>>({});
   const [serverJobDetails, setServerJobDetails] = useState<Record<string, DarwinJobInfo>>({});
