@@ -2796,15 +2796,20 @@ Deno.serve(async (req) => {
     if (pdfContent && largePdfTextFallbackTypes.has(analysisType) && pdfContent.length > AI_EXTRACTION_LIMIT) {
       try {
         const extracted = await extractTextFromPDFNative(pdfContent, pdfFileName || 'document.pdf');
-        const block = `=== ${pdfFileName || 'Document'} ===\n${extracted.substring(0, 100000)}`;
-        content = [content, block].filter(Boolean).join('\n\n');
-        additionalContext._useTextOnly = true;
-        // Store extracted text so resolveEngineerReportSourceText can use it for scenario detection
-        if (!additionalContext.pdfExtractedText && extracted.trim().length > 200) {
-          additionalContext.pdfExtractedText = extracted;
-          console.log(`[darwin] Stored large-PDF extracted text for resolver (${extracted.length} chars)`);
+        if (isGarbageText(extracted)) {
+          console.warn(`[darwin] Large-PDF native extraction produced GARBLED text (${extracted.length} chars) — cannot use for text-only mode`);
+          // Don't set pdfContent=undefined; keep the raw PDF for AI vision if possible
+        } else {
+          const block = `=== ${pdfFileName || 'Document'} ===\n${extracted.substring(0, 100000)}`;
+          content = [content, block].filter(Boolean).join('\n\n');
+          additionalContext._useTextOnly = true;
+          // Store extracted text so resolveEngineerReportSourceText can use it for scenario detection
+          if (!additionalContext.pdfExtractedText && extracted.trim().length > 200) {
+            additionalContext.pdfExtractedText = extracted;
+            console.log(`[darwin] Stored large-PDF extracted text for resolver (${extracted.length} chars)`);
+          }
+          pdfContent = undefined;
         }
-        pdfContent = undefined;
       } catch (nativeErr) {
         console.error('Large single-PDF text fallback failed:', nativeErr);
         throw new Error('This PDF is too large for direct analysis and text extraction failed. Please upload a smaller/selectable-text PDF or split the document.');
