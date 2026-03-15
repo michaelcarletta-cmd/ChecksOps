@@ -326,32 +326,53 @@ interface EngineerReportSourceResolution {
 function isGarbageText(text: string): boolean {
   // Detect binary/garbled text that was incorrectly stored as extracted_text
   if (!text || text.length < 100) return false;
-  const sample = text.substring(0, 2000);
-  
-  // Strategy 1: Check ratio of non-ASCII characters (binary data decoded as latin1 has many)
-  let nonAscii = 0;
-  let controlChars = 0;
-  for (let i = 0; i < sample.length; i++) {
-    const code = sample.charCodeAt(i);
-    if (code < 32 && code !== 9 && code !== 10 && code !== 13) controlChars++;
-    if (code > 126) nonAscii++;
+  // Sample multiple sections to catch mixed garbled content
+  const sampleStart = text.substring(0, 2000);
+  const sampleMid = text.length > 4000 ? text.substring(Math.floor(text.length / 2), Math.floor(text.length / 2) + 2000) : '';
+  const samples = [sampleStart, sampleMid].filter(Boolean);
+
+  for (const sample of samples) {
+    // Strategy 1: Check ratio of non-ASCII characters (binary data decoded as latin1 has many)
+    let nonAscii = 0;
+    let controlChars = 0;
+    for (let i = 0; i < sample.length; i++) {
+      const code = sample.charCodeAt(i);
+      if (code < 32 && code !== 9 && code !== 10 && code !== 13) controlChars++;
+      if (code > 126) nonAscii++;
+    }
+    const nonAsciiRatio = nonAscii / sample.length;
+    const controlRatio = controlChars / sample.length;
+    // If more than 15% non-ASCII or more than 3% control chars, likely binary/garbled
+    if (nonAsciiRatio > 0.15) return true;
+    if (controlRatio > 0.03) return true;
   }
-  const nonAsciiRatio = nonAscii / sample.length;
-  const controlRatio = controlChars / sample.length;
-  // If more than 25% non-ASCII or more than 5% control chars, likely binary
-  if (nonAsciiRatio > 0.25) return true;
-  if (controlRatio > 0.05) return true;
-  
+
   // Strategy 2: Check word density — real text has spaces and recognizable words
-  const words = sample.split(/\s+/).filter(w => w.length > 0);
-  const avgWordLen = words.length > 0 ? sample.replace(/\s+/g, '').length / words.length : 999;
+  const words = sampleStart.split(/\s+/).filter(w => w.length > 0);
+  const avgWordLen = words.length > 0 ? sampleStart.replace(/\s+/g, '').length / words.length : 999;
   // Binary garbage tends to have very long "words" (no spaces) or very few words
-  if (words.length < 10 && sample.length > 500) return true;
+  if (words.length < 10 && sampleStart.length > 500) return true;
   if (avgWordLen > 30) return true;
-  
+
   // Strategy 3: PDF binary markers
-  if (sample.includes('obj') && sample.includes('endobj') && sample.includes('stream')) return true;
-  
+  if (sampleStart.includes('obj') && sampleStart.includes('endobj') && sampleStart.includes('stream')) return true;
+
+  // Strategy 4: Low ratio of common English words — garbled text has very few recognizable words
+  const commonWords = ['the', 'and', 'was', 'for', 'that', 'with', 'this', 'from', 'are', 'have', 'not', 'but', 'been', 'were', 'which'];
+  const textLower = sampleStart.toLowerCase();
+  const commonWordHits = commonWords.filter(w => textLower.includes(` ${w} `)).length;
+  // Real English text of 2000 chars should contain at least a few common words
+  if (sampleStart.length > 500 && commonWordHits < 2) return true;
+
+  // Strategy 5: High density of special/symbol characters (©, ®, ¨, Ô, etc.)
+  let specialChars = 0;
+  for (let i = 0; i < sampleStart.length; i++) {
+    const code = sampleStart.charCodeAt(i);
+    // Count chars in ranges commonly produced by garbled PDF binary
+    if ((code >= 128 && code <= 255) || (code >= 8192 && code <= 8303)) specialChars++;
+  }
+  if (sampleStart.length > 500 && specialChars / sampleStart.length > 0.08) return true;
+
   return false;
 }
 
@@ -413,7 +434,14 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
   ).trim();
 
   // Priority: explicit PDF text > uploaded engineer text > file-derived text > content > context
-  if (explicitPdfText && explicitPdfText.length >= 500) {
+  // BUT: validate PDF text is not garbled before using it
+  const pdfTextIsGarbage = explicitPdfText ? isGarbageText(explicitPdfText) : false;
+  if (pdfTextIsGarbage) {
+    console.warn(`[darwin][resolveEngineerSource] Client-side PDF extracted text is GARBLED (${explicitPdfText.length} chars) — skipping in favor of other sources`);
+    console.warn(`[darwin][resolveEngineerSource] PDF text sample: "${explicitPdfText.substring(0, 200).replace(/\n/g, ' ')}"`);
+  }
+
+  if (!pdfTextIsGarbage && explicitPdfText && explicitPdfText.length >= 500) {
     return {
       text: explicitPdfText,
       sourceOrigin: 'pdf_extracted_text',
@@ -437,8 +465,8 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
     };
   }
 
-  // Fallback: if explicit PDF or uploaded text exists but is short, still use it
-  if (explicitPdfText) {
+  // Fallback: if explicit PDF or uploaded text exists but is short, still use it (unless garbage)
+  if (explicitPdfText && !pdfTextIsGarbage) {
     return { text: explicitPdfText, sourceOrigin: 'pdf_extracted_text', usedEngineerReportText: true };
   }
   if (uploadedEngineerText) {
@@ -2768,15 +2796,20 @@ Deno.serve(async (req) => {
     if (pdfContent && largePdfTextFallbackTypes.has(analysisType) && pdfContent.length > AI_EXTRACTION_LIMIT) {
       try {
         const extracted = await extractTextFromPDFNative(pdfContent, pdfFileName || 'document.pdf');
-        const block = `=== ${pdfFileName || 'Document'} ===\n${extracted.substring(0, 100000)}`;
-        content = [content, block].filter(Boolean).join('\n\n');
-        additionalContext._useTextOnly = true;
-        // Store extracted text so resolveEngineerReportSourceText can use it for scenario detection
-        if (!additionalContext.pdfExtractedText && extracted.trim().length > 200) {
-          additionalContext.pdfExtractedText = extracted;
-          console.log(`[darwin] Stored large-PDF extracted text for resolver (${extracted.length} chars)`);
+        if (isGarbageText(extracted)) {
+          console.warn(`[darwin] Large-PDF native extraction produced GARBLED text (${extracted.length} chars) — cannot use for text-only mode`);
+          // Don't set pdfContent=undefined; keep the raw PDF for AI vision if possible
+        } else {
+          const block = `=== ${pdfFileName || 'Document'} ===\n${extracted.substring(0, 100000)}`;
+          content = [content, block].filter(Boolean).join('\n\n');
+          additionalContext._useTextOnly = true;
+          // Store extracted text so resolveEngineerReportSourceText can use it for scenario detection
+          if (!additionalContext.pdfExtractedText && extracted.trim().length > 200) {
+            additionalContext.pdfExtractedText = extracted;
+            console.log(`[darwin] Stored large-PDF extracted text for resolver (${extracted.length} chars)`);
+          }
+          pdfContent = undefined;
         }
-        pdfContent = undefined;
       } catch (nativeErr) {
         console.error('Large single-PDF text fallback failed:', nativeErr);
         throw new Error('This PDF is too large for direct analysis and text extraction failed. Please upload a smaller/selectable-text PDF or split the document.');
@@ -2789,8 +2822,12 @@ Deno.serve(async (req) => {
       try {
         const preExtracted = await extractTextFromPDFNative(pdfContent, pdfFileName || 'document.pdf');
         if (preExtracted && preExtracted.trim().length > 200) {
-          additionalContext.pdfExtractedText = preExtracted;
-          console.log(`[darwin] Pre-extracted PDF text for engineer resolver (${preExtracted.length} chars)`);
+          if (isGarbageText(preExtracted)) {
+            console.warn(`[darwin] Pre-extracted PDF text is GARBLED (${preExtracted.length} chars) — discarding. Sample: "${preExtracted.substring(0, 200).replace(/\n/g, ' ')}"`);
+          } else {
+            additionalContext.pdfExtractedText = preExtracted;
+            console.log(`[darwin] Pre-extracted PDF text for engineer resolver (${preExtracted.length} chars)`);
+          }
         }
       } catch (preExtErr) {
         console.warn('[darwin] Pre-extraction for engineer resolver failed (non-fatal):', preExtErr);
