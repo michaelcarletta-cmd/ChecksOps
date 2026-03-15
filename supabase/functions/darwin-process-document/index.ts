@@ -366,7 +366,36 @@ Deno.serve(async (req) => {
     }
 
     // Call AI for classification
-    const classificationResult = await classifyDocument(textContent, fileName || file?.file_name || '');
+    const baseClassificationResult = await classifyDocument(textContent, fileName || file?.file_name || '');
+
+    const verifyResult = await verifyClassification(
+      textContent,
+      fileName || file?.file_name || '',
+      baseClassificationResult.classification
+    );
+
+    const smartClassification = await runSmartClassification({
+      fileName: fileName || file?.file_name || '',
+      text: textContent,
+      aiPrimary: baseClassificationResult,
+      aiVerify: verifyResult,
+    });
+
+    const classificationResult = {
+      ...baseClassificationResult,
+      classification: smartClassification.primary as DocumentClassification,
+      confidence: smartClassification.confidence,
+      metadata: {
+        ...baseClassificationResult.metadata,
+        smart_candidates: smartClassification.candidates,
+        smart_method: smartClassification.method,
+        smart_reasoning: smartClassification.reasoning,
+        review_required: smartClassification.review_required,
+        is_mixed_document: smartClassification.is_mixed_document,
+        document_family: smartClassification.document_family,
+        automation_safe: smartClassification.automation_safe,
+      },
+    };
 
     // Assess text quality
     const textQuality = assessTextQuality(textContent);
