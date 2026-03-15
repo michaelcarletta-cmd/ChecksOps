@@ -8814,6 +8814,8 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       );
     }
 
+    await persistAnalysisSnapshot(finalAnalysisText);
+
     const responseBuildStep = startStep('response', 'Build response payload');
     const responsePayload: any = {
       success: true,
