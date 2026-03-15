@@ -1562,10 +1562,12 @@ function stripCarrierDependencyAnalysis(text: string): string {
 function polishEngineerRebuttalFormatting(text: string): string {
   if (!text) return text;
   let updated = text;
+  updated = normalizeLeadingSectionLabels(updated);
   updated = stripOrphanLowSlopeOpeningBlocks(updated);
   updated = stripPriorityOrderControlBlock(updated);
   updated = stripLowSlopeControlSections(updated);
   updated = normalizeEngineerQuestionSection(updated);
+  updated = stripPostSignatureDuplicateBlocks(updated);
   updated = normalizeBrokenNumericLists(updated);
   updated = updated.replace(/\n{3,}/g, '\n\n');
   updated = updated.replace(
