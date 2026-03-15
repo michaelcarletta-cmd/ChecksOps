@@ -1201,29 +1201,18 @@ function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: st
 
 // ═══ FINAL LETTER CLEANUP HELPERS ═══
 
-function dedupeRepeatedOpeningSentence(text: string, requiredOpening: string): string {
-  if (!text || !requiredOpening) return text;
-  const escaped = requiredOpening.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(escaped, 'g');
-  const matches = [...text.matchAll(regex)];
-  if (matches.length <= 1) return text;
-
-  let seen = false;
-  return text.replace(regex, () => {
-    if (seen) return '';
-    seen = true;
-    return requiredOpening;
-  }).replace(/\n{3,}/g, '\n\n').trim();
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function cleanupEngineerLetterFormatting(text: string): string {
+function stripInternalEngineerControlText(text: string): string {
   if (!text) return text;
 
   let cleaned = text;
 
-  // Remove raw internal control lines/blocks
-  const forbiddenLinePatterns: RegExp[] = [
+  const patterns: RegExp[] = [
     /^PRIORITY ORDER \(MANDATORY\):.*$/gim,
+    /^Do NOT prioritize wind mechanics\..*$/gim,
     /^SECTION 1 [—-] TIMING FAILURE:.*$/gim,
     /^SECTION 2 [—-] DRAINAGE\s*\/\s*SNOWMELT ANALYSIS FAILURE:.*$/gim,
     /^SECTION 3 [—-] ENGINEER CONTRADICTION:.*$/gim,
@@ -1233,17 +1222,17 @@ function cleanupEngineerLetterFormatting(text: string): string {
     /^LOW_SLOPE_MEMBRANE.*$/gim,
     /^HARD ASSERTION.*$/gim,
     /^primaryScenario=.*$/gim,
-    /^rule_pack=.*$/gim,
     /^rulePackLoaded=.*$/gim,
-    /^suppressed_rule_packs=.*$/gim,
+    /^rule_pack=.*$/gim,
     /^suppressedRulePacks=.*$/gim,
+    /^suppressed_rule_packs=.*$/gim,
   ];
 
-  for (const pattern of forbiddenLinePatterns) {
+  for (const pattern of patterns) {
     cleaned = cleaned.replace(pattern, '');
   }
 
-  // Remove bullet remnants from internal control blocks
+  // Remove leaked bullet remnants from internal low-slope enforcement
   cleaned = cleaned.replace(/^- no membrane core cuts\s*$/gim, '');
   cleaned = cleaned.replace(/^- no seam adhesion\/peel testing\s*$/gim, '');
   cleaned = cleaned.replace(/^- no drainage-capacity analysis\s*$/gim, '');
@@ -1252,63 +1241,105 @@ function cleanupEngineerLetterFormatting(text: string): string {
   cleaned = cleaned.replace(/^- no moisture mapping\s*$/gim, '');
   cleaned = cleaned.replace(/^- no proof of timing of openings\s*$/gim, '');
 
-  // Fix salutation collisions
-  cleaned = cleaned.replace(
-    /(Dear\s+[^\n,]+,\s*)(The engineering report attributes the water intrusion to snow\/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering\.)/i,
-    `$1\n\n$2`
-  );
+  return cleaned.replace(/\n{3,}/g, '\n\n').trim();
+}
 
-  // Normalize citation spacing
+function dedupeRequiredLowSlopeOpening(text: string): string {
+  if (!text || !REQUIRED_LOW_SLOPE_OPENING) return text;
+
+  const escaped = escapeRegExp(REQUIRED_LOW_SLOPE_OPENING);
+  const regex = new RegExp(escaped, 'g');
+  const matches = text.match(regex);
+  if (!matches || matches.length <= 1) return text;
+
+  let seen = false;
+  return text.replace(regex, () => {
+    if (seen) return '';
+    seen = true;
+    return REQUIRED_LOW_SLOPE_OPENING;
+  }).replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function normalizeEngineerLetterFormatting(text: string): string {
+  if (!text) return text;
+
+  let cleaned = text;
+
+  // Normalize statute spacing
   cleaned = cleaned.replace(/\bN\.\s*J\.\s*A\.\s*C\.\s*/g, 'N.J.A.C. ');
   cleaned = cleaned.replace(/\bN\.\s*J\.\s*S\.\s*A\.\s*/g, 'N.J.S.A. ');
 
-  // Numeric spacing fixes
+  // Normalize decimals / broken numeric spacing
   cleaned = cleaned.replace(/(\d)\.\s+(\d)/g, '$1.$2');
-  cleaned = cleaned.replace(/(\d)\s*-\s*inches\b/gi, '$1 inches');
   cleaned = cleaned.replace(/\b0\.\s+78\b/g, '0.78');
+  cleaned = cleaned.replace(/\b1\.\s+75\b/g, '1.75');
+  cleaned = cleaned.replace(/\b17-\s*inch\b/gi, '17-inch');
+  cleaned = cleaned.replace(/\b17\s+inch\b/gi, '17-inch');
 
-  // Trim spaces before punctuation
+  // Remove bad OCR-style spaces before punctuation
   cleaned = cleaned.replace(/\s+([,.;:])/g, '$1');
+
+  // Tone down leaked all-caps emphasis inside prose
+  cleaned = cleaned.replace(/\bBEFORE\b/g, 'before');
+  cleaned = cleaned.replace(/\bCAUSED\/ACTIVATED\b/g, 'caused or activated');
+  cleaned = cleaned.replace(/\bNO objective basis\b/g, 'no objective basis');
 
   // Collapse excess blank lines
   cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
 
-  // Remove duplicated low-slope opening if it appears more than once
-  cleaned = dedupeRepeatedOpeningSentence(cleaned, REQUIRED_LOW_SLOPE_OPENING);
+  // Dedupe low-slope opening
+  cleaned = dedupeRequiredLowSlopeOpening(cleaned);
 
   return cleaned.trim();
 }
 
-function ensureLowSlopeOpeningAfterSalutation(text: string, primaryScenario: string | null): string {
-  if (!text || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return text;
+function findEngineerLetterBodyStart(lines: string[]): number {
+  const headerRegex =
+    /^(RE\s*:|Claim Number\s*:|Policy Number\s*:|Insured\s*:|Property Address\s*:|Date of Loss\s*:|Michael Carletta|Freedom Adjustment|[A-Z][a-z]+ \d{1,2}, \d{4}|[A-Z][a-z]+ [A-Z][a-z]+,?\s*(Public Adjuster)?|Church Mutual Insurance Company|3000 Schuster Lane|Merrill, Wisconsin)/i;
 
-  const required = REQUIRED_LOW_SLOPE_OPENING;
-  if (!required) return text;
-
-  const lines = text.split('\n');
-  const salutationIdx = lines.findIndex((line) => /^\s*Dear\b/i.test(line));
-
-  if (salutationIdx === -1) {
-    return enforceEngineerRebuttalLowSlopeOpening(text, primaryScenario);
+  let idx = 0;
+  while (idx < lines.length) {
+    const trimmed = lines[idx].trim();
+    if (!trimmed || headerRegex.test(trimmed)) {
+      idx += 1;
+      continue;
+    }
+    break;
   }
-
-  const afterSalutation = lines.slice(salutationIdx + 1).join('\n').trim();
-  if (afterSalutation.startsWith(required)) {
-    return text;
-  }
-
-  // Remove stray copies before re-inserting in correct place
-  let rebuilt = text.replace(required, '').replace(/\n{3,}/g, '\n\n').trim();
-  const rebuiltLines = rebuilt.split('\n');
-  const rebuiltSalutationIdx = rebuiltLines.findIndex((line) => /^\s*Dear\b/i.test(line));
-
-  if (rebuiltSalutationIdx === -1) return rebuilt;
-
-  rebuiltLines.splice(rebuiltSalutationIdx + 1, 0, '', required);
-  return rebuiltLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return idx;
 }
 
-function hasInternalEngineerControlLeak(text: string): boolean {
+function placeLowSlopeOpeningCorrectly(text: string, primaryScenario: string | null): string {
+  if (!text || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return text;
+
+  let updated = dedupeRequiredLowSlopeOpening(text);
+  const lines = updated.split('\n');
+
+  const salutationIdx = lines.findIndex((line) => /^\s*Dear\b/i.test(line));
+  if (salutationIdx >= 0) {
+    const afterSalutation = lines.slice(salutationIdx + 1).join('\n');
+    if (afterSalutation.includes(REQUIRED_LOW_SLOPE_OPENING)) {
+      return updated.replace(/\n{3,}/g, '\n\n').trim();
+    }
+
+    updated = updated.replace(REQUIRED_LOW_SLOPE_OPENING, '').replace(/\n{3,}/g, '\n\n').trim();
+    const rebuilt = updated.split('\n');
+    const rebuiltSalutationIdx = rebuilt.findIndex((line) => /^\s*Dear\b/i.test(line));
+    if (rebuiltSalutationIdx >= 0) {
+      rebuilt.splice(rebuiltSalutationIdx + 1, 0, '', REQUIRED_LOW_SLOPE_OPENING, '');
+      return rebuilt.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    }
+  }
+
+  // If there is no salutation, place it at the first true body paragraph after headers
+  updated = updated.replace(REQUIRED_LOW_SLOPE_OPENING, '').replace(/\n{3,}/g, '\n\n').trim();
+  const rebuilt = updated.split('\n');
+  const bodyStartIdx = findEngineerLetterBodyStart(rebuilt);
+  rebuilt.splice(bodyStartIdx, 0, REQUIRED_LOW_SLOPE_OPENING, '');
+  return rebuilt.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function hasEngineerInternalControlLeak(text: string): boolean {
   if (!text) return false;
   return [
     'PRIORITY ORDER (MANDATORY)',
@@ -1331,20 +1362,23 @@ function polishFinalEngineerRebuttal(
 
   let updated = result;
 
-  // Existing mandatory section enforcement stays
+  // Keep mandatory sections
   updated = enforceEngineerRebuttalMandatorySections(updated, context);
 
-  // Keep low-slope enforcement, but do not allow raw control text in final output
+  // Keep low-slope substantive enforcement
   if (context.primaryScenario === LOW_SLOPE_PRIMARY_SCENARIO) {
     updated = enforceLowSlopeRebuttalRequirements(
       updated,
       context.primaryScenario,
       buildLowSlopeSupportCorpus(context.engineerStatedCause || '')
     );
-    updated = ensureLowSlopeOpeningAfterSalutation(updated, context.primaryScenario);
+    updated = placeLowSlopeOpeningCorrectly(updated, context.primaryScenario);
   }
 
-  updated = cleanupEngineerLetterFormatting(updated);
+  // Final cleanup must happen AFTER enforcement
+  updated = stripInternalEngineerControlText(updated);
+  updated = dedupeRequiredLowSlopeOpening(updated);
+  updated = normalizeEngineerLetterFormatting(updated);
 
   return updated.trim();
 }
