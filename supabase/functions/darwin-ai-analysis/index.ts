@@ -8722,7 +8722,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         );
       }
 
-      await persistAnalysisSnapshot(analysisResult);
+      await persistAnalysisSnapshot(finalStructuredText);
 
       return new Response(
         JSON.stringify({
