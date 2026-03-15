@@ -2847,11 +2847,7 @@ Deno.serve(async (req) => {
       }
 
       if (!additionalContext.pdfExtractedText) {
-        const ocrFallbackText = await extractEngineerTextFromPdfViaVision(pdfContent, pdfFileName || 'document.pdf');
-        if (ocrFallbackText && ocrFallbackText.length >= 500) {
-          additionalContext.pdfExtractedText = ocrFallbackText;
-          console.log(`[darwin] Stored OCR fallback text for engineer resolver (${ocrFallbackText.length} chars)`);
-        }
+        console.warn('[darwin] No usable text from native extraction — engineer report may need re-processing via document intelligence pipeline');
       }
     }
 
