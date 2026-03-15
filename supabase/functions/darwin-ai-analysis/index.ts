@@ -8940,10 +8940,6 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     const preSendLowSlopeDetection = detectLowSlopeAcrossSources([
       engineerRebuttalCausationQuote,
       engineerRebuttalReportText,
-      String(content || ''),
-      claimSummary,
-      String(claim?.loss_description || ''),
-      finalResponseText,
     ]);
 
     const enforcedScenarioForResponse =
@@ -8957,13 +8953,31 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     const scenarioDiagnosticsRulePackLoaded = getRulePackLoaded(enforcedScenarioForResponse);
     const scenarioDiagnosticsSuppressedRulePacks = getSuppressedRulePacks(enforcedScenarioForResponse);
 
-    const allViolations = collectAllLowSlopeFinalViolations(
-      finalResponseText,
-      enforcedScenarioForResponse,
-      engineerRebuttalCausationQuote,
-    );
-    const finalResponseHash = computeStableTextHash(finalResponseText);
+    let allViolations: string[] = [];
+    let validationErrorMessage: string | null = null;
 
+    try {
+      validateFinalEngineerRebuttalOrThrow({
+        finalText: finalResponseText,
+        primaryScenario: enforcedScenarioForResponse,
+        engineerCausationSentence: engineerRebuttalCausationQuote,
+      });
+    } catch (validationError: any) {
+      allViolations = Array.from(new Set(
+        Array.isArray(validationError?.violations)
+          ? validationError.violations
+          : collectAllLowSlopeFinalViolations(
+              finalResponseText,
+              enforcedScenarioForResponse,
+              engineerRebuttalCausationQuote,
+            )
+      ));
+      validationErrorMessage = String(
+        validationError?.message || buildLowSlopeForbiddenTermErrorMessage(allViolations)
+      );
+    }
+
+    const finalResponseHash = computeStableTextHash(finalResponseText);
     const scenarioDiagnostics = buildLowSlopeScenarioDiagnostics({
       analysisType,
       responsePath,
@@ -8973,16 +8987,29 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       matchedTerms: scenarioDiagnosticsMatchedTerms,
       finalViolationList: allViolations,
       finalResponseHash,
+      sourceTextLength: engineerRebuttalSourceTextLength,
+      sourceTextOrigin: engineerRebuttalSourceTextOrigin,
+      usedEngineerReportText: engineerRebuttalUsedEngineerReportText,
     });
 
-    console.log(
-      `[darwin][final-return] path=${responsePath} analysisType=${analysisType} primary=${scenarioDiagnostics.primaryScenario || 'none'} rulePack=${scenarioDiagnostics.rulePackLoaded} suppressed=[${scenarioDiagnostics.suppressedRulePacks.join(',') || 'none'}] matched=[${scenarioDiagnostics.matchedTerms.join(',') || 'none'}] violations=[${scenarioDiagnostics.finalViolationList.join(',') || 'none'}] hash=${scenarioDiagnostics.finalResponseHash}`
-    );
+    console.log('[darwin][final-return]', JSON.stringify({
+      analysisType,
+      functionPath: responsePath,
+      primaryScenario: scenarioDiagnostics.primaryScenario,
+      rulePackLoaded: scenarioDiagnostics.rulePackLoaded,
+      suppressedRulePacks: scenarioDiagnostics.suppressedRulePacks,
+      matchedTerms: scenarioDiagnostics.matchedTerms,
+      finalViolationList: scenarioDiagnostics.finalViolationList,
+      finalResponseHash: scenarioDiagnostics.finalResponseHash,
+      sourceTextLength: scenarioDiagnostics.sourceTextLength,
+      sourceTextOrigin: scenarioDiagnostics.sourceTextOrigin,
+      usedEngineerReportText: scenarioDiagnostics.usedEngineerReportText,
+    }));
 
     if (allViolations.length > 0) {
       return new Response(
         JSON.stringify({
-          error: buildLowSlopeForbiddenTermErrorMessage(allViolations),
+          error: validationErrorMessage || buildLowSlopeForbiddenTermErrorMessage(allViolations),
           violations: allViolations,
           scenario_diagnostics: scenarioDiagnostics,
         }),
