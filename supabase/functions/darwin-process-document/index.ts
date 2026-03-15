@@ -460,10 +460,15 @@ Deno.serve(async (req) => {
         classification_candidates: smartClassification.candidates,
         classification_method: smartClassification.method,
         classification_reasoning: smartClassification.reasoning,
-        classification_review_required: smartClassification.review_required,
-        is_mixed_document: smartClassification.is_mixed_document,
+        classification_review_required: finalReviewRequired,
+        is_mixed_document: finalMixed,
         document_family: smartClassification.document_family,
-        automation_safe: smartClassification.automation_safe,
+        automation_safe: finalAutomationSafe,
+        packet_analysis: packetAnalysis || {},
+        packet_page_count: packetAnalysis?.page_count || null,
+        packet_dominant_classification: packetAnalysis?.dominant_classification || null,
+        packet_mixed_confidence: packetAnalysis?.mixed_confidence || null,
+        packet_review_required: packetAnalysis?.review_required || false,
         processing_error: null,
       };
       // Store extracted and clean text
