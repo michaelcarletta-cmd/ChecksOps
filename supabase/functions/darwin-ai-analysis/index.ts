@@ -658,6 +658,230 @@ function buildCausationProofFailureSection(context: EngineerRebuttalEnforcementC
 ${proofStatement}`;
 }
 
+// ============================================================================
+// ENGINEER STUMPER HELPERS — Forensic rebuttal upgrade
+// ============================================================================
+
+function buildEngineerStumperUniversalRules(primaryScenario: string | null, stateInfo: any): string {
+  const scenarioLabel = primaryScenario || 'universal';
+  return `
+=== ENGINEER STUMPER MODE (MANDATORY — ALL ENGINEER REBUTTALS) ===
+This rebuttal must corner the engineer on missing methodology, timing proof, causation proof, and contradictions.
+The goal is to leave no defensible scientific basis for a denial-oriented conclusion.
+
+ATTACK REQUIREMENTS:
+a) TIMING: The engineer must prove timing of damage/openings, not assume timing. Attack every instance where timing is assumed rather than forensically established.
+b) TESTING: Attack the absence of objective testing. Identify every required test that was not performed. Visual observations alone do not establish engineering causation to a reasonable degree of certainty.
+c) CAUSATION: The engineer must rule out the covered peril as a contributing or proximate cause. Failure to rule out = failure to prove sole causation. Susceptibility to failure is not proof of sole causation.
+d) CONTRADICTIONS: Identify internal contradictions between observations and conclusions. If the report acknowledges event conditions, it cannot logically conclude pre-existing cause alone without objective testing.
+e) LEAP ATTACK: An unsupported leap from "aged/weathered" to "sole cause" must be identified and dismantled every time it appears.
+
+MANDATORY DISTINCTIONS (use repeatedly):
+- "condition" vs "cause" — documenting a condition does not establish what caused it
+- "vulnerability" vs "causation" — pre-existing vulnerability does not prove the covered event was not the proximate cause
+- "structural adequacy" vs "watertight performance" — proving a structure can bear load does not prove it is watertight
+- "visual observation" vs "forensic proof" — visual observations alone do not establish engineering causation to a reasonable degree of certainty
+
+REQUIRED LANGUAGE CONCEPTS:
+- "The engineer must prove timing, not assume timing."
+- "Susceptibility to failure is not proof of sole causation."
+- "Visual observations alone do not establish engineering causation to a reasonable degree of certainty."
+- "A covered event acting on aged materials can still be the proximate cause of direct physical loss."
+- "The burden is on the carrier's expert to rule out the covered peril with objective support."
+- "Condition evidence is not causation proof."
+- "Without the testing necessary to separate pre-existing vulnerability from event-driven failure, the report does not establish sole causation to a reasonable degree of engineering certainty."
+
+The rebuttal must not merely argue conclusions; it must identify missing methodology.
+The rebuttal must force the engineer into answering technical questions they likely cannot answer.
+=== END ENGINEER STUMPER MODE ===
+`;
+}
+
+function buildEngineerMustAnswerQuestions(primaryScenario: string | null): string[] {
+  switch (primaryScenario) {
+    case 'low_slope_snow_ice_ponding':
+      return [
+        'What testing established the timing of the alleged membrane openings?',
+        'What membrane core cuts were taken and what did they show?',
+        'What seam adhesion or peel testing was performed?',
+        'What drainage-capacity analysis was performed?',
+        'What snow-water equivalent or runoff-path analysis was performed?',
+        'What leak-path tracing was performed from roof entry to interior manifestation?',
+        'What objective testing proves deterioration alone caused the loss rather than the snow/ice event activating or expanding the openings?',
+        'How did the engineer distinguish structural load adequacy from membrane watertightness performance?',
+      ];
+    case 'wind_uplift':
+      return [
+        'What hand-tab, seal integrity, or comparable bond testing was performed?',
+        'What fastener pattern review or deck attachment inspection was performed?',
+        'What slope-by-slope directional wind analysis was performed?',
+        'What testing ruled out event-driven seal failure?',
+        'What objective method was used to date the alleged wear versus storm-caused displacement?',
+      ];
+    case 'hail_impact':
+      return [
+        'What test squares were performed on each slope?',
+        'What soft-metal collateral evidence was documented?',
+        'What method differentiated functional damage from cosmetic damage?',
+        'What testing ruled out hail-caused mat fracture?',
+        'What random versus pattern analysis was performed to distinguish hail from other impact sources?',
+      ];
+    case 'water_intrusion_envelope':
+      return [
+        'What destructive testing was used to trace the intrusion path?',
+        'What flashing points were opened or tested?',
+        'What moisture mapping was performed?',
+        'What testing rules out event-driven entry at penetrations or transitions?',
+      ];
+    case 'structural_movement_settlement':
+    case 'foundation_settlement':
+      return [
+        'What measurements prove movement pre-dated the event?',
+        'What monitoring data exists?',
+        'What geotechnical or load-path analysis was performed?',
+        'What testing rules out event-triggered movement?',
+      ];
+    case 'plumbing_freeze_burst':
+    case 'freeze_burst':
+      return [
+        'What testing proved a long-term leak rather than a freeze-related failure?',
+        'What pipe condition analysis was performed?',
+        'What temperature exposure timeline was established?',
+        'What code-based insulation analysis was performed?',
+      ];
+    case 'fire_causation':
+    case 'fire_smoke':
+      return [
+        'What NFPA 921 methodology steps were followed?',
+        'What evidence elimination matrix was performed?',
+        'What alternative ignition sources were ruled out and how?',
+        'What origin and cause documentation supports the stated conclusion?',
+      ];
+    default:
+      return [
+        'What objective testing was performed to establish the timing of the alleged condition?',
+        'What forensic methodology was used to separate pre-existing vulnerability from event-driven damage?',
+        'What alternative causes were considered and how were they ruled out?',
+        'What measurements, samples, or quantifiable data support the stated conclusion?',
+        'What industry-standard testing protocols applicable to this loss type were followed?',
+      ];
+  }
+}
+
+function buildTimingFailureSection(primaryScenario: string | null, engineerCause: string): string {
+  const universalStatement = 'The report attempts to assign a pre-existing timeline to the observed condition without employing any forensic method capable of establishing when the relevant opening, breach, displacement, or failure actually occurred.';
+
+  let scenarioSpecific = '';
+  switch (primaryScenario) {
+    case 'low_slope_snow_ice_ponding':
+      scenarioSpecific = 'Specifically, the report provides no membrane core cuts, seam adhesion testing, moisture mapping, or leak-path tracing that could establish when the membrane openings developed. Without these tests, the report cannot prove whether openings pre-dated the snow/ice event or were created or expanded during snow/ice loading, freeze-thaw cycling, or ponding-water stress. The assertion that openings are maintenance-related is assumption, not dated forensic proof.';
+      break;
+    case 'wind_uplift':
+      scenarioSpecific = 'The report provides no seal adhesion testing, fastener withdrawal testing, or pre-loss condition documentation that could establish whether seal failure, displacement, or uplift-related distress existed before the wind event. Without objective pre-loss condition data, the claim that damage is pre-existing is assumption rather than timed forensic proof.';
+      break;
+    case 'hail_impact':
+      scenarioSpecific = 'The report provides no pre-loss condition survey, dated material sampling, or manufacturer defect analysis that could establish the condition of materials before the hail event. Without this data, attributing damage to weathering or aging rather than hail impact is speculative.';
+      break;
+    default:
+      scenarioSpecific = 'No forensic timeline analysis was performed to establish when the observed conditions developed relative to the loss event. The assumption of pre-existing cause is unsupported by dated evidence.';
+  }
+
+  return `Timing Failure
+
+${universalStatement}
+
+${scenarioSpecific}
+
+Engineer stated cause: "${engineerCause || 'No explicit causation statement extracted.'}"`;
+}
+
+function buildCausationProofFailureSectionStumper(primaryScenario: string | null, missingTests: string[]): string {
+  const missingCount = missingTests.length;
+  const missingList = missingTests.map((t) => `- ${t}`).join('\n');
+
+  return `Causation Proof Failure
+
+Condition evidence is not causation proof.
+
+Without the testing necessary to separate pre-existing vulnerability from event-driven failure, the report does not establish sole causation to a reasonable degree of engineering certainty.
+
+${missingCount > 0 ? `The following ${missingCount} required forensic test(s) are not documented in the report, rendering the causation opinion speculative:
+${missingList}` : 'Core forensic tests referenced in the report must still be tied to quantifiable, test-backed findings rather than visual assumption.'}
+
+The report did not scientifically prove sole causation. The absence of required testing makes the report speculative. The report failed to rule out the covered peril as a contributing or proximate cause. A covered event acting on aged materials can still be the proximate cause of direct physical loss.`;
+}
+
+function buildEngineerContradictionSection(primaryScenario: string | null, engineerTheorySentences: string[]): string {
+  const quotedSentences = engineerTheorySentences.length > 0
+    ? engineerTheorySentences.map((s) => `"${s}"`).join('\n')
+    : '"No specific engineer theory sentences extracted."';
+
+  let scenarioContradiction = '';
+  switch (primaryScenario) {
+    case 'low_slope_snow_ice_ponding':
+      scenarioContradiction = 'If the report acknowledges snow accumulation, drainage impedance, standing water, freeze-thaw stress, or elevated watertightness demand, it cannot logically conclude deterioration alone caused the loss without objective testing proving the event did not create, activate, or expand the openings. Admitting snow impeded drainage while blaming only maintenance is a contradiction the report does not resolve. Structural snow-load adequacy discussion does not substitute for membrane watertightness analysis.';
+      break;
+    case 'wind_uplift':
+      scenarioContradiction = 'If the report documents storm conditions, wind speeds, or displacement patterns consistent with wind exposure, it cannot logically conclude that all observed conditions are pre-existing without objective testing to rule out event-driven seal failure or displacement.';
+      break;
+    case 'hail_impact':
+      scenarioContradiction = 'If the report documents impact marks, dents, or collateral damage consistent with hail exposure, it cannot logically dismiss functional damage without quantifiable testing (test squares, mat fracture inspection, soft-metal analysis).';
+      break;
+    default:
+      scenarioContradiction = 'If the report acknowledges event conditions yet denies the event role, it contradicts itself unless objective testing proves the event had no causal contribution. Acknowledging deterioration and using that as automatic sole cause is a logical fallacy without forensic elimination of the covered peril.';
+  }
+
+  return `Internal Contradictions
+
+The following engineer theory statements are evaluated for internal consistency:
+${quotedSentences}
+
+${scenarioContradiction}
+
+Documenting active moisture, dripping, or damage patterns but not tracing the entry path to its cause is an evidentiary gap, not a conclusion. The report cannot acknowledge event conditions while simultaneously denying the event's role without objective testing to support the distinction.`;
+}
+
+function buildEngineerStumperStandardsBank(primaryScenario: string | null): string {
+  switch (primaryScenario) {
+    case 'low_slope_snow_ice_ponding':
+      return `
+APPLICABLE INDUSTRY STANDARDS (use as methodology expectations, not fabricated quotes):
+- ASTM D5957 — Standard Guide for Flood Testing Low-Slope Membrane Roofs
+- ASTM C1153 — Standard Practice for Location of Wet Insulation in Roofing Systems Using Infrared Imaging
+- ASTM E1105 — Standard Test Method for Field Determination of Water Penetration of Installed Exterior Windows, Skylights, Doors, and Curtain Walls
+- NRCA leak investigation methodology principles
+- Membrane seam adhesion and watertightness testing concepts
+- Distinction between structural load analysis and watertight performance testing`;
+    case 'wind_uplift':
+      return `
+APPLICABLE INDUSTRY STANDARDS:
+- Manufacturer installation and seal requirements for the specific product installed
+- Directional uplift and field bond testing concepts
+- Repairability and brittle condition analysis (only if supported by evidence)
+- ASCE 7 wind load provisions`;
+    case 'hail_impact':
+      return `
+APPLICABLE INDUSTRY STANDARDS:
+- Test square methodology (systematic sampling per slope)
+- Soft-metal collateral evidence documentation
+- Functional damage analysis (versus cosmetic-only classification)
+- Mat fracture and impact resistance testing`;
+    case 'fire_causation':
+    case 'fire_smoke':
+      return `
+APPLICABLE INDUSTRY STANDARDS:
+- NFPA 921 — Guide for Fire and Explosion Investigations
+- Systematic origin and cause methodology
+- Evidence elimination matrix requirements`;
+    default:
+      return `
+APPLICABLE INDUSTRY STANDARDS:
+- Industry-standard forensic testing methodology for the identified loss type
+- Material sampling and laboratory analysis protocols
+- Causation timeline documentation requirements`;
+  }
+}
+
 function enforceEngineerRebuttalMandatorySections(result: string, context: EngineerRebuttalEnforcementContext): string {
   if (!result) return result;
 
@@ -665,23 +889,42 @@ function enforceEngineerRebuttalMandatorySections(result: string, context: Engin
   const lower = updated.toLowerCase();
   const additions: string[] = [];
 
-  const hasTheorySection = /engineer theory extraction/i.test(lower);
-  if (!hasTheorySection) {
+  // 1. Engineer Theory Extraction
+  if (!/engineer theory extraction/i.test(lower)) {
     additions.push(buildEngineerTheoryExtractionSection(context));
   }
 
-  const hasRequiredTestingSection = /required testing not performed/i.test(lower);
-  if (!hasRequiredTestingSection) {
+  // 2. Timing Failure
+  if (!/timing failure/i.test(lower)) {
+    additions.push(buildTimingFailureSection(context.primaryScenario, context.engineerStatedCause));
+  }
+
+  // 3. Required Testing Not Performed
+  if (!/required testing not performed/i.test(lower)) {
     additions.push(buildRequiredTestingNotPerformedSection(context));
   }
 
+  // 4. Causation Proof Failure
   const hasCausationProofFailureSection = /causation proof failure/i.test(lower);
-  const hasSpeculativeFailureStatement = /has not scientifically proven their conclusion and the causation statement is therefore speculative/i.test(lower);
-  const missingTestsExist = getEngineerRequiredTests(context)
-    .some((testName) => !isTestMentionedInReport(context.reportText, testName));
+  const hasSpeculativeFailureStatement = /has not scientifically proven their conclusion and the causation statement is therefore speculative/i.test(lower)
+    || /does not establish sole causation to a reasonable degree of engineering certainty/i.test(lower);
+  const missingTests = getEngineerRequiredTests(context)
+    .filter((testName) => !isTestMentionedInReport(context.reportText, testName));
 
-  if (!hasCausationProofFailureSection || (missingTestsExist && !hasSpeculativeFailureStatement)) {
-    additions.push(buildCausationProofFailureSection(context));
+  if (!hasCausationProofFailureSection || (missingTests.length > 0 && !hasSpeculativeFailureStatement)) {
+    additions.push(buildCausationProofFailureSectionStumper(context.primaryScenario, missingTests));
+  }
+
+  // 5. Internal Contradictions
+  if (!/internal contradictions/i.test(lower)) {
+    additions.push(buildEngineerContradictionSection(context.primaryScenario, context.engineerTheorySentences));
+  }
+
+  // 6. Questions the Engineer Must Answer
+  if (!/questions the engineer must answer/i.test(lower)) {
+    const questions = buildEngineerMustAnswerQuestions(context.primaryScenario);
+    const questionsSection = `Questions the Engineer Must Answer\n\n${questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}`;
+    additions.push(questionsSection);
   }
 
   if (additions.length > 0) {
@@ -4336,6 +4579,17 @@ Never invent measurements, tests, or observations that are not in evidence.`;
         // Always inject dismantler findings
         systemPrompt += '\n' + dismantlerExtraction.promptInjection;
 
+        // Inject Engineer Stumper universal rules and scenario-specific standards
+        systemPrompt += '\n' + buildEngineerStumperUniversalRules(primarySc || null, stateInfo);
+        systemPrompt += '\n' + buildEngineerStumperStandardsBank(primarySc || null);
+
+        // Inject scenario-specific must-answer questions into system prompt
+        const engineerQuestions = buildEngineerMustAnswerQuestions(primarySc || null);
+        systemPrompt += `\n\n=== QUESTIONS THE ENGINEER MUST ANSWER (MANDATORY SECTION) ===
+Include a section titled exactly "Questions the Engineer Must Answer" with these numbered questions:
+${engineerQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
+These questions must be short, aggressive, and technical. No fluff.\n`;
+
         userPrompt = `${claimSummary}
 
 STATE JURISDICTION: ${stateInfo.stateName} (${stateInfo.state})
@@ -4364,36 +4618,62 @@ ${LOW_SLOPE_ALLOWED_CONTENT_BULLET_LIST}
 === NON-NEGOTIABLE FORENSIC FOUNDATION (MUST APPEAR IN EVERY ENGINEER REBUTTAL) ===
 Include these exact section headings somewhere in the rebuttal:
 1) Engineer Theory Extraction
-2) Required Testing Not Performed
-3) Causation Proof Failure
+2) Timing Failure
+3) Required Testing Not Performed
+4) Causation Proof Failure
+5) Internal Contradictions
+6) Questions the Engineer Must Answer
+7) Regulatory / Claims Handling Exposure
+8) Conclusion and Demands
 
 Engineer Theory Extraction must quote the engineer's stated cause directly from the report.
+Timing Failure must prove the engineer has not established when the alleged openings/failures developed and uses assumption instead of dated proof.
 Required Testing Not Performed must list the forensic tests required to scientifically prove that cause and explicitly mark whether each appears in the report.
-Causation Proof Failure must explicitly state that when required testing was not performed, the engineer has not scientifically proven the conclusion and the causation statement is speculative.
+Causation Proof Failure must explicitly state that when required testing was not performed, the engineer has not scientifically proven the conclusion and the causation statement is speculative. Must include: "Condition evidence is not causation proof."
+Internal Contradictions must identify where the report's observations contradict its conclusions.
+Questions the Engineer Must Answer must list numbered technical questions the engineer likely cannot answer.
 
 === MANDATORY SECTIONED STRUCTURE (ENFORCED — NO DEVIATIONS) ===
-Your rebuttal MUST contain ALL SEVEN of the following sections IN THIS ORDER. Do not omit any section. Do not leave structure to model discretion.
+Your rebuttal MUST contain ALL of the following sections IN THIS ORDER. Do not omit any section. Do not leave structure to model discretion.
 
-SECTION 1: ENGINEER THEORY SUMMARY
-Summarize the engineer's overall theory of causation. Quote their exact language. Identify the narrative they are constructing.
+SECTION 1: OPENING PARAGRAPH
+State that you have reviewed the engineering report and summarize that it is fundamentally flawed.
 
-SECTION 2: TRIGGER EVENT vs ROOT CAUSE
-Separate the trigger event (the weather event, system failure, or occurrence) from the engineer's stated root cause. Analyze whether they properly distinguished between the two or conflated them.
+SECTION 2: ENGINEER THEORY EXTRACTION
+Quote the engineer's stated cause directly from the report. Identify the narrative they are constructing.
 
-SECTION 3: REPORT WEAKNESSES
-Identify all methodology failures, inspection limitations, missing testing, inadequate time on site, areas not accessed, and equipment not used.
+SECTION 3: TIMING FAILURE
+Prove the engineer has not established when the alleged openings/failures developed. The report uses assumption instead of dated proof. No objective methodology established pre-loss existence of the supposed defect.
 
-SECTION 4: CAUSATION CHALLENGES
-Challenge every causation assumption. Identify where the engineer assumed causation without proving it. Point out contradictions between observations and conclusions.
+SECTION 4: REQUIRED TESTING NOT PERFORMED
+List every forensic test required to scientifically prove the engineer's theory. Mark whether each appears in the report. Explain why each missing test matters.
 
-SECTION 5: TECHNICAL REBUTTAL
-Point-by-point rebuttal of each finding using building science, industry standards, manufacturer specifications, and applicable codes.
+SECTION 5: CAUSATION PROOF FAILURE
+State that the engineer did not scientifically prove sole causation. The absence of required testing makes the report speculative. The report failed to rule out the covered peril. Include: "Condition evidence is not causation proof."
 
-SECTION 6: COVERAGE POSITIONING
-Frame the damage in coverage-favorable terms. Connect findings to policy provisions. Challenge any exclusion application that lacks specific policy citation.
+SECTION 6: EVIDENTIARY SUFFICIENCY AUDIT OF ENGINEER CONCLUSIONS
+For each major conclusion, audit the evidence provided vs missing. Rate each as Unsupported, Weakly Supported, Partially Supported, or Supported.
 
-SECTION 7: RECOMMENDED NEXT EVIDENCE
-Specify what additional documentation, testing, or expert analysis would strengthen the position. Be specific about what to obtain and why.
+SECTION 7: METHODOLOGY FAILURES
+Detail why the engineer's inspection and methodology were inadequate: time on site, areas not accessed, testing not performed, equipment not used, reliance on visual inspection.
+
+SECTION 8: TECHNICAL REBUTTAL / POINT-BY-POINT REBUTTAL
+For EVERY conclusion in the report, quote their exact statement and provide detailed technical rebuttal with codes, standards, and evidence.
+
+SECTION 9: INTERNAL CONTRADICTIONS
+Identify where the report's observations contradict its conclusions. If the report acknowledges event conditions while denying event role, expose that contradiction.
+
+SECTION 10: QUESTIONS THE ENGINEER MUST ANSWER
+List numbered technical questions the engineer likely cannot answer. Short, aggressive, technical. No fluff.
+
+SECTION 11: EVIDENCE OF BIAS
+Detail carrier-friendly language, predetermined conclusions, dismissed evidence, selective reporting.
+
+SECTION 12: REGULATORY VIOLATIONS / CLAIMS HANDLING EXPOSURE
+Cite state regulations the carrier may be violating by relying on this deficient report.
+
+SECTION 13: CONCLUSION AND DEMANDS
+State the report cannot be relied upon, demand it be disregarded, request independent re-inspection, reserve all rights.
 
 === FORMAL REBUTTAL LETTER FORMAT ===
 
@@ -6311,6 +6591,27 @@ RULES:
 
 ${combinedKnowledge}`;
 
+        // Inject engineer stumper rules for auto_draft_rebuttal
+        systemPrompt += '\n' + buildEngineerStumperUniversalRules(autoDraftPrimaryScenario, stateInfo);
+        systemPrompt += '\n' + buildEngineerStumperStandardsBank(autoDraftPrimaryScenario);
+        const autoDraftEngineerQuestions = buildEngineerMustAnswerQuestions(autoDraftPrimaryScenario);
+        systemPrompt += `\n\n=== QUESTIONS THE ENGINEER MUST ANSWER (MANDATORY SECTION) ===
+Include a section titled exactly "Questions the Engineer Must Answer" with these numbered questions:
+${autoDraftEngineerQuestions.map((q: string, i: number) => `${i + 1}. ${q}`).join('\n')}
+These questions must be short, aggressive, and technical. No fluff.\n
+
+=== MANDATORY ENGINEER REBUTTAL SECTIONS ===
+Your output MUST include ALL of these sections:
+1) Engineer Theory Extraction
+2) Timing Failure
+3) Required Testing Not Performed
+4) Causation Proof Failure
+5) Internal Contradictions
+6) Questions the Engineer Must Answer
+7) Regulatory / Claims Handling Exposure
+8) Conclusion and Demands
+If any section is missing, the post-processor will append it deterministically.\n`;
+
         if (isAutoDraftLowSlope) {
           systemPrompt = `You are an elite claims advocate drafting a LOW-SLOPE MEMBRANE SNOWMELT REBUTTAL ONLY.
 
@@ -6566,7 +6867,26 @@ STRICT FORBIDDEN TERMS:
 - architectural shingles
 
 If any forbidden term is needed, do not rewrite it as analysis—only quote it if it appears in the engineer causation statement.
-Do not fall back to wind_uplift reasoning under any circumstance.`;
+Do not fall back to wind_uplift reasoning under any circumstance.
+
+${buildEngineerStumperUniversalRules(LOW_SLOPE_PRIMARY_SCENARIO, stateInfo)}
+${buildEngineerStumperStandardsBank(LOW_SLOPE_PRIMARY_SCENARIO)}
+
+=== MANDATORY ENGINEER REBUTTAL SECTIONS ===
+Your output MUST include ALL of these sections (using low-slope-safe language only):
+1) Engineer Theory Extraction
+2) Timing Failure
+3) Required Testing Not Performed
+4) Causation Proof Failure
+5) Internal Contradictions
+6) Questions the Engineer Must Answer
+7) Regulatory / Claims Handling Exposure
+8) Conclusion and Demands
+
+=== QUESTIONS THE ENGINEER MUST ANSWER ===
+Include a section with exactly this heading and these questions:
+${buildEngineerMustAnswerQuestions(LOW_SLOPE_PRIMARY_SCENARIO).map((q: string, i: number) => `${i + 1}. ${q}`).join('\n')}
+`;
 
           userPrompt = `${claimSummary}
 
@@ -8608,7 +8928,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       analysisResult = JSON.stringify(structuredResult, null, 2);
     }
 
-    if (analysisType === 'engineer_report_rebuttal' && typeof analysisResult === 'string') {
+    if (['engineer_report_rebuttal', 'auto_draft_rebuttal'].includes(analysisType) && typeof analysisResult === 'string') {
       analysisResult = enforceEngineerRebuttalMandatorySections(analysisResult, {
         engineerStatedCause: engineerRebuttalStatedCause,
         engineerTheorySentences: engineerRebuttalTheorySentences,
