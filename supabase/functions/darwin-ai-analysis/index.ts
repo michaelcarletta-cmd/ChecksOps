@@ -8809,9 +8809,12 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
 
   } catch (error: any) {
     console.error('Darwin AI Analysis error:', error);
+    const errorMessage = String(error?.message || 'Unknown error');
+    const isLowSlopeForbiddenError = errorMessage.includes('LOW_SLOPE_MEMBRANE generation failed due to forbidden term');
+
     return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ error: errorMessage }),
+      { status: isLowSlopeForbiddenError ? 422 : 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
