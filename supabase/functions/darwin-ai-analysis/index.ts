@@ -10402,6 +10402,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
             ...structuredScenarioDiagnostics,
             finalViolationList: [],
           },
+          intelligence_diagnostics: intelligenceDiagnostics,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
