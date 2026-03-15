@@ -255,19 +255,17 @@ Deno.serve(async (req) => {
       }
 
       // GUARANTEE extracted_text is populated before any analysis
-      // When force-reprocessing, skip existing text if it's garbage — re-extract from source
-      const existingTextUsable = file.extracted_text && file.extracted_text.length > 50 && !isGarbageText(file.extracted_text);
+      // When force-reprocessing or existing text is garbage, re-extract from source
+      const existingTextIsGarbage = file.extracted_text && file.extracted_text.length > 50 && isGarbageText(file.extracted_text);
+      const existingTextUsable = file.extracted_text && file.extracted_text.length > 50 && !existingTextIsGarbage;
+      
       if (!force && existingTextUsable) {
         textContent = file.extracted_text;
         extractionMethod = 'existing_text';
         console.log(`[TextExtract] Using existing extracted_text (${textContent.length} chars) for ${file.file_name}`);
-      } else if (existingTextUsable && !force) {
-        textContent = file.extracted_text;
-        extractionMethod = 'existing_text';
-        console.log(`[TextExtract] Using existing extracted_text (${textContent.length} chars) for ${file.file_name}`);
-      } else if (force || !existingTextUsable) {
+      } else {
         if (force) console.log(`[TextExtract] Force reprocess — re-extracting text from source for ${file.file_name}`);
-        if (file.extracted_text && isGarbageText(file.extracted_text)) console.log(`[TextExtract] Existing text is garbage (${file.extracted_text.length} chars) — re-extracting from source for ${file.file_name}`);
+        if (existingTextIsGarbage) console.log(`[TextExtract] Existing text is garbage (${file.extracted_text.length} chars) — re-extracting from source for ${file.file_name}`);
       } else {
         // Download file and extract text
         const { data: fileBlob, error: downloadError } = await supabase.storage
