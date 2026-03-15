@@ -125,6 +125,62 @@ async function updateClaimMasterStateDocIntelSummary(
   }
 }
 
+async function verifyClassification(
+  textContent: string,
+  fileName: string,
+  initialClassification: string
+): Promise<{ classification: DocumentClassification; confidence: number; reasons: string[] } | null> {
+  try {
+    const apiKey = Deno.env.get('OPENAI_API_KEY');
+    if (!apiKey) return null;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        temperature: 0.1,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: `Return only JSON:
+{
+  "classification": "estimate|denial|approval|rfi|engineering_report|policy|correspondence|invoice|photo|other",
+  "confidence": number,
+  "reasons": ["string"]
+}
+Use the document text and filename. Do not invent facts.`,
+          },
+          {
+            role: 'user',
+            content: `File name: ${fileName}\nInitial classification: ${initialClassification}\nDocument text:\n${textContent.slice(0, 12000)}`,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const raw = data?.choices?.[0]?.message?.content;
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    return {
+      classification: parsed.classification || 'other',
+      confidence: Number(parsed.confidence || 0.5),
+      reasons: Array.isArray(parsed.reasons) ? parsed.reasons : [],
+    };
+  } catch (err) {
+    console.error('[ClassificationVerify] error:', err);
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
