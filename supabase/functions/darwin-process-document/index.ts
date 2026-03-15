@@ -1712,57 +1712,27 @@ async function indexDocumentForRetrieval(
       return;
     }
 
-    console.log(`[CrossClaim Index] Inserted ${insertedChunks.length} chunks, generating embeddings...`);
+    console.log(`[CrossClaim Index] Inserted ${insertedChunks.length} chunks for file ${fileId}`);
 
-    // Generate embeddings via the generate-embeddings function
+    // Defer embedding generation to avoid CPU timeout in the main processing function.
+    // Fire-and-forget call to generate-embeddings edge function which handles this async.
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-    const texts = insertedChunks.map((c: any) => c.content);
-    const chunkIds = insertedChunks.map((c: any) => c.id);
-
-    // Call generate-embeddings with the OpenAI key
-    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-    if (!OPENAI_API_KEY) {
-      console.log('[CrossClaim Index] No OPENAI_API_KEY, skipping embeddings');
-      return;
-    }
-
-    // Generate embeddings in batches of 50
-    const BATCH_SIZE = 50;
-    for (let i = 0; i < texts.length; i += BATCH_SIZE) {
-      const batchTexts = texts.slice(i, i + BATCH_SIZE);
-      const batchIds = chunkIds.slice(i, i + BATCH_SIZE);
-
-      const embResponse = await fetch('https://api.openai.com/v1/embeddings', {
+    if (SUPABASE_URL && SERVICE_ROLE_KEY) {
+      const chunkIds = insertedChunks.map((c: any) => c.id);
+      fetch(`${SUPABASE_URL}/functions/v1/generate-embeddings`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          model: 'text-embedding-3-small',
-          input: batchTexts,
-        }),
-      });
-
-      if (!embResponse.ok) {
-        console.error('[CrossClaim Index] Embedding API error:', embResponse.status);
-        continue;
-      }
-
-      const embData = await embResponse.json();
-      const embeddings = embData.data.map((item: any) => item.embedding);
-
-      for (let j = 0; j < batchIds.length; j++) {
-        await supabase
-          .from('claim_document_chunks')
-          .update({ embedding: embeddings[j] })
-          .eq('id', batchIds[j]);
-      }
+        body: JSON.stringify({ chunk_ids: chunkIds, source: 'cross-claim-index' }),
+      }).catch(err => console.error('[CrossClaim Index] Deferred embedding call failed:', err));
+      console.log(`[CrossClaim Index] Deferred embedding generation for ${chunkIds.length} chunks`);
+    } else {
+      console.log('[CrossClaim Index] Missing SUPABASE_URL or SERVICE_ROLE_KEY, skipping embeddings');
     }
-
-    console.log(`[CrossClaim Index] Successfully indexed ${chunks.length} chunks with embeddings for file ${fileId}`);
   } catch (error) {
     console.error('[CrossClaim Index] Error:', error);
   }
