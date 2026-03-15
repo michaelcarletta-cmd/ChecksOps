@@ -162,56 +162,78 @@ function stripExternalFormatting(text: string): string {
   return cleaned.trim();
 }
 
+const LOW_SLOPE_PRIMARY_SCENARIO = 'low_slope_snow_ice_ponding';
 const REQUIRED_LOW_SLOPE_OPENING = 'The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering.';
 
-const LOW_SLOPE_FORBIDDEN_RULES: Array<{ regex: RegExp; supportTerms: string[] }> = [
-  { regex: /\bshingle(?:s)?\b/i, supportTerms: ['shingle', 'shingles'] },
-  { regex: /\barchitectural\s+shingle(?:s)?\b/i, supportTerms: ['architectural shingle', 'architectural shingles'] },
-  { regex: /\bthermal\s+seal(?:ing)?\b/i, supportTerms: ['thermal seal', 'thermal sealing'] },
-  { regex: /\bseal\s+strip\b/i, supportTerms: ['seal strip'] },
-  { regex: /\bseal\s+failure\b/i, supportTerms: ['seal failure'] },
-  { regex: /\bfactory\s+seal(?:\s+failure)?\b/i, supportTerms: ['factory seal', 'factory seal failure'] },
-  { regex: /\buplift\s+check(?:s)?\b/i, supportTerms: ['uplift check', 'uplift checks'] },
-  { regex: /\buplift\s+resistance\b/i, supportTerms: ['uplift resistance'] },
-  { regex: /\buplift\s+test(?:ing|s)?\b/i, supportTerms: ['uplift test', 'uplift testing', 'uplift tests'] },
-  { regex: /\blift\s+test(?:s)?\b/i, supportTerms: ['lift test', 'lift tests'] },
-  { regex: /\bgranul(?:e|ar)s?(?:\s+loss)?\b/i, supportTerms: ['granule', 'granules', 'granular', 'granule loss', 'granular loss'] },
-  { regex: /\bfractured\s+tab(?:s)?\b/i, supportTerms: ['fractured tab', 'fractured tabs', 'tab fracture', 'fractured shingle tab'] },
-  { regex: /\bARMA\b/i, supportTerms: ['arma'] },
-  { regex: /\bfastener\s+pull-?out\b/i, supportTerms: ['fastener pull-out', 'fastener pullout'] },
-  { regex: /\bwind-?driven\s+rain\b/i, supportTerms: ['wind-driven rain'] },
-  { regex: /\bhand[-\s]?tab\s+test(?:s)?\b/i, supportTerms: ['hand-tab test', 'hand tab test', 'hand-tab tests', 'hand tab tests'] },
-  { regex: /\b(?:GAF|CertainTeed|Owens\s+Corning)\b/i, supportTerms: ['gaf', 'certainteed', 'owens corning'] },
-  { regex: /\bcreased\s+shingle\s+tab(?:s)?\b/i, supportTerms: ['creased shingle tab', 'creased shingle tabs'] },
-  { regex: /\bfractured\s+shingle(?:s)?\b/i, supportTerms: ['fractured shingle', 'fractured shingles'] },
-  { regex: /\bwind\s+uplift\s+mechanics?\b/i, supportTerms: ['wind uplift mechanic', 'wind uplift mechanics'] },
-  { regex: /\bthermal\s+expansion\s+of\s+shingle(?:s)?\b/i, supportTerms: ['thermal expansion of shingle', 'thermal expansion of shingles'] },
-  { regex: /\bstructural\s+racking\b/i, supportTerms: ['structural racking'] },
-  { regex: /\bhigh[-\s]?wind(?:\s+pressure)?\b/i, supportTerms: ['high wind', 'high wind pressure'] },
-  { regex: /\bwind\s+pressure\b/i, supportTerms: ['wind pressure'] },
-  { regex: /\bpressure\s+event\b/i, supportTerms: ['pressure event'] },
+type LowSlopeForbiddenRule = { regex: RegExp; supportTerms: string[]; label: string };
+
+const LOW_SLOPE_FORBIDDEN_RULES: LowSlopeForbiddenRule[] = [
+  { regex: /\bshingle(?:s)?\b/i, supportTerms: ['shingle', 'shingles'], label: 'shingle / shingles' },
+  { regex: /\barchitectural\s+shingle(?:s)?\b/i, supportTerms: ['architectural shingle', 'architectural shingles'], label: 'architectural shingles' },
+  { regex: /\barchitectural\s+asphalt\s+shingle(?:s)?\b/i, supportTerms: ['architectural asphalt shingle', 'architectural asphalt shingles'], label: 'architectural asphalt shingles' },
+  { regex: /\bthermal\s+seal(?:ing)?\b/i, supportTerms: ['thermal seal', 'thermal sealing'], label: 'thermal seal' },
+  { regex: /\bthermal\s+seal\s+strip\b/i, supportTerms: ['thermal seal strip'], label: 'thermal seal strip' },
+  { regex: /\bseal\s+strip\b/i, supportTerms: ['seal strip'], label: 'seal strip' },
+  { regex: /\bseal\s+failure\b/i, supportTerms: ['seal failure'], label: 'seal failure' },
+  { regex: /\bfactory\s+seal(?:\s+failure)?\b/i, supportTerms: ['factory seal', 'factory seal failure'], label: 'factory seal' },
+  { regex: /\buplift\s+check(?:s)?\b/i, supportTerms: ['uplift check', 'uplift checks'], label: 'uplift checks' },
+  { regex: /\buplift\s+resistance\b/i, supportTerms: ['uplift resistance'], label: 'uplift resistance' },
+  { regex: /\buplift\s+test(?:ing|s)?\b/i, supportTerms: ['uplift test', 'uplift testing', 'uplift tests'], label: 'uplift testing' },
+  { regex: /\blift\s+test(?:s)?\b/i, supportTerms: ['lift test', 'lift tests'], label: 'lift test' },
+  { regex: /\bgranul(?:e|ar)s?(?:\s+loss)?\b/i, supportTerms: ['granule', 'granules', 'granular', 'granule loss', 'granular loss'], label: 'granules / granular loss' },
+  { regex: /\bfractured\s+tab(?:s)?\b/i, supportTerms: ['fractured tab', 'fractured tabs', 'tab fracture', 'fractured shingle tab'], label: 'fractured tabs' },
+  { regex: /\bunsealed\s+tab\s+counts?\b/i, supportTerms: ['unsealed tab count', 'unsealed tab counts'], label: 'unsealed tab counts' },
+  { regex: /\bARMA\b/i, supportTerms: ['arma'], label: 'ARMA' },
+  { regex: /\bfastener\s+pull-?out\b/i, supportTerms: ['fastener pull-out', 'fastener pullout'], label: 'fastener pull-out' },
+  { regex: /\bfastener\s+pull-?out\s+resistance\b/i, supportTerms: ['fastener pull-out resistance', 'fastener pullout resistance'], label: 'fastener pull-out resistance' },
+  { regex: /\bwind-?driven\s+rain\b/i, supportTerms: ['wind-driven rain'], label: 'wind-driven rain' },
+  { regex: /\bwind-?driven\s+uplift\b/i, supportTerms: ['wind-driven uplift'], label: 'wind-driven uplift' },
+  { regex: /\bhand[-\s]?tab\s+test(?:s)?\b/i, supportTerms: ['hand-tab test', 'hand tab test', 'hand-tab tests', 'hand tab tests'], label: 'hand tab test' },
+  { regex: /\bshingle\s+pliability\s+tests?\b/i, supportTerms: ['shingle pliability test', 'shingle pliability tests'], label: 'shingle pliability tests' },
+  { regex: /\bmat\s+breakage\b/i, supportTerms: ['mat breakage'], label: 'mat breakage' },
+  { regex: /\b(?:GAF|CertainTeed|Owens\s+Corning)\b/i, supportTerms: ['gaf', 'certainteed', 'owens corning'], label: 'GAF / CertainTeed / Owens Corning references' },
+  { regex: /\bcreased\s+shingle\s+tab(?:s)?\b/i, supportTerms: ['creased shingle tab', 'creased shingle tabs'], label: 'creased shingle tabs' },
+  { regex: /\bfractured\s+shingle(?:s)?\b/i, supportTerms: ['fractured shingle', 'fractured shingles'], label: 'fractured shingles' },
+  { regex: /\bwind\s+uplift\s+mechanics?\b/i, supportTerms: ['wind uplift mechanic', 'wind uplift mechanics'], label: 'wind uplift mechanics' },
+  { regex: /\bthermal\s+expansion\s+of\s+shingle(?:s)?\b/i, supportTerms: ['thermal expansion of shingle', 'thermal expansion of shingles'], label: 'thermal expansion of shingles' },
+  { regex: /\bstructural\s+racking\b/i, supportTerms: ['structural racking'], label: 'structural racking' },
+  { regex: /\bhigh[-\s]?wind(?:\s+pressure)?\b/i, supportTerms: ['high wind', 'high wind pressure'], label: 'high wind pressure language' },
+  { regex: /\bhigh[-\s]?wind\s+occurrence\b/i, supportTerms: ['high wind occurrence'], label: 'high-wind occurrence' },
+  { regex: /\bwind\s+pressure\b/i, supportTerms: ['wind pressure'], label: 'wind pressure' },
+  { regex: /\bpressure\s+event\b/i, supportTerms: ['pressure event'], label: 'pressure event' },
+  { regex: /\bwind\s+speed\s+uplift\s+calculations?\b/i, supportTerms: ['wind speed uplift calculation', 'wind speed uplift calculations'], label: 'wind speed uplift calculations' },
+  { regex: /\bASTM\s*(?:D3161|D7158)\b|\bASTM\s+wind\b/i, supportTerms: ['astm d3161', 'astm d7158', 'astm wind'], label: 'ASTM wind language' },
 ];
 
-const LOW_SLOPE_FORBIDDEN_BULLET_LIST = [
-  'shingle / shingles',
-  'granules / granular loss',
-  'uplift test',
-  'seal failure / factory seal',
-  'thermal expansion of shingles',
-  'architectural shingles',
-  'structural racking',
-  'high wind pressure language',
-  'thermal seal',
-  'seal strip',
-  'uplift checks',
-  'fractured tabs',
-  'ARMA',
-  'fastener pull-out',
-  'wind-driven rain',
-  'hand tab test',
-  'lift test',
-  'GAF / CertainTeed / Owens Corning references',
+const LOW_SLOPE_FORBIDDEN_BULLET_LIST = LOW_SLOPE_FORBIDDEN_RULES
+  .map((rule) => `- ${rule.label}`)
+  .filter((label, index, list) => list.indexOf(label) === index)
+  .join('\n');
+
+const LOW_SLOPE_ALLOWED_CONTENT_BULLET_LIST = [
+  'snow/ice meltwater',
+  'low-slope roof covering / membrane',
+  'standing water / ponding',
+  'drainage obstruction',
+  'cracked/split cap sheet',
+  'cracked sealants',
+  'maintenance-deferred openings',
+  'no proof of timing',
+  'no membrane core cuts',
+  'no seam adhesion/peel testing',
+  'no drainage-capacity analysis',
+  'no snow-water equivalent/runoff analysis',
+  'no leak-path tracing',
+  'no moisture mapping',
+  'structural snow-load analysis is not membrane watertightness analysis',
 ].map((item) => `- ${item}`).join('\n');
+
+function getScenarioScopedSecondaryScenarios(primaryScenario: string | null, secondaryScenarios: string[]): string[] {
+  if (primaryScenario === LOW_SLOPE_PRIMARY_SCENARIO) {
+    return secondaryScenarios.filter((scenario) => scenario === LOW_SLOPE_PRIMARY_SCENARIO);
+  }
+  return [...secondaryScenarios];
+}
 
 function buildLowSlopeSupportCorpus(engineerCausationSentence: string): string {
   // Strict rule: for low-slope membrane snowmelt scenarios, suppression gates are based ONLY
