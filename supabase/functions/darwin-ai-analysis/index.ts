@@ -4634,28 +4634,46 @@ Internal Contradictions must identify where the report's observations contradict
 Questions the Engineer Must Answer must list numbered technical questions the engineer likely cannot answer.
 
 === MANDATORY SECTIONED STRUCTURE (ENFORCED — NO DEVIATIONS) ===
-Your rebuttal MUST contain ALL SEVEN of the following sections IN THIS ORDER. Do not omit any section. Do not leave structure to model discretion.
+Your rebuttal MUST contain ALL of the following sections IN THIS ORDER. Do not omit any section. Do not leave structure to model discretion.
 
-SECTION 1: ENGINEER THEORY SUMMARY
-Summarize the engineer's overall theory of causation. Quote their exact language. Identify the narrative they are constructing.
+SECTION 1: OPENING PARAGRAPH
+State that you have reviewed the engineering report and summarize that it is fundamentally flawed.
 
-SECTION 2: TRIGGER EVENT vs ROOT CAUSE
-Separate the trigger event (the weather event, system failure, or occurrence) from the engineer's stated root cause. Analyze whether they properly distinguished between the two or conflated them.
+SECTION 2: ENGINEER THEORY EXTRACTION
+Quote the engineer's stated cause directly from the report. Identify the narrative they are constructing.
 
-SECTION 3: REPORT WEAKNESSES
-Identify all methodology failures, inspection limitations, missing testing, inadequate time on site, areas not accessed, and equipment not used.
+SECTION 3: TIMING FAILURE
+Prove the engineer has not established when the alleged openings/failures developed. The report uses assumption instead of dated proof. No objective methodology established pre-loss existence of the supposed defect.
 
-SECTION 4: CAUSATION CHALLENGES
-Challenge every causation assumption. Identify where the engineer assumed causation without proving it. Point out contradictions between observations and conclusions.
+SECTION 4: REQUIRED TESTING NOT PERFORMED
+List every forensic test required to scientifically prove the engineer's theory. Mark whether each appears in the report. Explain why each missing test matters.
 
-SECTION 5: TECHNICAL REBUTTAL
-Point-by-point rebuttal of each finding using building science, industry standards, manufacturer specifications, and applicable codes.
+SECTION 5: CAUSATION PROOF FAILURE
+State that the engineer did not scientifically prove sole causation. The absence of required testing makes the report speculative. The report failed to rule out the covered peril. Include: "Condition evidence is not causation proof."
 
-SECTION 6: COVERAGE POSITIONING
-Frame the damage in coverage-favorable terms. Connect findings to policy provisions. Challenge any exclusion application that lacks specific policy citation.
+SECTION 6: EVIDENTIARY SUFFICIENCY AUDIT OF ENGINEER CONCLUSIONS
+For each major conclusion, audit the evidence provided vs missing. Rate each as Unsupported, Weakly Supported, Partially Supported, or Supported.
 
-SECTION 7: RECOMMENDED NEXT EVIDENCE
-Specify what additional documentation, testing, or expert analysis would strengthen the position. Be specific about what to obtain and why.
+SECTION 7: METHODOLOGY FAILURES
+Detail why the engineer's inspection and methodology were inadequate: time on site, areas not accessed, testing not performed, equipment not used, reliance on visual inspection.
+
+SECTION 8: TECHNICAL REBUTTAL / POINT-BY-POINT REBUTTAL
+For EVERY conclusion in the report, quote their exact statement and provide detailed technical rebuttal with codes, standards, and evidence.
+
+SECTION 9: INTERNAL CONTRADICTIONS
+Identify where the report's observations contradict its conclusions. If the report acknowledges event conditions while denying event role, expose that contradiction.
+
+SECTION 10: QUESTIONS THE ENGINEER MUST ANSWER
+List numbered technical questions the engineer likely cannot answer. Short, aggressive, technical. No fluff.
+
+SECTION 11: EVIDENCE OF BIAS
+Detail carrier-friendly language, predetermined conclusions, dismissed evidence, selective reporting.
+
+SECTION 12: REGULATORY VIOLATIONS / CLAIMS HANDLING EXPOSURE
+Cite state regulations the carrier may be violating by relying on this deficient report.
+
+SECTION 13: CONCLUSION AND DEMANDS
+State the report cannot be relied upon, demand it be disregarded, request independent re-inspection, reserve all rights.
 
 === FORMAL REBUTTAL LETTER FORMAT ===
 
