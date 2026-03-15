@@ -999,22 +999,17 @@ function enforceEngineerRebuttalLowSlopeOpening(
   primaryScenario: string | null,
   analysisType?: string,
 ): string {
-  if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return result;
-
-  // Do NOT force the low-slope opening into formal carrier-ready letter outputs.
-  // It can be used in internal analysis/drafts, but not injected into the body
-  // of a polished rebuttal letter where it creates awkward duplication.
-  if (analysisType === 'engineer_report_rebuttal' || analysisType === 'auto_draft_rebuttal') {
+  if (!result || primaryScenario !== "low_slope_snow_ice_ponding") return result;
+  // For formal rebuttal letters, do NOT inject the forced low-slope sentence
+  // as a standalone opening. It creates awkward duplication in carrier-ready output.
+  if (analysisType === "engineer_report_rebuttal" || analysisType === "auto_draft_rebuttal") {
     return result;
   }
-
   const required = REQUIRED_LOW_SLOPE_OPENING;
   const requiredLower = required.toLowerCase();
-  const lines = result.split('\n');
-
+  const lines = result.split("\n");
   const dateOfLossIdx = lines.findIndex((line) => /^\s*Date of Loss\s*:/i.test(line));
   const searchStart = dateOfLossIdx >= 0 ? dateOfLossIdx + 1 : 0;
-
   let firstBodyLineIdx = -1;
   for (let i = searchStart; i < lines.length; i += 1) {
     const line = lines[i].trim();
@@ -1023,18 +1018,15 @@ function enforceEngineerRebuttalLowSlopeOpening(
     firstBodyLineIdx = i;
     break;
   }
-
   if (firstBodyLineIdx < 0) {
     return `${required}\n\n${result}`.trim();
   }
-
   const firstBodyLine = lines[firstBodyLineIdx].trim();
   if (firstBodyLine.toLowerCase().startsWith(requiredLower)) {
     return result;
   }
-
   lines[firstBodyLineIdx] = `${required} ${firstBodyLine}`;
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
 function suppressLowSlopeUnsupportedBoilerplate(result: string, supportCorpus: string): string {
@@ -1208,10 +1200,21 @@ function buildLowSlopeScenarioDiagnostics(params: {
   };
 }
 
-function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: string | null, supportCorpus: string): string {
+function enforceLowSlopeRebuttalRequirements(
+  result: string,
+  primaryScenario: string | null,
+  supportCorpus: string,
+  analysisType?: string,
+): string {
   if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return result;
 
-  let updated = enforceEngineerRebuttalLowSlopeOpening(result, primaryScenario, undefined);
+  // For formal final rebuttal letters, do not append internal control sections.
+  // Those belong in prompting/validation, not in final carrier-facing output.
+  if (analysisType === "engineer_report_rebuttal" || analysisType === "auto_draft_rebuttal") {
+    return suppressLowSlopeUnsupportedBoilerplate(result.trim(), supportCorpus);
+  }
+
+  let updated = enforceEngineerRebuttalLowSlopeOpening(result, primaryScenario, analysisType);
   updated = suppressLowSlopeUnsupportedBoilerplate(updated, supportCorpus);
 
   const lower = updated.toLowerCase();
@@ -1431,63 +1434,91 @@ function hasEngineerInternalControlLeak(text: string): boolean {
 
 function stripOrphanLowSlopeOpeningBlocks(text: string): string {
   if (!text) return text;
-
   const escaped = REQUIRED_LOW_SLOPE_OPENING.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-  // Remove standalone repeated lines of the required opening
-  let updated = text.replace(
+  let updated = text;
+  // Remove standalone repeated low-slope opening lines
+  updated = updated.replace(
     new RegExp(`(^|\\n)${escaped}(?=\\n|$)`, 'gi'),
     '$1',
   );
-
-  // Remove it when it appears as an orphan line immediately under a heading
+  // Remove if it appears as a stray line immediately before body text
+  updated = updated.replace(
+    new RegExp(`${escaped}\\s+(?=After an exhaustive|After an exhaustive technical review|After an exhaustive review)`, 'i'),
+    '',
+  );
+  // Remove if it appears directly under Timing Failure
   updated = updated.replace(
     new RegExp(`(Timing Failure\\s*\\n+)${escaped}\\s*\\n`, 'i'),
     '$1',
   );
-
-  updated = updated.replace(/\n{3,}/g, '\n\n').trim();
-  return updated;
+  return updated.replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function normalizeEngineerQuestionSection(text: string): string {
   if (!text) return text;
-
   const sectionRegex =
-    /(Questions the Engineer Must Answer\s*\n)([\s\S]*?)(?=\n[A-Z][A-Za-z /&\-]+\n|\nConclusion and Demands|\nEvidence of Bias|\nRegulatory Violations|\nRegulatory \/ Claims Handling Exposure|\nCarrier Dependency Analysis|\n$)/i;
-
+    /(Questions the Engineer Must Answer\s*\n)([\s\S]*?)(?=\n[A-Z][A-Za-z /&\-\(\)]+\n|\nEvidence of Bias|\nRegulatory Violations and Claims Handling Exposure|\nRegulatory \/ Claims Handling Exposure|\nConclusion and Demands|\nRegards,|\nSincerely,|\n$)/i;
   return text.replace(sectionRegex, (_match, heading, body) => {
     const lines = String(body)
       .split('\n')
       .map((line) => line.trim())
       .filter(Boolean);
-
     const cleanedQuestions = lines.map((line) =>
       line.replace(/^\d+[\).\s-]*/, '').trim()
     );
-
-    const renumbered = cleanedQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n');
+    const renumbered = cleanedQuestions
+      .filter(Boolean)
+      .map((q, i) => `${i + 1}. ${q}`)
+      .join('\n');
     return `${heading}${renumbered}\n`;
   });
 }
 
+function stripPriorityOrderControlBlock(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(
+      /\n*PRIORITY ORDER \(MANDATORY\):[\s\S]*?Do NOT prioritize wind mechanics\.\s*/i,
+      '\n',
+    )
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function stripLowSlopeControlSections(text: string): string {
+  if (!text) return text;
+  let updated = text;
+  updated = updated.replace(
+    /\n*SECTION 1 — TIMING FAILURE:\s*[\s\S]*?(?=\n[A-Z][A-Za-z /&\-\(\)]+\n|\nRegards,|\nSincerely,|\n$)/i,
+    '\n',
+  );
+  updated = updated.replace(
+    /\n*SECTION 2 — DRAINAGE \/ SNOWMELT ANALYSIS FAILURE:\s*[\s\S]*?(?=\n[A-Z][A-Za-z /&\-\(\)]+\n|\nRegards,|\nSincerely,|\n$)/i,
+    '\n',
+  );
+  updated = updated.replace(
+    /\n*SECTION 3 — ENGINEER CONTRADICTION:\s*[\s\S]*?(?=\n[A-Z][A-Za-z /&\-\(\)]+\n|\nRegards,|\nSincerely,|\n$)/i,
+    '\n',
+  );
+  updated = updated.replace(
+    /\n*STRUCTURAL VS WATERTIGHTNESS DISTINCTION:\s*[\s\S]*?(?=\n[A-Z][A-Za-z /&\-\(\)]+\n|\nRegards,|\nSincerely,|\n$)/i,
+    '\n',
+  );
+  return updated.replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function normalizeBrokenNumericLists(text: string): string {
   if (!text) return text;
-
   let updated = text;
-
   // Fix things like "... January 25, 2026.2. The 17 inches ..."
   updated = updated.replace(/(\d{4})\.(\d+\.)\s/g, '$1\n$2 ');
-
   // If a section clearly contains numbered dependencies jammed together, split them
   updated = updated.replace(/([a-z0-9])\.(\d+\.)\s/g, '$1\n$2 ');
-
   return updated;
 }
 
 function stripCarrierDependencyAnalysis(text: string): string {
   if (!text) return text;
-
   return text
     .replace(
       /\n*Carrier Dependency Analysis\n[\s\S]*?(?=\n[A-Z][A-Za-z /&\-]+\n|\nConclusion and Demands|\n$)/i,
@@ -1499,19 +1530,17 @@ function stripCarrierDependencyAnalysis(text: string): string {
 
 function polishEngineerRebuttalFormatting(text: string): string {
   if (!text) return text;
-
   let updated = text;
-
   updated = stripOrphanLowSlopeOpeningBlocks(updated);
+  updated = stripPriorityOrderControlBlock(updated);
+  updated = stripLowSlopeControlSections(updated);
   updated = normalizeEngineerQuestionSection(updated);
   updated = normalizeBrokenNumericLists(updated);
-
-  // Clean spacing before headings
   updated = updated.replace(/\n{3,}/g, '\n\n');
-
-  // Remove duplicated heading spacing
-  updated = updated.replace(/([^\n])\n(Engineer Theory Extraction|Timing Failure|Required Testing Not Performed|Causation Proof Failure|Evidentiary Sufficiency Audit of Engineer Conclusions|Methodology Failures|Point-by-Point Rebuttal|Membrane Deterioration Fallacy Rebuttal|Internal Contradictions|Questions the Engineer Must Answer|Evidence of Bias|Regulatory Violations and Claims Handling Exposure|Regulatory \/ Claims Handling Exposure|Carrier Dependency Analysis|Conclusion and Demands)\n/g, '$1\n\n$2\n');
-
+  updated = updated.replace(
+    /([^\n])\n(Engineer Theory Extraction|Timing Failure|Required Testing Not Performed|Causation Proof Failure|Evidentiary Sufficiency Audit of Engineer Conclusions|Methodology Failures|Point-by-Point Rebuttal|Membrane Deterioration Fallacy Rebuttal|Internal Contradictions|Questions the Engineer Must Answer|Evidence of Bias|Regulatory Violations and Claims Handling Exposure|Regulatory \/ Claims Handling Exposure|Conclusion and Demands)\n/g,
+    '$1\n\n$2\n'
+  );
   return updated.trim();
 }
 
@@ -1532,7 +1561,8 @@ function polishFinalEngineerRebuttal(
     updated = enforceLowSlopeRebuttalRequirements(
       updated,
       context.primaryScenario,
-      buildLowSlopeSupportCorpus(context.engineerStatedCause || '')
+      buildLowSlopeSupportCorpus(context.engineerStatedCause || ''),
+      analysisType,
     );
     // Do NOT force opening sentence into formal letters
     updated = enforceEngineerRebuttalLowSlopeOpening(updated, context.primaryScenario, analysisType);
@@ -9303,10 +9333,12 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         engineerContext.primaryScenario = LOW_SLOPE_PRIMARY_SCENARIO;
       }
 
-      analysisResult = polishFinalEngineerRebuttal(analysisResult, engineerContext, analysisType);
-
-      // Final cleanup passes
-      analysisResult = stripOrphanLowSlopeOpeningBlocks(analysisResult);
+      analysisResult = enforceEngineerRebuttalLowSlopeOpening(
+        analysisResult,
+        engineerRebuttalPrimaryScenario,
+        analysisType,
+      );
+      analysisResult = enforceEngineerRebuttalMandatorySections(analysisResult, engineerContext);
       analysisResult = polishEngineerRebuttalFormatting(analysisResult);
 
       // Final safety: strip any remaining internal control text
