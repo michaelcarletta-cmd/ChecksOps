@@ -60,3 +60,6 @@ verify_jwt = false
 
 [functions.darwin-document-intelligence-worker]
 verify_jwt = false
+
+[functions.darwin-document-meaning-worker]
+verify_jwt = false

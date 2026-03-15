@@ -35,6 +35,51 @@ type IntelligenceOutput = {
   confidence_score: number;
 };
 
+async function enqueueDocumentMeaningJob(
+  supabase: ReturnType<typeof createClient>,
+  payload: {
+    claim_id: string;
+    file_id: string;
+    intelligence_id: string;
+    segment_id?: string | null;
+    source_scope?: string;
+    document_type: string;
+    document_classification: string;
+    source_summary?: string;
+    priority?: number;
+  }
+) {
+  const queueRow = {
+    claim_id: payload.claim_id,
+    file_id: payload.file_id,
+    segment_id: payload.segment_id ?? null,
+    source_scope: payload.source_scope || (payload.segment_id ? 'segment' : 'file'),
+    intelligence_id: payload.intelligence_id,
+    status: 'pending',
+    priority: payload.priority ?? 50,
+    run_after: new Date().toISOString(),
+    payload: {
+      intelligence_id: payload.intelligence_id,
+      segment_id: payload.segment_id ?? null,
+      source_scope: payload.source_scope || (payload.segment_id ? 'segment' : 'file'),
+      document_type: payload.document_type,
+      document_classification: payload.document_classification,
+      source_summary: payload.source_summary || '',
+    },
+  };
+
+  const conflictTarget = payload.segment_id ? 'segment_id' : 'file_id';
+
+  const { error } = await supabase
+    .from('document_meaning_queue')
+    .upsert(queueRow, { onConflict: conflictTarget });
+
+  if (error) {
+    console.error('[DocMeaningQueue] enqueue error:', error.message);
+    throw error;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });

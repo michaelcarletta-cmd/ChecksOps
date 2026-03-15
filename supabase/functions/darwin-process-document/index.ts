@@ -805,6 +805,46 @@ Deno.serve(async (req) => {
       });
     }
 
+    // === Document Meaning queue summary in claim_master_state ===
+    if (targetClaimId) {
+      const { count: meaningPendingCount } = await supabase
+        .from('document_meaning_queue')
+        .select('id', { count: 'exact', head: true })
+        .eq('claim_id', targetClaimId)
+        .in('status', ['pending', 'processing']);
+
+      const { count: meaningCount } = await supabase
+        .from('claim_document_meaning')
+        .select('id', { count: 'exact', head: true })
+        .eq('claim_id', targetClaimId);
+
+      const { data: existingMeaning } = await supabase
+        .from('claim_master_state')
+        .select('state_json')
+        .eq('claim_id', targetClaimId)
+        .maybeSingle();
+
+      const currentStateMeaning = (existingMeaning?.state_json ?? {}) as Record<string, unknown>;
+      const currentMeaning = (currentStateMeaning.document_meaning ?? {}) as Record<string, unknown>;
+
+      await supabase
+        .from('claim_master_state')
+        .upsert({
+          claim_id: targetClaimId,
+          state_json: {
+            ...currentStateMeaning,
+            document_meaning: {
+              ...currentMeaning,
+              analyzed_documents: meaningCount ?? 0,
+              pending_documents: meaningPendingCount ?? 0,
+              last_document_seen_at: new Date().toISOString(),
+            },
+            updated_at_iso: new Date().toISOString(),
+          },
+          updated_at: new Date().toISOString(),
+        });
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 
