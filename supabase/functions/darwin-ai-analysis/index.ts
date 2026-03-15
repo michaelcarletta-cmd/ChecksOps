@@ -1184,7 +1184,7 @@ function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: st
 
   if (!hasStructuralDistinction) {
     additions.push(
-      `Structural snow-load analysis does not prove membrane watertightness. A roof can remain structurally adequate while still failing at the membrane, seam, flashing, or drainage level under snowmelt, ponding, or freeze-thaw conditions.`
+      `Structural snow-load analysis does not prove membrane watertightness. A roof can remain structurally adequate while still fail at the membrane, seam, flashing, or drainage level under snowmelt, ponding, or freeze-thaw conditions.`
     );
   }
 
@@ -1193,7 +1193,8 @@ function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: st
   }
 
   updated = suppressLowSlopeUnsupportedBoilerplate(updated.trim(), supportCorpus);
-  updated = cleanupEngineerLetterFormatting(updated);
+  updated = stripInternalEngineerControlText(updated);
+  updated = normalizeEngineerLetterFormatting(updated);
 
   return updated.trim();
 }
