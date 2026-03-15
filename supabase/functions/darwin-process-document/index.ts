@@ -40,6 +40,25 @@ interface ClassificationResult {
   };
 }
 
+interface DocumentIntelligenceQueuePayload {
+  claim_id: string;
+  file_id: string;
+  document_type: string;
+  document_classification: string;
+  confidence_score: number;
+  summary?: string;
+}
+
+interface ClaimMasterStateDocIntelSummary {
+  total_documents?: number;
+  analyzed_documents?: number;
+  pending_documents?: number;
+  high_priority_action_docs?: number;
+  last_document_type?: string | null;
+  last_processed_file_id?: string | null;
+  last_processed_at?: string | null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
