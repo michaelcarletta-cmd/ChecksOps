@@ -4000,58 +4000,200 @@ Deno.serve(async (req) => {
       .eq('claim_id', claimId);
     context.files = files || [];
 
-    // ── SOFT MIGRATION: Load document intelligence for all claim files ──
-    // Darwin consumers check this FIRST, then fall back to legacy parsing.
-    let documentIntelligence: any[] = [];
+    // ── PHASE 2: DOCUMENT INTELLIGENCE SOFT MIGRATION ──────────────────────
+    // Helper types and functions for intelligence-first analysis
+
+    type IntelligenceBackedAnalysisType =
+      | "engineer_report_rebuttal"
+      | "auto_draft_rebuttal"
+      | "denial_rebuttal"
+      | "carrier_email_draft"
+      | "coverage_letter_response"
+      | "estimate_gap_analysis"
+      | "policy_analysis";
+
+    function analysisTypeSupportsIntelligence(at: string): at is IntelligenceBackedAnalysisType {
+      return [
+        "engineer_report_rebuttal", "auto_draft_rebuttal", "denial_rebuttal",
+        "carrier_email_draft", "coverage_letter_response", "estimate_gap_analysis", "policy_analysis",
+      ].includes(at);
+    }
+
+    function selectRelevantIntelligenceRows(params: { analysisType: string; intelligenceRows: any[] }): any[] {
+      const { analysisType: at, intelligenceRows: rows } = params;
+      if (!Array.isArray(rows)) return [];
+      const typeMap: Record<string, string[]> = {
+        engineer_report_rebuttal: ["engineering_report", "expert_report", "inspection_report"],
+        auto_draft_rebuttal: ["engineering_report", "carrier_denial", "coverage_letter", "carrier_email", "estimate", "inspection_report"],
+        denial_rebuttal: ["carrier_denial", "coverage_letter", "carrier_email", "policy_document", "engineering_report", "estimate"],
+        carrier_email_draft: ["carrier_email", "coverage_letter", "carrier_denial", "engineering_report", "estimate"],
+        coverage_letter_response: ["coverage_letter", "carrier_email", "policy_document", "estimate", "engineering_report"],
+        estimate_gap_analysis: ["estimate", "engineering_report", "coverage_letter", "carrier_denial"],
+        policy_analysis: ["policy_document", "coverage_letter", "carrier_denial"],
+      };
+      const allowed = new Set(typeMap[at] || []);
+      const filtered = rows.filter((row: any) => allowed.has(String(row.document_type || "")));
+      return filtered.length > 0 ? filtered : rows;
+    }
+
+    function buildDocumentIntelligenceContext(params: { analysisType: string; files: any[]; intelligenceRows: any[] }): string {
+      const { files: contextFiles, intelligenceRows } = params;
+      if (!Array.isArray(intelligenceRows) || intelligenceRows.length === 0) return "";
+      const fileMap = new Map((contextFiles || []).map((f: any) => [f.id, f]));
+      const lines: string[] = [];
+      lines.push("=== DOCUMENT INTELLIGENCE (AUTHORITATIVE WHEN AVAILABLE) ===");
+      for (const row of intelligenceRows.slice(0, 40)) {
+        const file = fileMap.get(row.claim_file_id);
+        const fileName = file?.file_name || "Unknown file";
+        const docType = row.document_type || file?.document_type || file?.document_classification || "other";
+        const docSubtype = row.document_subtype ? `/${row.document_subtype}` : "";
+        const textQuality = file?.text_quality_status || "unknown";
+        const ready = file?.ready_for_analysis === true ? "ready" : "not_ready";
+        lines.push(`\n--- ${fileName} [${docType}${docSubtype}] (${ready}, text_quality=${textQuality}) ---`);
+        if (row.summary) lines.push(`Summary: ${row.summary}`);
+        if (row.coverage_position) lines.push(`Coverage Position: ${row.coverage_position}`);
+        if (row.cause_of_loss) lines.push(`Cause of Loss: ${row.cause_of_loss}`);
+        if (row.sender) lines.push(`Sender: ${row.sender}`);
+        if (row.recipient) lines.push(`Recipient: ${row.recipient}`);
+        const denialReasons = Array.isArray(row.denial_reasons) ? row.denial_reasons : [];
+        if (denialReasons.length) lines.push(`Denial Reasons: ${denialReasons.join("; ")}`);
+        const exclusions = Array.isArray(row.exclusions_cited) ? row.exclusions_cited : [];
+        if (exclusions.length) lines.push(`Exclusions Cited: ${exclusions.join("; ")}`);
+        const testingPerformed = Array.isArray(row.testing_performed) ? row.testing_performed : [];
+        if (testingPerformed.length) lines.push(`Testing Performed: ${testingPerformed.join("; ")}`);
+        const testingMissing = Array.isArray(row.testing_missing) ? row.testing_missing : [];
+        if (testingMissing.length) lines.push(`Testing Missing: ${testingMissing.join("; ")}`);
+        const contradictions = Array.isArray(row.contradictions) ? row.contradictions : [];
+        if (contradictions.length) lines.push(`Contradictions: ${contradictions.join("; ")}`);
+        const scopePositions = Array.isArray(row.scope_positions) ? row.scope_positions : [];
+        if (scopePositions.length) lines.push(`Scope Positions: ${scopePositions.join("; ")}`);
+        const components = Array.isArray(row.building_components) ? row.building_components : [];
+        if (components.length) lines.push(`Building Components: ${components.join(", ")}`);
+        const codes = Array.isArray(row.code_references) ? row.code_references : [];
+        if (codes.length) lines.push(`Code References: ${codes.join("; ")}`);
+        const manufacturers = Array.isArray(row.manufacturer_references) ? row.manufacturer_references : [];
+        if (manufacturers.length) lines.push(`Manufacturer References: ${manufacturers.join("; ")}`);
+        const citations = Array.isArray(row.citations) ? row.citations : [];
+        if (citations.length) lines.push(`Citations: ${citations.join("; ")}`);
+        if (row.estimate_totals && typeof row.estimate_totals === "object") {
+          const et = row.estimate_totals as any;
+          const moneyParts: string[] = [];
+          if (typeof et.rcv === "number") moneyParts.push(`RCV=$${et.rcv.toLocaleString()}`);
+          if (typeof et.acv === "number") moneyParts.push(`ACV=$${et.acv.toLocaleString()}`);
+          if (typeof et.depreciation === "number") moneyParts.push(`Depreciation=$${et.depreciation.toLocaleString()}`);
+          if (typeof et.deductible === "number") moneyParts.push(`Deductible=$${et.deductible.toLocaleString()}`);
+          if (moneyParts.length) lines.push(`Estimate Totals: ${moneyParts.join(", ")}`);
+        }
+        const keyDates = Array.isArray(row.key_dates) ? row.key_dates : [];
+        if (keyDates.length) {
+          lines.push(`Key Dates: ${keyDates.map((d: any) => `${d?.date || "unknown"}=${d?.label || "event"}`).join("; ")}`);
+        }
+      }
+      lines.push("\nUSE THESE STRUCTURED FACTS FIRST. FALL BACK TO RAW DOCUMENT PARSING ONLY IF NEEDED.");
+      return lines.join("\n");
+    }
+
+    function buildDocumentReadinessWarnings(params: { files: any[]; intelligenceRows: any[]; analysisType: string }): { warningText: string; blockedFileIds: string[]; degradedFileIds: string[] } {
+      const { files: contextFiles, intelligenceRows } = params;
+      const fileMap = new Map((contextFiles || []).map((f: any) => [f.id, f]));
+      const blockedFileIds: string[] = [];
+      const degradedFileIds: string[] = [];
+      const warnLines: string[] = [];
+      for (const row of intelligenceRows || []) {
+        const file = fileMap.get(row.claim_file_id);
+        if (!file) continue;
+        const quality = String(file.text_quality_status || "");
+        const ready = file.ready_for_analysis === true;
+        const fileName = file.file_name || row.claim_file_id;
+        if (!ready) {
+          blockedFileIds.push(row.claim_file_id);
+          warnLines.push(`Blocked file: ${fileName} (ready_for_analysis=false, quality=${quality || "unknown"})`);
+          continue;
+        }
+        if (quality === "poor" || quality === "unusable") {
+          degradedFileIds.push(row.claim_file_id);
+          warnLines.push(`Degraded file: ${fileName} (text_quality_status=${quality})`);
+        }
+      }
+      return {
+        warningText: warnLines.length ? `=== DOCUMENT READINESS WARNINGS ===\n${warnLines.join("\n")}` : "",
+        blockedFileIds,
+        degradedFileIds,
+      };
+    }
+
+    const INTELLIGENCE_PRIORITY_INSTRUCTION = `
+=== DOCUMENT INTELLIGENCE PRIORITY RULE ===
+Use claim_document_intelligence facts first when available.
+Treat structured facts as the preferred source of truth for:
+- document summary
+- denial reasons
+- exclusions cited
+- testing performed
+- testing missing
+- estimate totals
+- cause of loss
+- coverage position
+- contradictions
+- code references
+- manufacturer references
+- key dates
+- sender / recipient
+Only fall back to raw extracted text when:
+- intelligence is missing for a needed fact
+- the structured fact is obviously incomplete
+- direct quoting from the source document is required
+Do not ignore readiness warnings.
+If a source file is marked ready_for_analysis=false, do not treat that file as reliable evidence unless no better source exists.
+=== END DOCUMENT INTELLIGENCE PRIORITY RULE ===
+`;
+
+    // ── Load document intelligence rows ──
+    let documentIntelligenceRows: any[] = [];
     try {
-      const { data: intelData } = await supabase
+      const { data: intelData, error: intelError } = await supabase
         .from('claim_document_intelligence')
         .select('*')
-        .eq('claim_id', claimId);
-      documentIntelligence = intelData || [];
-      if (documentIntelligence.length > 0) {
-        console.log(`[darwin] Document intelligence loaded: ${documentIntelligence.length} records for claim ${claimId}`);
+        .eq('claim_id', claimId)
+        .order('updated_at', { ascending: false });
+      if (intelError) {
+        console.warn("[darwin] claim_document_intelligence lookup failed:", intelError.message);
+      } else {
+        documentIntelligenceRows = intelData || [];
+        console.log(`[darwin] Loaded ${documentIntelligenceRows.length} document intelligence rows for claim ${claimId}`);
       }
     } catch (intelErr) {
-      console.warn('[darwin] Document intelligence lookup failed (non-fatal, using legacy):', intelErr);
+      console.warn('[darwin] Document intelligence lookup exception (non-fatal):', intelErr);
     }
-    context.documentIntelligence = documentIntelligence;
+    context.documentIntelligence = documentIntelligenceRows;
 
-    // Build structured intelligence context for prompt injection
-    let documentIntelligenceContext = '';
-    if (documentIntelligence.length > 0) {
-      const intelLines: string[] = ['=== DOCUMENT INTELLIGENCE (Pre-Extracted Structured Facts) ==='];
-      for (const intel of documentIntelligence.slice(0, 20)) {
-        const matchingFile = (files || []).find((f: any) => f.id === intel.claim_file_id);
-        const fileName = matchingFile?.file_name || 'Unknown';
-        intelLines.push(`\n--- ${fileName} [${intel.document_type}${intel.document_subtype ? '/' + intel.document_subtype : ''}] ---`);
-        if (intel.summary) intelLines.push(`Summary: ${intel.summary}`);
-        if (intel.coverage_position) intelLines.push(`Coverage Position: ${intel.coverage_position}`);
-        if (intel.cause_of_loss) intelLines.push(`Cause of Loss: ${intel.cause_of_loss}`);
-        if (intel.sender) intelLines.push(`From: ${intel.sender}`);
-        if (intel.recipient) intelLines.push(`To: ${intel.recipient}`);
-        const denialReasons = Array.isArray(intel.denial_reasons) ? intel.denial_reasons : [];
-        if (denialReasons.length > 0) intelLines.push(`Denial Reasons: ${denialReasons.join('; ')}`);
-        const exclusions = Array.isArray(intel.exclusions_cited) ? intel.exclusions_cited : [];
-        if (exclusions.length > 0) intelLines.push(`Exclusions Cited: ${exclusions.join('; ')}`);
-        const testingPerformed = Array.isArray(intel.testing_performed) ? intel.testing_performed : [];
-        if (testingPerformed.length > 0) intelLines.push(`Testing Performed: ${testingPerformed.join('; ')}`);
-        const testingMissing = Array.isArray(intel.testing_missing) ? intel.testing_missing : [];
-        if (testingMissing.length > 0) intelLines.push(`Testing Missing: ${testingMissing.join('; ')}`);
-        if (intel.estimate_totals && typeof intel.estimate_totals === 'object') {
-          const et = intel.estimate_totals as any;
-          if (et.rcv) intelLines.push(`RCV: $${et.rcv.toLocaleString()}`);
-          if (et.acv) intelLines.push(`ACV: $${et.acv.toLocaleString()}`);
-        }
-        const contradictions = Array.isArray(intel.contradictions) ? intel.contradictions : [];
-        if (contradictions.length > 0) intelLines.push(`Contradictions: ${contradictions.join('; ')}`);
-        const keyDates = Array.isArray(intel.key_dates) ? intel.key_dates : [];
-        if (keyDates.length > 0) intelLines.push(`Key Dates: ${keyDates.map((d: any) => `${d.date}: ${d.label}`).join('; ')}`);
-        const components = Array.isArray(intel.building_components) ? intel.building_components : [];
-        if (components.length > 0) intelLines.push(`Building Components: ${components.join(', ')}`);
-      }
-      documentIntelligenceContext = intelLines.join('\n') + '\n\n';
-    }
+    // ── Build intelligence-first context ──
+    const intelligenceSupported = analysisTypeSupportsIntelligence(analysisType);
+    const relevantIntelligenceRows = intelligenceSupported
+      ? selectRelevantIntelligenceRows({ analysisType, intelligenceRows: documentIntelligenceRows })
+      : documentIntelligenceRows;
+
+    const documentIntelligenceContext = relevantIntelligenceRows.length > 0
+      ? buildDocumentIntelligenceContext({ analysisType, files: files || [], intelligenceRows: relevantIntelligenceRows }) + '\n\n'
+      : '';
+
+    const readinessAudit = buildDocumentReadinessWarnings({
+      files: files || [],
+      intelligenceRows: relevantIntelligenceRows,
+      analysisType,
+    });
+
+    const intelligenceDiagnostics = {
+      intelligenceRowsLoaded: documentIntelligenceRows.length,
+      relevantIntelligenceRows: relevantIntelligenceRows.length,
+      blockedFileIds: readinessAudit.blockedFileIds,
+      degradedFileIds: readinessAudit.degradedFileIds,
+      intelligenceFirstApplied: intelligenceSupported,
+    };
+
+    console.log(
+      `[darwin][intel] analysisType=${analysisType} relevant_rows=${relevantIntelligenceRows.length} blocked=${readinessAudit.blockedFileIds.length} degraded=${readinessAudit.degradedFileIds.length}`
+    );
 
     // Get photos from claim_photos table (separate from claim_files)
     const { data: photos } = await supabase
