@@ -288,11 +288,26 @@ Deno.serve(async (req) => {
         .eq('id', fileId);
     }
 
-    // === STEP 4: STRUCTURED INTELLIGENCE EXTRACTION ===
+    // === STEP 4: DURABLE DOCUMENT INTELLIGENCE QUEUE ===
     if (readyForAnalysis && targetClaimId && fileId && cleanText.length >= 100) {
-      extractStructuredIntelligence(
-        supabase, targetClaimId, fileId, cleanText, mappedDocType, classificationResult
-      ).catch(err => console.error('[DocIntel] Structured extraction error:', err));
+      try {
+        await enqueueDocumentIntelligenceJob(supabase, {
+          claim_id: targetClaimId,
+          file_id: fileId,
+          document_type: mappedDocType,
+          document_classification: classificationResult.classification,
+          confidence_score: classificationResult.confidence,
+          summary: classificationResult.metadata?.summary,
+        });
+
+        await updateClaimMasterStateDocIntelSummary(supabase, targetClaimId, {
+          last_document_type: mappedDocType,
+          last_processed_file_id: fileId,
+          last_processed_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.error('[DocIntelQueue] Failed to queue structured extraction:', err);
+      }
     }
 
     // Log the classification action
