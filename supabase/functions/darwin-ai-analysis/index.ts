@@ -938,25 +938,30 @@ function enforceEngineerRebuttalLowSlopeOpening(result: string, primaryScenario:
   if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return result;
 
   const required = REQUIRED_LOW_SLOPE_OPENING;
+  if (!required) return result;
+
   const lines = result.split('\n');
-
-  const headerLineRegex =
-    /^(RE\s*:|Claim Number\s*:|Policy Number\s*:|Insured\s*:|Property Address\s*:|Date of Loss\s*:|Michael Carletta|Freedom Adjustment|March \d{1,2}, \d{4}|[A-Z][a-z]+ [A-Z][a-z]+$)/i;
-
   const salutationIdx = lines.findIndex((line) => /^\s*Dear\b/i.test(line));
 
-  let bodyStartIdx = salutationIdx >= 0 ? salutationIdx + 1 : 0;
-  while (bodyStartIdx < lines.length && (!lines[bodyStartIdx].trim() || headerLineRegex.test(lines[bodyStartIdx].trim()))) {
-    bodyStartIdx++;
+  if (salutationIdx >= 0) {
+    const afterSalutation = lines.slice(salutationIdx + 1).join('\n');
+    if (afterSalutation.includes(required)) return result;
+
+    const stripped = result.replace(required, '').replace(/\n{3,}/g, '\n\n').trim();
+    const rebuilt = stripped.split('\n');
+    const rebuiltSalutationIdx = rebuilt.findIndex((line) => /^\s*Dear\b/i.test(line));
+    if (rebuiltSalutationIdx >= 0) {
+      rebuilt.splice(rebuiltSalutationIdx + 1, 0, '', required, '');
+      return rebuilt.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    }
   }
 
-  const bodySlice = lines.slice(bodyStartIdx, bodyStartIdx + 12).join('\n');
-  if (bodySlice.includes(required)) {
-    return result;
-  }
-
-  lines.splice(bodyStartIdx, 0, required);
-  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  // No salutation: insert at first actual body paragraph after claim headers
+  const stripped = result.replace(required, '').replace(/\n{3,}/g, '\n\n').trim();
+  const rebuilt = stripped.split('\n');
+  const bodyStartIdx = findEngineerLetterBodyStart(rebuilt);
+  rebuilt.splice(bodyStartIdx, 0, required, '');
+  return rebuilt.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function suppressLowSlopeUnsupportedBoilerplate(result: string, supportCorpus: string): string {
