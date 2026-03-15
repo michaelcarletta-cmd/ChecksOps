@@ -4097,6 +4097,8 @@ Deno.serve(async (req) => {
     let scenarioRulePackLoaded = 'UNIVERSAL_ONLY';
     let scenarioSuppressedRulePacks: string[] = [];
     let scenarioDetectionMatchedTerms: string[] = [];
+    let engineerIntelligence: EngineerReportIntelligence | null = null;
+    let deterministicRebuttalText: string | null = null;
 
     let claimFilesWithExtractedTextCache: any[] | null = null;
     const loadClaimFilesWithExtractedText = async (): Promise<any[]> => {
