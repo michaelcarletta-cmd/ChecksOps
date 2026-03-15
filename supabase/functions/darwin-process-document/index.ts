@@ -58,6 +58,9 @@ Deno.serve(async (req) => {
     let file: any = null;
     let textContent = '';
     let targetClaimId = claimId;
+    let extractionMethod = 'none';
+    let isScanned = false;
+    let pageCount: number | null = null;
 
     // If fileId provided, fetch file from database
     if (fileId) {
