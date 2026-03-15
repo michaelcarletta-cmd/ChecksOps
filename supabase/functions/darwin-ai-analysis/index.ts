@@ -6591,6 +6591,27 @@ RULES:
 
 ${combinedKnowledge}`;
 
+        // Inject engineer stumper rules for auto_draft_rebuttal
+        systemPrompt += '\n' + buildEngineerStumperUniversalRules(autoDraftPrimaryScenario, stateInfo);
+        systemPrompt += '\n' + buildEngineerStumperStandardsBank(autoDraftPrimaryScenario);
+        const autoDraftEngineerQuestions = buildEngineerMustAnswerQuestions(autoDraftPrimaryScenario);
+        systemPrompt += `\n\n=== QUESTIONS THE ENGINEER MUST ANSWER (MANDATORY SECTION) ===
+Include a section titled exactly "Questions the Engineer Must Answer" with these numbered questions:
+${autoDraftEngineerQuestions.map((q: string, i: number) => `${i + 1}. ${q}`).join('\n')}
+These questions must be short, aggressive, and technical. No fluff.\n
+
+=== MANDATORY ENGINEER REBUTTAL SECTIONS ===
+Your output MUST include ALL of these sections:
+1) Engineer Theory Extraction
+2) Timing Failure
+3) Required Testing Not Performed
+4) Causation Proof Failure
+5) Internal Contradictions
+6) Questions the Engineer Must Answer
+7) Regulatory / Claims Handling Exposure
+8) Conclusion and Demands
+If any section is missing, the post-processor will append it deterministically.\n`;
+
         if (isAutoDraftLowSlope) {
           systemPrompt = `You are an elite claims advocate drafting a LOW-SLOPE MEMBRANE SNOWMELT REBUTTAL ONLY.
 
