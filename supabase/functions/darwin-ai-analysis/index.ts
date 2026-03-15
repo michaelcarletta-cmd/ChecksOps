@@ -9112,10 +9112,26 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     console.error('Darwin AI Analysis error:', error);
     const errorMessage = String(error?.message || 'Unknown error');
     const isLowSlopeForbiddenError = errorMessage.includes('LOW_SLOPE_MEMBRANE generation failed due to forbidden term');
+    const isEngineerSourceBlockedError = errorMessage.includes('Engineer rebuttal blocked');
+
+    const statusCode = (isLowSlopeForbiddenError || isEngineerSourceBlockedError) ? 422 : 500;
+
+    const errorPayload: any = { error: errorMessage };
+    if (isEngineerSourceBlockedError) {
+      errorPayload.scenario_diagnostics = {
+        analysisType: 'engineer_report_rebuttal',
+        sourceTextOrigin: 'none',
+        sourceTextLength: 0,
+        usedEngineerReportText: false,
+        primaryScenario: null,
+        rulePackLoaded: 'NONE_SOURCE_BLOCKED',
+        reason: 'No usable engineer report text found in claim files, content, or uploaded text.',
+      };
+    }
 
     return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: isLowSlopeForbiddenError ? 422 : 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify(errorPayload),
+      { status: statusCode, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
