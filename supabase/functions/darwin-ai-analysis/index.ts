@@ -3762,7 +3762,7 @@ HARD ASSERTION BEFORE FINAL OUTPUT:
 If primaryScenario=${LOW_SLOPE_PRIMARY_SCENARIO}, the final rebuttal must NOT contain forbidden wind/shingle mechanics unless they are directly quoted from the engineer causation sentence. If forbidden terms remain, generation must fail.`
           : '';
 
-        const lowSlopeOpeningDirective = primarySc === 'low_slope_snow_ice_ponding'
+        const lowSlopeOpeningDirective = primarySc === LOW_SLOPE_PRIMARY_SCENARIO
           ? `Begin the opening with this exact sentence:
 "${lowSlopeTheoryOpening}"
 Then state that the report fails timing proof, methodology sufficiency, and causation proof for a deterioration-only conclusion.`
