@@ -243,7 +243,18 @@ Deno.serve(async (req) => {
           JSON.stringify({ 
             success: true, 
             message: 'File already processed',
-            classification: file.document_classification 
+            classification: file.document_classification,
+            document_type: file.document_type || null,
+            document_subtype: file.document_subtype || null,
+            ready_for_analysis: file.ready_for_analysis ?? false,
+            ready_reason: file.ready_for_analysis ? 'ready' : 'previously_blocked',
+            text_quality_status: file.text_quality_status || null,
+            intelligence: {
+              attempted: false,
+              written: false,
+              skipped_reason: 'already_processed',
+              error: null,
+            },
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
@@ -356,11 +367,20 @@ Deno.serve(async (req) => {
 
             return new Response(
               JSON.stringify({
-                success: true,
+                success: false,
                 classification: 'other',
                 confidence: 0,
                 method: 'garbage_text_detected',
                 processing_error: 'Extracted text detected as garbage/binary data',
+                ready_for_analysis: false,
+                ready_reason: 'text_quality_unusable',
+                text_quality_status: 'unusable',
+                intelligence: {
+                  attempted: false,
+                  written: false,
+                  skipped_reason: 'not_ready_for_analysis:text_quality_unusable',
+                  error: null,
+                },
               }),
               { headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
@@ -428,11 +448,20 @@ Deno.serve(async (req) => {
 
       return new Response(
         JSON.stringify({ 
-          success: true, 
+          success: false, 
           classification: classificationFromName,
           confidence: 0.4,
           method: 'filename_pattern',
           processing_error: 'No readable text extracted from file',
+          ready_for_analysis: false,
+          ready_reason: 'clean_text_too_short',
+          text_quality_status: 'unusable',
+          intelligence: {
+            attempted: false,
+            written: false,
+            skipped_reason: 'not_ready_for_analysis:no_readable_text',
+            error: null,
+          },
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -457,7 +486,20 @@ Deno.serve(async (req) => {
     // Assess text quality
     const textQuality = assessTextQuality(textContent);
     const cleanText = cleanExtractedText(textContent);
-    const readyForAnalysis = textQuality.status === 'good' || textQuality.status === 'fair';
+    const readyDecision = getReadyForAnalysisDecision({
+      cleanText,
+      textQualityStatus: textQuality.status,
+      processingError: null,
+    });
+    const readyForAnalysis = readyDecision.ready;
+    const readyReason = readyDecision.reason;
+
+    // Intelligence outcome tracking
+    let intelligenceAttempted = false;
+    let intelligenceWritten = false;
+    let intelligenceSkippedReason: string | null = null;
+    let intelligenceError: string | null = null;
+    let documentSubtype: string | null = null;
 
     const packetAnalysis =
       cleanText.length >= 1200
@@ -646,19 +688,52 @@ Deno.serve(async (req) => {
     }
 
     // === STEP 3.5: INLINE STRUCTURED INTELLIGENCE EXTRACTION ===
-    if (readyForAnalysis && targetClaimId && fileId && cleanText.length >= 100) {
+    if (!readyForAnalysis) {
+      intelligenceSkippedReason = `not_ready_for_analysis:${readyReason}`;
+      console.log(`[DocIntel] skipped file_id=${fileId} reason=${intelligenceSkippedReason}`);
+    } else if (targetClaimId && fileId && cleanText.length >= 100) {
+      intelligenceAttempted = true;
       try {
-        await extractStructuredIntelligence(
+        const intelResult = await extractStructuredIntelligence(
           supabase, targetClaimId, fileId, cleanText,
           mappedDocType, classificationResult
         );
-      } catch (intelErr) {
-        console.error('[DocIntel] Inline extraction failed (non-fatal):', intelErr);
+        intelligenceWritten = intelResult.written;
+        if (intelResult.written && intelResult.success) {
+          documentSubtype = (intelResult as any).documentSubtype || null;
+          console.log(`[DocIntel] written file_id=${fileId} document_type=${mappedDocType} subtype=${documentSubtype || 'none'}`);
+          // Clear processing error and needs_reprocessing on success
+          await supabase.from('claim_files').update({
+            processing_error: null,
+            needs_reprocessing: false,
+          }).eq('id', fileId);
+        } else if (!intelResult.success) {
+          intelligenceError = (intelResult as any).error || 'unknown_error';
+          console.error(`[DocIntel] failed file_id=${fileId} error=${intelligenceError}`);
+          // Mark for retry
+          await supabase.from('claim_files').update({
+            processing_error: `intelligence_extraction_failed: ${intelligenceError}`,
+            needs_reprocessing: true,
+          }).eq('id', fileId);
+        } else {
+          // success but not written (skipped)
+          intelligenceSkippedReason = (intelResult as any).skippedReason || 'unknown_skip';
+          console.log(`[DocIntel] skipped file_id=${fileId} reason=${intelligenceSkippedReason}`);
+        }
+      } catch (intelErr: any) {
+        intelligenceError = intelErr?.message || String(intelErr);
+        console.error('[DocIntel] Inline extraction failed:', intelligenceError);
+        await supabase.from('claim_files').update({
+          processing_error: `intelligence_extraction_exception: ${intelligenceError}`,
+          needs_reprocessing: true,
+        }).eq('id', fileId);
       }
+    } else {
+      intelligenceSkippedReason = 'missing_claim_or_file_or_text';
     }
 
     // === STRUCTURED PROCESSING LOG ===
-    console.log(`[DocProcessed] file_id=${fileId} file_name=${fileName || file?.file_name} extraction_method=${extractionMethod} text_quality=${textQuality.status} is_scanned=${isScanned} ready_for_analysis=${readyForAnalysis} document_type=${mappedDocType} document_subtype=${classificationResult.metadata?.document_subtype || 'none'} confidence=${classificationResult.confidence}`);
+    console.log(`[DocProcessed] file_id=${fileId} file_name=${fileName || file?.file_name} extraction_method=${extractionMethod} text_quality=${textQuality.status} ready_for_analysis=${readyForAnalysis} ready_reason=${readyReason} document_type=${mappedDocType} document_subtype=${documentSubtype || classificationResult.metadata?.document_subtype || 'none'} confidence=${classificationResult.confidence} intelligence_attempted=${intelligenceAttempted} intelligence_written=${intelligenceWritten} intelligence_skipped_reason=${intelligenceSkippedReason || 'none'} intelligence_error=${intelligenceError || 'none'}`);
 
     // === STEP 4: DURABLE DOCUMENT INTELLIGENCE QUEUE ===
     if (readyForAnalysis && targetClaimId && fileId && cleanText.length >= 100) {
@@ -921,6 +996,17 @@ Deno.serve(async (req) => {
         classification: classificationResult.classification,
         confidence: classificationResult.confidence,
         metadata: classificationResult.metadata,
+        document_type: mappedDocType,
+        document_subtype: documentSubtype || classificationResult.metadata?.document_subtype || null,
+        ready_for_analysis: readyForAnalysis,
+        ready_reason: readyReason,
+        text_quality_status: textQuality.status,
+        intelligence: {
+          attempted: intelligenceAttempted,
+          written: intelligenceWritten,
+          skipped_reason: intelligenceSkippedReason,
+          error: intelligenceError,
+        },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
@@ -1000,6 +1086,52 @@ function cleanExtractedText(text: string): string {
     .trim();
 }
 
+// === INTELLIGENCE OUTCOME TYPES ===
+type StructuredIntelResult =
+  | { success: true; written: true; documentSubtype?: string | null; summary?: string | null }
+  | { success: true; written: false; skippedReason: string }
+  | { success: false; written: false; error: string };
+
+function getReadyForAnalysisDecision(params: {
+  cleanText: string;
+  textQualityStatus: string | null;
+  processingError: string | null;
+}): { ready: boolean; reason: string } {
+  if (params.processingError) {
+    return { ready: false, reason: "processing_error_present" };
+  }
+  const len = (params.cleanText || "").trim().length;
+  if (len < 100) {
+    return { ready: false, reason: "clean_text_too_short" };
+  }
+  if (params.textQualityStatus === "unusable") {
+    return { ready: false, reason: "text_quality_unusable" };
+  }
+  if (params.textQualityStatus === "poor") {
+    return { ready: false, reason: "text_quality_poor" };
+  }
+  return { ready: true, reason: "ready" };
+}
+
+function hasMeaningfulIntelligencePayload(intel: any): boolean {
+  if (!intel || typeof intel !== "object") return false;
+  const checks = [
+    typeof intel.summary === "string" && intel.summary.trim().length >= 20,
+    Array.isArray(intel.denial_reasons) && intel.denial_reasons.length > 0,
+    Array.isArray(intel.testing_missing) && intel.testing_missing.length > 0,
+    Array.isArray(intel.testing_performed) && intel.testing_performed.length > 0,
+    Array.isArray(intel.exclusions_cited) && intel.exclusions_cited.length > 0,
+    Array.isArray(intel.scope_positions) && intel.scope_positions.length > 0,
+    Array.isArray(intel.building_components) && intel.building_components.length > 0,
+    !!intel.coverage_position,
+    !!intel.cause_of_loss,
+    !!intel.sender,
+    !!intel.recipient,
+    !!intel.estimate_totals,
+  ];
+  return checks.some(Boolean);
+}
+
 // === STRUCTURED INTELLIGENCE EXTRACTION ===
 async function extractStructuredIntelligence(
   supabase: any,
@@ -1008,9 +1140,11 @@ async function extractStructuredIntelligence(
   cleanText: string,
   documentType: string,
   classificationResult: ClassificationResult,
-) {
+): Promise<StructuredIntelResult> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY) return;
+  if (!LOVABLE_API_KEY) {
+    return { success: true, written: false, skippedReason: 'no_lovable_api_key' };
+  }
 
   console.log(`[DocIntel] Starting structured extraction for ${fileId} (type: ${documentType})`);
 
@@ -1163,15 +1297,16 @@ async function extractStructuredIntelligence(
     });
 
     if (!response.ok) {
-      console.error(`[DocIntel] AI error: ${response.status}`);
-      return;
+      const errMsg = `AI error: ${response.status}`;
+      console.error(`[DocIntel] ${errMsg}`);
+      return { success: false, written: false, error: errMsg };
     }
 
     const aiResult = await response.json();
     const toolCall = aiResult.choices?.[0]?.message?.tool_calls?.[0];
     if (!toolCall?.function?.arguments) {
       console.error('[DocIntel] No tool call in response');
-      return;
+      return { success: true, written: false, skippedReason: 'no_tool_call_in_response' };
     }
 
     let intel: any;
@@ -1179,7 +1314,13 @@ async function extractStructuredIntelligence(
       intel = JSON.parse(toolCall.function.arguments);
     } catch {
       console.error('[DocIntel] Failed to parse tool call arguments');
-      return;
+      return { success: false, written: false, error: 'failed_to_parse_tool_call_arguments' };
+    }
+
+    // Reject empty/junk payloads
+    if (!hasMeaningfulIntelligencePayload(intel)) {
+      console.warn(`[DocIntel] Empty/junk intelligence payload for ${fileId}, skipping upsert`);
+      return { success: true, written: false, skippedReason: 'empty_intelligence_payload' };
     }
 
     // Upsert into claim_document_intelligence
@@ -1215,9 +1356,10 @@ async function extractStructuredIntelligence(
 
     if (upsertError) {
       console.error('[DocIntel] Upsert error:', upsertError.message);
-    } else {
-      console.log(`[DocIntel] Saved intelligence for ${fileId} (type: ${documentType}, subtype: ${intel.document_subtype || 'none'})`);
+      return { success: false, written: false, error: `upsert_failed: ${upsertError.message}` };
     }
+
+    console.log(`[DocIntel] written intelligence for ${fileId} (type: ${documentType}, subtype: ${intel.document_subtype || 'none'})`);
 
     // Also update claim_files with subtype and summary
     await supabase.from('claim_files').update({
@@ -1225,8 +1367,12 @@ async function extractStructuredIntelligence(
       document_summary: intel.summary || null,
     }).eq('id', fileId);
 
-  } catch (err) {
-    console.error('[DocIntel] Extraction failed:', err);
+    return { success: true, written: true, documentSubtype: intel.document_subtype || null, summary: intel.summary || null };
+
+  } catch (err: any) {
+    const errMsg = err?.message || String(err);
+    console.error('[DocIntel] Extraction failed:', errMsg);
+    return { success: false, written: false, error: errMsg };
   }
 }
 
