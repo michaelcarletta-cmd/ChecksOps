@@ -3105,6 +3105,11 @@ export type Database = {
           needs_reprocessing: boolean | null
           needs_text_backfill: boolean
           ocr_processed_at: string | null
+          packet_analysis: Json
+          packet_dominant_classification: string | null
+          packet_mixed_confidence: number | null
+          packet_page_count: number | null
+          packet_review_required: boolean
           page_count: number | null
           parent_file_id: string | null
           processed_at: string | null
@@ -3150,6 +3155,11 @@ export type Database = {
           needs_reprocessing?: boolean | null
           needs_text_backfill?: boolean
           ocr_processed_at?: string | null
+          packet_analysis?: Json
+          packet_dominant_classification?: string | null
+          packet_mixed_confidence?: number | null
+          packet_page_count?: number | null
+          packet_review_required?: boolean
           page_count?: number | null
           parent_file_id?: string | null
           processed_at?: string | null
@@ -3195,6 +3205,11 @@ export type Database = {
           needs_reprocessing?: boolean | null
           needs_text_backfill?: boolean
           ocr_processed_at?: string | null
+          packet_analysis?: Json
+          packet_dominant_classification?: string | null
+          packet_mixed_confidence?: number | null
+          packet_page_count?: number | null
+          packet_review_required?: boolean
           page_count?: number | null
           parent_file_id?: string | null
           processed_at?: string | null

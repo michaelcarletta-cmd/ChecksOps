@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { runSmartClassification, type DocumentClassification as SmartDocClassification } from './classification-v2.ts';
+import { analyzePacketText } from './packet-intelligence.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -381,26 +382,60 @@ Deno.serve(async (req) => {
       aiVerify: verifyResult,
     });
 
+    // Assess text quality
+    const textQuality = assessTextQuality(textContent);
+    const cleanText = cleanExtractedText(textContent);
+    const readyForAnalysis = textQuality.status === 'good' || textQuality.status === 'fair';
+
+    const packetAnalysis =
+      cleanText.length >= 1200
+        ? analyzePacketText(cleanText)
+        : null;
+
+    const packetDominantWins =
+      packetAnalysis &&
+      packetAnalysis.dominant_classification !== smartClassification.primary &&
+      packetAnalysis.dominant_confidence >= 0.7 &&
+      packetAnalysis.page_count >= 2;
+
+    const finalClassification = packetDominantWins
+      ? packetAnalysis!.dominant_classification
+      : smartClassification.primary;
+
+    const finalConfidence = packetDominantWins
+      ? Math.max(smartClassification.confidence, packetAnalysis!.dominant_confidence)
+      : smartClassification.confidence;
+
+    const finalMixed =
+      smartClassification.is_mixed_document ||
+      Boolean(packetAnalysis?.mixed_document);
+
+    const finalReviewRequired =
+      smartClassification.review_required ||
+      Boolean(packetAnalysis?.review_required);
+
+    const finalAutomationSafe =
+      smartClassification.automation_safe &&
+      !finalMixed &&
+      !finalReviewRequired;
+
     const classificationResult = {
       ...baseClassificationResult,
-      classification: smartClassification.primary as DocumentClassification,
-      confidence: smartClassification.confidence,
+      classification: finalClassification as DocumentClassification,
+      confidence: finalConfidence,
       metadata: {
         ...baseClassificationResult.metadata,
         smart_candidates: smartClassification.candidates,
         smart_method: smartClassification.method,
         smart_reasoning: smartClassification.reasoning,
-        review_required: smartClassification.review_required,
-        is_mixed_document: smartClassification.is_mixed_document,
+        review_required: finalReviewRequired,
+        is_mixed_document: finalMixed,
         document_family: smartClassification.document_family,
-        automation_safe: smartClassification.automation_safe,
+        automation_safe: finalAutomationSafe,
+        packet_analysis: packetAnalysis,
+        packet_dominant_wins: packetDominantWins,
       },
     };
-
-    // Assess text quality
-    const textQuality = assessTextQuality(textContent);
-    const cleanText = cleanExtractedText(textContent);
-    const readyForAnalysis = textQuality.status === 'good' || textQuality.status === 'fair';
 
     const mappedDocType = docTypeMap[classificationResult.classification] || classificationResult.classification;
 
@@ -425,10 +460,15 @@ Deno.serve(async (req) => {
         classification_candidates: smartClassification.candidates,
         classification_method: smartClassification.method,
         classification_reasoning: smartClassification.reasoning,
-        classification_review_required: smartClassification.review_required,
-        is_mixed_document: smartClassification.is_mixed_document,
+        classification_review_required: finalReviewRequired,
+        is_mixed_document: finalMixed,
         document_family: smartClassification.document_family,
-        automation_safe: smartClassification.automation_safe,
+        automation_safe: finalAutomationSafe,
+        packet_analysis: packetAnalysis || {},
+        packet_page_count: packetAnalysis?.page_count || null,
+        packet_dominant_classification: packetAnalysis?.dominant_classification || null,
+        packet_mixed_confidence: packetAnalysis?.mixed_confidence || null,
+        packet_review_required: packetAnalysis?.review_required || false,
         processing_error: null,
       };
       // Store extracted and clean text
@@ -446,7 +486,7 @@ Deno.serve(async (req) => {
         .eq('id', fileId);
 
       // Log review-required classifications
-      if (targetClaimId && (smartClassification.review_required || smartClassification.is_mixed_document)) {
+      if (targetClaimId && (finalReviewRequired || finalMixed)) {
         await supabase
           .from('darwin_action_log')
           .insert({
@@ -458,7 +498,10 @@ Deno.serve(async (req) => {
               primary_classification: smartClassification.primary,
               candidates: smartClassification.candidates,
               reasoning: smartClassification.reasoning,
-              is_mixed_document: smartClassification.is_mixed_document,
+              is_mixed_document: finalMixed,
+              packet_analysis: packetAnalysis,
+              packet_dominant_wins: packetDominantWins,
+            },
             },
             was_auto_executed: true,
             result: `Classification review required for ${fileName || file?.file_name}`,
@@ -552,7 +595,7 @@ Deno.serve(async (req) => {
       .single();
 
     // Trigger deep analysis for key document types (high confidence only)
-    if (classificationResult.confidence >= 0.8 && smartClassification.automation_safe) {
+    if (classificationResult.confidence >= 0.8 && finalAutomationSafe) {
       // Fire and forget - don't wait for deep analysis to complete
       triggerDeepAnalysis(
         supabase,
@@ -612,7 +655,7 @@ Deno.serve(async (req) => {
     }
 
     // Process automation actions if enabled
-    if (automation && classificationResult.confidence >= 0.8 && smartClassification.automation_safe) {
+    if (automation && classificationResult.confidence >= 0.8 && finalAutomationSafe) {
       await processDocumentActions(
         supabase, 
         targetClaimId, 
