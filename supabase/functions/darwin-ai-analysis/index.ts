@@ -8620,10 +8620,35 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       }
     }
 
-    const enforcedScenarioForResponse = engineerRebuttalPrimaryScenario;
+    const preSendLowSlopeDetection = detectLowSlopeAcrossSources([
+      engineerRebuttalCausationQuote,
+      engineerRebuttalReportText,
+      typeof analysisResult === 'string' ? analysisResult : '',
+    ]);
+
+    const enforcedScenarioForResponse =
+      engineerRebuttalPrimaryScenario === LOW_SLOPE_PRIMARY_SCENARIO || preSendLowSlopeDetection.shouldForce
+        ? LOW_SLOPE_PRIMARY_SCENARIO
+        : engineerRebuttalPrimaryScenario;
+
+    const scenarioDiagnosticsMatchedTerms = Array.from(
+      new Set([...(scenarioDetectionMatchedTerms || []), ...preSendLowSlopeDetection.matchedTerms])
+    );
+    const scenarioDiagnosticsRulePackLoaded = getRulePackLoaded(enforcedScenarioForResponse);
+    const scenarioDiagnosticsSuppressedRulePacks = getSuppressedRulePacks(enforcedScenarioForResponse);
+
     if (['engineer_report_rebuttal', 'auto_draft_rebuttal'].includes(analysisType) && typeof analysisResult === 'string') {
       assertLowSlopeStrictPreSendTerms(analysisResult, enforcedScenarioForResponse);
+      assertLowSlopeForbiddenTerms(
+        analysisResult,
+        enforcedScenarioForResponse,
+        engineerRebuttalCausationQuote,
+      );
     }
+
+    console.log(
+      `[darwin][${analysisType}] final scenario diagnostics: primary=${enforcedScenarioForResponse || 'none'} rule_pack=${scenarioDiagnosticsRulePackLoaded} suppressed=[${scenarioDiagnosticsSuppressedRulePacks.join(',') || 'none'}] matched_terms=[${scenarioDiagnosticsMatchedTerms.join(',') || 'none'}]`
+    );
 
     const responseBuildStep = startStep('response', 'Build response payload');
     const responsePayload: any = {
@@ -8635,10 +8660,11 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       carrierDismantler: carrierDismantlerResult,
       claimId,
       scenario_diagnostics: {
-        primaryScenario: engineerRebuttalPrimaryScenario,
-        rulePackLoaded: scenarioRulePackLoaded,
-        suppressedRulePacks: scenarioSuppressedRulePacks,
-        matchedPhysicalMechanismTerms: scenarioDetectionMatchedTerms,
+        primaryScenario: enforcedScenarioForResponse,
+        rulePackLoaded: scenarioDiagnosticsRulePackLoaded,
+        suppressedRulePacks: scenarioDiagnosticsSuppressedRulePacks,
+        matchedPhysicalMechanismTerms: scenarioDiagnosticsMatchedTerms,
+        matchedTerms: scenarioDiagnosticsMatchedTerms,
       },
       jurisdiction: {
         state_code: resolvedState,
