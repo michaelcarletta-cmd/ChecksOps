@@ -9,6 +9,8 @@ type QueueRow = {
   id: string;
   claim_id: string;
   file_id: string;
+  segment_id?: string | null;
+  source_scope?: string;
   status: string;
   attempts: number;
   max_attempts: number;
@@ -17,6 +19,8 @@ type QueueRow = {
     document_classification?: string;
     confidence_score?: number;
     summary?: string;
+    segment_id?: string;
+    source_scope?: string;
   };
 };
 
@@ -103,34 +107,73 @@ Deno.serve(async (req) => {
 });
 
 async function processJob(supabase: ReturnType<typeof createClient>, job: QueueRow) {
-  const { data: file, error: fileError } = await supabase
-    .from('claim_files')
-    .select('id, claim_id, file_name, clean_text, extracted_text, document_type, document_classification, classification_confidence, document_summary, classification_metadata')
-    .eq('id', job.file_id)
-    .single();
+  let sourceText = '';
+  let sourceSummary = '';
+  let sourceDocumentType = job.payload.document_type || 'other';
+  let sourceClassification = job.payload.document_classification || 'other';
+  let claimId = job.claim_id;
+  let fileId = job.file_id;
+  let segmentId: string | null = job.segment_id || job.payload.segment_id || null;
+  let sourceScope = job.source_scope || job.payload.source_scope || 'file';
+  let fileName = '';
 
-  if (fileError || !file) {
-    throw new Error(`Claim file not found for ${job.file_id}`);
+  if (sourceScope === 'segment' && segmentId) {
+    const { data: segment, error: segmentError } = await supabase
+      .from('claim_file_segments')
+      .select('id, claim_id, file_id, segment_label, clean_text, extracted_text, segment_classification, classification_confidence, document_family')
+      .eq('id', segmentId)
+      .single();
+
+    if (segmentError || !segment) {
+      throw new Error(`Claim file segment not found for ${segmentId}`);
+    }
+
+    claimId = segment.claim_id;
+    fileId = segment.file_id;
+    sourceText = String(segment.clean_text || segment.extracted_text || '').trim();
+    sourceSummary = segment.segment_label || '';
+    sourceDocumentType = mapDocumentType(segment.segment_classification || 'other');
+    sourceClassification = segment.segment_classification || 'other';
+    fileName = `${segment.segment_label || 'Segment'} (virtual)`;
+  } else {
+    const { data: file, error: fileError } = await supabase
+      .from('claim_files')
+      .select('id, claim_id, file_name, clean_text, extracted_text, document_type, document_classification, classification_confidence, document_summary, classification_metadata')
+      .eq('id', job.file_id)
+      .single();
+
+    if (fileError || !file) {
+      throw new Error(`Claim file not found for ${job.file_id}`);
+    }
+
+    claimId = file.claim_id;
+    fileId = file.id;
+    sourceText = String(file.clean_text || file.extracted_text || '').trim();
+    sourceSummary = file.document_summary || '';
+    sourceDocumentType = file.document_type || job.payload.document_type || 'other';
+    sourceClassification = file.document_classification || job.payload.document_classification || 'other';
+    fileName = file.file_name;
   }
 
-  const text = String(file.clean_text || file.extracted_text || '').trim();
-  if (text.length < 100) {
-    throw new Error(`Insufficient text for intelligence extraction on file ${job.file_id}`);
+  if (sourceText.length < 100) {
+    throw new Error(`Insufficient text for intelligence extraction on ${sourceScope} ${segmentId || fileId}`);
   }
 
   const intelligence = await extractDocumentIntelligence({
-    fileName: file.file_name,
-    documentType: file.document_type || job.payload.document_type || 'other',
-    documentClassification: file.document_classification || job.payload.document_classification || 'other',
-    summary: file.document_summary || job.payload.summary || '',
-    text,
+    fileName,
+    documentType: sourceDocumentType,
+    documentClassification: sourceClassification,
+    summary: sourceSummary,
+    text: sourceText,
   });
 
   const upsertPayload = {
-    claim_id: file.claim_id,
-    file_id: file.id,
-    document_type: file.document_type || job.payload.document_type || 'other',
-    document_classification: file.document_classification || job.payload.document_classification || 'other',
+    claim_id: claimId,
+    file_id: fileId,
+    segment_id: segmentId,
+    source_scope: sourceScope,
+    document_type: sourceDocumentType,
+    document_classification: sourceClassification,
     source_summary: intelligence.source_summary,
     extracted_entities: intelligence.extracted_entities,
     financial_data: intelligence.financial_data,
@@ -144,9 +187,11 @@ async function processJob(supabase: ReturnType<typeof createClient>, job: QueueR
     updated_at: new Date().toISOString(),
   };
 
+  const onConflictTarget = segmentId ? 'segment_id' : 'file_id';
+
   const { error: intelError } = await supabase
     .from('claim_document_intelligence')
-    .upsert(upsertPayload, { onConflict: 'file_id' });
+    .upsert(upsertPayload, { onConflict: onConflictTarget });
 
   if (intelError) {
     throw new Error(`Failed to upsert claim_document_intelligence: ${intelError.message}`);
@@ -164,7 +209,7 @@ async function processJob(supabase: ReturnType<typeof createClient>, job: QueueR
     })
     .eq('id', job.id);
 
-  await refreshClaimMasterState(supabase, file.claim_id, file.id, file.document_type || 'other');
+  await refreshClaimMasterState(supabase, claimId, fileId, sourceDocumentType);
 }
 
 async function extractDocumentIntelligence(input: {
@@ -291,6 +336,22 @@ ${input.text.slice(0, 25000)}
   };
 }
 
+function mapDocumentType(classification: string): string {
+  const docTypeMap: Record<string, string> = {
+    denial: 'denial_letter',
+    estimate: 'carrier_estimate',
+    approval: 'coverage_letter',
+    rfi: 'carrier_correspondence',
+    engineering_report: 'engineering_report',
+    policy: 'policy_document',
+    correspondence: 'carrier_correspondence',
+    invoice: 'invoice',
+    photo: 'photos_report',
+    other: 'other',
+  };
+  return docTypeMap[classification] || classification;
+}
+
 async function refreshClaimMasterState(
   supabase: ReturnType<typeof createClient>,
   claimId: string,
@@ -367,7 +428,7 @@ async function lockPendingJobs(
 
   const { data: candidates, error } = await supabase
     .from('document_intelligence_queue')
-    .select('id, claim_id, file_id, status, attempts, max_attempts, payload, locked_at')
+    .select('id, claim_id, file_id, segment_id, source_scope, status, attempts, max_attempts, payload, locked_at')
     .or(`and(status.eq.pending,run_after.lte.${nowIso}),and(status.eq.processing,locked_at.lte.${staleLockIso})`)
     .order('priority', { ascending: false })
     .order('created_at', { ascending: true })
@@ -389,7 +450,7 @@ async function lockPendingJobs(
       })
       .eq('id', row.id)
       .in('status', ['pending', 'processing'])
-      .select('id, claim_id, file_id, status, attempts, max_attempts, payload')
+      .select('id, claim_id, file_id, segment_id, source_scope, status, attempts, max_attempts, payload')
       .maybeSingle();
 
     if (!lockError && updated) {
