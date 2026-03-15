@@ -1455,22 +1455,20 @@ function runEngineerReportDismantler(documentText: string): EngineerReportDisman
   let primaryScenario: string | null = null;
   const secondaryScenarios: string[] = [];
 
-  if (activatedScenarios.length > 0) {
-    if (forceLowSlope) {
-      // Physical mechanism override: low-slope always wins when mechanism is clear
-      primaryScenario = LOW_SLOPE_PRIMARY_SCENARIO;
-      secondaryScenarios.push(
-        ...activatedScenarios.filter((s) => s !== LOW_SLOPE_PRIMARY_SCENARIO)
-      );
-      console.log(`[EngineerReportDismantler] LOW-SLOPE PHYSICAL MECHANISM OVERRIDE: ${lowSlopePhysicalMatchCount} mechanism terms matched — forcing primaryScenario=${LOW_SLOPE_PRIMARY_SCENARIO}`);
-    } else {
-      // Sort by theory alignment (highest first)
-      const sorted = [...activatedScenarios].sort(
-        (a, b) => (scenarioTheoryAlignment[b] || 0) - (scenarioTheoryAlignment[a] || 0)
-      );
-      primaryScenario = sorted[0];
-      secondaryScenarios.push(...sorted.slice(1));
-    }
+  if (forceLowSlope) {
+    // Physical mechanism override: low-slope always wins when mechanism terms are present
+    primaryScenario = LOW_SLOPE_PRIMARY_SCENARIO;
+    secondaryScenarios.push(
+      ...activatedScenarios.filter((s) => s !== LOW_SLOPE_PRIMARY_SCENARIO)
+    );
+    console.log(`[EngineerReportDismantler] LOW-SLOPE PHYSICAL MECHANISM OVERRIDE: matched terms=[${lowSlopeMatchedTerms.join(', ')}] — forcing primaryScenario=${LOW_SLOPE_PRIMARY_SCENARIO}`);
+  } else if (activatedScenarios.length > 0) {
+    // Sort by theory alignment (highest first)
+    const sorted = [...activatedScenarios].sort(
+      (a, b) => (scenarioTheoryAlignment[b] || 0) - (scenarioTheoryAlignment[a] || 0)
+    );
+    primaryScenario = sorted[0];
+    secondaryScenarios.push(...sorted.slice(1));
   }
 
   // ══════════════════════════════════════════════════════════════════════════
