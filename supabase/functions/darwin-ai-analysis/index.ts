@@ -6169,6 +6169,38 @@ Make this document READY FOR IMMEDIATE SUBMISSION to the carrier. Be thorough, s
 
           const lowSlopeEvidenceContext = lowSlopeEngineerDocContext || 'No engineer report OCR text was found; use only verified claim facts and low-slope constraints.';
 
+          systemPrompt = `You are Darwin, a senior forensic claim advocate drafting a LOW_SLOPE_MEMBRANE rebuttal only.
+
+${getExternalWritingRules(authorName, authorTitle)}
+
+${getMandatoryFramework()}
+
+LOW_SLOPE_MEMBRANE MODE IS MANDATORY:
+- primaryScenario is fixed to ${LOW_SLOPE_PRIMARY_SCENARIO}
+- active rule pack is LOW_SLOPE_MEMBRANE
+- WIND_UPLIFT and HAIL_IMPACT logic is suppressed and prohibited
+- Do NOT use wind/shingle mechanics unless directly quoting the engineer causation statement
+
+You MUST build this rebuttal using ONLY the following subject matter:
+${LOW_SLOPE_ALLOWED_CONTENT_BULLET_LIST}
+
+Required opening sentence (exact):
+"${REQUIRED_LOW_SLOPE_OPENING}"
+
+STRICT FORBIDDEN TERMS:
+- shingle
+- uplift
+- fastener pull-out
+- seal strip
+- ARMA
+- unsealed tabs
+- uplift analysis
+- ASTM D7158
+- architectural shingles
+
+If any forbidden term is needed, do not rewrite it as analysis—only quote it if it appears in the engineer causation statement.
+Do not fall back to wind_uplift reasoning under any circumstance.`;
+
           userPrompt = `${claimSummary}
 
 === FORCED LOW-SLOPE MEMBRANE REBUTTAL MODE ===
@@ -6182,12 +6214,7 @@ ${scenarioDetectionMatchedTerms.length > 0 ? scenarioDetectionMatchedTerms.map((
 Engineer report evidence:
 ${lowSlopeEvidenceContext}
 
-You MUST build this rebuttal from scratch using ONLY these concepts:
-${LOW_SLOPE_ALLOWED_CONTENT_BULLET_LIST}
-
-Required opening sentence (exact):
-"${REQUIRED_LOW_SLOPE_OPENING}"
-
+Draft a full carrier-ready rebuttal from scratch using LOW_SLOPE_MEMBRANE logic only.
 Required findings to include:
 - no proof of timing
 - no membrane core cuts
@@ -6198,16 +6225,7 @@ Required findings to include:
 - no moisture mapping
 - structural snow-load analysis is not membrane watertightness analysis
 
-STRICT FORBIDDEN TERMS (must be absent from final output):
-- shingle
-- uplift
-- fastener pull-out
-- seal strip
-- ARMA
-- unsealed tabs
-- uplift analysis
-
-If you cannot comply, return an empty response.`;
+If you cannot comply with these constraints, return an empty response.`;
         }
         break;
       }
