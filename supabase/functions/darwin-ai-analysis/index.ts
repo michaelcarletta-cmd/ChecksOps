@@ -2817,8 +2817,12 @@ Deno.serve(async (req) => {
       try {
         const preExtracted = await extractTextFromPDFNative(pdfContent, pdfFileName || 'document.pdf');
         if (preExtracted && preExtracted.trim().length > 200) {
-          additionalContext.pdfExtractedText = preExtracted;
-          console.log(`[darwin] Pre-extracted PDF text for engineer resolver (${preExtracted.length} chars)`);
+          if (isGarbageText(preExtracted)) {
+            console.warn(`[darwin] Pre-extracted PDF text is GARBLED (${preExtracted.length} chars) — discarding. Sample: "${preExtracted.substring(0, 200).replace(/\n/g, ' ')}"`);
+          } else {
+            additionalContext.pdfExtractedText = preExtracted;
+            console.log(`[darwin] Pre-extracted PDF text for engineer resolver (${preExtracted.length} chars)`);
+          }
         }
       } catch (preExtErr) {
         console.warn('[darwin] Pre-extraction for engineer resolver failed (non-fatal):', preExtErr);
