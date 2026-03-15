@@ -6126,6 +6126,58 @@ Structure the rebuttal as follows:
    - Contact information
 
 Make this document READY FOR IMMEDIATE SUBMISSION to the carrier. Be thorough, specific, and cite everything. The goal is to leave the carrier no choice but to reverse their denial.`;
+
+        if (isAutoDraftLowSlope) {
+          const lowSlopeEngineerDocContext = autoDraftEngineerReports
+            .slice(0, 4)
+            .map((doc: any) => {
+              const excerpt = String(doc.extracted_text || '').substring(0, 2500);
+              return `--- ${doc.file_name} ---\n${excerpt || 'No extracted text available.'}`;
+            })
+            .join('\n\n');
+
+          const lowSlopeEvidenceContext = lowSlopeEngineerDocContext || 'No engineer report OCR text was found; use only verified claim facts and low-slope constraints.';
+
+          userPrompt = `${claimSummary}
+
+=== FORCED LOW-SLOPE MEMBRANE REBUTTAL MODE ===
+primaryScenario=${LOW_SLOPE_PRIMARY_SCENARIO}
+rule_pack=LOW_SLOPE_MEMBRANE
+suppressed_rule_packs=WIND_UPLIFT,HAIL_IMPACT
+
+Engineer physical-mechanism terms matched:
+${scenarioDetectionMatchedTerms.length > 0 ? scenarioDetectionMatchedTerms.map((term) => `- ${term}`).join('\n') : '- none detected'}
+
+Engineer report evidence:
+${lowSlopeEvidenceContext}
+
+You MUST build this rebuttal from scratch using ONLY these concepts:
+${LOW_SLOPE_ALLOWED_CONTENT_BULLET_LIST}
+
+Required opening sentence (exact):
+"${REQUIRED_LOW_SLOPE_OPENING}"
+
+Required findings to include:
+- no proof of timing
+- no membrane core cuts
+- no seam adhesion/peel testing
+- no drainage-capacity analysis
+- no snow-water equivalent/runoff analysis
+- no leak-path tracing
+- no moisture mapping
+- structural snow-load analysis is not membrane watertightness analysis
+
+STRICT FORBIDDEN TERMS (must be absent from final output):
+- shingle
+- uplift
+- fastener pull-out
+- seal strip
+- ARMA
+- unsealed tabs
+- uplift analysis
+
+If you cannot comply, return an empty response.`;
+        }
         break;
       }
 
