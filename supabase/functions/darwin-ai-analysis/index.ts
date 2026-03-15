@@ -4009,13 +4009,12 @@ Deno.serve(async (req) => {
       | "denial_rebuttal"
       | "carrier_email_draft"
       | "coverage_letter_response"
-      | "estimate_gap_analysis"
-      | "policy_analysis";
+      | "estimate_gap_analysis";
 
     function analysisTypeSupportsIntelligence(at: string): at is IntelligenceBackedAnalysisType {
       return [
         "engineer_report_rebuttal", "auto_draft_rebuttal", "denial_rebuttal",
-        "carrier_email_draft", "coverage_letter_response", "estimate_gap_analysis", "policy_analysis",
+        "carrier_email_draft", "coverage_letter_response", "estimate_gap_analysis",
       ].includes(at);
     }
 
