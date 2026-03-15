@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { runSmartClassification, type DocumentClassification as SmartDocClassification } from './classification-v2.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -121,6 +122,62 @@ async function updateClaimMasterStateDocIntelSummary(
 
   if (error) {
     console.error('[ClaimMasterState] document_intelligence update error:', error.message);
+  }
+}
+
+async function verifyClassification(
+  textContent: string,
+  fileName: string,
+  initialClassification: string
+): Promise<{ classification: DocumentClassification; confidence: number; reasons: string[] } | null> {
+  try {
+    const apiKey = Deno.env.get('OPENAI_API_KEY');
+    if (!apiKey) return null;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        temperature: 0.1,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: `Return only JSON:
+{
+  "classification": "estimate|denial|approval|rfi|engineering_report|policy|correspondence|invoice|photo|other",
+  "confidence": number,
+  "reasons": ["string"]
+}
+Use the document text and filename. Do not invent facts.`,
+          },
+          {
+            role: 'user',
+            content: `File name: ${fileName}\nInitial classification: ${initialClassification}\nDocument text:\n${textContent.slice(0, 12000)}`,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const raw = data?.choices?.[0]?.message?.content;
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    return {
+      classification: parsed.classification || 'other',
+      confidence: Number(parsed.confidence || 0.5),
+      reasons: Array.isArray(parsed.reasons) ? parsed.reasons : [],
+    };
+  } catch (err) {
+    console.error('[ClassificationVerify] error:', err);
+    return null;
   }
 }
 
@@ -309,7 +366,36 @@ Deno.serve(async (req) => {
     }
 
     // Call AI for classification
-    const classificationResult = await classifyDocument(textContent, fileName || file?.file_name || '');
+    const baseClassificationResult = await classifyDocument(textContent, fileName || file?.file_name || '');
+
+    const verifyResult = await verifyClassification(
+      textContent,
+      fileName || file?.file_name || '',
+      baseClassificationResult.classification
+    );
+
+    const smartClassification = await runSmartClassification({
+      fileName: fileName || file?.file_name || '',
+      text: textContent,
+      aiPrimary: baseClassificationResult,
+      aiVerify: verifyResult,
+    });
+
+    const classificationResult = {
+      ...baseClassificationResult,
+      classification: smartClassification.primary as DocumentClassification,
+      confidence: smartClassification.confidence,
+      metadata: {
+        ...baseClassificationResult.metadata,
+        smart_candidates: smartClassification.candidates,
+        smart_method: smartClassification.method,
+        smart_reasoning: smartClassification.reasoning,
+        review_required: smartClassification.review_required,
+        is_mixed_document: smartClassification.is_mixed_document,
+        document_family: smartClassification.document_family,
+        automation_safe: smartClassification.automation_safe,
+      },
+    };
 
     // Assess text quality
     const textQuality = assessTextQuality(textContent);
@@ -336,6 +422,13 @@ Deno.serve(async (req) => {
         ready_for_analysis: readyForAnalysis,
         needs_reprocessing: textQuality.status === 'poor' || textQuality.status === 'unusable',
         processed_at: new Date().toISOString(),
+        classification_candidates: smartClassification.candidates,
+        classification_method: smartClassification.method,
+        classification_reasoning: smartClassification.reasoning,
+        classification_review_required: smartClassification.review_required,
+        is_mixed_document: smartClassification.is_mixed_document,
+        document_family: smartClassification.document_family,
+        automation_safe: smartClassification.automation_safe,
         processing_error: null,
       };
       // Store extracted and clean text
@@ -351,6 +444,27 @@ Deno.serve(async (req) => {
         .from('claim_files')
         .update(updatePayload)
         .eq('id', fileId);
+
+      // Log review-required classifications
+      if (targetClaimId && (smartClassification.review_required || smartClassification.is_mixed_document)) {
+        await supabase
+          .from('darwin_action_log')
+          .insert({
+            claim_id: targetClaimId,
+            action_type: 'document_classification_review_required',
+            action_details: {
+              file_id: fileId,
+              file_name: fileName || file?.file_name,
+              primary_classification: smartClassification.primary,
+              candidates: smartClassification.candidates,
+              reasoning: smartClassification.reasoning,
+              is_mixed_document: smartClassification.is_mixed_document,
+            },
+            was_auto_executed: true,
+            result: `Classification review required for ${fileName || file?.file_name}`,
+            trigger_source: 'darwin_process_document',
+          });
+      }
     }
 
     // === STEP 4: DURABLE DOCUMENT INTELLIGENCE QUEUE ===
@@ -438,7 +552,7 @@ Deno.serve(async (req) => {
       .single();
 
     // Trigger deep analysis for key document types (high confidence only)
-    if (classificationResult.confidence >= 0.8) {
+    if (classificationResult.confidence >= 0.8 && smartClassification.automation_safe) {
       // Fire and forget - don't wait for deep analysis to complete
       triggerDeepAnalysis(
         supabase,
@@ -498,7 +612,7 @@ Deno.serve(async (req) => {
     }
 
     // Process automation actions if enabled
-    if (automation && classificationResult.confidence >= 0.8) {
+    if (automation && classificationResult.confidence >= 0.8 && smartClassification.automation_safe) {
       await processDocumentActions(
         supabase, 
         targetClaimId, 
