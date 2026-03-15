@@ -1211,7 +1211,7 @@ function buildLowSlopeScenarioDiagnostics(params: {
 function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: string | null, supportCorpus: string): string {
   if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return result;
 
-  let updated = enforceEngineerRebuttalLowSlopeOpening(result, primaryScenario);
+  let updated = enforceEngineerRebuttalLowSlopeOpening(result, primaryScenario, undefined);
   updated = suppressLowSlopeUnsupportedBoilerplate(updated, supportCorpus);
 
   const lower = updated.toLowerCase();
