@@ -273,6 +273,23 @@ function detectLowSlopePhysicalMechanism(text: string): { shouldForce: boolean; 
   return { shouldForce: matchedTerms.length > 0, matchedTerms };
 }
 
+function detectLowSlopeAcrossSources(sources: Array<string | null | undefined>): { shouldForce: boolean; matchedTerms: string[] } {
+  const matchedTerms = new Set<string>();
+
+  for (const source of sources) {
+    if (!source) continue;
+    const detection = detectLowSlopePhysicalMechanism(source);
+    for (const term of detection.matchedTerms) {
+      matchedTerms.add(term);
+    }
+  }
+
+  return {
+    shouldForce: matchedTerms.size > 0,
+    matchedTerms: Array.from(matchedTerms),
+  };
+}
+
 function getRulePackLoaded(primaryScenario: string | null): string {
   if (!primaryScenario) return 'UNIVERSAL_ONLY';
   return SCENARIO_RULE_PACKS[primaryScenario] || `SCENARIO_${primaryScenario.toUpperCase()}`;
