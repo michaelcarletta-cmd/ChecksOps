@@ -402,11 +402,16 @@ Deno.serve(async (req) => {
     }
 
     // Auto-trigger inventory age resolution when invoices/receipts are processed
-    if (
+    const fileNameLower = (file?.file_name || fileName || '').toLowerCase();
+
+    const isFinancialProofDoc =
       classificationResult.confidence >= 0.6 &&
-      ['invoice', 'receipt'].includes(classificationResult.classification) ||
-      (file?.file_name || '').toLowerCase().match(/receipt|invoice|order|purchase|confirmation|warranty/)
-    ) {
+      (
+        classificationResult.classification === 'invoice' ||
+        /receipt|invoice|order|purchase|confirmation|warranty/.test(fileNameLower)
+      );
+
+    if (isFinancialProofDoc) {
       // Check if claim has inventory items
       const { count: inventoryCount } = await supabase
         .from('claim_home_inventory')
