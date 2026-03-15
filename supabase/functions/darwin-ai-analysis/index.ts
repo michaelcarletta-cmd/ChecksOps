@@ -8928,7 +8928,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       analysisResult = JSON.stringify(structuredResult, null, 2);
     }
 
-    if (analysisType === 'engineer_report_rebuttal' && typeof analysisResult === 'string') {
+    if (['engineer_report_rebuttal', 'auto_draft_rebuttal'].includes(analysisType) && typeof analysisResult === 'string') {
       analysisResult = enforceEngineerRebuttalMandatorySections(analysisResult, {
         engineerStatedCause: engineerRebuttalStatedCause,
         engineerTheorySentences: engineerRebuttalTheorySentences,
