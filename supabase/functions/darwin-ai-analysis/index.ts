@@ -6867,7 +6867,26 @@ STRICT FORBIDDEN TERMS:
 - architectural shingles
 
 If any forbidden term is needed, do not rewrite it as analysis—only quote it if it appears in the engineer causation statement.
-Do not fall back to wind_uplift reasoning under any circumstance.`;
+Do not fall back to wind_uplift reasoning under any circumstance.
+
+${buildEngineerStumperUniversalRules(LOW_SLOPE_PRIMARY_SCENARIO, stateInfo)}
+${buildEngineerStumperStandardsBank(LOW_SLOPE_PRIMARY_SCENARIO)}
+
+=== MANDATORY ENGINEER REBUTTAL SECTIONS ===
+Your output MUST include ALL of these sections (using low-slope-safe language only):
+1) Engineer Theory Extraction
+2) Timing Failure
+3) Required Testing Not Performed
+4) Causation Proof Failure
+5) Internal Contradictions
+6) Questions the Engineer Must Answer
+7) Regulatory / Claims Handling Exposure
+8) Conclusion and Demands
+
+=== QUESTIONS THE ENGINEER MUST ANSWER ===
+Include a section with exactly this heading and these questions:
+${buildEngineerMustAnswerQuestions(LOW_SLOPE_PRIMARY_SCENARIO).map((q: string, i: number) => `${i + 1}. ${q}`).join('\n')}
+`;
 
           userPrompt = `${claimSummary}
 
