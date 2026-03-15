@@ -35,6 +35,51 @@ type IntelligenceOutput = {
   confidence_score: number;
 };
 
+async function enqueueDocumentMeaningJob(
+  supabase: ReturnType<typeof createClient>,
+  payload: {
+    claim_id: string;
+    file_id: string;
+    intelligence_id: string;
+    segment_id?: string | null;
+    source_scope?: string;
+    document_type: string;
+    document_classification: string;
+    source_summary?: string;
+    priority?: number;
+  }
+) {
+  const queueRow = {
+    claim_id: payload.claim_id,
+    file_id: payload.file_id,
+    segment_id: payload.segment_id ?? null,
+    source_scope: payload.source_scope || (payload.segment_id ? 'segment' : 'file'),
+    intelligence_id: payload.intelligence_id,
+    status: 'pending',
+    priority: payload.priority ?? 50,
+    run_after: new Date().toISOString(),
+    payload: {
+      intelligence_id: payload.intelligence_id,
+      segment_id: payload.segment_id ?? null,
+      source_scope: payload.source_scope || (payload.segment_id ? 'segment' : 'file'),
+      document_type: payload.document_type,
+      document_classification: payload.document_classification,
+      source_summary: payload.source_summary || '',
+    },
+  };
+
+  const conflictTarget = payload.segment_id ? 'segment_id' : 'file_id';
+
+  const { error } = await supabase
+    .from('document_meaning_queue')
+    .upsert(queueRow, { onConflict: conflictTarget });
+
+  if (error) {
+    console.error('[DocMeaningQueue] enqueue error:', error.message);
+    throw error;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -208,6 +253,29 @@ async function processJob(supabase: ReturnType<typeof createClient>, job: QueueR
       last_error: null,
     })
     .eq('id', job.id);
+
+  // Enqueue meaning extraction after intelligence is saved
+  const { data: savedIntel, error: savedIntelError } = await supabase
+    .from('claim_document_intelligence')
+    .select('id, claim_id, file_id, segment_id, source_scope, document_type, document_classification, source_summary, confidence_score')
+    .eq(segmentId ? 'segment_id' : 'file_id', segmentId ? segmentId : fileId)
+    .maybeSingle();
+
+  if (savedIntelError || !savedIntel) {
+    throw new Error(`Unable to fetch saved document intelligence for meaning queue`);
+  }
+
+  await enqueueDocumentMeaningJob(supabase, {
+    claim_id: savedIntel.claim_id,
+    file_id: savedIntel.file_id,
+    intelligence_id: savedIntel.id,
+    segment_id: savedIntel.segment_id ?? null,
+    source_scope: savedIntel.source_scope || sourceScope,
+    document_type: savedIntel.document_type,
+    document_classification: savedIntel.document_classification,
+    source_summary: savedIntel.source_summary || '',
+    priority: Number(savedIntel.confidence_score || 0.5) >= 0.85 ? 100 : 50,
+  });
 
   await refreshClaimMasterState(supabase, claimId, fileId, sourceDocumentType);
 }
