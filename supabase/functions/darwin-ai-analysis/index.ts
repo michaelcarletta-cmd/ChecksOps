@@ -4223,7 +4223,7 @@ Be specific, professional, and provide communications that are ready to copy and
       case 'engineer_report_rebuttal': {
         // ── Universal Engineer Report Dismantler (runs on EVERY engineer report) ──
         const fullClaimFiles = await loadClaimFilesWithExtractedText();
-        const engineerSourceResolution = resolveEngineerReportSourceText({
+        let engineerSourceResolution = resolveEngineerReportSourceText({
           content,
           pdfExtractedText: String(additionalContext?.pdfExtractedText || additionalContext?.documentContentSection || ''),
           uploadedEngineerReportText: String(
@@ -4235,7 +4235,27 @@ Be specific, professional, and provide communications that are ready to copy and
           fullClaimFiles,
         });
 
-        const engineerTextForDismantler = engineerSourceResolution.text;
+        let engineerTextForDismantler = engineerSourceResolution.text;
+        if ((!engineerTextForDismantler || engineerTextForDismantler.trim().length < 500) && pdfContent) {
+          const lastChanceOcrText = await extractEngineerTextFromPdfViaVision(pdfContent, pdfFileName || 'document.pdf');
+          if (lastChanceOcrText && lastChanceOcrText.length >= 500) {
+            additionalContext.pdfExtractedText = lastChanceOcrText;
+            engineerSourceResolution = resolveEngineerReportSourceText({
+              content,
+              pdfExtractedText: String(additionalContext?.pdfExtractedText || additionalContext?.documentContentSection || ''),
+              uploadedEngineerReportText: String(
+                additionalContext?.engineerReportText
+                || additionalContext?.uploadedEngineerReportText
+                || ''
+              ),
+              additionalContext,
+              fullClaimFiles,
+            });
+            engineerTextForDismantler = engineerSourceResolution.text;
+            console.log(`[darwin][resolveEngineerSource] Last-chance OCR fallback supplied usable text (${engineerTextForDismantler.length} chars)`);
+          }
+        }
+
         if (!engineerTextForDismantler || engineerTextForDismantler.trim().length < 500) {
           throw new Error('Engineer rebuttal blocked: no usable engineer report text was found for scenario detection.');
         }
