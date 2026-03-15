@@ -3722,10 +3722,13 @@ Be specific, professional, and provide communications that are ready to copy and
         const windCausationTerms = Array.from(new Set(LOW_SLOPE_FORBIDDEN_RULES.flatMap((rule) => rule.supportTerms.map((term) => term.toLowerCase()))));
         const lowSlopeTheoryExplicitlyReliesOnWind = windCausationTerms.some((term) => engineerTheoryCorpus.includes(term));
 
-        const lowSlopeScopeGuard = primarySc === 'low_slope_snow_ice_ponding'
+        const lowSlopeScopeGuard = primarySc === LOW_SLOPE_PRIMARY_SCENARIO
           ? `=== LOW-SLOPE REPORT-SPECIFIC ENFORCEMENT (MANDATORY) ===
 OPENING SENTENCE REQUIREMENT (use this exact sentence first in the opening):
 "${lowSlopeTheoryOpening}"
+
+LOW-SLOPE-ONLY ALLOWED SUBJECT MATTER (MANDATORY):
+${LOW_SLOPE_ALLOWED_CONTENT_BULLET_LIST}
 
 ${LOW_SLOPE_PRIORITY_ORDER}
 
@@ -3736,7 +3739,7 @@ SECTION 3 — ENGINEER CONTRADICTION
 
 Do NOT use generic storm/wind/shingle boilerplate unless it is directly quoted from the engineer's causation sentence.
 Detected wind-centric causation reliance in extracted theory: ${lowSlopeTheoryExplicitlyReliesOnWind ? 'YES' : 'NO'}.
-${lowSlopeTheoryExplicitlyReliesOnWind ? 'If you use any wind/shingle language, quote the exact engineer causation sentence and explain why that quote is material.' : `Do NOT use:\n${LOW_SLOPE_FORBIDDEN_BULLET_LIST}`}
+${lowSlopeTheoryExplicitlyReliesOnWind ? 'If you use any wind/shingle language, quote the exact engineer causation sentence and explain why that quote is material.' : `FORBIDDEN (unless directly quoted from engineer causation text):\n${LOW_SLOPE_FORBIDDEN_BULLET_LIST}`}
 
 MANDATORY LOW-SLOPE METHODOLOGY ATTACKS:
 - no membrane core cuts
@@ -3755,8 +3758,8 @@ ${LOW_SLOPE_CONTRADICTION_SECTION.replace('SECTION 3 — ENGINEER CONTRADICTION:
 MANDATORY DISTINCTION:
 ${LOW_SLOPE_STRUCTURAL_DISTINCTION}
 
-EVIDENCE GROUNDING RULE:
-Do not insert damage facts unless grounded in direct report language. Do not insert creased shingle tabs, fractured shingles, wind uplift mechanics, structural racking, or high-wind pressure language unless those terms appear as direct quote text in the engineer’s causation sentence.`
+HARD ASSERTION BEFORE FINAL OUTPUT:
+If primaryScenario=${LOW_SLOPE_PRIMARY_SCENARIO}, the final rebuttal must NOT contain forbidden wind/shingle mechanics unless they are directly quoted from the engineer causation sentence. If forbidden terms remain, generation must fail.`
           : '';
 
         const lowSlopeOpeningDirective = primarySc === 'low_slope_snow_ice_ponding'
