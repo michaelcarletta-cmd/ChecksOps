@@ -635,6 +635,21 @@ Deno.serve(async (req) => {
       }
     }
 
+    // === STEP 3.5: INLINE STRUCTURED INTELLIGENCE EXTRACTION ===
+    if (readyForAnalysis && targetClaimId && fileId && cleanText.length >= 100) {
+      try {
+        await extractStructuredIntelligence(
+          supabase, targetClaimId, fileId, cleanText,
+          mappedDocType, classificationResult
+        );
+      } catch (intelErr) {
+        console.error('[DocIntel] Inline extraction failed (non-fatal):', intelErr);
+      }
+    }
+
+    // === STRUCTURED PROCESSING LOG ===
+    console.log(`[DocProcessed] file_id=${fileId} file_name=${fileName || file?.file_name} extraction_method=${extractionMethod} text_quality=${textQuality.status} is_scanned=${isScanned} ready_for_analysis=${readyForAnalysis} document_type=${mappedDocType} document_subtype=${classificationResult.metadata?.document_subtype || 'none'} confidence=${classificationResult.confidence}`);
+
     // === STEP 4: DURABLE DOCUMENT INTELLIGENCE QUEUE ===
     if (readyForAnalysis && targetClaimId && fileId && cleanText.length >= 100) {
       try {
