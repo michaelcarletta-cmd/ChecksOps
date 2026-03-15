@@ -1373,18 +1373,48 @@ function runEngineerReportDismantler(documentText: string): EngineerReportDisman
   // STEP 4: PRIMARY SCENARIO SELECTION
   // ══════════════════════════════════════════════════════════════════════════
 
+  // ── Physical-mechanism priority override for low-slope ──
+  // If the report's physical mechanism is clearly low-slope membrane/snowmelt,
+  // force low_slope_snow_ice_ponding as primary regardless of wind_uplift score.
+  const LOW_SLOPE_PHYSICAL_MECHANISM_TERMS = [
+    'snow melt', 'snowmelt', 'ice melt', 'ponding', 'drainage obstruction',
+    'low-slope roof covering', 'low slope roof covering', 'membrane',
+    'cap sheet', 'standing water', 'epdm', 'tpo', 'modified bitumen',
+    'built-up roof', 'low-slope', 'low slope', 'flat roof',
+    'snowmelt infiltration', 'ponding water', 'negative drainage',
+    'ice dam', 'membrane system', 'membrane seam', 'clogged drain',
+  ];
+  const hasLowSlopePhysicalMechanism = LOW_SLOPE_PHYSICAL_MECHANISM_TERMS.some(
+    (term) => textLower.includes(term)
+  );
+  // Require at least 3 distinct matches to override
+  const lowSlopePhysicalMatchCount = LOW_SLOPE_PHYSICAL_MECHANISM_TERMS.filter(
+    (term) => textLower.includes(term)
+  ).length;
+  const forceLowSlope = hasLowSlopePhysicalMechanism && lowSlopePhysicalMatchCount >= 3
+    && activatedScenarios.includes(LOW_SLOPE_PRIMARY_SCENARIO);
+
   // Primary = highest theory-alignment score among activated scenarios
   // Exclusion narrative keywords alone do NOT determine primary scenario
   let primaryScenario: string | null = null;
   const secondaryScenarios: string[] = [];
 
   if (activatedScenarios.length > 0) {
-    // Sort by theory alignment (highest first)
-    const sorted = [...activatedScenarios].sort(
-      (a, b) => (scenarioTheoryAlignment[b] || 0) - (scenarioTheoryAlignment[a] || 0)
-    );
-    primaryScenario = sorted[0];
-    secondaryScenarios.push(...sorted.slice(1));
+    if (forceLowSlope) {
+      // Physical mechanism override: low-slope always wins when mechanism is clear
+      primaryScenario = LOW_SLOPE_PRIMARY_SCENARIO;
+      secondaryScenarios.push(
+        ...activatedScenarios.filter((s) => s !== LOW_SLOPE_PRIMARY_SCENARIO)
+      );
+      console.log(`[EngineerReportDismantler] LOW-SLOPE PHYSICAL MECHANISM OVERRIDE: ${lowSlopePhysicalMatchCount} mechanism terms matched — forcing primaryScenario=${LOW_SLOPE_PRIMARY_SCENARIO}`);
+    } else {
+      // Sort by theory alignment (highest first)
+      const sorted = [...activatedScenarios].sort(
+        (a, b) => (scenarioTheoryAlignment[b] || 0) - (scenarioTheoryAlignment[a] || 0)
+      );
+      primaryScenario = sorted[0];
+      secondaryScenarios.push(...sorted.slice(1));
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
