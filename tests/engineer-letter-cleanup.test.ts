@@ -288,3 +288,268 @@ describe('hasEngineerInternalControlLeak', () => {
     expect(hasEngineerInternalControlLeak('Clean professional text only.')).toBe(false);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Engineer rebuttal required-testing post-processing
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface EngineerRebuttalEnforcementContext {
+  engineerStatedCause: string;
+  engineerTheorySentences: string[];
+  primaryScenario: string | null;
+  secondaryScenarios?: string[];
+  criticalTestingNotPerformed: string[];
+  reportText: string;
+}
+
+function isTestMentionedInReportTest(reportText: string, testName: string): boolean {
+  const text = String(reportText || "");
+  const textLower = text.toLowerCase();
+  if (!textLower) return false;
+
+  const normalizedTest = String(testName || "").toLowerCase().trim();
+  if (!normalizedTest) return false;
+
+  const negativeContextPatterns = [
+    new RegExp(`no\\s+${escapeRegExp(normalizedTest)}`, "i"),
+    new RegExp(`not\\s+performed[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
+    new RegExp(`${escapeRegExp(normalizedTest)}[^\\n.]{0,40}not\\s+performed`, "i"),
+    new RegExp(`failed\\s+to\\s+perform[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
+    new RegExp(`without[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
+    new RegExp(`did\\s+not\\s+perform[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
+    new RegExp(`omitted[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
+    new RegExp(`missing[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
+  ];
+
+  if (textLower.includes(normalizedTest)) {
+    const exactNegative = negativeContextPatterns.some((pattern) => pattern.test(text));
+    if (!exactNegative) return true;
+  }
+
+  const ignoredTokens = new Set([
+    "analysis", "testing", "review", "inspection", "proof",
+    "assessment", "evaluation", "performed", "perform",
+  ]);
+
+  const tokens = normalizedTest
+    .split(/[\s/()\-]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 4 && !ignoredTokens.has(token));
+
+  if (tokens.length === 0) return false;
+
+  const tokenHits = tokens.filter((token) => textLower.includes(token));
+  if (tokenHits.length === 0) return false;
+
+  const tokenNegative = tokenHits.some((token) => {
+    const tokenEscaped = escapeRegExp(token);
+    return [
+      new RegExp(`no[^\\n.]{0,30}${tokenEscaped}`, "i"),
+      new RegExp(`not\\s+performed[^\\n.]{0,30}${tokenEscaped}`, "i"),
+      new RegExp(`failed\\s+to\\s+perform[^\\n.]{0,30}${tokenEscaped}`, "i"),
+      new RegExp(`did\\s+not\\s+perform[^\\n.]{0,30}${tokenEscaped}`, "i"),
+      new RegExp(`without[^\\n.]{0,30}${tokenEscaped}`, "i"),
+      new RegExp(`missing[^\\n.]{0,30}${tokenEscaped}`, "i"),
+      new RegExp(`omitted[^\\n.]{0,30}${tokenEscaped}`, "i"),
+    ].some((pattern) => pattern.test(text));
+  });
+
+  return !tokenNegative;
+}
+
+function buildRequiredTestingNotPerformedSectionTest(reportText: string, requiredTests: string[]): string {
+  const lines = requiredTests.map((testName) => {
+    const appearsInReport = isTestMentionedInReportTest(reportText, testName);
+    return `- ${testName}: ${
+      appearsInReport
+        ? "Mentioned in report text, but not confirmed as actually performed"
+        : "Not documented in report"
+    }`;
+  });
+
+  return `Required Testing Not Performed\n\nThe following forensic testing is required to scientifically prove the engineer's causation theory. Mere discussion of a testing concept is not proof that the test was actually performed or that it produced objective findings.\n\n${lines.join("\n")}`;
+}
+
+function buildEngineerTheoryExtractionSectionTest(context: EngineerRebuttalEnforcementContext): string {
+  const quotedCause = String(
+    context.engineerStatedCause
+    || context.engineerTheorySentences?.[0]
+    || 'No explicit engineer causation sentence was extracted from the report.'
+  ).trim();
+
+  return `Engineer Theory Extraction\nEngineer-stated cause (direct quote from report):\n"${quotedCause}"`;
+}
+
+function buildTimingFailureSectionTest(primaryScenario: string | null, engineerCause: string): string {
+  const universalStatement = 'The report attempts to assign a pre-existing timeline to the observed condition without employing any forensic method capable of establishing when the relevant opening, breach, displacement, or failure actually occurred.';
+  let scenarioSpecific = '';
+  switch (primaryScenario) {
+    case 'low_slope_snow_ice_ponding':
+      scenarioSpecific = 'Specifically, the report provides no membrane core cuts, seam adhesion testing, moisture mapping, or leak-path tracing that could establish when the membrane openings developed.';
+      break;
+    default:
+      scenarioSpecific = 'No forensic timeline analysis was performed to establish when the observed conditions developed relative to the loss event.';
+  }
+  return `Timing Failure\n\n${universalStatement}\n\n${scenarioSpecific}\n\nEngineer stated cause: "${engineerCause || 'No explicit causation statement extracted.'}"`;
+}
+
+function buildEngineerContradictionSectionTest(primaryScenario: string | null, engineerTheorySentences: string[]): string {
+  const quotedSentences = engineerTheorySentences.length > 0
+    ? engineerTheorySentences.map((s) => `"${s}"`).join('\n')
+    : '"No specific engineer theory sentences extracted."';
+  let scenarioContradiction = '';
+  if (primaryScenario === 'low_slope_snow_ice_ponding') {
+    scenarioContradiction = 'If the report acknowledges snow accumulation, drainage impedance, standing water, freeze-thaw stress, or elevated watertightness demand, it cannot logically conclude deterioration alone caused the loss without objective testing proving the event did not create, activate, or expand the openings.';
+  } else {
+    scenarioContradiction = 'If the report acknowledges event conditions yet denies the event role, it contradicts itself unless objective testing proves the event had no causal contribution.';
+  }
+  return `Internal Contradictions\n\nThe following engineer theory statements are evaluated for internal consistency:\n${quotedSentences}\n\n${scenarioContradiction}`;
+}
+
+function buildEngineerMustAnswerQuestionsTest(primaryScenario: string | null): string[] {
+  switch (primaryScenario) {
+    case 'low_slope_snow_ice_ponding':
+      return [
+        'What testing established the timing of the alleged membrane openings?',
+        'What membrane core cuts were taken and what did they show?',
+        'What seam adhesion or peel testing was performed?',
+        'What drainage-capacity analysis was performed?',
+        'What snow-water equivalent or runoff-path analysis was performed?',
+        'What leak-path tracing was performed from roof entry to interior manifestation?',
+        'What objective testing proves deterioration alone caused the loss rather than the snow/ice event activating or expanding the openings?',
+        'How did the engineer distinguish structural load adequacy from membrane watertightness performance?',
+      ];
+    default:
+      return [
+        'What objective testing was performed to establish the timing of the alleged condition?',
+        'What forensic methodology was used to separate pre-existing vulnerability from event-driven damage?',
+        'What alternative causes were considered and how were they ruled out?',
+        'What measurements, samples, or quantifiable data support the stated conclusion?',
+        'What industry-standard testing protocols applicable to this loss type were followed?',
+      ];
+  }
+}
+
+function enforceEngineerRebuttalMandatorySectionsTest(
+  result: string,
+  context: EngineerRebuttalEnforcementContext
+): string {
+  if (!result) return result;
+
+  let updated = result.trim();
+  const additions: string[] = [];
+
+  const hasEngineerTheoryExtraction = /(^|\n)engineer theory extraction\b/i.test(updated);
+  const hasTimingFailure = /(^|\n)timing failure\b/i.test(updated);
+  const hasRequiredTesting = /(^|\n)required testing not performed\b/i.test(updated);
+  const hasCausationProofFailure = /(^|\n)causation proof failure\b/i.test(updated);
+  const hasInternalContradictions = /(^|\n)internal contradictions\b/i.test(updated);
+  const hasQuestionsEngineerMustAnswer = /(^|\n)questions the engineer must answer\b/i.test(updated);
+
+  if (!hasEngineerTheoryExtraction) {
+    additions.push(buildEngineerTheoryExtractionSectionTest(context));
+  }
+  if (!hasTimingFailure) {
+    additions.push(buildTimingFailureSectionTest(context.primaryScenario, context.engineerStatedCause));
+  }
+  if (!hasRequiredTesting) {
+    additions.push(buildRequiredTestingNotPerformedSectionTest(context.reportText, context.criticalTestingNotPerformed));
+  }
+  if (!hasCausationProofFailure) {
+    additions.push('Causation Proof Failure\n\nCondition evidence is not causation proof.');
+  }
+  if (!hasInternalContradictions) {
+    additions.push(buildEngineerContradictionSectionTest(context.primaryScenario, context.engineerTheorySentences));
+  }
+  if (!hasQuestionsEngineerMustAnswer) {
+    const questions = buildEngineerMustAnswerQuestionsTest(context.primaryScenario);
+    additions.push(`Questions the Engineer Must Answer\n\n${questions.map((q, i) => `${i + 1}. ${q}`).join("\n")}`);
+  }
+
+  if (additions.length > 0) {
+    updated += `\n\n${additions.join('\n\n')}`;
+  }
+
+  return updated.trim();
+}
+
+describe("Engineer rebuttal required-testing post-processing", () => {
+  const context: EngineerRebuttalEnforcementContext = {
+    engineerStatedCause:
+      "The water infiltration was the result of snow/ice meltwater that penetrated age-related and maintenance-deferred openings.",
+    engineerTheorySentences: [
+      "The water infiltration was the result of snow/ice meltwater that penetrated age-related and maintenance-deferred openings."
+    ],
+    primaryScenario: "low_slope_snow_ice_ponding",
+    criticalTestingNotPerformed: [
+      "membrane core cuts",
+      "seam adhesion/peel testing",
+      "drainage-capacity analysis",
+      "snow-water equivalent/runoff analysis",
+      "leak-path tracing",
+      "moisture mapping",
+      "proof of timing of openings",
+    ],
+    reportText: `
+      The engineer visually observed weathered cap sheets and cracked sealants.
+      No membrane core cuts were performed.
+      No seam adhesion or peel testing was performed.
+      No drainage-capacity analysis was performed.
+      No snow-water equivalent analysis was performed.
+      No leak-path tracing was performed.
+      No moisture mapping was performed.
+      The report states these openings developed over many months to years.
+    `,
+  };
+
+  it("does not mark omitted tests as appearing in the report just because they are mentioned negatively", () => {
+    const section = buildRequiredTestingNotPerformedSectionTest(context.reportText, context.criticalTestingNotPerformed);
+
+    expect(section).toContain("membrane core cuts: Not documented in report");
+    expect(section).toContain("seam adhesion/peel testing: Not documented in report");
+    expect(section).toContain("drainage-capacity analysis: Not documented in report");
+    expect(section).not.toContain("Appears in report");
+  });
+
+  it("does not append duplicate Required Testing section when already present", () => {
+    const existing = `
+Engineer Theory Extraction
+
+Some content.
+
+Required Testing Not Performed
+
+Already written section here.
+
+Causation Proof Failure
+
+Already written section here.
+`;
+
+    const result = enforceEngineerRebuttalMandatorySectionsTest(existing, context);
+
+    const matches = result.match(/Required Testing Not Performed/g) || [];
+    expect(matches.length).toBe(1);
+  });
+
+  it("does not append duplicate Causation Proof Failure when already present", () => {
+    const existing = `
+Engineer Theory Extraction
+
+Some content.
+
+Required Testing Not Performed
+
+Already written section here.
+
+Causation Proof Failure
+
+Already written section here.
+`;
+
+    const result = enforceEngineerRebuttalMandatorySectionsTest(existing, context);
+
+    const matches = result.match(/Causation Proof Failure/g) || [];
+    expect(matches.length).toBe(1);
+  });
+});
