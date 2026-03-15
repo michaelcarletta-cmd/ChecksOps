@@ -301,6 +301,95 @@ function detectLowSlopeAcrossSources(sources: Array<string | null | undefined>):
   };
 }
 
+type EngineerReportSourceOrigin =
+  | 'pdf_extracted_text'
+  | 'uploaded_engineer_report_text'
+  | 'file_extracted_text'
+  | 'content'
+  | 'additional_context'
+  | 'none';
+
+interface ResolveEngineerReportSourceTextParams {
+  content?: string;
+  pdfExtractedText?: string;
+  uploadedEngineerReportText?: string;
+  additionalContext?: any;
+  fullClaimFiles?: any[];
+}
+
+interface EngineerReportSourceResolution {
+  text: string;
+  sourceOrigin: EngineerReportSourceOrigin;
+  usedEngineerReportText: boolean;
+}
+
+function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceTextParams): EngineerReportSourceResolution {
+  const directContent = String(params.content || '').trim();
+  const explicitPdfText = String(params.pdfExtractedText || '').trim();
+  const uploadedEngineerText = String(params.uploadedEngineerReportText || '').trim();
+
+  const fileDerivedText = (Array.isArray(params.fullClaimFiles) ? params.fullClaimFiles : [])
+    .filter((file: any) => {
+      const classification = String(file?.document_classification || '').toLowerCase();
+      const fileName = String(file?.file_name || '').toLowerCase();
+      return classification.includes('engineering_report') || fileName.includes('engineer');
+    })
+    .map((file: any) => String(file?.extracted_text || '').trim())
+    .filter(Boolean)
+    .join('\n\n')
+    .trim();
+
+  const additionalContextText = String(
+    params.additionalContext?.userContext || params.additionalContext?.customPrompt || ''
+  ).trim();
+
+  if (explicitPdfText) {
+    return {
+      text: explicitPdfText,
+      sourceOrigin: 'pdf_extracted_text',
+      usedEngineerReportText: true,
+    };
+  }
+
+  if (uploadedEngineerText) {
+    return {
+      text: uploadedEngineerText,
+      sourceOrigin: 'uploaded_engineer_report_text',
+      usedEngineerReportText: true,
+    };
+  }
+
+  if (fileDerivedText) {
+    return {
+      text: fileDerivedText,
+      sourceOrigin: 'file_extracted_text',
+      usedEngineerReportText: true,
+    };
+  }
+
+  if (directContent) {
+    return {
+      text: directContent,
+      sourceOrigin: 'content',
+      usedEngineerReportText: false,
+    };
+  }
+
+  if (additionalContextText) {
+    return {
+      text: additionalContextText,
+      sourceOrigin: 'additional_context',
+      usedEngineerReportText: false,
+    };
+  }
+
+  return {
+    text: '',
+    sourceOrigin: 'none',
+    usedEngineerReportText: false,
+  };
+}
+
 function getRulePackLoaded(primaryScenario: string | null): string {
   if (!primaryScenario) return 'UNIVERSAL_ONLY';
   return SCENARIO_RULE_PACKS[primaryScenario] || `SCENARIO_${primaryScenario.toUpperCase()}`;
