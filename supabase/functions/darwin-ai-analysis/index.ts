@@ -4180,7 +4180,7 @@ Deno.serve(async (req) => {
       p.ai_condition_rating === 'Poor' || p.ai_condition_rating === 'Failed'
     )?.length || 0;
 
-    const claimSummary = claimFactsPackContext + `
+    const claimSummary = claimFactsPackContext + documentIntelligenceContext + `
 CLAIM DETAILS:
 - Claim Number: ${claim.claim_number || 'N/A'}
 - Policy Number: ${claim.policy_number || 'N/A'}
