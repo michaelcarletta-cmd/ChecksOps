@@ -508,17 +508,16 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                         <FileUp className="h-3 w-3 mr-1" /> Save as Template
                       </Button>
                     )}
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button variant="outline" size="sm" onClick={() => reprocessFileMutation.mutate(file.id)} disabled={isReprocessing}>
-                            {isReprocessing ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1" />}
-                            {isReprocessing ? "Processing..." : "Reprocess"}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent><p>Re-analyze with Darwin AI</p></TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      title="Re-analyze document type"
+                      onClick={() => reprocessFileMutation.mutate(file.id)}
+                      disabled={isReprocessing}
+                    >
+                      {isReprocessing ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+                      {isReprocessing ? "Processing..." : "Reprocess"}
+                    </Button>
                     <Button variant="outline" size="sm" onClick={() => handleDeleteFile(file)}>
                       <Trash2 className="h-3 w-3 mr-1" /> Delete
                     </Button>
