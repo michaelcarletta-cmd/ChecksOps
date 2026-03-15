@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { runSmartClassification, type DocumentClassification as SmartDocClassification } from './classification-v2.ts';
+import { analyzePacketText } from './packet-intelligence.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
