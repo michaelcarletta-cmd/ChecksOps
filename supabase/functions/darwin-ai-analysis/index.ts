@@ -9185,7 +9185,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         criticalTestingNotPerformed: Array.isArray(engineerRebuttalCriticalTestingNotPerformed)
           ? engineerRebuttalCriticalTestingNotPerformed
           : [],
-        reportText: engineerRebuttalReportText || String(content || ''),
+        reportText: engineerRebuttalReportText || "", // MUST be source report text only
       };
 
       // Detect low-slope across sources and force scenario if needed
