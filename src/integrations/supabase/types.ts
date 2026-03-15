@@ -3074,13 +3074,19 @@ export type Database = {
       }
       claim_files: {
         Row: {
+          automation_safe: boolean
           claim_id: string
+          classification_candidates: Json
           classification_confidence: number | null
           classification_metadata: Json | null
+          classification_method: string | null
+          classification_reasoning: Json
+          classification_review_required: boolean
           clean_text: string | null
           confidence_score: number | null
           darwin_processed_at: string | null
           document_classification: string | null
+          document_family: string | null
           document_subtype: string | null
           document_summary: string | null
           document_type: string | null
@@ -3094,6 +3100,7 @@ export type Database = {
           folder_id: string | null
           id: string
           is_latest_version: boolean | null
+          is_mixed_document: boolean
           is_scanned: boolean | null
           needs_reprocessing: boolean | null
           needs_text_backfill: boolean
@@ -3112,13 +3119,19 @@ export type Database = {
           version_label: string | null
         }
         Insert: {
+          automation_safe?: boolean
           claim_id: string
+          classification_candidates?: Json
           classification_confidence?: number | null
           classification_metadata?: Json | null
+          classification_method?: string | null
+          classification_reasoning?: Json
+          classification_review_required?: boolean
           clean_text?: string | null
           confidence_score?: number | null
           darwin_processed_at?: string | null
           document_classification?: string | null
+          document_family?: string | null
           document_subtype?: string | null
           document_summary?: string | null
           document_type?: string | null
@@ -3132,6 +3145,7 @@ export type Database = {
           folder_id?: string | null
           id?: string
           is_latest_version?: boolean | null
+          is_mixed_document?: boolean
           is_scanned?: boolean | null
           needs_reprocessing?: boolean | null
           needs_text_backfill?: boolean
@@ -3150,13 +3164,19 @@ export type Database = {
           version_label?: string | null
         }
         Update: {
+          automation_safe?: boolean
           claim_id?: string
+          classification_candidates?: Json
           classification_confidence?: number | null
           classification_metadata?: Json | null
+          classification_method?: string | null
+          classification_reasoning?: Json
+          classification_review_required?: boolean
           clean_text?: string | null
           confidence_score?: number | null
           darwin_processed_at?: string | null
           document_classification?: string | null
+          document_family?: string | null
           document_subtype?: string | null
           document_summary?: string | null
           document_type?: string | null
@@ -3170,6 +3190,7 @@ export type Database = {
           folder_id?: string | null
           id?: string
           is_latest_version?: boolean | null
+          is_mixed_document?: boolean
           is_scanned?: boolean | null
           needs_reprocessing?: boolean | null
           needs_text_backfill?: boolean
