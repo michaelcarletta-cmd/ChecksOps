@@ -579,6 +579,20 @@ function assertLowSlopeForbiddenTerms(result: string, primaryScenario: string | 
   }
 }
 
+function assertLowSlopeStrictPreSendTerms(result: string, primaryScenario: string | null): void {
+  if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return;
+
+  const strictViolations = LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES
+    .filter((rule) => rule.regex.test(result))
+    .map((rule) => rule.label);
+
+  if (strictViolations.length > 0) {
+    throw new Error(
+      `Low-slope pre-send assertion failed: forbidden terms remain (${Array.from(new Set(strictViolations)).join(', ')}). Generation aborted.`,
+    );
+  }
+}
+
 function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: string | null, supportCorpus: string): string {
   if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return result;
 
