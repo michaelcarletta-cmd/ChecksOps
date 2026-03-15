@@ -608,6 +608,21 @@ function collectLowSlopeStrictPreSendViolations(result: string, primaryScenario:
   ));
 }
 
+function collectAllLowSlopeFinalViolations(
+  finalText: string,
+  primaryScenario: string | null,
+  engineerCausationSentence: string,
+): string[] {
+  if (!finalText || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return [];
+
+  return Array.from(
+    new Set([
+      ...collectLowSlopeStrictPreSendViolations(finalText, primaryScenario),
+      ...collectLowSlopeForbiddenViolations(finalText, primaryScenario, engineerCausationSentence),
+    ]),
+  );
+}
+
 function buildLowSlopeForbiddenTermErrorMessage(violations: string[]): string {
   const uniqueViolations = Array.from(new Set(violations.filter(Boolean)));
   if (uniqueViolations.length === 0) {

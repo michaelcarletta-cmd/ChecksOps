@@ -10,6 +10,7 @@ import { HardHat, Loader2, Copy, Download, Sparkles, Upload, X, FileText, Histor
 import { useDeclaredPosition } from "@/hooks/useDeclaredPosition";
 import { PositionGateBanner } from "./PositionGateBanner";
 import { publishCarrierDismantler } from "@/lib/darwinDismantlerBus";
+import { getFunctionErrorDetails } from "@/lib/edgeFunctionError";
 
 interface DarwinEngineerReportAnalyzerProps {
   claimId: string;

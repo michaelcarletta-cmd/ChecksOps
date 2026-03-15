@@ -16,6 +16,7 @@ import { PositionGateBanner } from "./PositionGateBanner";
 import { publishCarrierDismantler } from "@/lib/darwinDismantlerBus";
 import { DarwinRefinementChat } from "./DarwinRefinementChat";
 import { DarwinCitationWatchdog } from "./DarwinCitationWatchdog";
+import { getFunctionErrorDetails } from "@/lib/edgeFunctionError";
 
 interface DarwinAutoDraftRebuttalProps {
   claimId: string;
