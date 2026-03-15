@@ -252,6 +252,8 @@ const LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES: Array<{ label: string; regex: R
   { label: 'ARMA', regex: /\bARMA\b/i },
   { label: 'unsealed tabs', regex: /\bunsealed\s+tabs?\b/i },
   { label: 'uplift analysis', regex: /\buplift\s+analysis\b/i },
+  { label: 'ASTM D7158', regex: /\bASTM\s*D7158\b/i },
+  { label: 'architectural shingles', regex: /\barchitectural\s+(?:asphalt\s+)?shingle(?:s)?\b/i },
 ];
 
 const SCENARIO_RULE_PACKS: Record<string, string> = {
