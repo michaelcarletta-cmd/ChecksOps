@@ -995,7 +995,63 @@ describe("Harvey Memorial / Envista — prompt-content validation", () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// TEST 3: FINAL-OUTPUT ENFORCEMENT (post-processing path)
+// TEST 3: SOURCE-RESOLUTION + FINAL-GATE REGRESSION
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("Harvey Memorial / Envista — source resolution regression", () => {
+  it("uses extracted engineer report text over generic content and hard-fails forbidden low-slope terms", () => {
+    const genericWindContent = "Carrier notes reference shingles uplift and wind pressure language in generic claim chatter.";
+    const source = resolveEngineerReportSourceTextForTest({
+      content: genericWindContent,
+      fullClaimFiles: [
+        {
+          file_name: "Envista Engineering Report.pdf",
+          document_classification: "engineering_report",
+          extracted_text: ENVISTA_REPORT_TEXT,
+        },
+      ],
+    });
+
+    expect(source.sourceOrigin).toBe("file_extracted_text");
+    expect(source.usedEngineerReportText).toBe(true);
+    expect(source.text.length).toBeGreaterThan(500);
+
+    const scenarioDetection = detectLowSlopeAcrossSourcesForTest([source.text]);
+    expect(scenarioDetection.shouldForce).toBe(true);
+
+    const dismantler = runEngineerReportDismantler(source.text);
+    expect(dismantler.primaryScenario).toBe("low_slope_snow_ice_ponding");
+
+    const forbiddenOutput = `The shingle assembly failed uplift resistance, with wind-driven rain, fasteners, sealant, adhesion testing, ASTM references, ARMA guidance, and IRC wind logic.`;
+
+    let thrown: any;
+    try {
+      validateFinalEngineerRebuttalOrThrowForTest({
+        finalText: forbiddenOutput,
+        primaryScenario: "low_slope_snow_ice_ponding",
+      });
+    } catch (error: any) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeTruthy();
+    expect(String(thrown.message)).toMatch(/LOW_SLOPE_MEMBRANE generation failed due to forbidden term/i);
+    expect(thrown.violations).toEqual(expect.arrayContaining([
+      "shingle / shingles",
+      "uplift",
+      "wind-driven rain",
+      "fasteners",
+      "sealant",
+      "adhesion testing",
+      "ASTM",
+      "ARMA",
+      "IRC/IBC wind logic",
+    ]));
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// TEST 4: FINAL-OUTPUT ENFORCEMENT (post-processing path)
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe("Harvey Memorial / Envista — final-output enforcement", () => {
