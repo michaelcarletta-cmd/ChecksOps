@@ -4154,25 +4154,6 @@ Be specific, professional, and provide communications that are ready to copy and
         });
 
         let engineerTextForDismantler = engineerSourceResolution.text;
-        if ((!engineerTextForDismantler || engineerTextForDismantler.trim().length < 500) && pdfContent) {
-          const lastChanceOcrText = await extractEngineerTextFromPdfViaVision(pdfContent, pdfFileName || 'document.pdf');
-          if (lastChanceOcrText && lastChanceOcrText.length >= 500) {
-            additionalContext.pdfExtractedText = lastChanceOcrText;
-            engineerSourceResolution = resolveEngineerReportSourceText({
-              content,
-              pdfExtractedText: String(additionalContext?.pdfExtractedText || additionalContext?.documentContentSection || ''),
-              uploadedEngineerReportText: String(
-                additionalContext?.engineerReportText
-                || additionalContext?.uploadedEngineerReportText
-                || ''
-              ),
-              additionalContext,
-              fullClaimFiles,
-            });
-            engineerTextForDismantler = engineerSourceResolution.text;
-            console.log(`[darwin][resolveEngineerSource] Last-chance OCR fallback supplied usable text (${engineerTextForDismantler.length} chars)`);
-          }
-        }
 
         if (!engineerTextForDismantler || engineerTextForDismantler.trim().length < 500) {
           throw new Error('Engineer rebuttal blocked: no usable engineer report text was found for scenario detection.');
