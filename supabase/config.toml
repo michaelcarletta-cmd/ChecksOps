@@ -57,3 +57,6 @@ verify_jwt = false
 
 [functions.darwin-ai-analysis]
 verify_jwt = false
+
+[functions.darwin-document-intelligence-worker]
+verify_jwt = false
