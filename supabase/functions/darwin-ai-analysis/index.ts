@@ -8622,9 +8622,65 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       );
     }
 
-    if (useStructuredDarwinOutput && structuredResult) {
+    if (useStructuredDarwinOutput && structuredResult && typeof analysisResult === 'string') {
+      const structuredPreSendLowSlopeDetection = detectLowSlopeAcrossSources([
+        engineerRebuttalCausationQuote,
+        engineerRebuttalReportText,
+        String(content || ''),
+        claimSummary,
+        String(claim?.loss_description || ''),
+        analysisResult,
+      ]);
+
+      const structuredEnforcedScenarioForResponse =
+        engineerRebuttalPrimaryScenario === LOW_SLOPE_PRIMARY_SCENARIO || structuredPreSendLowSlopeDetection.shouldForce
+          ? LOW_SLOPE_PRIMARY_SCENARIO
+          : engineerRebuttalPrimaryScenario;
+
+      const structuredScenarioDiagnosticsMatchedTerms = Array.from(
+        new Set([...(scenarioDetectionMatchedTerms || []), ...structuredPreSendLowSlopeDetection.matchedTerms])
+      );
+      const structuredScenarioDiagnosticsRulePackLoaded = getRulePackLoaded(structuredEnforcedScenarioForResponse);
+      const structuredScenarioDiagnosticsSuppressedRulePacks = getSuppressedRulePacks(structuredEnforcedScenarioForResponse);
+
+      const structuredStrictViolations = collectLowSlopeStrictPreSendViolations(
+        analysisResult,
+        structuredEnforcedScenarioForResponse,
+      );
+      const structuredContextualViolations = collectLowSlopeForbiddenViolations(
+        analysisResult,
+        structuredEnforcedScenarioForResponse,
+        engineerRebuttalCausationQuote,
+      );
+      const structuredViolations = Array.from(new Set([...structuredStrictViolations, ...structuredContextualViolations]));
+
+      if (structuredViolations.length > 0) {
+        return new Response(
+          JSON.stringify({
+            error: buildLowSlopeForbiddenTermErrorMessage(structuredViolations),
+            scenario_diagnostics: {
+              primaryScenario: structuredEnforcedScenarioForResponse,
+              rulePackLoaded: structuredScenarioDiagnosticsRulePackLoaded,
+              suppressedRulePacks: structuredScenarioDiagnosticsSuppressedRulePacks,
+              matchedPhysicalMechanismTerms: structuredScenarioDiagnosticsMatchedTerms,
+              matchedTerms: structuredScenarioDiagnosticsMatchedTerms,
+            },
+          }),
+          { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
       return new Response(
-        JSON.stringify(structuredResult),
+        JSON.stringify({
+          ...structuredResult,
+          scenario_diagnostics: {
+            primaryScenario: structuredEnforcedScenarioForResponse,
+            rulePackLoaded: structuredScenarioDiagnosticsRulePackLoaded,
+            suppressedRulePacks: structuredScenarioDiagnosticsSuppressedRulePacks,
+            matchedPhysicalMechanismTerms: structuredScenarioDiagnosticsMatchedTerms,
+            matchedTerms: structuredScenarioDiagnosticsMatchedTerms,
+          },
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
@@ -8648,6 +8704,9 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     const preSendLowSlopeDetection = detectLowSlopeAcrossSources([
       engineerRebuttalCausationQuote,
       engineerRebuttalReportText,
+      String(content || ''),
+      claimSummary,
+      String(claim?.loss_description || ''),
       typeof analysisResult === 'string' ? analysisResult : '',
     ]);
 
@@ -8662,13 +8721,33 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     const scenarioDiagnosticsRulePackLoaded = getRulePackLoaded(enforcedScenarioForResponse);
     const scenarioDiagnosticsSuppressedRulePacks = getSuppressedRulePacks(enforcedScenarioForResponse);
 
-    if (['engineer_report_rebuttal', 'auto_draft_rebuttal'].includes(analysisType) && typeof analysisResult === 'string') {
-      assertLowSlopeStrictPreSendTerms(analysisResult, enforcedScenarioForResponse);
-      assertLowSlopeForbiddenTerms(
+    if (typeof analysisResult === 'string') {
+      const strictViolations = collectLowSlopeStrictPreSendViolations(
+        analysisResult,
+        enforcedScenarioForResponse,
+      );
+      const contextualViolations = collectLowSlopeForbiddenViolations(
         analysisResult,
         enforcedScenarioForResponse,
         engineerRebuttalCausationQuote,
       );
+      const allViolations = Array.from(new Set([...strictViolations, ...contextualViolations]));
+
+      if (allViolations.length > 0) {
+        return new Response(
+          JSON.stringify({
+            error: buildLowSlopeForbiddenTermErrorMessage(allViolations),
+            scenario_diagnostics: {
+              primaryScenario: enforcedScenarioForResponse,
+              rulePackLoaded: scenarioDiagnosticsRulePackLoaded,
+              suppressedRulePacks: scenarioDiagnosticsSuppressedRulePacks,
+              matchedPhysicalMechanismTerms: scenarioDiagnosticsMatchedTerms,
+              matchedTerms: scenarioDiagnosticsMatchedTerms,
+            },
+          }),
+          { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
     }
 
     console.log(
