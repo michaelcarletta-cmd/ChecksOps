@@ -578,14 +578,56 @@ Deno.serve(async (req) => {
     // === STEP 4: DURABLE DOCUMENT INTELLIGENCE QUEUE ===
     if (readyForAnalysis && targetClaimId && fileId && cleanText.length >= 100) {
       try {
-        await enqueueDocumentIntelligenceJob(supabase, {
-          claim_id: targetClaimId,
-          file_id: fileId,
-          document_type: mappedDocType,
-          document_classification: classificationResult.classification,
-          confidence_score: classificationResult.confidence,
-          summary: classificationResult.metadata?.summary,
-        });
+        if (segmentationResult.has_segments) {
+          const { data: savedSegments, error: savedSegmentsError } = await supabase
+            .from('claim_file_segments')
+            .select('id, segment_index, segment_label, segment_classification, classification_confidence')
+            .eq('file_id', fileId)
+            .order('segment_index', { ascending: true });
+
+          if (savedSegmentsError) {
+            throw savedSegmentsError;
+          }
+
+          for (const segment of savedSegments || []) {
+            const queueRow = {
+              claim_id: targetClaimId,
+              file_id: fileId,
+              segment_id: segment.id,
+              source_scope: 'segment',
+              status: 'pending',
+              priority: Number(segment.classification_confidence || 0) >= 0.85 ? 100 : 50,
+              run_after: new Date().toISOString(),
+              payload: {
+                claim_id: targetClaimId,
+                file_id: fileId,
+                segment_id: segment.id,
+                source_scope: 'segment',
+                document_type: mapDocumentType(segment.segment_classification || 'other'),
+                document_classification: segment.segment_classification || 'other',
+                confidence_score: Number(segment.classification_confidence || 0.5),
+                summary: segment.segment_label,
+              },
+            };
+
+            const { error: queueError } = await supabase
+              .from('document_intelligence_queue')
+              .upsert(queueRow, { onConflict: 'segment_id' });
+
+            if (queueError) {
+              console.error('[DocIntelQueue] segment enqueue error:', queueError.message);
+            }
+          }
+        } else {
+          await enqueueDocumentIntelligenceJob(supabase, {
+            claim_id: targetClaimId,
+            file_id: fileId,
+            document_type: mappedDocType,
+            document_classification: classificationResult.classification,
+            confidence_score: classificationResult.confidence,
+            summary: classificationResult.metadata?.summary,
+          });
+        }
 
         await updateClaimMasterStateDocIntelSummary(supabase, targetClaimId, {
           last_document_type: mappedDocType,
