@@ -1000,6 +1000,52 @@ function cleanExtractedText(text: string): string {
     .trim();
 }
 
+// === INTELLIGENCE OUTCOME TYPES ===
+type StructuredIntelResult =
+  | { success: true; written: true; documentSubtype?: string | null; summary?: string | null }
+  | { success: true; written: false; skippedReason: string }
+  | { success: false; written: false; error: string };
+
+function getReadyForAnalysisDecision(params: {
+  cleanText: string;
+  textQualityStatus: string | null;
+  processingError: string | null;
+}): { ready: boolean; reason: string } {
+  if (params.processingError) {
+    return { ready: false, reason: "processing_error_present" };
+  }
+  const len = (params.cleanText || "").trim().length;
+  if (len < 100) {
+    return { ready: false, reason: "clean_text_too_short" };
+  }
+  if (params.textQualityStatus === "unusable") {
+    return { ready: false, reason: "text_quality_unusable" };
+  }
+  if (params.textQualityStatus === "poor") {
+    return { ready: false, reason: "text_quality_poor" };
+  }
+  return { ready: true, reason: "ready" };
+}
+
+function hasMeaningfulIntelligencePayload(intel: any): boolean {
+  if (!intel || typeof intel !== "object") return false;
+  const checks = [
+    typeof intel.summary === "string" && intel.summary.trim().length >= 20,
+    Array.isArray(intel.denial_reasons) && intel.denial_reasons.length > 0,
+    Array.isArray(intel.testing_missing) && intel.testing_missing.length > 0,
+    Array.isArray(intel.testing_performed) && intel.testing_performed.length > 0,
+    Array.isArray(intel.exclusions_cited) && intel.exclusions_cited.length > 0,
+    Array.isArray(intel.scope_positions) && intel.scope_positions.length > 0,
+    Array.isArray(intel.building_components) && intel.building_components.length > 0,
+    !!intel.coverage_position,
+    !!intel.cause_of_loss,
+    !!intel.sender,
+    !!intel.recipient,
+    !!intel.estimate_totals,
+  ];
+  return checks.some(Boolean);
+}
+
 // === STRUCTURED INTELLIGENCE EXTRACTION ===
 async function extractStructuredIntelligence(
   supabase: any,
@@ -1008,9 +1054,11 @@ async function extractStructuredIntelligence(
   cleanText: string,
   documentType: string,
   classificationResult: ClassificationResult,
-) {
+): Promise<StructuredIntelResult> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY) return;
+  if (!LOVABLE_API_KEY) {
+    return { success: true, written: false, skippedReason: 'no_lovable_api_key' };
+  }
 
   console.log(`[DocIntel] Starting structured extraction for ${fileId} (type: ${documentType})`);
 
@@ -1163,15 +1211,16 @@ async function extractStructuredIntelligence(
     });
 
     if (!response.ok) {
-      console.error(`[DocIntel] AI error: ${response.status}`);
-      return;
+      const errMsg = `AI error: ${response.status}`;
+      console.error(`[DocIntel] ${errMsg}`);
+      return { success: false, written: false, error: errMsg };
     }
 
     const aiResult = await response.json();
     const toolCall = aiResult.choices?.[0]?.message?.tool_calls?.[0];
     if (!toolCall?.function?.arguments) {
       console.error('[DocIntel] No tool call in response');
-      return;
+      return { success: true, written: false, skippedReason: 'no_tool_call_in_response' };
     }
 
     let intel: any;
@@ -1179,7 +1228,13 @@ async function extractStructuredIntelligence(
       intel = JSON.parse(toolCall.function.arguments);
     } catch {
       console.error('[DocIntel] Failed to parse tool call arguments');
-      return;
+      return { success: false, written: false, error: 'failed_to_parse_tool_call_arguments' };
+    }
+
+    // Reject empty/junk payloads
+    if (!hasMeaningfulIntelligencePayload(intel)) {
+      console.warn(`[DocIntel] Empty/junk intelligence payload for ${fileId}, skipping upsert`);
+      return { success: true, written: false, skippedReason: 'empty_intelligence_payload' };
     }
 
     // Upsert into claim_document_intelligence
@@ -1215,9 +1270,10 @@ async function extractStructuredIntelligence(
 
     if (upsertError) {
       console.error('[DocIntel] Upsert error:', upsertError.message);
-    } else {
-      console.log(`[DocIntel] Saved intelligence for ${fileId} (type: ${documentType}, subtype: ${intel.document_subtype || 'none'})`);
+      return { success: false, written: false, error: `upsert_failed: ${upsertError.message}` };
     }
+
+    console.log(`[DocIntel] written intelligence for ${fileId} (type: ${documentType}, subtype: ${intel.document_subtype || 'none'})`);
 
     // Also update claim_files with subtype and summary
     await supabase.from('claim_files').update({
@@ -1225,8 +1281,12 @@ async function extractStructuredIntelligence(
       document_summary: intel.summary || null,
     }).eq('id', fileId);
 
-  } catch (err) {
-    console.error('[DocIntel] Extraction failed:', err);
+    return { success: true, written: true, documentSubtype: intel.document_subtype || null, summary: intel.summary || null };
+
+  } catch (err: any) {
+    const errMsg = err?.message || String(err);
+    console.error('[DocIntel] Extraction failed:', errMsg);
+    return { success: false, written: false, error: errMsg };
   }
 }
 
