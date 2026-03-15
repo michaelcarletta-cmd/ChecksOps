@@ -501,6 +501,10 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
         {folderFiles.map((file) => {
           const Icon = getFileIcon(file.file_type);
           const isReprocessing = reprocessFileMutation.isPending && reprocessFileMutation.variables === file.id;
+          const qualityStatus = file.text_quality_status as TextQualityStatus | null;
+          const qualityInfo = qualityStatus ? TEXT_QUALITY_LABELS[qualityStatus] : null;
+          const docTypeLabel = DOCUMENT_TYPE_LABELS[file.document_classification || file.document_type || ''] || null;
+          
           return (
             <div key={file.id} className="p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors">
               <div className="flex items-start gap-3">
@@ -511,16 +515,48 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-medium truncate">{file.file_name}</p>
                     {getClassificationBadge(file.document_classification, file.classification_confidence)}
+                    {file.is_scanned && (
+                      <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-500 border-amber-500/30">
+                        <ScanLine className="h-3 w-3 mr-1" /> OCR
+                      </Badge>
+                    )}
+                    {file.ready_for_analysis === true && (
+                      <Badge variant="outline" className="text-xs bg-green-500/10 text-green-500 border-green-500/30">
+                        <CheckCircle2 className="h-3 w-3 mr-1" /> Ready
+                      </Badge>
+                    )}
+                    {file.ready_for_analysis === false && file.processed_by_darwin && (
+                      <Badge variant="outline" className="text-xs bg-red-500/10 text-red-500 border-red-500/30">
+                        <XCircle className="h-3 w-3 mr-1" /> Blocked
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
                     {formatFileSize(file.file_size || 0)} •{" "}
                     {new Date(file.uploaded_at).toLocaleDateString()}
-                    {file.classification_metadata && typeof file.classification_metadata === 'object' && 'summary' in file.classification_metadata && (
-                      <span className="ml-2 text-muted-foreground">
-                        • {String((file.classification_metadata as Record<string, unknown>).summary)}
-                      </span>
+                    {docTypeLabel && <span className="ml-1">• {docTypeLabel}</span>}
+                    {file.document_subtype && <span className="ml-1 opacity-70">({file.document_subtype.replace(/_/g, ' ')})</span>}
+                    {qualityInfo && <span className={`ml-1 ${qualityInfo.color}`}>• Text: {qualityInfo.label}</span>}
+                    {file.extraction_method && file.extraction_method !== 'none' && (
+                      <span className="ml-1 opacity-70">• {file.extraction_method.replace(/_/g, ' ')}</span>
                     )}
+                    {file.page_count && <span className="ml-1">• {file.page_count}p</span>}
                   </p>
+                  {file.document_summary && (
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1 italic">
+                      {file.document_summary}
+                    </p>
+                  )}
+                  {file.processing_error && (
+                    <p className="text-xs text-destructive mt-0.5 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" /> {file.processing_error}
+                    </p>
+                  )}
+                  {file.needs_reprocessing && !file.processing_error && (
+                    <p className="text-xs text-amber-500 mt-0.5 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" /> Needs reprocessing
+                    </p>
+                  )}
                   <div className="flex gap-2 mt-2 flex-wrap">
                     <Button variant="outline" size="sm" onClick={() => handleView(file)}>
                       <Eye className="h-3 w-3 mr-1" /> View
