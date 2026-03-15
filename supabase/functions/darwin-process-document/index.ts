@@ -327,6 +327,39 @@ Deno.serve(async (req) => {
 
         // Persist extracted_text to claim_files so it's always available
         if (textContent && textContent.length > 50 && !textContent.startsWith('[PDF Document')) {
+          // Run garbage detection before persisting
+          if (isGarbageText(textContent)) {
+            console.warn(`[TextExtract] isGarbageText=true for ${file.file_name}, marking unusable`);
+            await supabase
+              .from('claim_files')
+              .update({
+                extracted_text: textContent.substring(0, 100000),
+                extraction_method: extractionMethod,
+                text_quality_status: 'unusable',
+                is_scanned: isScanned,
+                ready_for_analysis: false,
+                needs_reprocessing: true,
+                processing_error: 'Extracted text detected as garbage/binary data',
+                processed_at: new Date().toISOString(),
+                processed_by_darwin: true,
+                darwin_processed_at: new Date().toISOString(),
+              })
+              .eq('id', fileId);
+
+            console.log(`[DocProcessed] file_id=${fileId} file_name=${file.file_name} extraction_method=${extractionMethod} text_quality=unusable is_scanned=${isScanned} ready_for_analysis=false document_type=unknown document_subtype=none reason=garbage_text`);
+
+            return new Response(
+              JSON.stringify({
+                success: true,
+                classification: 'other',
+                confidence: 0,
+                method: 'garbage_text_detected',
+                processing_error: 'Extracted text detected as garbage/binary data',
+              }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
           await supabase
             .from('claim_files')
             .update({ extracted_text: textContent.substring(0, 100000) })
