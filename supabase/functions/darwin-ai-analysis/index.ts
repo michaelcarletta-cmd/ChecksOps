@@ -4367,6 +4367,27 @@ ${darwinNotes ? `IMPORTANT USER-PROVIDED CONTEXT NOTES:
 ${darwinNotes}` : ''}
 `;
 
+    // ── PHASE 2: Engineer rebuttal blocking gate ──
+    // If no usable engineer intelligence AND all relevant source files are blocked, return 422
+    if (analysisType === 'engineer_report_rebuttal' && intelligenceSupported) {
+      const usableEngineerIntel = relevantIntelligenceRows.find(
+        (row: any) => String(row.document_type || "") === "engineering_report"
+      );
+      if (!usableEngineerIntel && readinessAudit.blockedFileIds.length > 0) {
+        console.log(`[darwin][intel] Engineer rebuttal BLOCKED — no usable engineer intelligence and ${readinessAudit.blockedFileIds.length} files not ready`);
+        return new Response(
+          JSON.stringify({
+            error: "Engineer rebuttal blocked: no reliable engineering report source is ready for analysis.",
+            blocked_file_ids: readinessAudit.blockedFileIds,
+            degraded_file_ids: readinessAudit.degradedFileIds,
+            analysisType,
+            intelligence_diagnostics: intelligenceDiagnostics,
+          }),
+          { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     switch (analysisType) {
       case 'denial_rebuttal': {
         // Search multiple knowledge base categories for comprehensive coverage
