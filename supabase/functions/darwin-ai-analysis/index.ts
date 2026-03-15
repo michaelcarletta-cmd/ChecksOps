@@ -323,27 +323,97 @@ interface EngineerReportSourceResolution {
   usedEngineerReportText: boolean;
 }
 
+function isGarbageText(text: string): boolean {
+  // Detect binary/garbled text that was incorrectly stored as extracted_text
+  if (!text || text.length < 100) return false;
+  const sample = text.substring(0, 2000);
+  
+  // Strategy 1: Check ratio of non-ASCII characters (binary data decoded as latin1 has many)
+  let nonAscii = 0;
+  let controlChars = 0;
+  for (let i = 0; i < sample.length; i++) {
+    const code = sample.charCodeAt(i);
+    if (code < 32 && code !== 9 && code !== 10 && code !== 13) controlChars++;
+    if (code > 126) nonAscii++;
+  }
+  const nonAsciiRatio = nonAscii / sample.length;
+  const controlRatio = controlChars / sample.length;
+  // If more than 25% non-ASCII or more than 5% control chars, likely binary
+  if (nonAsciiRatio > 0.25) return true;
+  if (controlRatio > 0.05) return true;
+  
+  // Strategy 2: Check word density — real text has spaces and recognizable words
+  const words = sample.split(/\s+/).filter(w => w.length > 0);
+  const avgWordLen = words.length > 0 ? sample.replace(/\s+/g, '').length / words.length : 999;
+  // Binary garbage tends to have very long "words" (no spaces) or very few words
+  if (words.length < 10 && sample.length > 500) return true;
+  if (avgWordLen > 30) return true;
+  
+  // Strategy 3: PDF binary markers
+  if (sample.includes('obj') && sample.includes('endobj') && sample.includes('stream')) return true;
+  
+  return false;
+}
+
 function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceTextParams): EngineerReportSourceResolution {
   const directContent = String(params.content || '').trim();
   const explicitPdfText = String(params.pdfExtractedText || '').trim();
   const uploadedEngineerText = String(params.uploadedEngineerReportText || '').trim();
 
-  const fileDerivedText = (Array.isArray(params.fullClaimFiles) ? params.fullClaimFiles : [])
-    .filter((file: any) => {
-      const classification = String(file?.document_classification || '').toLowerCase();
-      const fileName = String(file?.file_name || '').toLowerCase();
-      return classification.includes('engineering_report') || fileName.includes('engineer');
+  // ── Aggressive file-based resolution ──
+  // Search claim files in priority tiers, preferring files with the most extracted text.
+  const allFiles = Array.isArray(params.fullClaimFiles) ? params.fullClaimFiles : [];
+
+  // Tier 1: classified as engineering_report
+  // Tier 2: filename contains engineer/engineering
+  // Tier 3: filename contains 'full report' or 'report' (common for Envista / third-party reports)
+  const isEngineerFile = (file: any): { match: boolean; tier: number } => {
+    const classification = String(file?.document_classification || '').toLowerCase();
+    const fileName = String(file?.file_name || '').toLowerCase();
+    if (classification.includes('engineering_report')) return { match: true, tier: 1 };
+    if (fileName.includes('engineer')) return { match: true, tier: 2 };
+    if (fileName.includes('full report')) return { match: true, tier: 3 };
+    // Only match generic 'report' if it looks like a PDF report (not photos, contracts, etc.)
+    if (fileName.includes('report') && (fileName.endsWith('.pdf') || fileName.endsWith('.doc') || fileName.endsWith('.docx'))) return { match: true, tier: 4 };
+    return { match: false, tier: 99 };
+  };
+
+  const candidateFiles = allFiles
+    .map((file: any) => {
+      const check = isEngineerFile(file);
+      const rawText = String(file?.extracted_text || '').trim();
+      const textLen = rawText.length;
+      const garbage = isGarbageText(rawText);
+      if (garbage) {
+        console.log(`[darwin][resolveEngineerSource] Skipping "${file?.file_name}" — garbage/binary text detected (${textLen} chars)`);
+      }
+      return { file, tier: check.tier, matched: check.match, textLen: garbage ? 0 : textLen };
     })
-    .map((file: any) => String(file?.extracted_text || '').trim())
-    .filter(Boolean)
-    .join('\n\n')
-    .trim();
+    .filter((c) => c.matched && c.textLen > 0)
+    // Sort by tier first (lower = better), then by text length descending (prefer longest text)
+    .sort((a, b) => a.tier - b.tier || b.textLen - a.textLen);
+
+  const bestFileCandidate = candidateFiles.length > 0 ? candidateFiles[0] : null;
+  const fileDerivedText = bestFileCandidate
+    ? String(bestFileCandidate.file.extracted_text || '').trim()
+    : '';
+
+  if (bestFileCandidate) {
+    console.log(`[darwin][resolveEngineerSource] Best file candidate: "${bestFileCandidate.file.file_name}" (tier=${bestFileCandidate.tier}, classification="${bestFileCandidate.file.document_classification}", textLen=${bestFileCandidate.textLen})`);
+    if (candidateFiles.length > 1) {
+      console.log(`[darwin][resolveEngineerSource] ${candidateFiles.length} total candidates: ${candidateFiles.map(c => `"${c.file.file_name}"(tier=${c.tier},len=${c.textLen})`).join(', ')}`);
+    }
+  } else {
+    const allWithText = allFiles.filter((f: any) => String(f?.extracted_text || '').trim().length > 500);
+    console.log(`[darwin][resolveEngineerSource] No engineer file candidates found. Files with text>500: ${allWithText.length}. All files: ${allFiles.map((f: any) => `"${f.file_name}"(cls=${f.document_classification},len=${String(f?.extracted_text||'').trim().length})`).join(', ')}`);
+  }
 
   const additionalContextText = String(
     params.additionalContext?.userContext || params.additionalContext?.customPrompt || ''
   ).trim();
 
-  if (explicitPdfText) {
+  // Priority: explicit PDF text > uploaded engineer text > file-derived text > content > context
+  if (explicitPdfText && explicitPdfText.length >= 500) {
     return {
       text: explicitPdfText,
       sourceOrigin: 'pdf_extracted_text',
@@ -351,7 +421,7 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
     };
   }
 
-  if (uploadedEngineerText) {
+  if (uploadedEngineerText && uploadedEngineerText.length >= 500) {
     return {
       text: uploadedEngineerText,
       sourceOrigin: 'uploaded_engineer_report_text',
@@ -359,12 +429,23 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
     };
   }
 
-  if (fileDerivedText) {
+  if (fileDerivedText && fileDerivedText.length >= 500) {
     return {
       text: fileDerivedText,
       sourceOrigin: 'file_extracted_text',
       usedEngineerReportText: true,
     };
+  }
+
+  // Fallback: if explicit PDF or uploaded text exists but is short, still use it
+  if (explicitPdfText) {
+    return { text: explicitPdfText, sourceOrigin: 'pdf_extracted_text', usedEngineerReportText: true };
+  }
+  if (uploadedEngineerText) {
+    return { text: uploadedEngineerText, sourceOrigin: 'uploaded_engineer_report_text', usedEngineerReportText: true };
+  }
+  if (fileDerivedText) {
+    return { text: fileDerivedText, sourceOrigin: 'file_extracted_text', usedEngineerReportText: true };
   }
 
   if (directContent) {
@@ -9068,10 +9149,26 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     console.error('Darwin AI Analysis error:', error);
     const errorMessage = String(error?.message || 'Unknown error');
     const isLowSlopeForbiddenError = errorMessage.includes('LOW_SLOPE_MEMBRANE generation failed due to forbidden term');
+    const isEngineerSourceBlockedError = errorMessage.includes('Engineer rebuttal blocked');
+
+    const statusCode = (isLowSlopeForbiddenError || isEngineerSourceBlockedError) ? 422 : 500;
+
+    const errorPayload: any = { error: errorMessage };
+    if (isEngineerSourceBlockedError) {
+      errorPayload.scenario_diagnostics = {
+        analysisType: 'engineer_report_rebuttal',
+        sourceTextOrigin: 'none',
+        sourceTextLength: 0,
+        usedEngineerReportText: false,
+        primaryScenario: null,
+        rulePackLoaded: 'NONE_SOURCE_BLOCKED',
+        reason: 'No usable engineer report text found in claim files, content, or uploaded text.',
+      };
+    }
 
     return new Response(
-      JSON.stringify({ error: errorMessage }),
-      { status: isLowSlopeForbiddenError ? 422 : 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify(errorPayload),
+      { status: statusCode, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });

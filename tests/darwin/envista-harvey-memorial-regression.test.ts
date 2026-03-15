@@ -1193,3 +1193,147 @@ The engineer's methodology was fundamentally inadequate for a low-slope membrane
     expect(enforcedWithMandatorySections).toMatch(/has not scientifically proven their conclusion and the causation statement is therefore speculative/i);
   });
 });
+
+// ─── Resolver fallback regression: file with wrong classification but real text ─
+describe("resolveEngineerReportSourceText — file classification fallback", () => {
+
+  // Inline mirror of the resolver logic for testing
+  function isGarbageText(text: string): boolean {
+    if (!text || text.length < 100) return false;
+    const sample = text.substring(0, 2000);
+    let nonAscii = 0;
+    let controlChars = 0;
+    for (let i = 0; i < sample.length; i++) {
+      const code = sample.charCodeAt(i);
+      if (code < 32 && code !== 9 && code !== 10 && code !== 13) controlChars++;
+      if (code > 126) nonAscii++;
+    }
+    if (nonAscii / sample.length > 0.25) return true;
+    if (controlChars / sample.length > 0.05) return true;
+    const words = sample.split(/\s+/).filter(w => w.length > 0);
+    const avgWordLen = words.length > 0 ? sample.replace(/\s+/g, '').length / words.length : 999;
+    if (words.length < 10 && sample.length > 500) return true;
+    if (avgWordLen > 30) return true;
+    if (sample.includes('obj') && sample.includes('endobj') && sample.includes('stream')) return true;
+    return false;
+  }
+
+  type SourceOrigin = 'pdf_extracted_text' | 'uploaded_engineer_report_text' | 'file_extracted_text' | 'content' | 'additional_context' | 'none';
+
+  interface Resolution {
+    text: string;
+    sourceOrigin: SourceOrigin;
+    usedEngineerReportText: boolean;
+  }
+
+  function resolveEngineerReportSourceText(params: {
+    content?: string;
+    pdfExtractedText?: string;
+    uploadedEngineerReportText?: string;
+    additionalContext?: any;
+    fullClaimFiles?: any[];
+  }): Resolution {
+    const directContent = String(params.content || '').trim();
+    const explicitPdfText = String(params.pdfExtractedText || '').trim();
+    const uploadedEngineerText = String(params.uploadedEngineerReportText || '').trim();
+
+    const allFiles = Array.isArray(params.fullClaimFiles) ? params.fullClaimFiles : [];
+
+    const isEngineerFile = (file: any): { match: boolean; tier: number } => {
+      const classification = String(file?.document_classification || '').toLowerCase();
+      const fileName = String(file?.file_name || '').toLowerCase();
+      if (classification.includes('engineering_report')) return { match: true, tier: 1 };
+      if (fileName.includes('engineer')) return { match: true, tier: 2 };
+      if (fileName.includes('full report')) return { match: true, tier: 3 };
+      if (fileName.includes('report') && (fileName.endsWith('.pdf') || fileName.endsWith('.doc') || fileName.endsWith('.docx'))) return { match: true, tier: 4 };
+      return { match: false, tier: 99 };
+    };
+
+    const candidateFiles = allFiles
+      .map((file: any) => {
+        const check = isEngineerFile(file);
+        const rawText = String(file?.extracted_text || '').trim();
+        const textLen = rawText.length;
+        const garbage = isGarbageText(rawText);
+        return { file, tier: check.tier, matched: check.match, textLen: garbage ? 0 : textLen };
+      })
+      .filter((c) => c.matched && c.textLen > 0)
+      .sort((a, b) => a.tier - b.tier || b.textLen - a.textLen);
+
+    const bestFileCandidate = candidateFiles.length > 0 ? candidateFiles[0] : null;
+    const fileDerivedText = bestFileCandidate ? String(bestFileCandidate.file.extracted_text || '').trim() : '';
+
+    if (explicitPdfText && explicitPdfText.length >= 500) {
+      return { text: explicitPdfText, sourceOrigin: 'pdf_extracted_text', usedEngineerReportText: true };
+    }
+    if (uploadedEngineerText && uploadedEngineerText.length >= 500) {
+      return { text: uploadedEngineerText, sourceOrigin: 'uploaded_engineer_report_text', usedEngineerReportText: true };
+    }
+    if (fileDerivedText && fileDerivedText.length >= 500) {
+      return { text: fileDerivedText, sourceOrigin: 'file_extracted_text', usedEngineerReportText: true };
+    }
+    if (explicitPdfText) return { text: explicitPdfText, sourceOrigin: 'pdf_extracted_text', usedEngineerReportText: true };
+    if (uploadedEngineerText) return { text: uploadedEngineerText, sourceOrigin: 'uploaded_engineer_report_text', usedEngineerReportText: true };
+    if (fileDerivedText) return { text: fileDerivedText, sourceOrigin: 'file_extracted_text', usedEngineerReportText: true };
+    if (directContent) return { text: directContent, sourceOrigin: 'content', usedEngineerReportText: false };
+    return { text: '', sourceOrigin: 'none', usedEngineerReportText: false };
+  }
+
+  const LONG_MEMBRANE_TEXT = `The engineering firm conducted an inspection of the low-slope membrane roof system at the subject property. Upon examination, the membrane shows signs of ponding water, snow accumulation damage, and freeze-thaw cycling effects. The drainage capacity of the roof was not measured. No membrane core cuts were performed. No seam adhesion or peel testing was conducted. The inspector concluded that deterioration and deferred maintenance are the primary causes. ${"x".repeat(600)}`;
+
+  it("picks the file with real extracted text over a classified file with null text", () => {
+    const result = resolveEngineerReportSourceText({
+      fullClaimFiles: [
+        { file_name: "Engineer Report.pdf", document_classification: "engineering_report", extracted_text: null },
+        { file_name: "Full Report - 1245 Wynnewood Dr.pdf", document_classification: "other", extracted_text: LONG_MEMBRANE_TEXT },
+      ],
+    });
+
+    expect(result.sourceOrigin).toBe('file_extracted_text');
+    expect(result.usedEngineerReportText).toBe(true);
+    expect(result.text.length).toBeGreaterThan(500);
+    expect(result.text).toContain('low-slope membrane');
+  });
+
+  it("picks the classified file when it HAS text, even if another file has more text", () => {
+    const result = resolveEngineerReportSourceText({
+      fullClaimFiles: [
+        { file_name: "Engineer Report.pdf", document_classification: "engineering_report", extracted_text: LONG_MEMBRANE_TEXT },
+        { file_name: "Full Report - 1245 Wynnewood Dr.pdf", document_classification: "other", extracted_text: LONG_MEMBRANE_TEXT + LONG_MEMBRANE_TEXT },
+      ],
+    });
+
+    // Tier 1 (classified) wins over tier 3 (filename match)
+    expect(result.sourceOrigin).toBe('file_extracted_text');
+    expect(result.text).toBe(LONG_MEMBRANE_TEXT);
+  });
+
+  it("rejects garbage/binary text and falls through", () => {
+    const garbageText = "có *«žE-V…$S0G&÷ˆè{Ô2ÄLì(Á\"®Ê'Å\nˆ¾^;U\\¿ŒðFpGó¥nÃ9o‰eÁw¡ö®¯©Þ+Á#€Í<6'¯ï¦•cÃ<\"Þ½«âÍêG¢Ãi!EžyQ'{¸^oáÛ7ŠtŒDÆ.ö?î÷£›@µÙíZ¬±^,3I²@˜2*ãw;WC²]êXîeèzV—Ã­ÞG$ÀJ»pº ©ÍŸ¼(¦ŸÄÅPOç‡(¥öñÀ1ê*=ZÍ/ç†«#Ã\"ç*ÞêzVt34r¯Ì\nÈ@—Œ{Õù­ó¨4–áâ–/œ:¸epvü§¿JéIÞçÏ5Ôôù´½A¢i$IÄ¤&Ò@9<ïZZ'ˆâ°›Ï¾„\"¸$«à•e¹ëïZ" + "x".repeat(500);
+
+    const result = resolveEngineerReportSourceText({
+      fullClaimFiles: [
+        { file_name: "Full Report - property.pdf", document_classification: "other", extracted_text: garbageText },
+      ],
+    });
+
+    expect(result.sourceOrigin).toBe('none');
+    expect(result.usedEngineerReportText).toBe(false);
+  });
+
+  it("resolver + dismantler detects low_slope_snow_ice_ponding from file-derived text", () => {
+    const result = resolveEngineerReportSourceText({
+      content: "generic wind damage claim",
+      fullClaimFiles: [
+        { file_name: "Engineer Report.pdf", document_classification: "engineering_report", extracted_text: null },
+        { file_name: "Full Report - address.pdf", document_classification: "other", extracted_text: LONG_MEMBRANE_TEXT },
+      ],
+    });
+
+    expect(result.sourceOrigin).toBe('file_extracted_text');
+
+    // Run dismantler on the resolved text
+    const dismantler = runEngineerReportDismantler(result.text);
+    expect(dismantler.primaryScenario).toBe('low_slope_snow_ice_ponding');
+  });
+});
