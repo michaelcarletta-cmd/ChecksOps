@@ -325,22 +325,33 @@ interface EngineerReportSourceResolution {
 
 function isGarbageText(text: string): boolean {
   // Detect binary/garbled text that was incorrectly stored as extracted_text
-  // Check ratio of non-printable or high-byte characters
   if (!text || text.length < 100) return false;
   const sample = text.substring(0, 2000);
-  let nonPrintable = 0;
+  
+  // Strategy 1: Check ratio of non-ASCII characters (binary data decoded as latin1 has many)
+  let nonAscii = 0;
+  let controlChars = 0;
   for (let i = 0; i < sample.length; i++) {
     const code = sample.charCodeAt(i);
-    // Count chars outside normal printable ASCII + common Unicode
-    if ((code < 32 && code !== 9 && code !== 10 && code !== 13) || (code >= 127 && code <= 159) || code > 8000) {
-      nonPrintable++;
-    }
+    if (code < 32 && code !== 9 && code !== 10 && code !== 13) controlChars++;
+    if (code > 126) nonAscii++;
   }
-  const ratio = nonPrintable / sample.length;
-  // If more than 15% is garbage chars, it's binary data stored as text
-  if (ratio > 0.15) return true;
-  // Also check for common PDF binary markers in "text"
+  const nonAsciiRatio = nonAscii / sample.length;
+  const controlRatio = controlChars / sample.length;
+  // If more than 25% non-ASCII or more than 5% control chars, likely binary
+  if (nonAsciiRatio > 0.25) return true;
+  if (controlRatio > 0.05) return true;
+  
+  // Strategy 2: Check word density — real text has spaces and recognizable words
+  const words = sample.split(/\s+/).filter(w => w.length > 0);
+  const avgWordLen = words.length > 0 ? sample.replace(/\s+/g, '').length / words.length : 999;
+  // Binary garbage tends to have very long "words" (no spaces) or very few words
+  if (words.length < 10 && sample.length > 500) return true;
+  if (avgWordLen > 30) return true;
+  
+  // Strategy 3: PDF binary markers
   if (sample.includes('obj') && sample.includes('endobj') && sample.includes('stream')) return true;
+  
   return false;
 }
 
