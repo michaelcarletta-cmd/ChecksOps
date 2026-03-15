@@ -1561,7 +1561,8 @@ function polishFinalEngineerRebuttal(
     updated = enforceLowSlopeRebuttalRequirements(
       updated,
       context.primaryScenario,
-      buildLowSlopeSupportCorpus(context.engineerStatedCause || '')
+      buildLowSlopeSupportCorpus(context.engineerStatedCause || ''),
+      analysisType,
     );
     // Do NOT force opening sentence into formal letters
     updated = enforceEngineerRebuttalLowSlopeOpening(updated, context.primaryScenario, analysisType);
