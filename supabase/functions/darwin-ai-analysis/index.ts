@@ -2826,87 +2826,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    const extractEngineerTextFromPdfViaVision = async (base64Pdf: string, fileName: string): Promise<string> => {
-      if (!base64Pdf) return '';
-
-      const ocrModelChain = ['google/gemini-3-flash-preview', 'google/gemini-2.5-flash'];
-      for (const model of ocrModelChain) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), MODEL_REQUEST_TIMEOUT_MS);
-
-        try {
-          console.log(`[darwin][engineer-ocr] Trying OCR fallback with ${model} for ${fileName}`);
-
-          const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model,
-              temperature: 0,
-              max_tokens: 6000,
-              messages: [
-                {
-                  role: 'system',
-                  content: 'You are an OCR engine. Extract readable text from the provided engineering report PDF. Return plain text only, no markdown, no commentary.',
-                },
-                {
-                  role: 'user',
-                  content: [
-                    {
-                      type: 'image_url',
-                      image_url: {
-                        url: `data:application/pdf;base64,${base64Pdf}`,
-                      },
-                    },
-                    {
-                      type: 'text',
-                      text: 'Extract the most important readable body text from the report, including findings, methodology, causation statements, and conclusions. Return only OCR text.',
-                    },
-                  ],
-                },
-              ],
-            }),
-            signal: controller.signal,
-          });
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.warn(`[darwin][engineer-ocr] ${model} HTTP ${response.status}: ${errorText.substring(0, 180)}`);
-            continue;
-          }
-
-          const aiData = await response.json();
-          const messageContent = aiData?.choices?.[0]?.message?.content;
-          const rawText = Array.isArray(messageContent)
-            ? messageContent.filter((part: any) => part?.type === 'text' && part?.text).map((part: any) => part.text).join('\n')
-            : String(messageContent || '');
-
-          const extractedText = stripCodeFence(rawText).trim();
-          if (!extractedText || extractedText.length < 500) {
-            console.warn(`[darwin][engineer-ocr] ${model} returned insufficient OCR text (${extractedText.length} chars)`);
-            continue;
-          }
-
-          if (isGarbageText(extractedText)) {
-            console.warn(`[darwin][engineer-ocr] ${model} OCR output still appears garbled (${extractedText.length} chars)`);
-            continue;
-          }
-
-          console.log(`[darwin][engineer-ocr] OCR fallback succeeded with ${model} (${extractedText.length} chars)`);
-          return extractedText;
-        } catch (ocrError) {
-          const isTimeout = ocrError instanceof Error && ocrError.name === 'AbortError';
-          console.warn(`[darwin][engineer-ocr] ${model} failed (${isTimeout ? 'timeout' : 'error'})`, ocrError);
-        } finally {
-          clearTimeout(timeoutId);
-        }
-      }
-
-      return '';
-    };
+    // OCR fallback removed — was causing out-of-memory crashes in edge functions.
+    // Engineer report text should come from the document intelligence pipeline (clean_text / extracted_text).
 
     // For engineer_report_rebuttal, pre-extract text so the resolver can run scenario detection.
     // If native extraction is garbled (common with scanned/encoded PDFs), fall back to OCR via multimodal model.
@@ -2926,11 +2847,7 @@ Deno.serve(async (req) => {
       }
 
       if (!additionalContext.pdfExtractedText) {
-        const ocrFallbackText = await extractEngineerTextFromPdfViaVision(pdfContent, pdfFileName || 'document.pdf');
-        if (ocrFallbackText && ocrFallbackText.length >= 500) {
-          additionalContext.pdfExtractedText = ocrFallbackText;
-          console.log(`[darwin] Stored OCR fallback text for engineer resolver (${ocrFallbackText.length} chars)`);
-        }
+        console.warn('[darwin] No usable text from native extraction — engineer report may need re-processing via document intelligence pipeline');
       }
     }
 
@@ -4237,25 +4154,6 @@ Be specific, professional, and provide communications that are ready to copy and
         });
 
         let engineerTextForDismantler = engineerSourceResolution.text;
-        if ((!engineerTextForDismantler || engineerTextForDismantler.trim().length < 500) && pdfContent) {
-          const lastChanceOcrText = await extractEngineerTextFromPdfViaVision(pdfContent, pdfFileName || 'document.pdf');
-          if (lastChanceOcrText && lastChanceOcrText.length >= 500) {
-            additionalContext.pdfExtractedText = lastChanceOcrText;
-            engineerSourceResolution = resolveEngineerReportSourceText({
-              content,
-              pdfExtractedText: String(additionalContext?.pdfExtractedText || additionalContext?.documentContentSection || ''),
-              uploadedEngineerReportText: String(
-                additionalContext?.engineerReportText
-                || additionalContext?.uploadedEngineerReportText
-                || ''
-              ),
-              additionalContext,
-              fullClaimFiles,
-            });
-            engineerTextForDismantler = engineerSourceResolution.text;
-            console.log(`[darwin][resolveEngineerSource] Last-chance OCR fallback supplied usable text (${engineerTextForDismantler.length} chars)`);
-          }
-        }
 
         if (!engineerTextForDismantler || engineerTextForDismantler.trim().length < 500) {
           throw new Error('Engineer rebuttal blocked: no usable engineer report text was found for scenario detection.');
