@@ -10561,6 +10561,9 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       strategicPipelineApplied: STRATEGIC_PIPELINE_TYPES.includes(analysisType),
     };
     endStep(responseBuildStep, 'completed', `durationMs=${responsePayload.processingMetrics.totalDurationMs}`);
+    console.log(
+      `[darwin][intel-final] analysisType=${analysisType} loaded=${documentIntelligenceRows.length} relevant=${relevantIntelligenceRows.length} blocked=${readinessAudit.blockedFileIds.length} degraded=${readinessAudit.degradedFileIds.length}`
+    );
     return new Response(
       JSON.stringify(responsePayload),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
