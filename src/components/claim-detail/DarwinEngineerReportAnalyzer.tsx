@@ -228,10 +228,33 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        const details = await getFunctionErrorDetails(error, "Failed to analyze engineer report");
+        console.error("Engineer report analysis blocked", {
+          status: details.status,
+          scenarioDiagnostics: details.scenarioDiagnostics,
+          violations: details.violations,
+          payload: details.payload,
+        });
+
+        const violationText = details.violations?.length
+          ? ` Violations: ${details.violations.join(", ")}.`
+          : "";
+        throw new Error(`${details.message}${violationText}`.trim());
+      }
 
       if (data?.error) {
-        throw new Error(data.error);
+        const payloadViolations = Array.isArray((data as any).violations)
+          ? (data as any).violations.filter((item: unknown) => typeof item === 'string')
+          : [];
+        const violationText = payloadViolations.length
+          ? ` Violations: ${payloadViolations.join(", ")}.`
+          : "";
+        throw new Error(`${data.error}${violationText}`.trim());
+      }
+
+      if (!data?.result || typeof data.result !== 'string') {
+        throw new Error('No rebuttal returned. The response was blocked before delivery.');
       }
 
       setAnalysis(data.result);
