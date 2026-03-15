@@ -104,10 +104,12 @@ Deno.serve(async (req) => {
           const fileType = file.file_type || '';
           if (fileType.includes('text') || file.file_name.endsWith('.txt')) {
             textContent = await fileBlob.text();
+            extractionMethod = 'native_text';
           } else if (fileType.includes('pdf')) {
             // Attempt PDF text extraction via raw bytes
             const pdfBytes = new Uint8Array(await fileBlob.arrayBuffer());
             textContent = extractPdfText(pdfBytes);
+            extractionMethod = 'pdf_native';
             console.log(`[TextExtract] PDF raw text extraction: ${textContent.length} chars for ${file.file_name}`);
 
             // If PDF text extraction yields < 300 chars, use OCR via vision AI
@@ -116,9 +118,23 @@ Deno.serve(async (req) => {
               const ocrText = await ocrViaVision(pdfBytes, file.file_name);
               if (ocrText && ocrText.length > textContent.length) {
                 textContent = ocrText;
+                extractionMethod = 'ocr_vision';
+                isScanned = true;
                 console.log(`[TextExtract] OCR yielded ${textContent.length} chars for ${file.file_name}`);
               }
             }
+          } else if (fileType.includes('word') || /\.(docx?)$/i.test(file.file_name)) {
+            // Word document extraction
+            const docBytes = new Uint8Array(await fileBlob.arrayBuffer());
+            const rawText = new TextDecoder("utf-8", { fatal: false }).decode(docBytes);
+            const xmlTextMatches = rawText.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
+            if (xmlTextMatches) {
+              textContent = xmlTextMatches.map((m: string) => m.replace(/<[^>]+>/g, "")).join(" ");
+            } else {
+              textContent = rawText.replace(/[^\x20-\x7E\n\r\t]/g, " ").replace(/\s{3,}/g, " ").trim();
+            }
+            extractionMethod = 'docx_xml';
+            console.log(`[TextExtract] DOCX extraction: ${textContent.length} chars for ${file.file_name}`);
           } else if (/\.(png|jpg|jpeg|webp|gif|bmp|tiff?)$/i.test(file.file_name)) {
             // Image files: OCR via vision
             console.log(`[TextExtract] Image file, attempting OCR via vision for ${file.file_name}`);
@@ -126,6 +142,8 @@ Deno.serve(async (req) => {
             const ocrText = await ocrViaVision(imgBytes, file.file_name);
             if (ocrText) {
               textContent = ocrText;
+              extractionMethod = 'ocr_vision';
+              isScanned = true;
               console.log(`[TextExtract] OCR yielded ${textContent.length} chars for ${file.file_name}`);
             }
           }
