@@ -505,6 +505,51 @@ Deno.serve(async (req) => {
         .update(updatePayload)
         .eq('id', fileId);
 
+      // === VIRTUAL SEGMENT STORAGE ===
+      if (fileId) {
+        if (segmentationResult.has_segments) {
+          await supabase
+            .from('claim_file_segments')
+            .delete()
+            .eq('file_id', fileId);
+
+          const segmentRows = segmentationResult.segments.map((segment) => ({
+            claim_id: targetClaimId,
+            file_id: fileId,
+            segment_index: segment.segment_index,
+            segment_label: segment.segment_label,
+            start_page: segment.start_page,
+            end_page: segment.end_page,
+            text_excerpt: segment.text_excerpt,
+            extracted_text: segment.extracted_text.substring(0, 100000),
+            clean_text: segment.clean_text.substring(0, 100000),
+            segment_classification: segment.segment_classification,
+            classification_confidence: segment.classification_confidence,
+            classification_candidates: segment.classification_candidates,
+            classification_reasoning: segment.classification_reasoning,
+            review_required: segment.review_required,
+            automation_safe: segment.automation_safe,
+            document_family: segment.document_family,
+            source_method: 'virtual_segmentation',
+          }));
+
+          const { error: segmentError } = await supabase
+            .from('claim_file_segments')
+            .insert(segmentRows);
+
+          if (segmentError) {
+            console.error('[Segmentation] Failed to store segments:', segmentError.message);
+          } else {
+            console.log(`[Segmentation] Stored ${segmentRows.length} virtual segments for file ${fileId}`);
+          }
+        } else {
+          await supabase
+            .from('claim_file_segments')
+            .delete()
+            .eq('file_id', fileId);
+        }
+      }
+
       // Log review-required classifications
       if (targetClaimId && (finalReviewRequired || finalMixed)) {
         await supabase
