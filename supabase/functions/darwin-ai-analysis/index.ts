@@ -2654,6 +2654,7 @@ Deno.serve(async (req) => {
     let engineerRebuttalPrimaryScenario: string | null = null;
     let engineerRebuttalSecondaryScenarios: string[] = [];
     let engineerRebuttalStatedCause = '';
+    let engineerRebuttalCausationQuote = '';
     let engineerRebuttalTheorySentences: string[] = [];
     let engineerRebuttalCriticalTestingNotPerformed: string[] = [];
     let engineerRebuttalReportText = '';
