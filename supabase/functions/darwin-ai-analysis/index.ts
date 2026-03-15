@@ -4322,7 +4322,12 @@ If a source file is marked ready_for_analysis=false, do not treat that file as r
       p.ai_condition_rating === 'Poor' || p.ai_condition_rating === 'Failed'
     )?.length || 0;
 
-    const claimSummary = claimFactsPackContext + documentIntelligenceContext + `
+    const intelligencePriorityBlock = intelligenceSupported && relevantIntelligenceRows.length > 0
+      ? INTELLIGENCE_PRIORITY_INSTRUCTION
+      : '';
+    const readinessWarningBlock = readinessAudit.warningText ? readinessAudit.warningText + '\n\n' : '';
+
+    const claimSummary = claimFactsPackContext + intelligencePriorityBlock + readinessWarningBlock + documentIntelligenceContext + `
 CLAIM DETAILS:
 - Claim Number: ${claim.claim_number || 'N/A'}
 - Policy Number: ${claim.policy_number || 'N/A'}
