@@ -412,6 +412,7 @@ Deno.serve(async (req) => {
             is_scanned: isScanned,
             ready_for_analysis: false,
             needs_reprocessing: true,
+            processing_error: 'No readable text extracted from file',
             processed_at: new Date().toISOString(),
           })
           .eq('id', fileId);
