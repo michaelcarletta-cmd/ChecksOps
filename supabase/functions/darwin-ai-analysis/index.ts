@@ -4579,6 +4579,17 @@ Never invent measurements, tests, or observations that are not in evidence.`;
         // Always inject dismantler findings
         systemPrompt += '\n' + dismantlerExtraction.promptInjection;
 
+        // Inject Engineer Stumper universal rules and scenario-specific standards
+        systemPrompt += '\n' + buildEngineerStumperUniversalRules(primarySc || null, stateInfo);
+        systemPrompt += '\n' + buildEngineerStumperStandardsBank(primarySc || null);
+
+        // Inject scenario-specific must-answer questions into system prompt
+        const engineerQuestions = buildEngineerMustAnswerQuestions(primarySc || null);
+        systemPrompt += `\n\n=== QUESTIONS THE ENGINEER MUST ANSWER (MANDATORY SECTION) ===
+Include a section titled exactly "Questions the Engineer Must Answer" with these numbered questions:
+${engineerQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
+These questions must be short, aggressive, and technical. No fluff.\n`;
+
         userPrompt = `${claimSummary}
 
 STATE JURISDICTION: ${stateInfo.stateName} (${stateInfo.state})
@@ -4607,12 +4618,20 @@ ${LOW_SLOPE_ALLOWED_CONTENT_BULLET_LIST}
 === NON-NEGOTIABLE FORENSIC FOUNDATION (MUST APPEAR IN EVERY ENGINEER REBUTTAL) ===
 Include these exact section headings somewhere in the rebuttal:
 1) Engineer Theory Extraction
-2) Required Testing Not Performed
-3) Causation Proof Failure
+2) Timing Failure
+3) Required Testing Not Performed
+4) Causation Proof Failure
+5) Internal Contradictions
+6) Questions the Engineer Must Answer
+7) Regulatory / Claims Handling Exposure
+8) Conclusion and Demands
 
 Engineer Theory Extraction must quote the engineer's stated cause directly from the report.
+Timing Failure must prove the engineer has not established when the alleged openings/failures developed and uses assumption instead of dated proof.
 Required Testing Not Performed must list the forensic tests required to scientifically prove that cause and explicitly mark whether each appears in the report.
-Causation Proof Failure must explicitly state that when required testing was not performed, the engineer has not scientifically proven the conclusion and the causation statement is speculative.
+Causation Proof Failure must explicitly state that when required testing was not performed, the engineer has not scientifically proven the conclusion and the causation statement is speculative. Must include: "Condition evidence is not causation proof."
+Internal Contradictions must identify where the report's observations contradict its conclusions.
+Questions the Engineer Must Answer must list numbered technical questions the engineer likely cannot answer.
 
 === MANDATORY SECTIONED STRUCTURE (ENFORCED — NO DEVIATIONS) ===
 Your rebuttal MUST contain ALL SEVEN of the following sections IN THIS ORDER. Do not omit any section. Do not leave structure to model discretion.
