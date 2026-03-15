@@ -266,7 +266,6 @@ Deno.serve(async (req) => {
       } else {
         if (force) console.log(`[TextExtract] Force reprocess — re-extracting text from source for ${file.file_name}`);
         if (existingTextIsGarbage) console.log(`[TextExtract] Existing text is garbage (${file.extracted_text.length} chars) — re-extracting from source for ${file.file_name}`);
-      } else {
         // Download file and extract text
         const { data: fileBlob, error: downloadError } = await supabase.storage
           .from('claim-files')
