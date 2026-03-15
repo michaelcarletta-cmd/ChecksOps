@@ -393,7 +393,7 @@ function enforceEngineerRebuttalMandatorySections(result: string, context: Engin
 }
 
 function enforceEngineerRebuttalLowSlopeOpening(result: string, primaryScenario: string | null): string {
-  if (!result || primaryScenario !== 'low_slope_snow_ice_ponding') return result;
+  if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return result;
 
   const required = REQUIRED_LOW_SLOPE_OPENING;
   const requiredLower = required.toLowerCase();
