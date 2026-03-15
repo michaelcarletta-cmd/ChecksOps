@@ -552,7 +552,7 @@ Deno.serve(async (req) => {
       .single();
 
     // Trigger deep analysis for key document types (high confidence only)
-    if (classificationResult.confidence >= 0.8) {
+    if (classificationResult.confidence >= 0.8 && smartClassification.automation_safe) {
       // Fire and forget - don't wait for deep analysis to complete
       triggerDeepAnalysis(
         supabase,
