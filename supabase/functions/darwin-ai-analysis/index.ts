@@ -3794,6 +3794,12 @@ Be specific, professional, and provide communications that are ready to copy and
         engineerRebuttalTheorySentences = [...(dismantlerExtraction.engineerTheorySentences || [])];
         engineerRebuttalCriticalTestingNotPerformed = [...(dismantlerExtraction.criticalTestingNotPerformed || [])];
         engineerRebuttalReportText = engineerTextForDismantler;
+        scenarioRulePackLoaded = getRulePackLoaded(engineerRebuttalPrimaryScenario);
+        scenarioSuppressedRulePacks = getSuppressedRulePacks(engineerRebuttalPrimaryScenario);
+        scenarioDetectionMatchedTerms = detectLowSlopePhysicalMechanism(engineerTextForDismantler).matchedTerms;
+        console.log(
+          `[darwin][engineer_report_rebuttal] scenario diagnostics: primary=${engineerRebuttalPrimaryScenario || 'none'} rule_pack=${scenarioRulePackLoaded} suppressed=[${scenarioSuppressedRulePacks.join(',') || 'none'}] matched_terms=[${scenarioDetectionMatchedTerms.join(',') || 'none'}]`
+        );
 
         const allActiveScenarios = new Set([primarySc, ...scopedSecondaryScenarios].filter(Boolean));
 
