@@ -999,22 +999,17 @@ function enforceEngineerRebuttalLowSlopeOpening(
   primaryScenario: string | null,
   analysisType?: string,
 ): string {
-  if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return result;
-
-  // Do NOT force the low-slope opening into formal carrier-ready letter outputs.
-  // It can be used in internal analysis/drafts, but not injected into the body
-  // of a polished rebuttal letter where it creates awkward duplication.
-  if (analysisType === 'engineer_report_rebuttal' || analysisType === 'auto_draft_rebuttal') {
+  if (!result || primaryScenario !== "low_slope_snow_ice_ponding") return result;
+  // For formal rebuttal letters, do NOT inject the forced low-slope sentence
+  // as a standalone opening. It creates awkward duplication in carrier-ready output.
+  if (analysisType === "engineer_report_rebuttal" || analysisType === "auto_draft_rebuttal") {
     return result;
   }
-
   const required = REQUIRED_LOW_SLOPE_OPENING;
   const requiredLower = required.toLowerCase();
-  const lines = result.split('\n');
-
+  const lines = result.split("\n");
   const dateOfLossIdx = lines.findIndex((line) => /^\s*Date of Loss\s*:/i.test(line));
   const searchStart = dateOfLossIdx >= 0 ? dateOfLossIdx + 1 : 0;
-
   let firstBodyLineIdx = -1;
   for (let i = searchStart; i < lines.length; i += 1) {
     const line = lines[i].trim();
@@ -1023,18 +1018,15 @@ function enforceEngineerRebuttalLowSlopeOpening(
     firstBodyLineIdx = i;
     break;
   }
-
   if (firstBodyLineIdx < 0) {
     return `${required}\n\n${result}`.trim();
   }
-
   const firstBodyLine = lines[firstBodyLineIdx].trim();
   if (firstBodyLine.toLowerCase().startsWith(requiredLower)) {
     return result;
   }
-
   lines[firstBodyLineIdx] = `${required} ${firstBodyLine}`;
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
 function suppressLowSlopeUnsupportedBoilerplate(result: string, supportCorpus: string): string {
