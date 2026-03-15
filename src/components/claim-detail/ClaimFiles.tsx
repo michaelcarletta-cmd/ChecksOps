@@ -708,6 +708,17 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                 <ExternalLink className="h-4 w-4 mr-2" /> Xactimate
               </Button>
             )}
+            {isStaffOrAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => bulkReprocessMutation.mutate()}
+                disabled={bulkReprocessMutation.isPending}
+              >
+                {bulkReprocessMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Zap className="h-4 w-4 mr-2" />}
+                {bulkReprocessMutation.isPending ? "Reprocessing..." : "Reprocess All"}
+              </Button>
+            )}
             
             {/* New Folder - available to all users */}
             <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
