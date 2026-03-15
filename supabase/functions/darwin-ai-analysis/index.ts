@@ -1200,10 +1200,21 @@ function buildLowSlopeScenarioDiagnostics(params: {
   };
 }
 
-function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: string | null, supportCorpus: string): string {
+function enforceLowSlopeRebuttalRequirements(
+  result: string,
+  primaryScenario: string | null,
+  supportCorpus: string,
+  analysisType?: string,
+): string {
   if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return result;
 
-  let updated = enforceEngineerRebuttalLowSlopeOpening(result, primaryScenario, undefined);
+  // For formal final rebuttal letters, do not append internal control sections.
+  // Those belong in prompting/validation, not in final carrier-facing output.
+  if (analysisType === "engineer_report_rebuttal" || analysisType === "auto_draft_rebuttal") {
+    return suppressLowSlopeUnsupportedBoilerplate(result.trim(), supportCorpus);
+  }
+
+  let updated = enforceEngineerRebuttalLowSlopeOpening(result, primaryScenario, analysisType);
   updated = suppressLowSlopeUnsupportedBoilerplate(updated, supportCorpus);
 
   const lower = updated.toLowerCase();
