@@ -7979,11 +7979,17 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       });
 
       const lowSlopeFallbackFromReportText = /snowmelt|ponding water|low-slope|ice dam|membrane/i.test(String(content || ''));
-      const enforcedScenario = engineerRebuttalPrimaryScenario || (lowSlopeFallbackFromReportText ? 'low_slope_snow_ice_ponding' : null);
+      const enforcedScenario = engineerRebuttalPrimaryScenario || (lowSlopeFallbackFromReportText ? LOW_SLOPE_PRIMARY_SCENARIO : null);
       analysisResult = enforceLowSlopeRebuttalRequirements(
         analysisResult,
         enforcedScenario,
         lowSlopeSupportCorpusForFilters,
+      );
+
+      assertLowSlopeForbiddenTerms(
+        analysisResult,
+        enforcedScenario,
+        engineerRebuttalCausationQuote,
       );
     }
 
