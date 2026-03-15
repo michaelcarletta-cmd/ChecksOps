@@ -704,7 +704,7 @@ Deno.serve(async (req) => {
     }
 
     // === STRUCTURED PROCESSING LOG ===
-    console.log(`[DocProcessed] file_id=${fileId} file_name=${fileName || file?.file_name} extraction_method=${extractionMethod} text_quality=${textQuality.status} is_scanned=${isScanned} ready_for_analysis=${readyForAnalysis} document_type=${mappedDocType} document_subtype=${classificationResult.metadata?.document_subtype || 'none'} confidence=${classificationResult.confidence}`);
+    console.log(`[DocProcessed] file_id=${fileId} file_name=${fileName || file?.file_name} extraction_method=${extractionMethod} text_quality=${textQuality.status} ready_for_analysis=${readyForAnalysis} ready_reason=${readyReason} document_type=${mappedDocType} document_subtype=${documentSubtype || classificationResult.metadata?.document_subtype || 'none'} confidence=${classificationResult.confidence} intelligence_attempted=${intelligenceAttempted} intelligence_written=${intelligenceWritten} intelligence_skipped_reason=${intelligenceSkippedReason || 'none'} intelligence_error=${intelligenceError || 'none'}`);
 
     // === STEP 4: DURABLE DOCUMENT INTELLIGENCE QUEUE ===
     if (readyForAnalysis && targetClaimId && fileId && cleanText.length >= 100) {
