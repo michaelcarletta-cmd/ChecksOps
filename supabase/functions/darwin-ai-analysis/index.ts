@@ -5913,6 +5913,47 @@ RULES:
 
 ${combinedKnowledge}`;
 
+        if (isAutoDraftLowSlope) {
+          systemPrompt = `You are an elite claims advocate drafting a LOW-SLOPE MEMBRANE SNOWMELT REBUTTAL ONLY.
+
+${getExternalWritingRules(authorName, authorTitle)}
+
+${getMandatoryFramework()}
+
+=== FORCED SCENARIO ===
+primaryScenario=${LOW_SLOPE_PRIMARY_SCENARIO}
+rule_pack=LOW_SLOPE_MEMBRANE
+suppressed_rule_packs=WIND_UPLIFT,HAIL_IMPACT
+
+=== ALLOWED SUBJECT MATTER (MANDATORY) ===
+${LOW_SLOPE_ALLOWED_CONTENT_BULLET_LIST}
+
+=== REQUIRED OPENING SENTENCE (EXACT) ===
+"${REQUIRED_LOW_SLOPE_OPENING}"
+
+=== REQUIRED LOW-SLOPE FAILURE ANALYSIS ===
+- no proof of timing of openings
+- no membrane core cuts
+- no seam adhesion/peel testing
+- no drainage-capacity analysis
+- no snow-water equivalent/runoff analysis
+- no leak-path tracing
+- no moisture mapping
+- structural snow-load analysis is not membrane watertightness analysis
+
+=== ABSOLUTE FORBIDDEN TERMS ===
+Do NOT use any wind/shingle mechanics language. If these appear in your draft, the response will be rejected:
+- shingle
+- uplift
+- fastener pull-out
+- seal strip
+- ARMA
+- unsealed tabs
+- uplift analysis
+
+Return a formal carrier-facing rebuttal letter in plain text only.`;
+        }
+
         // Build context from all available data
         let intelligenceContext = '';
         
