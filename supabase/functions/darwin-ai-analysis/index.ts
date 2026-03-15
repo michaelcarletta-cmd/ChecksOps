@@ -248,15 +248,20 @@ const LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES: Array<{ label: string; regex: R
   { label: 'shingle', regex: /\bshingle(?:s)?\b/i },
   { label: 'uplift', regex: /\buplift\b/i },
   { label: 'wind uplift', regex: /\bwind\s+uplift\b/i },
+  { label: 'wind-driven rain', regex: /\bwind-?driven\s+rain\b/i },
   { label: 'fastener pull-out', regex: /\bfastener\s+pull-?out\b/i },
+  { label: 'fasteners', regex: /\bfasteners?\b/i },
   { label: 'seal strip', regex: /\bseal\s+strip\b/i },
   { label: 'sealant strip', regex: /\bsealant\s+strip\b/i },
+  { label: 'sealant', regex: /\bsealants?\b/i },
+  { label: 'adhesion testing', regex: /\badhesion\s+test(?:ing|s)?\b/i },
   { label: 'ARMA', regex: /\bARMA\b/i },
   { label: 'unsealed tabs', regex: /\bunsealed\s+tabs?\b/i },
   { label: 'unsealed shingles', regex: /\bunsealed\s+shingle(?:s)?\b/i },
   { label: 'uplift analysis', regex: /\buplift\s+analysis\b/i },
   { label: 'ASTM D7158', regex: /\bASTM\s*D7158\b/i },
   { label: 'ASTM', regex: /\bASTM\b/i },
+  { label: 'IRC/IBC wind logic', regex: /\b(?:IRC|IBC)\b[^\n]{0,80}\bwind\b|\bwind\b[^\n]{0,80}\b(?:IRC|IBC)\b/i },
   { label: 'architectural shingles', regex: /\barchitectural\s+(?:asphalt\s+)?shingle(?:s)?\b/i },
 ];
 
@@ -612,19 +617,36 @@ function buildLowSlopeForbiddenTermErrorMessage(violations: string[]): string {
   return `LOW_SLOPE_MEMBRANE generation failed due to forbidden term. Violations: ${uniqueViolations.join(', ')}`;
 }
 
-function assertLowSlopeForbiddenTerms(result: string, primaryScenario: string | null, engineerCausationSentence: string): void {
-  const violations = collectLowSlopeForbiddenViolations(result, primaryScenario, engineerCausationSentence);
-  if (violations.length > 0) {
-    throw new Error(buildLowSlopeForbiddenTermErrorMessage(violations));
+function computeStableTextHash(input: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
   }
+  return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
-function assertLowSlopeStrictPreSendTerms(result: string, primaryScenario: string | null): void {
-  const strictViolations = collectLowSlopeStrictPreSendViolations(result, primaryScenario);
-
-  if (strictViolations.length > 0) {
-    throw new Error(buildLowSlopeForbiddenTermErrorMessage(strictViolations));
-  }
+function buildLowSlopeScenarioDiagnostics(params: {
+  analysisType: string;
+  responsePath: 'structured' | 'non_structured';
+  primaryScenario: string | null;
+  rulePackLoaded: string;
+  suppressedRulePacks: string[];
+  matchedTerms: string[];
+  finalViolationList: string[];
+  finalResponseHash: string;
+}) {
+  return {
+    analysisType: params.analysisType,
+    functionPath: params.responsePath,
+    primaryScenario: params.primaryScenario,
+    rulePackLoaded: params.rulePackLoaded,
+    suppressedRulePacks: params.suppressedRulePacks,
+    matchedPhysicalMechanismTerms: params.matchedTerms,
+    matchedTerms: params.matchedTerms,
+    finalViolationList: params.finalViolationList,
+    finalResponseHash: params.finalResponseHash,
+  };
 }
 
 function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: string | null, supportCorpus: string): string {
@@ -8288,51 +8310,53 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         lowSlopeSupportCorpusForFilters,
       );
 
-      assertLowSlopeStrictPreSendTerms(
-        analysisResult,
-        enforcedScenario,
-      );
+      const provisionalViolations = Array.from(new Set([
+        ...collectLowSlopeStrictPreSendViolations(analysisResult, enforcedScenario),
+        ...collectLowSlopeForbiddenViolations(analysisResult, enforcedScenario, engineerRebuttalCausationQuote),
+      ]));
 
-      assertLowSlopeForbiddenTerms(
-        analysisResult,
-        enforcedScenario,
-        engineerRebuttalCausationQuote,
-      );
+      if (provisionalViolations.length > 0) {
+        console.warn(
+          `[darwin][provisional-low-slope-gate] analysisType=${analysisType} scenario=${enforcedScenario || 'none'} provisionalViolations=[${provisionalViolations.join(', ')}]`
+        );
+      }
     }
 
     endStep(parseStep, 'completed', `resultLength=${analysisResult.length}`);
     
     console.log(`Darwin AI Analysis completed for ${analysisType}, result length: ${analysisResult.length}`);
 
-    // Save analysis result to database for future reference
-    const inputSummary = pdfFileName 
-      ? `PDF: ${pdfFileName}` 
+    // Save analysis result to database for future reference (only after final validation succeeds)
+    const inputSummary = pdfFileName
+      ? `PDF: ${pdfFileName}`
       : additionalContext?.trigger_reason || `${analysisType} analysis`;
-    
-    const saveStep = startStep('persist_analysis', 'Persist analysis snapshot');
-    try {
-      const { error: saveError } = await supabase
-        .from('darwin_analysis_results')
-        .insert({
-          claim_id: claimId,
-          analysis_type: analysisType,
-          input_summary: inputSummary.substring(0, 500), // Truncate if too long
-          result: analysisResult,
-          pdf_file_name: pdfFileName || null,
-        });
-      
-      if (saveError) {
-        console.error('Failed to save analysis result:', saveError);
-        endStep(saveStep, 'error', saveError.message);
-      } else {
-        console.log(`Analysis result saved to darwin_analysis_results for claim ${claimId}`);
-        endStep(saveStep, 'completed');
+
+    const persistAnalysisSnapshot = async (resultToPersist: string) => {
+      const saveStep = startStep('persist_analysis', 'Persist analysis snapshot');
+      try {
+        const { error: saveError } = await supabase
+          .from('darwin_analysis_results')
+          .insert({
+            claim_id: claimId,
+            analysis_type: analysisType,
+            input_summary: inputSummary.substring(0, 500), // Truncate if too long
+            result: resultToPersist,
+            pdf_file_name: pdfFileName || null,
+          });
+
+        if (saveError) {
+          console.error('Failed to save analysis result:', saveError);
+          endStep(saveStep, 'error', saveError.message);
+        } else {
+          console.log(`Analysis result saved to darwin_analysis_results for claim ${claimId}`);
+          endStep(saveStep, 'completed');
+        }
+      } catch (saveErr) {
+        console.error('Error saving analysis result:', saveErr);
+        endStep(saveStep, 'error', saveErr instanceof Error ? saveErr.message : 'Unknown save error');
+        // Don't fail the request if save fails
       }
-    } catch (saveErr) {
-      console.error('Error saving analysis result:', saveErr);
-      endStep(saveStep, 'error', saveErr instanceof Error ? saveErr.message : 'Unknown save error');
-      // Don't fail the request if save fails
-    }
+    };
 
     // ═══ UNIVERSAL CARRIER DISMANTLER POST-PROCESSOR (unless enableDismantler=false) ═══
     let carrierDismantlerResult: DismantlerResult | null = null;
@@ -8628,6 +8652,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     }
 
     if (useStructuredDarwinOutput && structuredResult && typeof analysisResult === 'string') {
+      const responsePath: 'structured' = 'structured';
       const structuredPreSendLowSlopeDetection = detectLowSlopeAcrossSources([
         engineerRebuttalCausationQuote,
         engineerRebuttalReportText,
@@ -8658,32 +8683,42 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         engineerRebuttalCausationQuote,
       );
       const structuredViolations = Array.from(new Set([...structuredStrictViolations, ...structuredContextualViolations]));
+      const structuredFinalResponseHash = computeStableTextHash(analysisResult);
+
+      const structuredScenarioDiagnostics = buildLowSlopeScenarioDiagnostics({
+        analysisType,
+        responsePath,
+        primaryScenario: structuredEnforcedScenarioForResponse,
+        rulePackLoaded: structuredScenarioDiagnosticsRulePackLoaded,
+        suppressedRulePacks: structuredScenarioDiagnosticsSuppressedRulePacks,
+        matchedTerms: structuredScenarioDiagnosticsMatchedTerms,
+        finalViolationList: structuredViolations,
+        finalResponseHash: structuredFinalResponseHash,
+      });
+
+      console.log(
+        `[darwin][final-return] path=${responsePath} analysisType=${analysisType} primary=${structuredScenarioDiagnostics.primaryScenario || 'none'} rulePack=${structuredScenarioDiagnostics.rulePackLoaded} suppressed=[${structuredScenarioDiagnostics.suppressedRulePacks.join(',') || 'none'}] matched=[${structuredScenarioDiagnostics.matchedTerms.join(',') || 'none'}] violations=[${structuredScenarioDiagnostics.finalViolationList.join(',') || 'none'}] hash=${structuredScenarioDiagnostics.finalResponseHash}`
+      );
 
       if (structuredViolations.length > 0) {
         return new Response(
           JSON.stringify({
             error: buildLowSlopeForbiddenTermErrorMessage(structuredViolations),
-            scenario_diagnostics: {
-              primaryScenario: structuredEnforcedScenarioForResponse,
-              rulePackLoaded: structuredScenarioDiagnosticsRulePackLoaded,
-              suppressedRulePacks: structuredScenarioDiagnosticsSuppressedRulePacks,
-              matchedPhysicalMechanismTerms: structuredScenarioDiagnosticsMatchedTerms,
-              matchedTerms: structuredScenarioDiagnosticsMatchedTerms,
-            },
+            violations: structuredViolations,
+            scenario_diagnostics: structuredScenarioDiagnostics,
           }),
           { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
       }
 
+      await persistAnalysisSnapshot(analysisResult);
+
       return new Response(
         JSON.stringify({
           ...structuredResult,
           scenario_diagnostics: {
-            primaryScenario: structuredEnforcedScenarioForResponse,
-            rulePackLoaded: structuredScenarioDiagnosticsRulePackLoaded,
-            suppressedRulePacks: structuredScenarioDiagnosticsSuppressedRulePacks,
-            matchedPhysicalMechanismTerms: structuredScenarioDiagnosticsMatchedTerms,
-            matchedTerms: structuredScenarioDiagnosticsMatchedTerms,
+            ...structuredScenarioDiagnostics,
+            finalViolationList: [],
           },
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -8706,13 +8741,18 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       }
     }
 
+    const responsePath: 'non_structured' = 'non_structured';
+    const finalAnalysisText = typeof analysisResult === 'string'
+      ? analysisResult
+      : JSON.stringify(analysisResult ?? '');
+
     const preSendLowSlopeDetection = detectLowSlopeAcrossSources([
       engineerRebuttalCausationQuote,
       engineerRebuttalReportText,
       String(content || ''),
       claimSummary,
       String(claim?.loss_description || ''),
-      typeof analysisResult === 'string' ? analysisResult : '',
+      finalAnalysisText,
     ]);
 
     const enforcedScenarioForResponse =
@@ -8726,38 +8766,45 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     const scenarioDiagnosticsRulePackLoaded = getRulePackLoaded(enforcedScenarioForResponse);
     const scenarioDiagnosticsSuppressedRulePacks = getSuppressedRulePacks(enforcedScenarioForResponse);
 
-    if (typeof analysisResult === 'string') {
-      const strictViolations = collectLowSlopeStrictPreSendViolations(
-        analysisResult,
-        enforcedScenarioForResponse,
-      );
-      const contextualViolations = collectLowSlopeForbiddenViolations(
-        analysisResult,
-        enforcedScenarioForResponse,
-        engineerRebuttalCausationQuote,
-      );
-      const allViolations = Array.from(new Set([...strictViolations, ...contextualViolations]));
+    const strictViolations = collectLowSlopeStrictPreSendViolations(
+      finalAnalysisText,
+      enforcedScenarioForResponse,
+    );
+    const contextualViolations = collectLowSlopeForbiddenViolations(
+      finalAnalysisText,
+      enforcedScenarioForResponse,
+      engineerRebuttalCausationQuote,
+    );
+    const allViolations = Array.from(new Set([...strictViolations, ...contextualViolations]));
+    const finalResponseHash = computeStableTextHash(finalAnalysisText);
 
-      if (allViolations.length > 0) {
-        return new Response(
-          JSON.stringify({
-            error: buildLowSlopeForbiddenTermErrorMessage(allViolations),
-            scenario_diagnostics: {
-              primaryScenario: enforcedScenarioForResponse,
-              rulePackLoaded: scenarioDiagnosticsRulePackLoaded,
-              suppressedRulePacks: scenarioDiagnosticsSuppressedRulePacks,
-              matchedPhysicalMechanismTerms: scenarioDiagnosticsMatchedTerms,
-              matchedTerms: scenarioDiagnosticsMatchedTerms,
-            },
-          }),
-          { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-        );
-      }
-    }
+    const scenarioDiagnostics = buildLowSlopeScenarioDiagnostics({
+      analysisType,
+      responsePath,
+      primaryScenario: enforcedScenarioForResponse,
+      rulePackLoaded: scenarioDiagnosticsRulePackLoaded,
+      suppressedRulePacks: scenarioDiagnosticsSuppressedRulePacks,
+      matchedTerms: scenarioDiagnosticsMatchedTerms,
+      finalViolationList: allViolations,
+      finalResponseHash,
+    });
 
     console.log(
-      `[darwin][${analysisType}] final scenario diagnostics: primary=${enforcedScenarioForResponse || 'none'} rule_pack=${scenarioDiagnosticsRulePackLoaded} suppressed=[${scenarioDiagnosticsSuppressedRulePacks.join(',') || 'none'}] matched_terms=[${scenarioDiagnosticsMatchedTerms.join(',') || 'none'}]`
+      `[darwin][final-return] path=${responsePath} analysisType=${analysisType} primary=${scenarioDiagnostics.primaryScenario || 'none'} rulePack=${scenarioDiagnostics.rulePackLoaded} suppressed=[${scenarioDiagnostics.suppressedRulePacks.join(',') || 'none'}] matched=[${scenarioDiagnostics.matchedTerms.join(',') || 'none'}] violations=[${scenarioDiagnostics.finalViolationList.join(',') || 'none'}] hash=${scenarioDiagnostics.finalResponseHash}`
     );
+
+    if (allViolations.length > 0) {
+      return new Response(
+        JSON.stringify({
+          error: buildLowSlopeForbiddenTermErrorMessage(allViolations),
+          violations: allViolations,
+          scenario_diagnostics: scenarioDiagnostics,
+        }),
+        { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    await persistAnalysisSnapshot(finalAnalysisText);
 
     const responseBuildStep = startStep('response', 'Build response payload');
     const responsePayload: any = {
@@ -8769,11 +8816,8 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       carrierDismantler: carrierDismantlerResult,
       claimId,
       scenario_diagnostics: {
-        primaryScenario: enforcedScenarioForResponse,
-        rulePackLoaded: scenarioDiagnosticsRulePackLoaded,
-        suppressedRulePacks: scenarioDiagnosticsSuppressedRulePacks,
-        matchedPhysicalMechanismTerms: scenarioDiagnosticsMatchedTerms,
-        matchedTerms: scenarioDiagnosticsMatchedTerms,
+        ...scenarioDiagnostics,
+        finalViolationList: [],
       },
       jurisdiction: {
         state_code: resolvedState,
