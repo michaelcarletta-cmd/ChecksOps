@@ -605,61 +605,32 @@ function getEngineerRequiredTests(context: EngineerRebuttalEnforcementContext): 
 }
 
 function isTestMentionedInReport(reportText: string, testName: string): boolean {
-  const text = String(reportText || "");
-  const textLower = text.toLowerCase();
-  if (!textLower) return false;
-
+  const textLower = String(reportText || "").toLowerCase();
   const normalizedTest = String(testName || "").toLowerCase().trim();
-  if (!normalizedTest) return false;
+  if (!textLower || !normalizedTest) return false;
 
-  // If the phrase only appears in rebuttal-style negative framing, do NOT count it as performed.
-  const negativeContextPatterns = [
-    new RegExp(`no\\s+${escapeRegExp(normalizedTest)}`, "i"),
-    new RegExp(`not\\s+performed[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
-    new RegExp(`${escapeRegExp(normalizedTest)}[^\\n.]{0,40}not\\s+performed`, "i"),
-    new RegExp(`failed\\s+to\\s+perform[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
-    new RegExp(`without[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
-    new RegExp(`did\\s+not\\s+perform[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
-    new RegExp(`omitted[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
-    new RegExp(`missing[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
+  const performanceSignals = [
+    "performed", "conducted", "completed", "undertook", "carried out",
+    "tested", "measured", "mapped", "traced", "sampled", "inspected",
+    "evaluated", "analyzed", "analysis was performed", "testing was performed",
   ];
 
-  // Exact phrase in positive/neutral context
-  if (textLower.includes(normalizedTest)) {
-    const exactNegative = negativeContextPatterns.some((pattern) => pattern.test(text));
-    if (!exactNegative) return true;
-  }
-
-  // Token fallback only for real report text, but reject if negative framing is nearby.
-  const ignoredTokens = new Set([
-    "analysis", "testing", "review", "inspection", "proof",
-    "assessment", "evaluation", "performed", "perform",
-  ]);
-
-  const tokens = normalizedTest
+  const testTokens = normalizedTest
     .split(/[\s/()\-]+/)
     .map((token) => token.trim())
-    .filter((token) => token.length >= 4 && !ignoredTokens.has(token));
+    .filter((token) => token.length >= 4);
 
-  if (tokens.length === 0) return false;
+  if (testTokens.length === 0) return false;
 
-  const tokenHits = tokens.filter((token) => textLower.includes(token));
-  if (tokenHits.length === 0) return false;
-
-  const tokenNegative = tokenHits.some((token) => {
-    const tokenEscaped = escapeRegExp(token);
+  const nearbyWindowRegexes = testTokens.map((token) => {
+    const escaped = escapeRegExp(token);
     return [
-      new RegExp(`no[^\\n.]{0,30}${tokenEscaped}`, "i"),
-      new RegExp(`not\\s+performed[^\\n.]{0,30}${tokenEscaped}`, "i"),
-      new RegExp(`failed\\s+to\\s+perform[^\\n.]{0,30}${tokenEscaped}`, "i"),
-      new RegExp(`did\\s+not\\s+perform[^\\n.]{0,30}${tokenEscaped}`, "i"),
-      new RegExp(`without[^\\n.]{0,30}${tokenEscaped}`, "i"),
-      new RegExp(`missing[^\\n.]{0,30}${tokenEscaped}`, "i"),
-      new RegExp(`omitted[^\\n.]{0,30}${tokenEscaped}`, "i"),
-    ].some((pattern) => pattern.test(text));
-  });
+      new RegExp(`(?:${performanceSignals.map(escapeRegExp).join("|")})[^\\n\\.]{0,80}${escaped}`, "i"),
+      new RegExp(`${escaped}[^\\n\\.]{0,80}(?:${performanceSignals.map(escapeRegExp).join("|")})`, "i"),
+    ];
+  }).flat();
 
-  return !tokenNegative;
+  return nearbyWindowRegexes.some((regex) => regex.test(textLower));
 }
 
 function buildEngineerTheoryExtractionSection(context: EngineerRebuttalEnforcementContext): string {
@@ -947,40 +918,100 @@ APPLICABLE INDUSTRY STANDARDS:
   }
 }
 
-function enforceEngineerRebuttalMandatorySections(result: string, context: EngineerRebuttalEnforcementContext): string {
+function hasSectionHeading(text: string, heading: string): boolean {
+  if (!text || !heading) return false;
+  const escaped = escapeRegExp(heading);
+  const patterns = [
+    new RegExp(`(^|\\n)${escaped}(\\s|\\n|:|$)`, "i"),
+    new RegExp(`(^|\\n)Section\\s+\\d+\\s*[:\\-–—]\\s*${escaped}(\\s|\\n|:|$)`, "i"),
+    new RegExp(`(^|\\n)\\d+\\s*[\\.)\\-:]\\s*${escaped}(\\s|\\n|:|$)`, "i"),
+  ];
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+function normalizeLeadingSectionLabels(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/(^|\n)Section\s+1\s*[:\-–—]\s*Engineer Theory Extraction/gi, "$1Engineer Theory Extraction")
+    .replace(/(^|\n)Section\s+2\s*[:\-–—]\s*Timing Failure/gi, "$1Timing Failure")
+    .replace(/(^|\n)Section\s+3\s*[:\-–—]\s*Required Testing Not Performed/gi, "$1Required Testing Not Performed")
+    .replace(/(^|\n)Section\s+4\s*[:\-–—]\s*Causation Proof Failure/gi, "$1Causation Proof Failure")
+    .replace(/(^|\n)Section\s+5\s*[:\-–—]\s*Evidentiary Sufficiency Audit of Engineer Conclusions/gi, "$1Evidentiary Sufficiency Audit of Engineer Conclusions")
+    .replace(/(^|\n)Section\s+6\s*[:\-–—]\s*Methodology Failures/gi, "$1Methodology Failures")
+    .replace(/(^|\n)Section\s+7\s*[:\-–—]\s*Point-by-Point Rebuttal/gi, "$1Point-by-Point Rebuttal")
+    .replace(/(^|\n)Section\s+8\s*[:\-–—]\s*Internal Contradictions/gi, "$1Internal Contradictions")
+    .replace(/(^|\n)Section\s+9\s*[:\-–—]\s*Questions the Engineer Must Answer/gi, "$1Questions the Engineer Must Answer")
+    .replace(/(^|\n)Section\s+10\s*[:\-–—]\s*Evidence of Bias/gi, "$1Evidence of Bias")
+    .replace(/(^|\n)Section\s+11\s*[:\-–—]\s*Regulatory Violations and Claims Handling Exposure/gi, "$1Regulatory Violations and Claims Handling Exposure")
+    .replace(/(^|\n)Section\s+12\s*[:\-–—]\s*Conclusion and Demands/gi, "$1Conclusion and Demands")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function stripPostSignatureDuplicateBlocks(text: string): string {
+  if (!text) return text;
+  const signatureRegex = /\n(Sincerely,|Regards,)\s*\n[\s\S]*?(Michael Carletta, Public Adjuster)/i;
+  const match = text.match(signatureRegex);
+  if (!match || typeof match.index !== "number") return text;
+  const signatureEnd = match.index + match[0].length;
+  const before = text.slice(0, signatureEnd);
+  const after = text.slice(signatureEnd);
+  const duplicateHeadings = [
+    "Engineer Theory Extraction",
+    "Timing Failure",
+    "Required Testing Not Performed",
+    "Causation Proof Failure",
+    "Internal Contradictions",
+    "Questions the Engineer Must Answer",
+  ];
+  const hasDuplicateBlockAfterSignature = duplicateHeadings.some((heading) =>
+    hasSectionHeading(after, heading)
+  );
+  if (!hasDuplicateBlockAfterSignature) return text;
+  return before.trim();
+}
+
+function enforceEngineerRebuttalMandatorySections(
+  result: string,
+  context: EngineerRebuttalEnforcementContext,
+): string {
   if (!result) return result;
-
-  let updated = result.trim();
+  let updated = normalizeLeadingSectionLabels(result.trim());
   const additions: string[] = [];
+  const missingTests = getEngineerRequiredTests(context)
+    .filter((testName) => !isTestMentionedInReport(context.reportText, testName));
 
-  const hasEngineerTheoryExtraction = /(^|\n)engineer theory extraction\b/i.test(updated);
-  const hasTimingFailure = /(^|\n)timing failure\b/i.test(updated);
-  const hasRequiredTesting = /(^|\n)required testing not performed\b/i.test(updated);
-  const hasCausationProofFailure = /(^|\n)causation proof failure\b/i.test(updated);
-  const hasInternalContradictions = /(^|\n)internal contradictions\b/i.test(updated);
-  const hasQuestionsEngineerMustAnswer = /(^|\n)questions the engineer must answer\b/i.test(updated);
-
-  if (!hasEngineerTheoryExtraction) {
+  // 1. Engineer Theory Extraction
+  if (!hasSectionHeading(updated, "Engineer Theory Extraction")) {
     additions.push(buildEngineerTheoryExtractionSection(context));
   }
 
-  if (!hasTimingFailure) {
+  // 2. Timing Failure
+  if (!hasSectionHeading(updated, "Timing Failure")) {
     additions.push(buildTimingFailureSection(context.primaryScenario, context.engineerStatedCause));
   }
 
-  if (!hasRequiredTesting) {
+  // 3. Required Testing Not Performed
+  if (!hasSectionHeading(updated, "Required Testing Not Performed")) {
     additions.push(buildRequiredTestingNotPerformedSection(context));
   }
 
-  if (!hasCausationProofFailure) {
-    additions.push(buildCausationProofFailureSection(context));
+  // 4. Causation Proof Failure
+  const hasCausationHeading = hasSectionHeading(updated, "Causation Proof Failure");
+  const hasCausationLanguage =
+    /condition evidence is not causation proof/i.test(updated) &&
+    /does not establish sole causation to a reasonable degree of engineering certainty/i.test(updated);
+  if (!hasCausationHeading || !hasCausationLanguage) {
+    additions.push(buildCausationProofFailureSectionStumper(context.primaryScenario, missingTests));
   }
 
-  if (!hasInternalContradictions) {
+  // 5. Internal Contradictions
+  if (!hasSectionHeading(updated, "Internal Contradictions")) {
     additions.push(buildEngineerContradictionSection(context.primaryScenario, context.engineerTheorySentences));
   }
 
-  if (!hasQuestionsEngineerMustAnswer) {
+  // 6. Questions the Engineer Must Answer
+  if (!hasSectionHeading(updated, "Questions the Engineer Must Answer")) {
     const questions = buildEngineerMustAnswerQuestions(context.primaryScenario);
     additions.push(
       `Questions the Engineer Must Answer\n\n${questions.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
@@ -988,10 +1019,10 @@ function enforceEngineerRebuttalMandatorySections(result: string, context: Engin
   }
 
   if (additions.length > 0) {
-    updated += `\n\n${additions.join('\n\n')}`;
+    updated += `\n\n${additions.join("\n\n")}`;
   }
 
-  return updated.trim();
+  return updated.replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function enforceEngineerRebuttalLowSlopeOpening(
@@ -1531,10 +1562,12 @@ function stripCarrierDependencyAnalysis(text: string): string {
 function polishEngineerRebuttalFormatting(text: string): string {
   if (!text) return text;
   let updated = text;
+  updated = normalizeLeadingSectionLabels(updated);
   updated = stripOrphanLowSlopeOpeningBlocks(updated);
   updated = stripPriorityOrderControlBlock(updated);
   updated = stripLowSlopeControlSections(updated);
   updated = normalizeEngineerQuestionSection(updated);
+  updated = stripPostSignatureDuplicateBlocks(updated);
   updated = normalizeBrokenNumericLists(updated);
   updated = updated.replace(/\n{3,}/g, '\n\n');
   updated = updated.replace(
