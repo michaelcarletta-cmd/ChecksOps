@@ -165,6 +165,20 @@ Deno.serve(async (req) => {
         : atob(fileContent);
     }
 
+    // Map classification to expanded document_type
+    const docTypeMap: Record<string, string> = {
+      'denial': 'denial_letter',
+      'estimate': 'carrier_estimate',
+      'approval': 'coverage_letter',
+      'rfi': 'carrier_correspondence',
+      'engineering_report': 'engineering_report',
+      'policy': 'policy_document',
+      'correspondence': 'carrier_correspondence',
+      'invoice': 'invoice',
+      'photo': 'photos_report',
+      'other': 'other',
+    };
+
     // If no text content, try to classify by filename patterns
     if (!textContent || textContent.length < 50) {
       const classificationFromName = classifyByFilename(fileName || file?.file_name || '');
