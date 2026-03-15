@@ -5992,15 +5992,23 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
           }
         }
 
-        const autoDraftEngineerReports = (fullClaimFiles || []).filter((f: any) => {
-          const fileName = String(f.file_name || '').toLowerCase();
-          return f.document_classification === 'engineering_report' || fileName.includes('engineer');
+        const autoDraftSourceResolution = resolveEngineerReportSourceText({
+          content,
+          pdfExtractedText: documentContentSection,
+          uploadedEngineerReportText: String(
+            additionalContext?.engineerReportText
+            || additionalContext?.uploadedEngineerReportText
+            || ''
+          ),
+          additionalContext,
+          fullClaimFiles,
         });
-        const autoDraftEngineerReportCorpus = autoDraftEngineerReports
-          .map((f: any) => String(f.extracted_text || '').trim())
-          .filter((text: string) => text.length > 0)
-          .join('\n\n');
-        const autoDraftDismantlerSource = autoDraftEngineerReportCorpus || String(content || '');
+        const autoDraftDismantlerSource = autoDraftSourceResolution.text;
+
+        if (!autoDraftDismantlerSource || autoDraftDismantlerSource.trim().length < 500) {
+          throw new Error('Engineer rebuttal blocked: no usable engineer report text was found for scenario detection.');
+        }
+
         const autoDraftDismantler = runEngineerReportDismantler(autoDraftDismantlerSource);
         const autoDraftCausationQuote = String(
           autoDraftDismantler.engineerStatedCause
@@ -6011,9 +6019,6 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
         const autoDraftLowSlopeDetection = detectLowSlopeAcrossSources([
           autoDraftCausationQuote,
           autoDraftDismantlerSource,
-          documentContentSection,
-          claimSummary,
-          String(claim?.loss_description || ''),
         ]);
 
         const autoDraftPrimaryScenario = autoDraftLowSlopeDetection.shouldForce
@@ -6034,13 +6039,16 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
         engineerRebuttalTheorySentences = [...(autoDraftDismantler.engineerTheorySentences || [])];
         engineerRebuttalCriticalTestingNotPerformed = [...(autoDraftDismantler.criticalTestingNotPerformed || [])];
         engineerRebuttalReportText = autoDraftDismantlerSource;
+        engineerRebuttalSourceTextLength = autoDraftDismantlerSource.length;
+        engineerRebuttalSourceTextOrigin = autoDraftSourceResolution.sourceOrigin;
+        engineerRebuttalUsedEngineerReportText = autoDraftSourceResolution.usedEngineerReportText;
         lowSlopeSupportCorpusForFilters = buildLowSlopeSupportCorpus(autoDraftCausationQuote);
         scenarioRulePackLoaded = autoDraftRulePackLoaded;
         scenarioSuppressedRulePacks = [...autoDraftSuppressedRulePacks];
         scenarioDetectionMatchedTerms = [...autoDraftLowSlopeDetection.matchedTerms];
 
         console.log(
-          `[darwin][auto_draft_rebuttal] scenario diagnostics: primary=${autoDraftPrimaryScenario || 'none'} rule_pack=${autoDraftRulePackLoaded} suppressed=[${autoDraftSuppressedRulePacks.join(',') || 'none'}] matched_terms=[${autoDraftLowSlopeDetection.matchedTerms.join(',') || 'none'}]`
+          `[darwin][auto_draft_rebuttal] scenario diagnostics: primary=${autoDraftPrimaryScenario || 'none'} rule_pack=${autoDraftRulePackLoaded} suppressed=[${autoDraftSuppressedRulePacks.join(',') || 'none'}] matched_terms=[${autoDraftLowSlopeDetection.matchedTerms.join(',') || 'none'}] source_origin=${engineerRebuttalSourceTextOrigin} source_length=${engineerRebuttalSourceTextLength} used_engineer_report_text=${engineerRebuttalUsedEngineerReportText}`
         );
 
         systemPrompt = `You are an elite claims advocate generating a COMPREHENSIVE STRATEGIC REBUTTAL to OVERTURN the carrier's denial and secure coverage. You have access to ALL claim intelligence, strategic analyses, carrier behavior data, previous analyses, and the complete evidence file for this claim.
