@@ -326,32 +326,53 @@ interface EngineerReportSourceResolution {
 function isGarbageText(text: string): boolean {
   // Detect binary/garbled text that was incorrectly stored as extracted_text
   if (!text || text.length < 100) return false;
-  const sample = text.substring(0, 2000);
-  
-  // Strategy 1: Check ratio of non-ASCII characters (binary data decoded as latin1 has many)
-  let nonAscii = 0;
-  let controlChars = 0;
-  for (let i = 0; i < sample.length; i++) {
-    const code = sample.charCodeAt(i);
-    if (code < 32 && code !== 9 && code !== 10 && code !== 13) controlChars++;
-    if (code > 126) nonAscii++;
+  // Sample multiple sections to catch mixed garbled content
+  const sampleStart = text.substring(0, 2000);
+  const sampleMid = text.length > 4000 ? text.substring(Math.floor(text.length / 2), Math.floor(text.length / 2) + 2000) : '';
+  const samples = [sampleStart, sampleMid].filter(Boolean);
+
+  for (const sample of samples) {
+    // Strategy 1: Check ratio of non-ASCII characters (binary data decoded as latin1 has many)
+    let nonAscii = 0;
+    let controlChars = 0;
+    for (let i = 0; i < sample.length; i++) {
+      const code = sample.charCodeAt(i);
+      if (code < 32 && code !== 9 && code !== 10 && code !== 13) controlChars++;
+      if (code > 126) nonAscii++;
+    }
+    const nonAsciiRatio = nonAscii / sample.length;
+    const controlRatio = controlChars / sample.length;
+    // If more than 15% non-ASCII or more than 3% control chars, likely binary/garbled
+    if (nonAsciiRatio > 0.15) return true;
+    if (controlRatio > 0.03) return true;
   }
-  const nonAsciiRatio = nonAscii / sample.length;
-  const controlRatio = controlChars / sample.length;
-  // If more than 25% non-ASCII or more than 5% control chars, likely binary
-  if (nonAsciiRatio > 0.25) return true;
-  if (controlRatio > 0.05) return true;
-  
+
   // Strategy 2: Check word density — real text has spaces and recognizable words
-  const words = sample.split(/\s+/).filter(w => w.length > 0);
-  const avgWordLen = words.length > 0 ? sample.replace(/\s+/g, '').length / words.length : 999;
+  const words = sampleStart.split(/\s+/).filter(w => w.length > 0);
+  const avgWordLen = words.length > 0 ? sampleStart.replace(/\s+/g, '').length / words.length : 999;
   // Binary garbage tends to have very long "words" (no spaces) or very few words
-  if (words.length < 10 && sample.length > 500) return true;
+  if (words.length < 10 && sampleStart.length > 500) return true;
   if (avgWordLen > 30) return true;
-  
+
   // Strategy 3: PDF binary markers
-  if (sample.includes('obj') && sample.includes('endobj') && sample.includes('stream')) return true;
-  
+  if (sampleStart.includes('obj') && sampleStart.includes('endobj') && sampleStart.includes('stream')) return true;
+
+  // Strategy 4: Low ratio of common English words — garbled text has very few recognizable words
+  const commonWords = ['the', 'and', 'was', 'for', 'that', 'with', 'this', 'from', 'are', 'have', 'not', 'but', 'been', 'were', 'which'];
+  const textLower = sampleStart.toLowerCase();
+  const commonWordHits = commonWords.filter(w => textLower.includes(` ${w} `)).length;
+  // Real English text of 2000 chars should contain at least a few common words
+  if (sampleStart.length > 500 && commonWordHits < 2) return true;
+
+  // Strategy 5: High density of special/symbol characters (©, ®, ¨, Ô, etc.)
+  let specialChars = 0;
+  for (let i = 0; i < sampleStart.length; i++) {
+    const code = sampleStart.charCodeAt(i);
+    // Count chars in ranges commonly produced by garbled PDF binary
+    if ((code >= 128 && code <= 255) || (code >= 8192 && code <= 8303)) specialChars++;
+  }
+  if (sampleStart.length > 500 && specialChars / sampleStart.length > 0.08) return true;
+
   return false;
 }
 
