@@ -967,6 +967,17 @@ Deno.serve(async (req) => {
         classification: classificationResult.classification,
         confidence: classificationResult.confidence,
         metadata: classificationResult.metadata,
+        document_type: mappedDocType,
+        document_subtype: documentSubtype || classificationResult.metadata?.document_subtype || null,
+        ready_for_analysis: readyForAnalysis,
+        ready_reason: readyReason,
+        text_quality_status: textQuality.status,
+        intelligence: {
+          attempted: intelligenceAttempted,
+          written: intelligenceWritten,
+          skipped_reason: intelligenceSkippedReason,
+          error: intelligenceError,
+        },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
