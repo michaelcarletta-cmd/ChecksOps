@@ -696,14 +696,31 @@ ${lines.join("\n")}`;
 
 function buildCausationProofFailureSection(context: EngineerRebuttalEnforcementContext): string {
   const requiredTests = getEngineerRequiredTests(context);
-  const missingCount = requiredTests.filter((testName) => !isTestMentionedInReport(context.reportText, testName)).length;
 
-  const proofStatement = missingCount > 0
-    ? `Because ${missingCount} required forensic test(s) are not documented, the engineer has not scientifically proven their conclusion and the causation statement is therefore speculative.`
-    : 'Core forensic tests are referenced in the report text; causation still must be tied to quantifiable, test-backed findings rather than assumption.';
+  const undocumentedTests = requiredTests.filter(
+    (testName) => !isTestMentionedInReport(context.reportText, testName)
+  );
+
+  if (undocumentedTests.length > 0) {
+    return `Causation Proof Failure
+
+Condition evidence is not causation proof.
+
+Without the testing necessary to separate pre-existing vulnerability from event-driven failure, the report does not establish sole causation to a reasonable degree of engineering certainty.
+
+The following required forensic testing is not documented in the report:
+${undocumentedTests.map((t) => `- ${t}`).join("\n")}
+
+The report therefore does not scientifically prove sole causation and does not rule out the covered peril as a contributing or proximate cause. A covered event acting on aged materials can still be the proximate cause of direct physical loss.`;
+  }
 
   return `Causation Proof Failure
-${proofStatement}`;
+
+Condition evidence is not causation proof.
+
+Even where certain testing concepts are referenced in the report, the report still must tie those concepts to actual test performance, objective findings, and a scientifically supported elimination of the covered peril. Mere mention of a testing concept does not establish sole causation to a reasonable degree of engineering certainty.
+
+The report did not scientifically prove sole causation. The report failed to rule out the covered peril as a contributing or proximate cause. A covered event acting on aged materials can still be the proximate cause of direct physical loss.`;
 }
 
 // ============================================================================
