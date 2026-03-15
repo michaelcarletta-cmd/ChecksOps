@@ -116,17 +116,31 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
-      refetchFiles();
+    onMutate: () => {
       toast({
-        title: "Document Reprocessed",
-        description: `Classified as ${data.classification} (${Math.round((data.confidence || 0) * 100)}% confidence)`,
+        title: "Reprocessing document...",
+        description: "Analyzing and updating document type.",
       });
     },
-    onError: (error: Error) => {
+    onSuccess: (data) => {
+      refetchFiles();
+      const classification = typeof data?.classification === "string"
+        ? data.classification.replace(/_/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase())
+        : null;
+      const confidence = typeof data?.confidence === "number" ? Math.round(data.confidence * 100) : null;
+
+      toast({
+        title: "Document Reprocessed",
+        description: classification
+          ? `Classified as ${classification}${confidence !== null ? ` (${confidence}% confidence)` : ""}`
+          : "Document was reprocessed successfully.",
+      });
+    },
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : "Unable to reprocess the document.";
       toast({
         title: "Processing Error",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
     },
@@ -494,17 +508,16 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                         <FileUp className="h-3 w-3 mr-1" /> Save as Template
                       </Button>
                     )}
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button variant="outline" size="sm" onClick={() => reprocessFileMutation.mutate(file.id)} disabled={isReprocessing}>
-                            {isReprocessing ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1" />}
-                            {isReprocessing ? "Processing..." : "Reprocess"}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent><p>Re-analyze with Darwin AI</p></TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      title="Re-analyze document type"
+                      onClick={() => reprocessFileMutation.mutate(file.id)}
+                      disabled={isReprocessing}
+                    >
+                      {isReprocessing ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+                      {isReprocessing ? "Processing..." : "Reprocess"}
+                    </Button>
                     <Button variant="outline" size="sm" onClick={() => handleDeleteFile(file)}>
                       <Trash2 className="h-3 w-3 mr-1" /> Delete
                     </Button>
