@@ -390,8 +390,11 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
   // Tier 3: filename contains 'full report' or 'report' (common for Envista / third-party reports)
   const isEngineerFile = (file: any): { match: boolean; tier: number } => {
     const classification = String(file?.document_classification || '').toLowerCase();
+    const docType = String(file?.document_type || '').toLowerCase();
     const fileName = String(file?.file_name || '').toLowerCase();
-    if (classification.includes('engineering_report')) return { match: true, tier: 1 };
+    // Check both old document_classification AND new document_type from intelligence pipeline
+    if (classification.includes('engineering_report') || docType === 'engineering_report') return { match: true, tier: 1 };
+    if (docType === 'expert_report') return { match: true, tier: 1 };
     if (fileName.includes('engineer')) return { match: true, tier: 2 };
     if (fileName.includes('full report')) return { match: true, tier: 3 };
     // Only match generic 'report' if it looks like a PDF report (not photos, contracts, etc.)
@@ -402,13 +405,16 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
   const candidateFiles = allFiles
     .map((file: any) => {
       const check = isEngineerFile(file);
+      // Prefer clean_text from document intelligence pipeline, fall back to extracted_text
+      const cleanText = String(file?.clean_text || '').trim();
       const rawText = String(file?.extracted_text || '').trim();
-      const textLen = rawText.length;
-      const garbage = isGarbageText(rawText);
+      const bestText = cleanText.length > rawText.length ? cleanText : rawText;
+      const textLen = bestText.length;
+      const garbage = isGarbageText(bestText);
       if (garbage) {
         console.log(`[darwin][resolveEngineerSource] Skipping "${file?.file_name}" — garbage/binary text detected (${textLen} chars)`);
       }
-      return { file, tier: check.tier, matched: check.match, textLen: garbage ? 0 : textLen };
+      return { file, tier: check.tier, matched: check.match, textLen: garbage ? 0 : textLen, bestText: garbage ? '' : bestText };
     })
     .filter((c) => c.matched && c.textLen > 0)
     // Sort by tier first (lower = better), then by text length descending (prefer longest text)
@@ -416,7 +422,7 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
 
   const bestFileCandidate = candidateFiles.length > 0 ? candidateFiles[0] : null;
   const fileDerivedText = bestFileCandidate
-    ? String(bestFileCandidate.file.extracted_text || '').trim()
+    ? bestFileCandidate.bestText
     : '';
 
   if (bestFileCandidate) {
@@ -425,8 +431,12 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
       console.log(`[darwin][resolveEngineerSource] ${candidateFiles.length} total candidates: ${candidateFiles.map(c => `"${c.file.file_name}"(tier=${c.tier},len=${c.textLen})`).join(', ')}`);
     }
   } else {
-    const allWithText = allFiles.filter((f: any) => String(f?.extracted_text || '').trim().length > 500);
-    console.log(`[darwin][resolveEngineerSource] No engineer file candidates found. Files with text>500: ${allWithText.length}. All files: ${allFiles.map((f: any) => `"${f.file_name}"(cls=${f.document_classification},len=${String(f?.extracted_text||'').trim().length})`).join(', ')}`);
+    const allWithText = allFiles.filter((f: any) => {
+      const ct = String(f?.clean_text || '').trim().length;
+      const et = String(f?.extracted_text || '').trim().length;
+      return Math.max(ct, et) > 500;
+    });
+    console.log(`[darwin][resolveEngineerSource] No engineer file candidates found. Files with text>500: ${allWithText.length}. All files: ${allFiles.map((f: any) => `"${f.file_name}"(cls=${f.document_classification},docType=${f.document_type},len=${Math.max(String(f?.clean_text||'').trim().length, String(f?.extracted_text||'').trim().length)},ready=${f.ready_for_analysis})`).join(', ')}`);
   }
 
   const additionalContextText = String(
@@ -3088,7 +3098,7 @@ Deno.serve(async (req) => {
 
       const { data, error } = await supabase
         .from('claim_files')
-        .select('file_name, document_classification, classification_metadata, uploaded_at, claim_folders(name), extracted_text, file_type')
+        .select('file_name, document_classification, document_type, classification_metadata, uploaded_at, claim_folders(name), extracted_text, clean_text, file_type, ready_for_analysis, text_quality_status')
         .eq('claim_id', claimId);
 
       if (error) {
