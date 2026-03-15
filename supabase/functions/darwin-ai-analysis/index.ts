@@ -252,6 +252,8 @@ const LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES: Array<{ label: string; regex: R
   { label: 'ARMA', regex: /\bARMA\b/i },
   { label: 'unsealed tabs', regex: /\bunsealed\s+tabs?\b/i },
   { label: 'uplift analysis', regex: /\buplift\s+analysis\b/i },
+  { label: 'ASTM D7158', regex: /\bASTM\s*D7158\b/i },
+  { label: 'architectural shingles', regex: /\barchitectural\s+(?:asphalt\s+)?shingle(?:s)?\b/i },
 ];
 
 const SCENARIO_RULE_PACKS: Record<string, string> = {
@@ -271,6 +273,23 @@ function detectLowSlopePhysicalMechanism(text: string): { shouldForce: boolean; 
   const textLower = String(text || '').toLowerCase();
   const matchedTerms = LOW_SLOPE_FORCE_TERMS.filter((term) => textLower.includes(term));
   return { shouldForce: matchedTerms.length > 0, matchedTerms };
+}
+
+function detectLowSlopeAcrossSources(sources: Array<string | null | undefined>): { shouldForce: boolean; matchedTerms: string[] } {
+  const matchedTerms = new Set<string>();
+
+  for (const source of sources) {
+    if (!source) continue;
+    const detection = detectLowSlopePhysicalMechanism(source);
+    for (const term of detection.matchedTerms) {
+      matchedTerms.add(term);
+    }
+  }
+
+  return {
+    shouldForce: matchedTerms.size > 0,
+    matchedTerms: Array.from(matchedTerms),
+  };
 }
 
 function getRulePackLoaded(primaryScenario: string | null): string {
@@ -574,7 +593,7 @@ function assertLowSlopeForbiddenTerms(result: string, primaryScenario: string | 
   const violations = collectLowSlopeForbiddenViolations(result, primaryScenario, engineerCausationSentence);
   if (violations.length > 0) {
     throw new Error(
-      `Low-slope enforcement failed: forbidden wind/shingle mechanics remain in final output (${violations.join(', ')}).`,
+      `LOW_SLOPE_MEMBRANE generation failed due to forbidden term: ${Array.from(new Set(violations)).join(', ')}`,
     );
   }
 }
@@ -588,7 +607,7 @@ function assertLowSlopeStrictPreSendTerms(result: string, primaryScenario: strin
 
   if (strictViolations.length > 0) {
     throw new Error(
-      `Low-slope pre-send assertion failed: forbidden terms remain (${Array.from(new Set(strictViolations)).join(', ')}). Generation aborted.`,
+      `LOW_SLOPE_MEMBRANE generation failed due to forbidden term: ${Array.from(new Set(strictViolations)).join(', ')}`,
     );
   }
 }
@@ -5784,7 +5803,20 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
           .join('\n\n');
         const autoDraftDismantlerSource = autoDraftEngineerReportCorpus || String(content || '');
         const autoDraftDismantler = runEngineerReportDismantler(autoDraftDismantlerSource);
-        const autoDraftLowSlopeDetection = detectLowSlopePhysicalMechanism(autoDraftDismantlerSource);
+        const autoDraftCausationQuote = String(
+          autoDraftDismantler.engineerStatedCause
+          || autoDraftDismantler.engineerTheorySentences?.[0]
+          || ''
+        ).trim();
+
+        const autoDraftLowSlopeDetection = detectLowSlopeAcrossSources([
+          autoDraftCausationQuote,
+          autoDraftDismantlerSource,
+          documentContentSection,
+          claimSummary,
+          String(claim?.loss_description || ''),
+        ]);
+
         const autoDraftPrimaryScenario = autoDraftLowSlopeDetection.shouldForce
           ? LOW_SLOPE_PRIMARY_SCENARIO
           : (autoDraftDismantler.primaryScenario || null);
@@ -5795,11 +5827,6 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
         const autoDraftRulePackLoaded = getRulePackLoaded(autoDraftPrimaryScenario);
         const autoDraftSuppressedRulePacks = getSuppressedRulePacks(autoDraftPrimaryScenario);
         const isAutoDraftLowSlope = autoDraftPrimaryScenario === LOW_SLOPE_PRIMARY_SCENARIO;
-        const autoDraftCausationQuote = String(
-          autoDraftDismantler.engineerStatedCause
-          || autoDraftDismantler.engineerTheorySentences?.[0]
-          || ''
-        ).trim();
 
         engineerRebuttalPrimaryScenario = autoDraftPrimaryScenario;
         engineerRebuttalSecondaryScenarios = [...autoDraftSecondaryScenarios];
@@ -6144,6 +6171,38 @@ Make this document READY FOR IMMEDIATE SUBMISSION to the carrier. Be thorough, s
 
           const lowSlopeEvidenceContext = lowSlopeEngineerDocContext || 'No engineer report OCR text was found; use only verified claim facts and low-slope constraints.';
 
+          systemPrompt = `You are Darwin, a senior forensic claim advocate drafting a LOW_SLOPE_MEMBRANE rebuttal only.
+
+${getExternalWritingRules(authorName, authorTitle)}
+
+${getMandatoryFramework()}
+
+LOW_SLOPE_MEMBRANE MODE IS MANDATORY:
+- primaryScenario is fixed to ${LOW_SLOPE_PRIMARY_SCENARIO}
+- active rule pack is LOW_SLOPE_MEMBRANE
+- WIND_UPLIFT and HAIL_IMPACT logic is suppressed and prohibited
+- Do NOT use wind/shingle mechanics unless directly quoting the engineer causation statement
+
+You MUST build this rebuttal using ONLY the following subject matter:
+${LOW_SLOPE_ALLOWED_CONTENT_BULLET_LIST}
+
+Required opening sentence (exact):
+"${REQUIRED_LOW_SLOPE_OPENING}"
+
+STRICT FORBIDDEN TERMS:
+- shingle
+- uplift
+- fastener pull-out
+- seal strip
+- ARMA
+- unsealed tabs
+- uplift analysis
+- ASTM D7158
+- architectural shingles
+
+If any forbidden term is needed, do not rewrite it as analysis—only quote it if it appears in the engineer causation statement.
+Do not fall back to wind_uplift reasoning under any circumstance.`;
+
           userPrompt = `${claimSummary}
 
 === FORCED LOW-SLOPE MEMBRANE REBUTTAL MODE ===
@@ -6157,12 +6216,7 @@ ${scenarioDetectionMatchedTerms.length > 0 ? scenarioDetectionMatchedTerms.map((
 Engineer report evidence:
 ${lowSlopeEvidenceContext}
 
-You MUST build this rebuttal from scratch using ONLY these concepts:
-${LOW_SLOPE_ALLOWED_CONTENT_BULLET_LIST}
-
-Required opening sentence (exact):
-"${REQUIRED_LOW_SLOPE_OPENING}"
-
+Draft a full carrier-ready rebuttal from scratch using LOW_SLOPE_MEMBRANE logic only.
 Required findings to include:
 - no proof of timing
 - no membrane core cuts
@@ -6173,16 +6227,7 @@ Required findings to include:
 - no moisture mapping
 - structural snow-load analysis is not membrane watertightness analysis
 
-STRICT FORBIDDEN TERMS (must be absent from final output):
-- shingle
-- uplift
-- fastener pull-out
-- seal strip
-- ARMA
-- unsealed tabs
-- uplift analysis
-
-If you cannot comply, return an empty response.`;
+If you cannot comply with these constraints, return an empty response.`;
         }
         break;
       }
@@ -8210,10 +8255,18 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     }
 
     if (['engineer_report_rebuttal', 'auto_draft_rebuttal'].includes(analysisType) && typeof analysisResult === 'string') {
-      const lowSlopeFallbackFromReportText = /snowmelt|ponding water|low-slope|ice dam|membrane/i.test(
-        String(engineerRebuttalReportText || content || '')
-      );
-      const enforcedScenario = engineerRebuttalPrimaryScenario || (lowSlopeFallbackFromReportText ? LOW_SLOPE_PRIMARY_SCENARIO : null);
+      const lowSlopeDetectionForEnforcement = detectLowSlopeAcrossSources([
+        engineerRebuttalCausationQuote,
+        engineerRebuttalReportText,
+        String(content || ''),
+        analysisResult,
+      ]);
+
+      const enforcedScenario =
+        engineerRebuttalPrimaryScenario === LOW_SLOPE_PRIMARY_SCENARIO || lowSlopeDetectionForEnforcement.shouldForce
+          ? LOW_SLOPE_PRIMARY_SCENARIO
+          : engineerRebuttalPrimaryScenario;
+
       analysisResult = enforceLowSlopeRebuttalRequirements(
         analysisResult,
         enforcedScenario,
@@ -8577,10 +8630,35 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       }
     }
 
-    const enforcedScenarioForResponse = engineerRebuttalPrimaryScenario;
+    const preSendLowSlopeDetection = detectLowSlopeAcrossSources([
+      engineerRebuttalCausationQuote,
+      engineerRebuttalReportText,
+      typeof analysisResult === 'string' ? analysisResult : '',
+    ]);
+
+    const enforcedScenarioForResponse =
+      engineerRebuttalPrimaryScenario === LOW_SLOPE_PRIMARY_SCENARIO || preSendLowSlopeDetection.shouldForce
+        ? LOW_SLOPE_PRIMARY_SCENARIO
+        : engineerRebuttalPrimaryScenario;
+
+    const scenarioDiagnosticsMatchedTerms = Array.from(
+      new Set([...(scenarioDetectionMatchedTerms || []), ...preSendLowSlopeDetection.matchedTerms])
+    );
+    const scenarioDiagnosticsRulePackLoaded = getRulePackLoaded(enforcedScenarioForResponse);
+    const scenarioDiagnosticsSuppressedRulePacks = getSuppressedRulePacks(enforcedScenarioForResponse);
+
     if (['engineer_report_rebuttal', 'auto_draft_rebuttal'].includes(analysisType) && typeof analysisResult === 'string') {
       assertLowSlopeStrictPreSendTerms(analysisResult, enforcedScenarioForResponse);
+      assertLowSlopeForbiddenTerms(
+        analysisResult,
+        enforcedScenarioForResponse,
+        engineerRebuttalCausationQuote,
+      );
     }
+
+    console.log(
+      `[darwin][${analysisType}] final scenario diagnostics: primary=${enforcedScenarioForResponse || 'none'} rule_pack=${scenarioDiagnosticsRulePackLoaded} suppressed=[${scenarioDiagnosticsSuppressedRulePacks.join(',') || 'none'}] matched_terms=[${scenarioDiagnosticsMatchedTerms.join(',') || 'none'}]`
+    );
 
     const responseBuildStep = startStep('response', 'Build response payload');
     const responsePayload: any = {
@@ -8592,10 +8670,11 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       carrierDismantler: carrierDismantlerResult,
       claimId,
       scenario_diagnostics: {
-        primaryScenario: engineerRebuttalPrimaryScenario,
-        rulePackLoaded: scenarioRulePackLoaded,
-        suppressedRulePacks: scenarioSuppressedRulePacks,
-        matchedPhysicalMechanismTerms: scenarioDetectionMatchedTerms,
+        primaryScenario: enforcedScenarioForResponse,
+        rulePackLoaded: scenarioDiagnosticsRulePackLoaded,
+        suppressedRulePacks: scenarioDiagnosticsSuppressedRulePacks,
+        matchedPhysicalMechanismTerms: scenarioDiagnosticsMatchedTerms,
+        matchedTerms: scenarioDiagnosticsMatchedTerms,
       },
       jurisdiction: {
         state_code: resolvedState,
