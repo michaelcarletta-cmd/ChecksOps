@@ -1548,14 +1548,14 @@ PROMPT INJECTION ORDER (ENFORCED):
 
 function buildScenarioAttackVectors(primary: string, allActive: Set<string>): string {
   // Primary scenario controls rebuttal focus; secondary scenarios are supporting context only.
-  if (primary === 'low_slope_snow_ice_ponding') {
+  if (primary === LOW_SLOPE_PRIMARY_SCENARIO) {
     return `=== LOW-SLOPE / SNOW / ICE / MEMBRANE ATTACK APPROACH ===
-MANDATORY THEORY SUMMARY (OPENING SENTENCE):
-"The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering."
+LOW-SLOPE-ONLY MODE (MANDATORY):
+Use ONLY the following subject matter:
+${LOW_SLOPE_ALLOWED_CONTENT_BULLET_LIST}
 
-Do NOT default to generic storm/wind/shingle language in this scenario.
-Unless a wind/shingle mechanic is directly quoted from the engineer's causation sentence, do NOT use:
-${LOW_SLOPE_FORBIDDEN_BULLET_LIST}
+MANDATORY THEORY SUMMARY (OPENING SENTENCE):
+"${REQUIRED_LOW_SLOPE_OPENING}"
 
 ${LOW_SLOPE_PRIORITY_ORDER}
 
@@ -1574,8 +1574,8 @@ MANDATORY DISTINCTION:
 ${LOW_SLOPE_STRUCTURAL_DISTINCTION}
 Even if roof framing can carry load, that does not prove membrane watertightness.
 
-EVIDENCE GROUNDING RULE:
-Do not insert damage descriptions (e.g., creased shingle tabs, fractured shingles, wind uplift mechanics) unless those terms appear as direct quote text in the engineer’s causation sentence.`;
+HARD ASSERTION:
+If ${LOW_SLOPE_PRIMARY_SCENARIO} is primary, forbidden wind/shingle mechanics must not appear unless directly quoted from the engineer causation sentence.`;
   }
 
   const blocks: string[] = [];
