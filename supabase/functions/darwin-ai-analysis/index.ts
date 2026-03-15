@@ -8577,6 +8577,11 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       }
     }
 
+    const enforcedScenarioForResponse = engineerRebuttalPrimaryScenario;
+    if (['engineer_report_rebuttal', 'auto_draft_rebuttal'].includes(analysisType) && typeof analysisResult === 'string') {
+      assertLowSlopeStrictPreSendTerms(analysisResult, enforcedScenarioForResponse);
+    }
+
     const responseBuildStep = startStep('response', 'Build response payload');
     const responsePayload: any = {
       success: true,
@@ -8586,6 +8591,12 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       suggestedActions,
       carrierDismantler: carrierDismantlerResult,
       claimId,
+      scenario_diagnostics: {
+        primaryScenario: engineerRebuttalPrimaryScenario,
+        rulePackLoaded: scenarioRulePackLoaded,
+        suppressedRulePacks: scenarioSuppressedRulePacks,
+        matchedPhysicalMechanismTerms: scenarioDetectionMatchedTerms,
+      },
       jurisdiction: {
         state_code: resolvedState,
         state_name: stateInfo.stateName,
