@@ -5163,7 +5163,10 @@ Be specific, professional, and provide communications that are ready to copy and
         const dismantlerExtraction = runEngineerReportDismantler(engineerTextForDismantler);
         console.log(`[darwin] EngineerReportDismantler: primary=${dismantlerExtraction.primaryScenario || 'none'}, secondary=[${dismantlerExtraction.secondaryScenarios.join(',')}], maintenanceNarrative=${dismantlerExtraction.isMaintenanceDenialNarrative}, dualCausation=${dismantlerExtraction.isDualCausation}, engineerCause="${dismantlerExtraction.engineerStatedCause.substring(0, 80)}", missingTests=${dismantlerExtraction.criticalTestingNotPerformed.length}`);
 
-        // Build scenario-specific attack vectors based on primary scenario
+        // Run deterministic intelligence extraction
+        engineerIntelligence = extractEngineerIntelligence(engineerTextForDismantler);
+        console.log(`[darwin][engineer-intel] theory="${engineerIntelligence.engineerTheory.substring(0, 80)}" weatherEvents=[${engineerIntelligence.weatherEventsMentioned.join(',')}] testsDocumented=[${engineerIntelligence.testsDocumented.join(',')}] testsMissing=[${engineerIntelligence.testsMissing.join(',')}] contradictions=${engineerIntelligence.contradictions.length}`);
+
         const primarySc = dismantlerExtraction.primaryScenario || '';
         const scopedSecondaryScenarios = getScenarioScopedSecondaryScenarios(primarySc || null, dismantlerExtraction.secondaryScenarios || []);
 
