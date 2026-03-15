@@ -593,26 +593,37 @@ function collectLowSlopeForbiddenViolations(
   return [...violations];
 }
 
+function collectLowSlopeStrictPreSendViolations(result: string, primaryScenario: string | null): string[] {
+  if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return [];
+
+  return Array.from(new Set(
+    LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES
+      .filter((rule) => rule.regex.test(result))
+      .map((rule) => rule.label),
+  ));
+}
+
+function buildLowSlopeForbiddenTermErrorMessage(violations: string[]): string {
+  const uniqueViolations = Array.from(new Set(violations.filter(Boolean)));
+  if (uniqueViolations.length === 0) {
+    return 'LOW_SLOPE_MEMBRANE generation failed due to forbidden term.';
+  }
+
+  return `LOW_SLOPE_MEMBRANE generation failed due to forbidden term. Violations: ${uniqueViolations.join(', ')}`;
+}
+
 function assertLowSlopeForbiddenTerms(result: string, primaryScenario: string | null, engineerCausationSentence: string): void {
   const violations = collectLowSlopeForbiddenViolations(result, primaryScenario, engineerCausationSentence);
   if (violations.length > 0) {
-    throw new Error(
-      `LOW_SLOPE_MEMBRANE generation failed due to forbidden term: ${Array.from(new Set(violations)).join(', ')}`,
-    );
+    throw new Error(buildLowSlopeForbiddenTermErrorMessage(violations));
   }
 }
 
 function assertLowSlopeStrictPreSendTerms(result: string, primaryScenario: string | null): void {
-  if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return;
-
-  const strictViolations = LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES
-    .filter((rule) => rule.regex.test(result))
-    .map((rule) => rule.label);
+  const strictViolations = collectLowSlopeStrictPreSendViolations(result, primaryScenario);
 
   if (strictViolations.length > 0) {
-    throw new Error(
-      `LOW_SLOPE_MEMBRANE generation failed due to forbidden term: ${Array.from(new Set(strictViolations)).join(', ')}`,
-    );
+    throw new Error(buildLowSlopeForbiddenTermErrorMessage(strictViolations));
   }
 }
 
