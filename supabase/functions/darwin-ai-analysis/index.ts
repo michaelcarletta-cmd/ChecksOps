@@ -994,34 +994,47 @@ function enforceEngineerRebuttalMandatorySections(result: string, context: Engin
   return updated.trim();
 }
 
-function enforceEngineerRebuttalLowSlopeOpening(result: string, primaryScenario: string | null): string {
+function enforceEngineerRebuttalLowSlopeOpening(
+  result: string,
+  primaryScenario: string | null,
+  analysisType?: string,
+): string {
   if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return result;
 
-  const required = REQUIRED_LOW_SLOPE_OPENING;
-  if (!required) return result;
-
-  const lines = result.split('\n');
-  const salutationIdx = lines.findIndex((line) => /^\s*Dear\b/i.test(line));
-
-  if (salutationIdx >= 0) {
-    const afterSalutation = lines.slice(salutationIdx + 1).join('\n');
-    if (afterSalutation.includes(required)) return result;
-
-    const stripped = result.replace(required, '').replace(/\n{3,}/g, '\n\n').trim();
-    const rebuilt = stripped.split('\n');
-    const rebuiltSalutationIdx = rebuilt.findIndex((line) => /^\s*Dear\b/i.test(line));
-    if (rebuiltSalutationIdx >= 0) {
-      rebuilt.splice(rebuiltSalutationIdx + 1, 0, '', required, '');
-      return rebuilt.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-    }
+  // Do NOT force the low-slope opening into formal carrier-ready letter outputs.
+  // It can be used in internal analysis/drafts, but not injected into the body
+  // of a polished rebuttal letter where it creates awkward duplication.
+  if (analysisType === 'engineer_report_rebuttal' || analysisType === 'auto_draft_rebuttal') {
+    return result;
   }
 
-  // No salutation: insert at first actual body paragraph after claim headers
-  const stripped = result.replace(required, '').replace(/\n{3,}/g, '\n\n').trim();
-  const rebuilt = stripped.split('\n');
-  const bodyStartIdx = findEngineerLetterBodyStart(rebuilt);
-  rebuilt.splice(bodyStartIdx, 0, required, '');
-  return rebuilt.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  const required = REQUIRED_LOW_SLOPE_OPENING;
+  const requiredLower = required.toLowerCase();
+  const lines = result.split('\n');
+
+  const dateOfLossIdx = lines.findIndex((line) => /^\s*Date of Loss\s*:/i.test(line));
+  const searchStart = dateOfLossIdx >= 0 ? dateOfLossIdx + 1 : 0;
+
+  let firstBodyLineIdx = -1;
+  for (let i = searchStart; i < lines.length; i += 1) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    if (/^(RE\s*:|Claim Number\s*:|Policy Number\s*:|Insured\s*:|Property Address\s*:|Date of Loss\s*:)/i.test(line)) continue;
+    firstBodyLineIdx = i;
+    break;
+  }
+
+  if (firstBodyLineIdx < 0) {
+    return `${required}\n\n${result}`.trim();
+  }
+
+  const firstBodyLine = lines[firstBodyLineIdx].trim();
+  if (firstBodyLine.toLowerCase().startsWith(requiredLower)) {
+    return result;
+  }
+
+  lines[firstBodyLineIdx] = `${required} ${firstBodyLine}`;
+  return lines.join('\n');
 }
 
 function suppressLowSlopeUnsupportedBoilerplate(result: string, supportCorpus: string): string {
