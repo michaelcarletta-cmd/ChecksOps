@@ -1462,11 +1462,11 @@ DETECTED EXCLUSION LANGUAGE: ${denialNarrativeSignals.slice(0, 15).join(', ')}
   }
 
   // ── SCENARIO PACKS: PRIMARY FIRST, THEN SECONDARY ──
-  if (primaryScenario || secondaryScenarios.length > 0) {
+  if (primaryScenario || scopedSecondaryScenarios.length > 0) {
     promptInjection += `
 === SCENARIO-SPECIFIC KNOWLEDGE PACKS ===
 PRIMARY SCENARIO: ${primaryScenario || 'none'}
-SECONDARY SCENARIOS: ${secondaryScenarios.join(', ') || 'none'}
+SECONDARY SCENARIOS: ${scopedSecondaryScenarios.join(', ') || 'none'}
 
 PRIORITY RULE: The universal extraction above controls the reasoning structure.
 PRIMARY scenario pack arguments are the main technical rebuttal enhancement.
@@ -1488,7 +1488,7 @@ PROMPT INJECTION ORDER (ENFORCED):
         promptInjection += `--- PRIMARY SCENARIO PACK ---\n${primaryPack}\n`;
       }
     }
-    for (const sec of secondaryScenarios) {
+    for (const sec of scopedSecondaryScenarios) {
       const secPack = SCENARIO_KNOWLEDGE_PACKS[sec];
       if (secPack) {
         promptInjection += `--- SECONDARY SCENARIO PACK: ${sec} ---\n${secPack}\n`;
