@@ -431,8 +431,12 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
       console.log(`[darwin][resolveEngineerSource] ${candidateFiles.length} total candidates: ${candidateFiles.map(c => `"${c.file.file_name}"(tier=${c.tier},len=${c.textLen})`).join(', ')}`);
     }
   } else {
-    const allWithText = allFiles.filter((f: any) => String(f?.extracted_text || '').trim().length > 500);
-    console.log(`[darwin][resolveEngineerSource] No engineer file candidates found. Files with text>500: ${allWithText.length}. All files: ${allFiles.map((f: any) => `"${f.file_name}"(cls=${f.document_classification},len=${String(f?.extracted_text||'').trim().length})`).join(', ')}`);
+    const allWithText = allFiles.filter((f: any) => {
+      const ct = String(f?.clean_text || '').trim().length;
+      const et = String(f?.extracted_text || '').trim().length;
+      return Math.max(ct, et) > 500;
+    });
+    console.log(`[darwin][resolveEngineerSource] No engineer file candidates found. Files with text>500: ${allWithText.length}. All files: ${allFiles.map((f: any) => `"${f.file_name}"(cls=${f.document_classification},docType=${f.document_type},len=${Math.max(String(f?.clean_text||'').trim().length, String(f?.extracted_text||'').trim().length)},ready=${f.ready_for_analysis})`).join(', ')}`);
   }
 
   const additionalContextText = String(
