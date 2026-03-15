@@ -422,6 +422,13 @@ Deno.serve(async (req) => {
         ready_for_analysis: readyForAnalysis,
         needs_reprocessing: textQuality.status === 'poor' || textQuality.status === 'unusable',
         processed_at: new Date().toISOString(),
+        classification_candidates: smartClassification.candidates,
+        classification_method: smartClassification.method,
+        classification_reasoning: smartClassification.reasoning,
+        classification_review_required: smartClassification.review_required,
+        is_mixed_document: smartClassification.is_mixed_document,
+        document_family: smartClassification.document_family,
+        automation_safe: smartClassification.automation_safe,
         processing_error: null,
       };
       // Store extracted and clean text
