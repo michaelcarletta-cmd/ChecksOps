@@ -2750,6 +2750,9 @@ Deno.serve(async (req) => {
     let engineerRebuttalCriticalTestingNotPerformed: string[] = [];
     let engineerRebuttalReportText = '';
     let lowSlopeSupportCorpusForFilters = '';
+    let scenarioRulePackLoaded = 'UNIVERSAL_ONLY';
+    let scenarioSuppressedRulePacks: string[] = [];
+    let scenarioDetectionMatchedTerms: string[] = [];
 
     // Build photo summary for context
     const analyzedPhotoCount = context.photos?.filter((p: any) => p.ai_analyzed_at)?.length || 0;
