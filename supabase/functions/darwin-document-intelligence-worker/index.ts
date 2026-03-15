@@ -209,6 +209,29 @@ async function processJob(supabase: ReturnType<typeof createClient>, job: QueueR
     })
     .eq('id', job.id);
 
+  // Enqueue meaning extraction after intelligence is saved
+  const { data: savedIntel, error: savedIntelError } = await supabase
+    .from('claim_document_intelligence')
+    .select('id, claim_id, file_id, segment_id, source_scope, document_type, document_classification, source_summary, confidence_score')
+    .eq(segmentId ? 'segment_id' : 'file_id', segmentId ? segmentId : fileId)
+    .maybeSingle();
+
+  if (savedIntelError || !savedIntel) {
+    throw new Error(`Unable to fetch saved document intelligence for meaning queue`);
+  }
+
+  await enqueueDocumentMeaningJob(supabase, {
+    claim_id: savedIntel.claim_id,
+    file_id: savedIntel.file_id,
+    intelligence_id: savedIntel.id,
+    segment_id: savedIntel.segment_id ?? null,
+    source_scope: savedIntel.source_scope || sourceScope,
+    document_type: savedIntel.document_type,
+    document_classification: savedIntel.document_classification,
+    source_summary: savedIntel.source_summary || '',
+    priority: Number(savedIntel.confidence_score || 0.5) >= 0.85 ? 100 : 50,
+  });
+
   await refreshClaimMasterState(supabase, claimId, fileId, sourceDocumentType);
 }
 
