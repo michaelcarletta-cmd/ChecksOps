@@ -1137,55 +1137,210 @@ function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: st
   updated = suppressLowSlopeUnsupportedBoilerplate(updated, supportCorpus);
 
   const lower = updated.toLowerCase();
+  const additions: string[] = [];
 
-  const sectionsToAppend: string[] = [];
+  const hasTimingFailure = /timing failure/i.test(updated)
+    || (/timing of openings/i.test(lower) && /no objective testing|no proof|not prove timing/i.test(lower));
 
-  const hasPriorityOrder = /priority order \(mandatory\)/i.test(lower)
-    || /1\)\s*timing of openings/i.test(lower);
-  if (!hasPriorityOrder) sectionsToAppend.push(LOW_SLOPE_PRIORITY_ORDER);
-
-  const hasTimingFailureSection = /section\s*1\s*[—-]\s*timing failure/i.test(lower)
-    || (/timing of openings/i.test(lower) && /months|years/i.test(lower) && /no objective testing|no testing|without testing|no proof/i.test(lower));
-  if (!hasTimingFailureSection) sectionsToAppend.push(LOW_SLOPE_TIMING_FAILURE_SECTION);
-
-  const hasMethodologyPack = [
-    /membrane core cuts?/i,
-    /seam adhesion|peel testing/i,
-    /leak[-\s]path tracing/i,
-    /moisture mapping/i,
-  ].every((pattern) => pattern.test(updated));
-  if (!hasMethodologyPack) {
-    sectionsToAppend.push(`LOW-SLOPE MEMBRANE METHODOLOGY FAILURES (MANDATORY):
-- no membrane core cuts
-- no seam adhesion/peel testing
-- no leak-path tracing
-- no moisture mapping
-- no proof of timing of openings`);
+  if (!hasTimingFailure) {
+    additions.push(
+      `The report fails to prove the timing of the alleged membrane openings. Without membrane core cuts, seam adhesion or peel testing, moisture mapping, and leak-path tracing, the report cannot establish whether the relevant openings pre-dated the event or were created or expanded during snow, ice, ponding, or freeze-thaw conditions.`
+    );
   }
 
-  const hasDrainageFailureSection = /section\s*2\s*[—-]\s*drainage\s*\/\s*snowmelt analysis failure/i.test(lower)
-    || (/drainage[-\s]capacity/i.test(lower) && /snow[-\s]water equivalent|runoff analysis/i.test(lower));
-  if (!hasDrainageFailureSection) sectionsToAppend.push(LOW_SLOPE_DRAINAGE_FAILURE_SECTION);
+  const hasTestingConcepts =
+    /membrane core cuts?/i.test(updated) &&
+    /seam adhesion|peel testing/i.test(updated) &&
+    /drainage-capacity analysis/i.test(updated) &&
+    /snow-water equivalent|runoff analysis/i.test(updated) &&
+    /leak-path tracing/i.test(updated) &&
+    /moisture mapping/i.test(updated);
 
-  const hasContradictionAttack = /section\s*3\s*[—-]\s*engineer contradiction/i.test(lower)
-    || (/snow impeded drainage/i.test(lower)
-      && /standing water (was present|existed)/i.test(lower)
-      && /freeze[-\s]thaw/i.test(lower)
-      && /did not create or expand the openings|deterioration alone caused the loss|without proving/i.test(lower));
-  if (!hasContradictionAttack) sectionsToAppend.push(LOW_SLOPE_CONTRADICTION_SECTION);
-
-  const hasStructuralVsWatertightness = /structural snow[-\s]load analysis is not membrane watertightness analysis/i.test(lower)
-    || (/structural snow[-\s]load analysis/i.test(lower) && /membrane watertightness analysis/i.test(lower));
-  if (!hasStructuralVsWatertightness) {
-    sectionsToAppend.push(`STRUCTURAL VS WATERTIGHTNESS DISTINCTION:
-${LOW_SLOPE_STRUCTURAL_DISTINCTION} Even if framing can carry snow load, that does not prove membrane watertightness or entry-path causation.`);
+  if (!hasTestingConcepts) {
+    additions.push(
+      `The report also omits the core forensic testing necessary to support a deterioration-only conclusion, including membrane core cuts, seam adhesion and peel testing, drainage-capacity analysis, snow-water equivalent or runoff analysis, leak-path tracing, and moisture mapping. Without those methods, the causation opinion is not scientifically established.`
+    );
   }
 
-  if (sectionsToAppend.length > 0) {
-    updated += `\n\n${sectionsToAppend.join('\n\n')}`;
+  const hasContradiction =
+    /snow impeded drainage|impeded water from draining freely/i.test(lower) &&
+    /standing water/i.test(lower) &&
+    /deterioration alone caused the loss|without proving deterioration alone|maintenance/i.test(lower);
+
+  if (!hasContradiction) {
+    additions.push(
+      `The report is internally contradictory because it acknowledges that snow and ice impeded drainage and increased watertightness demand, yet still attributes the loss solely to deterioration without objective proof that the event did not create, activate, or expand the relevant openings.`
+    );
   }
 
-  return suppressLowSlopeUnsupportedBoilerplate(updated.trim(), supportCorpus);
+  const hasStructuralDistinction =
+    /structural snow-load analysis does not prove membrane watertightness/i.test(lower) ||
+    (/structural/i.test(lower) && /watertightness/i.test(lower));
+
+  if (!hasStructuralDistinction) {
+    additions.push(
+      `Structural snow-load analysis does not prove membrane watertightness. A roof can remain structurally adequate while still failing at the membrane, seam, flashing, or drainage level under snowmelt, ponding, or freeze-thaw conditions.`
+    );
+  }
+
+  if (additions.length > 0) {
+    updated = `${updated}\n\n${additions.join('\n\n')}`;
+  }
+
+  updated = suppressLowSlopeUnsupportedBoilerplate(updated.trim(), supportCorpus);
+  updated = cleanupEngineerLetterFormatting(updated);
+
+  return updated.trim();
+}
+
+// ═══ FINAL LETTER CLEANUP HELPERS ═══
+
+function dedupeRepeatedOpeningSentence(text: string, requiredOpening: string): string {
+  if (!text || !requiredOpening) return text;
+  const escaped = requiredOpening.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(escaped, 'g');
+  const matches = [...text.matchAll(regex)];
+  if (matches.length <= 1) return text;
+
+  let seen = false;
+  return text.replace(regex, () => {
+    if (seen) return '';
+    seen = true;
+    return requiredOpening;
+  }).replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function cleanupEngineerLetterFormatting(text: string): string {
+  if (!text) return text;
+
+  let cleaned = text;
+
+  // Remove raw internal control lines/blocks
+  const forbiddenLinePatterns: RegExp[] = [
+    /^PRIORITY ORDER \(MANDATORY\):.*$/gim,
+    /^SECTION 1 [—-] TIMING FAILURE:.*$/gim,
+    /^SECTION 2 [—-] DRAINAGE\s*\/\s*SNOWMELT ANALYSIS FAILURE:.*$/gim,
+    /^SECTION 3 [—-] ENGINEER CONTRADICTION:.*$/gim,
+    /^STRUCTURAL VS WATERTIGHTNESS DISTINCTION:.*$/gim,
+    /^STRUCTURAL VS MEMBRANE DISTINCTION:.*$/gim,
+    /^LOW-SLOPE MEMBRANE METHODOLOGY FAILURES \(MANDATORY\):.*$/gim,
+    /^LOW_SLOPE_MEMBRANE.*$/gim,
+    /^HARD ASSERTION.*$/gim,
+    /^primaryScenario=.*$/gim,
+    /^rule_pack=.*$/gim,
+    /^rulePackLoaded=.*$/gim,
+    /^suppressed_rule_packs=.*$/gim,
+    /^suppressedRulePacks=.*$/gim,
+  ];
+
+  for (const pattern of forbiddenLinePatterns) {
+    cleaned = cleaned.replace(pattern, '');
+  }
+
+  // Remove bullet remnants from internal control blocks
+  cleaned = cleaned.replace(/^- no membrane core cuts\s*$/gim, '');
+  cleaned = cleaned.replace(/^- no seam adhesion\/peel testing\s*$/gim, '');
+  cleaned = cleaned.replace(/^- no drainage-capacity analysis\s*$/gim, '');
+  cleaned = cleaned.replace(/^- no snow-water equivalent\/runoff analysis\s*$/gim, '');
+  cleaned = cleaned.replace(/^- no leak-path tracing\s*$/gim, '');
+  cleaned = cleaned.replace(/^- no moisture mapping\s*$/gim, '');
+  cleaned = cleaned.replace(/^- no proof of timing of openings\s*$/gim, '');
+
+  // Fix salutation collisions
+  cleaned = cleaned.replace(
+    /(Dear\s+[^\n,]+,\s*)(The engineering report attributes the water intrusion to snow\/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering\.)/i,
+    `$1\n\n$2`
+  );
+
+  // Normalize citation spacing
+  cleaned = cleaned.replace(/\bN\.\s*J\.\s*A\.\s*C\.\s*/g, 'N.J.A.C. ');
+  cleaned = cleaned.replace(/\bN\.\s*J\.\s*S\.\s*A\.\s*/g, 'N.J.S.A. ');
+
+  // Numeric spacing fixes
+  cleaned = cleaned.replace(/(\d)\.\s+(\d)/g, '$1.$2');
+  cleaned = cleaned.replace(/(\d)\s*-\s*inches\b/gi, '$1 inches');
+  cleaned = cleaned.replace(/\b0\.\s+78\b/g, '0.78');
+
+  // Trim spaces before punctuation
+  cleaned = cleaned.replace(/\s+([,.;:])/g, '$1');
+
+  // Collapse excess blank lines
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+  // Remove duplicated low-slope opening if it appears more than once
+  cleaned = dedupeRepeatedOpeningSentence(cleaned, REQUIRED_LOW_SLOPE_OPENING);
+
+  return cleaned.trim();
+}
+
+function ensureLowSlopeOpeningAfterSalutation(text: string, primaryScenario: string | null): string {
+  if (!text || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return text;
+
+  const required = REQUIRED_LOW_SLOPE_OPENING;
+  if (!required) return text;
+
+  const lines = text.split('\n');
+  const salutationIdx = lines.findIndex((line) => /^\s*Dear\b/i.test(line));
+
+  if (salutationIdx === -1) {
+    return enforceEngineerRebuttalLowSlopeOpening(text, primaryScenario);
+  }
+
+  const afterSalutation = lines.slice(salutationIdx + 1).join('\n').trim();
+  if (afterSalutation.startsWith(required)) {
+    return text;
+  }
+
+  // Remove stray copies before re-inserting in correct place
+  let rebuilt = text.replace(required, '').replace(/\n{3,}/g, '\n\n').trim();
+  const rebuiltLines = rebuilt.split('\n');
+  const rebuiltSalutationIdx = rebuiltLines.findIndex((line) => /^\s*Dear\b/i.test(line));
+
+  if (rebuiltSalutationIdx === -1) return rebuilt;
+
+  rebuiltLines.splice(rebuiltSalutationIdx + 1, 0, '', required);
+  return rebuiltLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function hasInternalEngineerControlLeak(text: string): boolean {
+  if (!text) return false;
+  return [
+    'PRIORITY ORDER (MANDATORY)',
+    'SECTION 1 — TIMING FAILURE:',
+    'SECTION 2 — DRAINAGE / SNOWMELT ANALYSIS FAILURE:',
+    'SECTION 3 — ENGINEER CONTRADICTION:',
+    'STRUCTURAL VS WATERTIGHTNESS DISTINCTION:',
+    'LOW_SLOPE_MEMBRANE',
+    'rule_pack=',
+    'primaryScenario=',
+    'suppressed_rule_packs=',
+  ].some((token) => text.includes(token));
+}
+
+function polishFinalEngineerRebuttal(
+  result: string,
+  context: EngineerRebuttalEnforcementContext
+): string {
+  if (!result) return result;
+
+  let updated = result;
+
+  // Existing mandatory section enforcement stays
+  updated = enforceEngineerRebuttalMandatorySections(updated, context);
+
+  // Keep low-slope enforcement, but do not allow raw control text in final output
+  if (context.primaryScenario === LOW_SLOPE_PRIMARY_SCENARIO) {
+    updated = enforceLowSlopeRebuttalRequirements(
+      updated,
+      context.primaryScenario,
+      buildLowSlopeSupportCorpus(context.engineerStatedCause || '')
+    );
+    updated = ensureLowSlopeOpeningAfterSalutation(updated, context.primaryScenario);
+  }
+
+  updated = cleanupEngineerLetterFormatting(updated);
+
+  return updated.trim();
 }
 
 const STRUCTURED_DARWIN_ANALYSIS_TYPES = new Set<string>([
