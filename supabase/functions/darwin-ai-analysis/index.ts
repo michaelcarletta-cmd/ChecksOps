@@ -8688,17 +8688,13 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       const structuredScenarioDiagnosticsRulePackLoaded = getRulePackLoaded(structuredEnforcedScenarioForResponse);
       const structuredScenarioDiagnosticsSuppressedRulePacks = getSuppressedRulePacks(structuredEnforcedScenarioForResponse);
 
-      const structuredStrictViolations = collectLowSlopeStrictPreSendViolations(
-        analysisResult,
-        structuredEnforcedScenarioForResponse,
-      );
-      const structuredContextualViolations = collectLowSlopeForbiddenViolations(
-        analysisResult,
+      const finalStructuredText = analysisResult;
+      const structuredViolations = collectAllLowSlopeFinalViolations(
+        finalStructuredText,
         structuredEnforcedScenarioForResponse,
         engineerRebuttalCausationQuote,
       );
-      const structuredViolations = Array.from(new Set([...structuredStrictViolations, ...structuredContextualViolations]));
-      const structuredFinalResponseHash = computeStableTextHash(analysisResult);
+      const structuredFinalResponseHash = computeStableTextHash(finalStructuredText);
 
       const structuredScenarioDiagnostics = buildLowSlopeScenarioDiagnostics({
         analysisType,
