@@ -3088,7 +3088,7 @@ Deno.serve(async (req) => {
 
       const { data, error } = await supabase
         .from('claim_files')
-        .select('file_name, document_classification, classification_metadata, uploaded_at, claim_folders(name), extracted_text, file_type')
+        .select('file_name, document_classification, document_type, classification_metadata, uploaded_at, claim_folders(name), extracted_text, clean_text, file_type, ready_for_analysis, text_quality_status')
         .eq('claim_id', claimId);
 
       if (error) {
