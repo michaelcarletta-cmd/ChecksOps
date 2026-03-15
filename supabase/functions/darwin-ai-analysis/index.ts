@@ -301,6 +301,95 @@ function detectLowSlopeAcrossSources(sources: Array<string | null | undefined>):
   };
 }
 
+type EngineerReportSourceOrigin =
+  | 'pdf_extracted_text'
+  | 'uploaded_engineer_report_text'
+  | 'file_extracted_text'
+  | 'content'
+  | 'additional_context'
+  | 'none';
+
+interface ResolveEngineerReportSourceTextParams {
+  content?: string;
+  pdfExtractedText?: string;
+  uploadedEngineerReportText?: string;
+  additionalContext?: any;
+  fullClaimFiles?: any[];
+}
+
+interface EngineerReportSourceResolution {
+  text: string;
+  sourceOrigin: EngineerReportSourceOrigin;
+  usedEngineerReportText: boolean;
+}
+
+function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceTextParams): EngineerReportSourceResolution {
+  const directContent = String(params.content || '').trim();
+  const explicitPdfText = String(params.pdfExtractedText || '').trim();
+  const uploadedEngineerText = String(params.uploadedEngineerReportText || '').trim();
+
+  const fileDerivedText = (Array.isArray(params.fullClaimFiles) ? params.fullClaimFiles : [])
+    .filter((file: any) => {
+      const classification = String(file?.document_classification || '').toLowerCase();
+      const fileName = String(file?.file_name || '').toLowerCase();
+      return classification.includes('engineering_report') || fileName.includes('engineer');
+    })
+    .map((file: any) => String(file?.extracted_text || '').trim())
+    .filter(Boolean)
+    .join('\n\n')
+    .trim();
+
+  const additionalContextText = String(
+    params.additionalContext?.userContext || params.additionalContext?.customPrompt || ''
+  ).trim();
+
+  if (explicitPdfText) {
+    return {
+      text: explicitPdfText,
+      sourceOrigin: 'pdf_extracted_text',
+      usedEngineerReportText: true,
+    };
+  }
+
+  if (uploadedEngineerText) {
+    return {
+      text: uploadedEngineerText,
+      sourceOrigin: 'uploaded_engineer_report_text',
+      usedEngineerReportText: true,
+    };
+  }
+
+  if (fileDerivedText) {
+    return {
+      text: fileDerivedText,
+      sourceOrigin: 'file_extracted_text',
+      usedEngineerReportText: true,
+    };
+  }
+
+  if (directContent) {
+    return {
+      text: directContent,
+      sourceOrigin: 'content',
+      usedEngineerReportText: false,
+    };
+  }
+
+  if (additionalContextText) {
+    return {
+      text: additionalContextText,
+      sourceOrigin: 'additional_context',
+      usedEngineerReportText: false,
+    };
+  }
+
+  return {
+    text: '',
+    sourceOrigin: 'none',
+    usedEngineerReportText: false,
+  };
+}
+
 function getRulePackLoaded(primaryScenario: string | null): string {
   if (!primaryScenario) return 'UNIVERSAL_ONLY';
   return SCENARIO_RULE_PACKS[primaryScenario] || `SCENARIO_${primaryScenario.toUpperCase()}`;
@@ -626,10 +715,28 @@ function collectAllLowSlopeFinalViolations(
 function buildLowSlopeForbiddenTermErrorMessage(violations: string[]): string {
   const uniqueViolations = Array.from(new Set(violations.filter(Boolean)));
   if (uniqueViolations.length === 0) {
-    return 'LOW_SLOPE_MEMBRANE generation failed due to forbidden term.';
+    return 'LOW_SLOPE_MEMBRANE generation failed due to forbidden term';
   }
 
   return `LOW_SLOPE_MEMBRANE generation failed due to forbidden term. Violations: ${uniqueViolations.join(', ')}`;
+}
+
+function validateFinalEngineerRebuttalOrThrow(params: {
+  finalText: string;
+  primaryScenario: string | null;
+  engineerCausationSentence: string;
+}) {
+  const violations = collectAllLowSlopeFinalViolations(
+    params.finalText,
+    params.primaryScenario,
+    params.engineerCausationSentence,
+  );
+
+  if (violations.length > 0) {
+    const validationError = new Error(buildLowSlopeForbiddenTermErrorMessage(violations));
+    (validationError as any).violations = Array.from(new Set(violations));
+    throw validationError;
+  }
 }
 
 function computeStableTextHash(input: string): string {
@@ -650,6 +757,9 @@ function buildLowSlopeScenarioDiagnostics(params: {
   matchedTerms: string[];
   finalViolationList: string[];
   finalResponseHash: string;
+  sourceTextLength: number;
+  sourceTextOrigin: EngineerReportSourceOrigin;
+  usedEngineerReportText: boolean;
 }) {
   return {
     analysisType: params.analysisType,
@@ -661,6 +771,9 @@ function buildLowSlopeScenarioDiagnostics(params: {
     matchedTerms: params.matchedTerms,
     finalViolationList: params.finalViolationList,
     finalResponseHash: params.finalResponseHash,
+    sourceTextLength: params.sourceTextLength,
+    sourceTextOrigin: params.sourceTextOrigin,
+    usedEngineerReportText: params.usedEngineerReportText,
   };
 }
 
@@ -2820,10 +2933,32 @@ Deno.serve(async (req) => {
     let engineerRebuttalTheorySentences: string[] = [];
     let engineerRebuttalCriticalTestingNotPerformed: string[] = [];
     let engineerRebuttalReportText = '';
+    let engineerRebuttalSourceTextLength = 0;
+    let engineerRebuttalSourceTextOrigin: EngineerReportSourceOrigin = 'none';
+    let engineerRebuttalUsedEngineerReportText = false;
     let lowSlopeSupportCorpusForFilters = '';
     let scenarioRulePackLoaded = 'UNIVERSAL_ONLY';
     let scenarioSuppressedRulePacks: string[] = [];
     let scenarioDetectionMatchedTerms: string[] = [];
+
+    let claimFilesWithExtractedTextCache: any[] | null = null;
+    const loadClaimFilesWithExtractedText = async (): Promise<any[]> => {
+      if (claimFilesWithExtractedTextCache) return claimFilesWithExtractedTextCache;
+
+      const { data, error } = await supabase
+        .from('claim_files')
+        .select('file_name, document_classification, classification_metadata, uploaded_at, claim_folders(name), extracted_text, file_type')
+        .eq('claim_id', claimId);
+
+      if (error) {
+        console.warn('[darwin] Unable to load claim_files extracted text for engineer source resolution:', error.message);
+        claimFilesWithExtractedTextCache = [];
+        return claimFilesWithExtractedTextCache;
+      }
+
+      claimFilesWithExtractedTextCache = data || [];
+      return claimFilesWithExtractedTextCache;
+    };
 
     // Build photo summary for context
     const analyzedPhotoCount = context.photos?.filter((p: any) => p.ai_analyzed_at)?.length || 0;
@@ -3846,12 +3981,24 @@ Be specific, professional, and provide communications that are ready to copy and
 
       case 'engineer_report_rebuttal': {
         // ── Universal Engineer Report Dismantler (runs on EVERY engineer report) ──
-        const engineerUserContext = String(
-          typeof additionalContext === 'string'
-            ? additionalContext
-            : (additionalContext?.userContext || additionalContext?.customPrompt || '')
-        ).trim();
-        const engineerTextForDismantler = content || engineerUserContext || '';
+        const fullClaimFiles = await loadClaimFilesWithExtractedText();
+        const engineerSourceResolution = resolveEngineerReportSourceText({
+          content,
+          pdfExtractedText: String(additionalContext?.pdfExtractedText || additionalContext?.documentContentSection || ''),
+          uploadedEngineerReportText: String(
+            additionalContext?.engineerReportText
+            || additionalContext?.uploadedEngineerReportText
+            || ''
+          ),
+          additionalContext,
+          fullClaimFiles,
+        });
+
+        const engineerTextForDismantler = engineerSourceResolution.text;
+        if (!engineerTextForDismantler || engineerTextForDismantler.trim().length < 500) {
+          throw new Error('Engineer rebuttal blocked: no usable engineer report text was found for scenario detection.');
+        }
+
         const dismantlerExtraction = runEngineerReportDismantler(engineerTextForDismantler);
         console.log(`[darwin] EngineerReportDismantler: primary=${dismantlerExtraction.primaryScenario || 'none'}, secondary=[${dismantlerExtraction.secondaryScenarios.join(',')}], maintenanceNarrative=${dismantlerExtraction.isMaintenanceDenialNarrative}, dualCausation=${dismantlerExtraction.isDualCausation}, engineerCause="${dismantlerExtraction.engineerStatedCause.substring(0, 80)}", missingTests=${dismantlerExtraction.criticalTestingNotPerformed.length}`);
 
@@ -3865,11 +4012,14 @@ Be specific, professional, and provide communications that are ready to copy and
         engineerRebuttalTheorySentences = [...(dismantlerExtraction.engineerTheorySentences || [])];
         engineerRebuttalCriticalTestingNotPerformed = [...(dismantlerExtraction.criticalTestingNotPerformed || [])];
         engineerRebuttalReportText = engineerTextForDismantler;
+        engineerRebuttalSourceTextLength = engineerTextForDismantler.length;
+        engineerRebuttalSourceTextOrigin = engineerSourceResolution.sourceOrigin;
+        engineerRebuttalUsedEngineerReportText = engineerSourceResolution.usedEngineerReportText;
         scenarioRulePackLoaded = getRulePackLoaded(engineerRebuttalPrimaryScenario);
         scenarioSuppressedRulePacks = getSuppressedRulePacks(engineerRebuttalPrimaryScenario);
         scenarioDetectionMatchedTerms = detectLowSlopePhysicalMechanism(engineerTextForDismantler).matchedTerms;
         console.log(
-          `[darwin][engineer_report_rebuttal] scenario diagnostics: primary=${engineerRebuttalPrimaryScenario || 'none'} rule_pack=${scenarioRulePackLoaded} suppressed=[${scenarioSuppressedRulePacks.join(',') || 'none'}] matched_terms=[${scenarioDetectionMatchedTerms.join(',') || 'none'}]`
+          `[darwin][engineer_report_rebuttal] scenario diagnostics: primary=${engineerRebuttalPrimaryScenario || 'none'} rule_pack=${scenarioRulePackLoaded} suppressed=[${scenarioSuppressedRulePacks.join(',') || 'none'}] matched_terms=[${scenarioDetectionMatchedTerms.join(',') || 'none'}] source_origin=${engineerRebuttalSourceTextOrigin} source_length=${engineerRebuttalSourceTextLength} used_engineer_report_text=${engineerRebuttalUsedEngineerReportText}`
         );
 
         const allActiveScenarios = new Set([primarySc, ...scopedSecondaryScenarios].filter(Boolean));
@@ -5710,11 +5860,8 @@ Return ONLY valid JSON with the classification.`;
         const combinedKnowledge = [kbRebuttal, kbBuildingCodes, kbDenialTactics].filter(Boolean).join('\n');
 
         // Fetch full claim files with classifications AND extracted text for evidence citation
-        const { data: fullClaimFiles } = await supabase
-          .from('claim_files')
-          .select('file_name, document_classification, classification_metadata, uploaded_at, claim_folders(name), extracted_text, file_type')
-          .eq('claim_id', claimId);
-        
+        const fullClaimFiles = await loadClaimFilesWithExtractedText();
+
         // Build detailed document inventory for citations
         let documentInventory = '';
         let documentContentSection = '';
@@ -5845,15 +5992,23 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
           }
         }
 
-        const autoDraftEngineerReports = (fullClaimFiles || []).filter((f: any) => {
-          const fileName = String(f.file_name || '').toLowerCase();
-          return f.document_classification === 'engineering_report' || fileName.includes('engineer');
+        const autoDraftSourceResolution = resolveEngineerReportSourceText({
+          content,
+          pdfExtractedText: documentContentSection,
+          uploadedEngineerReportText: String(
+            additionalContext?.engineerReportText
+            || additionalContext?.uploadedEngineerReportText
+            || ''
+          ),
+          additionalContext,
+          fullClaimFiles,
         });
-        const autoDraftEngineerReportCorpus = autoDraftEngineerReports
-          .map((f: any) => String(f.extracted_text || '').trim())
-          .filter((text: string) => text.length > 0)
-          .join('\n\n');
-        const autoDraftDismantlerSource = autoDraftEngineerReportCorpus || String(content || '');
+        const autoDraftDismantlerSource = autoDraftSourceResolution.text;
+
+        if (!autoDraftDismantlerSource || autoDraftDismantlerSource.trim().length < 500) {
+          throw new Error('Engineer rebuttal blocked: no usable engineer report text was found for scenario detection.');
+        }
+
         const autoDraftDismantler = runEngineerReportDismantler(autoDraftDismantlerSource);
         const autoDraftCausationQuote = String(
           autoDraftDismantler.engineerStatedCause
@@ -5864,9 +6019,6 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
         const autoDraftLowSlopeDetection = detectLowSlopeAcrossSources([
           autoDraftCausationQuote,
           autoDraftDismantlerSource,
-          documentContentSection,
-          claimSummary,
-          String(claim?.loss_description || ''),
         ]);
 
         const autoDraftPrimaryScenario = autoDraftLowSlopeDetection.shouldForce
@@ -5887,13 +6039,16 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
         engineerRebuttalTheorySentences = [...(autoDraftDismantler.engineerTheorySentences || [])];
         engineerRebuttalCriticalTestingNotPerformed = [...(autoDraftDismantler.criticalTestingNotPerformed || [])];
         engineerRebuttalReportText = autoDraftDismantlerSource;
+        engineerRebuttalSourceTextLength = autoDraftDismantlerSource.length;
+        engineerRebuttalSourceTextOrigin = autoDraftSourceResolution.sourceOrigin;
+        engineerRebuttalUsedEngineerReportText = autoDraftSourceResolution.usedEngineerReportText;
         lowSlopeSupportCorpusForFilters = buildLowSlopeSupportCorpus(autoDraftCausationQuote);
         scenarioRulePackLoaded = autoDraftRulePackLoaded;
         scenarioSuppressedRulePacks = [...autoDraftSuppressedRulePacks];
         scenarioDetectionMatchedTerms = [...autoDraftLowSlopeDetection.matchedTerms];
 
         console.log(
-          `[darwin][auto_draft_rebuttal] scenario diagnostics: primary=${autoDraftPrimaryScenario || 'none'} rule_pack=${autoDraftRulePackLoaded} suppressed=[${autoDraftSuppressedRulePacks.join(',') || 'none'}] matched_terms=[${autoDraftLowSlopeDetection.matchedTerms.join(',') || 'none'}]`
+          `[darwin][auto_draft_rebuttal] scenario diagnostics: primary=${autoDraftPrimaryScenario || 'none'} rule_pack=${autoDraftRulePackLoaded} suppressed=[${autoDraftSuppressedRulePacks.join(',') || 'none'}] matched_terms=[${autoDraftLowSlopeDetection.matchedTerms.join(',') || 'none'}] source_origin=${engineerRebuttalSourceTextOrigin} source_length=${engineerRebuttalSourceTextLength} used_engineer_report_text=${engineerRebuttalUsedEngineerReportText}`
         );
 
         systemPrompt = `You are an elite claims advocate generating a COMPREHENSIVE STRATEGIC REBUTTAL to OVERTURN the carrier's denial and secure coverage. You have access to ALL claim intelligence, strategic analyses, carrier behavior data, previous analyses, and the complete evidence file for this claim.
@@ -8310,8 +8465,6 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       const lowSlopeDetectionForEnforcement = detectLowSlopeAcrossSources([
         engineerRebuttalCausationQuote,
         engineerRebuttalReportText,
-        String(content || ''),
-        analysisResult,
       ]);
 
       const enforcedScenario =
@@ -8671,10 +8824,6 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       const structuredPreSendLowSlopeDetection = detectLowSlopeAcrossSources([
         engineerRebuttalCausationQuote,
         engineerRebuttalReportText,
-        String(content || ''),
-        claimSummary,
-        String(claim?.loss_description || ''),
-        analysisResult,
       ]);
 
       const structuredEnforcedScenarioForResponse =
@@ -8689,13 +8838,31 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       const structuredScenarioDiagnosticsSuppressedRulePacks = getSuppressedRulePacks(structuredEnforcedScenarioForResponse);
 
       const finalStructuredText = analysisResult;
-      const structuredViolations = collectAllLowSlopeFinalViolations(
-        finalStructuredText,
-        structuredEnforcedScenarioForResponse,
-        engineerRebuttalCausationQuote,
-      );
-      const structuredFinalResponseHash = computeStableTextHash(finalStructuredText);
+      let structuredViolations: string[] = [];
+      let structuredValidationErrorMessage: string | null = null;
 
+      try {
+        validateFinalEngineerRebuttalOrThrow({
+          finalText: finalStructuredText,
+          primaryScenario: structuredEnforcedScenarioForResponse,
+          engineerCausationSentence: engineerRebuttalCausationQuote,
+        });
+      } catch (validationError: any) {
+        structuredViolations = Array.from(new Set(
+          Array.isArray(validationError?.violations)
+            ? validationError.violations
+            : collectAllLowSlopeFinalViolations(
+                finalStructuredText,
+                structuredEnforcedScenarioForResponse,
+                engineerRebuttalCausationQuote,
+              )
+        ));
+        structuredValidationErrorMessage = String(
+          validationError?.message || buildLowSlopeForbiddenTermErrorMessage(structuredViolations)
+        );
+      }
+
+      const structuredFinalResponseHash = computeStableTextHash(finalStructuredText);
       const structuredScenarioDiagnostics = buildLowSlopeScenarioDiagnostics({
         analysisType,
         responsePath,
@@ -8705,16 +8872,29 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         matchedTerms: structuredScenarioDiagnosticsMatchedTerms,
         finalViolationList: structuredViolations,
         finalResponseHash: structuredFinalResponseHash,
+        sourceTextLength: engineerRebuttalSourceTextLength,
+        sourceTextOrigin: engineerRebuttalSourceTextOrigin,
+        usedEngineerReportText: engineerRebuttalUsedEngineerReportText,
       });
 
-      console.log(
-        `[darwin][final-return] path=${responsePath} analysisType=${analysisType} primary=${structuredScenarioDiagnostics.primaryScenario || 'none'} rulePack=${structuredScenarioDiagnostics.rulePackLoaded} suppressed=[${structuredScenarioDiagnostics.suppressedRulePacks.join(',') || 'none'}] matched=[${structuredScenarioDiagnostics.matchedTerms.join(',') || 'none'}] violations=[${structuredScenarioDiagnostics.finalViolationList.join(',') || 'none'}] hash=${structuredScenarioDiagnostics.finalResponseHash}`
-      );
+      console.log('[darwin][final-return]', JSON.stringify({
+        analysisType,
+        functionPath: responsePath,
+        primaryScenario: structuredScenarioDiagnostics.primaryScenario,
+        rulePackLoaded: structuredScenarioDiagnostics.rulePackLoaded,
+        suppressedRulePacks: structuredScenarioDiagnostics.suppressedRulePacks,
+        matchedTerms: structuredScenarioDiagnostics.matchedTerms,
+        finalViolationList: structuredScenarioDiagnostics.finalViolationList,
+        finalResponseHash: structuredScenarioDiagnostics.finalResponseHash,
+        sourceTextLength: structuredScenarioDiagnostics.sourceTextLength,
+        sourceTextOrigin: structuredScenarioDiagnostics.sourceTextOrigin,
+        usedEngineerReportText: structuredScenarioDiagnostics.usedEngineerReportText,
+      }));
 
       if (structuredViolations.length > 0) {
         return new Response(
           JSON.stringify({
-            error: buildLowSlopeForbiddenTermErrorMessage(structuredViolations),
+            error: structuredValidationErrorMessage || buildLowSlopeForbiddenTermErrorMessage(structuredViolations),
             violations: structuredViolations,
             scenario_diagnostics: structuredScenarioDiagnostics,
           }),
@@ -8760,10 +8940,6 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     const preSendLowSlopeDetection = detectLowSlopeAcrossSources([
       engineerRebuttalCausationQuote,
       engineerRebuttalReportText,
-      String(content || ''),
-      claimSummary,
-      String(claim?.loss_description || ''),
-      finalResponseText,
     ]);
 
     const enforcedScenarioForResponse =
@@ -8777,13 +8953,31 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     const scenarioDiagnosticsRulePackLoaded = getRulePackLoaded(enforcedScenarioForResponse);
     const scenarioDiagnosticsSuppressedRulePacks = getSuppressedRulePacks(enforcedScenarioForResponse);
 
-    const allViolations = collectAllLowSlopeFinalViolations(
-      finalResponseText,
-      enforcedScenarioForResponse,
-      engineerRebuttalCausationQuote,
-    );
-    const finalResponseHash = computeStableTextHash(finalResponseText);
+    let allViolations: string[] = [];
+    let validationErrorMessage: string | null = null;
 
+    try {
+      validateFinalEngineerRebuttalOrThrow({
+        finalText: finalResponseText,
+        primaryScenario: enforcedScenarioForResponse,
+        engineerCausationSentence: engineerRebuttalCausationQuote,
+      });
+    } catch (validationError: any) {
+      allViolations = Array.from(new Set(
+        Array.isArray(validationError?.violations)
+          ? validationError.violations
+          : collectAllLowSlopeFinalViolations(
+              finalResponseText,
+              enforcedScenarioForResponse,
+              engineerRebuttalCausationQuote,
+            )
+      ));
+      validationErrorMessage = String(
+        validationError?.message || buildLowSlopeForbiddenTermErrorMessage(allViolations)
+      );
+    }
+
+    const finalResponseHash = computeStableTextHash(finalResponseText);
     const scenarioDiagnostics = buildLowSlopeScenarioDiagnostics({
       analysisType,
       responsePath,
@@ -8793,16 +8987,29 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       matchedTerms: scenarioDiagnosticsMatchedTerms,
       finalViolationList: allViolations,
       finalResponseHash,
+      sourceTextLength: engineerRebuttalSourceTextLength,
+      sourceTextOrigin: engineerRebuttalSourceTextOrigin,
+      usedEngineerReportText: engineerRebuttalUsedEngineerReportText,
     });
 
-    console.log(
-      `[darwin][final-return] path=${responsePath} analysisType=${analysisType} primary=${scenarioDiagnostics.primaryScenario || 'none'} rulePack=${scenarioDiagnostics.rulePackLoaded} suppressed=[${scenarioDiagnostics.suppressedRulePacks.join(',') || 'none'}] matched=[${scenarioDiagnostics.matchedTerms.join(',') || 'none'}] violations=[${scenarioDiagnostics.finalViolationList.join(',') || 'none'}] hash=${scenarioDiagnostics.finalResponseHash}`
-    );
+    console.log('[darwin][final-return]', JSON.stringify({
+      analysisType,
+      functionPath: responsePath,
+      primaryScenario: scenarioDiagnostics.primaryScenario,
+      rulePackLoaded: scenarioDiagnostics.rulePackLoaded,
+      suppressedRulePacks: scenarioDiagnostics.suppressedRulePacks,
+      matchedTerms: scenarioDiagnostics.matchedTerms,
+      finalViolationList: scenarioDiagnostics.finalViolationList,
+      finalResponseHash: scenarioDiagnostics.finalResponseHash,
+      sourceTextLength: scenarioDiagnostics.sourceTextLength,
+      sourceTextOrigin: scenarioDiagnostics.sourceTextOrigin,
+      usedEngineerReportText: scenarioDiagnostics.usedEngineerReportText,
+    }));
 
     if (allViolations.length > 0) {
       return new Response(
         JSON.stringify({
-          error: buildLowSlopeForbiddenTermErrorMessage(allViolations),
+          error: validationErrorMessage || buildLowSlopeForbiddenTermErrorMessage(allViolations),
           violations: allViolations,
           scenario_diagnostics: scenarioDiagnostics,
         }),

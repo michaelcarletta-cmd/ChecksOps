@@ -767,6 +767,89 @@ function loadFixture(name: string): string {
 
 const ENVISTA_REPORT_TEXT = loadFixture("engineer-snowmelt-with-wind-refs.txt");
 
+const LOW_SLOPE_FORCE_TERMS = [
+  "low slope", "low-slope", "flat roof", "membrane", "tpo", "epdm",
+  "modified bitumen", "snowmelt", "snow melt", "meltwater", "ponding",
+  "standing water", "drainage obstruction", "negative drainage", "ice dam",
+  "freeze-thaw", "freeze thaw", "roof covering",
+];
+
+const LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES_FOR_TEST = [
+  { label: "shingle / shingles", regex: /\bshingle(?:s)?\b/i },
+  { label: "uplift", regex: /\buplift\b/i },
+  { label: "wind-driven rain", regex: /\bwind-?driven\s+rain\b/i },
+  { label: "fasteners", regex: /\bfasteners?\b/i },
+  { label: "fastener pull-out", regex: /\bfastener\s+pull-?out\b/i },
+  { label: "sealant", regex: /\bsealants?\b/i },
+  { label: "adhesion testing", regex: /\badhesion\s+test(?:ing|s)?\b/i },
+  { label: "ASTM", regex: /\bASTM\b/i },
+  { label: "ARMA", regex: /\bARMA\b/i },
+  { label: "IRC/IBC wind logic", regex: /\b(?:IRC|IBC)\b[^\n]{0,80}\bwind\b|\bwind\b[^\n]{0,80}\b(?:IRC|IBC)\b/i },
+];
+
+function detectLowSlopeAcrossSourcesForTest(sources: Array<string | null | undefined>): { shouldForce: boolean; matchedTerms: string[] } {
+  const matchedTerms = new Set<string>();
+  for (const source of sources) {
+    const lower = String(source || "").toLowerCase();
+    if (!lower) continue;
+    for (const term of LOW_SLOPE_FORCE_TERMS) {
+      if (lower.includes(term)) matchedTerms.add(term);
+    }
+  }
+  return { shouldForce: matchedTerms.size > 0, matchedTerms: Array.from(matchedTerms) };
+}
+
+function resolveEngineerReportSourceTextForTest(params: {
+  content?: string;
+  pdfExtractedText?: string;
+  uploadedEngineerReportText?: string;
+  additionalContext?: any;
+  fullClaimFiles?: any[];
+}): { text: string; sourceOrigin: string; usedEngineerReportText: boolean } {
+  const explicitPdfText = String(params.pdfExtractedText || "").trim();
+  const uploadedEngineerText = String(params.uploadedEngineerReportText || "").trim();
+  const fileDerivedText = (params.fullClaimFiles || [])
+    .filter((f: any) => {
+      const cls = String(f.document_classification || "").toLowerCase();
+      const name = String(f.file_name || "").toLowerCase();
+      return cls.includes("engineering_report") || name.includes("engineer");
+    })
+    .map((f: any) => String(f.extracted_text || "").trim())
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+  const directContent = String(params.content || "").trim();
+  const additionalContextText = String(params.additionalContext?.userContext || "").trim();
+
+  if (explicitPdfText) return { text: explicitPdfText, sourceOrigin: "pdf_extracted_text", usedEngineerReportText: true };
+  if (uploadedEngineerText) return { text: uploadedEngineerText, sourceOrigin: "uploaded_engineer_report_text", usedEngineerReportText: true };
+  if (fileDerivedText) return { text: fileDerivedText, sourceOrigin: "file_extracted_text", usedEngineerReportText: true };
+  if (directContent) return { text: directContent, sourceOrigin: "content", usedEngineerReportText: false };
+  if (additionalContextText) return { text: additionalContextText, sourceOrigin: "additional_context", usedEngineerReportText: false };
+  return { text: "", sourceOrigin: "none", usedEngineerReportText: false };
+}
+
+function collectLowSlopeStrictPreSendViolationsForTest(result: string, primaryScenario: string | null): string[] {
+  if (!result || primaryScenario !== "low_slope_snow_ice_ponding") return [];
+  return Array.from(new Set(
+    LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES_FOR_TEST
+      .filter((rule) => rule.regex.test(result))
+      .map((rule) => rule.label)
+  ));
+}
+
+function validateFinalEngineerRebuttalOrThrowForTest(params: {
+  finalText: string;
+  primaryScenario: string | null;
+}) {
+  const violations = collectLowSlopeStrictPreSendViolationsForTest(params.finalText, params.primaryScenario);
+  if (violations.length > 0) {
+    const error: any = new Error("LOW_SLOPE_MEMBRANE generation failed due to forbidden term");
+    error.violations = violations;
+    throw error;
+  }
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // TEST 1: DISMANTLER CLASSIFICATION
 // ═════════════════════════════════════════════════════════════════════════════
@@ -912,7 +995,63 @@ describe("Harvey Memorial / Envista — prompt-content validation", () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// TEST 3: FINAL-OUTPUT ENFORCEMENT (post-processing path)
+// TEST 3: SOURCE-RESOLUTION + FINAL-GATE REGRESSION
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("Harvey Memorial / Envista — source resolution regression", () => {
+  it("uses extracted engineer report text over generic content and hard-fails forbidden low-slope terms", () => {
+    const genericWindContent = "Carrier notes reference shingles uplift and wind pressure language in generic claim chatter.";
+    const source = resolveEngineerReportSourceTextForTest({
+      content: genericWindContent,
+      fullClaimFiles: [
+        {
+          file_name: "Envista Engineering Report.pdf",
+          document_classification: "engineering_report",
+          extracted_text: ENVISTA_REPORT_TEXT,
+        },
+      ],
+    });
+
+    expect(source.sourceOrigin).toBe("file_extracted_text");
+    expect(source.usedEngineerReportText).toBe(true);
+    expect(source.text.length).toBeGreaterThan(500);
+
+    const scenarioDetection = detectLowSlopeAcrossSourcesForTest([source.text]);
+    expect(scenarioDetection.shouldForce).toBe(true);
+
+    const dismantler = runEngineerReportDismantler(source.text);
+    expect(dismantler.primaryScenario).toBe("low_slope_snow_ice_ponding");
+
+    const forbiddenOutput = `The shingle assembly failed uplift resistance, with wind-driven rain, fasteners, sealant, adhesion testing, ASTM references, ARMA guidance, and IRC wind logic.`;
+
+    let thrown: any;
+    try {
+      validateFinalEngineerRebuttalOrThrowForTest({
+        finalText: forbiddenOutput,
+        primaryScenario: "low_slope_snow_ice_ponding",
+      });
+    } catch (error: any) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeTruthy();
+    expect(String(thrown.message)).toMatch(/LOW_SLOPE_MEMBRANE generation failed due to forbidden term/i);
+    expect(thrown.violations).toEqual(expect.arrayContaining([
+      "shingle / shingles",
+      "uplift",
+      "wind-driven rain",
+      "fasteners",
+      "sealant",
+      "adhesion testing",
+      "ASTM",
+      "ARMA",
+      "IRC/IBC wind logic",
+    ]));
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// TEST 4: FINAL-OUTPUT ENFORCEMENT (post-processing path)
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe("Harvey Memorial / Envista — final-output enforcement", () => {
