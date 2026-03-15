@@ -2762,6 +2762,116 @@ export type Database = {
           },
         ]
       }
+      claim_document_meaning: {
+        Row: {
+          carrier_arguments: Json
+          claim_id: string
+          confidence_score: number | null
+          contradictions: Json
+          coverage_position: Json
+          created_at: string
+          deadlines: Json
+          document_classification: string | null
+          document_type: string
+          file_id: string
+          financial_position: Json
+          id: string
+          meaning_version: string
+          missing_evidence: Json
+          raw_model_output: Json
+          recommended_response: Json
+          requested_items: Json
+          response_required: boolean
+          segment_id: string | null
+          source_scope: string
+          source_summary: string | null
+          strategic_weight: string | null
+          updated_at: string
+          urgency: string | null
+        }
+        Insert: {
+          carrier_arguments?: Json
+          claim_id: string
+          confidence_score?: number | null
+          contradictions?: Json
+          coverage_position?: Json
+          created_at?: string
+          deadlines?: Json
+          document_classification?: string | null
+          document_type: string
+          file_id: string
+          financial_position?: Json
+          id?: string
+          meaning_version?: string
+          missing_evidence?: Json
+          raw_model_output?: Json
+          recommended_response?: Json
+          requested_items?: Json
+          response_required?: boolean
+          segment_id?: string | null
+          source_scope?: string
+          source_summary?: string | null
+          strategic_weight?: string | null
+          updated_at?: string
+          urgency?: string | null
+        }
+        Update: {
+          carrier_arguments?: Json
+          claim_id?: string
+          confidence_score?: number | null
+          contradictions?: Json
+          coverage_position?: Json
+          created_at?: string
+          deadlines?: Json
+          document_classification?: string | null
+          document_type?: string
+          file_id?: string
+          financial_position?: Json
+          id?: string
+          meaning_version?: string
+          missing_evidence?: Json
+          raw_model_output?: Json
+          recommended_response?: Json
+          requested_items?: Json
+          response_required?: boolean
+          segment_id?: string | null
+          source_scope?: string
+          source_summary?: string | null
+          strategic_weight?: string | null
+          updated_at?: string
+          urgency?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_document_meaning_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_document_meaning_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_document_meaning_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "claim_files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_document_meaning_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "claim_file_segments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_estimate_analysis: {
         Row: {
           analysis_type: string
@@ -8445,6 +8555,105 @@ export type Database = {
           },
           {
             foreignKeyName: "document_intelligence_queue_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "claim_file_segments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_meaning_queue: {
+        Row: {
+          attempts: number
+          claim_id: string
+          completed_at: string | null
+          created_at: string
+          file_id: string
+          id: string
+          intelligence_id: string | null
+          last_error: string | null
+          locked_at: string | null
+          locked_by: string | null
+          max_attempts: number
+          payload: Json
+          priority: number
+          run_after: string
+          segment_id: string | null
+          source_scope: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          claim_id: string
+          completed_at?: string | null
+          created_at?: string
+          file_id: string
+          id?: string
+          intelligence_id?: string | null
+          last_error?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          max_attempts?: number
+          payload?: Json
+          priority?: number
+          run_after?: string
+          segment_id?: string | null
+          source_scope?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          claim_id?: string
+          completed_at?: string | null
+          created_at?: string
+          file_id?: string
+          id?: string
+          intelligence_id?: string | null
+          last_error?: string | null
+          locked_at?: string | null
+          locked_by?: string | null
+          max_attempts?: number
+          payload?: Json
+          priority?: number
+          run_after?: string
+          segment_id?: string | null
+          source_scope?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_meaning_queue_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "document_meaning_queue_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_meaning_queue_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "claim_files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_meaning_queue_intelligence_id_fkey"
+            columns: ["intelligence_id"]
+            isOneToOne: false
+            referencedRelation: "claim_document_intelligence"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_meaning_queue_segment_id_fkey"
             columns: ["segment_id"]
             isOneToOne: false
             referencedRelation: "claim_file_segments"
