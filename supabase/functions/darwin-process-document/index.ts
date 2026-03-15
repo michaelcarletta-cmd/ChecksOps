@@ -583,7 +583,6 @@ Deno.serve(async (req) => {
               packet_analysis: packetAnalysis,
               packet_dominant_wins: packetDominantWins,
             },
-            },
             was_auto_executed: true,
             result: `Classification review required for ${fileName || file?.file_name}`,
             trigger_source: 'darwin_process_document',
