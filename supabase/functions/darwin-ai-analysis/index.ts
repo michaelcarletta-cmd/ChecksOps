@@ -169,6 +169,7 @@ type LowSlopeForbiddenRule = { regex: RegExp; supportTerms: string[]; label: str
 
 const LOW_SLOPE_FORBIDDEN_RULES: LowSlopeForbiddenRule[] = [
   { regex: /\buplift\b/i, supportTerms: ['uplift'], label: 'uplift' },
+  { regex: /\buplift\s+analysis\b/i, supportTerms: ['uplift analysis'], label: 'uplift analysis' },
   { regex: /\bshingle(?:s)?\b/i, supportTerms: ['shingle', 'shingles'], label: 'shingle / shingles' },
   { regex: /\barchitectural\s+shingle(?:s)?\b/i, supportTerms: ['architectural shingle', 'architectural shingles'], label: 'architectural shingles' },
   { regex: /\barchitectural\s+asphalt\s+shingle(?:s)?\b/i, supportTerms: ['architectural asphalt shingle', 'architectural asphalt shingles'], label: 'architectural asphalt shingles' },
@@ -184,6 +185,7 @@ const LOW_SLOPE_FORBIDDEN_RULES: LowSlopeForbiddenRule[] = [
   { regex: /\bgranul(?:e|ar)s?(?:\s+loss)?\b/i, supportTerms: ['granule', 'granules', 'granular', 'granule loss', 'granular loss'], label: 'granules / granular loss' },
   { regex: /\bfractured\s+tab(?:s)?\b/i, supportTerms: ['fractured tab', 'fractured tabs', 'tab fracture', 'fractured shingle tab'], label: 'fractured tabs' },
   { regex: /\bunsealed\s+tab\s+counts?\b/i, supportTerms: ['unsealed tab count', 'unsealed tab counts'], label: 'unsealed tab counts' },
+  { regex: /\bunsealed\s+tabs?\b/i, supportTerms: ['unsealed tab', 'unsealed tabs'], label: 'unsealed tabs' },
   { regex: /\bARMA\b/i, supportTerms: ['arma'], label: 'ARMA' },
   { regex: /\bfastener\s+pull-?out\b/i, supportTerms: ['fastener pull-out', 'fastener pullout'], label: 'fastener pull-out' },
   { regex: /\bfastener\s+pull-?out\s+resistance\b/i, supportTerms: ['fastener pull-out resistance', 'fastener pullout resistance'], label: 'fastener pull-out resistance' },
@@ -228,6 +230,60 @@ const LOW_SLOPE_ALLOWED_CONTENT_BULLET_LIST = [
   'no moisture mapping',
   'structural snow-load analysis is not membrane watertightness analysis',
 ].map((item) => `- ${item}`).join('\n');
+
+const LOW_SLOPE_FORCE_TERMS = [
+  'snow melt',
+  'snowmelt',
+  'ice melt',
+  'ponding',
+  'drainage obstruction',
+  'low-slope roof covering',
+  'low slope roof covering',
+  'membrane',
+  'cap sheet',
+  'standing water',
+];
+
+const LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES: Array<{ label: string; regex: RegExp }> = [
+  { label: 'shingle', regex: /\bshingle(?:s)?\b/i },
+  { label: 'uplift', regex: /\buplift\b/i },
+  { label: 'fastener pull-out', regex: /\bfastener\s+pull-?out\b/i },
+  { label: 'seal strip', regex: /\bseal\s+strip\b/i },
+  { label: 'ARMA', regex: /\bARMA\b/i },
+  { label: 'unsealed tabs', regex: /\bunsealed\s+tabs?\b/i },
+  { label: 'uplift analysis', regex: /\buplift\s+analysis\b/i },
+];
+
+const SCENARIO_RULE_PACKS: Record<string, string> = {
+  low_slope_snow_ice_ponding: 'LOW_SLOPE_MEMBRANE',
+  wind_uplift: 'WIND_UPLIFT',
+  hail_impact: 'HAIL_IMPACT',
+  tree_impact: 'TREE_IMPACT',
+  fire_smoke: 'FIRE_SMOKE',
+  water_escape: 'WATER_ESCAPE',
+  freeze_burst: 'FREEZE_BURST',
+  mechanical_breakdown: 'MECHANICAL_BREAKDOWN',
+  vandalism_theft: 'VANDALISM_THEFT',
+  foundation_settlement: 'FOUNDATION_SETTLEMENT',
+};
+
+function detectLowSlopePhysicalMechanism(text: string): { shouldForce: boolean; matchedTerms: string[] } {
+  const textLower = String(text || '').toLowerCase();
+  const matchedTerms = LOW_SLOPE_FORCE_TERMS.filter((term) => textLower.includes(term));
+  return { shouldForce: matchedTerms.length > 0, matchedTerms };
+}
+
+function getRulePackLoaded(primaryScenario: string | null): string {
+  if (!primaryScenario) return 'UNIVERSAL_ONLY';
+  return SCENARIO_RULE_PACKS[primaryScenario] || `SCENARIO_${primaryScenario.toUpperCase()}`;
+}
+
+function getSuppressedRulePacks(primaryScenario: string | null): string[] {
+  if (primaryScenario === LOW_SLOPE_PRIMARY_SCENARIO) {
+    return ['WIND_UPLIFT', 'HAIL_IMPACT'];
+  }
+  return [];
+}
 
 function getScenarioScopedSecondaryScenarios(primaryScenario: string | null, secondaryScenarios: string[]): string[] {
   if (primaryScenario === LOW_SLOPE_PRIMARY_SCENARIO) {
