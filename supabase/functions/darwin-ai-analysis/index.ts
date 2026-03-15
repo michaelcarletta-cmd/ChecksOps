@@ -3872,7 +3872,7 @@ You must generate a FORMAL REBUTTAL LETTER that is ready to send to the insuranc
 
 The letter must be EXHAUSTIVE and address EVERY finding in the engineer's report. Do NOT summarize or abbreviate. Each paragraph/finding in their report requires a complete rebuttal paragraph (or multiple paragraphs) in your letter.
 
-${primarySc === 'low_slope_snow_ice_ponding' ? `LOW-SLOPE REPORT ENFORCEMENT:
+${primarySc === LOW_SLOPE_PRIMARY_SCENARIO ? `LOW-SLOPE REPORT ENFORCEMENT:
 - Opening first sentence MUST be exactly: "${lowSlopeTheoryOpening}"
 - Then challenge timing proof, methodology gaps, and causation logic (in that order)
 - Focus on: no membrane core cuts, no seam adhesion/peel testing, no drainage-capacity analysis, no snow-water equivalent/runoff analysis, no leak-path tracing, no moisture mapping, and no proof of timing of openings
