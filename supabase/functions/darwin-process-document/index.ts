@@ -92,6 +92,7 @@ Deno.serve(async (req) => {
       // GUARANTEE extracted_text is populated before any analysis
       if (file.extracted_text && file.extracted_text.length > 50) {
         textContent = file.extracted_text;
+        extractionMethod = 'existing_text';
         console.log(`[TextExtract] Using existing extracted_text (${textContent.length} chars) for ${file.file_name}`);
       } else {
         // Download file and extract text
