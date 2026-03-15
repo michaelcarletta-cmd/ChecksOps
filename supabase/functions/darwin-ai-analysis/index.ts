@@ -168,6 +168,7 @@ const REQUIRED_LOW_SLOPE_OPENING = 'The engineering report attributes the water 
 type LowSlopeForbiddenRule = { regex: RegExp; supportTerms: string[]; label: string };
 
 const LOW_SLOPE_FORBIDDEN_RULES: LowSlopeForbiddenRule[] = [
+  { regex: /\buplift\b/i, supportTerms: ['uplift'], label: 'uplift' },
   { regex: /\bshingle(?:s)?\b/i, supportTerms: ['shingle', 'shingles'], label: 'shingle / shingles' },
   { regex: /\barchitectural\s+shingle(?:s)?\b/i, supportTerms: ['architectural shingle', 'architectural shingles'], label: 'architectural shingles' },
   { regex: /\barchitectural\s+asphalt\s+shingle(?:s)?\b/i, supportTerms: ['architectural asphalt shingle', 'architectural asphalt shingles'], label: 'architectural asphalt shingles' },
