@@ -5860,11 +5860,8 @@ Return ONLY valid JSON with the classification.`;
         const combinedKnowledge = [kbRebuttal, kbBuildingCodes, kbDenialTactics].filter(Boolean).join('\n');
 
         // Fetch full claim files with classifications AND extracted text for evidence citation
-        const { data: fullClaimFiles } = await supabase
-          .from('claim_files')
-          .select('file_name, document_classification, classification_metadata, uploaded_at, claim_folders(name), extracted_text, file_type')
-          .eq('claim_id', claimId);
-        
+        const fullClaimFiles = await loadClaimFilesWithExtractedText();
+
         // Build detailed document inventory for citations
         let documentInventory = '';
         let documentContentSection = '';
