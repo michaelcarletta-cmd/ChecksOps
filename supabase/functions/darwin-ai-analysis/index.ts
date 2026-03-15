@@ -612,6 +612,38 @@ function buildLowSlopeForbiddenTermErrorMessage(violations: string[]): string {
   return `LOW_SLOPE_MEMBRANE generation failed due to forbidden term. Violations: ${uniqueViolations.join(', ')}`;
 }
 
+function computeStableTextHash(input: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function buildLowSlopeScenarioDiagnostics(params: {
+  analysisType: string;
+  responsePath: 'structured' | 'non_structured';
+  primaryScenario: string | null;
+  rulePackLoaded: string;
+  suppressedRulePacks: string[];
+  matchedTerms: string[];
+  finalViolationList: string[];
+  finalResponseHash: string;
+}) {
+  return {
+    analysisType: params.analysisType,
+    functionPath: params.responsePath,
+    primaryScenario: params.primaryScenario,
+    rulePackLoaded: params.rulePackLoaded,
+    suppressedRulePacks: params.suppressedRulePacks,
+    matchedPhysicalMechanismTerms: params.matchedTerms,
+    matchedTerms: params.matchedTerms,
+    finalViolationList: params.finalViolationList,
+    finalResponseHash: params.finalResponseHash,
+  };
+}
+
 function assertLowSlopeForbiddenTerms(result: string, primaryScenario: string | null, engineerCausationSentence: string): void {
   const violations = collectLowSlopeForbiddenViolations(result, primaryScenario, engineerCausationSentence);
   if (violations.length > 0) {
