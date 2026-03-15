@@ -3691,14 +3691,16 @@ Be specific, professional, and provide communications that are ready to copy and
 
         // Build scenario-specific attack vectors based on primary scenario
         const primarySc = dismantlerExtraction.primaryScenario || '';
+        const scopedSecondaryScenarios = getScenarioScopedSecondaryScenarios(primarySc || null, dismantlerExtraction.secondaryScenarios || []);
+
         engineerRebuttalPrimaryScenario = primarySc || null;
-        engineerRebuttalSecondaryScenarios = [...dismantlerExtraction.secondaryScenarios];
+        engineerRebuttalSecondaryScenarios = [...scopedSecondaryScenarios];
         engineerRebuttalStatedCause = String(dismantlerExtraction.engineerStatedCause || '').trim();
         engineerRebuttalTheorySentences = [...(dismantlerExtraction.engineerTheorySentences || [])];
         engineerRebuttalCriticalTestingNotPerformed = [...(dismantlerExtraction.criticalTestingNotPerformed || [])];
         engineerRebuttalReportText = engineerTextForDismantler;
 
-        const allActiveScenarios = new Set([primarySc, ...dismantlerExtraction.secondaryScenarios].filter(Boolean));
+        const allActiveScenarios = new Set([primarySc, ...scopedSecondaryScenarios].filter(Boolean));
 
         const scenarioAttackVectors = buildScenarioAttackVectors(primarySc, allActiveScenarios);
         const scenarioSpecificEvAuditFields = buildScenarioEvAuditFields(primarySc, allActiveScenarios);
