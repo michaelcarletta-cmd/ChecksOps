@@ -916,9 +916,30 @@ Deno.serve(async (req) => {
     );
 
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("Darwin Document Processing error:", error);
+
+    // Best-effort: write processing_error to claim_files so the failure is visible
+    try {
+      const body = await req.clone().json().catch(() => ({}));
+      const failedFileId = body?.fileId;
+      if (failedFileId) {
+        const supabase = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        );
+        await supabase.from('claim_files').update({
+          processing_error: errorMsg,
+          needs_reprocessing: true,
+          ready_for_analysis: false,
+          processed_at: new Date().toISOString(),
+        }).eq('id', failedFileId);
+        console.log(`[DocProcessed] file_id=${failedFileId} FAILED error="${errorMsg}"`);
+      }
+    } catch { /* best effort */ }
+
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: errorMsg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
