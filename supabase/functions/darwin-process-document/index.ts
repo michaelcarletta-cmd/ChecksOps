@@ -659,15 +659,48 @@ Deno.serve(async (req) => {
     }
 
     // === STEP 3.5: INLINE STRUCTURED INTELLIGENCE EXTRACTION ===
-    if (readyForAnalysis && targetClaimId && fileId && cleanText.length >= 100) {
+    if (!readyForAnalysis) {
+      intelligenceSkippedReason = `not_ready_for_analysis:${readyReason}`;
+      console.log(`[DocIntel] skipped file_id=${fileId} reason=${intelligenceSkippedReason}`);
+    } else if (targetClaimId && fileId && cleanText.length >= 100) {
+      intelligenceAttempted = true;
       try {
-        await extractStructuredIntelligence(
+        const intelResult = await extractStructuredIntelligence(
           supabase, targetClaimId, fileId, cleanText,
           mappedDocType, classificationResult
         );
-      } catch (intelErr) {
-        console.error('[DocIntel] Inline extraction failed (non-fatal):', intelErr);
+        intelligenceWritten = intelResult.written;
+        if (intelResult.written && intelResult.success) {
+          documentSubtype = (intelResult as any).documentSubtype || null;
+          console.log(`[DocIntel] written file_id=${fileId} document_type=${mappedDocType} subtype=${documentSubtype || 'none'}`);
+          // Clear processing error and needs_reprocessing on success
+          await supabase.from('claim_files').update({
+            processing_error: null,
+            needs_reprocessing: false,
+          }).eq('id', fileId);
+        } else if (!intelResult.success) {
+          intelligenceError = (intelResult as any).error || 'unknown_error';
+          console.error(`[DocIntel] failed file_id=${fileId} error=${intelligenceError}`);
+          // Mark for retry
+          await supabase.from('claim_files').update({
+            processing_error: `intelligence_extraction_failed: ${intelligenceError}`,
+            needs_reprocessing: true,
+          }).eq('id', fileId);
+        } else {
+          // success but not written (skipped)
+          intelligenceSkippedReason = (intelResult as any).skippedReason || 'unknown_skip';
+          console.log(`[DocIntel] skipped file_id=${fileId} reason=${intelligenceSkippedReason}`);
+        }
+      } catch (intelErr: any) {
+        intelligenceError = intelErr?.message || String(intelErr);
+        console.error('[DocIntel] Inline extraction failed:', intelligenceError);
+        await supabase.from('claim_files').update({
+          processing_error: `intelligence_extraction_exception: ${intelligenceError}`,
+          needs_reprocessing: true,
+        }).eq('id', fileId);
       }
+    } else {
+      intelligenceSkippedReason = 'missing_claim_or_file_or_text';
     }
 
     // === STRUCTURED PROCESSING LOG ===
