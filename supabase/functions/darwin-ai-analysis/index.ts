@@ -5801,7 +5801,20 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
           .join('\n\n');
         const autoDraftDismantlerSource = autoDraftEngineerReportCorpus || String(content || '');
         const autoDraftDismantler = runEngineerReportDismantler(autoDraftDismantlerSource);
-        const autoDraftLowSlopeDetection = detectLowSlopePhysicalMechanism(autoDraftDismantlerSource);
+        const autoDraftCausationQuote = String(
+          autoDraftDismantler.engineerStatedCause
+          || autoDraftDismantler.engineerTheorySentences?.[0]
+          || ''
+        ).trim();
+
+        const autoDraftLowSlopeDetection = detectLowSlopeAcrossSources([
+          autoDraftCausationQuote,
+          autoDraftDismantlerSource,
+          documentContentSection,
+          claimSummary,
+          String(claim?.loss_description || ''),
+        ]);
+
         const autoDraftPrimaryScenario = autoDraftLowSlopeDetection.shouldForce
           ? LOW_SLOPE_PRIMARY_SCENARIO
           : (autoDraftDismantler.primaryScenario || null);
@@ -5812,11 +5825,6 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
         const autoDraftRulePackLoaded = getRulePackLoaded(autoDraftPrimaryScenario);
         const autoDraftSuppressedRulePacks = getSuppressedRulePacks(autoDraftPrimaryScenario);
         const isAutoDraftLowSlope = autoDraftPrimaryScenario === LOW_SLOPE_PRIMARY_SCENARIO;
-        const autoDraftCausationQuote = String(
-          autoDraftDismantler.engineerStatedCause
-          || autoDraftDismantler.engineerTheorySentences?.[0]
-          || ''
-        ).trim();
 
         engineerRebuttalPrimaryScenario = autoDraftPrimaryScenario;
         engineerRebuttalSecondaryScenarios = [...autoDraftSecondaryScenarios];
