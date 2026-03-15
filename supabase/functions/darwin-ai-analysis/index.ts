@@ -465,8 +465,8 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
     };
   }
 
-  // Fallback: if explicit PDF or uploaded text exists but is short, still use it
-  if (explicitPdfText) {
+  // Fallback: if explicit PDF or uploaded text exists but is short, still use it (unless garbage)
+  if (explicitPdfText && !pdfTextIsGarbage) {
     return { text: explicitPdfText, sourceOrigin: 'pdf_extracted_text', usedEngineerReportText: true };
   }
   if (uploadedEngineerText) {
