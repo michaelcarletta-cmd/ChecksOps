@@ -649,21 +649,6 @@ function buildLowSlopeScenarioDiagnostics(params: {
   };
 }
 
-function assertLowSlopeForbiddenTerms(result: string, primaryScenario: string | null, engineerCausationSentence: string): void {
-  const violations = collectLowSlopeForbiddenViolations(result, primaryScenario, engineerCausationSentence);
-  if (violations.length > 0) {
-    throw new Error(buildLowSlopeForbiddenTermErrorMessage(violations));
-  }
-}
-
-function assertLowSlopeStrictPreSendTerms(result: string, primaryScenario: string | null): void {
-  const strictViolations = collectLowSlopeStrictPreSendViolations(result, primaryScenario);
-
-  if (strictViolations.length > 0) {
-    throw new Error(buildLowSlopeForbiddenTermErrorMessage(strictViolations));
-  }
-}
-
 function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: string | null, supportCorpus: string): string {
   if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return result;
 
