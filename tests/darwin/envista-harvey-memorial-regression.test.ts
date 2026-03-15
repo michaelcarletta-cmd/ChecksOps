@@ -1201,14 +1201,21 @@ describe("resolveEngineerReportSourceText — file classification fallback", () 
   function isGarbageText(text: string): boolean {
     if (!text || text.length < 100) return false;
     const sample = text.substring(0, 2000);
-    let nonPrintable = 0;
+    let nonAscii = 0;
+    let controlChars = 0;
     for (let i = 0; i < sample.length; i++) {
       const code = sample.charCodeAt(i);
-      if ((code < 32 && code !== 9 && code !== 10 && code !== 13) || (code >= 127 && code <= 159) || code > 8000) {
-        nonPrintable++;
-      }
+      if (code < 32 && code !== 9 && code !== 10 && code !== 13) controlChars++;
+      if (code > 126) nonAscii++;
     }
-    return (nonPrintable / sample.length) > 0.15;
+    if (nonAscii / sample.length > 0.25) return true;
+    if (controlChars / sample.length > 0.05) return true;
+    const words = sample.split(/\s+/).filter(w => w.length > 0);
+    const avgWordLen = words.length > 0 ? sample.replace(/\s+/g, '').length / words.length : 999;
+    if (words.length < 10 && sample.length > 500) return true;
+    if (avgWordLen > 30) return true;
+    if (sample.includes('obj') && sample.includes('endobj') && sample.includes('stream')) return true;
+    return false;
   }
 
   type SourceOrigin = 'pdf_extracted_text' | 'uploaded_engineer_report_text' | 'file_extracted_text' | 'content' | 'additional_context' | 'none';
