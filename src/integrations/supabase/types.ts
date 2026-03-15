@@ -2637,6 +2637,118 @@ export type Database = {
           },
         ]
       }
+      claim_document_intelligence: {
+        Row: {
+          building_components: Json | null
+          cause_of_loss: string | null
+          citations: Json | null
+          claim_file_id: string
+          claim_id: string
+          code_references: Json | null
+          confidence_score: number | null
+          contradictions: Json | null
+          coverage_position: string | null
+          created_at: string | null
+          denial_reasons: Json | null
+          document_subtype: string | null
+          document_type: string
+          estimate_totals: Json | null
+          exclusions_cited: Json | null
+          extracted_facts: Json | null
+          id: string
+          key_dates: Json | null
+          key_entities: Json | null
+          manufacturer_references: Json | null
+          recipient: string | null
+          scope_positions: Json | null
+          sender: string | null
+          summary: string | null
+          testing_missing: Json | null
+          testing_performed: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          building_components?: Json | null
+          cause_of_loss?: string | null
+          citations?: Json | null
+          claim_file_id: string
+          claim_id: string
+          code_references?: Json | null
+          confidence_score?: number | null
+          contradictions?: Json | null
+          coverage_position?: string | null
+          created_at?: string | null
+          denial_reasons?: Json | null
+          document_subtype?: string | null
+          document_type: string
+          estimate_totals?: Json | null
+          exclusions_cited?: Json | null
+          extracted_facts?: Json | null
+          id?: string
+          key_dates?: Json | null
+          key_entities?: Json | null
+          manufacturer_references?: Json | null
+          recipient?: string | null
+          scope_positions?: Json | null
+          sender?: string | null
+          summary?: string | null
+          testing_missing?: Json | null
+          testing_performed?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          building_components?: Json | null
+          cause_of_loss?: string | null
+          citations?: Json | null
+          claim_file_id?: string
+          claim_id?: string
+          code_references?: Json | null
+          confidence_score?: number | null
+          contradictions?: Json | null
+          coverage_position?: string | null
+          created_at?: string | null
+          denial_reasons?: Json | null
+          document_subtype?: string | null
+          document_type?: string
+          estimate_totals?: Json | null
+          exclusions_cited?: Json | null
+          extracted_facts?: Json | null
+          id?: string
+          key_dates?: Json | null
+          key_entities?: Json | null
+          manufacturer_references?: Json | null
+          recipient?: string | null
+          scope_positions?: Json | null
+          sender?: string | null
+          summary?: string | null
+          testing_missing?: Json | null
+          testing_performed?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_document_intelligence_claim_file_id_fkey"
+            columns: ["claim_file_id"]
+            isOneToOne: true
+            referencedRelation: "claim_files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_document_intelligence_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_document_intelligence_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_estimate_analysis: {
         Row: {
           analysis_type: string
