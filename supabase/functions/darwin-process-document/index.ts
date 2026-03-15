@@ -356,11 +356,20 @@ Deno.serve(async (req) => {
 
             return new Response(
               JSON.stringify({
-                success: true,
+                success: false,
                 classification: 'other',
                 confidence: 0,
                 method: 'garbage_text_detected',
                 processing_error: 'Extracted text detected as garbage/binary data',
+                ready_for_analysis: false,
+                ready_reason: 'text_quality_unusable',
+                text_quality_status: 'unusable',
+                intelligence: {
+                  attempted: false,
+                  written: false,
+                  skipped_reason: 'not_ready_for_analysis:text_quality_unusable',
+                  error: null,
+                },
               }),
               { headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
