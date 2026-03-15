@@ -1704,6 +1704,138 @@ const DarwinOperations = () => {
         </CardContent>
       </Card>
 
+      {/* ── Step 5: Document Intelligence Coverage & Backfill ────────── */}
+      <Card className="border-2 border-primary/30">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Database className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Step 5: Document Intelligence Backfill</CardTitle>
+          </div>
+          <CardDescription>
+            Backfills structured document intelligence for supported file types (engineering reports,
+            denials, estimates, correspondence, policies). This enables intelligence-first analysis
+            in Darwin rebuttals, gap analysis, and email drafting.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Coverage Metrics */}
+          {intelCoverage && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">Intelligence Coverage</p>
+                <span className={`text-sm font-bold ${intelCoverage.coveragePct >= 50 ? "text-green-600" : intelCoverage.coveragePct >= 20 ? "text-amber-600" : "text-destructive"}`}>
+                  {intelCoverage.coveragePct}%
+                </span>
+              </div>
+              <Progress value={intelCoverage.coveragePct} className="h-3" />
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                <SummaryCard label="Supported Files" value={intelCoverage.totalSupported} />
+                <SummaryCard label="With Intel" value={intelCoverage.withIntelligence} />
+                <SummaryCard label="Missing Intel" value={intelCoverage.withoutIntelligence} variant={intelCoverage.withoutIntelligence > 0 ? "warning" : undefined} />
+                <SummaryCard label="Ready" value={intelCoverage.readyForAnalysis} />
+                <SummaryCard label="Blocked" value={intelCoverage.blocked} variant={intelCoverage.blocked > 0 ? "warning" : undefined} />
+                <SummaryCard label="Needs Reprocess" value={intelCoverage.needsReprocessing} variant={intelCoverage.needsReprocessing > 0 ? "warning" : undefined} />
+              </div>
+            </div>
+          )}
+
+          {/* Per-type breakdown */}
+          {intelCoverageByType.length > 0 && (
+            <div className="rounded-md border bg-muted/20">
+              <table className="w-full text-xs">
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="px-3 py-1.5 text-left font-medium">Document Type</th>
+                    <th className="px-3 py-1.5 text-right font-medium">Total</th>
+                    <th className="px-3 py-1.5 text-right font-medium">With Intel</th>
+                    <th className="px-3 py-1.5 text-right font-medium">Missing</th>
+                    <th className="px-3 py-1.5 text-right font-medium">Coverage</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {intelCoverageByType.map((row) => (
+                    <tr key={row.type}>
+                      <td className="px-3 py-1.5">{row.type}</td>
+                      <td className="px-3 py-1.5 text-right">{row.total}</td>
+                      <td className="px-3 py-1.5 text-right">{row.withIntel}</td>
+                      <td className={`px-3 py-1.5 text-right ${row.missing > 0 ? "text-destructive font-medium" : ""}`}>
+                        {row.missing}
+                      </td>
+                      <td className={`px-3 py-1.5 text-right font-medium ${row.coveragePct >= 50 ? "text-green-600" : row.coveragePct >= 20 ? "text-amber-600" : "text-destructive"}`}>
+                        {row.coveragePct}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Backfill controls */}
+          {intelBackfill.status === "idle" && (
+            <div className="flex gap-2">
+              <Button onClick={startIntelBackfill} className="gap-2" variant="secondary">
+                <Play className="h-4 w-4" />
+                Run Intelligence Backfill
+              </Button>
+              <Button onClick={fetchIntelCoverage} variant="outline" size="sm" className="gap-2">
+                <RefreshCw className="h-4 w-4" />
+                Refresh
+              </Button>
+            </div>
+          )}
+          {intelBackfill.status === "running" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Backfilling intelligence… {intelBackfill.processed} files processed ({intelBackfill.remaining} remaining)
+              </div>
+              <Progress
+                value={intelBackfill.remaining > 0
+                  ? (intelBackfill.processed / (intelBackfill.processed + intelBackfill.remaining)) * 100
+                  : 100
+                }
+                className="h-3"
+              />
+              <div className="grid grid-cols-4 gap-3">
+                <SummaryCard label="Processed" value={intelBackfill.processed} />
+                <SummaryCard label="Intel Written" value={intelBackfill.succeeded} />
+                <SummaryCard label="Skipped" value={intelBackfill.skipped} />
+                <SummaryCard label="Failed" value={intelBackfill.failed} variant={intelBackfill.failed > 0 ? "warning" : undefined} />
+              </div>
+            </div>
+          )}
+          {intelBackfill.status === "complete" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-green-600">
+                <CheckCircle2 className="h-4 w-4" />
+                Intelligence backfill complete
+              </div>
+              <div className="grid grid-cols-4 gap-3">
+                <SummaryCard label="Processed" value={intelBackfill.processed} />
+                <SummaryCard label="Intel Written" value={intelBackfill.succeeded} />
+                <SummaryCard label="Skipped" value={intelBackfill.skipped} />
+                <SummaryCard label="Failed" value={intelBackfill.failed} variant={intelBackfill.failed > 0 ? "warning" : undefined} />
+              </div>
+              <Button variant="outline" size="sm" onClick={startIntelBackfill}>
+                Run Again
+              </Button>
+            </div>
+          )}
+          {intelBackfill.status === "error" && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-destructive">
+                <AlertTriangle className="h-4 w-4" />
+                {intelBackfill.errorMessage}
+              </div>
+              <Button variant="outline" size="sm" onClick={startIntelBackfill}>
+                Retry
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <DarwinRoofTuningDashboard />
 
       <DarwinOperationsCenter />
