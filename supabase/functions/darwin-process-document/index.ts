@@ -457,7 +457,20 @@ Deno.serve(async (req) => {
     // Assess text quality
     const textQuality = assessTextQuality(textContent);
     const cleanText = cleanExtractedText(textContent);
-    const readyForAnalysis = textQuality.status === 'good' || textQuality.status === 'fair';
+    const readyDecision = getReadyForAnalysisDecision({
+      cleanText,
+      textQualityStatus: textQuality.status,
+      processingError: null,
+    });
+    const readyForAnalysis = readyDecision.ready;
+    const readyReason = readyDecision.reason;
+
+    // Intelligence outcome tracking
+    let intelligenceAttempted = false;
+    let intelligenceWritten = false;
+    let intelligenceSkippedReason: string | null = null;
+    let intelligenceError: string | null = null;
+    let documentSubtype: string | null = null;
 
     const packetAnalysis =
       cleanText.length >= 1200
