@@ -3981,12 +3981,24 @@ Be specific, professional, and provide communications that are ready to copy and
 
       case 'engineer_report_rebuttal': {
         // ── Universal Engineer Report Dismantler (runs on EVERY engineer report) ──
-        const engineerUserContext = String(
-          typeof additionalContext === 'string'
-            ? additionalContext
-            : (additionalContext?.userContext || additionalContext?.customPrompt || '')
-        ).trim();
-        const engineerTextForDismantler = content || engineerUserContext || '';
+        const fullClaimFiles = await loadClaimFilesWithExtractedText();
+        const engineerSourceResolution = resolveEngineerReportSourceText({
+          content,
+          pdfExtractedText: String(additionalContext?.pdfExtractedText || additionalContext?.documentContentSection || ''),
+          uploadedEngineerReportText: String(
+            additionalContext?.engineerReportText
+            || additionalContext?.uploadedEngineerReportText
+            || ''
+          ),
+          additionalContext,
+          fullClaimFiles,
+        });
+
+        const engineerTextForDismantler = engineerSourceResolution.text;
+        if (!engineerTextForDismantler || engineerTextForDismantler.trim().length < 500) {
+          throw new Error('Engineer rebuttal blocked: no usable engineer report text was found for scenario detection.');
+        }
+
         const dismantlerExtraction = runEngineerReportDismantler(engineerTextForDismantler);
         console.log(`[darwin] EngineerReportDismantler: primary=${dismantlerExtraction.primaryScenario || 'none'}, secondary=[${dismantlerExtraction.secondaryScenarios.join(',')}], maintenanceNarrative=${dismantlerExtraction.isMaintenanceDenialNarrative}, dualCausation=${dismantlerExtraction.isDualCausation}, engineerCause="${dismantlerExtraction.engineerStatedCause.substring(0, 80)}", missingTests=${dismantlerExtraction.criticalTestingNotPerformed.length}`);
 
@@ -4000,11 +4012,14 @@ Be specific, professional, and provide communications that are ready to copy and
         engineerRebuttalTheorySentences = [...(dismantlerExtraction.engineerTheorySentences || [])];
         engineerRebuttalCriticalTestingNotPerformed = [...(dismantlerExtraction.criticalTestingNotPerformed || [])];
         engineerRebuttalReportText = engineerTextForDismantler;
+        engineerRebuttalSourceTextLength = engineerTextForDismantler.length;
+        engineerRebuttalSourceTextOrigin = engineerSourceResolution.sourceOrigin;
+        engineerRebuttalUsedEngineerReportText = engineerSourceResolution.usedEngineerReportText;
         scenarioRulePackLoaded = getRulePackLoaded(engineerRebuttalPrimaryScenario);
         scenarioSuppressedRulePacks = getSuppressedRulePacks(engineerRebuttalPrimaryScenario);
         scenarioDetectionMatchedTerms = detectLowSlopePhysicalMechanism(engineerTextForDismantler).matchedTerms;
         console.log(
-          `[darwin][engineer_report_rebuttal] scenario diagnostics: primary=${engineerRebuttalPrimaryScenario || 'none'} rule_pack=${scenarioRulePackLoaded} suppressed=[${scenarioSuppressedRulePacks.join(',') || 'none'}] matched_terms=[${scenarioDetectionMatchedTerms.join(',') || 'none'}]`
+          `[darwin][engineer_report_rebuttal] scenario diagnostics: primary=${engineerRebuttalPrimaryScenario || 'none'} rule_pack=${scenarioRulePackLoaded} suppressed=[${scenarioSuppressedRulePacks.join(',') || 'none'}] matched_terms=[${scenarioDetectionMatchedTerms.join(',') || 'none'}] source_origin=${engineerRebuttalSourceTextOrigin} source_length=${engineerRebuttalSourceTextLength} used_engineer_report_text=${engineerRebuttalUsedEngineerReportText}`
         );
 
         const allActiveScenarios = new Set([primarySc, ...scopedSecondaryScenarios].filter(Boolean));
