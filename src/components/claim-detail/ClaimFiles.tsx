@@ -116,17 +116,31 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
-      refetchFiles();
+    onMutate: () => {
       toast({
-        title: "Document Reprocessed",
-        description: `Classified as ${data.classification} (${Math.round((data.confidence || 0) * 100)}% confidence)`,
+        title: "Reprocessing document...",
+        description: "Analyzing and updating document type.",
       });
     },
-    onError: (error: Error) => {
+    onSuccess: (data) => {
+      refetchFiles();
+      const classification = typeof data?.classification === "string"
+        ? data.classification.replace(/_/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase())
+        : null;
+      const confidence = typeof data?.confidence === "number" ? Math.round(data.confidence * 100) : null;
+
+      toast({
+        title: "Document Reprocessed",
+        description: classification
+          ? `Classified as ${classification}${confidence !== null ? ` (${confidence}% confidence)` : ""}`
+          : "Document was reprocessed successfully.",
+      });
+    },
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : "Unable to reprocess the document.";
       toast({
         title: "Processing Error",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
     },
