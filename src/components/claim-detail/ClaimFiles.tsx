@@ -111,7 +111,7 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
   const reprocessFileMutation = useMutation({
     mutationFn: async (fileId: string) => {
       const { data, error } = await supabase.functions.invoke('darwin-process-document', {
-        body: { fileId }
+        body: { fileId, force: true }
       });
       if (error) throw error;
       return data;

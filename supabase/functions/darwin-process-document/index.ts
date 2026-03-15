@@ -77,8 +77,8 @@ Deno.serve(async (req) => {
       file = fileData;
       targetClaimId = file.claim_id;
 
-      // Check if already processed
-      if (file.processed_by_darwin) {
+      // Check if already processed (skip if force=true for reprocessing)
+      if (file.processed_by_darwin && !force) {
         return new Response(
           JSON.stringify({ 
             success: true, 
@@ -87,6 +87,11 @@ Deno.serve(async (req) => {
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      }
+      
+      // If force reprocessing, clear previous classification so it gets re-analyzed
+      if (force && file.processed_by_darwin) {
+        console.log(`[Darwin] Force reprocessing file ${fileId}, clearing previous classification`);
       }
 
       // GUARANTEE extracted_text is populated before any analysis
