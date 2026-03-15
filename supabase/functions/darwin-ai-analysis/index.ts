@@ -715,10 +715,28 @@ function collectAllLowSlopeFinalViolations(
 function buildLowSlopeForbiddenTermErrorMessage(violations: string[]): string {
   const uniqueViolations = Array.from(new Set(violations.filter(Boolean)));
   if (uniqueViolations.length === 0) {
-    return 'LOW_SLOPE_MEMBRANE generation failed due to forbidden term.';
+    return 'LOW_SLOPE_MEMBRANE generation failed due to forbidden term';
   }
 
   return `LOW_SLOPE_MEMBRANE generation failed due to forbidden term. Violations: ${uniqueViolations.join(', ')}`;
+}
+
+function validateFinalEngineerRebuttalOrThrow(params: {
+  finalText: string;
+  primaryScenario: string | null;
+  engineerCausationSentence: string;
+}) {
+  const violations = collectAllLowSlopeFinalViolations(
+    params.finalText,
+    params.primaryScenario,
+    params.engineerCausationSentence,
+  );
+
+  if (violations.length > 0) {
+    const validationError = new Error(buildLowSlopeForbiddenTermErrorMessage(violations));
+    (validationError as any).violations = Array.from(new Set(violations));
+    throw validationError;
+  }
 }
 
 function computeStableTextHash(input: string): string {
@@ -739,6 +757,9 @@ function buildLowSlopeScenarioDiagnostics(params: {
   matchedTerms: string[];
   finalViolationList: string[];
   finalResponseHash: string;
+  sourceTextLength: number;
+  sourceTextOrigin: EngineerReportSourceOrigin;
+  usedEngineerReportText: boolean;
 }) {
   return {
     analysisType: params.analysisType,
@@ -750,6 +771,9 @@ function buildLowSlopeScenarioDiagnostics(params: {
     matchedTerms: params.matchedTerms,
     finalViolationList: params.finalViolationList,
     finalResponseHash: params.finalResponseHash,
+    sourceTextLength: params.sourceTextLength,
+    sourceTextOrigin: params.sourceTextOrigin,
+    usedEngineerReportText: params.usedEngineerReportText,
   };
 }
 
