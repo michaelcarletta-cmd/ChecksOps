@@ -7248,6 +7248,10 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
         scenarioSuppressedRulePacks = [...autoDraftSuppressedRulePacks];
         scenarioDetectionMatchedTerms = [...autoDraftLowSlopeDetection.matchedTerms];
 
+        // Run deterministic intelligence extraction for auto_draft_rebuttal
+        engineerIntelligence = extractEngineerIntelligence(autoDraftDismantlerSource);
+        console.log(`[darwin][auto-draft-intel] theory="${engineerIntelligence.engineerTheory.substring(0, 80)}" weatherEvents=[${engineerIntelligence.weatherEventsMentioned.join(',')}] testsMissing=[${engineerIntelligence.testsMissing.join(',')}] contradictions=${engineerIntelligence.contradictions.length}`);
+
         console.log(
           `[darwin][auto_draft_rebuttal] scenario diagnostics: primary=${autoDraftPrimaryScenario || 'none'} rule_pack=${autoDraftRulePackLoaded} suppressed=[${autoDraftSuppressedRulePacks.join(',') || 'none'}] matched_terms=[${autoDraftLowSlopeDetection.matchedTerms.join(',') || 'none'}] source_origin=${engineerRebuttalSourceTextOrigin} source_length=${engineerRebuttalSourceTextLength} used_engineer_report_text=${engineerRebuttalUsedEngineerReportText}`
         );
