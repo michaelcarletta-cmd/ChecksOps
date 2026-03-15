@@ -390,8 +390,11 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
   // Tier 3: filename contains 'full report' or 'report' (common for Envista / third-party reports)
   const isEngineerFile = (file: any): { match: boolean; tier: number } => {
     const classification = String(file?.document_classification || '').toLowerCase();
+    const docType = String(file?.document_type || '').toLowerCase();
     const fileName = String(file?.file_name || '').toLowerCase();
-    if (classification.includes('engineering_report')) return { match: true, tier: 1 };
+    // Check both old document_classification AND new document_type from intelligence pipeline
+    if (classification.includes('engineering_report') || docType === 'engineering_report') return { match: true, tier: 1 };
+    if (docType === 'expert_report') return { match: true, tier: 1 };
     if (fileName.includes('engineer')) return { match: true, tier: 2 };
     if (fileName.includes('full report')) return { match: true, tier: 3 };
     // Only match generic 'report' if it looks like a PDF report (not photos, contracts, etc.)
