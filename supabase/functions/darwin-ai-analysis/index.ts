@@ -5768,6 +5768,49 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
           }
         }
 
+        const autoDraftEngineerReports = (fullClaimFiles || []).filter((f: any) => {
+          const fileName = String(f.file_name || '').toLowerCase();
+          return f.document_classification === 'engineering_report' || fileName.includes('engineer');
+        });
+        const autoDraftEngineerReportCorpus = autoDraftEngineerReports
+          .map((f: any) => String(f.extracted_text || '').trim())
+          .filter((text: string) => text.length > 0)
+          .join('\n\n');
+        const autoDraftDismantlerSource = autoDraftEngineerReportCorpus || String(content || '');
+        const autoDraftDismantler = runEngineerReportDismantler(autoDraftDismantlerSource);
+        const autoDraftLowSlopeDetection = detectLowSlopePhysicalMechanism(autoDraftDismantlerSource);
+        const autoDraftPrimaryScenario = autoDraftLowSlopeDetection.shouldForce
+          ? LOW_SLOPE_PRIMARY_SCENARIO
+          : (autoDraftDismantler.primaryScenario || null);
+        const autoDraftSecondaryScenarios = getScenarioScopedSecondaryScenarios(
+          autoDraftPrimaryScenario,
+          autoDraftDismantler.secondaryScenarios || [],
+        );
+        const autoDraftRulePackLoaded = getRulePackLoaded(autoDraftPrimaryScenario);
+        const autoDraftSuppressedRulePacks = getSuppressedRulePacks(autoDraftPrimaryScenario);
+        const isAutoDraftLowSlope = autoDraftPrimaryScenario === LOW_SLOPE_PRIMARY_SCENARIO;
+        const autoDraftCausationQuote = String(
+          autoDraftDismantler.engineerStatedCause
+          || autoDraftDismantler.engineerTheorySentences?.[0]
+          || ''
+        ).trim();
+
+        engineerRebuttalPrimaryScenario = autoDraftPrimaryScenario;
+        engineerRebuttalSecondaryScenarios = [...autoDraftSecondaryScenarios];
+        engineerRebuttalStatedCause = autoDraftCausationQuote;
+        engineerRebuttalCausationQuote = autoDraftCausationQuote;
+        engineerRebuttalTheorySentences = [...(autoDraftDismantler.engineerTheorySentences || [])];
+        engineerRebuttalCriticalTestingNotPerformed = [...(autoDraftDismantler.criticalTestingNotPerformed || [])];
+        engineerRebuttalReportText = autoDraftDismantlerSource;
+        lowSlopeSupportCorpusForFilters = buildLowSlopeSupportCorpus(autoDraftCausationQuote);
+        scenarioRulePackLoaded = autoDraftRulePackLoaded;
+        scenarioSuppressedRulePacks = [...autoDraftSuppressedRulePacks];
+        scenarioDetectionMatchedTerms = [...autoDraftLowSlopeDetection.matchedTerms];
+
+        console.log(
+          `[darwin][auto_draft_rebuttal] scenario diagnostics: primary=${autoDraftPrimaryScenario || 'none'} rule_pack=${autoDraftRulePackLoaded} suppressed=[${autoDraftSuppressedRulePacks.join(',') || 'none'}] matched_terms=[${autoDraftLowSlopeDetection.matchedTerms.join(',') || 'none'}]`
+        );
+
         systemPrompt = `You are an elite claims advocate generating a COMPREHENSIVE STRATEGIC REBUTTAL to OVERTURN the carrier's denial and secure coverage. You have access to ALL claim intelligence, strategic analyses, carrier behavior data, previous analyses, and the complete evidence file for this claim.
 
 ${getExternalWritingRules(authorName, authorTitle)}
