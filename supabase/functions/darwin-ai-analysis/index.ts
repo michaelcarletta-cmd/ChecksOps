@@ -1427,9 +1427,98 @@ function hasEngineerInternalControlLeak(text: string): boolean {
   ].some((token) => text.includes(token));
 }
 
+// ═══ ORPHAN LOW-SLOPE OPENING & LIST NORMALIZATION HELPERS ═══
+
+function stripOrphanLowSlopeOpeningBlocks(text: string): string {
+  if (!text) return text;
+
+  const escaped = REQUIRED_LOW_SLOPE_OPENING.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // Remove standalone repeated lines of the required opening
+  let updated = text.replace(
+    new RegExp(`(^|\\n)${escaped}(?=\\n|$)`, 'gi'),
+    '$1',
+  );
+
+  // Remove it when it appears as an orphan line immediately under a heading
+  updated = updated.replace(
+    new RegExp(`(Timing Failure\\s*\\n+)${escaped}\\s*\\n`, 'i'),
+    '$1',
+  );
+
+  updated = updated.replace(/\n{3,}/g, '\n\n').trim();
+  return updated;
+}
+
+function normalizeEngineerQuestionSection(text: string): string {
+  if (!text) return text;
+
+  const sectionRegex =
+    /(Questions the Engineer Must Answer\s*\n)([\s\S]*?)(?=\n[A-Z][A-Za-z /&\-]+\n|\nConclusion and Demands|\nEvidence of Bias|\nRegulatory Violations|\nRegulatory \/ Claims Handling Exposure|\nCarrier Dependency Analysis|\n$)/i;
+
+  return text.replace(sectionRegex, (_match, heading, body) => {
+    const lines = String(body)
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const cleanedQuestions = lines.map((line) =>
+      line.replace(/^\d+[\).\s-]*/, '').trim()
+    );
+
+    const renumbered = cleanedQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n');
+    return `${heading}${renumbered}\n`;
+  });
+}
+
+function normalizeBrokenNumericLists(text: string): string {
+  if (!text) return text;
+
+  let updated = text;
+
+  // Fix things like "... January 25, 2026.2. The 17 inches ..."
+  updated = updated.replace(/(\d{4})\.(\d+\.)\s/g, '$1\n$2 ');
+
+  // If a section clearly contains numbered dependencies jammed together, split them
+  updated = updated.replace(/([a-z0-9])\.(\d+\.)\s/g, '$1\n$2 ');
+
+  return updated;
+}
+
+function stripCarrierDependencyAnalysis(text: string): string {
+  if (!text) return text;
+
+  return text
+    .replace(
+      /\n*Carrier Dependency Analysis\n[\s\S]*?(?=\n[A-Z][A-Za-z /&\-]+\n|\nConclusion and Demands|\n$)/i,
+      '\n'
+    )
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function polishEngineerRebuttalFormatting(text: string): string {
+  if (!text) return text;
+
+  let updated = text;
+
+  updated = stripOrphanLowSlopeOpeningBlocks(updated);
+  updated = normalizeEngineerQuestionSection(updated);
+  updated = normalizeBrokenNumericLists(updated);
+
+  // Clean spacing before headings
+  updated = updated.replace(/\n{3,}/g, '\n\n');
+
+  // Remove duplicated heading spacing
+  updated = updated.replace(/([^\n])\n(Engineer Theory Extraction|Timing Failure|Required Testing Not Performed|Causation Proof Failure|Evidentiary Sufficiency Audit of Engineer Conclusions|Methodology Failures|Point-by-Point Rebuttal|Membrane Deterioration Fallacy Rebuttal|Internal Contradictions|Questions the Engineer Must Answer|Evidence of Bias|Regulatory Violations and Claims Handling Exposure|Regulatory \/ Claims Handling Exposure|Carrier Dependency Analysis|Conclusion and Demands)\n/g, '$1\n\n$2\n');
+
+  return updated.trim();
+}
+
 function polishFinalEngineerRebuttal(
   result: string,
-  context: EngineerRebuttalEnforcementContext
+  context: EngineerRebuttalEnforcementContext,
+  analysisType?: string,
 ): string {
   if (!result) return result;
 
@@ -1445,13 +1534,16 @@ function polishFinalEngineerRebuttal(
       context.primaryScenario,
       buildLowSlopeSupportCorpus(context.engineerStatedCause || '')
     );
-    updated = placeLowSlopeOpeningCorrectly(updated, context.primaryScenario);
+    // Do NOT force opening sentence into formal letters
+    updated = enforceEngineerRebuttalLowSlopeOpening(updated, context.primaryScenario, analysisType);
   }
 
   // Final cleanup must happen AFTER enforcement
   updated = stripInternalEngineerControlText(updated);
   updated = dedupeRequiredLowSlopeOpening(updated);
   updated = normalizeEngineerLetterFormatting(updated);
+  updated = stripOrphanLowSlopeOpeningBlocks(updated);
+  updated = polishEngineerRebuttalFormatting(updated);
 
   return updated.trim();
 }
