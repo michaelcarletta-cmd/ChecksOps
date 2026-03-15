@@ -200,7 +200,27 @@ Deno.serve(async (req) => {
     // Call AI for classification
     const classificationResult = await classifyDocument(textContent, fileName || file?.file_name || '');
 
-    // Update file record with classification + store extracted text
+    // Assess text quality
+    const textQuality = assessTextQuality(textContent);
+    const cleanText = cleanExtractedText(textContent);
+    const readyForAnalysis = textQuality.status === 'good' || textQuality.status === 'fair';
+
+    // Map classification to expanded document_type
+    const docTypeMap: Record<string, string> = {
+      'denial': 'denial_letter',
+      'estimate': 'carrier_estimate',
+      'approval': 'coverage_letter',
+      'rfi': 'carrier_correspondence',
+      'engineering_report': 'engineering_report',
+      'policy': 'policy_document',
+      'correspondence': 'carrier_correspondence',
+      'invoice': 'invoice',
+      'photo': 'photos_report',
+      'other': 'other',
+    };
+    const mappedDocType = docTypeMap[classificationResult.classification] || classificationResult.classification;
+
+    // Update file record with classification + intelligence metadata
     if (file) {
       const updatePayload: Record<string, unknown> = {
         document_classification: classificationResult.classification,
@@ -208,15 +228,38 @@ Deno.serve(async (req) => {
         classification_metadata: classificationResult.metadata,
         processed_by_darwin: true,
         darwin_processed_at: new Date().toISOString(),
+        // New document intelligence fields
+        document_type: mappedDocType,
+        extraction_method: extractionMethod,
+        text_quality_status: textQuality.status,
+        confidence_score: classificationResult.confidence,
+        is_scanned: isScanned,
+        page_count: pageCount,
+        ready_for_analysis: readyForAnalysis,
+        needs_reprocessing: textQuality.status === 'poor' || textQuality.status === 'unusable',
+        processed_at: new Date().toISOString(),
+        processing_error: null,
       };
-      // Store extracted text for regex fallback and future analysis
+      // Store extracted and clean text
       if (textContent && textContent.length > 50 && !textContent.startsWith('[PDF Document')) {
-        updatePayload.extracted_text = textContent.substring(0, 100000); // cap at 100k chars
+        updatePayload.extracted_text = textContent.substring(0, 100000);
+        updatePayload.clean_text = cleanText.substring(0, 100000);
+      }
+      // Generate summary from classification metadata
+      if (classificationResult.metadata?.summary) {
+        updatePayload.document_summary = classificationResult.metadata.summary;
       }
       await supabase
         .from('claim_files')
         .update(updatePayload)
         .eq('id', fileId);
+    }
+
+    // === STEP 4: STRUCTURED INTELLIGENCE EXTRACTION ===
+    if (readyForAnalysis && targetClaimId && fileId && cleanText.length >= 100) {
+      extractStructuredIntelligence(
+        supabase, targetClaimId, fileId, cleanText, mappedDocType, classificationResult
+      ).catch(err => console.error('[DocIntel] Structured extraction error:', err));
     }
 
     // Log the classification action
