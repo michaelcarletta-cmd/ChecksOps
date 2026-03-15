@@ -486,6 +486,10 @@ Deno.serve(async (req) => {
         packet_mixed_confidence: packetAnalysis?.mixed_confidence || null,
         packet_review_required: packetAnalysis?.review_required || false,
         processing_error: null,
+        has_virtual_segments: segmentationResult.has_segments,
+        segment_count: segmentationResult.segment_count,
+        segmentation_status: segmentationResult.has_segments ? 'segmented' : 'not_segmented',
+        segmentation_summary: segmentationResult.summary,
       };
       // Store extracted and clean text
       if (textContent && textContent.length > 50 && !textContent.startsWith('[PDF Document')) {
