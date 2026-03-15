@@ -444,6 +444,27 @@ Deno.serve(async (req) => {
         .from('claim_files')
         .update(updatePayload)
         .eq('id', fileId);
+
+      // Log review-required classifications
+      if (targetClaimId && (smartClassification.review_required || smartClassification.is_mixed_document)) {
+        await supabase
+          .from('darwin_action_log')
+          .insert({
+            claim_id: targetClaimId,
+            action_type: 'document_classification_review_required',
+            action_details: {
+              file_id: fileId,
+              file_name: fileName || file?.file_name,
+              primary_classification: smartClassification.primary,
+              candidates: smartClassification.candidates,
+              reasoning: smartClassification.reasoning,
+              is_mixed_document: smartClassification.is_mixed_document,
+            },
+            was_auto_executed: true,
+            result: `Classification review required for ${fileName || file?.file_name}`,
+            trigger_source: 'darwin_process_document',
+          });
+      }
     }
 
     // === STEP 4: DURABLE DOCUMENT INTELLIGENCE QUEUE ===
