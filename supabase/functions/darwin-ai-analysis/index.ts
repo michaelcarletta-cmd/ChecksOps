@@ -4009,13 +4009,12 @@ Deno.serve(async (req) => {
       | "denial_rebuttal"
       | "carrier_email_draft"
       | "coverage_letter_response"
-      | "estimate_gap_analysis"
-      | "policy_analysis";
+      | "estimate_gap_analysis";
 
     function analysisTypeSupportsIntelligence(at: string): at is IntelligenceBackedAnalysisType {
       return [
         "engineer_report_rebuttal", "auto_draft_rebuttal", "denial_rebuttal",
-        "carrier_email_draft", "coverage_letter_response", "estimate_gap_analysis", "policy_analysis",
+        "carrier_email_draft", "coverage_letter_response", "estimate_gap_analysis",
       ].includes(at);
     }
 
@@ -4029,7 +4028,6 @@ Deno.serve(async (req) => {
         carrier_email_draft: ["carrier_email", "coverage_letter", "carrier_denial", "engineering_report", "estimate"],
         coverage_letter_response: ["coverage_letter", "carrier_email", "policy_document", "estimate", "engineering_report"],
         estimate_gap_analysis: ["estimate", "engineering_report", "coverage_letter", "carrier_denial"],
-        policy_analysis: ["policy_document", "coverage_letter", "carrier_denial"],
       };
       const allowed = new Set(typeMap[at] || []);
       const filtered = rows.filter((row: any) => allowed.has(String(row.document_type || "")));

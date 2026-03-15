@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { DarwinOperationsCenter } from "@/components/dashboard/DarwinOperationsCenter";
 import { DarwinRoofTuningDashboard } from "@/components/darwin/DarwinRoofTuningDashboard";
-import { Bot, Play, CheckCircle2, AlertTriangle, Loader2, FileText, RefreshCw, XCircle, ChevronDown, ChevronUp, Brain } from "lucide-react";
+import { Bot, Play, CheckCircle2, AlertTriangle, Loader2, FileText, RefreshCw, XCircle, ChevronDown, ChevronUp, Brain, Database } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -99,6 +99,35 @@ interface BulkDarwinCandidate {
   file_name: string;
 }
 
+interface IntelBackfillState {
+  status: "idle" | "running" | "complete" | "error";
+  processed: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+  remaining: number;
+  cursor: string | null;
+  errorMessage?: string;
+}
+
+interface IntelCoverage {
+  totalSupported: number;
+  withIntelligence: number;
+  withoutIntelligence: number;
+  readyForAnalysis: number;
+  blocked: number;
+  needsReprocessing: number;
+  coveragePct: number;
+}
+
+interface IntelCoverageByType {
+  type: string;
+  total: number;
+  withIntel: number;
+  missing: number;
+  coveragePct: number;
+}
+
 const INITIAL_STATS: BatchStats = {
   deadlines_created: 0,
   overdue_detected: 0,
@@ -170,6 +199,20 @@ const DarwinOperations = () => {
   const [showBulkDarwinFailedFiles, setShowBulkDarwinFailedFiles] = useState(false);
   const [textCoverage, setTextCoverage] = useState<number | null>(null);
 
+  // Step 5: Document Intelligence Backfill
+  const [intelBackfill, setIntelBackfill] = useState<IntelBackfillState>({
+    status: "idle",
+    processed: 0,
+    succeeded: 0,
+    failed: 0,
+    skipped: 0,
+    remaining: 0,
+    cursor: null,
+  });
+  const intelBackfillAbortRef = useRef(false);
+  const [intelCoverage, setIntelCoverage] = useState<IntelCoverage | null>(null);
+  const [intelCoverageByType, setIntelCoverageByType] = useState<IntelCoverageByType[]>([]);
+
   const fetchTextCoverage = useCallback(async () => {
     const { count: total } = await supabase
       .from("claim_files")
@@ -197,6 +240,139 @@ const DarwinOperations = () => {
   }, [textBackfill.status, textBackfill.processed, fetchTextCoverage]);
 
   const step2Disabled = (textCoverage !== null && textCoverage < 30) || textBackfill.status === "running";
+
+  // === STEP 5: INTELLIGENCE COVERAGE ===
+  const INTEL_DOC_TYPES = [
+    "engineering_report", "carrier_denial", "denial_letter", "denial",
+    "coverage_letter", "approval", "carrier_correspondence", "correspondence",
+    "carrier_email", "rfi", "estimate", "carrier_estimate",
+    "policy_document", "policy", "expert_report", "inspection_report",
+  ];
+
+  const fetchIntelCoverage = useCallback(async () => {
+    try {
+      const [{ count: totalSupported }, { count: withIntel }, { count: readyCount }, { count: blockedCount }, { count: reprocessCount }] = await Promise.all([
+        supabase.from("claim_files").select("id", { count: "exact", head: true })
+          .or(INTEL_DOC_TYPES.map((t) => `document_classification.eq.${t}`).join(",") + "," + INTEL_DOC_TYPES.map((t) => `document_type.eq.${t}`).join(",")),
+        supabase.from("claim_document_intelligence").select("id", { count: "exact", head: true }),
+        supabase.from("claim_files").select("id", { count: "exact", head: true }).eq("ready_for_analysis", true)
+          .or(INTEL_DOC_TYPES.map((t) => `document_classification.eq.${t}`).join(",") + "," + INTEL_DOC_TYPES.map((t) => `document_type.eq.${t}`).join(",")),
+        supabase.from("claim_files").select("id", { count: "exact", head: true }).eq("ready_for_analysis", false)
+          .or(INTEL_DOC_TYPES.map((t) => `document_classification.eq.${t}`).join(",") + "," + INTEL_DOC_TYPES.map((t) => `document_type.eq.${t}`).join(",")),
+        supabase.from("claim_files").select("id", { count: "exact", head: true }).eq("needs_reprocessing", true),
+      ]);
+
+      const total = totalSupported ?? 0;
+      const intel = withIntel ?? 0;
+      setIntelCoverage({
+        totalSupported: total,
+        withIntelligence: intel,
+        withoutIntelligence: Math.max(total - intel, 0),
+        readyForAnalysis: readyCount ?? 0,
+        blocked: blockedCount ?? 0,
+        needsReprocessing: reprocessCount ?? 0,
+        coveragePct: total > 0 ? Math.round((intel / total) * 100) : 0,
+      });
+
+      // Per-type coverage for key types
+      const keyTypes = [
+        { label: "Engineering Report", types: ["engineering_report", "expert_report", "inspection_report"] },
+        { label: "Denial / Coverage Letter", types: ["denial", "denial_letter", "carrier_denial", "coverage_letter", "approval"] },
+        { label: "Carrier Email / Correspondence", types: ["carrier_email", "correspondence", "carrier_correspondence", "rfi"] },
+        { label: "Estimate", types: ["estimate", "carrier_estimate"] },
+        { label: "Policy Document", types: ["policy", "policy_document"] },
+      ];
+
+      const byTypeResults: IntelCoverageByType[] = [];
+      for (const kt of keyTypes) {
+        const orFilter = kt.types.map((t) => `document_classification.eq.${t}`).join(",") + "," + kt.types.map((t) => `document_type.eq.${t}`).join(",");
+        const { count: typeTotal } = await supabase.from("claim_files").select("id", { count: "exact", head: true }).or(orFilter);
+        // For per-type intel, we need to match document_type in claim_document_intelligence
+        const { count: typeIntel } = await supabase.from("claim_document_intelligence").select("id", { count: "exact", head: true })
+          .or(kt.types.map((t) => `document_type.eq.${t}`).join(","));
+        const tt = typeTotal ?? 0;
+        const ti = typeIntel ?? 0;
+        byTypeResults.push({
+          type: kt.label,
+          total: tt,
+          withIntel: ti,
+          missing: Math.max(tt - ti, 0),
+          coveragePct: tt > 0 ? Math.round((ti / tt) * 100) : 0,
+        });
+      }
+      setIntelCoverageByType(byTypeResults);
+    } catch (err) {
+      console.error("[IntelCoverage] fetch error:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchIntelCoverage();
+  }, [fetchIntelCoverage]);
+
+  useEffect(() => {
+    if (intelBackfill.status === "complete" || intelBackfill.status === "running") {
+      fetchIntelCoverage();
+    }
+  }, [intelBackfill.status, intelBackfill.processed, fetchIntelCoverage]);
+
+  const runIntelBackfillBatch = useCallback(async (cursor: string | null, prev: IntelBackfillState) => {
+    if (intelBackfillAbortRef.current) return;
+
+    const { data, error } = await supabase.functions.invoke("backfill-document-intelligence", {
+      body: { cursor },
+    });
+
+    if (error || !data?.success) {
+      setIntelBackfill((s) => ({
+        ...s,
+        status: "error",
+        errorMessage: error?.message || data?.error || "Unknown error",
+      }));
+      return;
+    }
+
+    const next: IntelBackfillState = {
+      status: (data.remaining || 0) > 0 ? "running" : "complete",
+      processed: prev.processed + (data.processed || 0),
+      succeeded: prev.succeeded + (data.succeeded || 0),
+      failed: prev.failed + (data.failed || 0),
+      skipped: prev.skipped + (data.skipped || 0),
+      remaining: data.remaining || 0,
+      cursor: data.cursor,
+    };
+
+    if (data.coverage) {
+      setIntelCoverage(data.coverage);
+    }
+
+    setIntelBackfill(next);
+
+    if ((data.remaining || 0) > 0 && !intelBackfillAbortRef.current) {
+      setTimeout(() => runIntelBackfillBatch(data.cursor, next), 500);
+    } else if ((data.remaining || 0) === 0) {
+      toast({
+        title: "Intelligence Backfill Complete",
+        description: `${next.succeeded} files now have document intelligence. ${next.failed} failed. ${next.skipped} skipped.`,
+      });
+      fetchIntelCoverage();
+    }
+  }, [fetchIntelCoverage]);
+
+  const startIntelBackfill = () => {
+    intelBackfillAbortRef.current = false;
+    const initial: IntelBackfillState = {
+      status: "running",
+      processed: 0,
+      succeeded: 0,
+      failed: 0,
+      skipped: 0,
+      remaining: 1,
+      cursor: null,
+    };
+    setIntelBackfill(initial);
+    runIntelBackfillBatch(null, initial);
+  };
 
   // Fetch server-side job locks on mount (heartbeat-aware)
   const [serverJobs, setServerJobs] = useState<Record<string, string>>({});
@@ -1523,6 +1699,138 @@ const DarwinOperations = () => {
               <p className="text-xs text-muted-foreground">
                 Use only if Step 4 appears stuck with no progress for several minutes.
               </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Step 5: Document Intelligence Coverage & Backfill ────────── */}
+      <Card className="border-2 border-primary/30">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Database className="h-5 w-5 text-primary" />
+            <CardTitle className="text-lg">Step 5: Document Intelligence Backfill</CardTitle>
+          </div>
+          <CardDescription>
+            Backfills structured document intelligence for supported file types (engineering reports,
+            denials, estimates, correspondence, policies). This enables intelligence-first analysis
+            in Darwin rebuttals, gap analysis, and email drafting.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Coverage Metrics */}
+          {intelCoverage && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">Intelligence Coverage</p>
+                <span className={`text-sm font-bold ${intelCoverage.coveragePct >= 50 ? "text-green-600" : intelCoverage.coveragePct >= 20 ? "text-amber-600" : "text-destructive"}`}>
+                  {intelCoverage.coveragePct}%
+                </span>
+              </div>
+              <Progress value={intelCoverage.coveragePct} className="h-3" />
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                <SummaryCard label="Supported Files" value={intelCoverage.totalSupported} />
+                <SummaryCard label="With Intel" value={intelCoverage.withIntelligence} />
+                <SummaryCard label="Missing Intel" value={intelCoverage.withoutIntelligence} variant={intelCoverage.withoutIntelligence > 0 ? "warning" : undefined} />
+                <SummaryCard label="Ready" value={intelCoverage.readyForAnalysis} />
+                <SummaryCard label="Blocked" value={intelCoverage.blocked} variant={intelCoverage.blocked > 0 ? "warning" : undefined} />
+                <SummaryCard label="Needs Reprocess" value={intelCoverage.needsReprocessing} variant={intelCoverage.needsReprocessing > 0 ? "warning" : undefined} />
+              </div>
+            </div>
+          )}
+
+          {/* Per-type breakdown */}
+          {intelCoverageByType.length > 0 && (
+            <div className="rounded-md border bg-muted/20">
+              <table className="w-full text-xs">
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="px-3 py-1.5 text-left font-medium">Document Type</th>
+                    <th className="px-3 py-1.5 text-right font-medium">Total</th>
+                    <th className="px-3 py-1.5 text-right font-medium">With Intel</th>
+                    <th className="px-3 py-1.5 text-right font-medium">Missing</th>
+                    <th className="px-3 py-1.5 text-right font-medium">Coverage</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {intelCoverageByType.map((row) => (
+                    <tr key={row.type}>
+                      <td className="px-3 py-1.5">{row.type}</td>
+                      <td className="px-3 py-1.5 text-right">{row.total}</td>
+                      <td className="px-3 py-1.5 text-right">{row.withIntel}</td>
+                      <td className={`px-3 py-1.5 text-right ${row.missing > 0 ? "text-destructive font-medium" : ""}`}>
+                        {row.missing}
+                      </td>
+                      <td className={`px-3 py-1.5 text-right font-medium ${row.coveragePct >= 50 ? "text-green-600" : row.coveragePct >= 20 ? "text-amber-600" : "text-destructive"}`}>
+                        {row.coveragePct}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Backfill controls */}
+          {intelBackfill.status === "idle" && (
+            <div className="flex gap-2">
+              <Button onClick={startIntelBackfill} className="gap-2" variant="secondary">
+                <Play className="h-4 w-4" />
+                Run Intelligence Backfill
+              </Button>
+              <Button onClick={fetchIntelCoverage} variant="outline" size="sm" className="gap-2">
+                <RefreshCw className="h-4 w-4" />
+                Refresh
+              </Button>
+            </div>
+          )}
+          {intelBackfill.status === "running" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Backfilling intelligence… {intelBackfill.processed} files processed ({intelBackfill.remaining} remaining)
+              </div>
+              <Progress
+                value={intelBackfill.remaining > 0
+                  ? (intelBackfill.processed / (intelBackfill.processed + intelBackfill.remaining)) * 100
+                  : 100
+                }
+                className="h-3"
+              />
+              <div className="grid grid-cols-4 gap-3">
+                <SummaryCard label="Processed" value={intelBackfill.processed} />
+                <SummaryCard label="Intel Written" value={intelBackfill.succeeded} />
+                <SummaryCard label="Skipped" value={intelBackfill.skipped} />
+                <SummaryCard label="Failed" value={intelBackfill.failed} variant={intelBackfill.failed > 0 ? "warning" : undefined} />
+              </div>
+            </div>
+          )}
+          {intelBackfill.status === "complete" && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-green-600">
+                <CheckCircle2 className="h-4 w-4" />
+                Intelligence backfill complete
+              </div>
+              <div className="grid grid-cols-4 gap-3">
+                <SummaryCard label="Processed" value={intelBackfill.processed} />
+                <SummaryCard label="Intel Written" value={intelBackfill.succeeded} />
+                <SummaryCard label="Skipped" value={intelBackfill.skipped} />
+                <SummaryCard label="Failed" value={intelBackfill.failed} variant={intelBackfill.failed > 0 ? "warning" : undefined} />
+              </div>
+              <Button variant="outline" size="sm" onClick={startIntelBackfill}>
+                Run Again
+              </Button>
+            </div>
+          )}
+          {intelBackfill.status === "error" && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-destructive">
+                <AlertTriangle className="h-4 w-4" />
+                {intelBackfill.errorMessage}
+              </div>
+              <Button variant="outline" size="sm" onClick={startIntelBackfill}>
+                Retry
+              </Button>
             </div>
           )}
         </CardContent>
