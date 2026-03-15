@@ -199,6 +199,20 @@ const DarwinOperations = () => {
   const [showBulkDarwinFailedFiles, setShowBulkDarwinFailedFiles] = useState(false);
   const [textCoverage, setTextCoverage] = useState<number | null>(null);
 
+  // Step 5: Document Intelligence Backfill
+  const [intelBackfill, setIntelBackfill] = useState<IntelBackfillState>({
+    status: "idle",
+    processed: 0,
+    succeeded: 0,
+    failed: 0,
+    skipped: 0,
+    remaining: 0,
+    cursor: null,
+  });
+  const intelBackfillAbortRef = useRef(false);
+  const [intelCoverage, setIntelCoverage] = useState<IntelCoverage | null>(null);
+  const [intelCoverageByType, setIntelCoverageByType] = useState<IntelCoverageByType[]>([]);
+
   const fetchTextCoverage = useCallback(async () => {
     const { count: total } = await supabase
       .from("claim_files")
