@@ -58,6 +58,9 @@ Deno.serve(async (req) => {
     let file: any = null;
     let textContent = '';
     let targetClaimId = claimId;
+    let extractionMethod = 'none';
+    let isScanned = false;
+    let pageCount: number | null = null;
 
     // If fileId provided, fetch file from database
     if (fileId) {
@@ -89,6 +92,7 @@ Deno.serve(async (req) => {
       // GUARANTEE extracted_text is populated before any analysis
       if (file.extracted_text && file.extracted_text.length > 50) {
         textContent = file.extracted_text;
+        extractionMethod = 'existing_text';
         console.log(`[TextExtract] Using existing extracted_text (${textContent.length} chars) for ${file.file_name}`);
       } else {
         // Download file and extract text
@@ -100,10 +104,12 @@ Deno.serve(async (req) => {
           const fileType = file.file_type || '';
           if (fileType.includes('text') || file.file_name.endsWith('.txt')) {
             textContent = await fileBlob.text();
+            extractionMethod = 'native_text';
           } else if (fileType.includes('pdf')) {
             // Attempt PDF text extraction via raw bytes
             const pdfBytes = new Uint8Array(await fileBlob.arrayBuffer());
             textContent = extractPdfText(pdfBytes);
+            extractionMethod = 'pdf_native';
             console.log(`[TextExtract] PDF raw text extraction: ${textContent.length} chars for ${file.file_name}`);
 
             // If PDF text extraction yields < 300 chars, use OCR via vision AI
@@ -112,9 +118,23 @@ Deno.serve(async (req) => {
               const ocrText = await ocrViaVision(pdfBytes, file.file_name);
               if (ocrText && ocrText.length > textContent.length) {
                 textContent = ocrText;
+                extractionMethod = 'ocr_vision';
+                isScanned = true;
                 console.log(`[TextExtract] OCR yielded ${textContent.length} chars for ${file.file_name}`);
               }
             }
+          } else if (fileType.includes('word') || /\.(docx?)$/i.test(file.file_name)) {
+            // Word document extraction
+            const docBytes = new Uint8Array(await fileBlob.arrayBuffer());
+            const rawText = new TextDecoder("utf-8", { fatal: false }).decode(docBytes);
+            const xmlTextMatches = rawText.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
+            if (xmlTextMatches) {
+              textContent = xmlTextMatches.map((m: string) => m.replace(/<[^>]+>/g, "")).join(" ");
+            } else {
+              textContent = rawText.replace(/[^\x20-\x7E\n\r\t]/g, " ").replace(/\s{3,}/g, " ").trim();
+            }
+            extractionMethod = 'docx_xml';
+            console.log(`[TextExtract] DOCX extraction: ${textContent.length} chars for ${file.file_name}`);
           } else if (/\.(png|jpg|jpeg|webp|gif|bmp|tiff?)$/i.test(file.file_name)) {
             // Image files: OCR via vision
             console.log(`[TextExtract] Image file, attempting OCR via vision for ${file.file_name}`);
@@ -122,6 +142,8 @@ Deno.serve(async (req) => {
             const ocrText = await ocrViaVision(imgBytes, file.file_name);
             if (ocrText) {
               textContent = ocrText;
+              extractionMethod = 'ocr_vision';
+              isScanned = true;
               console.log(`[TextExtract] OCR yielded ${textContent.length} chars for ${file.file_name}`);
             }
           }
@@ -143,12 +165,27 @@ Deno.serve(async (req) => {
         : atob(fileContent);
     }
 
+    // Map classification to expanded document_type
+    const docTypeMap: Record<string, string> = {
+      'denial': 'denial_letter',
+      'estimate': 'carrier_estimate',
+      'approval': 'coverage_letter',
+      'rfi': 'carrier_correspondence',
+      'engineering_report': 'engineering_report',
+      'policy': 'policy_document',
+      'correspondence': 'carrier_correspondence',
+      'invoice': 'invoice',
+      'photo': 'photos_report',
+      'other': 'other',
+    };
+
     // If no text content, try to classify by filename patterns
     if (!textContent || textContent.length < 50) {
       const classificationFromName = classifyByFilename(fileName || file?.file_name || '');
       
       // Update file record with basic classification
       if (file) {
+        const filenameDocType = docTypeMap?.[classificationFromName] || classificationFromName;
         await supabase
           .from('claim_files')
           .update({
@@ -160,6 +197,13 @@ Deno.serve(async (req) => {
             },
             processed_by_darwin: true,
             darwin_processed_at: new Date().toISOString(),
+            document_type: filenameDocType,
+            extraction_method: extractionMethod,
+            text_quality_status: 'unusable',
+            is_scanned: isScanned,
+            ready_for_analysis: false,
+            needs_reprocessing: true,
+            processed_at: new Date().toISOString(),
           })
           .eq('id', fileId);
       }
@@ -178,7 +222,14 @@ Deno.serve(async (req) => {
     // Call AI for classification
     const classificationResult = await classifyDocument(textContent, fileName || file?.file_name || '');
 
-    // Update file record with classification + store extracted text
+    // Assess text quality
+    const textQuality = assessTextQuality(textContent);
+    const cleanText = cleanExtractedText(textContent);
+    const readyForAnalysis = textQuality.status === 'good' || textQuality.status === 'fair';
+
+    const mappedDocType = docTypeMap[classificationResult.classification] || classificationResult.classification;
+
+    // Update file record with classification + intelligence metadata
     if (file) {
       const updatePayload: Record<string, unknown> = {
         document_classification: classificationResult.classification,
@@ -186,15 +237,38 @@ Deno.serve(async (req) => {
         classification_metadata: classificationResult.metadata,
         processed_by_darwin: true,
         darwin_processed_at: new Date().toISOString(),
+        // New document intelligence fields
+        document_type: mappedDocType,
+        extraction_method: extractionMethod,
+        text_quality_status: textQuality.status,
+        confidence_score: classificationResult.confidence,
+        is_scanned: isScanned,
+        page_count: pageCount,
+        ready_for_analysis: readyForAnalysis,
+        needs_reprocessing: textQuality.status === 'poor' || textQuality.status === 'unusable',
+        processed_at: new Date().toISOString(),
+        processing_error: null,
       };
-      // Store extracted text for regex fallback and future analysis
+      // Store extracted and clean text
       if (textContent && textContent.length > 50 && !textContent.startsWith('[PDF Document')) {
-        updatePayload.extracted_text = textContent.substring(0, 100000); // cap at 100k chars
+        updatePayload.extracted_text = textContent.substring(0, 100000);
+        updatePayload.clean_text = cleanText.substring(0, 100000);
+      }
+      // Generate summary from classification metadata
+      if (classificationResult.metadata?.summary) {
+        updatePayload.document_summary = classificationResult.metadata.summary;
       }
       await supabase
         .from('claim_files')
         .update(updatePayload)
         .eq('id', fileId);
+    }
+
+    // === STEP 4: STRUCTURED INTELLIGENCE EXTRACTION ===
+    if (readyForAnalysis && targetClaimId && fileId && cleanText.length >= 100) {
+      extractStructuredIntelligence(
+        supabase, targetClaimId, fileId, cleanText, mappedDocType, classificationResult
+      ).catch(err => console.error('[DocIntel] Structured extraction error:', err));
     }
 
     // Log the classification action
@@ -343,6 +417,276 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+// === TEXT QUALITY ASSESSMENT ===
+function assessTextQuality(text: string): { status: 'good' | 'fair' | 'poor' | 'unusable'; score: number; reasons: string[] } {
+  if (!text || text.length < 20) return { status: 'unusable', score: 0, reasons: ['No text extracted'] };
+
+  const reasons: string[] = [];
+  let score = 100;
+
+  // Check for garbage/binary content
+  const sample = text.substring(0, 2000);
+  const nonAscii = (sample.match(/[^\x20-\x7E\n\r\t]/g) || []).length;
+  const nonAsciiRatio = nonAscii / sample.length;
+  if (nonAsciiRatio > 0.3) { score -= 60; reasons.push('High non-ASCII ratio (binary/garbled)'); }
+  else if (nonAsciiRatio > 0.15) { score -= 30; reasons.push('Moderate non-ASCII content'); }
+
+  // Check for common English words as readability proxy
+  const lower = text.toLowerCase();
+  const commonWords = ['the', 'and', 'was', 'for', 'that', 'with', 'this', 'from', 'have', 'been', 'claim', 'loss', 'damage', 'policy', 'insurance'];
+  const wordHits = commonWords.filter(w => lower.includes(` ${w} `)).length;
+  if (text.length > 500 && wordHits < 3) { score -= 25; reasons.push('Low common-word density'); }
+
+  // Length assessment
+  if (text.length < 100) { score -= 20; reasons.push('Very short text'); }
+  else if (text.length < 300) { score -= 10; reasons.push('Short text'); }
+
+  const status = score >= 70 ? 'good' : score >= 40 ? 'fair' : score >= 20 ? 'poor' : 'unusable';
+  return { status, score, reasons };
+}
+
+// === CLEAN TEXT (normalize whitespace, strip control chars) ===
+function cleanExtractedText(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // strip control chars except \n\r\t
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]+/g, ' ')        // collapse horizontal whitespace
+    .replace(/\n{3,}/g, '\n\n')     // max 2 newlines
+    .trim();
+}
+
+// === STRUCTURED INTELLIGENCE EXTRACTION ===
+async function extractStructuredIntelligence(
+  supabase: any,
+  claimId: string,
+  fileId: string,
+  cleanText: string,
+  documentType: string,
+  classificationResult: ClassificationResult,
+) {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) return;
+
+  console.log(`[DocIntel] Starting structured extraction for ${fileId} (type: ${documentType})`);
+
+  const docTypeContext: Record<string, string> = {
+    'denial_letter': 'Focus on denial reasons, exclusions cited, coverage positions, and any contradictions with policy language.',
+    'engineering_report': 'Focus on cause of loss determination, testing performed vs not performed, building components discussed, manufacturer references, and code citations.',
+    'carrier_estimate': 'Focus on estimate totals (RCV/ACV), line item categories, scope positions, and any exclusions or limitations noted.',
+    'coverage_letter': 'Focus on coverage positions, approved amounts, conditions, and any limitations.',
+    'carrier_correspondence': 'Focus on carrier positions, requests, deadlines, and any admissions or concessions.',
+    'policy_document': 'Focus on coverage types, limits, deductibles, exclusions, endorsements, and conditions.',
+    'invoice': 'Focus on vendor, amounts, dates, and line items.',
+    'photos_report': 'Focus on damage descriptions, locations, and severity assessments.',
+  };
+
+  const typeHint = docTypeContext[documentType] || 'Extract all relevant claim facts.';
+
+  try {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a document intelligence extractor for insurance claims. Extract structured facts from the document. ${typeHint} Be precise — only extract what is explicitly stated. Do not guess.`
+          },
+          {
+            role: 'user',
+            content: `Document type: ${documentType}\n\nDocument content:\n${cleanText.substring(0, 20000)}`
+          }
+        ],
+        tools: [{
+          type: 'function',
+          function: {
+            name: 'extract_document_intelligence',
+            description: 'Extract structured intelligence from a claim document',
+            parameters: {
+              type: 'object',
+              properties: {
+                document_subtype: {
+                  type: 'string',
+                  description: 'Specific subtype: full_denial, partial_denial, reservation_of_rights, carrier_estimate, pa_estimate, contractor_estimate, supplement_estimate, engineering_report, expert_report, policy_jacket, endorsement, declarations, proof_of_loss, invoice, receipt, inspection_report, mitigation_report, or other'
+                },
+                summary: {
+                  type: 'string',
+                  description: 'One-paragraph summary of the document (max 500 chars)'
+                },
+                sender: { type: 'string', description: 'Who sent/authored this document' },
+                recipient: { type: 'string', description: 'Who received this document' },
+                cause_of_loss: { type: 'string', description: 'Stated cause of loss/damage' },
+                coverage_position: {
+                  type: 'string',
+                  description: 'The coverage position stated (approved, denied, partial, under review, etc.)'
+                },
+                key_dates: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      date: { type: 'string', description: 'YYYY-MM-DD' },
+                      label: { type: 'string', description: 'What this date represents' }
+                    },
+                    required: ['date', 'label']
+                  },
+                  description: 'All significant dates found'
+                },
+                key_entities: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string' },
+                      role: { type: 'string', description: 'adjuster, engineer, contractor, carrier, insured, attorney, etc.' }
+                    },
+                    required: ['name', 'role']
+                  }
+                },
+                denial_reasons: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Specific reasons given for denial or limitation'
+                },
+                exclusions_cited: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Policy exclusions referenced'
+                },
+                testing_performed: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Tests/inspections that were performed'
+                },
+                testing_missing: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Standard tests that should have been performed but were not mentioned'
+                },
+                estimate_totals: {
+                  type: 'object',
+                  properties: {
+                    rcv: { type: 'number', description: 'Replacement Cost Value total' },
+                    acv: { type: 'number', description: 'Actual Cash Value total' },
+                    depreciation: { type: 'number' },
+                    deductible: { type: 'number' }
+                  }
+                },
+                scope_positions: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Specific scope items or trade categories discussed'
+                },
+                building_components: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Building components mentioned (roof, siding, HVAC, plumbing, etc.)'
+                },
+                code_references: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Building codes, standards, or regulations referenced'
+                },
+                manufacturer_references: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Manufacturer names, product names, or warranty references'
+                },
+                citations: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Legal citations, case law, or regulatory references'
+                },
+                contradictions: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Internal contradictions or inconsistencies found in the document'
+                },
+              },
+              required: ['summary'],
+              additionalProperties: false,
+            }
+          }
+        }],
+        tool_choice: { type: 'function', function: { name: 'extract_document_intelligence' } },
+        temperature: 0.1,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[DocIntel] AI error: ${response.status}`);
+      return;
+    }
+
+    const aiResult = await response.json();
+    const toolCall = aiResult.choices?.[0]?.message?.tool_calls?.[0];
+    if (!toolCall?.function?.arguments) {
+      console.error('[DocIntel] No tool call in response');
+      return;
+    }
+
+    let intel: any;
+    try {
+      intel = JSON.parse(toolCall.function.arguments);
+    } catch {
+      console.error('[DocIntel] Failed to parse tool call arguments');
+      return;
+    }
+
+    // Upsert into claim_document_intelligence
+    const { error: upsertError } = await supabase
+      .from('claim_document_intelligence')
+      .upsert({
+        claim_file_id: fileId,
+        claim_id: claimId,
+        document_type: documentType,
+        document_subtype: intel.document_subtype || null,
+        summary: intel.summary || null,
+        key_dates: intel.key_dates || [],
+        key_entities: intel.key_entities || [],
+        coverage_position: intel.coverage_position || null,
+        denial_reasons: intel.denial_reasons || [],
+        exclusions_cited: intel.exclusions_cited || [],
+        testing_performed: intel.testing_performed || [],
+        testing_missing: intel.testing_missing || [],
+        estimate_totals: intel.estimate_totals || null,
+        scope_positions: intel.scope_positions || [],
+        citations: intel.citations || [],
+        building_components: intel.building_components || [],
+        code_references: intel.code_references || [],
+        manufacturer_references: intel.manufacturer_references || [],
+        contradictions: intel.contradictions || [],
+        sender: intel.sender || null,
+        recipient: intel.recipient || null,
+        cause_of_loss: intel.cause_of_loss || null,
+        extracted_facts: intel,
+        confidence_score: classificationResult.confidence,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'claim_file_id' });
+
+    if (upsertError) {
+      console.error('[DocIntel] Upsert error:', upsertError.message);
+    } else {
+      console.log(`[DocIntel] Saved intelligence for ${fileId} (type: ${documentType}, subtype: ${intel.document_subtype || 'none'})`);
+    }
+
+    // Also update claim_files with subtype and summary
+    await supabase.from('claim_files').update({
+      document_subtype: intel.document_subtype || null,
+      document_summary: intel.summary || null,
+    }).eq('id', fileId);
+
+  } catch (err) {
+    console.error('[DocIntel] Extraction failed:', err);
+  }
+}
 
 // === PDF TEXT EXTRACTION (raw byte parsing) ===
 function extractPdfText(bytes: Uint8Array): string {

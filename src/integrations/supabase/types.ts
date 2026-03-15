@@ -2637,6 +2637,118 @@ export type Database = {
           },
         ]
       }
+      claim_document_intelligence: {
+        Row: {
+          building_components: Json | null
+          cause_of_loss: string | null
+          citations: Json | null
+          claim_file_id: string
+          claim_id: string
+          code_references: Json | null
+          confidence_score: number | null
+          contradictions: Json | null
+          coverage_position: string | null
+          created_at: string | null
+          denial_reasons: Json | null
+          document_subtype: string | null
+          document_type: string
+          estimate_totals: Json | null
+          exclusions_cited: Json | null
+          extracted_facts: Json | null
+          id: string
+          key_dates: Json | null
+          key_entities: Json | null
+          manufacturer_references: Json | null
+          recipient: string | null
+          scope_positions: Json | null
+          sender: string | null
+          summary: string | null
+          testing_missing: Json | null
+          testing_performed: Json | null
+          updated_at: string | null
+        }
+        Insert: {
+          building_components?: Json | null
+          cause_of_loss?: string | null
+          citations?: Json | null
+          claim_file_id: string
+          claim_id: string
+          code_references?: Json | null
+          confidence_score?: number | null
+          contradictions?: Json | null
+          coverage_position?: string | null
+          created_at?: string | null
+          denial_reasons?: Json | null
+          document_subtype?: string | null
+          document_type: string
+          estimate_totals?: Json | null
+          exclusions_cited?: Json | null
+          extracted_facts?: Json | null
+          id?: string
+          key_dates?: Json | null
+          key_entities?: Json | null
+          manufacturer_references?: Json | null
+          recipient?: string | null
+          scope_positions?: Json | null
+          sender?: string | null
+          summary?: string | null
+          testing_missing?: Json | null
+          testing_performed?: Json | null
+          updated_at?: string | null
+        }
+        Update: {
+          building_components?: Json | null
+          cause_of_loss?: string | null
+          citations?: Json | null
+          claim_file_id?: string
+          claim_id?: string
+          code_references?: Json | null
+          confidence_score?: number | null
+          contradictions?: Json | null
+          coverage_position?: string | null
+          created_at?: string | null
+          denial_reasons?: Json | null
+          document_subtype?: string | null
+          document_type?: string
+          estimate_totals?: Json | null
+          exclusions_cited?: Json | null
+          extracted_facts?: Json | null
+          id?: string
+          key_dates?: Json | null
+          key_entities?: Json | null
+          manufacturer_references?: Json | null
+          recipient?: string | null
+          scope_positions?: Json | null
+          sender?: string | null
+          summary?: string | null
+          testing_missing?: Json | null
+          testing_performed?: Json | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_document_intelligence_claim_file_id_fkey"
+            columns: ["claim_file_id"]
+            isOneToOne: true
+            referencedRelation: "claim_files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_document_intelligence_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_document_intelligence_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_estimate_analysis: {
         Row: {
           analysis_type: string
@@ -2965,10 +3077,16 @@ export type Database = {
           claim_id: string
           classification_confidence: number | null
           classification_metadata: Json | null
+          clean_text: string | null
+          confidence_score: number | null
           darwin_processed_at: string | null
           document_classification: string | null
+          document_subtype: string | null
+          document_summary: string | null
+          document_type: string | null
           email_id: string | null
           extracted_text: string | null
+          extraction_method: string | null
           file_name: string
           file_path: string
           file_size: number | null
@@ -2976,11 +3094,18 @@ export type Database = {
           folder_id: string | null
           id: string
           is_latest_version: boolean | null
+          is_scanned: boolean | null
+          needs_reprocessing: boolean | null
           needs_text_backfill: boolean
           ocr_processed_at: string | null
+          page_count: number | null
           parent_file_id: string | null
+          processed_at: string | null
           processed_by_darwin: boolean | null
+          processing_error: string | null
+          ready_for_analysis: boolean | null
           source: string | null
+          text_quality_status: string | null
           uploaded_at: string | null
           uploaded_by: string | null
           version: number | null
@@ -2990,10 +3115,16 @@ export type Database = {
           claim_id: string
           classification_confidence?: number | null
           classification_metadata?: Json | null
+          clean_text?: string | null
+          confidence_score?: number | null
           darwin_processed_at?: string | null
           document_classification?: string | null
+          document_subtype?: string | null
+          document_summary?: string | null
+          document_type?: string | null
           email_id?: string | null
           extracted_text?: string | null
+          extraction_method?: string | null
           file_name: string
           file_path: string
           file_size?: number | null
@@ -3001,11 +3132,18 @@ export type Database = {
           folder_id?: string | null
           id?: string
           is_latest_version?: boolean | null
+          is_scanned?: boolean | null
+          needs_reprocessing?: boolean | null
           needs_text_backfill?: boolean
           ocr_processed_at?: string | null
+          page_count?: number | null
           parent_file_id?: string | null
+          processed_at?: string | null
           processed_by_darwin?: boolean | null
+          processing_error?: string | null
+          ready_for_analysis?: boolean | null
           source?: string | null
+          text_quality_status?: string | null
           uploaded_at?: string | null
           uploaded_by?: string | null
           version?: number | null
@@ -3015,10 +3153,16 @@ export type Database = {
           claim_id?: string
           classification_confidence?: number | null
           classification_metadata?: Json | null
+          clean_text?: string | null
+          confidence_score?: number | null
           darwin_processed_at?: string | null
           document_classification?: string | null
+          document_subtype?: string | null
+          document_summary?: string | null
+          document_type?: string | null
           email_id?: string | null
           extracted_text?: string | null
+          extraction_method?: string | null
           file_name?: string
           file_path?: string
           file_size?: number | null
@@ -3026,11 +3170,18 @@ export type Database = {
           folder_id?: string | null
           id?: string
           is_latest_version?: boolean | null
+          is_scanned?: boolean | null
+          needs_reprocessing?: boolean | null
           needs_text_backfill?: boolean
           ocr_processed_at?: string | null
+          page_count?: number | null
           parent_file_id?: string | null
+          processed_at?: string | null
           processed_by_darwin?: boolean | null
+          processing_error?: string | null
+          ready_for_analysis?: boolean | null
           source?: string | null
+          text_quality_status?: string | null
           uploaded_at?: string | null
           uploaded_by?: string | null
           version?: number | null
