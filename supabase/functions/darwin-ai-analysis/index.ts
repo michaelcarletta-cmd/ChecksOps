@@ -247,12 +247,16 @@ const LOW_SLOPE_FORCE_TERMS = [
 const LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES: Array<{ label: string; regex: RegExp }> = [
   { label: 'shingle', regex: /\bshingle(?:s)?\b/i },
   { label: 'uplift', regex: /\buplift\b/i },
+  { label: 'wind uplift', regex: /\bwind\s+uplift\b/i },
   { label: 'fastener pull-out', regex: /\bfastener\s+pull-?out\b/i },
   { label: 'seal strip', regex: /\bseal\s+strip\b/i },
+  { label: 'sealant strip', regex: /\bsealant\s+strip\b/i },
   { label: 'ARMA', regex: /\bARMA\b/i },
   { label: 'unsealed tabs', regex: /\bunsealed\s+tabs?\b/i },
+  { label: 'unsealed shingles', regex: /\bunsealed\s+shingle(?:s)?\b/i },
   { label: 'uplift analysis', regex: /\buplift\s+analysis\b/i },
   { label: 'ASTM D7158', regex: /\bASTM\s*D7158\b/i },
+  { label: 'ASTM', regex: /\bASTM\b/i },
   { label: 'architectural shingles', regex: /\barchitectural\s+(?:asphalt\s+)?shingle(?:s)?\b/i },
 ];
 
