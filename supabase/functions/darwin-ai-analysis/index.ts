@@ -951,52 +951,47 @@ function enforceEngineerRebuttalMandatorySections(result: string, context: Engin
   if (!result) return result;
 
   let updated = result.trim();
-  const lower = updated.toLowerCase();
   const additions: string[] = [];
 
-  // 1. Engineer Theory Extraction
-  if (!/engineer theory extraction/i.test(lower)) {
+  const hasEngineerTheoryExtraction = /(^|\n)engineer theory extraction\b/i.test(updated);
+  const hasTimingFailure = /(^|\n)timing failure\b/i.test(updated);
+  const hasRequiredTesting = /(^|\n)required testing not performed\b/i.test(updated);
+  const hasCausationProofFailure = /(^|\n)causation proof failure\b/i.test(updated);
+  const hasInternalContradictions = /(^|\n)internal contradictions\b/i.test(updated);
+  const hasQuestionsEngineerMustAnswer = /(^|\n)questions the engineer must answer\b/i.test(updated);
+
+  if (!hasEngineerTheoryExtraction) {
     additions.push(buildEngineerTheoryExtractionSection(context));
   }
 
-  // 2. Timing Failure
-  if (!/timing failure/i.test(lower)) {
+  if (!hasTimingFailure) {
     additions.push(buildTimingFailureSection(context.primaryScenario, context.engineerStatedCause));
   }
 
-  // 3. Required Testing Not Performed
-  if (!/required testing not performed/i.test(lower)) {
+  if (!hasRequiredTesting) {
     additions.push(buildRequiredTestingNotPerformedSection(context));
   }
 
-  // 4. Causation Proof Failure
-  const hasCausationProofFailureSection = /causation proof failure/i.test(lower);
-  const hasSpeculativeFailureStatement = /has not scientifically proven their conclusion and the causation statement is therefore speculative/i.test(lower)
-    || /does not establish sole causation to a reasonable degree of engineering certainty/i.test(lower);
-  const missingTests = getEngineerRequiredTests(context)
-    .filter((testName) => !isTestMentionedInReport(context.reportText, testName));
-
-  if (!hasCausationProofFailureSection || (missingTests.length > 0 && !hasSpeculativeFailureStatement)) {
-    additions.push(buildCausationProofFailureSectionStumper(context.primaryScenario, missingTests));
+  if (!hasCausationProofFailure) {
+    additions.push(buildCausationProofFailureSection(context));
   }
 
-  // 5. Internal Contradictions
-  if (!/internal contradictions/i.test(lower)) {
+  if (!hasInternalContradictions) {
     additions.push(buildEngineerContradictionSection(context.primaryScenario, context.engineerTheorySentences));
   }
 
-  // 6. Questions the Engineer Must Answer
-  if (!/questions the engineer must answer/i.test(lower)) {
+  if (!hasQuestionsEngineerMustAnswer) {
     const questions = buildEngineerMustAnswerQuestions(context.primaryScenario);
-    const questionsSection = `Questions the Engineer Must Answer\n\n${questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}`;
-    additions.push(questionsSection);
+    additions.push(
+      `Questions the Engineer Must Answer\n\n${questions.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
+    );
   }
 
   if (additions.length > 0) {
     updated += `\n\n${additions.join('\n\n')}`;
   }
 
-  return updated;
+  return updated.trim();
 }
 
 function enforceEngineerRebuttalLowSlopeOpening(result: string, primaryScenario: string | null): string {
