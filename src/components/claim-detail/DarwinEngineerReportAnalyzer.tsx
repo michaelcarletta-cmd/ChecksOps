@@ -176,6 +176,7 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
 
     setLoading(true);
     setExecutionSteps([]);
+    setAnalysis(null);
     try {
       let pdfBase64 = null;
       let pdfFilePath: string | null = null;
