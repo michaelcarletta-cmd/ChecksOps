@@ -456,8 +456,66 @@ function suppressLowSlopeUnsupportedBoilerplate(result: string, supportCorpus: s
   return filteredLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+function getQuoteRanges(text: string): Array<{ start: number; end: number; quoteText: string }> {
+  const ranges: Array<{ start: number; end: number; quoteText: string }> = [];
+  const quoteRegex = /["“”']([^"“”']+)["“”']/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = quoteRegex.exec(text)) !== null) {
+    ranges.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      quoteText: String(match[1] || '').trim(),
+    });
+  }
+
+  return ranges;
+}
+
+function collectLowSlopeForbiddenViolations(
+  result: string,
+  primaryScenario: string | null,
+  engineerCausationSentence: string,
+): string[] {
+  if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return [];
+
+  const causationLower = String(engineerCausationSentence || '').toLowerCase();
+  const quoteRanges = getQuoteRanges(result);
+  const violations = new Set<string>();
+
+  for (const rule of LOW_SLOPE_FORBIDDEN_RULES) {
+    const scanRegex = new RegExp(rule.regex.source, rule.regex.flags.includes('g') ? rule.regex.flags : `${rule.regex.flags}g`);
+    let match: RegExpExecArray | null;
+
+    while ((match = scanRegex.exec(result)) !== null) {
+      const matchIndex = match.index;
+      const inAllowedDirectQuote = quoteRanges.some((range) => {
+        const isWithinRange = matchIndex >= range.start && matchIndex < range.end;
+        if (!isWithinRange) return false;
+        const quoteLower = range.quoteText.toLowerCase();
+        return Boolean(quoteLower) && causationLower.includes(quoteLower);
+      });
+
+      if (!inAllowedDirectQuote) {
+        violations.add(rule.label);
+      }
+    }
+  }
+
+  return [...violations];
+}
+
+function assertLowSlopeForbiddenTerms(result: string, primaryScenario: string | null, engineerCausationSentence: string): void {
+  const violations = collectLowSlopeForbiddenViolations(result, primaryScenario, engineerCausationSentence);
+  if (violations.length > 0) {
+    throw new Error(
+      `Low-slope enforcement failed: forbidden wind/shingle mechanics remain in final output (${violations.join(', ')}).`,
+    );
+  }
+}
+
 function enforceLowSlopeRebuttalRequirements(result: string, primaryScenario: string | null, supportCorpus: string): string {
-  if (!result || primaryScenario !== 'low_slope_snow_ice_ponding') return result;
+  if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return result;
 
   let updated = enforceEngineerRebuttalLowSlopeOpening(result, primaryScenario);
   updated = suppressLowSlopeUnsupportedBoilerplate(updated, supportCorpus);
