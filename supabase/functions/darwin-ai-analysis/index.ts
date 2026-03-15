@@ -8660,6 +8660,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     }
 
     if (useStructuredDarwinOutput && structuredResult && typeof analysisResult === 'string') {
+      const responsePath: 'structured' = 'structured';
       const structuredPreSendLowSlopeDetection = detectLowSlopeAcrossSources([
         engineerRebuttalCausationQuote,
         engineerRebuttalReportText,
@@ -8690,18 +8691,29 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         engineerRebuttalCausationQuote,
       );
       const structuredViolations = Array.from(new Set([...structuredStrictViolations, ...structuredContextualViolations]));
+      const structuredFinalResponseHash = computeStableTextHash(analysisResult);
+
+      const structuredScenarioDiagnostics = buildLowSlopeScenarioDiagnostics({
+        analysisType,
+        responsePath,
+        primaryScenario: structuredEnforcedScenarioForResponse,
+        rulePackLoaded: structuredScenarioDiagnosticsRulePackLoaded,
+        suppressedRulePacks: structuredScenarioDiagnosticsSuppressedRulePacks,
+        matchedTerms: structuredScenarioDiagnosticsMatchedTerms,
+        finalViolationList: structuredViolations,
+        finalResponseHash: structuredFinalResponseHash,
+      });
+
+      console.log(
+        `[darwin][final-return] path=${responsePath} analysisType=${analysisType} primary=${structuredScenarioDiagnostics.primaryScenario || 'none'} rulePack=${structuredScenarioDiagnostics.rulePackLoaded} suppressed=[${structuredScenarioDiagnostics.suppressedRulePacks.join(',') || 'none'}] matched=[${structuredScenarioDiagnostics.matchedTerms.join(',') || 'none'}] violations=[${structuredScenarioDiagnostics.finalViolationList.join(',') || 'none'}] hash=${structuredScenarioDiagnostics.finalResponseHash}`
+      );
 
       if (structuredViolations.length > 0) {
         return new Response(
           JSON.stringify({
             error: buildLowSlopeForbiddenTermErrorMessage(structuredViolations),
-            scenario_diagnostics: {
-              primaryScenario: structuredEnforcedScenarioForResponse,
-              rulePackLoaded: structuredScenarioDiagnosticsRulePackLoaded,
-              suppressedRulePacks: structuredScenarioDiagnosticsSuppressedRulePacks,
-              matchedPhysicalMechanismTerms: structuredScenarioDiagnosticsMatchedTerms,
-              matchedTerms: structuredScenarioDiagnosticsMatchedTerms,
-            },
+            violations: structuredViolations,
+            scenario_diagnostics: structuredScenarioDiagnostics,
           }),
           { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
         );
@@ -8711,11 +8723,8 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         JSON.stringify({
           ...structuredResult,
           scenario_diagnostics: {
-            primaryScenario: structuredEnforcedScenarioForResponse,
-            rulePackLoaded: structuredScenarioDiagnosticsRulePackLoaded,
-            suppressedRulePacks: structuredScenarioDiagnosticsSuppressedRulePacks,
-            matchedPhysicalMechanismTerms: structuredScenarioDiagnosticsMatchedTerms,
-            matchedTerms: structuredScenarioDiagnosticsMatchedTerms,
+            ...structuredScenarioDiagnostics,
+            finalViolationList: [],
           },
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
