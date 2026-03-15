@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { fileId, claimId, fileName, fileContent } = await req.json();
+    const { fileId, claimId, fileName, fileContent, force } = await req.json();
 
     console.log("Darwin Document Processing starting...", { fileId, claimId, fileName });
 
