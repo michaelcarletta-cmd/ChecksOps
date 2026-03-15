@@ -2767,10 +2767,29 @@ Deno.serve(async (req) => {
         const block = `=== ${pdfFileName || 'Document'} ===\n${extracted.substring(0, 100000)}`;
         content = [content, block].filter(Boolean).join('\n\n');
         additionalContext._useTextOnly = true;
+        // Store extracted text so resolveEngineerReportSourceText can use it for scenario detection
+        if (!additionalContext.pdfExtractedText && extracted.trim().length > 200) {
+          additionalContext.pdfExtractedText = extracted;
+          console.log(`[darwin] Stored large-PDF extracted text for resolver (${extracted.length} chars)`);
+        }
         pdfContent = undefined;
       } catch (nativeErr) {
         console.error('Large single-PDF text fallback failed:', nativeErr);
         throw new Error('This PDF is too large for direct analysis and text extraction failed. Please upload a smaller/selectable-text PDF or split the document.');
+      }
+    }
+
+    // For engineer_report_rebuttal with a smaller PDF, pre-extract text so the resolver
+    // can use it for scenario detection even when the PDF is sent to AI as base64.
+    if (pdfContent && !additionalContext.pdfExtractedText && analysisType === 'engineer_report_rebuttal') {
+      try {
+        const preExtracted = await extractTextFromPDFNative(pdfContent, pdfFileName || 'document.pdf');
+        if (preExtracted && preExtracted.trim().length > 200) {
+          additionalContext.pdfExtractedText = preExtracted;
+          console.log(`[darwin] Pre-extracted PDF text for engineer resolver (${preExtracted.length} chars)`);
+        }
+      } catch (preExtErr) {
+        console.warn('[darwin] Pre-extraction for engineer resolver failed (non-fatal):', preExtErr);
       }
     }
 
