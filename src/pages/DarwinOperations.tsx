@@ -99,6 +99,35 @@ interface BulkDarwinCandidate {
   file_name: string;
 }
 
+interface IntelBackfillState {
+  status: "idle" | "running" | "complete" | "error";
+  processed: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+  remaining: number;
+  cursor: string | null;
+  errorMessage?: string;
+}
+
+interface IntelCoverage {
+  totalSupported: number;
+  withIntelligence: number;
+  withoutIntelligence: number;
+  readyForAnalysis: number;
+  blocked: number;
+  needsReprocessing: number;
+  coveragePct: number;
+}
+
+interface IntelCoverageByType {
+  type: string;
+  total: number;
+  withIntel: number;
+  missing: number;
+  coveragePct: number;
+}
+
 const INITIAL_STATS: BatchStats = {
   deadlines_created: 0,
   overdue_detected: 0,
