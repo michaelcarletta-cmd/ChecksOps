@@ -93,18 +93,42 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
   const topLevelFolders = folders?.filter(f => !f.parent_folder_id) || [];
   const getSubfolders = (parentId: string) => folders?.filter(f => f.parent_folder_id === parentId) || [];
 
-  // Fetch files with classification data
+  // Fetch files with classification + intelligence data
   const { data: files, refetch: refetchFiles } = useQuery({
     queryKey: ["claim-files", claimId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("claim_files")
-        .select("*, document_classification, classification_confidence, classification_metadata, processed_by_darwin")
+        .select("*, document_classification, classification_confidence, classification_metadata, processed_by_darwin, document_type, document_subtype, text_quality_status, extraction_method, is_scanned, ready_for_analysis, needs_reprocessing, processing_error, document_summary, page_count")
         .eq("claim_id", claimId)
         .order("uploaded_at", { ascending: false });
 
       if (error) throw error;
       return data;
+    },
+  });
+
+  // Bulk reprocess all files in claim
+  const bulkReprocessMutation = useMutation({
+    mutationFn: async () => {
+      const allFiles = files || [];
+      const processable = allFiles.filter(f => f.file_type?.includes('pdf') || f.file_type?.includes('text') || f.file_type?.includes('word') || /\.(pdf|docx?|txt)$/i.test(f.file_name));
+      for (const file of processable) {
+        await supabase.functions.invoke('darwin-process-document', {
+          body: { fileId: file.id, force: true }
+        });
+      }
+      return processable.length;
+    },
+    onSuccess: (count) => {
+      refetchFiles();
+      toast({
+        title: "Bulk Reprocess Started",
+        description: `${count} files queued for reprocessing.`,
+      });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Bulk reprocess failed.", variant: "destructive" });
     },
   });
 
