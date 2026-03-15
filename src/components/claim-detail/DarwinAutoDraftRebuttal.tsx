@@ -16,6 +16,7 @@ import { PositionGateBanner } from "./PositionGateBanner";
 import { publishCarrierDismantler } from "@/lib/darwinDismantlerBus";
 import { DarwinRefinementChat } from "./DarwinRefinementChat";
 import { DarwinCitationWatchdog } from "./DarwinCitationWatchdog";
+import { getFunctionErrorDetails } from "@/lib/edgeFunctionError";
 
 interface DarwinAutoDraftRebuttalProps {
   claimId: string;
@@ -217,6 +218,10 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
 
   const handleGenerate = async () => {
     setIsGenerating(true);
+    setRebuttal(null);
+    setEditableRebuttal("");
+    setCitationWatchdog(null);
+    setJurisdiction(null);
     try {
       const { data, error } = await supabase.functions.invoke("darwin-ai-analysis", {
         body: {
@@ -270,47 +275,64 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
         },
       });
 
-      if (error) throw error;
-
-      if (data?.result) {
-        setRebuttal(data.result);
-        setEditableRebuttal(data.result);
-        
-        // Store watchdog results for display
-        if (data?.citation_watchdog) {
-          setCitationWatchdog(data.citation_watchdog);
-        }
-        if (data?.jurisdiction) {
-          setJurisdiction(data.jurisdiction);
-        }
-        
-        if (data?.carrierDismantler) {
-          publishCarrierDismantler({
-            claimId,
-            analysisType: "auto_draft_rebuttal",
-            carrierDismantler: data.carrierDismantler,
-            claimFactsPack: data.claimFactsPack ?? null,
-          });
-        }
-        
-        // Save to darwin_analysis_results
-        const { data: userData } = await supabase.auth.getUser();
-        await supabase.from("darwin_analysis_results").insert({
-          claim_id: claimId,
-          analysis_type: "auto_draft_rebuttal",
-          input_summary: "Full strategic rebuttal using all claim intelligence",
-          result: data.result,
-          created_by: userData.user?.id,
+      if (error) {
+        const details = await getFunctionErrorDetails(error, "Failed to generate rebuttal");
+        console.error("Auto draft rebuttal blocked", {
+          status: details.status,
+          scenarioDiagnostics: details.scenarioDiagnostics,
+          violations: details.violations,
+          payload: details.payload,
         });
 
-        toast({
-          title: "Rebuttal drafted",
-          description: data?.citation_watchdog 
-            ? `⚠️ Rebuttal ready but ${data.citation_watchdog.wrong_state_citations_found} wrong-state citation(s) detected — review before sending`
-            : "Darwin has compiled a comprehensive rebuttal using all available intelligence",
-          variant: data?.citation_watchdog ? "destructive" : "default",
+        const violationText = details.violations?.length
+          ? ` Violations: ${details.violations.join(", ")}.`
+          : "";
+        throw new Error(`${details.message}${violationText}`.trim());
+      }
+
+      if (data?.error) {
+        const payloadViolations = Array.isArray((data as any).violations)
+          ? (data as any).violations.filter((item: unknown) => typeof item === "string")
+          : [];
+        const violationText = payloadViolations.length
+          ? ` Violations: ${payloadViolations.join(", ")}.`
+          : "";
+        throw new Error(`${data.error}${violationText}`.trim());
+      }
+
+      if (!data?.result || typeof data.result !== "string") {
+        throw new Error("No rebuttal returned. The response was blocked before delivery.");
+      }
+
+      setRebuttal(data.result);
+      setEditableRebuttal(data.result);
+
+      // Store watchdog results for display
+      if (data?.citation_watchdog) {
+        setCitationWatchdog(data.citation_watchdog);
+      }
+      if (data?.jurisdiction) {
+        setJurisdiction(data.jurisdiction);
+      }
+
+      if (data?.carrierDismantler) {
+        publishCarrierDismantler({
+          claimId,
+          analysisType: "auto_draft_rebuttal",
+          carrierDismantler: data.carrierDismantler,
+          claimFactsPack: data.claimFactsPack ?? null,
         });
       }
+
+      // Persisting is handled server-side only after final low-slope validation passes.
+
+      toast({
+        title: "Rebuttal drafted",
+        description: data?.citation_watchdog
+          ? `⚠️ Rebuttal ready but ${data.citation_watchdog.wrong_state_citations_found} wrong-state citation(s) detected — review before sending`
+          : "Darwin has compiled a comprehensive rebuttal using all available intelligence",
+        variant: data?.citation_watchdog ? "destructive" : "default",
+      });
     } catch (error: any) {
       console.error("Error generating rebuttal:", error);
       toast({

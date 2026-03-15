@@ -608,6 +608,21 @@ function collectLowSlopeStrictPreSendViolations(result: string, primaryScenario:
   ));
 }
 
+function collectAllLowSlopeFinalViolations(
+  finalText: string,
+  primaryScenario: string | null,
+  engineerCausationSentence: string,
+): string[] {
+  if (!finalText || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return [];
+
+  return Array.from(
+    new Set([
+      ...collectLowSlopeStrictPreSendViolations(finalText, primaryScenario),
+      ...collectLowSlopeForbiddenViolations(finalText, primaryScenario, engineerCausationSentence),
+    ]),
+  );
+}
+
 function buildLowSlopeForbiddenTermErrorMessage(violations: string[]): string {
   const uniqueViolations = Array.from(new Set(violations.filter(Boolean)));
   if (uniqueViolations.length === 0) {
@@ -8673,17 +8688,13 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       const structuredScenarioDiagnosticsRulePackLoaded = getRulePackLoaded(structuredEnforcedScenarioForResponse);
       const structuredScenarioDiagnosticsSuppressedRulePacks = getSuppressedRulePacks(structuredEnforcedScenarioForResponse);
 
-      const structuredStrictViolations = collectLowSlopeStrictPreSendViolations(
-        analysisResult,
-        structuredEnforcedScenarioForResponse,
-      );
-      const structuredContextualViolations = collectLowSlopeForbiddenViolations(
-        analysisResult,
+      const finalStructuredText = analysisResult;
+      const structuredViolations = collectAllLowSlopeFinalViolations(
+        finalStructuredText,
         structuredEnforcedScenarioForResponse,
         engineerRebuttalCausationQuote,
       );
-      const structuredViolations = Array.from(new Set([...structuredStrictViolations, ...structuredContextualViolations]));
-      const structuredFinalResponseHash = computeStableTextHash(analysisResult);
+      const structuredFinalResponseHash = computeStableTextHash(finalStructuredText);
 
       const structuredScenarioDiagnostics = buildLowSlopeScenarioDiagnostics({
         analysisType,
@@ -8711,7 +8722,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         );
       }
 
-      await persistAnalysisSnapshot(analysisResult);
+      await persistAnalysisSnapshot(finalStructuredText);
 
       return new Response(
         JSON.stringify({
@@ -8742,7 +8753,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     }
 
     const responsePath: 'non_structured' = 'non_structured';
-    const finalAnalysisText = typeof analysisResult === 'string'
+    const finalResponseText = typeof analysisResult === 'string'
       ? analysisResult
       : JSON.stringify(analysisResult ?? '');
 
@@ -8752,7 +8763,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       String(content || ''),
       claimSummary,
       String(claim?.loss_description || ''),
-      finalAnalysisText,
+      finalResponseText,
     ]);
 
     const enforcedScenarioForResponse =
@@ -8766,17 +8777,12 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     const scenarioDiagnosticsRulePackLoaded = getRulePackLoaded(enforcedScenarioForResponse);
     const scenarioDiagnosticsSuppressedRulePacks = getSuppressedRulePacks(enforcedScenarioForResponse);
 
-    const strictViolations = collectLowSlopeStrictPreSendViolations(
-      finalAnalysisText,
-      enforcedScenarioForResponse,
-    );
-    const contextualViolations = collectLowSlopeForbiddenViolations(
-      finalAnalysisText,
+    const allViolations = collectAllLowSlopeFinalViolations(
+      finalResponseText,
       enforcedScenarioForResponse,
       engineerRebuttalCausationQuote,
     );
-    const allViolations = Array.from(new Set([...strictViolations, ...contextualViolations]));
-    const finalResponseHash = computeStableTextHash(finalAnalysisText);
+    const finalResponseHash = computeStableTextHash(finalResponseText);
 
     const scenarioDiagnostics = buildLowSlopeScenarioDiagnostics({
       analysisType,
@@ -8804,14 +8810,14 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       );
     }
 
-    await persistAnalysisSnapshot(finalAnalysisText);
+    await persistAnalysisSnapshot(finalResponseText);
 
     const responseBuildStep = startStep('response', 'Build response payload');
     const responsePayload: any = {
       success: true,
       analysisType,
-      result: analysisResult,
-      analysis: analysisResult,
+      result: finalResponseText,
+      analysis: finalResponseText,
       suggestedActions,
       carrierDismantler: carrierDismantlerResult,
       claimId,

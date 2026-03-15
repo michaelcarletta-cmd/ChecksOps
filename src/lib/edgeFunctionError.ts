@@ -4,39 +4,79 @@ import {
   FunctionsRelayError,
 } from "@supabase/supabase-js";
 
+export interface FunctionErrorDetails {
+  message: string;
+  status?: number;
+  payload?: unknown;
+  violations?: string[];
+  scenarioDiagnostics?: Record<string, unknown> | null;
+}
+
+async function parseFunctionErrorPayload(response: Response): Promise<unknown> {
+  try {
+    return await response.clone().json();
+  } catch {
+    // Fall through to plain text payload
+  }
+
+  try {
+    const text = await response.clone().text();
+    return text || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getFunctionErrorDetails(
+  error: unknown,
+  fallback = "Request failed",
+): Promise<FunctionErrorDetails> {
+  if (error instanceof FunctionsHttpError) {
+    const response = error.context;
+    const payload = await parseFunctionErrorPayload(response);
+
+    const payloadObject = payload && typeof payload === "object" ? payload as Record<string, unknown> : null;
+    const payloadText = typeof payload === "string" ? payload : null;
+
+    const message =
+      (typeof payloadObject?.error === "string" && payloadObject.error) ||
+      (typeof payloadObject?.message === "string" && payloadObject.message) ||
+      (typeof payloadObject?.details === "string" && payloadObject.details) ||
+      payloadText ||
+      `${fallback} (HTTP ${response.status})`;
+
+    const violations = Array.isArray(payloadObject?.violations)
+      ? payloadObject.violations.filter((item): item is string => typeof item === "string")
+      : [];
+
+    const scenarioDiagnostics = payloadObject?.scenario_diagnostics && typeof payloadObject.scenario_diagnostics === "object"
+      ? payloadObject.scenario_diagnostics as Record<string, unknown>
+      : null;
+
+    return {
+      message,
+      status: response.status,
+      payload,
+      violations,
+      scenarioDiagnostics,
+    };
+  }
+
+  if (error instanceof FunctionsRelayError || error instanceof FunctionsFetchError) {
+    return { message: error.message || fallback };
+  }
+
+  if (error instanceof Error) {
+    return { message: error.message || fallback };
+  }
+
+  return { message: fallback };
+}
+
 export async function getFunctionErrorMessage(
   error: unknown,
   fallback = "Request failed",
 ): Promise<string> {
-  if (error instanceof FunctionsHttpError) {
-    const response = error.context;
-
-    try {
-      const json = await response.json();
-      if (typeof json?.error === "string") return json.error;
-      if (typeof json?.message === "string") return json.message;
-      if (typeof json?.details === "string") return json.details;
-    } catch {
-      // Ignore JSON parse failure and try text fallback
-    }
-
-    try {
-      const text = await response.text();
-      if (text) return text;
-    } catch {
-      // ignore
-    }
-
-    return `${fallback} (HTTP ${response.status})`;
-  }
-
-  if (error instanceof FunctionsRelayError || error instanceof FunctionsFetchError) {
-    return error.message || fallback;
-  }
-
-  if (error instanceof Error) {
-    return error.message || fallback;
-  }
-
-  return fallback;
+  const details = await getFunctionErrorDetails(error, fallback);
+  return details.message;
 }
