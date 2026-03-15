@@ -2703,6 +2703,10 @@ Deno.serve(async (req) => {
           const block = `=== ${pdfFileName || 'Document'} ===\n${extractedText.substring(0, 100000)}`;
           content = [content, block].filter(Boolean).join('\n\n');
           additionalContext._useTextOnly = true;
+          // Store for resolver scenario detection
+          if (!additionalContext.pdfExtractedText && extractedText.trim().length > 200) {
+            additionalContext.pdfExtractedText = extractedText;
+          }
           pdfContent = undefined;
         }
       } catch (pathErr) {
