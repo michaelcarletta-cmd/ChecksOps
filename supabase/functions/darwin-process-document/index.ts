@@ -171,6 +171,7 @@ Deno.serve(async (req) => {
       
       // Update file record with basic classification
       if (file) {
+        const filenameDocType = docTypeMap?.[classificationFromName] || classificationFromName;
         await supabase
           .from('claim_files')
           .update({
@@ -182,6 +183,13 @@ Deno.serve(async (req) => {
             },
             processed_by_darwin: true,
             darwin_processed_at: new Date().toISOString(),
+            document_type: filenameDocType,
+            extraction_method: extractionMethod,
+            text_quality_status: 'unusable',
+            is_scanned: isScanned,
+            ready_for_analysis: false,
+            needs_reprocessing: true,
+            processed_at: new Date().toISOString(),
           })
           .eq('id', fileId);
       }
