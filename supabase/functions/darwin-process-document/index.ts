@@ -953,6 +953,11 @@ Deno.serve(async (req) => {
 function assessTextQuality(text: string): { status: 'good' | 'fair' | 'poor' | 'unusable'; score: number; reasons: string[] } {
   if (!text || text.length < 20) return { status: 'unusable', score: 0, reasons: ['No text extracted'] };
 
+  // Multi-sample garbage detection from shared utility
+  if (isGarbageText(text)) {
+    return { status: 'unusable', score: 0, reasons: ['Multi-sample garbage detection triggered (binary/garbled data)'] };
+  }
+
   const reasons: string[] = [];
   let score = 100;
 
