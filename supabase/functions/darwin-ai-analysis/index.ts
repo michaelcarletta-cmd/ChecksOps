@@ -304,7 +304,9 @@ function getEngineerRequiredTests(context: EngineerRebuttalEnforcementContext): 
 
   const scenarioMappedTests = scenarioList.flatMap((scenario) => SCENARIO_MISSING_TESTING_MAP[scenario] || []);
   const taggedMissingTests = (context.criticalTestingNotPerformed || [])
-    .map((entry) => parseTaggedMissingTest(entry).testName)
+    .map((entry) => parseTaggedMissingTest(entry))
+    .filter(({ scenario }) => context.primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO || !scenario || scenario === LOW_SLOPE_PRIMARY_SCENARIO)
+    .map(({ testName }) => testName)
     .filter(Boolean);
 
   const merged = Array.from(new Set([...scenarioMappedTests, ...taggedMissingTests]));
