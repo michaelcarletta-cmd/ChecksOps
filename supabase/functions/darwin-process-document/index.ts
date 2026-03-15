@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { isGarbageText } from '../_shared/document-intelligence-types.ts';
 import { runSmartClassification, type DocumentClassification as SmartDocClassification } from './classification-v2.ts';
 import { analyzePacketText } from './packet-intelligence.ts';
 import { classifyVirtualSegments } from './segment-intelligence.ts';
@@ -326,6 +327,39 @@ Deno.serve(async (req) => {
 
         // Persist extracted_text to claim_files so it's always available
         if (textContent && textContent.length > 50 && !textContent.startsWith('[PDF Document')) {
+          // Run garbage detection before persisting
+          if (isGarbageText(textContent)) {
+            console.warn(`[TextExtract] isGarbageText=true for ${file.file_name}, marking unusable`);
+            await supabase
+              .from('claim_files')
+              .update({
+                extracted_text: textContent.substring(0, 100000),
+                extraction_method: extractionMethod,
+                text_quality_status: 'unusable',
+                is_scanned: isScanned,
+                ready_for_analysis: false,
+                needs_reprocessing: true,
+                processing_error: 'Extracted text detected as garbage/binary data',
+                processed_at: new Date().toISOString(),
+                processed_by_darwin: true,
+                darwin_processed_at: new Date().toISOString(),
+              })
+              .eq('id', fileId);
+
+            console.log(`[DocProcessed] file_id=${fileId} file_name=${file.file_name} extraction_method=${extractionMethod} text_quality=unusable is_scanned=${isScanned} ready_for_analysis=false document_type=unknown document_subtype=none reason=garbage_text`);
+
+            return new Response(
+              JSON.stringify({
+                success: true,
+                classification: 'other',
+                confidence: 0,
+                method: 'garbage_text_detected',
+                processing_error: 'Extracted text detected as garbage/binary data',
+              }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
           await supabase
             .from('claim_files')
             .update({ extracted_text: textContent.substring(0, 100000) })
@@ -378,17 +412,21 @@ Deno.serve(async (req) => {
             is_scanned: isScanned,
             ready_for_analysis: false,
             needs_reprocessing: true,
+            processing_error: 'No readable text extracted from file',
             processed_at: new Date().toISOString(),
           })
           .eq('id', fileId);
       }
+
+      console.log(`[DocProcessed] file_id=${fileId} file_name=${fileName || file?.file_name} extraction_method=${extractionMethod} text_quality=unusable is_scanned=${isScanned} ready_for_analysis=false document_type=${file ? (docTypeMap?.[classificationFromName] || classificationFromName) : 'unknown'} document_subtype=none reason=no_readable_text`);
 
       return new Response(
         JSON.stringify({ 
           success: true, 
           classification: classificationFromName,
           confidence: 0.4,
-          method: 'filename_pattern'
+          method: 'filename_pattern',
+          processing_error: 'No readable text extracted from file',
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -600,6 +638,21 @@ Deno.serve(async (req) => {
           });
       }
     }
+
+    // === STEP 3.5: INLINE STRUCTURED INTELLIGENCE EXTRACTION ===
+    if (readyForAnalysis && targetClaimId && fileId && cleanText.length >= 100) {
+      try {
+        await extractStructuredIntelligence(
+          supabase, targetClaimId, fileId, cleanText,
+          mappedDocType, classificationResult
+        );
+      } catch (intelErr) {
+        console.error('[DocIntel] Inline extraction failed (non-fatal):', intelErr);
+      }
+    }
+
+    // === STRUCTURED PROCESSING LOG ===
+    console.log(`[DocProcessed] file_id=${fileId} file_name=${fileName || file?.file_name} extraction_method=${extractionMethod} text_quality=${textQuality.status} is_scanned=${isScanned} ready_for_analysis=${readyForAnalysis} document_type=${mappedDocType} document_subtype=${classificationResult.metadata?.document_subtype || 'none'} confidence=${classificationResult.confidence}`);
 
     // === STEP 4: DURABLE DOCUMENT INTELLIGENCE QUEUE ===
     if (readyForAnalysis && targetClaimId && fileId && cleanText.length >= 100) {
@@ -867,9 +920,30 @@ Deno.serve(async (req) => {
     );
 
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("Darwin Document Processing error:", error);
+
+    // Best-effort: write processing_error to claim_files so the failure is visible
+    try {
+      const body = await req.clone().json().catch(() => ({}));
+      const failedFileId = body?.fileId;
+      if (failedFileId) {
+        const supabase = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        );
+        await supabase.from('claim_files').update({
+          processing_error: errorMsg,
+          needs_reprocessing: true,
+          ready_for_analysis: false,
+          processed_at: new Date().toISOString(),
+        }).eq('id', failedFileId);
+        console.log(`[DocProcessed] file_id=${failedFileId} FAILED error="${errorMsg}"`);
+      }
+    } catch { /* best effort */ }
+
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: errorMsg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
@@ -878,6 +952,11 @@ Deno.serve(async (req) => {
 // === TEXT QUALITY ASSESSMENT ===
 function assessTextQuality(text: string): { status: 'good' | 'fair' | 'poor' | 'unusable'; score: number; reasons: string[] } {
   if (!text || text.length < 20) return { status: 'unusable', score: 0, reasons: ['No text extracted'] };
+
+  // Multi-sample garbage detection from shared utility
+  if (isGarbageText(text)) {
+    return { status: 'unusable', score: 0, reasons: ['Multi-sample garbage detection triggered (binary/garbled data)'] };
+  }
 
   const reasons: string[] = [];
   let score = 100;
