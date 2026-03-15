@@ -10539,6 +10539,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         detection_source: (claim as any).state_code ? 'database' : detectedStateRaw ? 'address_parse' : 'fallback_default',
         confidence: (claim as any).state_code ? 'high' : detectedStateRaw ? 'medium' : 'low',
       },
+      intelligence_diagnostics: intelligenceDiagnostics,
     };
     // Attach watchdog results so the UI can flag issues
     if (citationAudit && citationAudit.violations.length > 0) {
