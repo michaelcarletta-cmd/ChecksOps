@@ -8465,8 +8465,6 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       const lowSlopeDetectionForEnforcement = detectLowSlopeAcrossSources([
         engineerRebuttalCausationQuote,
         engineerRebuttalReportText,
-        String(content || ''),
-        analysisResult,
       ]);
 
       const enforcedScenario =
