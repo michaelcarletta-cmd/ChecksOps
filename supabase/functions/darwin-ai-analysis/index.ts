@@ -2933,10 +2933,32 @@ Deno.serve(async (req) => {
     let engineerRebuttalTheorySentences: string[] = [];
     let engineerRebuttalCriticalTestingNotPerformed: string[] = [];
     let engineerRebuttalReportText = '';
+    let engineerRebuttalSourceTextLength = 0;
+    let engineerRebuttalSourceTextOrigin: EngineerReportSourceOrigin = 'none';
+    let engineerRebuttalUsedEngineerReportText = false;
     let lowSlopeSupportCorpusForFilters = '';
     let scenarioRulePackLoaded = 'UNIVERSAL_ONLY';
     let scenarioSuppressedRulePacks: string[] = [];
     let scenarioDetectionMatchedTerms: string[] = [];
+
+    let claimFilesWithExtractedTextCache: any[] | null = null;
+    const loadClaimFilesWithExtractedText = async (): Promise<any[]> => {
+      if (claimFilesWithExtractedTextCache) return claimFilesWithExtractedTextCache;
+
+      const { data, error } = await supabase
+        .from('claim_files')
+        .select('file_name, document_classification, classification_metadata, uploaded_at, claim_folders(name), extracted_text, file_type')
+        .eq('claim_id', claimId);
+
+      if (error) {
+        console.warn('[darwin] Unable to load claim_files extracted text for engineer source resolution:', error.message);
+        claimFilesWithExtractedTextCache = [];
+        return claimFilesWithExtractedTextCache;
+      }
+
+      claimFilesWithExtractedTextCache = data || [];
+      return claimFilesWithExtractedTextCache;
+    };
 
     // Build photo summary for context
     const analyzedPhotoCount = context.photos?.filter((p: any) => p.ai_analyzed_at)?.length || 0;
