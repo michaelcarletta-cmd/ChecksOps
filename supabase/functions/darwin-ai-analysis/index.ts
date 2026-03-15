@@ -4290,7 +4290,7 @@ APPLICABLE LAW: ${stateInfo.insuranceCode}
 ${pdfContent ? `A PDF of the engineer report has been provided for analysis.` : `ENGINEER REPORT CONTENT:
 ${content || 'No engineer report content provided'}`}
 
-${additionalContextText ? `ADDITIONAL CONTEXT/OBSERVATIONS:\n${additionalContextText}` : ''}
+${(additionalContext?.userContext || additionalContext?.customPrompt) ? `ADDITIONAL CONTEXT/OBSERVATIONS:\n${additionalContext?.userContext || additionalContext?.customPrompt}` : ''}
 
 === CRITICAL OUTPUT REQUIREMENT ===
 You must generate a FORMAL REBUTTAL LETTER that is ready to send to the insurance company. This is NOT an internal analysis—this IS the document we submit to the carrier.
