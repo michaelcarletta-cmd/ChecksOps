@@ -507,6 +507,288 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
   };
 }
 
+// ============================================================================
+// ENGINEER REPORT REBUTTAL BUILDER — Deterministic intelligence extraction
+// ============================================================================
+
+interface EngineerReportIntelligence {
+  engineerTheory: string;
+  engineerQuotes: string[];
+  weatherEventsMentioned: string[];
+  structuralClaims: string[];
+  testsDocumented: string[];
+  testsMissing: string[];
+  contradictions: string[];
+}
+
+interface EngineerRebuttalInput {
+  claimNumber?: string;
+  policyNumber?: string;
+  insured?: string;
+  propertyAddress?: string;
+  dateOfLoss?: string;
+  carrierName?: string;
+  addressee?: string;
+  authorName?: string;
+  authorTitle?: string;
+  companyName?: string;
+  state?: string;
+}
+
+const ENGINEER_TEST_LIBRARY: Array<{ label: string; patterns: RegExp[] }> = [
+  { label: "Membrane core cuts", patterns: [/\bcore cuts?\b/i, /\bmembrane core\b/i] },
+  { label: "Seam adhesion / peel testing", patterns: [/\bpeel testing\b/i, /\bseam adhesion\b/i, /\badhesion testing\b/i] },
+  { label: "Moisture mapping / infrared", patterns: [/\bmoisture mapping\b/i, /\binfrared\b/i, /\bthermography\b/i, /\bthermal imaging\b/i] },
+  { label: "Drainage capacity analysis", patterns: [/\bdrainage[- ]capacity\b/i, /\bdrainage analysis\b/i] },
+  { label: "Snow-water equivalent / runoff analysis", patterns: [/\bsnow[- ]water equivalent\b/i, /\brunoff analysis\b/i, /\bSWE\b/i] },
+  { label: "Leak-path tracing", patterns: [/\bleak[- ]path tracing\b/i, /\bleak path\b/i, /\bdye testing\b/i, /\bwater testing\b/i] },
+  { label: "Deflection / structural measurement", patterns: [/\bdeflection\b/i, /\bplumb\b/i, /\blevel survey\b/i, /\blaser level\b/i] },
+];
+
+const ENGINEER_WEATHER_PATTERNS: Array<{ label: string; regex: RegExp }> = [
+  { label: "snow", regex: /\bsnow\b/i },
+  { label: "ice", regex: /\bice\b/i },
+  { label: "standing water", regex: /\bstanding water\b/i },
+  { label: "ponding water", regex: /\bponding\b/i },
+  { label: "freeze-thaw", regex: /\bfreeze[- ]thaw\b/i },
+  { label: "meltwater", regex: /\bmeltwater\b/i },
+  { label: "drainage obstruction", regex: /\bimpeded drainage\b|\bdrainage obstruction\b/i },
+];
+
+function normalizeWhitespaceForIntel(text: string): string {
+  return String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function splitSentencesForIntel(text: string): string[] {
+  return normalizeWhitespaceForIntel(text).split(/(?<=[.!?])\s+|\n+/).map((s) => s.trim()).filter((s) => s.length > 25);
+}
+
+function uniqueStringsForIntel(values: string[]): string[] {
+  return Array.from(new Set(values.map((v) => v.trim()).filter(Boolean)));
+}
+
+function extractQuotedTextForIntel(text: string): string[] {
+  const matches = text.match(/"([^"]{20,400})"/g) || [];
+  return uniqueStringsForIntel(matches.map((m) => m.replace(/^"|"$/g, "")));
+}
+
+function extractEngineerTheoryFromText(text: string): string {
+  const sentences = splitSentencesForIntel(text);
+  const preferredPatterns: RegExp[] = [
+    /\bresult of\b/i, /\bcaused by\b/i, /\bwas the result of\b/i, /\bconsistent with\b/i,
+    /\bdue to\b/i, /\bcreated by\b/i, /\bpenetrated\b/i, /\bmaintenance[- ]deferred\b/i,
+    /\bage[- ]related\b/i, /\blong[- ]term\b/i, /\bdeterioration\b/i,
+  ];
+  const candidates = sentences.filter((s) => preferredPatterns.some((re) => re.test(s)));
+  if (candidates.length > 0) return candidates.slice(0, 2).join(" ");
+  return sentences[0] || "No explicit engineer causation statement could be extracted.";
+}
+
+function extractEngineerQuotesFromText(text: string): string[] {
+  const quoted = extractQuotedTextForIntel(text);
+  const theoryLikeQuoted = quoted.filter((q) =>
+    /\b(result of|caused by|consistent with|due to|long[- ]term|deterioration|maintenance|age[- ]related)\b/i.test(q)
+  );
+  if (theoryLikeQuoted.length > 0) return theoryLikeQuoted.slice(0, 8);
+  return quoted.slice(0, 8);
+}
+
+function extractStructuralClaimsFromText(text: string): string[] {
+  const sentences = splitSentencesForIntel(text);
+  return uniqueStringsForIntel(
+    sentences.filter((s) => /\bstructural\b|\bdeflection\b|\bframing\b|\bwood-framed\b|\bload\b|\bASCE\b|\bcapacity\b/i.test(s))
+  ).slice(0, 8);
+}
+
+function detectWeatherEventsInText(text: string): string[] {
+  return uniqueStringsForIntel(ENGINEER_WEATHER_PATTERNS.filter((p) => p.regex.test(text)).map((p) => p.label));
+}
+
+function detectDocumentedTestsInText(text: string): string[] {
+  return ENGINEER_TEST_LIBRARY.filter((test) => test.patterns.some((re) => re.test(text))).map((test) => test.label);
+}
+
+function detectMissingTestsInText(text: string): string[] {
+  const documented = new Set(detectDocumentedTestsInText(text));
+  return ENGINEER_TEST_LIBRARY.map((t) => t.label).filter((label) => !documented.has(label));
+}
+
+function buildContradictionsFromText(text: string, weatherEvents: string[], structuralClaims: string[]): string[] {
+  const contradictions: string[] = [];
+  const lower = text.toLowerCase();
+  if (weatherEvents.length > 0 && /\bdeterioration\b|\bmaintenance\b|\bage[- ]related\b/i.test(text)) {
+    contradictions.push("The report acknowledges event conditions but still attributes the loss solely to deterioration or maintenance without objective testing separating the event from the alleged pre-existing condition.");
+  }
+  if (/\bstanding water\b|\bimpeded drainage\b|\bponding\b|\bmeltwater\b/i.test(text) && /\bmaintenance\b|\bdeterioration\b/i.test(text)) {
+    contradictions.push("The report admits drainage obstruction, ponding, or meltwater stress, yet still blames only maintenance without proving the event did not create, activate, or expand the leakage pathway.");
+  }
+  if (structuralClaims.length > 0 && /\bwater infiltration\b|\bleak\b|\bmembrane\b|\bwatertight\b/i.test(text)) {
+    contradictions.push("The report relies on structural load or framing adequacy to dismiss leakage, even though structural adequacy is not the same as membrane watertight performance.");
+  }
+  if (/\bno decay\b|\blacked the onset of decay\b|\bremained stiff\b/i.test(lower) && /\blong[- ]term\b|\byears\b/i.test(lower)) {
+    contradictions.push("The report characterizes the condition as long-term while simultaneously describing wood components as lacking decay or remaining structurally stiff, which is inconsistent with an extended leakage timeline.");
+  }
+  return uniqueStringsForIntel(contradictions);
+}
+
+function extractEngineerIntelligence(text: string): EngineerReportIntelligence {
+  const normalized = normalizeWhitespaceForIntel(text);
+  const weatherEventsMentioned = detectWeatherEventsInText(normalized);
+  const structuralClaims = extractStructuralClaimsFromText(normalized);
+  const testsDocumented = detectDocumentedTestsInText(normalized);
+  const testsMissing = detectMissingTestsInText(normalized);
+  const contradictions = buildContradictionsFromText(normalized, weatherEventsMentioned, structuralClaims);
+  return {
+    engineerTheory: extractEngineerTheoryFromText(normalized),
+    engineerQuotes: extractEngineerQuotesFromText(normalized),
+    weatherEventsMentioned,
+    structuralClaims,
+    testsDocumented,
+    testsMissing,
+    contradictions,
+  };
+}
+
+function buildRebuttalHeader(input: EngineerRebuttalInput): string {
+  const lines: string[] = [];
+  lines.push(`RE: Rebuttal to Engineering Report`);
+  if (input.claimNumber) lines.push(`Claim Number: ${input.claimNumber}`);
+  if (input.policyNumber) lines.push(`Policy Number: ${input.policyNumber}`);
+  if (input.insured) lines.push(`Insured: ${input.insured}`);
+  if (input.propertyAddress) lines.push(`Property Address: ${input.propertyAddress}`);
+  if (input.dateOfLoss) lines.push(`Date of Loss: ${input.dateOfLoss}`);
+  return lines.join("\n");
+}
+
+function buildRequiredTestingSectionFromIntel(intel: EngineerReportIntelligence): string {
+  if (intel.testsMissing.length === 0) {
+    return `Required Testing Not Performed\n\nThe report references testing concepts, but those references still do not establish that objective diagnostic work was actually performed to rule out event-driven failure.`;
+  }
+  return `Required Testing Not Performed\n\nTo scientifically prove the engineer's theory, the following forensic procedures should have been documented but were not:\n\n${intel.testsMissing.map((t) => `• ${t}`).join("\n")}\n\nWithout these procedures, the report does not establish timing, mechanism, or sole causation.`;
+}
+
+function buildQuestionsSectionFromIntel(intel: EngineerReportIntelligence): string {
+  const questions: string[] = [
+    "What objective testing established the timing of the alleged membrane openings?",
+    "What pre-loss documentation proves these specific openings existed in the same condition prior to the loss event?",
+    "What testing rules out the reported weather event as a contributing or proximate cause?",
+  ];
+  if (intel.testsMissing.includes("Membrane core cuts")) {
+    questions.push("What membrane core cuts were taken and what did they show regarding the condition of the substrate and inter-ply moisture?");
+  }
+  if (intel.testsMissing.includes("Seam adhesion / peel testing")) {
+    questions.push("What seam adhesion or peel testing was performed to quantify the integrity of the laps or seams?");
+  }
+  if (intel.testsMissing.includes("Drainage capacity analysis")) {
+    questions.push("What drainage-capacity analysis was performed to determine whether the system was overwhelmed during the event?");
+  }
+  if (intel.testsMissing.includes("Snow-water equivalent / runoff analysis")) {
+    questions.push("What snow-water equivalent or runoff-path analysis was performed to evaluate hydraulic loading and meltwater volume?");
+  }
+  if (intel.testsMissing.includes("Leak-path tracing")) {
+    questions.push("What leak-path tracing connected the exterior condition to the interior manifestation?");
+  }
+  questions.push("How did the engineer distinguish structural adequacy from membrane watertightness performance?");
+  questions.push("What objective testing proves deterioration alone caused the loss rather than the event activating or expanding the failure path?");
+  return `Questions the Engineer Must Answer\n\n${uniqueStringsForIntel(questions).map((q, i) => `${i + 1}. ${q}`).join("\n")}`;
+}
+
+function buildDeterministicEngineerRebuttal(intel: EngineerReportIntelligence, input: EngineerRebuttalInput = {}): string {
+  const authorName = input.authorName || "Michael Carletta";
+  const authorTitle = input.authorTitle || "Public Adjuster";
+  const companyName = input.companyName || "Freedom Adjustment";
+
+  const contradictionText = intel.contradictions.length > 0
+    ? intel.contradictions.map((c) => `• ${c}`).join("\n")
+    : "• The report documents conditions and observations but does not supply the objective testing required to convert those observations into a reliable causation opinion.";
+
+  const quotedTheory = intel.engineerQuotes[0] || intel.engineerTheory || "No explicit engineer causation quote could be extracted.";
+
+  return `${buildRebuttalHeader(input)}
+
+After an exhaustive technical review of the provided report, it is clear that the findings are based on visual assumptions rather than forensic engineering methodology. The report fails to provide timing proof, methodology sufficiency, or scientific causation proof to support a deterioration-only conclusion.
+
+By acknowledging the presence of weather conditions and observable moisture-related impacts while dismissing their role without objective testing, the engineer has produced a report that is fundamentally speculative. This rebuttal explains why the report cannot serve as a reliable basis for a coverage determination.
+
+Engineer Theory Extraction
+
+The engineer states the following regarding the cause of loss: "${quotedTheory}"
+
+This narrative attempts to characterize the condition as age-related or maintenance-related while avoiding the forensic work necessary to prove when the relevant openings developed, whether the event activated or expanded those openings, and whether the event was a contributing or proximate cause of the resulting intrusion.
+
+Timing Failure
+
+The report fails to establish a chronological baseline for the alleged failure condition. The engineer must prove timing, not assume timing. There is no dated pre-loss documentation demonstrating that the specific openings, seam conditions, or leak pathways at issue existed in the same condition immediately before the loss event.
+
+Without prior inspection records, dated photographs, historical leak-path documentation, or objective forensic testing capable of distinguishing older conditions from event-driven expansion or activation, the assertion that the condition is exclusively long-term is unsupported. Condition evidence is not timing proof.
+
+${buildRequiredTestingSectionFromIntel(intel)}
+
+Causation Proof Failure
+
+The engineer did not scientifically prove sole causation. The absence of required diagnostic testing means the report does not reliably distinguish pre-existing vulnerability from event-driven failure.
+
+Condition evidence is not causation proof.
+
+A system may be weathered, aged, or vulnerable and still remain functional until a specific event imposes the hydraulic, thermal, structural, or mechanical stress necessary to produce direct physical loss. The burden is on the carrier's expert to rule out the reported event with objective support. That was not done here.
+
+Evidentiary Sufficiency Audit of Engineer Conclusions
+
+Conclusion: ${intel.engineerTheory}
+
+Data Provided: Primarily visual observations and narrative characterization.
+
+Missing Data: Objective testing establishing timing, mechanism, and exclusion of event-driven failure.
+
+Assumption Leap: The report moves from observed condition to sole-cause conclusion without the forensic methodology required to support that leap.
+
+Support Rating: Unsupported.
+
+Methodology Failures
+
+The methodology employed in this investigation was inadequate for a causation analysis. A visual walk-through is not a substitute for destructive testing, leak-path tracing, moisture mapping, quantitative load/path analysis, or material-specific performance testing when the question is whether a covered event caused or materially contributed to loss.
+
+Visual observations alone do not establish engineering causation to a reasonable degree of certainty. The report documents conditions; it does not scientifically prove why those conditions caused the loss at this specific time and in this specific manner.
+
+Point-by-Point Rebuttal
+
+The report relies on the visual appearance of materials to support a deterioration narrative. That is insufficient. Weathering, aging, prior repairs, or historical maintenance conditions may describe the state of a component, but they do not establish whether a documented event activated, expanded, or materially worsened the relevant failure pathway.
+
+The report also treats condition evidence as if it were proof of sole causation. That is a fundamental forensic error. A covered event acting on aged materials can still be the proximate cause of direct physical loss.
+
+Internal Contradictions
+
+${contradictionText}
+
+If the report acknowledges conditions consistent with event-related stress, moisture demand, drainage impairment, hydraulic loading, freeze-thaw activity, or other event-driven forces, it cannot logically conclude deterioration alone caused the loss without objective testing that separates those forces from the alleged pre-existing condition.
+
+${buildQuestionsSectionFromIntel(intel)}
+
+Evidence of Bias
+
+The report emphasizes condition-based explanations while minimizing or failing to objectively test event-driven mechanisms. When a report repeatedly labels a condition as age-related or maintenance-related but omits the testing necessary to establish timing and rule out the reported peril, it begins to function less like a forensic analysis and more like a denial narrative.
+
+Regulatory / Claims Handling Exposure
+
+By relying on a report that lacks objective testing, fails to establish timing, and does not scientifically rule out the reported event as a contributing or proximate cause, the carrier risks failing the requirement of a reasonable investigation based upon all available information. A speculative engineering report is not a sufficient factual basis for a fair denial decision.
+
+Conclusion and Demands
+
+The engineering report is methodologically deficient, scientifically unsupported, and insufficient to establish a deterioration-only conclusion. It cannot be relied upon as a valid basis for a coverage determination.
+
+We demand that the carrier disregard this report and reassess the loss based on objective evidence and proper forensic methodology. We further request an independent re-inspection by a qualified professional willing to perform the destructive and diagnostic testing necessary to reach a reliable causation conclusion.
+
+Sincerely,
+
+${authorName}, ${authorTitle}
+
+${companyName}`;
+}
+
+// ============================================================================
+// END ENGINEER REPORT REBUTTAL BUILDER
+// ============================================================================
+
 function getRulePackLoaded(primaryScenario: string | null): string {
   if (!primaryScenario) return 'UNIVERSAL_ONLY';
   return SCENARIO_RULE_PACKS[primaryScenario] || `SCENARIO_${primaryScenario.toUpperCase()}`;
