@@ -1326,8 +1326,9 @@ function runEngineerReportDismantler(documentText: string): EngineerReportDisman
   // ══════════════════════════════════════════════════════════════════════════
 
   const criticalTestingNotPerformed: string[] = [];
+  const scopedSecondaryScenarios = getScenarioScopedSecondaryScenarios(primaryScenario, secondaryScenarios);
   const scenariosToCheck = primaryScenario
-    ? [primaryScenario, ...secondaryScenarios]
+    ? [primaryScenario, ...scopedSecondaryScenarios]
     : activatedScenarios;
 
   for (const scenario of scenariosToCheck) {
