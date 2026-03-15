@@ -8753,7 +8753,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     }
 
     const responsePath: 'non_structured' = 'non_structured';
-    const finalAnalysisText = typeof analysisResult === 'string'
+    const finalResponseText = typeof analysisResult === 'string'
       ? analysisResult
       : JSON.stringify(analysisResult ?? '');
 
@@ -8763,7 +8763,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       String(content || ''),
       claimSummary,
       String(claim?.loss_description || ''),
-      finalAnalysisText,
+      finalResponseText,
     ]);
 
     const enforcedScenarioForResponse =
@@ -8777,17 +8777,12 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     const scenarioDiagnosticsRulePackLoaded = getRulePackLoaded(enforcedScenarioForResponse);
     const scenarioDiagnosticsSuppressedRulePacks = getSuppressedRulePacks(enforcedScenarioForResponse);
 
-    const strictViolations = collectLowSlopeStrictPreSendViolations(
-      finalAnalysisText,
-      enforcedScenarioForResponse,
-    );
-    const contextualViolations = collectLowSlopeForbiddenViolations(
-      finalAnalysisText,
+    const allViolations = collectAllLowSlopeFinalViolations(
+      finalResponseText,
       enforcedScenarioForResponse,
       engineerRebuttalCausationQuote,
     );
-    const allViolations = Array.from(new Set([...strictViolations, ...contextualViolations]));
-    const finalResponseHash = computeStableTextHash(finalAnalysisText);
+    const finalResponseHash = computeStableTextHash(finalResponseText);
 
     const scenarioDiagnostics = buildLowSlopeScenarioDiagnostics({
       analysisType,
