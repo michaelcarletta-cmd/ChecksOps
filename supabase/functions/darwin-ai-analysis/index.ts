@@ -8207,8 +8207,12 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         criticalTestingNotPerformed: engineerRebuttalCriticalTestingNotPerformed,
         reportText: engineerRebuttalReportText || String(content || ''),
       });
+    }
 
-      const lowSlopeFallbackFromReportText = /snowmelt|ponding water|low-slope|ice dam|membrane/i.test(String(content || ''));
+    if (['engineer_report_rebuttal', 'auto_draft_rebuttal'].includes(analysisType) && typeof analysisResult === 'string') {
+      const lowSlopeFallbackFromReportText = /snowmelt|ponding water|low-slope|ice dam|membrane/i.test(
+        String(engineerRebuttalReportText || content || '')
+      );
       const enforcedScenario = engineerRebuttalPrimaryScenario || (lowSlopeFallbackFromReportText ? LOW_SLOPE_PRIMARY_SCENARIO : null);
       analysisResult = enforceLowSlopeRebuttalRequirements(
         analysisResult,
