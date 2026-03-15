@@ -938,32 +938,25 @@ function enforceEngineerRebuttalLowSlopeOpening(result: string, primaryScenario:
   if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return result;
 
   const required = REQUIRED_LOW_SLOPE_OPENING;
-  const requiredLower = required.toLowerCase();
   const lines = result.split('\n');
 
-  const dateOfLossIdx = lines.findIndex((line) => /^\s*Date of Loss\s*:/i.test(line));
-  const searchStart = dateOfLossIdx >= 0 ? dateOfLossIdx + 1 : 0;
+  const headerLineRegex =
+    /^(RE\s*:|Claim Number\s*:|Policy Number\s*:|Insured\s*:|Property Address\s*:|Date of Loss\s*:|Michael Carletta|Freedom Adjustment|March \d{1,2}, \d{4}|[A-Z][a-z]+ [A-Z][a-z]+$)/i;
 
-  let firstBodyLineIdx = -1;
-  for (let i = searchStart; i < lines.length; i += 1) {
-    const line = lines[i].trim();
-    if (!line) continue;
-    if (/^(RE\s*:|Claim Number\s*:|Policy Number\s*:|Insured\s*:|Property Address\s*:|Date of Loss\s*:)/i.test(line)) continue;
-    firstBodyLineIdx = i;
-    break;
+  const salutationIdx = lines.findIndex((line) => /^\s*Dear\b/i.test(line));
+
+  let bodyStartIdx = salutationIdx >= 0 ? salutationIdx + 1 : 0;
+  while (bodyStartIdx < lines.length && (!lines[bodyStartIdx].trim() || headerLineRegex.test(lines[bodyStartIdx].trim()))) {
+    bodyStartIdx++;
   }
 
-  if (firstBodyLineIdx < 0) {
-    return `${required}\n\n${result}`.trim();
-  }
-
-  const firstBodyLine = lines[firstBodyLineIdx].trim();
-  if (firstBodyLine.toLowerCase().startsWith(requiredLower)) {
+  const bodySlice = lines.slice(bodyStartIdx, bodyStartIdx + 12).join('\n');
+  if (bodySlice.includes(required)) {
     return result;
   }
 
-  lines[firstBodyLineIdx] = `${required} ${firstBodyLine}`;
-  return lines.join('\n');
+  lines.splice(bodyStartIdx, 0, required);
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function suppressLowSlopeUnsupportedBoilerplate(result: string, supportCorpus: string): string {
