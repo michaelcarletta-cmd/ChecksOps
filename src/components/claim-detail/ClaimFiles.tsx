@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2, ExternalLink, Copy, Calculator, Bot, RefreshCw, Loader2, ChevronRight } from "lucide-react";
+import { FileText, Image, Download, Upload, Eye, Folder, Plus, FolderPlus, File as FileIcon, FileUp, Trash2, ExternalLink, Copy, Calculator, Bot, RefreshCw, Loader2, ChevronRight, AlertTriangle, CheckCircle2, XCircle, ScanLine, Zap } from "lucide-react";
+import { DOCUMENT_TYPE_LABELS, TEXT_QUALITY_LABELS, type TextQualityStatus } from "@/lib/document-intelligence-types";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -92,18 +93,42 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
   const topLevelFolders = folders?.filter(f => !f.parent_folder_id) || [];
   const getSubfolders = (parentId: string) => folders?.filter(f => f.parent_folder_id === parentId) || [];
 
-  // Fetch files with classification data
+  // Fetch files with classification + intelligence data
   const { data: files, refetch: refetchFiles } = useQuery({
     queryKey: ["claim-files", claimId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("claim_files")
-        .select("*, document_classification, classification_confidence, classification_metadata, processed_by_darwin")
+        .select("*, document_classification, classification_confidence, classification_metadata, processed_by_darwin, document_type, document_subtype, text_quality_status, extraction_method, is_scanned, ready_for_analysis, needs_reprocessing, processing_error, document_summary, page_count")
         .eq("claim_id", claimId)
         .order("uploaded_at", { ascending: false });
 
       if (error) throw error;
       return data;
+    },
+  });
+
+  // Bulk reprocess all files in claim
+  const bulkReprocessMutation = useMutation({
+    mutationFn: async () => {
+      const allFiles = files || [];
+      const processable = allFiles.filter(f => f.file_type?.includes('pdf') || f.file_type?.includes('text') || f.file_type?.includes('word') || /\.(pdf|docx?|txt)$/i.test(f.file_name));
+      for (const file of processable) {
+        await supabase.functions.invoke('darwin-process-document', {
+          body: { fileId: file.id, force: true }
+        });
+      }
+      return processable.length;
+    },
+    onSuccess: (count) => {
+      refetchFiles();
+      toast({
+        title: "Bulk Reprocess Started",
+        description: `${count} files queued for reprocessing.`,
+      });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Bulk reprocess failed.", variant: "destructive" });
     },
   });
 
@@ -476,6 +501,10 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
         {folderFiles.map((file) => {
           const Icon = getFileIcon(file.file_type);
           const isReprocessing = reprocessFileMutation.isPending && reprocessFileMutation.variables === file.id;
+          const qualityStatus = file.text_quality_status as TextQualityStatus | null;
+          const qualityInfo = qualityStatus ? TEXT_QUALITY_LABELS[qualityStatus] : null;
+          const docTypeLabel = DOCUMENT_TYPE_LABELS[file.document_classification || file.document_type || ''] || null;
+          
           return (
             <div key={file.id} className="p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors">
               <div className="flex items-start gap-3">
@@ -486,16 +515,48 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-sm font-medium truncate">{file.file_name}</p>
                     {getClassificationBadge(file.document_classification, file.classification_confidence)}
+                    {file.is_scanned && (
+                      <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-500 border-amber-500/30">
+                        <ScanLine className="h-3 w-3 mr-1" /> OCR
+                      </Badge>
+                    )}
+                    {file.ready_for_analysis === true && (
+                      <Badge variant="outline" className="text-xs bg-green-500/10 text-green-500 border-green-500/30">
+                        <CheckCircle2 className="h-3 w-3 mr-1" /> Ready
+                      </Badge>
+                    )}
+                    {file.ready_for_analysis === false && file.processed_by_darwin && (
+                      <Badge variant="outline" className="text-xs bg-red-500/10 text-red-500 border-red-500/30">
+                        <XCircle className="h-3 w-3 mr-1" /> Blocked
+                      </Badge>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
                     {formatFileSize(file.file_size || 0)} •{" "}
                     {new Date(file.uploaded_at).toLocaleDateString()}
-                    {file.classification_metadata && typeof file.classification_metadata === 'object' && 'summary' in file.classification_metadata && (
-                      <span className="ml-2 text-muted-foreground">
-                        • {String((file.classification_metadata as Record<string, unknown>).summary)}
-                      </span>
+                    {docTypeLabel && <span className="ml-1">• {docTypeLabel}</span>}
+                    {file.document_subtype && <span className="ml-1 opacity-70">({file.document_subtype.replace(/_/g, ' ')})</span>}
+                    {qualityInfo && <span className={`ml-1 ${qualityInfo.color}`}>• Text: {qualityInfo.label}</span>}
+                    {file.extraction_method && file.extraction_method !== 'none' && (
+                      <span className="ml-1 opacity-70">• {file.extraction_method.replace(/_/g, ' ')}</span>
                     )}
+                    {file.page_count && <span className="ml-1">• {file.page_count}p</span>}
                   </p>
+                  {file.document_summary && (
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1 italic">
+                      {file.document_summary}
+                    </p>
+                  )}
+                  {file.processing_error && (
+                    <p className="text-xs text-destructive mt-0.5 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" /> {file.processing_error}
+                    </p>
+                  )}
+                  {file.needs_reprocessing && !file.processing_error && (
+                    <p className="text-xs text-amber-500 mt-0.5 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" /> Needs reprocessing
+                    </p>
+                  )}
                   <div className="flex gap-2 mt-2 flex-wrap">
                     <Button variant="outline" size="sm" onClick={() => handleView(file)}>
                       <Eye className="h-3 w-3 mr-1" /> View
@@ -645,6 +706,17 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
             {isStaffOrAdmin && (
               <Button variant="outline" onClick={() => window.open("https://xactimate.com/xor/sign-in?utm_source=xactimate&utm_medium=referral&utm_campaign=login_page&utm_content=sign_in_btn", "_blank")}>
                 <ExternalLink className="h-4 w-4 mr-2" /> Xactimate
+              </Button>
+            )}
+            {isStaffOrAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => bulkReprocessMutation.mutate()}
+                disabled={bulkReprocessMutation.isPending}
+              >
+                {bulkReprocessMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Zap className="h-4 w-4 mr-2" />}
+                {bulkReprocessMutation.isPending ? "Reprocessing..." : "Reprocess All"}
               </Button>
             )}
             

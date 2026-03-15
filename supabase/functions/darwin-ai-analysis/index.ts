@@ -4000,6 +4000,59 @@ Deno.serve(async (req) => {
       .eq('claim_id', claimId);
     context.files = files || [];
 
+    // ── SOFT MIGRATION: Load document intelligence for all claim files ──
+    // Darwin consumers check this FIRST, then fall back to legacy parsing.
+    let documentIntelligence: any[] = [];
+    try {
+      const { data: intelData } = await supabase
+        .from('claim_document_intelligence')
+        .select('*')
+        .eq('claim_id', claimId);
+      documentIntelligence = intelData || [];
+      if (documentIntelligence.length > 0) {
+        console.log(`[darwin] Document intelligence loaded: ${documentIntelligence.length} records for claim ${claimId}`);
+      }
+    } catch (intelErr) {
+      console.warn('[darwin] Document intelligence lookup failed (non-fatal, using legacy):', intelErr);
+    }
+    context.documentIntelligence = documentIntelligence;
+
+    // Build structured intelligence context for prompt injection
+    let documentIntelligenceContext = '';
+    if (documentIntelligence.length > 0) {
+      const intelLines: string[] = ['=== DOCUMENT INTELLIGENCE (Pre-Extracted Structured Facts) ==='];
+      for (const intel of documentIntelligence.slice(0, 20)) {
+        const matchingFile = (files || []).find((f: any) => f.id === intel.claim_file_id);
+        const fileName = matchingFile?.file_name || 'Unknown';
+        intelLines.push(`\n--- ${fileName} [${intel.document_type}${intel.document_subtype ? '/' + intel.document_subtype : ''}] ---`);
+        if (intel.summary) intelLines.push(`Summary: ${intel.summary}`);
+        if (intel.coverage_position) intelLines.push(`Coverage Position: ${intel.coverage_position}`);
+        if (intel.cause_of_loss) intelLines.push(`Cause of Loss: ${intel.cause_of_loss}`);
+        if (intel.sender) intelLines.push(`From: ${intel.sender}`);
+        if (intel.recipient) intelLines.push(`To: ${intel.recipient}`);
+        const denialReasons = Array.isArray(intel.denial_reasons) ? intel.denial_reasons : [];
+        if (denialReasons.length > 0) intelLines.push(`Denial Reasons: ${denialReasons.join('; ')}`);
+        const exclusions = Array.isArray(intel.exclusions_cited) ? intel.exclusions_cited : [];
+        if (exclusions.length > 0) intelLines.push(`Exclusions Cited: ${exclusions.join('; ')}`);
+        const testingPerformed = Array.isArray(intel.testing_performed) ? intel.testing_performed : [];
+        if (testingPerformed.length > 0) intelLines.push(`Testing Performed: ${testingPerformed.join('; ')}`);
+        const testingMissing = Array.isArray(intel.testing_missing) ? intel.testing_missing : [];
+        if (testingMissing.length > 0) intelLines.push(`Testing Missing: ${testingMissing.join('; ')}`);
+        if (intel.estimate_totals && typeof intel.estimate_totals === 'object') {
+          const et = intel.estimate_totals as any;
+          if (et.rcv) intelLines.push(`RCV: $${et.rcv.toLocaleString()}`);
+          if (et.acv) intelLines.push(`ACV: $${et.acv.toLocaleString()}`);
+        }
+        const contradictions = Array.isArray(intel.contradictions) ? intel.contradictions : [];
+        if (contradictions.length > 0) intelLines.push(`Contradictions: ${contradictions.join('; ')}`);
+        const keyDates = Array.isArray(intel.key_dates) ? intel.key_dates : [];
+        if (keyDates.length > 0) intelLines.push(`Key Dates: ${keyDates.map((d: any) => `${d.date}: ${d.label}`).join('; ')}`);
+        const components = Array.isArray(intel.building_components) ? intel.building_components : [];
+        if (components.length > 0) intelLines.push(`Building Components: ${components.join(', ')}`);
+      }
+      documentIntelligenceContext = intelLines.join('\n') + '\n\n';
+    }
+
     // Get photos from claim_photos table (separate from claim_files)
     const { data: photos } = await supabase
       .from('claim_photos')
@@ -4127,7 +4180,7 @@ Deno.serve(async (req) => {
       p.ai_condition_rating === 'Poor' || p.ai_condition_rating === 'Failed'
     )?.length || 0;
 
-    const claimSummary = claimFactsPackContext + `
+    const claimSummary = claimFactsPackContext + documentIntelligenceContext + `
 CLAIM DETAILS:
 - Claim Number: ${claim.claim_number || 'N/A'}
 - Policy Number: ${claim.policy_number || 'N/A'}
