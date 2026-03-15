@@ -918,40 +918,100 @@ APPLICABLE INDUSTRY STANDARDS:
   }
 }
 
-function enforceEngineerRebuttalMandatorySections(result: string, context: EngineerRebuttalEnforcementContext): string {
+function hasSectionHeading(text: string, heading: string): boolean {
+  if (!text || !heading) return false;
+  const escaped = escapeRegExp(heading);
+  const patterns = [
+    new RegExp(`(^|\\n)${escaped}(\\s|\\n|:|$)`, "i"),
+    new RegExp(`(^|\\n)Section\\s+\\d+\\s*[:\\-–—]\\s*${escaped}(\\s|\\n|:|$)`, "i"),
+    new RegExp(`(^|\\n)\\d+\\s*[\\.)\\-:]\\s*${escaped}(\\s|\\n|:|$)`, "i"),
+  ];
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+function normalizeLeadingSectionLabels(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/(^|\n)Section\s+1\s*[:\-–—]\s*Engineer Theory Extraction/gi, "$1Engineer Theory Extraction")
+    .replace(/(^|\n)Section\s+2\s*[:\-–—]\s*Timing Failure/gi, "$1Timing Failure")
+    .replace(/(^|\n)Section\s+3\s*[:\-–—]\s*Required Testing Not Performed/gi, "$1Required Testing Not Performed")
+    .replace(/(^|\n)Section\s+4\s*[:\-–—]\s*Causation Proof Failure/gi, "$1Causation Proof Failure")
+    .replace(/(^|\n)Section\s+5\s*[:\-–—]\s*Evidentiary Sufficiency Audit of Engineer Conclusions/gi, "$1Evidentiary Sufficiency Audit of Engineer Conclusions")
+    .replace(/(^|\n)Section\s+6\s*[:\-–—]\s*Methodology Failures/gi, "$1Methodology Failures")
+    .replace(/(^|\n)Section\s+7\s*[:\-–—]\s*Point-by-Point Rebuttal/gi, "$1Point-by-Point Rebuttal")
+    .replace(/(^|\n)Section\s+8\s*[:\-–—]\s*Internal Contradictions/gi, "$1Internal Contradictions")
+    .replace(/(^|\n)Section\s+9\s*[:\-–—]\s*Questions the Engineer Must Answer/gi, "$1Questions the Engineer Must Answer")
+    .replace(/(^|\n)Section\s+10\s*[:\-–—]\s*Evidence of Bias/gi, "$1Evidence of Bias")
+    .replace(/(^|\n)Section\s+11\s*[:\-–—]\s*Regulatory Violations and Claims Handling Exposure/gi, "$1Regulatory Violations and Claims Handling Exposure")
+    .replace(/(^|\n)Section\s+12\s*[:\-–—]\s*Conclusion and Demands/gi, "$1Conclusion and Demands")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function stripPostSignatureDuplicateBlocks(text: string): string {
+  if (!text) return text;
+  const signatureRegex = /\n(Sincerely,|Regards,)\s*\n[\s\S]*?(Michael Carletta, Public Adjuster)/i;
+  const match = text.match(signatureRegex);
+  if (!match || typeof match.index !== "number") return text;
+  const signatureEnd = match.index + match[0].length;
+  const before = text.slice(0, signatureEnd);
+  const after = text.slice(signatureEnd);
+  const duplicateHeadings = [
+    "Engineer Theory Extraction",
+    "Timing Failure",
+    "Required Testing Not Performed",
+    "Causation Proof Failure",
+    "Internal Contradictions",
+    "Questions the Engineer Must Answer",
+  ];
+  const hasDuplicateBlockAfterSignature = duplicateHeadings.some((heading) =>
+    hasSectionHeading(after, heading)
+  );
+  if (!hasDuplicateBlockAfterSignature) return text;
+  return before.trim();
+}
+
+function enforceEngineerRebuttalMandatorySections(
+  result: string,
+  context: EngineerRebuttalEnforcementContext,
+): string {
   if (!result) return result;
-
-  let updated = result.trim();
+  let updated = normalizeLeadingSectionLabels(result.trim());
   const additions: string[] = [];
+  const missingTests = getEngineerRequiredTests(context)
+    .filter((testName) => !isTestMentionedInReport(context.reportText, testName));
 
-  const hasEngineerTheoryExtraction = /(^|\n)engineer theory extraction\b/i.test(updated);
-  const hasTimingFailure = /(^|\n)timing failure\b/i.test(updated);
-  const hasRequiredTesting = /(^|\n)required testing not performed\b/i.test(updated);
-  const hasCausationProofFailure = /(^|\n)causation proof failure\b/i.test(updated);
-  const hasInternalContradictions = /(^|\n)internal contradictions\b/i.test(updated);
-  const hasQuestionsEngineerMustAnswer = /(^|\n)questions the engineer must answer\b/i.test(updated);
-
-  if (!hasEngineerTheoryExtraction) {
+  // 1. Engineer Theory Extraction
+  if (!hasSectionHeading(updated, "Engineer Theory Extraction")) {
     additions.push(buildEngineerTheoryExtractionSection(context));
   }
 
-  if (!hasTimingFailure) {
+  // 2. Timing Failure
+  if (!hasSectionHeading(updated, "Timing Failure")) {
     additions.push(buildTimingFailureSection(context.primaryScenario, context.engineerStatedCause));
   }
 
-  if (!hasRequiredTesting) {
+  // 3. Required Testing Not Performed
+  if (!hasSectionHeading(updated, "Required Testing Not Performed")) {
     additions.push(buildRequiredTestingNotPerformedSection(context));
   }
 
-  if (!hasCausationProofFailure) {
-    additions.push(buildCausationProofFailureSection(context));
+  // 4. Causation Proof Failure
+  const hasCausationHeading = hasSectionHeading(updated, "Causation Proof Failure");
+  const hasCausationLanguage =
+    /condition evidence is not causation proof/i.test(updated) &&
+    /does not establish sole causation to a reasonable degree of engineering certainty/i.test(updated);
+  if (!hasCausationHeading || !hasCausationLanguage) {
+    additions.push(buildCausationProofFailureSectionStumper(context.primaryScenario, missingTests));
   }
 
-  if (!hasInternalContradictions) {
+  // 5. Internal Contradictions
+  if (!hasSectionHeading(updated, "Internal Contradictions")) {
     additions.push(buildEngineerContradictionSection(context.primaryScenario, context.engineerTheorySentences));
   }
 
-  if (!hasQuestionsEngineerMustAnswer) {
+  // 6. Questions the Engineer Must Answer
+  if (!hasSectionHeading(updated, "Questions the Engineer Must Answer")) {
     const questions = buildEngineerMustAnswerQuestions(context.primaryScenario);
     additions.push(
       `Questions the Engineer Must Answer\n\n${questions.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
@@ -959,10 +1019,10 @@ function enforceEngineerRebuttalMandatorySections(result: string, context: Engin
   }
 
   if (additions.length > 0) {
-    updated += `\n\n${additions.join('\n\n')}`;
+    updated += `\n\n${additions.join("\n\n")}`;
   }
 
-  return updated.trim();
+  return updated.replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function enforceEngineerRebuttalLowSlopeOpening(
