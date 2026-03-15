@@ -9303,7 +9303,11 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         engineerContext.primaryScenario = LOW_SLOPE_PRIMARY_SCENARIO;
       }
 
-      analysisResult = polishFinalEngineerRebuttal(analysisResult, engineerContext);
+      analysisResult = polishFinalEngineerRebuttal(analysisResult, engineerContext, analysisType);
+
+      // Final cleanup passes
+      analysisResult = stripOrphanLowSlopeOpeningBlocks(analysisResult);
+      analysisResult = polishEngineerRebuttalFormatting(analysisResult);
 
       // Final safety: strip any remaining internal control text
       analysisResult = normalizeEngineerLetterFormatting(stripInternalEngineerControlText(analysisResult));
