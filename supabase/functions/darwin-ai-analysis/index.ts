@@ -370,8 +370,13 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
   const candidateFiles = allFiles
     .map((file: any) => {
       const check = isEngineerFile(file);
-      const textLen = String(file?.extracted_text || '').trim().length;
-      return { file, tier: check.tier, matched: check.match, textLen };
+      const rawText = String(file?.extracted_text || '').trim();
+      const textLen = rawText.length;
+      const garbage = isGarbageText(rawText);
+      if (garbage) {
+        console.log(`[darwin][resolveEngineerSource] Skipping "${file?.file_name}" — garbage/binary text detected (${textLen} chars)`);
+      }
+      return { file, tier: check.tier, matched: check.match, textLen: garbage ? 0 : textLen };
     })
     .filter((c) => c.matched && c.textLen > 0)
     // Sort by tier first (lower = better), then by text length descending (prefer longest text)
