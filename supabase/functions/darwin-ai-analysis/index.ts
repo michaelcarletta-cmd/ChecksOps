@@ -1448,7 +1448,6 @@ function runEngineerReportDismantler(documentText: string): EngineerReportDisman
   // If report text references the low-slope membrane mechanism terms, force low-slope as primary.
   // This deliberately ignores generic storm references and prioritizes the engineer's physical mechanism.
   const { shouldForce: forceLowSlope, matchedTerms: lowSlopeMatchedTerms } = detectLowSlopePhysicalMechanism(documentText);
-  const lowSlopePhysicalMatchCount = lowSlopeMatchedTerms.length;
 
   // Primary = highest theory-alignment score among activated scenarios
   // Exclusion narrative keywords alone do NOT determine primary scenario
