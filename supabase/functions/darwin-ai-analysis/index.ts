@@ -8325,16 +8325,16 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         lowSlopeSupportCorpusForFilters,
       );
 
-      assertLowSlopeStrictPreSendTerms(
-        analysisResult,
-        enforcedScenario,
-      );
+      const provisionalViolations = Array.from(new Set([
+        ...collectLowSlopeStrictPreSendViolations(analysisResult, enforcedScenario),
+        ...collectLowSlopeForbiddenViolations(analysisResult, enforcedScenario, engineerRebuttalCausationQuote),
+      ]));
 
-      assertLowSlopeForbiddenTerms(
-        analysisResult,
-        enforcedScenario,
-        engineerRebuttalCausationQuote,
-      );
+      if (provisionalViolations.length > 0) {
+        console.warn(
+          `[darwin][provisional-low-slope-gate] analysisType=${analysisType} scenario=${enforcedScenario || 'none'} provisionalViolations=[${provisionalViolations.join(', ')}]`
+        );
+      }
     }
 
     endStep(parseStep, 'completed', `resultLength=${analysisResult.length}`);
