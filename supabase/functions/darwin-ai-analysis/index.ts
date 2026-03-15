@@ -9141,9 +9141,11 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       analysisResult = polishFinalEngineerRebuttal(analysisResult, engineerContext);
 
       // Final safety: strip any remaining internal control text
-      if (hasInternalEngineerControlLeak(analysisResult)) {
-        console.warn('[darwin][engineer-rebuttal] Internal control text leak detected after cleanup');
-        analysisResult = cleanupEngineerLetterFormatting(analysisResult);
+      analysisResult = normalizeEngineerLetterFormatting(stripInternalEngineerControlText(analysisResult));
+
+      if (hasEngineerInternalControlLeak(analysisResult)) {
+        console.warn('[darwin][engineer-rebuttal] Internal control text still present after cleanup');
+        analysisResult = normalizeEngineerLetterFormatting(stripInternalEngineerControlText(analysisResult));
       }
 
       const provisionalViolations = Array.from(new Set([
