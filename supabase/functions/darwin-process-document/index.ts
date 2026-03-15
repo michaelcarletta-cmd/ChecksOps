@@ -612,7 +612,7 @@ Deno.serve(async (req) => {
     }
 
     // Process automation actions if enabled
-    if (automation && classificationResult.confidence >= 0.8) {
+    if (automation && classificationResult.confidence >= 0.8 && smartClassification.automation_safe) {
       await processDocumentActions(
         supabase, 
         targetClaimId, 
