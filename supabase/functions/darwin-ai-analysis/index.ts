@@ -676,14 +676,22 @@ Engineer-stated cause (direct quote from report):
 
 function buildRequiredTestingNotPerformedSection(context: EngineerRebuttalEnforcementContext): string {
   const requiredTests = getEngineerRequiredTests(context);
-  const testLines = requiredTests.map((testName) => {
+
+  const lines = requiredTests.map((testName) => {
     const appearsInReport = isTestMentionedInReport(context.reportText, testName);
-    return `- ${testName}: ${appearsInReport ? 'Appears in report (identified in text)' : 'Not documented in report'}`;
+
+    return `- ${testName}: ${
+      appearsInReport
+        ? "Mentioned in report text, but not confirmed as actually performed"
+        : "Not documented in report"
+    }`;
   });
 
   return `Required Testing Not Performed
-The following forensic testing is required to scientifically prove the engineer's causation theory, with report presence status:
-${testLines.join('\n')}`;
+
+The following forensic testing is required to scientifically prove the engineer's causation theory. Mere discussion of a testing concept is not proof that the test was actually performed or that it produced objective findings.
+
+${lines.join("\n")}`;
 }
 
 function buildCausationProofFailureSection(context: EngineerRebuttalEnforcementContext): string {
