@@ -3432,7 +3432,37 @@ Deno.serve(async (req) => {
         const extracted = await extractTextFromPDFNative(pdfContent, pdfFileName || 'document.pdf');
         if (isGarbageText(extracted)) {
           console.warn(`[darwin] Large-PDF native extraction produced GARBLED text (${extracted.length} chars) — cannot use for text-only mode`);
-          // Don't set pdfContent=undefined; keep the raw PDF for AI vision if possible
+          // For large garbled PDFs, try to find extracted_text from the document intelligence pipeline in the DB
+          // instead of sending 20MB+ base64 to the AI model (which causes memory/CPU crashes).
+          if (pdfContent.length > AI_EXTRACTION_LIMIT) {
+            console.log(`[darwin] Large garbled PDF (${Math.round(pdfContent.length / 1024 / 1024)}MB base64) — checking DB for pre-indexed extracted text`);
+            try {
+              const { data: dbFiles } = await supabase
+                .from('claim_files')
+                .select('extracted_text, clean_text, file_name')
+                .eq('claim_id', claimId)
+                .or(`file_name.eq.${pdfFileName}`)
+                .not('extracted_text', 'is', null)
+                .limit(1);
+              const dbText = dbFiles?.[0]?.clean_text || dbFiles?.[0]?.extracted_text || '';
+              if (dbText.length > 500 && !isGarbageText(dbText)) {
+                console.log(`[darwin] Found DB extracted text for "${pdfFileName}" (${dbText.length} chars) — using text-only mode instead of raw PDF`);
+                const block = `=== ${pdfFileName || 'Document'} ===\n${dbText.substring(0, 100000)}`;
+                content = [content, block].filter(Boolean).join('\n\n');
+                additionalContext._useTextOnly = true;
+                additionalContext.pdfExtractedText = dbText;
+                pdfContent = undefined;
+              } else {
+                console.warn(`[darwin] No usable DB text found — PDF is too large (${Math.round(pdfContent.length / 1024 / 1024)}MB) to send as base64. Discarding to prevent crash.`);
+                // Discard the raw PDF to prevent memory crash — better to get a partial analysis than a crash
+                pdfContent = undefined;
+              }
+            } catch (dbErr) {
+              console.warn('[darwin] DB text lookup failed:', dbErr);
+              // Discard large garbled PDF to prevent crash
+              pdfContent = undefined;
+            }
+          }
         } else {
           const block = `=== ${pdfFileName || 'Document'} ===\n${extracted.substring(0, 100000)}`;
           content = [content, block].filter(Boolean).join('\n\n');
@@ -3454,7 +3484,7 @@ Deno.serve(async (req) => {
     // Engineer report text should come from the document intelligence pipeline (clean_text / extracted_text).
 
     // For engineer_report_rebuttal, pre-extract text so the resolver can run scenario detection.
-    // If native extraction is garbled (common with scanned/encoded PDFs), fall back to OCR via multimodal model.
+    // If native extraction is garbled (common with scanned/encoded PDFs), check DB for extracted text.
     if (pdfContent && !additionalContext.pdfExtractedText && analysisType === 'engineer_report_rebuttal') {
       try {
         const preExtracted = await extractTextFromPDFNative(pdfContent, pdfFileName || 'document.pdf');
@@ -3468,6 +3498,36 @@ Deno.serve(async (req) => {
         }
       } catch (preExtErr) {
         console.warn('[darwin] Pre-extraction for engineer resolver failed (non-fatal):', preExtErr);
+      }
+
+      // If still no text and PDF is very large, try DB fallback and discard raw PDF
+      if (!additionalContext.pdfExtractedText && pdfContent && pdfContent.length > AI_EXTRACTION_LIMIT) {
+        console.log(`[darwin] Engineer rebuttal: large garbled PDF — trying DB extracted text fallback`);
+        try {
+          const { data: dbFiles } = await supabase
+            .from('claim_files')
+            .select('extracted_text, clean_text, file_name')
+            .eq('claim_id', claimId)
+            .not('extracted_text', 'is', null)
+            .limit(5);
+          // Find the best match by filename or take the first engineering report
+          const matchingFile = dbFiles?.find(f => f.file_name === pdfFileName) || dbFiles?.[0];
+          const dbText = matchingFile?.clean_text || matchingFile?.extracted_text || '';
+          if (dbText.length > 500 && !isGarbageText(dbText)) {
+            console.log(`[darwin] Using DB extracted text for engineer rebuttal (${dbText.length} chars from "${matchingFile?.file_name}")`);
+            additionalContext.pdfExtractedText = dbText;
+            const block = `=== ${pdfFileName || 'Document'} ===\n${dbText.substring(0, 100000)}`;
+            content = [content, block].filter(Boolean).join('\n\n');
+            additionalContext._useTextOnly = true;
+            pdfContent = undefined;
+          } else {
+            console.warn(`[darwin] No usable DB text — discarding large PDF to prevent crash`);
+            pdfContent = undefined;
+          }
+        } catch (dbErr) {
+          console.warn('[darwin] DB text fallback failed:', dbErr);
+          pdfContent = undefined;
+        }
       }
 
       if (!additionalContext.pdfExtractedText) {
