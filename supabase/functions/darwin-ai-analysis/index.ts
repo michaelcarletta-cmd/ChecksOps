@@ -285,14 +285,20 @@ function parseTaggedMissingTest(testEntry: string): { scenario: string | null; t
 }
 
 function getEngineerRequiredTests(context: EngineerRebuttalEnforcementContext): string[] {
+  const scopedSecondaryScenarios = getScenarioScopedSecondaryScenarios(
+    context.primaryScenario,
+    Array.isArray(context.secondaryScenarios) ? context.secondaryScenarios : [],
+  );
+
   const scenarioCandidates = [
     context.primaryScenario,
-    ...(Array.isArray(context.secondaryScenarios) ? context.secondaryScenarios : []),
+    ...scopedSecondaryScenarios,
   ].filter((value): value is string => typeof value === 'string' && value.length > 0);
 
   const scenarioFromMissing = (context.criticalTestingNotPerformed || [])
     .map((entry) => parseTaggedMissingTest(entry).scenario)
-    .filter((value): value is string => typeof value === 'string' && value.length > 0);
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    .filter((scenario) => context.primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO || scenario === LOW_SLOPE_PRIMARY_SCENARIO);
 
   const scenarioList = Array.from(new Set([...scenarioCandidates, ...scenarioFromMissing]));
 
