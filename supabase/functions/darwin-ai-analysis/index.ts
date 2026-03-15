@@ -605,7 +605,7 @@ function assertLowSlopeStrictPreSendTerms(result: string, primaryScenario: strin
 
   if (strictViolations.length > 0) {
     throw new Error(
-      `Low-slope pre-send assertion failed: forbidden terms remain (${Array.from(new Set(strictViolations)).join(', ')}). Generation aborted.`,
+      `LOW_SLOPE_MEMBRANE generation failed due to forbidden term: ${Array.from(new Set(strictViolations)).join(', ')}`,
     );
   }
 }
