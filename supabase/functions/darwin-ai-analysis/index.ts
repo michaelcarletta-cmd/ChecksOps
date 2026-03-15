@@ -9077,41 +9077,43 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     }
 
     if (['engineer_report_rebuttal', 'auto_draft_rebuttal'].includes(analysisType) && typeof analysisResult === 'string') {
-      analysisResult = enforceEngineerRebuttalMandatorySections(analysisResult, {
-        engineerStatedCause: engineerRebuttalStatedCause,
-        engineerTheorySentences: engineerRebuttalTheorySentences,
-        primaryScenario: engineerRebuttalPrimaryScenario,
-        secondaryScenarios: engineerRebuttalSecondaryScenarios,
-        criticalTestingNotPerformed: engineerRebuttalCriticalTestingNotPerformed,
+      const engineerContext: EngineerRebuttalEnforcementContext = {
+        engineerStatedCause: engineerRebuttalStatedCause || engineerRebuttalCausationQuote || '',
+        engineerTheorySentences: Array.isArray(engineerRebuttalTheorySentences) ? engineerRebuttalTheorySentences : [],
+        primaryScenario: engineerRebuttalPrimaryScenario || null,
+        secondaryScenarios: Array.isArray(engineerRebuttalSecondaryScenarios) ? engineerRebuttalSecondaryScenarios : [],
+        criticalTestingNotPerformed: Array.isArray(engineerRebuttalCriticalTestingNotPerformed)
+          ? engineerRebuttalCriticalTestingNotPerformed
+          : [],
         reportText: engineerRebuttalReportText || String(content || ''),
-      });
-    }
+      };
 
-    if (['engineer_report_rebuttal', 'auto_draft_rebuttal'].includes(analysisType) && typeof analysisResult === 'string') {
+      // Detect low-slope across sources and force scenario if needed
       const lowSlopeDetectionForEnforcement = detectLowSlopeAcrossSources([
         engineerRebuttalCausationQuote,
         engineerRebuttalReportText,
       ]);
 
-      const enforcedScenario =
-        engineerRebuttalPrimaryScenario === LOW_SLOPE_PRIMARY_SCENARIO || lowSlopeDetectionForEnforcement.shouldForce
-          ? LOW_SLOPE_PRIMARY_SCENARIO
-          : engineerRebuttalPrimaryScenario;
+      if (lowSlopeDetectionForEnforcement.shouldForce) {
+        engineerContext.primaryScenario = LOW_SLOPE_PRIMARY_SCENARIO;
+      }
 
-      analysisResult = enforceLowSlopeRebuttalRequirements(
-        analysisResult,
-        enforcedScenario,
-        lowSlopeSupportCorpusForFilters,
-      );
+      analysisResult = polishFinalEngineerRebuttal(analysisResult, engineerContext);
+
+      // Final safety: strip any remaining internal control text
+      if (hasInternalEngineerControlLeak(analysisResult)) {
+        console.warn('[darwin][engineer-rebuttal] Internal control text leak detected after cleanup');
+        analysisResult = cleanupEngineerLetterFormatting(analysisResult);
+      }
 
       const provisionalViolations = Array.from(new Set([
-        ...collectLowSlopeStrictPreSendViolations(analysisResult, enforcedScenario),
-        ...collectLowSlopeForbiddenViolations(analysisResult, enforcedScenario, engineerRebuttalCausationQuote),
+        ...collectLowSlopeStrictPreSendViolations(analysisResult, engineerContext.primaryScenario),
+        ...collectLowSlopeForbiddenViolations(analysisResult, engineerContext.primaryScenario, engineerRebuttalCausationQuote),
       ]));
 
       if (provisionalViolations.length > 0) {
         console.warn(
-          `[darwin][provisional-low-slope-gate] analysisType=${analysisType} scenario=${enforcedScenario || 'none'} provisionalViolations=[${provisionalViolations.join(', ')}]`
+          `[darwin][provisional-low-slope-gate] analysisType=${analysisType} scenario=${engineerContext.primaryScenario || 'none'} provisionalViolations=[${provisionalViolations.join(', ')}]`
         );
       }
     }
