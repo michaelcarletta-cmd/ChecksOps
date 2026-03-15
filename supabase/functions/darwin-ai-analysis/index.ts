@@ -8824,10 +8824,6 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       const structuredPreSendLowSlopeDetection = detectLowSlopeAcrossSources([
         engineerRebuttalCausationQuote,
         engineerRebuttalReportText,
-        String(content || ''),
-        claimSummary,
-        String(claim?.loss_description || ''),
-        analysisResult,
       ]);
 
       const structuredEnforcedScenarioForResponse =
@@ -8842,13 +8838,31 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       const structuredScenarioDiagnosticsSuppressedRulePacks = getSuppressedRulePacks(structuredEnforcedScenarioForResponse);
 
       const finalStructuredText = analysisResult;
-      const structuredViolations = collectAllLowSlopeFinalViolations(
-        finalStructuredText,
-        structuredEnforcedScenarioForResponse,
-        engineerRebuttalCausationQuote,
-      );
-      const structuredFinalResponseHash = computeStableTextHash(finalStructuredText);
+      let structuredViolations: string[] = [];
+      let structuredValidationErrorMessage: string | null = null;
 
+      try {
+        validateFinalEngineerRebuttalOrThrow({
+          finalText: finalStructuredText,
+          primaryScenario: structuredEnforcedScenarioForResponse,
+          engineerCausationSentence: engineerRebuttalCausationQuote,
+        });
+      } catch (validationError: any) {
+        structuredViolations = Array.from(new Set(
+          Array.isArray(validationError?.violations)
+            ? validationError.violations
+            : collectAllLowSlopeFinalViolations(
+                finalStructuredText,
+                structuredEnforcedScenarioForResponse,
+                engineerRebuttalCausationQuote,
+              )
+        ));
+        structuredValidationErrorMessage = String(
+          validationError?.message || buildLowSlopeForbiddenTermErrorMessage(structuredViolations)
+        );
+      }
+
+      const structuredFinalResponseHash = computeStableTextHash(finalStructuredText);
       const structuredScenarioDiagnostics = buildLowSlopeScenarioDiagnostics({
         analysisType,
         responsePath,
@@ -8858,16 +8872,29 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         matchedTerms: structuredScenarioDiagnosticsMatchedTerms,
         finalViolationList: structuredViolations,
         finalResponseHash: structuredFinalResponseHash,
+        sourceTextLength: engineerRebuttalSourceTextLength,
+        sourceTextOrigin: engineerRebuttalSourceTextOrigin,
+        usedEngineerReportText: engineerRebuttalUsedEngineerReportText,
       });
 
-      console.log(
-        `[darwin][final-return] path=${responsePath} analysisType=${analysisType} primary=${structuredScenarioDiagnostics.primaryScenario || 'none'} rulePack=${structuredScenarioDiagnostics.rulePackLoaded} suppressed=[${structuredScenarioDiagnostics.suppressedRulePacks.join(',') || 'none'}] matched=[${structuredScenarioDiagnostics.matchedTerms.join(',') || 'none'}] violations=[${structuredScenarioDiagnostics.finalViolationList.join(',') || 'none'}] hash=${structuredScenarioDiagnostics.finalResponseHash}`
-      );
+      console.log('[darwin][final-return]', JSON.stringify({
+        analysisType,
+        functionPath: responsePath,
+        primaryScenario: structuredScenarioDiagnostics.primaryScenario,
+        rulePackLoaded: structuredScenarioDiagnostics.rulePackLoaded,
+        suppressedRulePacks: structuredScenarioDiagnostics.suppressedRulePacks,
+        matchedTerms: structuredScenarioDiagnostics.matchedTerms,
+        finalViolationList: structuredScenarioDiagnostics.finalViolationList,
+        finalResponseHash: structuredScenarioDiagnostics.finalResponseHash,
+        sourceTextLength: structuredScenarioDiagnostics.sourceTextLength,
+        sourceTextOrigin: structuredScenarioDiagnostics.sourceTextOrigin,
+        usedEngineerReportText: structuredScenarioDiagnostics.usedEngineerReportText,
+      }));
 
       if (structuredViolations.length > 0) {
         return new Response(
           JSON.stringify({
-            error: buildLowSlopeForbiddenTermErrorMessage(structuredViolations),
+            error: structuredValidationErrorMessage || buildLowSlopeForbiddenTermErrorMessage(structuredViolations),
             violations: structuredViolations,
             scenario_diagnostics: structuredScenarioDiagnostics,
           }),
