@@ -420,6 +420,21 @@ Deno.serve(async (req) => {
       !finalMixed &&
       !finalReviewRequired;
 
+    const segmentationResult =
+      packetAnalysis &&
+      packetAnalysis.mixed_document &&
+      cleanText.length >= 2000
+        ? classifyVirtualSegments({
+            cleanText,
+            smartClassification,
+          })
+        : {
+            has_segments: false,
+            segment_count: 0,
+            summary: {},
+            segments: [],
+          };
+
     const classificationResult = {
       ...baseClassificationResult,
       classification: finalClassification as DocumentClassification,
