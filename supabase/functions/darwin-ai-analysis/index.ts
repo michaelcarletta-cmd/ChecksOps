@@ -8288,6 +8288,11 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         lowSlopeSupportCorpusForFilters,
       );
 
+      assertLowSlopeStrictPreSendTerms(
+        analysisResult,
+        enforcedScenario,
+      );
+
       assertLowSlopeForbiddenTerms(
         analysisResult,
         enforcedScenario,
