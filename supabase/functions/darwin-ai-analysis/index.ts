@@ -405,13 +405,16 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
   const candidateFiles = allFiles
     .map((file: any) => {
       const check = isEngineerFile(file);
+      // Prefer clean_text from document intelligence pipeline, fall back to extracted_text
+      const cleanText = String(file?.clean_text || '').trim();
       const rawText = String(file?.extracted_text || '').trim();
-      const textLen = rawText.length;
-      const garbage = isGarbageText(rawText);
+      const bestText = cleanText.length > rawText.length ? cleanText : rawText;
+      const textLen = bestText.length;
+      const garbage = isGarbageText(bestText);
       if (garbage) {
         console.log(`[darwin][resolveEngineerSource] Skipping "${file?.file_name}" — garbage/binary text detected (${textLen} chars)`);
       }
-      return { file, tier: check.tier, matched: check.match, textLen: garbage ? 0 : textLen };
+      return { file, tier: check.tier, matched: check.match, textLen: garbage ? 0 : textLen, bestText: garbage ? '' : bestText };
     })
     .filter((c) => c.matched && c.textLen > 0)
     // Sort by tier first (lower = better), then by text length descending (prefer longest text)
@@ -419,7 +422,7 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
 
   const bestFileCandidate = candidateFiles.length > 0 ? candidateFiles[0] : null;
   const fileDerivedText = bestFileCandidate
-    ? String(bestFileCandidate.file.extracted_text || '').trim()
+    ? bestFileCandidate.bestText
     : '';
 
   if (bestFileCandidate) {
