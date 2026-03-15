@@ -323,6 +323,27 @@ interface EngineerReportSourceResolution {
   usedEngineerReportText: boolean;
 }
 
+function isGarbageText(text: string): boolean {
+  // Detect binary/garbled text that was incorrectly stored as extracted_text
+  // Check ratio of non-printable or high-byte characters
+  if (!text || text.length < 100) return false;
+  const sample = text.substring(0, 2000);
+  let nonPrintable = 0;
+  for (let i = 0; i < sample.length; i++) {
+    const code = sample.charCodeAt(i);
+    // Count chars outside normal printable ASCII + common Unicode
+    if ((code < 32 && code !== 9 && code !== 10 && code !== 13) || (code >= 127 && code <= 159) || code > 8000) {
+      nonPrintable++;
+    }
+  }
+  const ratio = nonPrintable / sample.length;
+  // If more than 15% is garbage chars, it's binary data stored as text
+  if (ratio > 0.15) return true;
+  // Also check for common PDF binary markers in "text"
+  if (sample.includes('obj') && sample.includes('endobj') && sample.includes('stream')) return true;
+  return false;
+}
+
 function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceTextParams): EngineerReportSourceResolution {
   const directContent = String(params.content || '').trim();
   const explicitPdfText = String(params.pdfExtractedText || '').trim();
