@@ -486,7 +486,7 @@ Deno.serve(async (req) => {
         .eq('id', fileId);
 
       // Log review-required classifications
-      if (targetClaimId && (smartClassification.review_required || smartClassification.is_mixed_document)) {
+      if (targetClaimId && (finalReviewRequired || finalMixed)) {
         await supabase
           .from('darwin_action_log')
           .insert({
@@ -498,7 +498,10 @@ Deno.serve(async (req) => {
               primary_classification: smartClassification.primary,
               candidates: smartClassification.candidates,
               reasoning: smartClassification.reasoning,
-              is_mixed_document: smartClassification.is_mixed_document,
+              is_mixed_document: finalMixed,
+              packet_analysis: packetAnalysis,
+              packet_dominant_wins: packetDominantWins,
+            },
             },
             was_auto_executed: true,
             result: `Classification review required for ${fileName || file?.file_name}`,
