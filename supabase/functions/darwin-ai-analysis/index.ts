@@ -1445,25 +1445,10 @@ function runEngineerReportDismantler(documentText: string): EngineerReportDisman
   // ══════════════════════════════════════════════════════════════════════════
 
   // ── Physical-mechanism priority override for low-slope ──
-  // If the report's physical mechanism is clearly low-slope membrane/snowmelt,
-  // force low_slope_snow_ice_ponding as primary regardless of wind_uplift score.
-  const LOW_SLOPE_PHYSICAL_MECHANISM_TERMS = [
-    'snow melt', 'snowmelt', 'ice melt', 'ponding', 'drainage obstruction',
-    'low-slope roof covering', 'low slope roof covering', 'membrane',
-    'cap sheet', 'standing water', 'epdm', 'tpo', 'modified bitumen',
-    'built-up roof', 'low-slope', 'low slope', 'flat roof',
-    'snowmelt infiltration', 'ponding water', 'negative drainage',
-    'ice dam', 'membrane system', 'membrane seam', 'clogged drain',
-  ];
-  const hasLowSlopePhysicalMechanism = LOW_SLOPE_PHYSICAL_MECHANISM_TERMS.some(
-    (term) => textLower.includes(term)
-  );
-  // Require at least 3 distinct matches to override
-  const lowSlopePhysicalMatchCount = LOW_SLOPE_PHYSICAL_MECHANISM_TERMS.filter(
-    (term) => textLower.includes(term)
-  ).length;
-  const forceLowSlope = hasLowSlopePhysicalMechanism && lowSlopePhysicalMatchCount >= 3
-    && activatedScenarios.includes(LOW_SLOPE_PRIMARY_SCENARIO);
+  // If report text references the low-slope membrane mechanism terms, force low-slope as primary.
+  // This deliberately ignores generic storm references and prioritizes the engineer's physical mechanism.
+  const { shouldForce: forceLowSlope, matchedTerms: lowSlopeMatchedTerms } = detectLowSlopePhysicalMechanism(documentText);
+  const lowSlopePhysicalMatchCount = lowSlopeMatchedTerms.length;
 
   // Primary = highest theory-alignment score among activated scenarios
   // Exclusion narrative keywords alone do NOT determine primary scenario
