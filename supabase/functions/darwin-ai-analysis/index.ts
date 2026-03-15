@@ -3715,6 +3715,7 @@ Be specific, professional, and provide communications that are ready to copy and
           || dismantlerExtraction.engineerTheorySentences[0]
           || ''
         );
+        engineerRebuttalCausationQuote = engineerCausationSentence;
         const engineerTheoryCorpus = engineerCausationSentence.toLowerCase();
         lowSlopeSupportCorpusForFilters = buildLowSlopeSupportCorpus(engineerCausationSentence);
 
