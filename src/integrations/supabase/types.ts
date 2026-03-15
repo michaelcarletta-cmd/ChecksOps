@@ -2965,10 +2965,16 @@ export type Database = {
           claim_id: string
           classification_confidence: number | null
           classification_metadata: Json | null
+          clean_text: string | null
+          confidence_score: number | null
           darwin_processed_at: string | null
           document_classification: string | null
+          document_subtype: string | null
+          document_summary: string | null
+          document_type: string | null
           email_id: string | null
           extracted_text: string | null
+          extraction_method: string | null
           file_name: string
           file_path: string
           file_size: number | null
@@ -2976,11 +2982,18 @@ export type Database = {
           folder_id: string | null
           id: string
           is_latest_version: boolean | null
+          is_scanned: boolean | null
+          needs_reprocessing: boolean | null
           needs_text_backfill: boolean
           ocr_processed_at: string | null
+          page_count: number | null
           parent_file_id: string | null
+          processed_at: string | null
           processed_by_darwin: boolean | null
+          processing_error: string | null
+          ready_for_analysis: boolean | null
           source: string | null
+          text_quality_status: string | null
           uploaded_at: string | null
           uploaded_by: string | null
           version: number | null
@@ -2990,10 +3003,16 @@ export type Database = {
           claim_id: string
           classification_confidence?: number | null
           classification_metadata?: Json | null
+          clean_text?: string | null
+          confidence_score?: number | null
           darwin_processed_at?: string | null
           document_classification?: string | null
+          document_subtype?: string | null
+          document_summary?: string | null
+          document_type?: string | null
           email_id?: string | null
           extracted_text?: string | null
+          extraction_method?: string | null
           file_name: string
           file_path: string
           file_size?: number | null
@@ -3001,11 +3020,18 @@ export type Database = {
           folder_id?: string | null
           id?: string
           is_latest_version?: boolean | null
+          is_scanned?: boolean | null
+          needs_reprocessing?: boolean | null
           needs_text_backfill?: boolean
           ocr_processed_at?: string | null
+          page_count?: number | null
           parent_file_id?: string | null
+          processed_at?: string | null
           processed_by_darwin?: boolean | null
+          processing_error?: string | null
+          ready_for_analysis?: boolean | null
           source?: string | null
+          text_quality_status?: string | null
           uploaded_at?: string | null
           uploaded_by?: string | null
           version?: number | null
@@ -3015,10 +3041,16 @@ export type Database = {
           claim_id?: string
           classification_confidence?: number | null
           classification_metadata?: Json | null
+          clean_text?: string | null
+          confidence_score?: number | null
           darwin_processed_at?: string | null
           document_classification?: string | null
+          document_subtype?: string | null
+          document_summary?: string | null
+          document_type?: string | null
           email_id?: string | null
           extracted_text?: string | null
+          extraction_method?: string | null
           file_name?: string
           file_path?: string
           file_size?: number | null
@@ -3026,11 +3058,18 @@ export type Database = {
           folder_id?: string | null
           id?: string
           is_latest_version?: boolean | null
+          is_scanned?: boolean | null
+          needs_reprocessing?: boolean | null
           needs_text_backfill?: boolean
           ocr_processed_at?: string | null
+          page_count?: number | null
           parent_file_id?: string | null
+          processed_at?: string | null
           processed_by_darwin?: boolean | null
+          processing_error?: string | null
+          ready_for_analysis?: boolean | null
           source?: string | null
+          text_quality_status?: string | null
           uploaded_at?: string | null
           uploaded_by?: string | null
           version?: number | null
