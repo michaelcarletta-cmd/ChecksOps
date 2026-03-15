@@ -605,61 +605,32 @@ function getEngineerRequiredTests(context: EngineerRebuttalEnforcementContext): 
 }
 
 function isTestMentionedInReport(reportText: string, testName: string): boolean {
-  const text = String(reportText || "");
-  const textLower = text.toLowerCase();
-  if (!textLower) return false;
-
+  const textLower = String(reportText || "").toLowerCase();
   const normalizedTest = String(testName || "").toLowerCase().trim();
-  if (!normalizedTest) return false;
+  if (!textLower || !normalizedTest) return false;
 
-  // If the phrase only appears in rebuttal-style negative framing, do NOT count it as performed.
-  const negativeContextPatterns = [
-    new RegExp(`no\\s+${escapeRegExp(normalizedTest)}`, "i"),
-    new RegExp(`not\\s+performed[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
-    new RegExp(`${escapeRegExp(normalizedTest)}[^\\n.]{0,40}not\\s+performed`, "i"),
-    new RegExp(`failed\\s+to\\s+perform[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
-    new RegExp(`without[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
-    new RegExp(`did\\s+not\\s+perform[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
-    new RegExp(`omitted[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
-    new RegExp(`missing[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
+  const performanceSignals = [
+    "performed", "conducted", "completed", "undertook", "carried out",
+    "tested", "measured", "mapped", "traced", "sampled", "inspected",
+    "evaluated", "analyzed", "analysis was performed", "testing was performed",
   ];
 
-  // Exact phrase in positive/neutral context
-  if (textLower.includes(normalizedTest)) {
-    const exactNegative = negativeContextPatterns.some((pattern) => pattern.test(text));
-    if (!exactNegative) return true;
-  }
-
-  // Token fallback only for real report text, but reject if negative framing is nearby.
-  const ignoredTokens = new Set([
-    "analysis", "testing", "review", "inspection", "proof",
-    "assessment", "evaluation", "performed", "perform",
-  ]);
-
-  const tokens = normalizedTest
+  const testTokens = normalizedTest
     .split(/[\s/()\-]+/)
     .map((token) => token.trim())
-    .filter((token) => token.length >= 4 && !ignoredTokens.has(token));
+    .filter((token) => token.length >= 4);
 
-  if (tokens.length === 0) return false;
+  if (testTokens.length === 0) return false;
 
-  const tokenHits = tokens.filter((token) => textLower.includes(token));
-  if (tokenHits.length === 0) return false;
-
-  const tokenNegative = tokenHits.some((token) => {
-    const tokenEscaped = escapeRegExp(token);
+  const nearbyWindowRegexes = testTokens.map((token) => {
+    const escaped = escapeRegExp(token);
     return [
-      new RegExp(`no[^\\n.]{0,30}${tokenEscaped}`, "i"),
-      new RegExp(`not\\s+performed[^\\n.]{0,30}${tokenEscaped}`, "i"),
-      new RegExp(`failed\\s+to\\s+perform[^\\n.]{0,30}${tokenEscaped}`, "i"),
-      new RegExp(`did\\s+not\\s+perform[^\\n.]{0,30}${tokenEscaped}`, "i"),
-      new RegExp(`without[^\\n.]{0,30}${tokenEscaped}`, "i"),
-      new RegExp(`missing[^\\n.]{0,30}${tokenEscaped}`, "i"),
-      new RegExp(`omitted[^\\n.]{0,30}${tokenEscaped}`, "i"),
-    ].some((pattern) => pattern.test(text));
-  });
+      new RegExp(`(?:${performanceSignals.map(escapeRegExp).join("|")})[^\\n\\.]{0,80}${escaped}`, "i"),
+      new RegExp(`${escaped}[^\\n\\.]{0,80}(?:${performanceSignals.map(escapeRegExp).join("|")})`, "i"),
+    ];
+  }).flat();
 
-  return !tokenNegative;
+  return nearbyWindowRegexes.some((regex) => regex.test(textLower));
 }
 
 function buildEngineerTheoryExtractionSection(context: EngineerRebuttalEnforcementContext): string {
