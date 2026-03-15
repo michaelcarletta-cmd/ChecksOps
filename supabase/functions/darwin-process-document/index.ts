@@ -127,6 +127,22 @@ async function updateClaimMasterStateDocIntelSummary(
   }
 }
 
+function mapDocumentType(classification: string): string {
+  const docTypeMap: Record<string, string> = {
+    denial: 'denial_letter',
+    estimate: 'carrier_estimate',
+    approval: 'coverage_letter',
+    rfi: 'carrier_correspondence',
+    engineering_report: 'engineering_report',
+    policy: 'policy_document',
+    correspondence: 'carrier_correspondence',
+    invoice: 'invoice',
+    photo: 'photos_report',
+    other: 'other',
+  };
+  return docTypeMap[classification] || classification;
+}
+
 async function verifyClassification(
   textContent: string,
   fileName: string,
