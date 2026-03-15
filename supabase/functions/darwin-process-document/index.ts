@@ -418,12 +418,15 @@ Deno.serve(async (req) => {
           .eq('id', fileId);
       }
 
+      console.log(`[DocProcessed] file_id=${fileId} file_name=${fileName || file?.file_name} extraction_method=${extractionMethod} text_quality=unusable is_scanned=${isScanned} ready_for_analysis=false document_type=${file ? (docTypeMap?.[classificationFromName] || classificationFromName) : 'unknown'} document_subtype=none reason=no_readable_text`);
+
       return new Response(
         JSON.stringify({ 
           success: true, 
           classification: classificationFromName,
           confidence: 0.4,
-          method: 'filename_pattern'
+          method: 'filename_pattern',
+          processing_error: 'No readable text extracted from file',
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
