@@ -434,7 +434,14 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
   ).trim();
 
   // Priority: explicit PDF text > uploaded engineer text > file-derived text > content > context
-  if (explicitPdfText && explicitPdfText.length >= 500) {
+  // BUT: validate PDF text is not garbled before using it
+  const pdfTextIsGarbage = explicitPdfText ? isGarbageText(explicitPdfText) : false;
+  if (pdfTextIsGarbage) {
+    console.warn(`[darwin][resolveEngineerSource] Client-side PDF extracted text is GARBLED (${explicitPdfText.length} chars) — skipping in favor of other sources`);
+    console.warn(`[darwin][resolveEngineerSource] PDF text sample: "${explicitPdfText.substring(0, 200).replace(/\n/g, ' ')}"`);
+  }
+
+  if (!pdfTextIsGarbage && explicitPdfText && explicitPdfText.length >= 500) {
     return {
       text: explicitPdfText,
       sourceOrigin: 'pdf_extracted_text',
