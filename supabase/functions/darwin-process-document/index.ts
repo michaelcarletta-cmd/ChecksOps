@@ -443,6 +443,24 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (targetClaimId) {
+      const { count: analyzedCount } = await supabase
+        .from('claim_document_intelligence')
+        .select('id', { count: 'exact', head: true })
+        .eq('claim_id', targetClaimId);
+
+      const { count: pendingCount } = await supabase
+        .from('document_intelligence_queue')
+        .select('id', { count: 'exact', head: true })
+        .eq('claim_id', targetClaimId)
+        .in('status', ['pending', 'processing']);
+
+      await updateClaimMasterStateDocIntelSummary(supabase, targetClaimId, {
+        analyzed_documents: analyzedCount ?? 0,
+        pending_documents: pendingCount ?? 0,
+      });
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 
