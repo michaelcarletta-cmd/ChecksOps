@@ -437,11 +437,20 @@ Deno.serve(async (req) => {
 
       return new Response(
         JSON.stringify({ 
-          success: true, 
+          success: false, 
           classification: classificationFromName,
           confidence: 0.4,
           method: 'filename_pattern',
           processing_error: 'No readable text extracted from file',
+          ready_for_analysis: false,
+          ready_reason: 'clean_text_too_short',
+          text_quality_status: 'unusable',
+          intelligence: {
+            attempted: false,
+            written: false,
+            skipped_reason: 'not_ready_for_analysis:no_readable_text',
+            error: null,
+          },
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
