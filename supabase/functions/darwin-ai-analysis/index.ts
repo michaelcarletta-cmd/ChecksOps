@@ -963,14 +963,17 @@ const DUAL_CAUSATION_KEYWORDS = [
 const SCENARIO_KNOWLEDGE_PACKS: Record<string, string> = {
   low_slope_snow_ice_ponding: `
 === SCENARIO KNOWLEDGE PACK: LOW-SLOPE / SNOW / ICE / SNOWMELT / PONDING ===
+LOW-SLOPE-ONLY ALLOWED SUBJECT MATTER (MANDATORY):
+${LOW_SLOPE_ALLOWED_CONTENT_BULLET_LIST}
+
 MANDATORY REBUTTAL ARGUMENTS:
 - CAUSATION ASSUMPTIONS: Challenge any assumption that damage is "maintenance" without testing. The engineer must prove damage existed BEFORE the weather event with dated documentation.
-- LACK OF TESTING: Did the engineer perform moisture mapping, infrared scanning, core cuts, or destructive testing to determine water intrusion pathways? If not, conclusions are speculative.
-- SNOWMELT HYDRAULIC LOADING: Snow accumulation creates sustained hydraulic pressure on roofing systems. Even properly maintained roofs can fail under prolonged snowmelt conditions. Cite building science on hydrostatic pressure vs. design limitations.
-- DRAINAGE OBSTRUCTION: Ice dams, debris accumulation, and freeze-thaw cycling can obstruct designed drainage pathways, causing water to back up under shingles, flashing, and membrane systems. Drainage obstruction, snow/ice backup, and freeze-thaw effects may constitute event-driven physical loss and should not be automatically recast as maintenance absent proof.
-- FREEZE-THAW EFFECTS: Repeated freeze-thaw cycling causes mechanical damage to roofing materials, sealants, and flashing. Ice expansion can exert substantial force—far exceeding material design tolerances. This is physical damage from a weather event, not wear and tear.
+- LACK OF TESTING: Did the engineer perform moisture mapping, membrane core cuts, seam adhesion/peel testing, leak-path tracing, or destructive testing to determine water intrusion pathways? If not, conclusions are speculative.
+- SNOWMELT HYDRAULIC LOADING: Snow accumulation creates sustained hydraulic pressure on low-slope membrane systems. Even properly maintained roofs can fail under prolonged snowmelt conditions.
+- DRAINAGE OBSTRUCTION: Ice dams, debris accumulation, and freeze-thaw cycling can obstruct designed drainage pathways and increase ponding/standing water load at membrane openings.
+- FREEZE-THAW EFFECTS: Repeated freeze-thaw cycling can worsen membrane seam stress, cracked/split cap sheet conditions, and cracked sealants.
 - NEGATIVE DRAINAGE: If ponding or negative drainage conditions exist, determine whether these are design deficiencies (potentially covered) or maintenance issues. The engineer must provide specific evidence, not assumptions.
-- LOW-SLOPE MEMBRANE SCIENCE: EPDM, TPO, and modified bitumen systems have specific failure modes under ice/snow loading (seam stress, puncture from ice crystals, thermal shock). Challenge generic "deterioration" language.
+- LOW-SLOPE MEMBRANE SCIENCE: EPDM, TPO, and modified bitumen systems have specific failure modes under ice/snow loading. Challenge generic "deterioration" language unless supported by testing.
 === END SCENARIO PACK ===`,
 
   hail_impact: `
