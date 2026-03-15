@@ -8810,14 +8810,14 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       );
     }
 
-    await persistAnalysisSnapshot(finalAnalysisText);
+    await persistAnalysisSnapshot(finalResponseText);
 
     const responseBuildStep = startStep('response', 'Build response payload');
     const responsePayload: any = {
       success: true,
       analysisType,
-      result: analysisResult,
-      analysis: analysisResult,
+      result: finalResponseText,
+      analysis: finalResponseText,
       suggestedActions,
       carrierDismantler: carrierDismantlerResult,
       claimId,

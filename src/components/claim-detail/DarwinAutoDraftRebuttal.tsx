@@ -321,15 +321,7 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
           });
         }
         
-        // Save to darwin_analysis_results
-        const { data: userData } = await supabase.auth.getUser();
-        await supabase.from("darwin_analysis_results").insert({
-          claim_id: claimId,
-          analysis_type: "auto_draft_rebuttal",
-          input_summary: "Full strategic rebuttal using all claim intelligence",
-          result: data.result,
-          created_by: userData.user?.id,
-        });
+        // Persisting is handled server-side only after final low-slope validation passes.
 
         toast({
           title: "Rebuttal drafted",

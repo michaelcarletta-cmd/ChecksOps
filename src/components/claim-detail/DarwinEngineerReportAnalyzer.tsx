@@ -270,16 +270,7 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
       setLastAnalyzed(new Date());
       setLastFileName(fileName || null);
 
-      // Save the analysis result
-      const { data: userData } = await supabase.auth.getUser();
-      await supabase.from('darwin_analysis_results').insert({
-        claim_id: claimId,
-        analysis_type: 'engineer_report_rebuttal',
-        input_summary: fileName || reportContent.substring(0, 200),
-        result: data.result,
-        pdf_file_name: fileName || null,
-        created_by: userData.user?.id
-      });
+      // Persisting is handled server-side only after final low-slope validation passes.
 
       toast({
         title: "Analysis complete",
