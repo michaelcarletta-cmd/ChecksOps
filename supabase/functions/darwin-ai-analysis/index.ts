@@ -2826,8 +2826,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    // For engineer_report_rebuttal with a smaller PDF, pre-extract text so the resolver
-    // can use it for scenario detection even when the PDF is sent to AI as base64.
+    // For engineer_report_rebuttal, pre-extract text so the resolver can run scenario detection.
+    // If native extraction is garbled (common with scanned/encoded PDFs), fall back to OCR via multimodal model.
     if (pdfContent && !additionalContext.pdfExtractedText && analysisType === 'engineer_report_rebuttal') {
       try {
         const preExtracted = await extractTextFromPDFNative(pdfContent, pdfFileName || 'document.pdf');
@@ -2841,6 +2841,14 @@ Deno.serve(async (req) => {
         }
       } catch (preExtErr) {
         console.warn('[darwin] Pre-extraction for engineer resolver failed (non-fatal):', preExtErr);
+      }
+
+      if (!additionalContext.pdfExtractedText) {
+        const ocrFallbackText = await extractEngineerTextFromPdfViaVision(pdfContent, pdfFileName || 'document.pdf');
+        if (ocrFallbackText && ocrFallbackText.length >= 500) {
+          additionalContext.pdfExtractedText = ocrFallbackText;
+          console.log(`[darwin] Stored OCR fallback text for engineer resolver (${ocrFallbackText.length} chars)`);
+        }
       }
     }
 
