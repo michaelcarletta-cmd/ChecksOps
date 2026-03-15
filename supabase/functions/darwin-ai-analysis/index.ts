@@ -247,12 +247,16 @@ const LOW_SLOPE_FORCE_TERMS = [
 const LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES: Array<{ label: string; regex: RegExp }> = [
   { label: 'shingle', regex: /\bshingle(?:s)?\b/i },
   { label: 'uplift', regex: /\buplift\b/i },
+  { label: 'wind uplift', regex: /\bwind\s+uplift\b/i },
   { label: 'fastener pull-out', regex: /\bfastener\s+pull-?out\b/i },
   { label: 'seal strip', regex: /\bseal\s+strip\b/i },
+  { label: 'sealant strip', regex: /\bsealant\s+strip\b/i },
   { label: 'ARMA', regex: /\bARMA\b/i },
   { label: 'unsealed tabs', regex: /\bunsealed\s+tabs?\b/i },
+  { label: 'unsealed shingles', regex: /\bunsealed\s+shingle(?:s)?\b/i },
   { label: 'uplift analysis', regex: /\buplift\s+analysis\b/i },
   { label: 'ASTM D7158', regex: /\bASTM\s*D7158\b/i },
+  { label: 'ASTM', regex: /\bASTM\b/i },
   { label: 'architectural shingles', regex: /\barchitectural\s+(?:asphalt\s+)?shingle(?:s)?\b/i },
 ];
 
@@ -589,26 +593,37 @@ function collectLowSlopeForbiddenViolations(
   return [...violations];
 }
 
+function collectLowSlopeStrictPreSendViolations(result: string, primaryScenario: string | null): string[] {
+  if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return [];
+
+  return Array.from(new Set(
+    LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES
+      .filter((rule) => rule.regex.test(result))
+      .map((rule) => rule.label),
+  ));
+}
+
+function buildLowSlopeForbiddenTermErrorMessage(violations: string[]): string {
+  const uniqueViolations = Array.from(new Set(violations.filter(Boolean)));
+  if (uniqueViolations.length === 0) {
+    return 'LOW_SLOPE_MEMBRANE generation failed due to forbidden term.';
+  }
+
+  return `LOW_SLOPE_MEMBRANE generation failed due to forbidden term. Violations: ${uniqueViolations.join(', ')}`;
+}
+
 function assertLowSlopeForbiddenTerms(result: string, primaryScenario: string | null, engineerCausationSentence: string): void {
   const violations = collectLowSlopeForbiddenViolations(result, primaryScenario, engineerCausationSentence);
   if (violations.length > 0) {
-    throw new Error(
-      `LOW_SLOPE_MEMBRANE generation failed due to forbidden term: ${Array.from(new Set(violations)).join(', ')}`,
-    );
+    throw new Error(buildLowSlopeForbiddenTermErrorMessage(violations));
   }
 }
 
 function assertLowSlopeStrictPreSendTerms(result: string, primaryScenario: string | null): void {
-  if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return;
-
-  const strictViolations = LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES
-    .filter((rule) => rule.regex.test(result))
-    .map((rule) => rule.label);
+  const strictViolations = collectLowSlopeStrictPreSendViolations(result, primaryScenario);
 
   if (strictViolations.length > 0) {
-    throw new Error(
-      `LOW_SLOPE_MEMBRANE generation failed due to forbidden term: ${Array.from(new Set(strictViolations)).join(', ')}`,
-    );
+    throw new Error(buildLowSlopeForbiddenTermErrorMessage(strictViolations));
   }
 }
 
@@ -8273,6 +8288,11 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         lowSlopeSupportCorpusForFilters,
       );
 
+      assertLowSlopeStrictPreSendTerms(
+        analysisResult,
+        enforcedScenario,
+      );
+
       assertLowSlopeForbiddenTerms(
         analysisResult,
         enforcedScenario,
@@ -8607,9 +8627,65 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       );
     }
 
-    if (useStructuredDarwinOutput && structuredResult) {
+    if (useStructuredDarwinOutput && structuredResult && typeof analysisResult === 'string') {
+      const structuredPreSendLowSlopeDetection = detectLowSlopeAcrossSources([
+        engineerRebuttalCausationQuote,
+        engineerRebuttalReportText,
+        String(content || ''),
+        claimSummary,
+        String(claim?.loss_description || ''),
+        analysisResult,
+      ]);
+
+      const structuredEnforcedScenarioForResponse =
+        engineerRebuttalPrimaryScenario === LOW_SLOPE_PRIMARY_SCENARIO || structuredPreSendLowSlopeDetection.shouldForce
+          ? LOW_SLOPE_PRIMARY_SCENARIO
+          : engineerRebuttalPrimaryScenario;
+
+      const structuredScenarioDiagnosticsMatchedTerms = Array.from(
+        new Set([...(scenarioDetectionMatchedTerms || []), ...structuredPreSendLowSlopeDetection.matchedTerms])
+      );
+      const structuredScenarioDiagnosticsRulePackLoaded = getRulePackLoaded(structuredEnforcedScenarioForResponse);
+      const structuredScenarioDiagnosticsSuppressedRulePacks = getSuppressedRulePacks(structuredEnforcedScenarioForResponse);
+
+      const structuredStrictViolations = collectLowSlopeStrictPreSendViolations(
+        analysisResult,
+        structuredEnforcedScenarioForResponse,
+      );
+      const structuredContextualViolations = collectLowSlopeForbiddenViolations(
+        analysisResult,
+        structuredEnforcedScenarioForResponse,
+        engineerRebuttalCausationQuote,
+      );
+      const structuredViolations = Array.from(new Set([...structuredStrictViolations, ...structuredContextualViolations]));
+
+      if (structuredViolations.length > 0) {
+        return new Response(
+          JSON.stringify({
+            error: buildLowSlopeForbiddenTermErrorMessage(structuredViolations),
+            scenario_diagnostics: {
+              primaryScenario: structuredEnforcedScenarioForResponse,
+              rulePackLoaded: structuredScenarioDiagnosticsRulePackLoaded,
+              suppressedRulePacks: structuredScenarioDiagnosticsSuppressedRulePacks,
+              matchedPhysicalMechanismTerms: structuredScenarioDiagnosticsMatchedTerms,
+              matchedTerms: structuredScenarioDiagnosticsMatchedTerms,
+            },
+          }),
+          { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
       return new Response(
-        JSON.stringify(structuredResult),
+        JSON.stringify({
+          ...structuredResult,
+          scenario_diagnostics: {
+            primaryScenario: structuredEnforcedScenarioForResponse,
+            rulePackLoaded: structuredScenarioDiagnosticsRulePackLoaded,
+            suppressedRulePacks: structuredScenarioDiagnosticsSuppressedRulePacks,
+            matchedPhysicalMechanismTerms: structuredScenarioDiagnosticsMatchedTerms,
+            matchedTerms: structuredScenarioDiagnosticsMatchedTerms,
+          },
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
@@ -8633,6 +8709,9 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     const preSendLowSlopeDetection = detectLowSlopeAcrossSources([
       engineerRebuttalCausationQuote,
       engineerRebuttalReportText,
+      String(content || ''),
+      claimSummary,
+      String(claim?.loss_description || ''),
       typeof analysisResult === 'string' ? analysisResult : '',
     ]);
 
@@ -8647,13 +8726,33 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     const scenarioDiagnosticsRulePackLoaded = getRulePackLoaded(enforcedScenarioForResponse);
     const scenarioDiagnosticsSuppressedRulePacks = getSuppressedRulePacks(enforcedScenarioForResponse);
 
-    if (['engineer_report_rebuttal', 'auto_draft_rebuttal'].includes(analysisType) && typeof analysisResult === 'string') {
-      assertLowSlopeStrictPreSendTerms(analysisResult, enforcedScenarioForResponse);
-      assertLowSlopeForbiddenTerms(
+    if (typeof analysisResult === 'string') {
+      const strictViolations = collectLowSlopeStrictPreSendViolations(
+        analysisResult,
+        enforcedScenarioForResponse,
+      );
+      const contextualViolations = collectLowSlopeForbiddenViolations(
         analysisResult,
         enforcedScenarioForResponse,
         engineerRebuttalCausationQuote,
       );
+      const allViolations = Array.from(new Set([...strictViolations, ...contextualViolations]));
+
+      if (allViolations.length > 0) {
+        return new Response(
+          JSON.stringify({
+            error: buildLowSlopeForbiddenTermErrorMessage(allViolations),
+            scenario_diagnostics: {
+              primaryScenario: enforcedScenarioForResponse,
+              rulePackLoaded: scenarioDiagnosticsRulePackLoaded,
+              suppressedRulePacks: scenarioDiagnosticsSuppressedRulePacks,
+              matchedPhysicalMechanismTerms: scenarioDiagnosticsMatchedTerms,
+              matchedTerms: scenarioDiagnosticsMatchedTerms,
+            },
+          }),
+          { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
     }
 
     console.log(
@@ -8710,9 +8809,12 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
 
   } catch (error: any) {
     console.error('Darwin AI Analysis error:', error);
+    const errorMessage = String(error?.message || 'Unknown error');
+    const isLowSlopeForbiddenError = errorMessage.includes('LOW_SLOPE_MEMBRANE generation failed due to forbidden term');
+
     return new Response(
-      JSON.stringify({ error: error.message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ error: errorMessage }),
+      { status: isLowSlopeForbiddenError ? 422 : 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
