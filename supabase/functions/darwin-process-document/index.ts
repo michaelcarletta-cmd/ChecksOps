@@ -227,19 +227,6 @@ Deno.serve(async (req) => {
     const cleanText = cleanExtractedText(textContent);
     const readyForAnalysis = textQuality.status === 'good' || textQuality.status === 'fair';
 
-    // Map classification to expanded document_type
-    const docTypeMap: Record<string, string> = {
-      'denial': 'denial_letter',
-      'estimate': 'carrier_estimate',
-      'approval': 'coverage_letter',
-      'rfi': 'carrier_correspondence',
-      'engineering_report': 'engineering_report',
-      'policy': 'policy_document',
-      'correspondence': 'carrier_correspondence',
-      'invoice': 'invoice',
-      'photo': 'photos_report',
-      'other': 'other',
-    };
     const mappedDocType = docTypeMap[classificationResult.classification] || classificationResult.classification;
 
     // Update file record with classification + intelligence metadata
