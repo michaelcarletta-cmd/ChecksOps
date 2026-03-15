@@ -10282,7 +10282,16 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       scenario_diagnostics: {
         ...scenarioDiagnostics,
         finalViolationList: [],
+        ...(engineerIntelligence ? {
+          engineerTheory: engineerIntelligence.engineerTheory,
+          weatherEvents: engineerIntelligence.weatherEventsMentioned,
+          testsDocumented: engineerIntelligence.testsDocumented,
+          testsMissing: engineerIntelligence.testsMissing,
+          contradictions: engineerIntelligence.contradictions,
+        } : {}),
       },
+      ...(engineerIntelligence ? { intelligence: engineerIntelligence } : {}),
+      ...(deterministicRebuttalText ? { deterministicRebuttal: deterministicRebuttalText } : {}),
       jurisdiction: {
         state_code: resolvedState,
         state_name: stateInfo.stateName,
