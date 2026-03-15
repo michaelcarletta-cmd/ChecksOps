@@ -59,6 +59,71 @@ interface ClaimMasterStateDocIntelSummary {
   last_processed_at?: string | null;
 }
 
+async function enqueueDocumentIntelligenceJob(
+  supabase: ReturnType<typeof createClient>,
+  payload: DocumentIntelligenceQueuePayload
+) {
+  const queueRow = {
+    claim_id: payload.claim_id,
+    file_id: payload.file_id,
+    status: 'pending',
+    priority: payload.confidence_score >= 0.85 ? 100 : 50,
+    run_after: new Date().toISOString(),
+    payload: payload,
+  };
+
+  const { error } = await supabase
+    .from('document_intelligence_queue')
+    .upsert(queueRow, { onConflict: 'file_id' });
+
+  if (error) {
+    console.error('[DocIntelQueue] enqueue error:', error.message);
+    throw error;
+  }
+
+  console.log('[DocIntelQueue] queued', {
+    claim_id: payload.claim_id,
+    file_id: payload.file_id,
+    document_type: payload.document_type,
+  });
+}
+
+async function updateClaimMasterStateDocIntelSummary(
+  supabase: ReturnType<typeof createClient>,
+  claimId: string,
+  patch: ClaimMasterStateDocIntelSummary
+) {
+  const { data: existing } = await supabase
+    .from('claim_master_state')
+    .select('state_json')
+    .eq('claim_id', claimId)
+    .maybeSingle();
+
+  const currentState = (existing?.state_json ?? {}) as Record<string, unknown>;
+  const currentDocIntel = (currentState.document_intelligence ?? {}) as Record<string, unknown>;
+
+  const nextState = {
+    ...currentState,
+    document_intelligence: {
+      ...currentDocIntel,
+      ...patch,
+    },
+    updated_at_iso: new Date().toISOString(),
+  };
+
+  const { error } = await supabase
+    .from('claim_master_state')
+    .upsert({
+      claim_id: claimId,
+      state_json: nextState,
+      updated_at: new Date().toISOString(),
+    });
+
+  if (error) {
+    console.error('[ClaimMasterState] document_intelligence update error:', error.message);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
