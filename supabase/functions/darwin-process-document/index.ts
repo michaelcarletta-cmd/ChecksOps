@@ -276,15 +276,26 @@ Deno.serve(async (req) => {
             extractionMethod = 'pdf_native';
             console.log(`[TextExtract] PDF raw text extraction: ${textContent.length} chars for ${file.file_name}`);
 
-            // If PDF text extraction yields < 300 chars, use OCR via vision AI
-            if (textContent.length < 300) {
-              console.log(`[TextExtract] PDF text < 300 chars, attempting OCR via vision for ${file.file_name}`);
+            // Check if extracted text is garbage (binary/image data from embedded photos)
+            const pdfQuality = assessTextQuality(textContent);
+            const needsOcr = textContent.length < 300 || pdfQuality.status === 'unusable' || pdfQuality.status === 'poor';
+
+            if (needsOcr) {
+              console.log(`[TextExtract] PDF text needs OCR (length=${textContent.length}, quality=${pdfQuality.status}, reasons=${pdfQuality.reasons.join('; ')}), attempting OCR via vision for ${file.file_name}`);
               const ocrText = await ocrViaVision(pdfBytes, file.file_name);
-              if (ocrText && ocrText.length > textContent.length) {
-                textContent = ocrText;
-                extractionMethod = 'ocr_vision';
-                isScanned = true;
-                console.log(`[TextExtract] OCR yielded ${textContent.length} chars for ${file.file_name}`);
+              if (ocrText && ocrText.length > 100) {
+                // Only replace if OCR produced meaningful text
+                const ocrQuality = assessTextQuality(ocrText);
+                if (ocrQuality.score > pdfQuality.score) {
+                  textContent = ocrText;
+                  extractionMethod = 'ocr_vision';
+                  isScanned = true;
+                  console.log(`[TextExtract] OCR replaced garbage native text (ocr=${ocrText.length} chars, quality=${ocrQuality.status}) for ${file.file_name}`);
+                } else {
+                  console.log(`[TextExtract] OCR quality (${ocrQuality.status}) not better than native (${pdfQuality.status}), keeping native for ${file.file_name}`);
+                }
+              } else {
+                console.log(`[TextExtract] OCR returned insufficient text for ${file.file_name}`);
               }
             }
           } else if (fileType.includes('word') || /\.(docx?)$/i.test(file.file_name)) {
