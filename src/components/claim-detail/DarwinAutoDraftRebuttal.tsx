@@ -305,35 +305,34 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
       }
 
       setRebuttal(data.result);
-        setEditableRebuttal(data.result);
-        
-        // Store watchdog results for display
-        if (data?.citation_watchdog) {
-          setCitationWatchdog(data.citation_watchdog);
-        }
-        if (data?.jurisdiction) {
-          setJurisdiction(data.jurisdiction);
-        }
-        
-        if (data?.carrierDismantler) {
-          publishCarrierDismantler({
-            claimId,
-            analysisType: "auto_draft_rebuttal",
-            carrierDismantler: data.carrierDismantler,
-            claimFactsPack: data.claimFactsPack ?? null,
-          });
-        }
-        
-        // Persisting is handled server-side only after final low-slope validation passes.
+      setEditableRebuttal(data.result);
 
-        toast({
-          title: "Rebuttal drafted",
-          description: data?.citation_watchdog 
-            ? `⚠️ Rebuttal ready but ${data.citation_watchdog.wrong_state_citations_found} wrong-state citation(s) detected — review before sending`
-            : "Darwin has compiled a comprehensive rebuttal using all available intelligence",
-          variant: data?.citation_watchdog ? "destructive" : "default",
+      // Store watchdog results for display
+      if (data?.citation_watchdog) {
+        setCitationWatchdog(data.citation_watchdog);
+      }
+      if (data?.jurisdiction) {
+        setJurisdiction(data.jurisdiction);
+      }
+
+      if (data?.carrierDismantler) {
+        publishCarrierDismantler({
+          claimId,
+          analysisType: "auto_draft_rebuttal",
+          carrierDismantler: data.carrierDismantler,
+          claimFactsPack: data.claimFactsPack ?? null,
         });
       }
+
+      // Persisting is handled server-side only after final low-slope validation passes.
+
+      toast({
+        title: "Rebuttal drafted",
+        description: data?.citation_watchdog
+          ? `⚠️ Rebuttal ready but ${data.citation_watchdog.wrong_state_citations_found} wrong-state citation(s) detected — review before sending`
+          : "Darwin has compiled a comprehensive rebuttal using all available intelligence",
+        variant: data?.citation_watchdog ? "destructive" : "default",
+      });
     } catch (error: any) {
       console.error("Error generating rebuttal:", error);
       toast({
