@@ -605,21 +605,61 @@ function getEngineerRequiredTests(context: EngineerRebuttalEnforcementContext): 
 }
 
 function isTestMentionedInReport(reportText: string, testName: string): boolean {
-  const textLower = String(reportText || '').toLowerCase();
+  const text = String(reportText || "");
+  const textLower = text.toLowerCase();
   if (!textLower) return false;
 
-  const normalizedTest = String(testName || '').toLowerCase().trim();
+  const normalizedTest = String(testName || "").toLowerCase().trim();
   if (!normalizedTest) return false;
-  if (textLower.includes(normalizedTest)) return true;
 
-  const ignoredTokens = new Set(['analysis', 'testing', 'review', 'inspection', 'proof', 'assessment', 'evaluation']);
+  // If the phrase only appears in rebuttal-style negative framing, do NOT count it as performed.
+  const negativeContextPatterns = [
+    new RegExp(`no\\s+${escapeRegExp(normalizedTest)}`, "i"),
+    new RegExp(`not\\s+performed[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
+    new RegExp(`${escapeRegExp(normalizedTest)}[^\\n.]{0,40}not\\s+performed`, "i"),
+    new RegExp(`failed\\s+to\\s+perform[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
+    new RegExp(`without[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
+    new RegExp(`did\\s+not\\s+perform[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
+    new RegExp(`omitted[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
+    new RegExp(`missing[^\\n.]{0,40}${escapeRegExp(normalizedTest)}`, "i"),
+  ];
+
+  // Exact phrase in positive/neutral context
+  if (textLower.includes(normalizedTest)) {
+    const exactNegative = negativeContextPatterns.some((pattern) => pattern.test(text));
+    if (!exactNegative) return true;
+  }
+
+  // Token fallback only for real report text, but reject if negative framing is nearby.
+  const ignoredTokens = new Set([
+    "analysis", "testing", "review", "inspection", "proof",
+    "assessment", "evaluation", "performed", "perform",
+  ]);
+
   const tokens = normalizedTest
     .split(/[\s/()\-]+/)
     .map((token) => token.trim())
     .filter((token) => token.length >= 4 && !ignoredTokens.has(token));
 
   if (tokens.length === 0) return false;
-  return tokens.some((token) => textLower.includes(token));
+
+  const tokenHits = tokens.filter((token) => textLower.includes(token));
+  if (tokenHits.length === 0) return false;
+
+  const tokenNegative = tokenHits.some((token) => {
+    const tokenEscaped = escapeRegExp(token);
+    return [
+      new RegExp(`no[^\\n.]{0,30}${tokenEscaped}`, "i"),
+      new RegExp(`not\\s+performed[^\\n.]{0,30}${tokenEscaped}`, "i"),
+      new RegExp(`failed\\s+to\\s+perform[^\\n.]{0,30}${tokenEscaped}`, "i"),
+      new RegExp(`did\\s+not\\s+perform[^\\n.]{0,30}${tokenEscaped}`, "i"),
+      new RegExp(`without[^\\n.]{0,30}${tokenEscaped}`, "i"),
+      new RegExp(`missing[^\\n.]{0,30}${tokenEscaped}`, "i"),
+      new RegExp(`omitted[^\\n.]{0,30}${tokenEscaped}`, "i"),
+    ].some((pattern) => pattern.test(text));
+  });
+
+  return !tokenNegative;
 }
 
 function buildEngineerTheoryExtractionSection(context: EngineerRebuttalEnforcementContext): string {
@@ -636,26 +676,51 @@ Engineer-stated cause (direct quote from report):
 
 function buildRequiredTestingNotPerformedSection(context: EngineerRebuttalEnforcementContext): string {
   const requiredTests = getEngineerRequiredTests(context);
-  const testLines = requiredTests.map((testName) => {
+
+  const lines = requiredTests.map((testName) => {
     const appearsInReport = isTestMentionedInReport(context.reportText, testName);
-    return `- ${testName}: ${appearsInReport ? 'Appears in report (identified in text)' : 'Not documented in report'}`;
+
+    return `- ${testName}: ${
+      appearsInReport
+        ? "Mentioned in report text, but not confirmed as actually performed"
+        : "Not documented in report"
+    }`;
   });
 
   return `Required Testing Not Performed
-The following forensic testing is required to scientifically prove the engineer's causation theory, with report presence status:
-${testLines.join('\n')}`;
+
+The following forensic testing is required to scientifically prove the engineer's causation theory. Mere discussion of a testing concept is not proof that the test was actually performed or that it produced objective findings.
+
+${lines.join("\n")}`;
 }
 
 function buildCausationProofFailureSection(context: EngineerRebuttalEnforcementContext): string {
   const requiredTests = getEngineerRequiredTests(context);
-  const missingCount = requiredTests.filter((testName) => !isTestMentionedInReport(context.reportText, testName)).length;
 
-  const proofStatement = missingCount > 0
-    ? `Because ${missingCount} required forensic test(s) are not documented, the engineer has not scientifically proven their conclusion and the causation statement is therefore speculative.`
-    : 'Core forensic tests are referenced in the report text; causation still must be tied to quantifiable, test-backed findings rather than assumption.';
+  const undocumentedTests = requiredTests.filter(
+    (testName) => !isTestMentionedInReport(context.reportText, testName)
+  );
+
+  if (undocumentedTests.length > 0) {
+    return `Causation Proof Failure
+
+Condition evidence is not causation proof.
+
+Without the testing necessary to separate pre-existing vulnerability from event-driven failure, the report does not establish sole causation to a reasonable degree of engineering certainty.
+
+The following required forensic testing is not documented in the report:
+${undocumentedTests.map((t) => `- ${t}`).join("\n")}
+
+The report therefore does not scientifically prove sole causation and does not rule out the covered peril as a contributing or proximate cause. A covered event acting on aged materials can still be the proximate cause of direct physical loss.`;
+  }
 
   return `Causation Proof Failure
-${proofStatement}`;
+
+Condition evidence is not causation proof.
+
+Even where certain testing concepts are referenced in the report, the report still must tie those concepts to actual test performance, objective findings, and a scientifically supported elimination of the covered peril. Mere mention of a testing concept does not establish sole causation to a reasonable degree of engineering certainty.
+
+The report did not scientifically prove sole causation. The report failed to rule out the covered peril as a contributing or proximate cause. A covered event acting on aged materials can still be the proximate cause of direct physical loss.`;
 }
 
 // ============================================================================
@@ -886,52 +951,47 @@ function enforceEngineerRebuttalMandatorySections(result: string, context: Engin
   if (!result) return result;
 
   let updated = result.trim();
-  const lower = updated.toLowerCase();
   const additions: string[] = [];
 
-  // 1. Engineer Theory Extraction
-  if (!/engineer theory extraction/i.test(lower)) {
+  const hasEngineerTheoryExtraction = /(^|\n)engineer theory extraction\b/i.test(updated);
+  const hasTimingFailure = /(^|\n)timing failure\b/i.test(updated);
+  const hasRequiredTesting = /(^|\n)required testing not performed\b/i.test(updated);
+  const hasCausationProofFailure = /(^|\n)causation proof failure\b/i.test(updated);
+  const hasInternalContradictions = /(^|\n)internal contradictions\b/i.test(updated);
+  const hasQuestionsEngineerMustAnswer = /(^|\n)questions the engineer must answer\b/i.test(updated);
+
+  if (!hasEngineerTheoryExtraction) {
     additions.push(buildEngineerTheoryExtractionSection(context));
   }
 
-  // 2. Timing Failure
-  if (!/timing failure/i.test(lower)) {
+  if (!hasTimingFailure) {
     additions.push(buildTimingFailureSection(context.primaryScenario, context.engineerStatedCause));
   }
 
-  // 3. Required Testing Not Performed
-  if (!/required testing not performed/i.test(lower)) {
+  if (!hasRequiredTesting) {
     additions.push(buildRequiredTestingNotPerformedSection(context));
   }
 
-  // 4. Causation Proof Failure
-  const hasCausationProofFailureSection = /causation proof failure/i.test(lower);
-  const hasSpeculativeFailureStatement = /has not scientifically proven their conclusion and the causation statement is therefore speculative/i.test(lower)
-    || /does not establish sole causation to a reasonable degree of engineering certainty/i.test(lower);
-  const missingTests = getEngineerRequiredTests(context)
-    .filter((testName) => !isTestMentionedInReport(context.reportText, testName));
-
-  if (!hasCausationProofFailureSection || (missingTests.length > 0 && !hasSpeculativeFailureStatement)) {
-    additions.push(buildCausationProofFailureSectionStumper(context.primaryScenario, missingTests));
+  if (!hasCausationProofFailure) {
+    additions.push(buildCausationProofFailureSection(context));
   }
 
-  // 5. Internal Contradictions
-  if (!/internal contradictions/i.test(lower)) {
+  if (!hasInternalContradictions) {
     additions.push(buildEngineerContradictionSection(context.primaryScenario, context.engineerTheorySentences));
   }
 
-  // 6. Questions the Engineer Must Answer
-  if (!/questions the engineer must answer/i.test(lower)) {
+  if (!hasQuestionsEngineerMustAnswer) {
     const questions = buildEngineerMustAnswerQuestions(context.primaryScenario);
-    const questionsSection = `Questions the Engineer Must Answer\n\n${questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}`;
-    additions.push(questionsSection);
+    additions.push(
+      `Questions the Engineer Must Answer\n\n${questions.map((q, i) => `${i + 1}. ${q}`).join("\n")}`
+    );
   }
 
   if (additions.length > 0) {
     updated += `\n\n${additions.join('\n\n')}`;
   }
 
-  return updated;
+  return updated.trim();
 }
 
 function enforceEngineerRebuttalLowSlopeOpening(result: string, primaryScenario: string | null): string {
@@ -9125,7 +9185,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
         criticalTestingNotPerformed: Array.isArray(engineerRebuttalCriticalTestingNotPerformed)
           ? engineerRebuttalCriticalTestingNotPerformed
           : [],
-        reportText: engineerRebuttalReportText || String(content || ''),
+        reportText: engineerRebuttalReportText || "", // MUST be source report text only
       };
 
       // Detect low-slope across sources and force scenario if needed
