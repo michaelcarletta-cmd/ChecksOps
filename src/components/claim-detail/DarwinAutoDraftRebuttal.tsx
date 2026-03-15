@@ -218,6 +218,10 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
 
   const handleGenerate = async () => {
     setIsGenerating(true);
+    setRebuttal(null);
+    setEditableRebuttal("");
+    setCitationWatchdog(null);
+    setJurisdiction(null);
     try {
       const { data, error } = await supabase.functions.invoke("darwin-ai-analysis", {
         body: {
