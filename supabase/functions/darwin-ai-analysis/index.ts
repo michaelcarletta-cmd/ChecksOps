@@ -591,7 +591,7 @@ function assertLowSlopeForbiddenTerms(result: string, primaryScenario: string | 
   const violations = collectLowSlopeForbiddenViolations(result, primaryScenario, engineerCausationSentence);
   if (violations.length > 0) {
     throw new Error(
-      `Low-slope enforcement failed: forbidden wind/shingle mechanics remain in final output (${violations.join(', ')}).`,
+      `LOW_SLOPE_MEMBRANE generation failed due to forbidden term: ${Array.from(new Set(violations)).join(', ')}`,
     );
   }
 }
