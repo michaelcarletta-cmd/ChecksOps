@@ -328,22 +328,55 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
   const explicitPdfText = String(params.pdfExtractedText || '').trim();
   const uploadedEngineerText = String(params.uploadedEngineerReportText || '').trim();
 
-  const fileDerivedText = (Array.isArray(params.fullClaimFiles) ? params.fullClaimFiles : [])
-    .filter((file: any) => {
-      const classification = String(file?.document_classification || '').toLowerCase();
-      const fileName = String(file?.file_name || '').toLowerCase();
-      return classification.includes('engineering_report') || fileName.includes('engineer');
+  // ── Aggressive file-based resolution ──
+  // Search claim files in priority tiers, preferring files with the most extracted text.
+  const allFiles = Array.isArray(params.fullClaimFiles) ? params.fullClaimFiles : [];
+
+  // Tier 1: classified as engineering_report
+  // Tier 2: filename contains engineer/engineering
+  // Tier 3: filename contains 'full report' or 'report' (common for Envista / third-party reports)
+  const isEngineerFile = (file: any): { match: boolean; tier: number } => {
+    const classification = String(file?.document_classification || '').toLowerCase();
+    const fileName = String(file?.file_name || '').toLowerCase();
+    if (classification.includes('engineering_report')) return { match: true, tier: 1 };
+    if (fileName.includes('engineer')) return { match: true, tier: 2 };
+    if (fileName.includes('full report')) return { match: true, tier: 3 };
+    // Only match generic 'report' if it looks like a PDF report (not photos, contracts, etc.)
+    if (fileName.includes('report') && (fileName.endsWith('.pdf') || fileName.endsWith('.doc') || fileName.endsWith('.docx'))) return { match: true, tier: 4 };
+    return { match: false, tier: 99 };
+  };
+
+  const candidateFiles = allFiles
+    .map((file: any) => {
+      const check = isEngineerFile(file);
+      const textLen = String(file?.extracted_text || '').trim().length;
+      return { file, tier: check.tier, matched: check.match, textLen };
     })
-    .map((file: any) => String(file?.extracted_text || '').trim())
-    .filter(Boolean)
-    .join('\n\n')
-    .trim();
+    .filter((c) => c.matched && c.textLen > 0)
+    // Sort by tier first (lower = better), then by text length descending (prefer longest text)
+    .sort((a, b) => a.tier - b.tier || b.textLen - a.textLen);
+
+  const bestFileCandidate = candidateFiles.length > 0 ? candidateFiles[0] : null;
+  const fileDerivedText = bestFileCandidate
+    ? String(bestFileCandidate.file.extracted_text || '').trim()
+    : '';
+
+  if (bestFileCandidate) {
+    console.log(`[darwin][resolveEngineerSource] Best file candidate: "${bestFileCandidate.file.file_name}" (tier=${bestFileCandidate.tier}, classification="${bestFileCandidate.file.document_classification}", textLen=${bestFileCandidate.textLen})`);
+    if (candidateFiles.length > 1) {
+      console.log(`[darwin][resolveEngineerSource] ${candidateFiles.length} total candidates: ${candidateFiles.map(c => `"${c.file.file_name}"(tier=${c.tier},len=${c.textLen})`).join(', ')}`);
+    }
+  } else {
+    const allWithText = allFiles.filter((f: any) => String(f?.extracted_text || '').trim().length > 500);
+    console.log(`[darwin][resolveEngineerSource] No engineer file candidates found. Files with text>500: ${allWithText.length}. All files: ${allFiles.map((f: any) => `"${f.file_name}"(cls=${f.document_classification},len=${String(f?.extracted_text||'').trim().length})`).join(', ')}`);
+  }
 
   const additionalContextText = String(
     params.additionalContext?.userContext || params.additionalContext?.customPrompt || ''
   ).trim();
 
-  if (explicitPdfText) {
+  // Priority: explicit PDF text > uploaded engineer text > file-derived text > content > context
+  if (explicitPdfText && explicitPdfText.length >= 500) {
     return {
       text: explicitPdfText,
       sourceOrigin: 'pdf_extracted_text',
@@ -351,7 +384,7 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
     };
   }
 
-  if (uploadedEngineerText) {
+  if (uploadedEngineerText && uploadedEngineerText.length >= 500) {
     return {
       text: uploadedEngineerText,
       sourceOrigin: 'uploaded_engineer_report_text',
@@ -359,12 +392,23 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
     };
   }
 
-  if (fileDerivedText) {
+  if (fileDerivedText && fileDerivedText.length >= 500) {
     return {
       text: fileDerivedText,
       sourceOrigin: 'file_extracted_text',
       usedEngineerReportText: true,
     };
+  }
+
+  // Fallback: if explicit PDF or uploaded text exists but is short, still use it
+  if (explicitPdfText) {
+    return { text: explicitPdfText, sourceOrigin: 'pdf_extracted_text', usedEngineerReportText: true };
+  }
+  if (uploadedEngineerText) {
+    return { text: uploadedEngineerText, sourceOrigin: 'uploaded_engineer_report_text', usedEngineerReportText: true };
+  }
+  if (fileDerivedText) {
+    return { text: fileDerivedText, sourceOrigin: 'file_extracted_text', usedEngineerReportText: true };
   }
 
   if (directContent) {
