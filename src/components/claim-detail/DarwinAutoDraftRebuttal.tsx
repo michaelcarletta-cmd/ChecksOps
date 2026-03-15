@@ -300,8 +300,11 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
         throw new Error(`${data.error}${violationText}`.trim());
       }
 
-      if (data?.result && typeof data.result === "string") {
-        setRebuttal(data.result);
+      if (!data?.result || typeof data.result !== "string") {
+        throw new Error("No rebuttal returned. The response was blocked before delivery.");
+      }
+
+      setRebuttal(data.result);
         setEditableRebuttal(data.result);
         
         // Store watchdog results for display
