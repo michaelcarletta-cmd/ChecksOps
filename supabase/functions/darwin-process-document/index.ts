@@ -243,7 +243,18 @@ Deno.serve(async (req) => {
           JSON.stringify({ 
             success: true, 
             message: 'File already processed',
-            classification: file.document_classification 
+            classification: file.document_classification,
+            document_type: file.document_type || null,
+            document_subtype: file.document_subtype || null,
+            ready_for_analysis: file.ready_for_analysis ?? false,
+            ready_reason: file.ready_for_analysis ? 'ready' : 'previously_blocked',
+            text_quality_status: file.text_quality_status || null,
+            intelligence: {
+              attempted: false,
+              written: false,
+              skipped_reason: 'already_processed',
+              error: null,
+            },
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
