@@ -81,6 +81,7 @@ const GENERATION_RULES = [
   'Explicitly state why partial repair is not feasible if supported',
   'Explicitly identify missing proof if evidence is incomplete',
   'Identify missing proof items such as weather report, ITEL/manufacturer confirmation, code citation, repairability opinion, or missing elevation photos',
+  'Classify evidence gaps as Critical (must cure before submission), Helpful (strengthens case significantly), or Optional (nice-to-have support) based on their impact on proving causation, coverage, scope, or amount',
   'Use headings and subheadings for clear structure',
   'Include a formal demand paragraph with specific dollar amounts',
   'State what evidence supports each section',
