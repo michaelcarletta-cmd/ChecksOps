@@ -90,7 +90,6 @@ type DarwinWorkspaceKey =
   | "package-building"
   | "regulatory-compliance"
   | "contents-loss"
-  | "timeline-history"
   | "automation";
 
 interface DarwinWorkspaceSection {
@@ -138,12 +137,6 @@ const workspaceSections: DarwinWorkspaceSection[] = [
     icon: Calculator,
   },
   {
-    key: "timeline-history",
-    title: "Timeline & History",
-    description: "Visual and document-driven timelines",
-    icon: Clock,
-  },
-  {
     key: "automation",
     title: "Automation Settings",
     description: "Configure autonomous Darwin workflows",
@@ -154,7 +147,6 @@ const workspaceSections: DarwinWorkspaceSection[] = [
 const sectionToWorkspace: Record<string, DarwinWorkspaceKey> = {
   rebuttals: "rebuttals",
   "document-analysis": "document-analysis",
-  timeline: "timeline-history",
 };
 
 // Map analysis types to readable names and scroll targets
@@ -519,13 +511,6 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             <DarwinLossOfUseCalculator claimId={claimId} claim={claim} />
             <DarwinHomeInventoryBuilder claimId={claimId} claim={claim} />
             <DarwinHiddenLossDetective claimId={claimId} claim={claim} />
-          </>
-        );
-      case "timeline-history":
-        return (
-          <>
-            <DarwinHealthCheck claimId={claimId} claim={claim} />
-            <DarwinDocumentTimeline claimId={claimId} claim={claim} />
           </>
         );
       case "automation":
