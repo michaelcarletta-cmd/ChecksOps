@@ -502,7 +502,7 @@ Deno.serve(async (req) => {
     <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Photo Documentation</w:t></w:r></w:p>
     <w:p><w:r><w:rPr><w:i/><w:color w:val="666666"/></w:rPr><w:t>Photos could not be embedded due to file size limitations. Please refer to the Photos tab in the application for full resolution images.</w:t></w:r></w:p>
     `}
-    <w:sectPr>${headerLogoBase64 ? '<w:headerReference w:type="default" r:id="rId2"/>' : ''}<w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+    <w:sectPr>${showHeader ? '<w:headerReference w:type="default" r:id="rId2"/>' : ''}<w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
   </w:body>
 </w:document>`);
 
