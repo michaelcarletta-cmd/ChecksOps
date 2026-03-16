@@ -435,7 +435,8 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
           reportTitle: `Demand Package - ${claim.policyholder_name || 'Claim'} - ${format(new Date(), 'yyyy-MM-dd')}`,
           reportType: 'demand_package',
           companyBranding,
-          includeLogoHeader: true
+          includeLogoHeader: true,
+          headerLogoUrl: companyBranding?.letterhead_url || companyBranding?.logo_url || null,
         }
       });
 
