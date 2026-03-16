@@ -52,6 +52,7 @@ export function useCanonicalTimeline(claimId: string) {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    console.log(`[useCanonicalTimeline] load() called for claim=${claimId}`);
     setLoading(true);
     setError(null);
     try {
@@ -60,6 +61,7 @@ export function useCanonicalTimeline(claimId: string) {
       });
       if (fnErr) throw fnErr;
       const payload = data as CanonicalTimelinePayload;
+      console.log(`[useCanonicalTimeline] Received ${payload.events?.length ?? 0} events, summary:`, payload.summary);
       setEvents(payload.events || []);
       setSummary(payload.summary || null);
       setClaim(payload.claim || null);
