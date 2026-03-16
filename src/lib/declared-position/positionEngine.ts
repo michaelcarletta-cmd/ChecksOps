@@ -23,6 +23,35 @@ function weakPhrase(value: string) {
   return weakPatterns.some((p) => p.test(value));
 }
 
+/**
+ * Tokenize a text into lowercased, cleaned tokens for concept matching.
+ */
+function tokenize(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((t) => t.length > 2)
+  );
+}
+
+/**
+ * Calculate concept/token coverage between a declared field and generated output.
+ * Returns a ratio 0-1 of how many declared concept tokens appear in the output.
+ */
+function conceptCoverage(declaredField: string, outputText: string): number {
+  const declaredTokens = tokenize(declaredField);
+  if (declaredTokens.size === 0) return 1;
+
+  const outputTokens = tokenize(outputText);
+  let matched = 0;
+  for (const token of declaredTokens) {
+    if (outputTokens.has(token)) matched++;
+  }
+  return matched / declaredTokens.size;
+}
+
 export function buildMasterPositionStatement(
   position: Partial<DarwinDeclaredPosition>
 ): string | null {
@@ -170,34 +199,54 @@ export function scoreDeclaredPosition(
   return { score, label, driftRisk, reasons };
 }
 
+/**
+ * Required section headers in carrier-facing output.
+ */
+const REQUIRED_OUTPUT_SECTIONS = [
+  "Cause of Loss",
+  "Coverage Analysis",
+  "Carrier Error",
+  "Decisive Contradiction",
+  "Requested Remedy",
+];
+
+/**
+ * Minimum concept/token coverage ratio to consider a field adequately represented.
+ */
+const MIN_CONCEPT_COVERAGE = 0.35;
+
 export function detectOutputDrift(
   position: Partial<DarwinDeclaredPosition>,
   outputText: string
 ): OutputDriftResult {
   const reasons: string[] = [];
-  const text = outputText.toLowerCase();
+  const textLower = outputText.toLowerCase();
 
-  const checks: Array<[string, string | undefined | null]> = [
-    ["loss mechanism", position.primary_loss_mechanism],
-    ["coverage trigger", position.coverage_trigger_theory],
-    ["carrier failure", position.specific_carrier_failure],
-    ["requested remedy", position.requested_remedy],
-  ];
-
-  for (const [label, value] of checks) {
-    if (value && value.trim().length > 0) {
-      const snippet = value.trim().slice(0, 30).toLowerCase();
-      if (!text.includes(snippet)) {
-        reasons.push(`Generated output may drift from declared ${label}`);
-      }
+  // Check required section presence
+  for (const section of REQUIRED_OUTPUT_SECTIONS) {
+    if (!textLower.includes(section.toLowerCase())) {
+      reasons.push(`Output missing required section: "${section}"`);
     }
   }
 
-  if (
-    position.decisive_contradiction &&
-    !text.includes(position.decisive_contradiction.trim().slice(0, 30).toLowerCase())
-  ) {
-    reasons.push("Generated output omits decisive contradiction");
+  // Check concept/token coverage for each declared field
+  const coverageChecks: Array<[string, string | undefined | null]> = [
+    ["primary loss mechanism", position.primary_loss_mechanism],
+    ["coverage trigger theory", position.coverage_trigger_theory],
+    ["specific carrier failure", position.specific_carrier_failure],
+    ["decisive contradiction", position.decisive_contradiction],
+    ["requested remedy", position.requested_remedy],
+  ];
+
+  for (const [label, value] of coverageChecks) {
+    if (value && value.trim().length > 0) {
+      const coverage = conceptCoverage(value, outputText);
+      if (coverage < MIN_CONCEPT_COVERAGE) {
+        reasons.push(
+          `Generated output may drift from declared ${label} (concept coverage: ${Math.round(coverage * 100)}%)`
+        );
+      }
+    }
   }
 
   return {

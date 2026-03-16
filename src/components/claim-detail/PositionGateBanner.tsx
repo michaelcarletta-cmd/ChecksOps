@@ -61,5 +61,4 @@ export function PositionGateBanner({
   );
 }
 
-// Keep named export for backwards compat
-export { PositionGateBanner as default };
+export default PositionGateBanner;

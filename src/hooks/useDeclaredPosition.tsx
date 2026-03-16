@@ -34,6 +34,26 @@ const emptyPosition = (claimId: string): DarwinDeclaredPosition => ({
   provisional_reason: null,
 });
 
+async function writeAuditLog(
+  claimId: string,
+  action: string,
+  beforeJson: any,
+  afterJson: any
+) {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    await supabase.from("darwin_declared_position_audit_logs" as any).insert({
+      claim_id: claimId,
+      user_id: userData.user?.id ?? null,
+      action,
+      before_json: beforeJson ? JSON.parse(JSON.stringify(beforeJson)) : null,
+      after_json: afterJson ? JSON.parse(JSON.stringify(afterJson)) : null,
+    } as any);
+  } catch (err) {
+    console.error("Audit log write failed:", err);
+  }
+}
+
 export function useDeclaredPosition(claimId?: string) {
   const [position, setPosition] = useState<DarwinDeclaredPosition | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,6 +90,7 @@ export function useDeclaredPosition(claimId?: string) {
       if (!claimId) return { error: "Missing claimId" };
 
       const current = position ?? emptyPosition(claimId);
+      const isNew = !position?.id;
       const merged: DarwinDeclaredPosition = { ...current, ...updates };
 
       // Auto-compute master statement and scoring
@@ -79,11 +100,11 @@ export function useDeclaredPosition(claimId?: string) {
       merged.position_strength_label = scored.label;
       merged.drift_risk = scored.driftRisk;
 
-      // Sync legacy fields for backwards compat
-      merged.primary_cause_of_loss = merged.observed_damage_condition || merged.primary_cause_of_loss || null;
-      merged.primary_coverage_theory = merged.coverage_trigger_theory || merged.primary_coverage_theory || null;
-      merged.primary_carrier_error = merged.specific_carrier_failure || merged.primary_carrier_error || null;
-      merged.carrier_dependency_statement = merged.decisive_contradiction || merged.carrier_dependency_statement || null;
+      // Legacy field mapping (new → old for backwards compat)
+      merged.primary_cause_of_loss = merged.primary_loss_mechanism || null;
+      merged.primary_coverage_theory = merged.coverage_trigger_theory || null;
+      merged.primary_carrier_error = merged.specific_carrier_failure || null;
+      merged.carrier_dependency_statement = merged.decisive_contradiction || null;
       merged.position_locked = merged.lock_status !== "draft";
       merged.confidence_level = merged.lock_status === "litigation_grade" ? "high" : merged.lock_status === "strategic_lock" ? "high" : "medium";
 
@@ -120,38 +141,43 @@ export function useDeclaredPosition(claimId?: string) {
         updated_at: new Date().toISOString(),
       };
 
-      if (!position?.id) {
+      if (isNew) {
         payload.created_by = userData.user?.id;
       }
 
+      let data: any;
+      let error: any;
+
       if (position?.id) {
-        const { data, error } = await supabase
+        const result = await supabase
           .from("darwin_declared_positions")
           .update(payload)
           .eq("id", position.id)
           .select()
           .single();
-
-        if (error) {
-          toast({ title: "Save failed", description: error.message, variant: "destructive" });
-          return { error: error.message };
-        }
-        setPosition(data as unknown as DarwinDeclaredPosition);
-        return { data, error: null };
+        data = result.data;
+        error = result.error;
       } else {
-        const { data, error } = await supabase
+        const result = await supabase
           .from("darwin_declared_positions")
           .insert(payload)
           .select()
           .single();
-
-        if (error) {
-          toast({ title: "Save failed", description: error.message, variant: "destructive" });
-          return { error: error.message };
-        }
-        setPosition(data as unknown as DarwinDeclaredPosition);
-        return { data, error: null };
+        data = result.data;
+        error = result.error;
       }
+
+      if (error) {
+        toast({ title: "Save failed", description: error.message, variant: "destructive" });
+        return { error: error.message };
+      }
+
+      // Write audit log
+      const auditAction = isNew ? "created" : "updated";
+      writeAuditLog(claimId, auditAction, isNew ? null : current, data);
+
+      setPosition(data as unknown as DarwinDeclaredPosition);
+      return { data, error: null };
     },
     [claimId, position, toast]
   );
@@ -169,8 +195,12 @@ export function useDeclaredPosition(claimId?: string) {
         return { error: msg, validation };
       }
 
+      const previousLockStatus = current.lock_status;
       const result = await savePosition({ lock_status: targetLock });
+
       if (!result.error) {
+        // Write lock status change audit
+        writeAuditLog(claimId, "lock_status_changed", { lock_status: previousLockStatus }, { lock_status: targetLock });
         toast({
           title: targetLock === "litigation_grade" ? "Litigation Grade Locked" : "Strategic Position Locked",
           description: "Declared position is now locked for carrier-facing outputs.",
@@ -182,12 +212,14 @@ export function useDeclaredPosition(claimId?: string) {
   );
 
   const unlockPosition = useCallback(async () => {
+    const previousLockStatus = position?.lock_status;
     const result = await savePosition({ lock_status: "draft" });
-    if (!result.error) {
+    if (!result.error && claimId) {
+      writeAuditLog(claimId, "unlocked", { lock_status: previousLockStatus }, { lock_status: "draft" });
       toast({ title: "Position unlocked", description: "Reverted to draft. You can now edit." });
     }
     return result;
-  }, [savePosition, toast]);
+  }, [savePosition, toast, claimId, position]);
 
   const derived = useMemo(() => {
     const p = position;
