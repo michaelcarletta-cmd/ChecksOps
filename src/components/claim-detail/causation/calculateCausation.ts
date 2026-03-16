@@ -163,7 +163,7 @@ export function calculateCausation(formData: CausationFormData): CausationResult
   return {
     decision,
     decisionLabel,
-    counterfactualQuestion: buildCounterfactualQuestion(perilLabel, damageText),
+    counterfactualQuestion: buildCounterfactualQuestion(formData.perilTested, formData.damageTypes),
     directAnswer,
     conclusion,
     reasoningSummary,
