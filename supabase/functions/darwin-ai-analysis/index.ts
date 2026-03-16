@@ -3529,13 +3529,23 @@ interface AnalysisRequest {
   pdfFileName?: string;
   pdfFilePaths?: Array<{ path: string; name?: string; folder?: string }>;
   pdfContents?: Array<{ name: string; content: string; folder?: string }>;
+  photoContents?: Array<{ name: string; content: string; category: string; description: string }>;
   additionalContext?: any;
+  generationConfig?: {
+    format?: string;
+    audience?: string;
+    tone?: string;
+    objective?: string;
+    requiredSections?: string[];
+    rules?: string[];
+  };
+  strategyPreset?: string;
   claim?: any;
   contextData?: any;
   darwinNotes?: string;
   claimFactsPack?: ClaimFactsPack;
-  enableEvidenceIndex?: boolean; // default true for strategic types - build or use ClaimFactsPack
-  enableDismantler?: boolean; // default true - run carrierDismantler post-step
+  enableEvidenceIndex?: boolean;
+  enableDismantler?: boolean;
 }
 
 interface CarrierDismantlerMiddlewareContext {
