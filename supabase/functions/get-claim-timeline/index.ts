@@ -579,6 +579,8 @@ Deno.serve(async (req) => {
       rebuttal_candidates: merged.filter(e => e.supports_rebuttal).length,
     };
 
+    console.log(`[get-claim-timeline] claim=${claimId} returning ${merged.length} events (verified=${summary.verified_events}, doc_backed=${summary.document_backed_events}, manual=${summary.manual_events})`);
+
     return new Response(
       JSON.stringify({
         claimId,

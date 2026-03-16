@@ -252,6 +252,8 @@ export const DarwinDocumentTimeline = ({ claimId, claim }: DarwinDocumentTimelin
       });
 
       await loadClaimEvents();
+      console.log('[DarwinDocumentTimeline] Generate complete, hard-reloading canonical timeline');
+      await reloadCanonical();
       toast.success(`Timeline built from ${claimEvents.length} events + ${filesWithText.length} docs`);
     } catch (err: any) {
       console.error("Timeline generation error:", err);
