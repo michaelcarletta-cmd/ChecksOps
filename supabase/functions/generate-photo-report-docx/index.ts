@@ -139,7 +139,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { reportContent, claimId, reportTitle, reportType, photoUrls, weatherData, companyBranding, includeLogoHeader } = await req.json();
+    const { reportContent, claimId, reportTitle, reportType, photoUrls, weatherData, companyBranding, includeLogoHeader, headerLogoUrl } = await req.json();
 
     if (!reportContent) {
       return new Response(
@@ -206,13 +206,14 @@ Deno.serve(async (req) => {
     const zip = new PizZip();
     
     // Check if we should add a header with logo
-    const hasLogoHeader = includeLogoHeader && branding?.letterhead_url;
+    const logoUrl = headerLogoUrl || branding?.letterhead_url || branding?.logo_url || null;
+    const hasLogoHeader = includeLogoHeader && logoUrl;
     let headerLogoBase64 = "";
     let headerLogoExtension = "png";
     
     if (hasLogoHeader) {
       try {
-        const logoResponse = await fetch(branding.letterhead_url);
+        const logoResponse = await fetch(logoUrl);
         if (logoResponse.ok) {
           const logoBuffer = await logoResponse.arrayBuffer();
           // Only include if under 500KB
@@ -240,7 +241,8 @@ Deno.serve(async (req) => {
       return `<Default Extension="${ext}" ContentType="${mimeType}"/>`;
     }).join("\n  ");
 
-    // [Content_Types].xml - add header if we have logo
+    // [Content_Types].xml - add header when branding is available
+    const showHeader = includeLogoHeader !== false;
     zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -248,7 +250,7 @@ Deno.serve(async (req) => {
   ${contentTypesExtensions}
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
   <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
-  ${headerLogoBase64 ? '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' : ''}
+  ${showHeader ? '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' : ''}
 </Types>`);
     
     // _rels/.rels
@@ -266,7 +268,7 @@ Deno.serve(async (req) => {
     zip.file("word/_rels/document.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-  ${headerLogoBase64 ? '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>' : ''}
+  ${showHeader ? '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>' : ''}
   ${imageRelationships}
 </Relationships>`);
 
@@ -298,12 +300,27 @@ Deno.serve(async (req) => {
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/header_logo.${headerLogoExtension}"/>
 </Relationships>`);
+    }
+    
+    // Build header XML — logo + contact line, or text fallback
+    if (showHeader) {
+      // Logo: ~220px wide x 70px tall → 2.29in x 0.73in in EMUs
+      const logoWidth = 2095500;
+      const logoHeight = 666750;
       
-      // Create header XML with logo - logo width 2 inches, height proportional
-      const logoWidth = 1828800; // 2 inches in EMUs
-      const logoHeight = 457200; // 0.5 inches in EMUs (adjust for your logo aspect ratio)
+      // Contact line under logo/name
+      const escHeader = (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const contactParts = [branding?.company_phone, branding?.company_email].filter(Boolean);
+      const contactLine = contactParts.length > 0 ? contactParts.join('  •  ') : '';
+      const contactParagraph = contactLine ? `
+  <w:p>
+    <w:pPr><w:jc w:val="center"/></w:pPr>
+    <w:r><w:rPr><w:sz w:val="18"/><w:color w:val="666666"/></w:rPr><w:t>${escHeader(contactLine)}</w:t></w:r>
+  </w:p>` : '';
       
-      zip.file("word/header1.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      if (headerLogoBase64) {
+        // Logo header with contact line
+        zip.file("word/header1.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <w:p>
     <w:pPr><w:jc w:val="center"/></w:pPr>
@@ -336,8 +353,18 @@ Deno.serve(async (req) => {
         </wp:inline>
       </w:drawing>
     </w:r>
-  </w:p>
+  </w:p>${contactParagraph}
 </w:hdr>`);
+      } else {
+        // Text-only fallback header — company name bold + contact line
+        zip.file("word/header1.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:p>
+    <w:pPr><w:jc w:val="center"/></w:pPr>
+    <w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t>${escHeader(branding?.company_name || 'Freedom Adjustment')}</w:t></w:r>
+  </w:p>${contactParagraph}
+</w:hdr>`);
+      }
     }
     
     // word/styles.xml
@@ -475,7 +502,7 @@ Deno.serve(async (req) => {
     <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Photo Documentation</w:t></w:r></w:p>
     <w:p><w:r><w:rPr><w:i/><w:color w:val="666666"/></w:rPr><w:t>Photos could not be embedded due to file size limitations. Please refer to the Photos tab in the application for full resolution images.</w:t></w:r></w:p>
     `}
-    <w:sectPr>${headerLogoBase64 ? '<w:headerReference w:type="default" r:id="rId2"/>' : ''}<w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+    <w:sectPr>${showHeader ? '<w:headerReference w:type="default" r:id="rId2"/>' : ''}<w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
   </w:body>
 </w:document>`);
 
