@@ -147,7 +147,6 @@ const workspaceSections: DarwinWorkspaceSection[] = [
 const sectionToWorkspace: Record<string, DarwinWorkspaceKey> = {
   rebuttals: "rebuttals",
   "document-analysis": "document-analysis",
-  timeline: "timeline-history",
 };
 
 // Map analysis types to readable names and scroll targets
