@@ -106,6 +106,20 @@ export const DarwinHomeInventoryBuilder = ({ claimId, claim }: DarwinHomeInvento
       return;
     }
 
+    // Duplicate detection: same room + item name (case-insensitive)
+    const duplicate = items.find(
+      (i) =>
+        i.room_name.toLowerCase() === formData.room_name.toLowerCase() &&
+        i.item_name.toLowerCase() === formData.item_name.toLowerCase()
+    );
+    if (duplicate) {
+      const confirmed = window.confirm(
+        `Possible duplicate: "${formData.item_name}" in "${formData.room_name}" already exists in the inventory.\n\nDo you still want to add it?`
+      );
+      if (!confirmed) return;
+      toast.warning("Duplicate item added — please verify");
+    }
+
     const { data: userData } = await supabase.auth.getUser();
 
     const { error } = await supabase.from("claim_home_inventory").insert({

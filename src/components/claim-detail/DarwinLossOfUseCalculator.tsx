@@ -126,6 +126,23 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
       return;
     }
 
+    // Duplicate detection: same category + date + amount
+    const amt = parseFloat(formData.amount);
+    const duplicate = expenses.find(
+      (e) =>
+        e.expense_category === formData.expense_category &&
+        e.expense_date === formData.expense_date &&
+        Math.abs(e.amount - amt) < 0.01
+    );
+    if (duplicate) {
+      const vendorHint = duplicate.vendor_name ? ` at ${duplicate.vendor_name}` : "";
+      const confirmed = window.confirm(
+        `Possible duplicate: A ${formData.expense_category} expense of $${amt.toFixed(2)} on ${formData.expense_date}${vendorHint} already exists.\n\nDo you still want to add this expense?`
+      );
+      if (!confirmed) return;
+      toast.warning("Duplicate expense added — please verify");
+    }
+
     const { data: userData } = await supabase.auth.getUser();
 
     const { error } = await supabase.from("claim_loss_of_use_expenses").insert({
