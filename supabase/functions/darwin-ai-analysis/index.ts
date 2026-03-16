@@ -9338,7 +9338,6 @@ Return the full revised ${docLabel} with the requested changes applied:`;
       const contentParts: any[] = [];
       
       // Add each PDF as an image_url (Gemini will process PDFs this way)
-      // Limit to 5 PDFs for systematic_dismantling to allow more cross-referencing
       const maxPdfs = analysisType === 'systematic_dismantling' ? 5 : 3;
       for (const pdf of pdfContents.slice(0, maxPdfs)) {
         contentParts.push({
@@ -9347,11 +9346,35 @@ Return the full revised ${docLabel} with the requested changes applied:`;
             url: `data:application/pdf;base64,${pdf.content}`
           }
         });
-        // Add document separator for cross-referencing
         contentParts.push({
           type: 'text',
           text: `[Above is document: ${pdf.name}${pdf.folder ? ` (from folder: ${pdf.folder})` : ''}]`
         });
+      }
+
+      // Add photo contents as images for visual analysis (demand_package only)
+      if (analysisType === 'demand_package' && photoContents && photoContents.length > 0) {
+        const maxPhotos = 15; // Limit photos to avoid payload size issues
+        contentParts.push({
+          type: 'text',
+          text: `\n\n--- PHOTO EVIDENCE (${Math.min(photoContents.length, maxPhotos)} of ${photoContents.length} photos) ---\nAnalyze each photo for visible damage, material conditions, and evidence supporting the claim.\n`
+        });
+        for (const photo of photoContents.slice(0, maxPhotos)) {
+          // Detect mime type from file extension
+          const ext = photo.name.toLowerCase().split('.').pop() || 'jpeg';
+          const mimeMap: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', gif: 'image/gif' };
+          const mime = mimeMap[ext] || 'image/jpeg';
+          contentParts.push({
+            type: 'image_url',
+            image_url: {
+              url: `data:${mime};base64,${photo.content}`
+            }
+          });
+          contentParts.push({
+            type: 'text',
+            text: `[Photo: ${photo.name} | Category: ${photo.category}${photo.description ? ` | Description: ${photo.description}` : ''}]`
+          });
+        }
       }
       
       // Add the text prompt last
@@ -9365,7 +9388,7 @@ Return the full revised ${docLabel} with the requested changes applied:`;
         { role: 'user', content: contentParts }
       ];
       
-      console.log(`${analysisType} with ${pdfContents.length} PDFs (processing ${Math.min(pdfContents.length, maxPdfs)})`);
+      console.log(`${analysisType} with ${pdfContents.length} PDFs (processing ${Math.min(pdfContents.length, maxPdfs)})${photoContents ? `, ${photoContents.length} photos` : ''}`);
     } else if (analysisType === 'supplement' && !additionalContext?._useTextOnly && (additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf || pdfContent)) {
       // Supplement comparison with potentially two PDFs
       const contentParts: any[] = [];
