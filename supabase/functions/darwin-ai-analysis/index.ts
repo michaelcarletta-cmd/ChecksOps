@@ -6244,6 +6244,7 @@ ${genConfig.rules ? `\nMANDATORY RULES:\n${genConfig.rules.map((r: string) => `-
           repairability_matching: 'Core focus on why repair is infeasible: material discontinuation, manufacturer repair prohibitions, code compliance, system interdependency, uniform appearance, and pre-loss condition restoration.',
           code_upgrade: 'Emphasize building code upgrade requirements triggered by repair scope, IRC/IBC code sections, local amendments, permitting requirements, and why code upgrades are covered loss costs.',
           partial_denial_rebuttal: 'Focus on rebutting partial scope denial: prove all denied items are covered, causation for each denied item, inconsistency in carrier reasoning, and bad faith indicators for partial denial.',
+          coverage_trigger_dispute: 'Emphasize direct physical loss trigger language, ensuing loss doctrine, storm-created opening analysis, policy trigger interpretation. Prove the covered event initiated the loss chain. Address carrier burden when exclusion is asserted — carrier must prove exclusion applies after insured establishes prima facie covered loss. Focus on policy-trigger language (direct physical loss, sudden and accidental), ensuing loss provisions, and anti-concurrent causation clause interpretation under state law.',
         };
         const strategyEmphasis = STRATEGY_EMPHASIS[stratPreset] || STRATEGY_EMPHASIS.general_property;
 

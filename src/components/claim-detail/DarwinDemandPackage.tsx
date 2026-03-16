@@ -228,9 +228,23 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
     });
   };
 
+  const MAX_PDFS = 5;
+  const MAX_PHOTOS = 15;
+  const MAX_FILE_SIZE_MB = 12;
+
   const handleGenerate = async () => {
     if (selectedFiles.size === 0) {
       toast.error('Please select at least one evidence document');
+      return;
+    }
+
+    if (selectedFiles.size > MAX_PDFS) {
+      toast.error(`Please select at most ${MAX_PDFS} PDF documents to avoid payload size issues. You selected ${selectedFiles.size}.`);
+      return;
+    }
+
+    if (selectedPhotos.size > MAX_PHOTOS) {
+      toast.error(`Please select at most ${MAX_PHOTOS} photos. You selected ${selectedPhotos.size}.`);
       return;
     }
 
@@ -248,6 +262,12 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
           .download(file.file_path);
 
         if (data && !error) {
+          // Skip files larger than limit
+          if (data.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+            console.warn(`Skipping ${file.file_name} — exceeds ${MAX_FILE_SIZE_MB}MB limit (${(data.size / 1024 / 1024).toFixed(1)}MB)`);
+            toast.warning(`Skipped ${file.file_name} — too large (${(data.size / 1024 / 1024).toFixed(1)}MB)`);
+            continue;
+          }
           const base64 = await blobToBase64(data);
           fileContents.push({
             name: file.file_name,
@@ -267,6 +287,10 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
           .download(photo.file_path);
 
         if (data && !error) {
+          if (data.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+            console.warn(`Skipping photo ${photo.file_name} — exceeds ${MAX_FILE_SIZE_MB}MB`);
+            continue;
+          }
           const base64 = await blobToBase64(data);
           photoContents.push({
             name: photo.file_name,
@@ -321,14 +345,28 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
 
       if (error) throw error;
 
-      setGeneratedPackage(data.result);
+      // Robust result extraction — handles string or structured JSON
+      const resultText =
+        typeof data?.result === 'string'
+          ? data.result
+          : typeof data?.packageText === 'string'
+            ? data.packageText
+            : JSON.stringify(data, null, 2);
+
+      setGeneratedPackage(resultText);
       setLastPackageDate(new Date().toISOString());
 
       await supabase.from('darwin_analysis_results').insert({
         claim_id: claimId,
         analysis_type: 'demand_package',
-        result: data.result,
-        input_summary: `Documents: ${fileContents.length}, Photos: ${photoContents.length}, Strategy: ${strategyPreset}`
+        result: resultText,
+        input_summary: `Documents: ${fileContents.length}, Photos: ${photoContents.length}, Strategy: ${strategyPreset}`,
+        metadata: {
+          strategyPreset,
+          documentNames: fileContents.map(f => f.name),
+          photoNames: photoContents.map(p => p.name),
+          claimFacts,
+        }
       });
 
       toast.success('Demand package generated successfully');
