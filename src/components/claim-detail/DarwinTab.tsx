@@ -54,8 +54,8 @@ const ClaimTimeline = lazy(() => import("@/components/claim-detail/ClaimTimeline
 const ProofOfLossGenerator = lazy(() => import("@/components/claim-detail/ProofOfLossGenerator").then(m => ({ default: m.ProofOfLossGenerator })));
 const ClaimContextPipeline = lazy(() => import("@/components/claim-detail/ClaimContextPipeline").then(m => ({ default: m.ClaimContextPipeline })));
 const RecoverableDepreciationInvoice = lazy(() => import("@/components/claim-detail/RecoverableDepreciationInvoice").then(m => ({ default: m.RecoverableDepreciationInvoice })));
-const ClaimAutomationSettings = lazy(() => import("@/components/claim-detail/ClaimAutomationSettings").then(m => ({ default: m.ClaimAutomationSettings })));
 const ClaimAutonomySettings = lazy(() => import("@/components/claim-detail/ClaimAutonomySettings").then(m => ({ default: m.ClaimAutonomySettings })));
+const RecoverableDepreciationFollowUps = lazy(() => import("@/components/claim-detail/RecoverableDepreciationFollowUps").then(m => ({ default: m.RecoverableDepreciationFollowUps })));
 const DarwinButForCausation = lazy(() => import("@/components/claim-detail/DarwinButForCausation").then(m => ({ default: m.DarwinButForCausation })));
 const DarwinProximityPrecedents = lazy(() => import("@/components/claim-detail/DarwinProximityPrecedents").then(m => ({ default: m.DarwinProximityPrecedents })));
 const DarwinDeclaredPosition = lazy(() => import("@/components/claim-detail/DarwinDeclaredPosition").then(m => ({ default: m.DarwinDeclaredPosition })));
