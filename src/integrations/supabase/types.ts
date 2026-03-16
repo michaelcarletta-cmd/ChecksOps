@@ -4007,6 +4007,57 @@ export type Database = {
           },
         ]
       }
+      claim_normal_bills: {
+        Row: {
+          category: string
+          claim_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          label: string
+          monthly_amount: number
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          claim_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label: string
+          monthly_amount?: number
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          claim_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label?: string
+          monthly_amount?: number
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_normal_bills_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_normal_bills_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_outcome_events: {
         Row: {
           carrier: string
