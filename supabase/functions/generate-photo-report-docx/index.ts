@@ -139,7 +139,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { reportContent, claimId, reportTitle, reportType, photoUrls, weatherData, companyBranding, includeLogoHeader } = await req.json();
+    const { reportContent, claimId, reportTitle, reportType, photoUrls, weatherData, companyBranding, includeLogoHeader, headerLogoUrl } = await req.json();
 
     if (!reportContent) {
       return new Response(
