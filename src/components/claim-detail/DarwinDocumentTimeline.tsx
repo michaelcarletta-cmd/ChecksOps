@@ -94,21 +94,14 @@ export const DarwinDocumentTimeline = ({ claimId, claim }: DarwinDocumentTimelin
     : (textCoverage?.total === 0 ? 100 : null);
   const hasInsufficientText = coveragePct !== null && coveragePct < 30;
 
-  // Anchor event types - only these are used for timeline and strategic analysis
-  const ANCHOR_EVENT_TYPES = [
-    'fnol_received', 'acknowledgement_issued', 'ror_issued', 'denial_issued',
-    'inspection', 'payment_issued', 'estimate_issued', 'loss_event',
-    'document_received', 'engineer_report_issued', 'deadline',
-    'prior_loss_mentioned',
-  ];
-
   const loadClaimEvents = async () => {
-    const { data } = await supabase
+    console.log('[DarwinDocumentTimeline] loadClaimEvents() called for claim', claimId);
+    const { data, error } = await supabase
       .from('claim_events')
       .select('id, event_type, occurred_at, summary, date_source, date_confidence, doc_type')
       .eq('claim_id', claimId)
-      .in('event_type', ANCHOR_EVENT_TYPES)
       .order('occurred_at', { ascending: true });
+    console.log(`[DarwinDocumentTimeline] loadClaimEvents returned ${data?.length ?? 0} events, error:`, error);
     if (data) setClaimEvents(data as ClaimEvent[]);
   };
 
