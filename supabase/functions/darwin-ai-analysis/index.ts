@@ -6285,7 +6285,21 @@ IMPORTANT: The PDF documents and photos have been provided for you to analyze. R
 - Photo damage documentation and material conditions
 - Code requirements and manufacturer specifications
 - Any other relevant evidence
-- EVIDENCE GAPS: If evidence is missing or incomplete, explicitly identify what is missing (weather report, ITEL confirmation, code citation, repairability opinion, elevation photos, etc.)
+
+IMPORTANT: You must include a dedicated section titled "Counterfactual Causation Test."
+In that section:
+1. State the precise counterfactual question for this claim.
+2. Answer the question directly with Yes, No, or Indeterminate.
+3. Explain whether the observed damage would exist in the same form, extent, and timing absent the reported loss event.
+4. Identify the evidence supporting that answer.
+5. Identify competing explanations considered, including wear and tear, deterioration, foot traffic, installation defects, prior repairs, deferred maintenance, or other non-covered causes if relevant.
+6. Explain whether those competing explanations better account for the observed condition.
+7. If the evidence is insufficient to establish causation confidently, say so explicitly and identify the missing proof needed.
+
+IMPORTANT: EVIDENCE GAPS must be identified explicitly and classified as:
+- Critical
+- Helpful
+- Optional
 
 COMPANY INFORMATION FOR HEADER/SIGNATURE:
 Company: ${companyName}
