@@ -7,6 +7,8 @@ import { Loader2, Copy, Clock, RefreshCw, FileText, Calendar, AlertTriangle, Che
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useCanonicalTimeline } from "@/hooks/useCanonicalTimeline";
+import { TimelineExport } from "./TimelineExport";
 
 interface DarwinDocumentTimelineProps {
   claimId: string;
@@ -67,6 +69,7 @@ export const DarwinDocumentTimeline = ({ claimId, claim }: DarwinDocumentTimelin
   const [lastGenerated, setLastGenerated] = useState<Date | null>(null);
   const [claimEvents, setClaimEvents] = useState<ClaimEvent[]>([]);
   const [textCoverage, setTextCoverage] = useState<{ total: number; withText: number } | null>(null);
+  const { events: canonicalEvents } = useCanonicalTimeline(claimId);
 
   useEffect(() => {
     loadPreviousTimeline();
@@ -316,6 +319,7 @@ export const DarwinDocumentTimeline = ({ claimId, claim }: DarwinDocumentTimelin
           </div>
           {hasContent && (
             <div className="flex gap-2">
+              <TimelineExport events={canonicalEvents} claimNumber={claim?.claim_number} />
               <Button variant="outline" size="sm" onClick={rebuildTimeline} disabled={loading}>
                 <RefreshCw className={cn("h-4 w-4 mr-1", loading && "animate-spin")} />
                 Rebuild

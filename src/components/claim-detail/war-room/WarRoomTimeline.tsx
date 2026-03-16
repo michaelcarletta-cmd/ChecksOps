@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { cn } from "@/lib/utils";
+import { TimelineExport } from "@/components/claim-detail/TimelineExport";
 
 const EVENT_TYPES = [
   "inspection", "estimate", "payment", "denial", "supplement",
@@ -638,6 +639,7 @@ ${JSON.stringify(contradictions, null, 2)}`,
             </SelectContent>
           </Select>
           <AddEventDialog open={showAddDialog} onOpenChange={setShowAddDialog} onSubmit={handleAddEvent} />
+          <TimelineExport events={events} claimNumber={claim?.claim_number} />
         </div>
 
         <div className="flex items-center gap-3 text-[10px] text-muted-foreground">

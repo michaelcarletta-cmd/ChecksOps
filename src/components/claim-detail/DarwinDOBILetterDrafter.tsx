@@ -101,6 +101,28 @@ export const DarwinDOBILetterDrafter = ({ claimId, claim }: DarwinDOBILetterDraf
     const selectedRegs = regulations.filter(r => selectedRegulations.has(r.id));
 
     try {
+      // Fetch canonical timeline to provide verified chronology context
+      let timelineContext: any[] = [];
+      try {
+        const { data: tlData } = await supabase.functions.invoke("get-claim-timeline", {
+          body: { claimId },
+        });
+        if (tlData?.events) {
+          timelineContext = (tlData.events as any[])
+            .filter((e: any) => e.is_verified || e.supports_escalation || e.supports_rebuttal)
+            .slice(0, 60)
+            .map((e: any) => ({
+              date: e.occurred_at?.split("T")[0],
+              type: e.event_type,
+              summary: e.summary,
+              is_verified: e.is_verified,
+              date_source: e.date_source,
+              supports_escalation: e.supports_escalation,
+              supports_rebuttal: e.supports_rebuttal,
+            }));
+        }
+      } catch { /* timeline fetch is optional enhancement */ }
+
       const { data, error } = await supabase.functions.invoke("darwin-ai-analysis", {
         body: {
           analysisType: "dobi_letter",
@@ -116,6 +138,7 @@ export const DarwinDOBILetterDrafter = ({ claimId, claim }: DarwinDOBILetterDraf
             })),
             state: detectedState,
             userContext: additionalContext,
+            canonicalTimeline: timelineContext,
           },
         },
       });
