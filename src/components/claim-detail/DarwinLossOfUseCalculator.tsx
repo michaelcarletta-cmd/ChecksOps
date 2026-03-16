@@ -107,7 +107,56 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
 
   useEffect(() => {
     fetchExpenses();
+    fetchNormalBills();
   }, [claimId]);
+
+  const fetchNormalBills = async () => {
+    const { data, error } = await supabase
+      .from("claim_normal_bills")
+      .select("*")
+      .eq("claim_id", claimId);
+    if (!error) setNormalBills((data as any) || []);
+    setNormalBillsLoading(false);
+  };
+
+  const handleAddNormalBill = async () => {
+    if (!newBillCategory || !newBillAmount) {
+      toast.error("Select a category and enter an amount");
+      return;
+    }
+    const existing = normalBills.find(b => b.category === newBillCategory);
+    if (existing) {
+      toast.error("That category already exists — edit it instead");
+      return;
+    }
+    const catInfo = NORMAL_BILL_CATEGORIES.find(c => c.value === newBillCategory);
+    const { error } = await supabase.from("claim_normal_bills").insert({
+      claim_id: claimId,
+      category: newBillCategory,
+      label: newBillLabel || catInfo?.label || newBillCategory,
+      monthly_amount: parseFloat(newBillAmount),
+    } as any);
+    if (error) { toast.error("Failed to add"); console.error(error); }
+    else {
+      toast.success("Normal bill added");
+      setNewBillCategory("");
+      setNewBillAmount("");
+      setNewBillLabel("");
+      fetchNormalBills();
+    }
+  };
+
+  const handleUpdateNormalBill = async (id: string, amount: number) => {
+    const { error } = await supabase.from("claim_normal_bills").update({ monthly_amount: amount } as any).eq("id", id);
+    if (error) toast.error("Failed to update");
+    else { toast.success("Updated"); fetchNormalBills(); }
+  };
+
+  const handleDeleteNormalBill = async (id: string) => {
+    const { error } = await supabase.from("claim_normal_bills").delete().eq("id", id);
+    if (error) toast.error("Failed to delete");
+    else { toast.success("Removed"); fetchNormalBills(); }
+  };
 
   // Derive available months
   const availableMonths = useMemo(() => {
