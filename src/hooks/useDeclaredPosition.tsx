@@ -172,9 +172,25 @@ export function useDeclaredPosition(claimId?: string) {
         return { error: error.message };
       }
 
-      // Write audit log
-      const auditAction = isNew ? "created" : "updated";
-      writeAuditLog(claimId, auditAction, isNew ? null : current, data);
+      // Smart audit logging: avoid duplicate logs for lock-only changes
+      const beforeLock = (current as any)?.lock_status ?? null;
+      const afterLock = (data as any)?.lock_status ?? null;
+      const changedKeys = Object.keys(payload).filter((key) => {
+        const beforeVal = JSON.stringify((current as any)?.[key] ?? null);
+        const afterVal = JSON.stringify((data as any)?.[key] ?? null);
+        return beforeVal !== afterVal;
+      });
+      const lockOnlyChange =
+        changedKeys.length > 0 &&
+        changedKeys.every((key) => key === "lock_status" || key === "position_locked" || key === "confidence_level" || key === "updated_at");
+
+      if (isNew) {
+        writeAuditLog(claimId, "created", null, data);
+      } else if (beforeLock !== afterLock && lockOnlyChange) {
+        // do nothing here — let setLockStatus/unlockPosition write the specific audit event
+      } else {
+        writeAuditLog(claimId, "updated", current, data);
+      }
 
       setPosition(data as unknown as DarwinDeclaredPosition);
       return { data, error: null };
