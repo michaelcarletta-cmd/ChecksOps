@@ -33,6 +33,7 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
     policyholder_address: claim?.policyholder_address || "",
     policy_number: claim?.policy_number || "",
     loss_date: claim?.loss_date || "",
+    date_claim_filed: claim?.date_claim_filed || "",
     loss_type: claim?.loss_type || "",
     loss_type_id: claim?.loss_type_id || "",
     loss_description: claim?.loss_description || "",
