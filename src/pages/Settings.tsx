@@ -43,7 +43,7 @@ import { AuditLogSettings } from "@/components/settings/AuditLogSettings";
 import { useQuery } from "@tanstack/react-query";
 import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
 import { SignatureFieldTemplatesSettings } from "@/components/settings/SignatureFieldTemplatesSettings";
-import { CausationRubricSettings } from "@/components/settings/CausationRubricSettings";
+
 import { RDAutomationSettings } from "@/components/settings/RDAutomationSettings";
 import { OutlookConnectionSettings } from "@/components/settings/OutlookConnectionSettings";
 import { PhoneVerificationSettings } from "@/components/settings/PhoneVerificationSettings";
@@ -336,7 +336,7 @@ export default function Settings() {
           <TabsTrigger value="users" className="w-full md:w-auto justify-start text-base font-medium px-4">User Management</TabsTrigger>
           <TabsTrigger value="automations" className="w-full md:w-auto justify-start text-base font-medium px-4">Automations</TabsTrigger>
           <TabsTrigger value="ai-knowledge" className="w-full md:w-auto justify-start text-base font-medium px-4">AI Knowledge Base</TabsTrigger>
-          <TabsTrigger value="causation-rubric" className="w-full md:w-auto justify-start text-base font-medium px-4">Causation Rubric</TabsTrigger>
+          
           <TabsTrigger value="organization" className="w-full md:w-auto justify-start text-base font-medium px-4">Organization</TabsTrigger>
           <TabsTrigger value="import" className="w-full md:w-auto justify-start text-base font-medium px-4">Import Data</TabsTrigger>
           {isAdmin && (
@@ -604,9 +604,6 @@ export default function Settings() {
           <ImportSettings />
         </TabsContent>
 
-        <TabsContent value="causation-rubric" className="w-full">
-          <CausationRubricSettings />
-        </TabsContent>
 
         {isAdmin && (
           <TabsContent value="audit-logs" className="w-full">
