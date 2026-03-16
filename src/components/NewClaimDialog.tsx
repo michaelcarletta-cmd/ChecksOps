@@ -496,7 +496,7 @@ export function NewClaimDialog() {
       if (claim?.id) {
         await supabase
           .from("claim_automations")
-          .insert({
+          .insert([{
             claim_id: claim.id,
             is_enabled: true,
             autonomy_level: "semi_autonomous",
@@ -506,8 +506,8 @@ export function NewClaimDialog() {
               auto_send_sms: false,
               notify_client_on_updates: false,
             } as any,
-            darwin_source_mode: "passive",
-          });
+            darwin_source_mode: "passive" as const,
+          }]);
       }
 
       // Assign contractor if selected
