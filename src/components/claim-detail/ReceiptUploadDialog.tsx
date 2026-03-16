@@ -230,8 +230,9 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
           : catInfo?.label || editCategory,
         amount: totalValue,
         receipt_file_path: receiptFilePath,
+        receipt_file_name: receiptFile?.name || null,
         created_by: userData.user?.id,
-      });
+      } as any);
 
       if (error) throw error;
 

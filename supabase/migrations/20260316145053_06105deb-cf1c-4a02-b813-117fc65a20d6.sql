@@ -1,0 +1,1 @@
+ALTER TABLE public.claim_loss_of_use_expenses ADD COLUMN IF NOT EXISTS receipt_file_name text;
