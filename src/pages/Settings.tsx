@@ -43,7 +43,7 @@ import { AuditLogSettings } from "@/components/settings/AuditLogSettings";
 import { useQuery } from "@tanstack/react-query";
 import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
 import { SignatureFieldTemplatesSettings } from "@/components/settings/SignatureFieldTemplatesSettings";
-import { CausationRubricSettings } from "@/components/settings/CausationRubricSettings";
+
 import { RDAutomationSettings } from "@/components/settings/RDAutomationSettings";
 import { OutlookConnectionSettings } from "@/components/settings/OutlookConnectionSettings";
 import { PhoneVerificationSettings } from "@/components/settings/PhoneVerificationSettings";
