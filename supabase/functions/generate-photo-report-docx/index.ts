@@ -300,12 +300,27 @@ Deno.serve(async (req) => {
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/header_logo.${headerLogoExtension}"/>
 </Relationships>`);
+    }
+    
+    // Build header XML — logo + contact line, or text fallback
+    if (showHeader) {
+      // Logo: ~220px wide x 70px tall → 2.29in x 0.73in in EMUs
+      const logoWidth = 2095500;
+      const logoHeight = 666750;
       
-      // Create header XML with logo - logo width 2 inches, height proportional
-      const logoWidth = 1828800; // 2 inches in EMUs
-      const logoHeight = 457200; // 0.5 inches in EMUs (adjust for your logo aspect ratio)
+      // Contact line under logo/name
+      const escHeader = (str: string) => str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const contactParts = [branding?.company_phone, branding?.company_email].filter(Boolean);
+      const contactLine = contactParts.length > 0 ? contactParts.join('  •  ') : '';
+      const contactParagraph = contactLine ? `
+  <w:p>
+    <w:pPr><w:jc w:val="center"/></w:pPr>
+    <w:r><w:rPr><w:sz w:val="18"/><w:color w:val="666666"/></w:rPr><w:t>${escHeader(contactLine)}</w:t></w:r>
+  </w:p>` : '';
       
-      zip.file("word/header1.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      if (headerLogoBase64) {
+        // Logo header with contact line
+        zip.file("word/header1.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <w:p>
     <w:pPr><w:jc w:val="center"/></w:pPr>
@@ -338,8 +353,18 @@ Deno.serve(async (req) => {
         </wp:inline>
       </w:drawing>
     </w:r>
-  </w:p>
+  </w:p>${contactParagraph}
 </w:hdr>`);
+      } else {
+        // Text-only fallback header — company name bold + contact line
+        zip.file("word/header1.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:p>
+    <w:pPr><w:jc w:val="center"/></w:pPr>
+    <w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t>${escHeader(branding?.company_name || 'Freedom Adjustment')}</w:t></w:r>
+  </w:p>${contactParagraph}
+</w:hdr>`);
+      }
     }
     
     // word/styles.xml
