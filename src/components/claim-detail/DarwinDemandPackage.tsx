@@ -232,6 +232,7 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
   const MAX_PDFS = 5;
   const MAX_PHOTOS = 15;
   const MAX_FILE_SIZE_MB = 12;
+  const MAX_TOTAL_PAYLOAD_BYTES = 45 * 1024 * 1024;
 
   const handleGenerate = async () => {
     if (selectedFiles.size === 0) {
@@ -253,6 +254,8 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
     toast.info('Darwin is analyzing evidence, testing causation, and assembling the demand package.');
 
     try {
+      let cumulativeBytes = 0;
+
       // Download PDFs as base64
       const selectedFileData = files.filter(f => selectedFiles.has(f.id));
       const fileContents: { name: string; content: string; folder: string }[] = [];
@@ -263,12 +266,17 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
           .download(file.file_path);
 
         if (data && !error) {
-          // Skip files larger than limit
           if (data.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
             console.warn(`Skipping ${file.file_name} — exceeds ${MAX_FILE_SIZE_MB}MB limit (${(data.size / 1024 / 1024).toFixed(1)}MB)`);
             toast.warning(`Skipped ${file.file_name} — too large (${(data.size / 1024 / 1024).toFixed(1)}MB)`);
             continue;
           }
+          if (cumulativeBytes + data.size > MAX_TOTAL_PAYLOAD_BYTES) {
+            console.warn(`Skipping ${file.file_name} — would exceed ${MAX_TOTAL_PAYLOAD_BYTES / 1024 / 1024}MB total payload budget`);
+            toast.warning(`Skipped ${file.file_name} — total payload budget reached`);
+            continue;
+          }
+          cumulativeBytes += data.size;
           const base64 = await blobToBase64(data);
           fileContents.push({
             name: file.file_name,
@@ -292,6 +300,12 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
             console.warn(`Skipping photo ${photo.file_name} — exceeds ${MAX_FILE_SIZE_MB}MB`);
             continue;
           }
+          if (cumulativeBytes + data.size > MAX_TOTAL_PAYLOAD_BYTES) {
+            console.warn(`Skipping photo ${photo.file_name} — total payload budget reached`);
+            toast.warning(`Skipped photo ${photo.file_name} — total payload budget reached`);
+            continue;
+          }
+          cumulativeBytes += data.size;
           const base64 = await blobToBase64(data);
           photoContents.push({
             name: photo.file_name,
@@ -302,14 +316,18 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
         }
       }
 
-      const photoInfo = selectedPhotoData.map((p, i) => ({
-        number: i + 1,
-        name: p.file_name,
-        category: p.category || 'General',
-        description: p.description || ''
-      }));
+      // Build photoInfo and docInfo from *actually included* contents only
+      const includedPhotoNames = new Set(photoContents.map(p => p.name));
+      const photoInfo = selectedPhotoData
+        .filter(p => includedPhotoNames.has(p.file_name))
+        .map((p, i) => ({
+          number: i + 1,
+          name: p.file_name,
+          category: p.category || 'General',
+          description: p.description || ''
+        }));
 
-      console.log(`Generating demand package with ${fileContents.length} documents and ${photoContents.length} photos`);
+      console.log(`Generating demand package with ${fileContents.length} documents and ${photoContents.length} photos (${(cumulativeBytes / 1024 / 1024).toFixed(1)}MB total)`);
 
       const { data, error } = await supabase.functions.invoke('darwin-ai-analysis', {
         body: {
@@ -367,7 +385,7 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
           documentNames: fileContents.map(f => f.name),
           photoNames: photoContents.map(p => p.name),
           claimFacts,
-        }
+        } as any
       });
 
       toast.success('Demand package generated successfully');
