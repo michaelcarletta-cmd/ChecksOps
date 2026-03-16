@@ -512,11 +512,13 @@ function ExpenseTable({ expenses, categories, markAsSubmitted, markAsReimbursed,
                   </TableCell>
                   <TableCell>
                     {expense.receipt_file_name ? (
-                      <span className="text-xs text-muted-foreground truncate max-w-[120px] block" title={expense.receipt_file_name}>
+                      <span className="text-xs text-muted-foreground truncate max-w-[150px] block" title={expense.receipt_file_name}>
                         📄 {expense.receipt_file_name}
                       </span>
                     ) : expense.receipt_file_path ? (
-                      <span className="text-xs text-muted-foreground">📎 Attached</span>
+                      <span className="text-xs text-muted-foreground truncate max-w-[150px] block" title={expense.receipt_file_path.split('/').pop() || 'Attached'}>
+                        📄 {expense.receipt_file_path.split('/').pop() || 'Attached'}
+                      </span>
                     ) : (
                       <span className="text-xs text-muted-foreground opacity-50">—</span>
                     )}
