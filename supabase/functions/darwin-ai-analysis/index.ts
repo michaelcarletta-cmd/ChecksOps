@@ -6244,7 +6244,7 @@ ${genConfig.rules ? `\nMANDATORY RULES:\n${genConfig.rules.map((r: string) => `-
           repairability_matching: 'Core focus on why repair is infeasible: material discontinuation, manufacturer repair prohibitions, code compliance, system interdependency, uniform appearance, and pre-loss condition restoration.',
           code_upgrade: 'Emphasize building code upgrade requirements triggered by repair scope, IRC/IBC code sections, local amendments, permitting requirements, and why code upgrades are covered loss costs.',
           partial_denial_rebuttal: 'Focus on rebutting partial scope denial: prove all denied items are covered, causation for each denied item, inconsistency in carrier reasoning, and bad faith indicators for partial denial.',
-          coverage_trigger_dispute: 'Emphasize direct physical loss trigger language, ensuing loss doctrine, storm-created opening analysis, policy trigger interpretation. Prove the covered event initiated the loss chain. Address carrier burden when exclusion is asserted — carrier must prove exclusion applies after insured establishes prima facie covered loss. Focus on policy-trigger language (direct physical loss, sudden and accidental), ensuing loss provisions, and anti-concurrent causation clause interpretation under state law.',
+          coverage_trigger_dispute: 'Emphasize direct physical loss trigger language, ensuing loss doctrine, storm-created opening analysis, and policy trigger interpretation. Prove the covered event initiated the loss chain. Address carrier burden when exclusion is asserted — carrier must prove exclusion applies after the insured establishes a prima facie covered loss.',
         };
         const strategyEmphasis = STRATEGY_EMPHASIS[stratPreset] || STRATEGY_EMPHASIS.general_property;
 
@@ -6285,7 +6285,21 @@ IMPORTANT: The PDF documents and photos have been provided for you to analyze. R
 - Photo damage documentation and material conditions
 - Code requirements and manufacturer specifications
 - Any other relevant evidence
-- EVIDENCE GAPS: If evidence is missing or incomplete, explicitly identify what is missing (weather report, ITEL confirmation, code citation, repairability opinion, elevation photos, etc.)
+
+IMPORTANT: You must include a dedicated section titled "Counterfactual Causation Test."
+In that section:
+1. State the precise counterfactual question for this claim.
+2. Answer the question directly with Yes, No, or Indeterminate.
+3. Explain whether the observed damage would exist in the same form, extent, and timing absent the reported loss event.
+4. Identify the evidence supporting that answer.
+5. Identify competing explanations considered, including wear and tear, deterioration, foot traffic, installation defects, prior repairs, deferred maintenance, or other non-covered causes if relevant.
+6. Explain whether those competing explanations better account for the observed condition.
+7. If the evidence is insufficient to establish causation confidently, say so explicitly and identify the missing proof needed.
+
+IMPORTANT: EVIDENCE GAPS must be identified explicitly and classified as:
+- Critical
+- Helpful
+- Optional
 
 COMPANY INFORMATION FOR HEADER/SIGNATURE:
 Company: ${companyName}
@@ -9339,7 +9353,7 @@ Return the full revised ${docLabel} with the requested changes applied:`;
       const contentParts: any[] = [];
       
       // Add each PDF as an image_url (Gemini will process PDFs this way)
-      const maxPdfs = analysisType === 'systematic_dismantling' ? 5 : 3;
+      const maxPdfs = analysisType === 'systematic_dismantling' ? 5 : 5;
       for (const pdf of pdfContents.slice(0, maxPdfs)) {
         contentParts.push({
           type: 'image_url',
