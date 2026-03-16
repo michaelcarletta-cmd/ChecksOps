@@ -37,14 +37,14 @@ interface ClaimPhoto {
 }
 
 const STRATEGY_PRESETS: { value: string; label: string; description: string }[] = [
-  { value: "general_property", label: "General Property Loss", description: "Broad property damage demand" },
-  { value: "roof_wind_hail", label: "Roof Wind / Hail", description: "Wind and hail damage to roofing systems" },
-  { value: "interior_water", label: "Interior Water Damage", description: "Water intrusion and interior damage" },
-  { value: "engineer_rebuttal", label: "Engineer Rebuttal", description: "Rebutting carrier engineer reports" },
-  { value: "repairability_matching", label: "Repairability / Matching Dispute", description: "Arguing full replacement over repair" },
-  { value: "code_upgrade", label: "Code Upgrade Dispute", description: "Building code upgrade requirements" },
-  { value: "partial_denial_rebuttal", label: "Partial Denial Rebuttal", description: "Rebutting partial scope denials" },
-  { value: "coverage_trigger_dispute", label: "Coverage Trigger Dispute", description: "Direct physical loss, ensuing loss, storm-created opening, policy trigger language" },
+  { value: "general_property", label: "General Property Loss", description: "Balanced demand package across causation, scope, code, and cost." },
+  { value: "roof_wind_hail", label: "Roof Wind / Hail", description: "Emphasizes storm causation, HAAG, weather correlation, and repairability." },
+  { value: "interior_water", label: "Interior Water", description: "Emphasizes source, intrusion path, drying, secondary damage, and full scope." },
+  { value: "engineer_rebuttal", label: "Engineer Rebuttal", description: "Targets carrier engineer conclusions and selective inspection issues." },
+  { value: "repairability_matching", label: "Repairability / Matching", description: "Focuses on discontinuation, system interdependency, and infeasible repair." },
+  { value: "code_upgrade", label: "Code Upgrade", description: "Emphasizes building code triggers, local amendments, and required upgrades." },
+  { value: "partial_denial_rebuttal", label: "Partial Denial Rebuttal", description: "Rebut denied line items and prove covered scope item-by-item." },
+  { value: "coverage_trigger_dispute", label: "Coverage Trigger Dispute", description: "Focuses on direct physical loss, ensuing loss, storm-created opening, and carrier burden." },
 ];
 
 const REQUIRED_SECTIONS = [
@@ -73,18 +73,20 @@ const REQUIRED_SECTIONS = [
 ];
 
 const GENERATION_RULES = [
-  'Use a formal, persuasive, evidence-driven tone',
-  'Tie each major conclusion to facts from the provided evidence',
-  'Do not invent facts not found in evidence',
-  'Explain the counterfactual causation test in plain language',
-  'Separate repairability from matching',
-  'Explicitly state why partial repair is not feasible if supported',
-  'Explicitly identify missing proof if evidence is incomplete',
-  'Identify missing proof items such as weather report, ITEL/manufacturer confirmation, code citation, repairability opinion, or missing elevation photos',
-  'Classify evidence gaps as Critical (must cure before submission), Helpful (strengthens case significantly), or Optional (nice-to-have support) based on their impact on proving causation, coverage, scope, or amount',
-  'Use headings and subheadings for clear structure',
-  'Include a formal demand paragraph with specific dollar amounts',
-  'State what evidence supports each section',
+  'Use a formal, persuasive, evidence-driven tone.',
+  'Do not invent facts not found in the provided evidence.',
+  'Tie each major conclusion to the provided evidence.',
+  'Use headings and subheadings matching the required sections.',
+  'Separate causation analysis from repairability analysis.',
+  'Separate matching arguments from direct physical damage arguments.',
+  'Identify competing explanations such as wear and tear, deterioration, foot traffic, installation defects, prior repairs, or deferred maintenance when supported by the evidence.',
+  'If the evidence does not support a confident conclusion, say so explicitly.',
+  'Identify evidence gaps and classify each as Critical, Helpful, or Optional based on its effect on proving causation, coverage, scope, or amount.',
+  'Include a dedicated Counterfactual Causation Test section.',
+  'In the Counterfactual Causation Test, ask whether the observed damage would exist in the same form, extent, and timing but for the reported loss event.',
+  'In the Counterfactual Causation Test, provide a direct answer of Yes, No, or Indeterminate and explain the basis for that answer using the evidence.',
+  'In the Counterfactual Causation Test, identify alternative non-covered explanations considered and explain whether they better account for the observed condition.',
+  'If causation cannot be established confidently from the provided materials, state that explicitly and identify the missing proof needed.',
 ];
 
 export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps) => {
