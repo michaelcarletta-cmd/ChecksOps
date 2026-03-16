@@ -69,7 +69,7 @@ export const DarwinDocumentTimeline = ({ claimId, claim }: DarwinDocumentTimelin
   const [lastGenerated, setLastGenerated] = useState<Date | null>(null);
   const [claimEvents, setClaimEvents] = useState<ClaimEvent[]>([]);
   const [textCoverage, setTextCoverage] = useState<{ total: number; withText: number } | null>(null);
-  const { events: canonicalEvents } = useCanonicalTimeline(claimId);
+  const { events: canonicalEvents, reload: reloadCanonical } = useCanonicalTimeline(claimId);
 
   useEffect(() => {
     loadPreviousTimeline();
