@@ -376,10 +376,9 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
       </CardHeader>
       <CardContent className="space-y-4 pt-4">
         <PositionGateBanner
-          position={position}
-          isLocked={isLocked}
+          lockStatus={position?.lock_status || "draft"}
           loading={positionLoading}
-          onOverride={() => setProvisionalOverride(true)}
+          onProceedProvisional={() => setProvisionalOverride(true)}
         />
         {/* Data Sources Summary */}
         <div className="space-y-2">

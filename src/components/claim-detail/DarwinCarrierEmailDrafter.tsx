@@ -35,20 +35,55 @@ export const DarwinCarrierEmailDrafter = ({ claimId, claim }: DarwinCarrierEmail
   const [generatedBody, setGeneratedBody] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [provisionalOverride, setProvisionalOverride] = useState(false);
-  const { position, isLocked, loading: positionLoading } = useDeclaredPosition(claimId);
+
+  const {
+    position,
+    loading: positionLoading,
+    isLocked,
+    isStrategicLocked,
+    isLitigationGrade,
+  } = useDeclaredPosition(claimId);
+
+  const canGenerate = isStrategicLocked || isLitigationGrade;
+
+  const buildPositionPayload = () => {
+    if (!position) return null;
+    return {
+      lock_status: position.lock_status,
+      observed_damage_condition: position.observed_damage_condition,
+      primary_loss_mechanism: position.primary_loss_mechanism,
+      coverage_trigger_theory: position.coverage_trigger_theory,
+      specific_carrier_failure: position.specific_carrier_failure,
+      decisive_contradiction: position.decisive_contradiction,
+      requested_remedy: position.requested_remedy,
+      master_position_statement: position.master_position_statement,
+      position_strength_score: position.position_strength_score,
+      position_strength_label: position.position_strength_label,
+      drift_risk: position.drift_risk,
+      known_weaknesses: position.known_weaknesses,
+      missing_proof_needed: position.missing_proof_needed,
+      provisional_override: !canGenerate && provisionalOverride,
+      provisional_reason: !canGenerate && provisionalOverride
+        ? "Strategic lock bypassed by adjuster for urgent output."
+        : null,
+      // Legacy fields for backwards compat with existing prompt injection
+      primary_cause_of_loss: position.observed_damage_condition || position.primary_cause_of_loss,
+      primary_coverage_theory: position.coverage_trigger_theory || position.primary_coverage_theory,
+      primary_carrier_error: position.specific_carrier_failure || position.primary_carrier_error,
+      carrier_dependency_statement: position.decisive_contradiction || position.carrier_dependency_statement,
+    };
+  };
 
   const handleGenerate = async () => {
     if (!emailType) {
-      toast({
-        title: "Select email type",
-        description: "Please select the type of email you want to generate",
-        variant: "destructive",
-      });
+      toast({ title: "Select email type", description: "Please select the type of email you want to generate", variant: "destructive" });
       return;
     }
 
     setIsGenerating(true);
     try {
+      const declaredPositionPayload = buildPositionPayload();
+
       const { data, error } = await supabase.functions.invoke("darwin-ai-analysis", {
         body: {
           claimId,
@@ -57,15 +92,8 @@ export const DarwinCarrierEmailDrafter = ({ claimId, claim }: DarwinCarrierEmail
             emailType,
             userContext: additionalContext,
             emailTypeLabel: EMAIL_TYPES.find(t => t.value === emailType)?.label,
-            ...(isLocked && position ? {
-              declaredPosition: {
-                primary_cause_of_loss: position.primary_cause_of_loss,
-                primary_coverage_theory: position.primary_coverage_theory,
-                primary_carrier_error: position.primary_carrier_error,
-                carrier_dependency_statement: position.carrier_dependency_statement,
-              }
-            } : {}),
-            ...(provisionalOverride ? { provisionalPosition: true } : {}),
+            declaredPosition: declaredPositionPayload,
+            provisionalPosition: !canGenerate && provisionalOverride,
           },
           claim,
         },
@@ -74,32 +102,19 @@ export const DarwinCarrierEmailDrafter = ({ claimId, claim }: DarwinCarrierEmail
       if (error) throw error;
 
       if (data?.result) {
-        // Parse subject and body from result
         const result = data.result;
         const subjectMatch = result.match(/SUBJECT:\s*(.+?)(?:\n|$)/i);
         const bodyMatch = result.match(/BODY:\s*([\s\S]+)/i);
-        
-        if (subjectMatch) {
-          setGeneratedSubject(subjectMatch[1].trim());
-        }
-        if (bodyMatch) {
-          setGeneratedBody(bodyMatch[1].trim());
-        } else {
-          setGeneratedBody(result);
-        }
 
-        toast({
-          title: "Email drafted",
-          description: "Darwin has generated your carrier communication",
-        });
+        if (subjectMatch) setGeneratedSubject(subjectMatch[1].trim());
+        if (bodyMatch) setGeneratedBody(bodyMatch[1].trim());
+        else setGeneratedBody(result);
+
+        toast({ title: "Email drafted", description: "Darwin has generated your carrier communication" });
       }
     } catch (error: any) {
       console.error("Error generating email:", error);
-      toast({
-        title: "Generation failed",
-        description: error.message || "Failed to generate email",
-        variant: "destructive",
-      });
+      toast({ title: "Generation failed", description: error.message || "Failed to generate email", variant: "destructive" });
     } finally {
       setIsGenerating(false);
     }
@@ -108,23 +123,16 @@ export const DarwinCarrierEmailDrafter = ({ claimId, claim }: DarwinCarrierEmail
   const handleCopy = () => {
     const fullEmail = `Subject: ${generatedSubject}\n\n${generatedBody}`;
     navigator.clipboard.writeText(fullEmail);
-    toast({
-      title: "Copied",
-      description: "Email copied to clipboard",
-    });
+    toast({ title: "Copied", description: "Email copied to clipboard" });
   };
 
   const handleSendToComposer = () => {
-    // Store in sessionStorage for the email composer to pick up
     sessionStorage.setItem("draftEmail", JSON.stringify({
       subject: generatedSubject,
       body: generatedBody,
       to: claim.adjuster_email || claim.insurance_email || "",
     }));
-    toast({
-      title: "Ready to send",
-      description: "Email loaded into composer. Navigate to Communications to send.",
-    });
+    toast({ title: "Ready to send", description: "Email loaded into composer. Navigate to Communications to send." });
   };
 
   return (
@@ -136,12 +144,15 @@ export const DarwinCarrierEmailDrafter = ({ claimId, claim }: DarwinCarrierEmail
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <PositionGateBanner
-          position={position}
-          isLocked={isLocked}
-          loading={positionLoading}
-          onOverride={() => setProvisionalOverride(true)}
-        />
+        {!canGenerate && !provisionalOverride && (
+          <PositionGateBanner
+            lockStatus={position?.lock_status || "draft"}
+            loading={positionLoading}
+            onProceedProvisional={() => setProvisionalOverride(true)}
+            allowProvisional
+          />
+        )}
+
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label>Email Type</Label>
@@ -190,10 +201,7 @@ export const DarwinCarrierEmailDrafter = ({ claimId, claim }: DarwinCarrierEmail
           <div className="space-y-4 pt-4 border-t">
             <div className="space-y-2">
               <Label>Subject</Label>
-              <Input
-                value={generatedSubject}
-                onChange={(e) => setGeneratedSubject(e.target.value)}
-              />
+              <Input value={generatedSubject} onChange={(e) => setGeneratedSubject(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label>Body</Label>

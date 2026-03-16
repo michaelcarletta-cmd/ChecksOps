@@ -327,10 +327,9 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
       </CardHeader>
       <CardContent className="space-y-4">
         <PositionGateBanner
-          position={position}
-          isLocked={isLocked}
+          lockStatus={position?.lock_status || "draft"}
           loading={positionLoading}
-          onOverride={() => setProvisionalOverride(true)}
+          onProceedProvisional={() => setProvisionalOverride(true)}
         />
         {lastAnalyzed && (
           <div className="p-3 bg-muted/50 rounded-md text-sm text-muted-foreground flex items-center gap-2">
