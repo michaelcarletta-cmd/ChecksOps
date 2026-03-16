@@ -7,6 +7,8 @@ import { Loader2, Copy, Clock, RefreshCw, FileText, Calendar, AlertTriangle, Che
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useCanonicalTimeline } from "@/hooks/useCanonicalTimeline";
+import { TimelineExport } from "./TimelineExport";
 
 interface DarwinDocumentTimelineProps {
   claimId: string;
