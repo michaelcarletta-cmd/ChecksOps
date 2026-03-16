@@ -47,10 +47,8 @@ const DarwinSmartDocumentSort = lazy(() => import("@/components/claim-detail/Dar
 const DarwinEstimateGapAnalysis = lazy(() => import("@/components/claim-detail/DarwinEstimateGapAnalysis").then(m => ({ default: m.DarwinEstimateGapAnalysis })));
 const DarwinEstimateComparison = lazy(() => import("@/components/claim-detail/DarwinEstimateComparison").then(m => ({ default: m.DarwinEstimateComparison })));
 const DarwinDocumentTimeline = lazy(() => import("@/components/claim-detail/DarwinDocumentTimeline").then(m => ({ default: m.DarwinDocumentTimeline })));
-const VisualClaimTimeline = lazy(() => import("@/components/claim-detail/VisualClaimTimeline").then(m => ({ default: m.VisualClaimTimeline })));
 const DarwinComplianceChecker = lazy(() => import("@/components/claim-detail/DarwinComplianceChecker").then(m => ({ default: m.DarwinComplianceChecker })));
 const DarwinDOBILetterDrafter = lazy(() => import("@/components/claim-detail/DarwinDOBILetterDrafter").then(m => ({ default: m.DarwinDOBILetterDrafter })));
-const ClaimTimeline = lazy(() => import("@/components/claim-detail/ClaimTimeline").then(m => ({ default: m.ClaimTimeline })));
 const ProofOfLossGenerator = lazy(() => import("@/components/claim-detail/ProofOfLossGenerator").then(m => ({ default: m.ProofOfLossGenerator })));
 const ClaimContextPipeline = lazy(() => import("@/components/claim-detail/ClaimContextPipeline").then(m => ({ default: m.ClaimContextPipeline })));
 const RecoverableDepreciationInvoice = lazy(() => import("@/components/claim-detail/RecoverableDepreciationInvoice").then(m => ({ default: m.RecoverableDepreciationInvoice })));
