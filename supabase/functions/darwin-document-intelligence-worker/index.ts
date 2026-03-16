@@ -278,6 +278,194 @@ async function processJob(supabase: ReturnType<typeof createClient>, job: QueueR
   });
 
   await refreshClaimMasterState(supabase, claimId, fileId, sourceDocumentType);
+
+  // === WRITE INTELLIGENCE-EXTRACTED DATES INTO claim_events ===
+  await writeIntelligenceDatesToClaimEvents(
+    supabase, claimId, fileId, fileName,
+    sourceDocumentType, sourceClassification,
+    intelligence, savedIntel.confidence_score ?? 0.5,
+  );
+}
+
+// =========================================================================
+// INTELLIGENCE → CANONICAL TIMELINE: Write high-quality dates to claim_events
+// =========================================================================
+const INTEL_LABEL_TO_EVENT_TYPE: Record<string, string> = {
+  'loss_date': 'loss_event',
+  'date_of_loss': 'loss_event',
+  'fnol': 'fnol_received',
+  'date_reported': 'fnol_received',
+  'acknowledgement': 'acknowledgement_issued',
+  'acknowledgment': 'acknowledgement_issued',
+  'reservation_of_rights': 'ror_issued',
+  'ror': 'ror_issued',
+  'denial': 'denial_issued',
+  'denial_date': 'denial_issued',
+  'inspection': 'inspection',
+  'inspection_date': 'inspection',
+  'payment': 'payment_issued',
+  'payment_date': 'payment_issued',
+  'estimate': 'estimate_issued',
+  'estimate_date': 'estimate_issued',
+  'document_date': 'document_issued',
+  'letter_date': 'document_issued',
+  'deadline': 'deadline',
+};
+
+function parseIntelDate(raw: string): string | null {
+  if (!raw) return null;
+  const cleaned = raw.trim();
+  // YYYY-MM-DD
+  const iso = cleaned.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    const y = parseInt(iso[1]), m = parseInt(iso[2]), d = parseInt(iso[3]);
+    if (y >= 2000 && y <= new Date().getFullYear() + 1 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      return `${iso[1]}-${iso[2]}-${iso[3]}T12:00:00.000Z`;
+    }
+  }
+  // MM/DD/YYYY
+  const slash = cleaned.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (slash) {
+    const mm = slash[1].padStart(2, '0');
+    const dd = slash[2].padStart(2, '0');
+    let yr = slash[3];
+    if (yr.length === 2) yr = `20${yr}`;
+    const y = parseInt(yr), m = parseInt(mm), d = parseInt(dd);
+    if (y >= 2000 && y <= new Date().getFullYear() + 1 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      return `${yr}-${mm}-${dd}T12:00:00.000Z`;
+    }
+  }
+  return null;
+}
+
+async function writeIntelligenceDatesToClaimEvents(
+  supabase: ReturnType<typeof createClient>,
+  claimId: string,
+  fileId: string,
+  fileName: string,
+  documentType: string,
+  documentClassification: string,
+  intelligence: IntelligenceOutput,
+  overallConfidence: number,
+) {
+  const timeline = intelligence.timeline_data as {
+    dates?: Array<{ date?: string; label?: string; confidence?: number }>;
+    deadlines?: Array<{ date?: string; label?: string; source_excerpt?: string }>;
+  } | null;
+
+  if (!timeline) return;
+
+  const events: Array<{
+    claim_id: string;
+    event_type: string;
+    occurred_at: string;
+    summary: string;
+    source_artifact_id: string | null;
+    source_artifact_type: string;
+    date_source: string;
+    date_confidence: number;
+    date_evidence: string | null;
+    doc_type: string;
+    metadata_json: Record<string, unknown>;
+  }> = [];
+
+  const seen = new Set<string>();
+
+  // Process timeline dates
+  if (Array.isArray(timeline.dates)) {
+    for (const entry of timeline.dates) {
+      if (!entry?.date) continue;
+      const occurredAt = parseIntelDate(entry.date);
+      if (!occurredAt) continue;
+
+      const label = (entry.label || '').toLowerCase().replace(/\s+/g, '_');
+      const eventType = INTEL_LABEL_TO_EVENT_TYPE[label] || 'date_mentioned';
+      const confidence = typeof entry.confidence === 'number'
+        ? Math.min(entry.confidence, overallConfidence)
+        : overallConfidence * 0.8;
+
+      // Only write dates with meaningful confidence
+      if (confidence < 0.5) continue;
+
+      const key = `${eventType}|${occurredAt}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      events.push({
+        claim_id: claimId,
+        event_type: eventType,
+        occurred_at: occurredAt,
+        summary: `${eventType.replace(/_/g, ' ')}: ${fileName}`,
+        source_artifact_id: fileId,
+        source_artifact_type: 'claim_file',
+        date_source: 'document_extracted',
+        date_confidence: confidence,
+        date_evidence: entry.label || `Intelligence-extracted date from ${fileName}`,
+        doc_type: documentClassification || documentType,
+        metadata_json: {
+          file_name: fileName,
+          extraction_method: 'intelligence_worker',
+          original_label: entry.label,
+        },
+      });
+    }
+  }
+
+  // Process deadlines
+  if (Array.isArray(timeline.deadlines)) {
+    for (const dl of timeline.deadlines) {
+      if (!dl?.date) continue;
+      const occurredAt = parseIntelDate(dl.date);
+      if (!occurredAt) continue;
+
+      const key = `deadline|${occurredAt}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      events.push({
+        claim_id: claimId,
+        event_type: 'deadline',
+        occurred_at: occurredAt,
+        summary: dl.label || `Deadline from ${fileName}`,
+        source_artifact_id: fileId,
+        source_artifact_type: 'claim_file',
+        date_source: 'document_extracted',
+        date_confidence: overallConfidence * 0.85,
+        date_evidence: dl.source_excerpt || dl.label || `Deadline extracted from ${fileName}`,
+        doc_type: documentClassification || documentType,
+        metadata_json: {
+          file_name: fileName,
+          extraction_method: 'intelligence_worker_deadline',
+          original_label: dl.label,
+        },
+      });
+    }
+  }
+
+  // Deduplicate against existing claim_events before inserting
+  let insertedCount = 0;
+  for (const evt of events) {
+    const { data: existing } = await supabase
+      .from('claim_events')
+      .select('id')
+      .eq('claim_id', evt.claim_id)
+      .eq('event_type', evt.event_type)
+      .eq('occurred_at', evt.occurred_at)
+      .limit(1);
+
+    if (!existing || existing.length === 0) {
+      const { error } = await supabase.from('claim_events').insert(evt);
+      if (error) {
+        console.error(`[IntelTimeline] Insert failed: ${error.message}`, JSON.stringify(evt));
+      } else {
+        insertedCount++;
+      }
+    }
+  }
+
+  if (insertedCount > 0) {
+    console.log(`[IntelTimeline] Wrote ${insertedCount} events from intelligence for file ${fileName} (claim ${claimId})`);
+  }
 }
 
 async function extractDocumentIntelligence(input: {
