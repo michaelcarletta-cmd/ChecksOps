@@ -526,8 +526,6 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
           <>
             <DarwinHealthCheck claimId={claimId} claim={claim} />
             <DarwinDocumentTimeline claimId={claimId} claim={claim} />
-            <VisualClaimTimeline claimId={claimId} claim={claim} />
-            <ClaimTimeline claimId={claimId} claim={claim} />
           </>
         );
       case "automation":
