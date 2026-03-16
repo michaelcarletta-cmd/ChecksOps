@@ -9353,7 +9353,7 @@ Return the full revised ${docLabel} with the requested changes applied:`;
       const contentParts: any[] = [];
       
       // Add each PDF as an image_url (Gemini will process PDFs this way)
-      const maxPdfs = analysisType === 'systematic_dismantling' ? 5 : 3;
+      const maxPdfs = analysisType === 'systematic_dismantling' ? 5 : 5;
       for (const pdf of pdfContents.slice(0, maxPdfs)) {
         contentParts.push({
           type: 'image_url',
