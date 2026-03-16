@@ -75,16 +75,18 @@ export function useCanonicalTimeline(claimId: string) {
     load();
   }, [load]);
 
-  // Subscribe to claim_events changes for auto-refresh
+  // Subscribe to all canonical source tables for auto-refresh
   useEffect(() => {
     const channel = supabase
       .channel(`canonical-timeline-${claimId}`)
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "claim_events",
-        filter: `claim_id=eq.${claimId}`,
-      }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "claim_events", filter: `claim_id=eq.${claimId}` }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "claim_updates", filter: `claim_id=eq.${claimId}` }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "claim_files", filter: `claim_id=eq.${claimId}` }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "emails", filter: `claim_id=eq.${claimId}` }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "inspections", filter: `claim_id=eq.${claimId}` }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "claim_payments", filter: `claim_id=eq.${claimId}` }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "claim_checks", filter: `claim_id=eq.${claimId}` }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "claims", filter: `id=eq.${claimId}` }, () => load())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [claimId, load]);

@@ -158,7 +158,13 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
     const channel = supabase
       .channel(`timeline-${claimId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "claim_events", filter: `claim_id=eq.${claimId}` }, () => loadEvents())
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "claim_files", filter: `claim_id=eq.${claimId}` }, () => loadEvents())
+      .on("postgres_changes", { event: "*", schema: "public", table: "claim_updates", filter: `claim_id=eq.${claimId}` }, () => loadEvents())
+      .on("postgres_changes", { event: "*", schema: "public", table: "claim_files", filter: `claim_id=eq.${claimId}` }, () => loadEvents())
+      .on("postgres_changes", { event: "*", schema: "public", table: "emails", filter: `claim_id=eq.${claimId}` }, () => loadEvents())
+      .on("postgres_changes", { event: "*", schema: "public", table: "inspections", filter: `claim_id=eq.${claimId}` }, () => loadEvents())
+      .on("postgres_changes", { event: "*", schema: "public", table: "claim_payments", filter: `claim_id=eq.${claimId}` }, () => loadEvents())
+      .on("postgres_changes", { event: "*", schema: "public", table: "claim_checks", filter: `claim_id=eq.${claimId}` }, () => loadEvents())
+      .on("postgres_changes", { event: "*", schema: "public", table: "claims", filter: `id=eq.${claimId}` }, () => loadEvents())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [claimId, loadEvents]);
