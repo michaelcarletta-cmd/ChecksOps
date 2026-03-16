@@ -604,9 +604,6 @@ export default function Settings() {
           <ImportSettings />
         </TabsContent>
 
-        <TabsContent value="causation-rubric" className="w-full">
-          <CausationRubricSettings />
-        </TabsContent>
 
         {isAdmin && (
           <TabsContent value="audit-logs" className="w-full">
