@@ -241,7 +241,8 @@ Deno.serve(async (req) => {
       return `<Default Extension="${ext}" ContentType="${mimeType}"/>`;
     }).join("\n  ");
 
-    // [Content_Types].xml - add header if we have logo
+    // [Content_Types].xml - add header when branding is available
+    const showHeader = includeLogoHeader !== false;
     zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -249,7 +250,7 @@ Deno.serve(async (req) => {
   ${contentTypesExtensions}
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
   <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
-  ${headerLogoBase64 ? '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' : ''}
+  ${showHeader ? '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' : ''}
 </Types>`);
     
     // _rels/.rels
