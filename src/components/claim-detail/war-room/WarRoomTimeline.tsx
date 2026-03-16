@@ -24,12 +24,13 @@ const EVENT_TYPES = [
   "communication", "document_upload", "carrier_action", "pa_action",
   "legal_escalation", "file_uploaded", "email_sent", "payment_received",
   "fnol_received", "acknowledgement_issued", "ror_issued", "denial_issued",
-  "payment_issued", "estimate_issued"
+  "payment_issued", "estimate_issued", "loss_event", "claim_created", "claim_note"
 ] as const;
 
 const MILESTONE_TYPES = new Set([
   "denial", "denial_issued", "payment", "payment_received", "payment_issued",
-  "legal_escalation", "inspection", "supplement", "fnol_received", "estimate_issued"
+  "legal_escalation", "inspection", "supplement", "fnol_received", "estimate_issued",
+  "loss_event"
 ]);
 
 const EVENT_TYPE_META: Record<string, { label: string; icon: React.ReactNode; color: string; importance: number }> = {
@@ -52,6 +53,9 @@ const EVENT_TYPE_META: Record<string, { label: string; icon: React.ReactNode; co
   fnol_received:     { label: "FNOL Received",    icon: <Clock className="h-3.5 w-3.5" />,         color: "bg-chart-3/20 text-chart-3 border-chart-3/30", importance: 8 },
   acknowledgement_issued: { label: "Acknowledgement", icon: <CheckCircle2 className="h-3.5 w-3.5" />, color: "bg-chart-3/20 text-chart-3 border-chart-3/30", importance: 5 },
   ror_issued:        { label: "ROR Issued",       icon: <FileText className="h-3.5 w-3.5" />,      color: "bg-warning/20 text-warning border-warning/30", importance: 6 },
+  loss_event:        { label: "Date of Loss",     icon: <AlertTriangle className="h-3.5 w-3.5" />, color: "bg-destructive/20 text-destructive border-destructive/30", importance: 10 },
+  claim_created:     { label: "Claim Created",    icon: <FileText className="h-3.5 w-3.5" />,      color: "bg-chart-3/20 text-chart-3 border-chart-3/30", importance: 4 },
+  claim_note:        { label: "Claim Note",       icon: <FileText className="h-3.5 w-3.5" />,      color: "bg-muted text-muted-foreground border-border", importance: 3 },
 };
 
 const getEventMeta = (type: string) =>
@@ -65,15 +69,23 @@ interface TimelineEvent {
   actor: string | null;
   source_artifact_id: string | null;
   source_artifact_type: string | null;
+  source_table?: string | null;
+  source_row_id?: string | null;
   metadata_json: Record<string, unknown>;
-  date_source?: string;
+  date_source?: string | null;
+  date_confidence?: number | null;
+  date_evidence?: string | null;
+  doc_type?: string | null;
   is_manual?: boolean;
   is_editable?: boolean;
   is_pinned?: boolean;
-  importance_score?: number;
+  importance_score?: number | null;
   dispute_tag?: string | null;
   supports_escalation?: boolean;
   supports_rebuttal?: boolean;
+  is_verified?: boolean;
+  verification_basis?: string | null;
+  derived?: boolean;
 }
 
 interface ChronologyGap {
@@ -89,6 +101,9 @@ interface Contradiction {
   event_b_id: string;
   description: string;
 }
+
+const isPersistableClaimEvent = (event: TimelineEvent) =>
+  event.source_table === "claim_events" && !event.derived;
 
 interface WarRoomTimelineProps {
   claimId: string;
@@ -117,42 +132,24 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
       });
       if (error) throw error;
 
-      const { data: manualEvents } = await supabase
-        .from("claim_events")
-        .select("id, event_type, occurred_at, summary, actor, source_artifact_id, source_artifact_type, metadata_json, date_source, is_manual, is_editable, is_pinned, importance_score, dispute_tag, supports_escalation, supports_rebuttal")
-        .eq("claim_id", claimId)
-        .order("occurred_at", { ascending: false });
-
-      const merged: TimelineEvent[] = [...(data?.events || [])];
-      const existingIds = new Set(merged.map((e: TimelineEvent) => e.id));
-
-      const dbEventsMap = new Map((manualEvents || []).map((e: any) => [e.id, e]));
-      merged.forEach((e, i) => {
-        const dbE = dbEventsMap.get(e.id);
-        if (dbE) {
-          merged[i] = { ...e, is_pinned: dbE.is_pinned, importance_score: dbE.importance_score, is_editable: dbE.is_editable, is_manual: dbE.is_manual, dispute_tag: dbE.dispute_tag, supports_escalation: dbE.supports_escalation, supports_rebuttal: dbE.supports_rebuttal };
-        }
-      });
-      manualEvents?.forEach((e: any) => {
-        if (!existingIds.has(e.id)) {
-          merged.push({ ...e, is_manual: true, is_editable: true });
-        }
-      });
-
-      merged.forEach((e) => {
-        if (!e.importance_score) {
-          e.importance_score = getEventMeta(e.event_type).importance;
-        }
-      });
+      const merged: TimelineEvent[] = (data?.events || []).map((e: TimelineEvent) => ({
+        ...e,
+        importance_score: e.importance_score ?? getEventMeta(e.event_type).importance,
+      }));
 
       merged.sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime());
       setEvents(merged);
     } catch (err) {
       console.error("Timeline load error:", err);
+      toast({
+        title: "Timeline load failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
-  }, [claimId]);
+  }, [claimId, toast]);
 
   useEffect(() => { loadEvents(); }, [loadEvents]);
 
@@ -165,50 +162,121 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
     return () => { supabase.removeChannel(channel); };
   }, [claimId, loadEvents]);
 
-  // Detect chronology gaps
+  // Detect chronology gaps — forward-looking response match
   const gaps = useMemo<ChronologyGap[]>(() => {
     const sorted = [...events].sort((a, b) => new Date(a.occurred_at).getTime() - new Date(b.occurred_at).getTime());
     const result: ChronologyGap[] = [];
+    const now = new Date();
+
+    const findNextResponse = (startIndex: number, responseTypes: string[]) => {
+      for (let j = startIndex + 1; j < sorted.length; j++) {
+        if (responseTypes.includes(sorted[j].event_type)) return sorted[j];
+      }
+      return null;
+    };
+
     for (let i = 0; i < sorted.length; i++) {
       const curr = sorted[i];
-      const next = sorted[i + 1];
-      if (!next) continue;
-      const days = differenceInDays(new Date(next.occurred_at), new Date(curr.occurred_at));
-      if ((curr.event_type === "pa_action" || curr.event_type === "supplement" || curr.event_type === "communication") &&
-        !["carrier_action", "payment", "payment_received", "payment_issued", "denial", "denial_issued", "estimate_issued"].includes(next.event_type) && days > 15) {
-        result.push({ type: "carrier_delay", from_event: curr.id, to_event: next.id, days, description: `${days}-day gap after ${getEventMeta(curr.event_type).label} with no carrier response` });
+      const currDate = new Date(curr.occurred_at);
+
+      if (["pa_action", "supplement", "communication", "claim_note"].includes(curr.event_type)) {
+        const nextCarrierResponse = findNextResponse(i, [
+          "carrier_action", "payment", "payment_received", "payment_issued",
+          "denial", "denial_issued", "estimate_issued", "acknowledgement_issued",
+          "ror_issued", "email_sent",
+        ]);
+        const endDate = nextCarrierResponse ? new Date(nextCarrierResponse.occurred_at) : now;
+        const days = differenceInDays(endDate, currDate);
+        if (days > 15) {
+          result.push({
+            type: "carrier_delay",
+            from_event: curr.id,
+            to_event: nextCarrierResponse?.id ?? "today",
+            days,
+            description: `${days}-day gap after ${getEventMeta(curr.event_type).label} with no meaningful carrier response`,
+          });
+        }
       }
-      if ((curr.event_type === "estimate_issued" || curr.event_type === "estimate") &&
-        !["payment", "payment_received", "payment_issued"].includes(next.event_type) && days > 30) {
-        result.push({ type: "payment_delay", from_event: curr.id, to_event: next.id, days, description: `${days}-day gap after estimate with no payment` });
+
+      if (["estimate", "estimate_issued"].includes(curr.event_type)) {
+        const nextPayment = findNextResponse(i, ["payment", "payment_received", "payment_issued"]);
+        const endDate = nextPayment ? new Date(nextPayment.occurred_at) : now;
+        const days = differenceInDays(endDate, currDate);
+        if (days > 30) {
+          result.push({
+            type: "payment_delay",
+            from_event: curr.id,
+            to_event: nextPayment?.id ?? "today",
+            days,
+            description: `${days}-day gap after estimate with no payment`,
+          });
+        }
       }
-      if (curr.event_type === "supplement" &&
-        !["payment", "payment_received", "estimate_issued", "denial", "denial_issued"].includes(next.event_type) && days > 20) {
-        result.push({ type: "unresolved_supplement", from_event: curr.id, to_event: next.id, days, description: `Supplement unresolved for ${days} days` });
+
+      if (curr.event_type === "supplement") {
+        const nextSupplementResolution = findNextResponse(i, [
+          "payment", "payment_received", "payment_issued",
+          "estimate_issued", "denial", "denial_issued",
+        ]);
+        const endDate = nextSupplementResolution ? new Date(nextSupplementResolution.occurred_at) : now;
+        const days = differenceInDays(endDate, currDate);
+        if (days > 20) {
+          result.push({
+            type: "unresolved_supplement",
+            from_event: curr.id,
+            to_event: nextSupplementResolution?.id ?? "today",
+            days,
+            description: `Supplement unresolved for ${days} days`,
+          });
+        }
       }
     }
+
     return result;
   }, [events]);
 
-  // Detect contradictions
+  // Detect contradictions — smarter with explainable sequences
   const contradictions = useMemo<Contradiction[]>(() => {
     const result: Contradiction[] = [];
     const denials = events.filter((e) => e.event_type === "denial" || e.event_type === "denial_issued");
     const payments = events.filter((e) => ["payment", "payment_received", "payment_issued"].includes(e.event_type));
+
     for (const denial of denials) {
       for (const payment of payments) {
-        if (new Date(payment.occurred_at) > new Date(denial.occurred_at)) {
-          const betweenEvents = events.filter(
-            (e) => new Date(e.occurred_at) > new Date(denial.occurred_at) &&
-              new Date(e.occurred_at) < new Date(payment.occurred_at) &&
-              (e.event_type === "supplement" || e.summary?.toLowerCase().includes("revers"))
+        if (new Date(payment.occurred_at) <= new Date(denial.occurred_at)) continue;
+
+        const betweenEvents = events.filter(
+          (e) =>
+            new Date(e.occurred_at) > new Date(denial.occurred_at) &&
+            new Date(e.occurred_at) < new Date(payment.occurred_at)
+        );
+
+        const explainsSequence = betweenEvents.some((e) => {
+          const s = `${e.summary || ""}`.toLowerCase();
+          return (
+            e.event_type === "supplement" ||
+            e.event_type === "ror_issued" ||
+            e.event_type === "estimate_issued" ||
+            s.includes("reopen") ||
+            s.includes("re-open") ||
+            s.includes("reversal") ||
+            s.includes("partial payment") ||
+            s.includes("undisputed") ||
+            s.includes("supplemental") ||
+            s.includes("revised estimate")
           );
-          if (betweenEvents.length === 0) {
-            result.push({ event_a_id: denial.id, event_b_id: payment.id, description: "Payment issued after denial with no documented reversal or supplement" });
-          }
+        });
+
+        if (!explainsSequence) {
+          result.push({
+            event_a_id: denial.id,
+            event_b_id: payment.id,
+            description: "Payment issued after denial with no documented reversal, reopening, partial-payment explanation, or supplement resolution",
+          });
         }
       }
     }
+
     return result;
   }, [events]);
 
@@ -219,13 +287,13 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
   const escalationEvents = useMemo(() => events.filter((e) => e.supports_escalation), [events]);
   const rebuttalEvents = useMemo(() => events.filter((e) => e.supports_rebuttal), [events]);
 
-  // AI chronology summary
+  // AI chronology summary — uses verified chronology for rebuttals and complaints
   const generateChronologySummary = useCallback(async () => {
     setGeneratingSummary(true);
     try {
-      const timelineData = events
+      const timelineData = [...events]
         .sort((a, b) => new Date(a.occurred_at).getTime() - new Date(b.occurred_at).getTime())
-        .slice(0, 50)
+        .slice(0, 100)
         .map((e) => ({
           date: e.occurred_at?.split("T")[0],
           type: e.event_type,
@@ -234,6 +302,12 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
           is_pinned: e.is_pinned,
           supports_escalation: e.supports_escalation,
           supports_rebuttal: e.supports_rebuttal,
+          is_verified: e.is_verified,
+          verification_basis: e.verification_basis,
+          date_source: e.date_source,
+          date_confidence: e.date_confidence,
+          source_table: e.source_table,
+          source_artifact_type: e.source_artifact_type,
         }));
 
       const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/darwin-copilot`;
@@ -246,7 +320,24 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
         body: JSON.stringify({
           claimId,
           mode: "war_room",
-          userQuestion: `Based on the following claim timeline events, write a concise chronology summary (3-5 paragraphs). Identify which events most strongly support escalation or rebuttal. Highlight carrier delays, contradictions, and procedural failures. End with a strategic assessment of the timeline's strength for the policyholder's position.\n\nTimeline events:\n${JSON.stringify(timelineData, null, 1)}\n\nDetected gaps: ${JSON.stringify(gaps)}\nContradictions: ${JSON.stringify(contradictions)}`,
+          userQuestion: `Using the verified insurance claim timeline below, write a strategic chronology summary for use in rebuttals, regulatory complaints, and claim escalation.
+
+Instructions:
+- Prioritize verified, document-backed, and claim-overview dates.
+- Identify the strongest rebuttal-supporting events.
+- Identify the strongest escalation / regulatory complaint events.
+- Highlight carrier delays, unexplained inactivity, contradictions, deadline issues, and procedural failures.
+- Distinguish between verified chronology and derived activity when relevant.
+- End with a concise strategic assessment of how strong the timeline is for the policyholder.
+
+Timeline events:
+${JSON.stringify(timelineData, null, 2)}
+
+Detected gaps:
+${JSON.stringify(gaps, null, 2)}
+
+Detected contradictions:
+${JSON.stringify(contradictions, null, 2)}`,
         }),
       });
 
@@ -287,20 +378,91 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
     }
   }, [claimId, events, gaps, contradictions, toast]);
 
-  // Toggle escalation/rebuttal flags
+  // Toggle escalation/rebuttal flags — only persist for real claim_events
   const toggleEventFlag = async (event: TimelineEvent, flag: "supports_escalation" | "supports_rebuttal") => {
     const newVal = !event[flag];
-    if (!event.id.includes("-") || event.is_manual) {
-      await supabase.from("claim_events").update({ [flag]: newVal }).eq("id", event.id);
+    if (!isPersistableClaimEvent(event)) {
+      toast({
+        title: "Cannot save flag on derived event",
+        description: "Convert this item into a manual claim event first if you want to persist flags.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const { error } = await supabase.from("claim_events").update({ [flag]: newVal }).eq("id", event.id);
+    if (error) {
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+      return;
     }
     setEvents((prev) => prev.map((e) => e.id === event.id ? { ...e, [flag]: newVal } : e));
   };
 
   const setDisputeTag = async (event: TimelineEvent, tag: string | null) => {
-    if (!event.id.includes("-") || event.is_manual) {
-      await supabase.from("claim_events").update({ dispute_tag: tag }).eq("id", event.id);
+    if (!isPersistableClaimEvent(event)) {
+      toast({
+        title: "Cannot tag derived event",
+        description: "Only stored claim events can persist dispute tags.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const { error } = await supabase.from("claim_events").update({ dispute_tag: tag }).eq("id", event.id);
+    if (error) {
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+      return;
     }
     setEvents((prev) => prev.map((e) => e.id === event.id ? { ...e, dispute_tag: tag } : e));
+  };
+
+  const togglePin = async (event: TimelineEvent) => {
+    const newPinned = !event.is_pinned;
+    if (!isPersistableClaimEvent(event)) {
+      toast({
+        title: "Cannot pin derived event permanently",
+        description: "Only stored claim events can persist pinned state.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const { error } = await supabase.from("claim_events").update({ is_pinned: newPinned }).eq("id", event.id);
+    if (error) {
+      toast({ title: "Update failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    setEvents((prev) => prev.map((e) => e.id === event.id ? { ...e, is_pinned: newPinned } : e));
+  };
+
+  // Promote derived event to manual claim event
+  const promoteToManualEvent = async (event: TimelineEvent) => {
+    try {
+      const payload = {
+        claim_id: claimId,
+        event_type: event.event_type,
+        occurred_at: event.occurred_at,
+        summary: event.summary,
+        actor: event.actor,
+        source_artifact_id: event.source_artifact_id,
+        source_artifact_type: event.source_artifact_type,
+        metadata_json: {
+          ...(event.metadata_json || {}),
+          promoted_from_source_table: event.source_table,
+          promoted_from_source_row_id: event.source_row_id,
+        },
+        date_source: "manual",
+        is_manual: true,
+        is_editable: true,
+        is_pinned: false,
+        importance_score: event.importance_score ?? getEventMeta(event.event_type).importance,
+        supports_escalation: !!event.supports_escalation,
+        supports_rebuttal: !!event.supports_rebuttal,
+      };
+      const { error } = await supabase.from("claim_events").insert(payload);
+      if (error) throw error;
+      toast({ title: "Manual timeline event created" });
+      loadEvents();
+    } catch (err: any) {
+      toast({ title: "Promotion failed", description: err.message, variant: "destructive" });
+    }
   };
 
   // Sort & filter
@@ -346,14 +508,6 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
       return b.localeCompare(a);
     });
   }, [grouped]);
-
-  const togglePin = async (event: TimelineEvent) => {
-    const newPinned = !event.is_pinned;
-    if (!event.id.includes("-")) {
-      await supabase.from("claim_events").update({ is_pinned: newPinned }).eq("id", event.id);
-    }
-    setEvents((prev) => prev.map((e) => e.id === event.id ? { ...e, is_pinned: newPinned } : e));
-  };
 
   const handleAddEvent = async (form: { event_type: string; occurred_at: string; summary: string; actor: string }) => {
     try {
@@ -514,6 +668,7 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
                     const isMilestone = MILESTONE_TYPES.has(event.event_type);
                     const isContradiction = contradictionIds.has(event.id);
                     const isGapEvent = gapEventIds.has(event.id);
+                    const canPersist = isPersistableClaimEvent(event);
 
                     return (
                       <div key={event.id} className="relative group">
@@ -573,6 +728,21 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
                                   {event.supports_escalation && <Badge className="text-[8px] bg-destructive/15 text-destructive">⬆ Escalation</Badge>}
                                   {event.supports_rebuttal && <Badge className="text-[8px] bg-chart-2/20 text-chart-2">📝 Rebuttal</Badge>}
                                   {event.dispute_tag && <Badge variant="outline" className="text-[8px] border-chart-3/50 text-chart-3">{event.dispute_tag}</Badge>}
+                                  {event.is_verified && (
+                                    <Badge variant="outline" className="text-[8px] border-emerald-400/50 text-emerald-600">
+                                      Verified
+                                    </Badge>
+                                  )}
+                                  {event.date_source === "document_extracted" && (
+                                    <Badge variant="outline" className="text-[8px] border-blue-400/50 text-blue-600">
+                                      Doc-backed
+                                    </Badge>
+                                  )}
+                                  {event.derived && (
+                                    <Badge variant="outline" className="text-[8px] border-muted-foreground/30 text-muted-foreground">
+                                      Derived
+                                    </Badge>
+                                  )}
                                   <span className="text-[10px] text-muted-foreground">
                                     {format(parseISO(event.occurred_at), "h:mm a")}
                                   </span>
@@ -580,6 +750,14 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
                                   {event.is_manual && <Badge variant="secondary" className="text-[8px]">Manual</Badge>}
                                 </div>
                                 <p className="text-xs mt-0.5 leading-snug">{event.summary || "No summary"}</p>
+                                {/* Verification details */}
+                                {(event.verification_basis || event.date_evidence || event.date_confidence !== null) && (
+                                  <div className="mt-1 text-[10px] text-muted-foreground space-y-0.5">
+                                    {event.verification_basis && <div>Basis: {event.verification_basis}</div>}
+                                    {event.date_evidence && <div>Evidence: {event.date_evidence}</div>}
+                                    {typeof event.date_confidence === "number" && <div>Confidence: {Math.round(event.date_confidence * 100)}%</div>}
+                                  </div>
+                                )}
                                 {event.source_artifact_id && event.source_artifact_type && (
                                   <button
                                     className="text-[10px] text-primary hover:underline flex items-center gap-0.5 mt-0.5"
@@ -607,27 +785,80 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
                                 {/* Escalation toggle */}
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="sm" className={cn("h-6 w-6 p-0 opacity-0 group-hover:opacity-100", event.supports_escalation && "opacity-100")} onClick={() => toggleEventFlag(event, "supports_escalation")}>
-                                      <Scale className={cn("h-3 w-3", event.supports_escalation ? "text-destructive" : "text-muted-foreground")} />
-                                    </Button>
+                                    <span>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={!canPersist}
+                                        className={cn("h-6 w-6 p-0 opacity-0 group-hover:opacity-100", event.supports_escalation && "opacity-100")}
+                                        onClick={() => toggleEventFlag(event, "supports_escalation")}
+                                      >
+                                        <Scale className={cn("h-3 w-3", event.supports_escalation ? "text-destructive" : "text-muted-foreground")} />
+                                      </Button>
+                                    </span>
                                   </TooltipTrigger>
-                                  <TooltipContent className="text-xs">Mark as escalation support</TooltipContent>
+                                  <TooltipContent className="text-xs">
+                                    {canPersist ? "Mark as escalation support" : "Derived events cannot persist flags"}
+                                  </TooltipContent>
                                 </Tooltip>
                                 {/* Rebuttal toggle */}
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="sm" className={cn("h-6 w-6 p-0 opacity-0 group-hover:opacity-100", event.supports_rebuttal && "opacity-100")} onClick={() => toggleEventFlag(event, "supports_rebuttal")}>
-                                      <BookOpen className={cn("h-3 w-3", event.supports_rebuttal ? "text-chart-2" : "text-muted-foreground")} />
-                                    </Button>
+                                    <span>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={!canPersist}
+                                        className={cn("h-6 w-6 p-0 opacity-0 group-hover:opacity-100", event.supports_rebuttal && "opacity-100")}
+                                        onClick={() => toggleEventFlag(event, "supports_rebuttal")}
+                                      >
+                                        <BookOpen className={cn("h-3 w-3", event.supports_rebuttal ? "text-chart-2" : "text-muted-foreground")} />
+                                      </Button>
+                                    </span>
                                   </TooltipTrigger>
-                                  <TooltipContent className="text-xs">Mark as rebuttal evidence</TooltipContent>
+                                  <TooltipContent className="text-xs">
+                                    {canPersist ? "Mark as rebuttal evidence" : "Derived events cannot persist flags"}
+                                  </TooltipContent>
                                 </Tooltip>
-                                <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100" onClick={() => togglePin(event)}>
-                                  {event.is_pinned ? <PinOff className="h-3 w-3 text-primary" /> : <Pin className="h-3 w-3" />}
-                                </Button>
-                                {(event.is_manual || event.is_editable) && (
-                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100" onClick={() => startEdit(event)}>
+                                {/* Pin toggle */}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={!canPersist}
+                                        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+                                        onClick={() => togglePin(event)}
+                                      >
+                                        {event.is_pinned ? <PinOff className="h-3 w-3 text-primary" /> : <Pin className="h-3 w-3" />}
+                                      </Button>
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="text-xs">
+                                    {canPersist ? "Pin event" : "Only stored claim events can be pinned"}
+                                  </TooltipContent>
+                                </Tooltip>
+                                {/* Edit button — only for persistable manual/editable events */}
+                                {(event.is_manual || event.is_editable) && canPersist && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+                                    onClick={() => startEdit(event)}
+                                  >
                                     <Edit2 className="h-3 w-3" />
+                                  </Button>
+                                )}
+                                {/* Promote derived event */}
+                                {event.derived && !isPersistableClaimEvent(event) && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 text-[10px]"
+                                    onClick={() => promoteToManualEvent(event)}
+                                  >
+                                    Promote
                                   </Button>
                                 )}
                               </div>
