@@ -33,6 +33,7 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
     policyholder_address: claim?.policyholder_address || "",
     policy_number: claim?.policy_number || "",
     loss_date: claim?.loss_date || "",
+    date_claim_filed: claim?.date_claim_filed || "",
     loss_type: claim?.loss_type || "",
     loss_type_id: claim?.loss_type_id || "",
     loss_description: claim?.loss_description || "",
@@ -56,6 +57,7 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
         policyholder_address: claim.policyholder_address || "",
         policy_number: claim.policy_number || "",
         loss_date: claim.loss_date || "",
+        date_claim_filed: claim.date_claim_filed || "",
         loss_type: claim.loss_type || "",
         loss_type_id: claim.loss_type_id || "",
         loss_description: claim.loss_description || "",
@@ -351,6 +353,15 @@ export function EditClaimDialog({ open, onOpenChange, claim, onClaimUpdated }: E
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div>
+                <Label htmlFor="date_claim_filed">Date Claim Filed</Label>
+                <Input
+                  id="date_claim_filed"
+                  type="date"
+                  value={formData.date_claim_filed}
+                  onChange={(e) => handleChange("date_claim_filed", e.target.value)}
+                />
               </div>
               <div className="col-span-2">
                 <Label htmlFor="loss_description">Loss Description</Label>

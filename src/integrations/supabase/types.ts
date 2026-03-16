@@ -5979,6 +5979,7 @@ export type Database = {
           construction_status: string | null
           contract_pdf_path: string | null
           created_at: string | null
+          date_claim_filed: string | null
           deductible: number | null
           dwelling_limit: number | null
           esign_audit_url: string | null
@@ -6049,6 +6050,7 @@ export type Database = {
           construction_status?: string | null
           contract_pdf_path?: string | null
           created_at?: string | null
+          date_claim_filed?: string | null
           deductible?: number | null
           dwelling_limit?: number | null
           esign_audit_url?: string | null
@@ -6119,6 +6121,7 @@ export type Database = {
           construction_status?: string | null
           contract_pdf_path?: string | null
           created_at?: string | null
+          date_claim_filed?: string | null
           deductible?: number | null
           dwelling_limit?: number | null
           esign_audit_url?: string | null
@@ -12813,6 +12816,7 @@ export type Database = {
               construction_status: string | null
               contract_pdf_path: string | null
               created_at: string | null
+              date_claim_filed: string | null
               deductible: number | null
               dwelling_limit: number | null
               esign_audit_url: string | null
@@ -12908,6 +12912,7 @@ export type Database = {
               construction_status: string | null
               contract_pdf_path: string | null
               created_at: string | null
+              date_claim_filed: string | null
               deductible: number | null
               dwelling_limit: number | null
               esign_audit_url: string | null

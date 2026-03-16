@@ -1,0 +1,1 @@
+ALTER TABLE public.claims ADD COLUMN date_claim_filed DATE;

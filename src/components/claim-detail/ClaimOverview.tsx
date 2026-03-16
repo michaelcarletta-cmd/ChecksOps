@@ -327,6 +327,12 @@ export function ClaimOverview({ claim, isPortalUser = false, onClaimUpdated }: C
               <p className="text-sm font-medium">{claim.loss_type || "N/A"}</p>
             </div>
             <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Date Claim Filed</p>
+              <p className="text-sm font-medium">
+                {claim.date_claim_filed ? format(new Date(claim.date_claim_filed + 'T12:00:00'), "MMM dd, yyyy") : "N/A"}
+              </p>
+            </div>
+            <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Date Submitted</p>
               <p className="text-sm font-medium">
                 {claim.created_at ? format(new Date(claim.created_at), "MMM dd, yyyy") : "N/A"}
