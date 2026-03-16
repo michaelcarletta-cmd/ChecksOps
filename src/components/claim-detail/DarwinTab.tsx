@@ -462,6 +462,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
                 }
               }}
             />
+            <DarwinButForCausation claimId={claimId} claim={claim} />
             <DarwinRoofEstimate claimId={claimId} claim={claim} />
           </>
         );
