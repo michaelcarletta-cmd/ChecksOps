@@ -1,41 +1,39 @@
- import { useState } from "react";
- import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
- import { supabase } from "@/integrations/supabase/client";
- import { Button } from "@/components/ui/button";
- import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
- import { Input } from "@/components/ui/input";
- import { Label } from "@/components/ui/label";
- import { Textarea } from "@/components/ui/textarea";
- import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
- import { Badge } from "@/components/ui/badge";
- import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
- import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
- import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
- import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
- import { ScrollArea } from "@/components/ui/scroll-area";
- import { 
-   Scale, 
-   ChevronDown, 
-   Loader2,
-   Info,
-   Eye
- } from "lucide-react";
- import { toast } from "sonner";
- import { cn } from "@/lib/utils";
- import { CausationBlameCounterSection } from "./CausationBlameCounterSection";
- 
- // New modular imports
- import { CausationFormData, CausationResult, IndicatorValue, IndicatorBreakdown } from "./causation/types";
- import { 
-   PERILS, 
-   DAMAGE_TYPES, 
-   SHINGLE_TYPES,
-   PERIL_SUPPORTING_INDICATORS,
-   ALTERNATIVE_CAUSE_INDICATORS
- } from "./causation/indicators";
- import { calculateCausation } from "./causation/calculateCausation";
- import { IndicatorInput } from "./causation/IndicatorInput";
- import { CausationResults } from "./causation/CausationResults";
+import { useState } from "react";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { 
+  Scale, 
+  ChevronDown, 
+  Loader2,
+  Info,
+  Eye
+} from "lucide-react";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { CausationBlameCounterSection } from "./CausationBlameCounterSection";
+
+import { CausationFormData, CausationResult, IndicatorValue } from "./causation/types";
+import { 
+  PERILS, 
+  DAMAGE_TYPES, 
+  SHINGLE_TYPES,
+  PERIL_SUPPORTING_INDICATORS,
+  ALTERNATIVE_CAUSE_INDICATORS
+} from "./causation/indicators";
+import { calculateCausation } from "./causation/calculateCausation";
+import { IndicatorInput } from "./causation/IndicatorInput";
+import { CausationResults } from "./causation/CausationResults";
 import { CausationPhotoAnalysis } from "./causation/CausationPhotoAnalysis";
 
 interface DarwinButForCausationProps {
@@ -55,7 +53,7 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
     damageTypes: [],
     eventDate: claim?.date_of_loss || '',
     damageNoticedDate: '',
-     indicators: {},
+    indicators: {},
     roofAge: '',
     shingleType: '',
     manufacturer: '',
@@ -81,15 +79,15 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
     },
   });
 
-   // Handle indicator state changes
-   const handleIndicatorChange = (id: string, value: IndicatorValue) => {
-     setFormData(prev => ({
-       ...prev,
-       indicators: {
-         ...prev.indicators,
-         [id]: value,
-       },
-     }));
+  // Handle indicator state changes
+  const handleIndicatorChange = (id: string, value: IndicatorValue) => {
+    setFormData(prev => ({
+      ...prev,
+      indicators: {
+        ...prev.indicators,
+        [id]: value,
+      },
+    }));
   };
 
   // Handle bulk indicator updates from photo analysis
@@ -107,38 +105,47 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
     mutationFn: async (result: CausationResult) => {
       const { error } = await supabase
         .from('claim_causation_tests')
-       .insert([{
+        .insert([{
           claim_id: claimId,
           peril_tested: formData.perilTested,
           damage_type: formData.damageTypes.join(', '),
           event_date: formData.eventDate || null,
           damage_noticed_date: formData.damageNoticedDate || null,
-           directional_indicators: Object.keys(formData.indicators).filter(k => formData.indicators[k]?.state === 'present'),
-           collateral_damage: [],
-           pattern_dispersion: null,
-          roof_age: formData.roofAge ? parseInt(formData.roofAge) : null,
+          directional_indicators: Object.keys(formData.indicators).filter(
+            (k) => formData.indicators[k]?.state === 'present'
+          ),
+          collateral_damage: [],
+          pattern_dispersion: null,
+          roof_age: formData.roofAge ? parseInt(formData.roofAge, 10) : null,
           shingle_type: formData.shingleType,
           manufacturer: formData.manufacturer,
           prior_repairs: formData.priorRepairs,
           weather_evidence: formData.weatherEvidence,
-           competing_causes: [],
+          competing_causes: result.opposingObservations.map((i) => i.label),
           observations_notes: formData.observationsNotes,
           decision: result.decision,
-          decision_statement: result.decisionStatement,
-           reasoning: result.topSupportingIndicators.map(i => `${i.label} (+${i.appliedWeight})`),
-           alternatives_considered: result.topOpposingIndicators.map(i => ({ 
-             cause: i.label, 
-             likelihood: 'Documented', 
-             reasoning: `Evidence documented (-${i.appliedWeight})` 
-           })),
+          decision_statement: result.conclusion,
+          reasoning: [
+            result.counterfactualQuestion,
+            result.directAnswer,
+            result.reasoningSummary,
+          ],
+          alternatives_considered: result.opposingObservations.map((i) => ({
+            cause: i.label,
+            reasoning: 'Affirmatively documented alternative-cause observation',
+          })),
           evidence_gaps: result.evidenceGaps,
-           total_score: result.scoring.netScore,
-           score_breakdown: JSON.parse(JSON.stringify({ 
-             windEvidence: result.scoring.windEvidenceScore, 
-             alternativeCause: result.scoring.alternativeCauseScore,
-             indicatorBreakdown: result.indicatorBreakdown
-           })),
-       }]);
+          total_score: null,
+          score_breakdown: JSON.parse(JSON.stringify({
+            counterfactualQuestion: result.counterfactualQuestion,
+            directAnswer: result.directAnswer,
+            supportingObservations: result.supportingObservations,
+            opposingObservations: result.opposingObservations,
+            unknownObservations: result.unknownObservations,
+            carrierBurdenStatement: result.carrierBurdenStatement,
+            baselineContext: result.baselineContext,
+          })),
+        }]);
       
       if (error) throw error;
     },
@@ -157,7 +164,7 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
       return;
     }
     
-     const calculatedResult = calculateCausation(formData);
+    const calculatedResult = calculateCausation(formData);
     setResult(calculatedResult);
     setShowResults(true);
     saveMutation.mutate(calculatedResult);
@@ -173,54 +180,36 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
 
   // Reconstruct a CausationResult from a saved database test record
   const reconstructResult = (test: any): { result: CausationResult; formData: CausationFormData } => {
-    const scoreBreakdown = typeof test.score_breakdown === 'string' 
-      ? JSON.parse(test.score_breakdown) 
-      : test.score_breakdown || {};
-    const indicatorBreakdown = scoreBreakdown?.indicatorBreakdown || [];
-    const reasoning = Array.isArray(test.reasoning) ? test.reasoning : [];
-    const alternatives = Array.isArray(test.alternatives_considered) ? test.alternatives_considered : [];
-
-    const topSupporting: IndicatorBreakdown[] = reasoning.map((r: string, i: number) => {
-      const match = r.match(/^(.+?)\s*\(\+(\d+)\)$/);
-      return {
-        id: `supporting-${i}`,
-        label: match ? match[1] : r,
-        state: 'present' as const,
-        weight: match ? parseInt(match[2]) : 0,
-        appliedWeight: match ? parseInt(match[2]) : 0,
-        isPositive: true,
-      };
-    });
-
-    const topOpposing: IndicatorBreakdown[] = alternatives.map((a: any, i: number) => {
-      const weightMatch = a.reasoning?.match(/\(-?(\d+)\)/);
-      return {
-        id: `opposing-${i}`,
-        label: a.cause || `Alternative ${i + 1}`,
-        state: 'present' as const,
-        weight: weightMatch ? parseInt(weightMatch[1]) : 0,
-        appliedWeight: weightMatch ? parseInt(weightMatch[1]) : 0,
-        isPositive: false,
-      };
-    });
+    const scoreBreakdown =
+      typeof test.score_breakdown === 'string'
+        ? JSON.parse(test.score_breakdown)
+        : test.score_breakdown || {};
 
     const result: CausationResult = {
       decision: test.decision || 'indeterminate',
-      decisionStatement: test.decision_statement || '',
-      butForStatement: `But for ${test.peril_tested}, the ${test.damage_type || 'damage'} would not have occurred.`,
-      minimumEvidenceMet: topSupporting.length > 0,
-      minimumEvidenceDetails: topSupporting.length === 0 ? ['No core supporting indicators were documented'] : [],
-      topSupportingIndicators: topSupporting,
-      topOpposingIndicators: topOpposing,
+      decisionLabel:
+        test.decision === 'supported'
+          ? 'Causation Supported'
+          : test.decision === 'not_supported'
+          ? 'Causation Not Supported'
+          : 'More Documentation Needed',
+      counterfactualQuestion:
+        scoreBreakdown.counterfactualQuestion ||
+        `If not for ${test.peril_tested || 'the reported peril'}, would the ${test.damage_type || 'reported damage'} be present?`,
+      directAnswer:
+        scoreBreakdown.directAnswer || test.decision_statement || '',
+      conclusion: test.decision_statement || '',
+      reasoningSummary:
+        Array.isArray(test.reasoning) ? test.reasoning.join(' ') : '',
+      supportingObservations: scoreBreakdown.supportingObservations || [],
+      opposingObservations: scoreBreakdown.opposingObservations || [],
+      unknownObservations: scoreBreakdown.unknownObservations || [],
       evidenceGaps: Array.isArray(test.evidence_gaps) ? test.evidence_gaps : [],
-      whatWouldChange: [],
-      scoring: {
-        windEvidenceScore: scoreBreakdown?.windEvidence || 0,
-        alternativeCauseScore: scoreBreakdown?.alternativeCause || 0,
-        netScore: test.total_score || 0,
-      },
-      indicatorBreakdown,
-      baselineSusceptibility: test.roof_age ? `Roof age: ${test.roof_age} years. Shingle: ${test.shingle_type || 'Unknown'}` : '',
+      carrierBurdenStatement:
+        scoreBreakdown.carrierBurdenStatement ||
+        'If the carrier disputes the reported peril as the cause, it should identify the specific alternative cause and the facts supporting it.',
+      baselineContext: scoreBreakdown.baselineContext || '',
+      rebuttalSummary: undefined,
     };
 
     const fd: CausationFormData = {
@@ -254,9 +243,9 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
                   <Scale className="h-5 w-5" />
                 </div>
                 <div>
-                  <CardTitle className="text-base">But-For Causation Test</CardTitle>
+                  <CardTitle className="text-base">Counterfactual Causation Test</CardTitle>
                   <CardDescription className="text-xs">
-                    Evaluate insurance causation: "If not for PERIL X, would DAMAGE Y have occurred?"
+                    Evaluate causation in plain language: "If not for the reported peril, would the reported damage be present?"
                   </CardDescription>
                 </div>
               </div>
@@ -290,7 +279,7 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
               </div>
             )}
 
-            {/* AI Photo Analysis Section - Always visible */}
+            {/* AI Photo Analysis Section */}
             <CausationPhotoAnalysis
               claimId={claimId}
               perilTested={formData.perilTested || 'wind'}
@@ -311,7 +300,7 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
                     <SelectContent>
                       {PERILS.map(peril => (
                         <SelectItem key={peril.value} value={peril.value}>
-                           {peril.label}
+                          {peril.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -373,269 +362,265 @@ export const DarwinButForCausation = ({ claimId, claim }: DarwinButForCausationP
                 </div>
               </div>
 
-               {/* Three-State Indicator System */}
-               <div className="space-y-4">
-                 <div className="flex items-center gap-2 p-3 bg-muted/30 rounded-lg">
-                   <Info className="h-4 w-4 text-muted-foreground" />
-                   <p className="text-xs text-muted-foreground">
-                     <strong>Indicator States:</strong> Yes (observed/documented) • No (explicitly not present) • ? (unknown/not evaluated). 
-                     <span className="text-yellow-600 dark:text-yellow-400 font-medium"> Unknown indicators are NEVER penalized.</span>
-                   </p>
-                 </div>
- 
-                 <Accordion type="multiple" defaultValue={['core_evidence', 'directional']} className="space-y-2">
-                   {/* Core Evidence Indicators */}
-                   <AccordionItem value="core_evidence" className="border rounded-lg">
-                     <AccordionTrigger className="px-4 hover:no-underline">
-                       <div className="flex items-center gap-2">
-                         <span className="font-medium">Core Evidence (Minimum Requirement)</span>
-                         <Badge variant="outline" className="bg-primary/10 text-primary text-xs">
-                           At least 1 required for "Supported"
-                         </Badge>
-                       </div>
-                     </AccordionTrigger>
-                     <AccordionContent className="px-4 pb-4">
-                       <div className="space-y-2">
-                         {PERIL_SUPPORTING_INDICATORS.filter(i => i.category === 'core_evidence').map(indicator => (
-                           <IndicatorInput
-                             key={indicator.id}
-                             id={indicator.id}
-                             label={indicator.label}
-                             weight={indicator.weight}
-                             isPositive={indicator.isPositive}
-                             description={indicator.description}
-                             value={formData.indicators[indicator.id]}
-                             onChange={handleIndicatorChange}
-                           />
-                         ))}
-                       </div>
-                     </AccordionContent>
-                   </AccordionItem>
- 
-                   {/* Secondary Supporting Indicators */}
-                   <AccordionItem value="secondary" className="border rounded-lg">
-                     <AccordionTrigger className="px-4 hover:no-underline">
-                       <span className="font-medium">Secondary Supporting Indicators</span>
-                     </AccordionTrigger>
-                     <AccordionContent className="px-4 pb-4">
-                       <div className="space-y-2">
-                         {PERIL_SUPPORTING_INDICATORS.filter(i => i.category !== 'core_evidence').map(indicator => (
-                           <IndicatorInput
-                             key={indicator.id}
-                             id={indicator.id}
-                             label={indicator.label}
-                             weight={indicator.weight}
-                             isPositive={indicator.isPositive}
-                             description={indicator.description}
-                             value={formData.indicators[indicator.id]}
-                             onChange={handleIndicatorChange}
-                           />
-                         ))}
-                       </div>
-                     </AccordionContent>
-                   </AccordionItem>
- 
-                   {/* Alternative Cause Indicators */}
-                   <AccordionItem value="alternative" className="border rounded-lg border-red-500/20">
-                     <AccordionTrigger className="px-4 hover:no-underline">
-                       <div className="flex items-center gap-2">
-                         <span className="font-medium">Alternative Cause Indicators</span>
-                         <Badge variant="outline" className="bg-red-500/10 text-red-700 text-xs">
-                           Only mark "Yes" if affirmative evidence exists
-                         </Badge>
-                       </div>
-                     </AccordionTrigger>
-                     <AccordionContent className="px-4 pb-4">
-                       <p className="text-xs text-muted-foreground mb-3">
-                         Do NOT subtract points unless there is <strong>affirmative evidence</strong> of an alternative cause. 
-                         Absence of documentation ≠ evidence of absence.
-                       </p>
-                       <div className="space-y-2">
-                         {ALTERNATIVE_CAUSE_INDICATORS.map(indicator => (
-                           <IndicatorInput
-                             key={indicator.id}
-                             id={indicator.id}
-                             label={indicator.label}
-                             weight={indicator.weight}
-                             isPositive={indicator.isPositive}
-                             description={indicator.description}
-                             value={formData.indicators[indicator.id]}
-                             onChange={handleIndicatorChange}
-                           />
-                         ))}
-                       </div>
-                     </AccordionContent>
-                   </AccordionItem>
-                 </Accordion>
-               </div>
- 
-               {/* Baseline Susceptibility Context (not scored) */}
-               <Accordion type="single" collapsible className="border rounded-lg">
-                 <AccordionItem value="context" className="border-0">
-                   <AccordionTrigger className="px-4 hover:no-underline">
-                     <div className="flex items-center gap-2">
-                       <span className="font-medium">Baseline Susceptibility Context</span>
-                       <Badge variant="outline" className="text-xs">
-                         Contextual modifiers — not directly scored
-                       </Badge>
-                     </div>
-                   </AccordionTrigger>
-                   <AccordionContent className="px-4 pb-4 space-y-4">
-                     <p className="text-xs text-muted-foreground">
-                       Roof age, shingle type, and prior repairs influence the but-for explanation, 
-                       but do NOT independently cause approval or denial.
-                     </p>
-                     
-                     <div className="grid gap-4 md:grid-cols-3">
-                       <div className="space-y-2">
-                         <Label>Roof Age (years)</Label>
-                         <Input 
-                           type="number" 
-                           placeholder="e.g., 12"
-                           value={formData.roofAge} 
-                           onChange={e => setFormData(prev => ({ ...prev, roofAge: e.target.value }))}
-                         />
-                       </div>
-                       <div className="space-y-2">
-                         <Label>Shingle Type</Label>
-                         <Select value={formData.shingleType} onValueChange={v => setFormData(prev => ({ ...prev, shingleType: v }))}>
-                           <SelectTrigger>
-                             <SelectValue placeholder="Select type" />
-                           </SelectTrigger>
-                           <SelectContent>
-                             {SHINGLE_TYPES.map(type => (
-                               <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
-                             ))}
-                           </SelectContent>
-                         </Select>
-                       </div>
-                       <div className="space-y-2">
-                         <Label>Manufacturer</Label>
-                         <Input 
-                           placeholder="e.g., GAF, Owens Corning"
-                           value={formData.manufacturer} 
-                           onChange={e => setFormData(prev => ({ ...prev, manufacturer: e.target.value }))}
-                         />
-                       </div>
-                     </div>
- 
-                     <div className="space-y-2">
-                       <Label>Prior Repairs / Known Issues</Label>
-                       <Textarea 
-                         placeholder="Document any previous repairs, maintenance, or known issues..."
-                         value={formData.priorRepairs}
-                         onChange={e => setFormData(prev => ({ ...prev, priorRepairs: e.target.value }))}
-                         rows={2}
-                      />
-                    </div>
- 
-                     <div className="space-y-2">
-                       <Label>Weather/Event Evidence</Label>
-                       <Textarea 
-                         placeholder="Reported wind speeds, storm reports, NOAA data..."
-                         value={formData.weatherEvidence}
-                         onChange={e => setFormData(prev => ({ ...prev, weatherEvidence: e.target.value }))}
-                         rows={2}
-                      />
-                    </div>
-                   </AccordionContent>
-                 </AccordionItem>
-               </Accordion>
- 
-               {/* Notes */}
-               <div className="space-y-2">
-                 <Label>Observations / Additional Notes</Label>
-                 <Textarea 
-                   placeholder="Additional observations, inspector notes, or context..."
-                   value={formData.observationsNotes}
-                   onChange={e => setFormData(prev => ({ ...prev, observationsNotes: e.target.value }))}
-                   rows={2}
-                 />
+              {/* Three-State Indicator System */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 p-3 bg-muted/30 rounded-lg">
+                  <Info className="h-4 w-4 text-muted-foreground" />
+                  <p className="text-xs text-muted-foreground">
+                    <strong>Indicator States:</strong> Yes (observed/documented) • No (explicitly not present) • ? (unknown/not evaluated). 
+                    <span className="text-yellow-600 dark:text-yellow-400 font-medium"> Document what was observed. Unknowns are not counted against the insured.</span>
+                  </p>
+                </div>
+
+                <Accordion type="multiple" defaultValue={['core_evidence', 'secondary']} className="space-y-2">
+                  {/* Core Evidence Indicators */}
+                  <AccordionItem value="core_evidence" className="border rounded-lg">
+                    <AccordionTrigger className="px-4 hover:no-underline">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Core Evidence</span>
+                        <Badge variant="outline" className="bg-primary/10 text-primary text-xs">
+                          Document what was observed. Unknowns are not counted against the insured.
+                        </Badge>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-4 pb-4">
+                      <div className="space-y-2">
+                        {PERIL_SUPPORTING_INDICATORS.filter(i => i.category === 'core_evidence').map(indicator => (
+                          <IndicatorInput
+                            key={indicator.id}
+                            id={indicator.id}
+                            label={indicator.label}
+                            isPositive={indicator.isPositive}
+                            description={indicator.description}
+                            value={formData.indicators[indicator.id]}
+                            onChange={handleIndicatorChange}
+                          />
+                        ))}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  {/* Secondary Supporting Indicators */}
+                  <AccordionItem value="secondary" className="border rounded-lg">
+                    <AccordionTrigger className="px-4 hover:no-underline">
+                      <span className="font-medium">Secondary Supporting Indicators</span>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-4 pb-4">
+                      <div className="space-y-2">
+                        {PERIL_SUPPORTING_INDICATORS.filter(i => i.category !== 'core_evidence').map(indicator => (
+                          <IndicatorInput
+                            key={indicator.id}
+                            id={indicator.id}
+                            label={indicator.label}
+                            isPositive={indicator.isPositive}
+                            description={indicator.description}
+                            value={formData.indicators[indicator.id]}
+                            onChange={handleIndicatorChange}
+                          />
+                        ))}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+
+                  {/* Alternative Cause Indicators */}
+                  <AccordionItem value="alternative" className="border rounded-lg border-red-500/20">
+                    <AccordionTrigger className="px-4 hover:no-underline">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Alternative Cause Indicators</span>
+                        <Badge variant="outline" className="bg-red-500/10 text-red-700 text-xs">
+                          Only mark "Yes" if affirmative evidence exists
+                        </Badge>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-4 pb-4">
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Do NOT mark present unless there is <strong>affirmative evidence</strong> of an alternative cause. 
+                        Absence of documentation ≠ evidence of absence.
+                      </p>
+                      <div className="space-y-2">
+                        {ALTERNATIVE_CAUSE_INDICATORS.map(indicator => (
+                          <IndicatorInput
+                            key={indicator.id}
+                            id={indicator.id}
+                            label={indicator.label}
+                            isPositive={indicator.isPositive}
+                            description={indicator.description}
+                            value={formData.indicators[indicator.id]}
+                            onChange={handleIndicatorChange}
+                          />
+                        ))}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
               </div>
 
-               {/* Run Test Button */}
-               <div className="flex gap-2">
-                 <Button 
-                   onClick={handleRunTest} 
-                   disabled={saveMutation.isPending}
-                   className="flex-1"
-                 >
-                   {saveMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                   Run But-For Causation Test
-                 </Button>
+              {/* Baseline Context (not scored) */}
+              <Accordion type="single" collapsible className="border rounded-lg">
+                <AccordionItem value="context" className="border-0">
+                  <AccordionTrigger className="px-4 hover:no-underline">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Baseline Context</span>
+                      <Badge variant="outline" className="text-xs">
+                        Contextual — not part of the causation determination
+                      </Badge>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-4 pb-4 space-y-4">
+                    <p className="text-xs text-muted-foreground">
+                      Roof age, shingle type, and prior repairs provide context but do not independently determine causation.
+                    </p>
+                    
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className="space-y-2">
+                        <Label>Roof Age (years)</Label>
+                        <Input 
+                          type="number" 
+                          placeholder="e.g., 12"
+                          value={formData.roofAge} 
+                          onChange={e => setFormData(prev => ({ ...prev, roofAge: e.target.value }))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Shingle Type</Label>
+                        <Select value={formData.shingleType} onValueChange={v => setFormData(prev => ({ ...prev, shingleType: v }))}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SHINGLE_TYPES.map(type => (
+                              <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Manufacturer</Label>
+                        <Input 
+                          placeholder="e.g., GAF, Owens Corning"
+                          value={formData.manufacturer} 
+                          onChange={e => setFormData(prev => ({ ...prev, manufacturer: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Prior Repairs / Known Issues</Label>
+                      <Textarea 
+                        placeholder="Document any previous repairs, maintenance, or known issues..."
+                        value={formData.priorRepairs}
+                        onChange={e => setFormData(prev => ({ ...prev, priorRepairs: e.target.value }))}
+                        rows={2}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Weather/Event Evidence</Label>
+                      <Textarea 
+                        placeholder="Reported wind speeds, storm reports, NOAA data..."
+                        value={formData.weatherEvidence}
+                        onChange={e => setFormData(prev => ({ ...prev, weatherEvidence: e.target.value }))}
+                        rows={2}
+                      />
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+
+              {/* Notes */}
+              <div className="space-y-2">
+                <Label>Observations / Additional Notes</Label>
+                <Textarea 
+                  placeholder="Additional observations, inspector notes, or context..."
+                  value={formData.observationsNotes}
+                  onChange={e => setFormData(prev => ({ ...prev, observationsNotes: e.target.value }))}
+                  rows={2}
+                />
               </div>
 
-               {/* Results */}
-               {showResults && result && (
-                 <CausationResults 
-                   result={result} 
-                   formData={formData}
-                   claimNumber={claim?.claim_number}
-                 />
-               )}
- 
-               {/* Carrier Blame Counter Section */}
-               <Accordion type="single" collapsible>
-                 <AccordionItem value="blame-counter">
-                   <AccordionTrigger>
-                     <span className="font-medium">Carrier Blame Counter-Arguments</span>
-                   </AccordionTrigger>
-                   <AccordionContent>
-                     <CausationBlameCounterSection
-                       selectedTactics={formData.carrierBlameTactics}
-                       onTacticsChange={(tactics) => setFormData(prev => ({ ...prev, carrierBlameTactics: tactics }))}
-                       onEvidenceCheck={(tacticId, evidenceItem, checked) => {
-                         setFormData(prev => {
-                           const current = prev.blameEvidenceChecked[tacticId] || [];
-                           const updated = checked 
-                             ? [...current, evidenceItem]
-                             : current.filter(e => e !== evidenceItem);
-                           return {
-                             ...prev,
-                             blameEvidenceChecked: {
-                               ...prev.blameEvidenceChecked,
-                               [tacticId]: updated,
-                             },
-                           };
-                         });
-                       }}
-                       checkedEvidence={formData.blameEvidenceChecked}
-                     />
-                   </AccordionContent>
-                 </AccordionItem>
-               </Accordion>
-             </div>
+              {/* Run Test Button */}
+              <div className="flex gap-2">
+                <Button 
+                  onClick={handleRunTest} 
+                  disabled={saveMutation.isPending}
+                  className="flex-1"
+                >
+                  {saveMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Run Counterfactual Test
+                </Button>
+              </div>
+
+              {/* Results */}
+              {showResults && result && (
+                <CausationResults 
+                  result={result} 
+                  formData={formData}
+                  claimNumber={claim?.claim_number}
+                />
+              )}
+
+              {/* Carrier Blame Counter Section */}
+              <Accordion type="single" collapsible>
+                <AccordionItem value="blame-counter">
+                  <AccordionTrigger>
+                    <span className="font-medium">Carrier Blame Counter-Arguments</span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <CausationBlameCounterSection
+                      selectedTactics={formData.carrierBlameTactics}
+                      onTacticsChange={(tactics) => setFormData(prev => ({ ...prev, carrierBlameTactics: tactics }))}
+                      onEvidenceCheck={(tacticId, evidenceItem, checked) => {
+                        setFormData(prev => {
+                          const current = prev.blameEvidenceChecked[tacticId] || [];
+                          const updated = checked 
+                            ? [...current, evidenceItem]
+                            : current.filter(e => e !== evidenceItem);
+                          return {
+                            ...prev,
+                            blameEvidenceChecked: {
+                              ...prev.blameEvidenceChecked,
+                              [tacticId]: updated,
+                            },
+                          };
+                        });
+                      }}
+                      checkedEvidence={formData.blameEvidenceChecked}
+                    />
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            </div>
           </CardContent>
         </CollapsibleContent>
       </Collapsible>
     </Card>
 
-      {/* Previous Test Results Dialog */}
-      <Dialog open={!!viewingTest} onOpenChange={(open) => !open && setViewingTest(null)}>
-        <DialogContent className="max-w-3xl max-h-[85vh]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Scale className="h-5 w-5 text-primary" />
-              Causation Test: {viewingTest?.peril_tested} — {viewingTest?.damage_type}
-              <span className="text-sm font-normal text-muted-foreground ml-2">
-                {viewingTest && new Date(viewingTest.created_at).toLocaleDateString()}
-              </span>
-            </DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="max-h-[70vh] pr-4">
-            {viewingTest && (() => {
-              const { result: savedResult, formData: savedFormData } = reconstructResult(viewingTest);
-              return (
-                <CausationResults
-                  result={savedResult}
-                  formData={savedFormData}
-                  claimNumber={claim?.claim_number}
-                />
-              );
-            })()}
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
+    {/* Previous Test Results Dialog */}
+    <Dialog open={!!viewingTest} onOpenChange={(open) => !open && setViewingTest(null)}>
+      <DialogContent className="max-w-3xl max-h-[85vh]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Scale className="h-5 w-5 text-primary" />
+            Causation Test: {viewingTest?.peril_tested} — {viewingTest?.damage_type}
+            <span className="text-sm font-normal text-muted-foreground ml-2">
+              {viewingTest && new Date(viewingTest.created_at).toLocaleDateString()}
+            </span>
+          </DialogTitle>
+        </DialogHeader>
+        <ScrollArea className="max-h-[70vh] pr-4">
+          {viewingTest && (() => {
+            const { result: savedResult, formData: savedFormData } = reconstructResult(viewingTest);
+            return (
+              <CausationResults
+                result={savedResult}
+                formData={savedFormData}
+                claimNumber={claim?.claim_number}
+              />
+            );
+          })()}
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
     </>
   );
 };
