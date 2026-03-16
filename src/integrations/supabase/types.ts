@@ -6717,50 +6717,107 @@ export type Database = {
       darwin_declared_positions: {
         Row: {
           carrier_dependency_statement: string | null
+          carrier_evidence_rebutted: Json
           claim_id: string
+          claim_type: string | null
           confidence_level: string | null
+          coverage_trigger_theory: string | null
           created_at: string
           created_by: string | null
+          decisive_contradiction: string | null
+          drift_risk: string | null
           id: string
+          key_supporting_evidence: Json
+          known_weaknesses: Json
+          lock_status: string
+          master_position_statement: string | null
           missing_inputs: string[] | null
+          missing_proof_needed: Json
+          observed_damage_condition: string | null
+          policy_standard_support: Json
           position_locked: boolean
+          position_strength_label: string | null
+          position_strength_score: number | null
           primary_carrier_error: string | null
           primary_cause_of_loss: string | null
           primary_coverage_theory: string | null
+          primary_loss_mechanism: string | null
+          provisional_reason: string | null
           reasoning_complete: boolean
+          requested_remedy: string | null
           risk_flags: string[] | null
+          specific_carrier_failure: string | null
+          strategic_notes: string | null
           updated_at: string
         }
         Insert: {
           carrier_dependency_statement?: string | null
+          carrier_evidence_rebutted?: Json
           claim_id: string
+          claim_type?: string | null
           confidence_level?: string | null
+          coverage_trigger_theory?: string | null
           created_at?: string
           created_by?: string | null
+          decisive_contradiction?: string | null
+          drift_risk?: string | null
           id?: string
+          key_supporting_evidence?: Json
+          known_weaknesses?: Json
+          lock_status?: string
+          master_position_statement?: string | null
           missing_inputs?: string[] | null
+          missing_proof_needed?: Json
+          observed_damage_condition?: string | null
+          policy_standard_support?: Json
           position_locked?: boolean
+          position_strength_label?: string | null
+          position_strength_score?: number | null
           primary_carrier_error?: string | null
           primary_cause_of_loss?: string | null
           primary_coverage_theory?: string | null
+          primary_loss_mechanism?: string | null
+          provisional_reason?: string | null
           reasoning_complete?: boolean
+          requested_remedy?: string | null
           risk_flags?: string[] | null
+          specific_carrier_failure?: string | null
+          strategic_notes?: string | null
           updated_at?: string
         }
         Update: {
           carrier_dependency_statement?: string | null
+          carrier_evidence_rebutted?: Json
           claim_id?: string
+          claim_type?: string | null
           confidence_level?: string | null
+          coverage_trigger_theory?: string | null
           created_at?: string
           created_by?: string | null
+          decisive_contradiction?: string | null
+          drift_risk?: string | null
           id?: string
+          key_supporting_evidence?: Json
+          known_weaknesses?: Json
+          lock_status?: string
+          master_position_statement?: string | null
           missing_inputs?: string[] | null
+          missing_proof_needed?: Json
+          observed_damage_condition?: string | null
+          policy_standard_support?: Json
           position_locked?: boolean
+          position_strength_label?: string | null
+          position_strength_score?: number | null
           primary_carrier_error?: string | null
           primary_cause_of_loss?: string | null
           primary_coverage_theory?: string | null
+          primary_loss_mechanism?: string | null
+          provisional_reason?: string | null
           reasoning_complete?: boolean
+          requested_remedy?: string | null
           risk_flags?: string[] | null
+          specific_carrier_failure?: string | null
+          strategic_notes?: string | null
           updated_at?: string
         }
         Relationships: [
