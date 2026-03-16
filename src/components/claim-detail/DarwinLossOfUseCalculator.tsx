@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { Home, Plus, DollarSign, Receipt, Upload, CheckCircle, CreditCard, Edit, Trash2, X } from "lucide-react";
+import { Home, Plus, DollarSign, Receipt, Upload, CheckCircle, CreditCard, Edit, Trash2, X, Wallet, Save } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -50,12 +50,37 @@ const EXPENSE_CATEGORIES = [
   { value: "other", label: "Other ALE", icon: "📋" },
 ];
 
+interface NormalBill {
+  id: string;
+  claim_id: string;
+  category: string;
+  label: string;
+  monthly_amount: number;
+  notes: string | null;
+}
+
+const NORMAL_BILL_CATEGORIES = [
+  { value: "groceries", label: "Groceries", icon: "🛒" },
+  { value: "meals", label: "Meals / Dining Out", icon: "🍽️" },
+  { value: "utilities", label: "Utilities", icon: "💡" },
+  { value: "laundry", label: "Laundry", icon: "🧺" },
+  { value: "transportation", label: "Transportation / Gas", icon: "🚗" },
+  { value: "pet_care", label: "Pet Care", icon: "🐕" },
+  { value: "other", label: "Other", icon: "📋" },
+];
+
 export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCalculatorProps) => {
   const [expenses, setExpenses] = useState<LossOfUseExpense[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [normalBills, setNormalBills] = useState<NormalBill[]>([]);
+  const [normalBillsLoading, setNormalBillsLoading] = useState(true);
+  const [showNormalBills, setShowNormalBills] = useState(false);
+  const [newBillCategory, setNewBillCategory] = useState("");
+  const [newBillAmount, setNewBillAmount] = useState("");
+  const [newBillLabel, setNewBillLabel] = useState("");
   const [formData, setFormData] = useState({
     expense_category: "",
     expense_date: format(new Date(), "yyyy-MM-dd"),
@@ -82,7 +107,56 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
 
   useEffect(() => {
     fetchExpenses();
+    fetchNormalBills();
   }, [claimId]);
+
+  const fetchNormalBills = async () => {
+    const { data, error } = await supabase
+      .from("claim_normal_bills")
+      .select("*")
+      .eq("claim_id", claimId);
+    if (!error) setNormalBills((data as any) || []);
+    setNormalBillsLoading(false);
+  };
+
+  const handleAddNormalBill = async () => {
+    if (!newBillCategory || !newBillAmount) {
+      toast.error("Select a category and enter an amount");
+      return;
+    }
+    const existing = normalBills.find(b => b.category === newBillCategory);
+    if (existing) {
+      toast.error("That category already exists — edit it instead");
+      return;
+    }
+    const catInfo = NORMAL_BILL_CATEGORIES.find(c => c.value === newBillCategory);
+    const { error } = await supabase.from("claim_normal_bills").insert({
+      claim_id: claimId,
+      category: newBillCategory,
+      label: newBillLabel || catInfo?.label || newBillCategory,
+      monthly_amount: parseFloat(newBillAmount),
+    } as any);
+    if (error) { toast.error("Failed to add"); console.error(error); }
+    else {
+      toast.success("Normal bill added");
+      setNewBillCategory("");
+      setNewBillAmount("");
+      setNewBillLabel("");
+      fetchNormalBills();
+    }
+  };
+
+  const handleUpdateNormalBill = async (id: string, amount: number) => {
+    const { error } = await supabase.from("claim_normal_bills").update({ monthly_amount: amount } as any).eq("id", id);
+    if (error) toast.error("Failed to update");
+    else { toast.success("Updated"); fetchNormalBills(); }
+  };
+
+  const handleDeleteNormalBill = async (id: string) => {
+    const { error } = await supabase.from("claim_normal_bills").delete().eq("id", id);
+    if (error) toast.error("Failed to delete");
+    else { toast.success("Removed"); fetchNormalBills(); }
+  };
 
   // Derive available months
   const availableMonths = useMemo(() => {
@@ -250,6 +324,34 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
 
   const activeFilters = (selectedMonth ? 1 : 0) + (selectedCategory ? 1 : 0);
 
+  // Normal bills total
+  const totalNormalBills = normalBills.reduce((sum, b) => sum + b.monthly_amount, 0);
+
+  // Monthly additional expense calculation
+  const monthlyAdditionalExpenses = useMemo(() => {
+    const monthMap = new Map<string, { monthLabel: string; total: number }>();
+    expenses.forEach((e) => {
+      const d = new Date(e.expense_date);
+      const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`;
+      const existing = monthMap.get(key);
+      if (existing) {
+        existing.total += e.amount;
+      } else {
+        monthMap.set(key, {
+          monthLabel: d.toLocaleString("en-US", { month: "long", year: "numeric" }),
+          total: e.amount,
+        });
+      }
+    });
+    return Array.from(monthMap.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([, v]) => ({
+        ...v,
+        normalBills: totalNormalBills,
+        additional: Math.max(0, v.total - totalNormalBills),
+      }));
+  }, [expenses, totalNormalBills]);
+
   return (
     <Card>
       <CardHeader>
@@ -397,6 +499,106 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
             <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">${totalReimbursed.toLocaleString()}</p>
           </div>
         </div>
+
+        {/* Normal Bills / Baseline Section */}
+        <div className="mb-6 border rounded-lg p-4 bg-muted/30">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-muted-foreground" />
+              <h4 className="font-medium">Client's Normal Monthly Bills</h4>
+              {totalNormalBills > 0 && (
+                <Badge variant="secondary" className="text-xs">${totalNormalBills.toLocaleString()}/mo</Badge>
+              )}
+            </div>
+            <Button size="sm" variant="outline" onClick={() => setShowNormalBills(!showNormalBills)}>
+              {showNormalBills ? "Hide" : "Manage"}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            Enter the client's normal monthly expenses (groceries, meals, etc.) to calculate the <strong>additional</strong> expense above their baseline.
+          </p>
+
+          {showNormalBills && (
+            <div className="space-y-3">
+              {normalBills.map((bill) => (
+                <div key={bill.id} className="flex items-center gap-2">
+                  <span className="text-sm w-40 truncate">{NORMAL_BILL_CATEGORIES.find(c => c.value === bill.category)?.icon || "📋"} {bill.label}</span>
+                  <span className="text-xs text-muted-foreground">$</span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    className="w-28 h-8 text-sm"
+                    defaultValue={bill.monthly_amount}
+                    onBlur={(e) => {
+                      const val = parseFloat(e.target.value);
+                      if (!isNaN(val) && val !== bill.monthly_amount) {
+                        handleUpdateNormalBill(bill.id, val);
+                      }
+                    }}
+                  />
+                  <span className="text-xs text-muted-foreground">/mo</span>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => handleDeleteNormalBill(bill.id)}>
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+
+              <div className="flex items-center gap-2 pt-2 border-t">
+                <Select value={newBillCategory} onValueChange={setNewBillCategory}>
+                  <SelectTrigger className="w-44 h-8 text-sm"><SelectValue placeholder="Category" /></SelectTrigger>
+                  <SelectContent>
+                    {NORMAL_BILL_CATEGORIES.filter(c => !normalBills.find(b => b.category === c.value)).map(cat => (
+                      <SelectItem key={cat.value} value={cat.value}>{cat.icon} {cat.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-xs text-muted-foreground">$</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  className="w-28 h-8 text-sm"
+                  value={newBillAmount}
+                  onChange={(e) => setNewBillAmount(e.target.value)}
+                />
+                <span className="text-xs text-muted-foreground">/mo</span>
+                <Button size="sm" className="h-8" onClick={handleAddNormalBill}><Plus className="h-3 w-3 mr-1" /> Add</Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Monthly Additional Expense Summary */}
+        {monthlyAdditionalExpenses.length > 0 && totalNormalBills > 0 && (
+          <div className="mb-6 border rounded-lg overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Month</TableHead>
+                  <TableHead className="text-right">Total Spent</TableHead>
+                  <TableHead className="text-right">Normal Bills</TableHead>
+                  <TableHead className="text-right font-semibold">Additional Expense</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {monthlyAdditionalExpenses.map((m) => (
+                  <TableRow key={m.monthLabel}>
+                    <TableCell className="font-medium">{m.monthLabel}</TableCell>
+                    <TableCell className="text-right">${m.total.toLocaleString()}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">-${m.normalBills.toLocaleString()}</TableCell>
+                    <TableCell className="text-right font-bold text-primary">${m.additional.toLocaleString()}</TableCell>
+                  </TableRow>
+                ))}
+                <TableRow className="bg-muted/50 font-semibold">
+                  <TableCell>Total Additional</TableCell>
+                  <TableCell className="text-right">${monthlyAdditionalExpenses.reduce((s, m) => s + m.total, 0).toLocaleString()}</TableCell>
+                  <TableCell className="text-right text-muted-foreground">-${(totalNormalBills * monthlyAdditionalExpenses.length).toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-bold text-primary">${monthlyAdditionalExpenses.reduce((s, m) => s + m.additional, 0).toLocaleString()}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        )}
 
         {/* Category Breakdown */}
         {Object.keys(categoryTotals).length > 0 && (
