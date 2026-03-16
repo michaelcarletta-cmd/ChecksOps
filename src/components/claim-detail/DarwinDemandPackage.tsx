@@ -7,9 +7,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { FileText, Loader2, Download, Copy, FolderOpen, File, CheckSquare, AlertCircle, Briefcase, Camera } from "lucide-react";
+import { FileText, Loader2, Download, Copy, FolderOpen, File, CheckSquare, AlertCircle, Briefcase, Camera, Shield } from "lucide-react";
 import { format } from "date-fns";
 
 interface DarwinDemandPackageProps {
@@ -35,12 +36,62 @@ interface ClaimPhoto {
   description: string | null;
 }
 
+const STRATEGY_PRESETS: { value: string; label: string; description: string }[] = [
+  { value: "general_property", label: "General Property Loss", description: "Broad property damage demand" },
+  { value: "roof_wind_hail", label: "Roof Wind / Hail", description: "Wind and hail damage to roofing systems" },
+  { value: "interior_water", label: "Interior Water Damage", description: "Water intrusion and interior damage" },
+  { value: "engineer_rebuttal", label: "Engineer Rebuttal", description: "Rebutting carrier engineer reports" },
+  { value: "repairability_matching", label: "Repairability / Matching Dispute", description: "Arguing full replacement over repair" },
+  { value: "code_upgrade", label: "Code Upgrade Dispute", description: "Building code upgrade requirements" },
+  { value: "partial_denial_rebuttal", label: "Partial Denial Rebuttal", description: "Rebutting partial scope denials" },
+];
+
+const REQUIRED_SECTIONS = [
+  'Table of Contents',
+  'Claim Overview',
+  'Policyholder and Loss Information',
+  'Summary of Findings',
+  'Evidence Reviewed',
+  'Counterfactual Causation Test',
+  'Cause of Loss Analysis',
+  'Damaged Components',
+  'Weather Conditions Analysis',
+  'Condition of Damaged Components',
+  'Repairability Analysis',
+  'Why Partial Repairs Are Not Feasible',
+  'Interdependency of Building Systems',
+  'Why Damaged Areas Must Be Disturbed for Repairs',
+  'Code Requirements',
+  'Manufacturer Installation Standards',
+  'HAAG Engineering Standards and Industry Best Practices',
+  'Estimate and Scope Summary',
+  'Anticipated Carrier Defenses and Rebuttals',
+  'Formal Demand and Conclusion',
+  'Exhibit Index',
+  'Evidence Gaps Preventing Stronger Proof',
+];
+
+const GENERATION_RULES = [
+  'Use a formal, persuasive, evidence-driven tone',
+  'Tie each major conclusion to facts from the provided evidence',
+  'Do not invent facts not found in evidence',
+  'Explain the counterfactual causation test in plain language',
+  'Separate repairability from matching',
+  'Explicitly state why partial repair is not feasible if supported',
+  'Explicitly identify missing proof if evidence is incomplete',
+  'Identify missing proof items such as weather report, ITEL/manufacturer confirmation, code citation, repairability opinion, or missing elevation photos',
+  'Use headings and subheadings for clear structure',
+  'Include a formal demand paragraph with specific dollar amounts',
+  'State what evidence supports each section',
+];
+
 export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps) => {
   const [files, setFiles] = useState<ClaimFile[]>([]);
   const [photos, setPhotos] = useState<ClaimPhoto[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
   const [additionalInstructions, setAdditionalInstructions] = useState('');
+  const [strategyPreset, setStrategyPreset] = useState<string>('roof_wind_hail');
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [generatedPackage, setGeneratedPackage] = useState<string | null>(null);
@@ -49,6 +100,18 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
   const [assignedUserName, setAssignedUserName] = useState<string>('Public Adjuster');
   const [companyBranding, setCompanyBranding] = useState<any>(null);
 
+  // Structured claim facts helper
+  const claimFacts = {
+    policyholderName: claim?.policyholder_name || '',
+    claimNumber: claim?.claim_number || '',
+    policyNumber: claim?.policy_number || '',
+    carrier: claim?.carrier_name || claim?.insurance_company || '',
+    dateOfLoss: claim?.date_of_loss || claim?.loss_date || '',
+    lossAddress: claim?.loss_address || claim?.property_address || '',
+    state: claim?.state || '',
+    typeOfLoss: claim?.loss_type || claim?.claim_type || '',
+  };
+
   useEffect(() => {
     loadData();
   }, [claimId]);
@@ -56,7 +119,6 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
   const loadData = async () => {
     setLoadingData(true);
     try {
-      // Load folders first to get folder names
       const { data: foldersData } = await supabase
         .from('claim_folders')
         .select('id, name')
@@ -64,7 +126,6 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
       
       const folderMap = new Map(foldersData?.map(f => [f.id, f.name]) || []);
 
-      // Load files (PDFs and documents)
       const { data: filesData, error: filesError } = await supabase
         .from('claim_files')
         .select('id, file_name, file_path, file_type, folder_id, uploaded_at')
@@ -73,7 +134,6 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
 
       if (filesError) throw filesError;
       
-      // Filter to PDFs only and add folder names
       const documentFiles = (filesData || [])
         .filter(f => f.file_name?.toLowerCase().endsWith('.pdf'))
         .map(f => ({
@@ -82,7 +142,6 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
         }));
       setFiles(documentFiles);
 
-      // Load photos
       const { data: photosData } = await supabase
         .from('claim_photos')
         .select('id, file_name, file_path, category, description')
@@ -91,7 +150,6 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
       
       setPhotos(photosData || []);
 
-      // Load company branding
       const { data: brandingData } = await supabase
         .from('company_branding')
         .select('*')
@@ -99,7 +157,6 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
         .single();
       setCompanyBranding(brandingData);
 
-      // Load assigned staff to get user name
       const { data: staffData } = await supabase
         .from('claim_staff')
         .select('staff_id')
@@ -118,7 +175,6 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
         }
       }
 
-      // Load previous demand package
       const { data: previousPackage } = await supabase
         .from('darwin_analysis_results')
         .select('result, created_at')
@@ -141,21 +197,15 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
 
   const toggleFile = (id: string) => {
     const newSelected = new Set(selectedFiles);
-    if (newSelected.has(id)) {
-      newSelected.delete(id);
-    } else {
-      newSelected.add(id);
-    }
+    if (newSelected.has(id)) newSelected.delete(id);
+    else newSelected.add(id);
     setSelectedFiles(newSelected);
   };
 
   const togglePhoto = (id: string) => {
     const newSelected = new Set(selectedPhotos);
-    if (newSelected.has(id)) {
-      newSelected.delete(id);
-    } else {
-      newSelected.add(id);
-    }
+    if (newSelected.has(id)) newSelected.delete(id);
+    else newSelected.add(id);
     setSelectedPhotos(newSelected);
   };
 
@@ -164,6 +214,19 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
   const selectAllPhotos = () => setSelectedPhotos(new Set(photos.map(p => p.id)));
   const clearPhotos = () => setSelectedPhotos(new Set());
 
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        const base64 = result.split(',')[1] || result;
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
   const handleGenerate = async () => {
     if (selectedFiles.size === 0) {
       toast.error('Please select at least one evidence document');
@@ -171,10 +234,10 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
     }
 
     setLoading(true);
-    toast.info('Analyzing documents and building demand package... This may take 2-3 minutes.');
+    toast.info('Darwin is analyzing evidence, testing causation, and assembling the demand package.');
 
     try {
-      // Get file contents (PDFs as base64)
+      // Download PDFs as base64
       const selectedFileData = files.filter(f => selectedFiles.has(f.id));
       const fileContents: { name: string; content: string; folder: string }[] = [];
 
@@ -193,8 +256,26 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
         }
       }
 
-      // Get photo info if selected
+      // Download selected photos as base64
       const selectedPhotoData = photos.filter(p => selectedPhotos.has(p.id));
+      const photoContents: { name: string; content: string; category: string; description: string }[] = [];
+
+      for (const photo of selectedPhotoData) {
+        const { data, error } = await supabase.storage
+          .from('claim-photos')
+          .download(photo.file_path);
+
+        if (data && !error) {
+          const base64 = await blobToBase64(data);
+          photoContents.push({
+            name: photo.file_name,
+            content: base64,
+            category: photo.category || 'General',
+            description: photo.description || ''
+          });
+        }
+      }
+
       const photoInfo = selectedPhotoData.map((p, i) => ({
         number: i + 1,
         name: p.file_name,
@@ -202,7 +283,7 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
         description: p.description || ''
       }));
 
-      console.log(`Generating demand package with ${fileContents.length} documents and ${photoInfo.length} photos`);
+      console.log(`Generating demand package with ${fileContents.length} documents and ${photoContents.length} photos`);
 
       const { data, error } = await supabase.functions.invoke('darwin-ai-analysis', {
         body: {
@@ -210,14 +291,30 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
           analysisType: 'demand_package',
           additionalContext: {
             additionalInstructions,
-            documentCount: fileContents.length,
-            documents: fileContents.map(f => ({ name: f.name, folder: f.folder })),
-            photoCount: photoInfo.length,
-            photos: photoInfo,
-            assignedUserName
+            assignedUserName,
+            claimFacts,
+            evidenceSummary: {
+              documentCount: fileContents.length,
+              documents: fileContents.map((f, index) => ({
+                exhibit: `Exhibit ${String.fromCharCode(65 + index)}`,
+                name: f.name,
+                folder: f.folder,
+              })),
+              photoCount: photoInfo.length,
+              photos: photoInfo,
+            },
           },
-          // Send all PDF contents for analysis
-          pdfContents: fileContents
+          generationConfig: {
+            format: 'formal_demand_package',
+            audience: 'insurance_carrier_adjuster_engineer_supervisor',
+            tone: 'formal_assertive_evidence_driven',
+            objective: 'prove covered loss, prove causation, prove scope, preempt defenses, demand payment',
+            requiredSections: REQUIRED_SECTIONS,
+            rules: GENERATION_RULES,
+          },
+          strategyPreset,
+          pdfContents: fileContents,
+          photoContents,
         }
       });
 
@@ -226,12 +323,11 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
       setGeneratedPackage(data.result);
       setLastPackageDate(new Date().toISOString());
 
-      // Save to database
       await supabase.from('darwin_analysis_results').insert({
         claim_id: claimId,
         analysis_type: 'demand_package',
         result: data.result,
-        input_summary: `Documents: ${fileContents.length}, Photos: ${photoInfo.length}`
+        input_summary: `Documents: ${fileContents.length}, Photos: ${photoContents.length}, Strategy: ${strategyPreset}`
       });
 
       toast.success('Demand package generated successfully');
@@ -241,19 +337,6 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
     } finally {
       setLoading(false);
     }
-  };
-
-  const blobToBase64 = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        const base64 = result.split(',')[1] || result;
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
   };
 
   const copyToClipboard = () => {
@@ -327,19 +410,45 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Briefcase className="h-5 w-5 text-primary" />
-          Demand Package Builder
+          Causation & Demand Package Builder
         </CardTitle>
         <CardDescription>
-          Select evidence documents for Darwin to analyze and compile into a comprehensive demand package. Darwin will review the actual content of each document to build your case.
+          Select reports, estimates, manufacturer letters, weather documents, and photos for Darwin to analyze. Darwin will organize the evidence into a formal demand package designed to prove causation, scope, repair infeasibility, code impact, and the full payment owed.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            <strong>How it works:</strong> Select the PDF documents containing evidence (inspection reports, estimates, photos with descriptions, etc.). Darwin will read and analyze the content of each document to extract key information and build a detailed demand package presenting your case.
+            <strong>How it works:</strong> Select evidence documents and photos. Darwin will read and analyze the actual content of each document and photo to extract key information, test causation, and build a detailed demand package. If evidence is missing, Darwin will identify the gaps explicitly.
           </AlertDescription>
         </Alert>
+
+        {/* Strategy Preset */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2">
+            <Shield className="h-4 w-4 text-primary" />
+            Packet Strategy
+          </Label>
+          <Select value={strategyPreset} onValueChange={setStrategyPreset}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select a strategy preset" />
+            </SelectTrigger>
+            <SelectContent>
+              {STRATEGY_PRESETS.map(preset => (
+                <SelectItem key={preset.value} value={preset.value}>
+                  <div className="flex flex-col">
+                    <span>{preset.label}</span>
+                    <span className="text-xs text-muted-foreground">{preset.description}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Strategy presets adjust Darwin's emphasis and section weighting based on claim type.
+          </p>
+        </div>
 
         {/* Selection Tabs */}
         <Tabs defaultValue="documents" className="w-full">
@@ -413,7 +522,7 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
           <TabsContent value="photos" className="space-y-3">
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
-                {photos.length === 0 ? 'No photos uploaded' : `${photos.length} photos available (optional - include if relevant)`}
+                {photos.length === 0 ? 'No photos uploaded' : `${photos.length} photos available — selected photos will be sent as images for visual analysis`}
               </p>
               {photos.length > 0 && (
                 <div className="flex gap-2">
@@ -445,7 +554,7 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
                       />
                       <Camera className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                       <div className="overflow-hidden flex-1 min-w-0">
-                        <p className="text-xs truncate">Photo {idx + 1}</p>
+                        <p className="text-xs truncate">{photo.file_name || `Photo ${idx + 1}`}</p>
                         {photo.category && (
                           <p className="text-xs text-muted-foreground truncate">{photo.category}</p>
                         )}
@@ -487,12 +596,12 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
           {loading ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Analyzing Documents & Building Case...
+              Analyzing Evidence & Building Causation Package...
             </>
           ) : (
             <>
               <Briefcase className="h-4 w-4 mr-2" />
-              Generate Demand Package ({selectedFiles.size} documents{selectedPhotos.size > 0 ? `, ${selectedPhotos.size} photos` : ''})
+              Build Causation & Demand Package ({selectedFiles.size} documents{selectedPhotos.size > 0 ? `, ${selectedPhotos.size} photos` : ''})
             </>
           )}
         </Button>
