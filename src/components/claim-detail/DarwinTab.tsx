@@ -513,13 +513,6 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             <DarwinHiddenLossDetective claimId={claimId} claim={claim} />
           </>
         );
-      case "timeline-history":
-        return (
-          <>
-            <DarwinHealthCheck claimId={claimId} claim={claim} />
-            <DarwinDocumentTimeline claimId={claimId} claim={claim} />
-          </>
-        );
       case "automation":
         return (
           <>
