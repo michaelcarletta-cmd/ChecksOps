@@ -3529,13 +3529,23 @@ interface AnalysisRequest {
   pdfFileName?: string;
   pdfFilePaths?: Array<{ path: string; name?: string; folder?: string }>;
   pdfContents?: Array<{ name: string; content: string; folder?: string }>;
+  photoContents?: Array<{ name: string; content: string; category: string; description: string }>;
   additionalContext?: any;
+  generationConfig?: {
+    format?: string;
+    audience?: string;
+    tone?: string;
+    objective?: string;
+    requiredSections?: string[];
+    rules?: string[];
+  };
+  strategyPreset?: string;
   claim?: any;
   contextData?: any;
   darwinNotes?: string;
   claimFactsPack?: ClaimFactsPack;
-  enableEvidenceIndex?: boolean; // default true for strategic types - build or use ClaimFactsPack
-  enableDismantler?: boolean; // default true - run carrierDismantler post-step
+  enableEvidenceIndex?: boolean;
+  enableDismantler?: boolean;
 }
 
 interface CarrierDismantlerMiddlewareContext {
@@ -3618,7 +3628,10 @@ Deno.serve(async (req) => {
       pdfFileName,
       pdfContents,
       pdfFilePaths,
+      photoContents,
       additionalContext = {},
+      generationConfig,
+      strategyPreset,
       claim: providedClaim,
       contextData,
       darwinNotes: providedNotes,
@@ -6197,37 +6210,81 @@ ${weatherContext}
 ${communicationsContext}
 ${successPatternContext}`;
 
-        const photoList = dpContext.photos?.map((p: any) => 
-          `Photo ${p.number}: ${p.category}${p.description ? ` - ${p.description}` : ''}`
+        // Use structured evidence summary from frontend when available
+        const evidenceSummary = dpContext.evidenceSummary || {};
+        const claimFacts = dpContext.claimFacts || {};
+
+        const photoList = (evidenceSummary.photos || dpContext.photos || []).map((p: any) => 
+          `Photo ${p.number || ''}: ${p.name || ''} [${p.category || 'General'}]${p.description ? ` - ${p.description}` : ''}`
         ).join('\n') || 'No photos included';
 
-        const docList = dpContext.documents?.map((d: any, i: number) => 
-          `Document ${i + 1}: ${d.name} (${d.folder || 'Uncategorized'})`
+        const docList = (evidenceSummary.documents || dpContext.documents || []).map((d: any, i: number) => 
+          `${d.exhibit || `Document ${i + 1}`}: ${d.name} (${d.folder || 'Uncategorized'})`
         ).join('\n') || 'No documents provided';
 
+        // Build generation config instructions from frontend contract
+        const genConfig = (requestPayload as any).generationConfig;
+        const genConfigBlock = genConfig ? `
+GENERATION CONTRACT:
+- Objective: ${genConfig.objective || 'Build a carrier-facing demand package'}
+- Audience: ${genConfig.audience || 'insurance_carrier'}
+- Tone: ${genConfig.tone || 'formal_assertive_evidence_driven'}
+- Format: ${genConfig.format || 'formal_demand_package'}
+${genConfig.requiredSections ? `\nREQUIRED SECTIONS (must include all):\n${genConfig.requiredSections.map((s: string, i: number) => `${i + 1}. ${s}`).join('\n')}` : ''}
+${genConfig.rules ? `\nMANDATORY RULES:\n${genConfig.rules.map((r: string) => `- ${r}`).join('\n')}` : ''}
+` : '';
+
+        // Build strategy emphasis from preset
+        const stratPreset = (requestPayload as any).strategyPreset || 'general_property';
+        const STRATEGY_EMPHASIS: Record<string, string> = {
+          general_property: 'Cover all standard demand package sections with balanced emphasis.',
+          roof_wind_hail: 'Heavy emphasis on causation (wind/hail), HAAG standards, weather data correlation, seal strip degradation, repairability analysis, and manufacturer specs for roofing materials.',
+          interior_water: 'Emphasize water intrusion source, moisture testing/readings, mold prevention requirements, drying protocols, secondary damage documentation, and full mitigation scope.',
+          engineer_rebuttal: 'Primary focus on rebutting carrier engineer conclusions. Challenge scope of inspection, time on site, selective reporting, ASTM rating fallacy for aged materials, and carrier-bias indicators.',
+          repairability_matching: 'Core focus on why repair is infeasible: material discontinuation, manufacturer repair prohibitions, code compliance, system interdependency, uniform appearance, and pre-loss condition restoration.',
+          code_upgrade: 'Emphasize building code upgrade requirements triggered by repair scope, IRC/IBC code sections, local amendments, permitting requirements, and why code upgrades are covered loss costs.',
+          partial_denial_rebuttal: 'Focus on rebutting partial scope denial: prove all denied items are covered, causation for each denied item, inconsistency in carrier reasoning, and bad faith indicators for partial denial.',
+        };
+        const strategyEmphasis = STRATEGY_EMPHASIS[stratPreset] || STRATEGY_EMPHASIS.general_property;
+
         userPrompt = `${claimSummary}
+
+CLAIM FACTS:
+- Policyholder: ${claimFacts.policyholderName || claim.policyholder_name || 'Unknown'}
+- Claim Number: ${claimFacts.claimNumber || claim.claim_number || 'Unknown'}
+- Policy Number: ${claimFacts.policyNumber || claim.policy_number || 'Unknown'}
+- Carrier: ${claimFacts.carrier || claim.insurance_company || 'Unknown'}
+- Date of Loss: ${claimFacts.dateOfLoss || claim.loss_date || 'Unknown'}
+- Loss Address: ${claimFacts.lossAddress || claim.policyholder_address || 'Unknown'}
+- Type of Loss: ${claimFacts.typeOfLoss || claim.loss_type || 'Unknown'}
 
 STATE JURISDICTION: ${stateInfo.stateName} (${stateInfo.state})
 APPLICABLE LAW: ${stateInfo.insuranceCode}
 UNFAIR PRACTICES: ${stateInfo.promptPayAct}
 
+STRATEGY PRESET: ${stratPreset}
+STRATEGY EMPHASIS: ${strategyEmphasis}
+
+${genConfigBlock}
+
 ${kbContent || ''}
 
-EVIDENCE DOCUMENTS PROVIDED FOR ANALYSIS (${dpContext.documentCount || 0} total):
+EVIDENCE DOCUMENTS PROVIDED FOR ANALYSIS (${evidenceSummary.documentCount || dpContext.documentCount || 0} total):
 ${docList}
 
-${dpContext.photoCount > 0 ? `PHOTOS REFERENCED (${dpContext.photoCount} total):\n${photoList}` : ''}
+${(evidenceSummary.photoCount || dpContext.photoCount || 0) > 0 ? `PHOTOS PROVIDED FOR VISUAL ANALYSIS (${evidenceSummary.photoCount || dpContext.photoCount} total):\n${photoList}\nIMPORTANT: Photos have been provided as images. Analyze each photo for visible damage, material conditions, and evidence that supports the claim.` : ''}
 
 ${dpContext.additionalInstructions ? `USER INSTRUCTIONS:\n${dpContext.additionalInstructions}` : ''}
 
-IMPORTANT: The PDF documents have been provided for you to analyze. Read through each document carefully and extract:
+IMPORTANT: The PDF documents and photos have been provided for you to analyze. Read through each document carefully and extract:
 - Specific damage findings and measurements
 - Inspector/engineer observations and conclusions
 - Weather conditions and weather report data
 - Cost estimates and line items
-- Photos descriptions and damage documentation
+- Photo damage documentation and material conditions
 - Code requirements and manufacturer specifications
 - Any other relevant evidence
+- EVIDENCE GAPS: If evidence is missing or incomplete, explicitly identify what is missing (weather report, ITEL confirmation, code citation, repairability opinion, elevation photos, etc.)
 
 COMPANY INFORMATION FOR HEADER/SIGNATURE:
 Company: ${companyName}
@@ -9281,7 +9338,6 @@ Return the full revised ${docLabel} with the requested changes applied:`;
       const contentParts: any[] = [];
       
       // Add each PDF as an image_url (Gemini will process PDFs this way)
-      // Limit to 5 PDFs for systematic_dismantling to allow more cross-referencing
       const maxPdfs = analysisType === 'systematic_dismantling' ? 5 : 3;
       for (const pdf of pdfContents.slice(0, maxPdfs)) {
         contentParts.push({
@@ -9290,11 +9346,35 @@ Return the full revised ${docLabel} with the requested changes applied:`;
             url: `data:application/pdf;base64,${pdf.content}`
           }
         });
-        // Add document separator for cross-referencing
         contentParts.push({
           type: 'text',
           text: `[Above is document: ${pdf.name}${pdf.folder ? ` (from folder: ${pdf.folder})` : ''}]`
         });
+      }
+
+      // Add photo contents as images for visual analysis (demand_package only)
+      if (analysisType === 'demand_package' && photoContents && photoContents.length > 0) {
+        const maxPhotos = 15; // Limit photos to avoid payload size issues
+        contentParts.push({
+          type: 'text',
+          text: `\n\n--- PHOTO EVIDENCE (${Math.min(photoContents.length, maxPhotos)} of ${photoContents.length} photos) ---\nAnalyze each photo for visible damage, material conditions, and evidence supporting the claim.\n`
+        });
+        for (const photo of photoContents.slice(0, maxPhotos)) {
+          // Detect mime type from file extension
+          const ext = photo.name.toLowerCase().split('.').pop() || 'jpeg';
+          const mimeMap: Record<string, string> = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', gif: 'image/gif' };
+          const mime = mimeMap[ext] || 'image/jpeg';
+          contentParts.push({
+            type: 'image_url',
+            image_url: {
+              url: `data:${mime};base64,${photo.content}`
+            }
+          });
+          contentParts.push({
+            type: 'text',
+            text: `[Photo: ${photo.name} | Category: ${photo.category}${photo.description ? ` | Description: ${photo.description}` : ''}]`
+          });
+        }
       }
       
       // Add the text prompt last
@@ -9308,7 +9388,7 @@ Return the full revised ${docLabel} with the requested changes applied:`;
         { role: 'user', content: contentParts }
       ];
       
-      console.log(`${analysisType} with ${pdfContents.length} PDFs (processing ${Math.min(pdfContents.length, maxPdfs)})`);
+      console.log(`${analysisType} with ${pdfContents.length} PDFs (processing ${Math.min(pdfContents.length, maxPdfs)})${photoContents ? `, ${photoContents.length} photos` : ''}`);
     } else if (analysisType === 'supplement' && !additionalContext?._useTextOnly && (additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf || pdfContent)) {
       // Supplement comparison with potentially two PDFs
       const contentParts: any[] = [];
