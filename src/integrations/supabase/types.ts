@@ -6731,6 +6731,7 @@ export type Database = {
           created_by: string | null
           id: string
           input_summary: string | null
+          metadata: Json | null
           pdf_file_name: string | null
           result: string
         }
@@ -6741,6 +6742,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           input_summary?: string | null
+          metadata?: Json | null
           pdf_file_name?: string | null
           result: string
         }
@@ -6751,6 +6753,7 @@ export type Database = {
           created_by?: string | null
           id?: string
           input_summary?: string | null
+          metadata?: Json | null
           pdf_file_name?: string | null
           result?: string
         }
