@@ -355,7 +355,7 @@ async function writeIntelligenceDatesToClaimEvents(
 
   if (!timeline) return;
 
-  const events: Array<{
+  type ClaimEventCandidate = {
     claim_id: string;
     event_type: string;
     occurred_at: string;
@@ -367,8 +367,9 @@ async function writeIntelligenceDatesToClaimEvents(
     date_evidence: string | null;
     doc_type: string;
     metadata_json: Record<string, unknown>;
-  }> = [];
+  };
 
+  const candidates: ClaimEventCandidate[] = [];
   const seen = new Set<string>();
 
   // Process timeline dates
@@ -384,14 +385,13 @@ async function writeIntelligenceDatesToClaimEvents(
         ? Math.min(entry.confidence, overallConfidence)
         : overallConfidence * 0.8;
 
-      // Only write dates with meaningful confidence
       if (confidence < 0.5) continue;
 
       const key = `${eventType}|${occurredAt}`;
       if (seen.has(key)) continue;
       seen.add(key);
 
-      events.push({
+      candidates.push({
         claim_id: claimId,
         event_type: eventType,
         occurred_at: occurredAt,
@@ -422,7 +422,7 @@ async function writeIntelligenceDatesToClaimEvents(
       if (seen.has(key)) continue;
       seen.add(key);
 
-      events.push({
+      candidates.push({
         claim_id: claimId,
         event_type: 'deadline',
         occurred_at: occurredAt,
@@ -442,29 +442,75 @@ async function writeIntelligenceDatesToClaimEvents(
     }
   }
 
-  // Deduplicate against existing claim_events before inserting
-  let insertedCount = 0;
-  for (const evt of events) {
-    const { data: existing } = await supabase
-      .from('claim_events')
-      .select('id')
-      .eq('claim_id', evt.claim_id)
-      .eq('event_type', evt.event_type)
-      .eq('occurred_at', evt.occurred_at)
-      .limit(1);
+  if (candidates.length === 0) return;
 
-    if (!existing || existing.length === 0) {
-      const { error } = await supabase.from('claim_events').insert(evt);
-      if (error) {
-        console.error(`[IntelTimeline] Insert failed: ${error.message}`, JSON.stringify(evt));
-      } else {
-        insertedCount++;
-      }
+  // === BATCH PREFETCH: get all existing claim_events for this claim in one query ===
+  const occurredAtValues = [...new Set(candidates.map(c => c.occurred_at))];
+  const eventTypeValues = [...new Set(candidates.map(c => c.event_type))];
+
+  const { data: existingEvents } = await supabase
+    .from('claim_events')
+    .select('id, event_type, occurred_at, date_confidence')
+    .eq('claim_id', claimId)
+    .in('event_type', eventTypeValues)
+    .in('occurred_at', occurredAtValues);
+
+  // Build lookup: event_type|occurred_at → { id, date_confidence }
+  const existingMap = new Map<string, { id: string; date_confidence: number }>();
+  for (const row of existingEvents || []) {
+    const key = `${row.event_type}|${row.occurred_at}`;
+    existingMap.set(key, { id: row.id, date_confidence: row.date_confidence ?? 0 });
+  }
+
+  // Partition into inserts vs updates
+  const toInsert: ClaimEventCandidate[] = [];
+  const toUpdate: Array<{ id: string; patch: Partial<ClaimEventCandidate> }> = [];
+
+  for (const evt of candidates) {
+    const key = `${evt.event_type}|${evt.occurred_at}`;
+    const existing = existingMap.get(key);
+
+    if (!existing) {
+      toInsert.push(evt);
+    } else if (evt.date_confidence > existing.date_confidence) {
+      // Stronger evidence → update the existing row
+      toUpdate.push({
+        id: existing.id,
+        patch: {
+          date_confidence: evt.date_confidence,
+          date_evidence: evt.date_evidence,
+          doc_type: evt.doc_type,
+          metadata_json: evt.metadata_json,
+        },
+      });
     }
   }
 
-  if (insertedCount > 0) {
-    console.log(`[IntelTimeline] Wrote ${insertedCount} events from intelligence for file ${fileName} (claim ${claimId})`);
+  // Bulk insert new events
+  let insertedCount = 0;
+  if (toInsert.length > 0) {
+    const { error, count } = await supabase
+      .from('claim_events')
+      .insert(toInsert, { count: 'exact' });
+    if (error) {
+      console.error(`[IntelTimeline] Bulk insert failed: ${error.message}`);
+    } else {
+      insertedCount = count ?? toInsert.length;
+    }
+  }
+
+  // Update existing events with stronger evidence
+  let updatedCount = 0;
+  for (const upd of toUpdate) {
+    const { error } = await supabase
+      .from('claim_events')
+      .update(upd.patch)
+      .eq('id', upd.id);
+    if (!error) updatedCount++;
+  }
+
+  if (insertedCount > 0 || updatedCount > 0) {
+    console.log(`[IntelTimeline] file=${fileName} claim=${claimId}: inserted=${insertedCount} upgraded=${updatedCount} (of ${candidates.length} candidates)`);
   }
 }
 

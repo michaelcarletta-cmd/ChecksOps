@@ -317,6 +317,12 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
               </div>
             )}
 
+            {receiptFile && (
+              <div className="text-xs text-muted-foreground bg-muted/50 rounded px-2.5 py-1.5 truncate">
+                📄 Document: <span className="font-medium text-foreground">{receiptFile.name}</span>
+              </div>
+            )}
+
             {previewUrl && (
               <div className="flex justify-center">
                 <img src={previewUrl} alt="Receipt" className="max-h-40 rounded-lg border" />
