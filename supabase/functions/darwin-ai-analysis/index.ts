@@ -9451,15 +9451,57 @@ Return the full revised ${docLabel} with the requested changes applied:`;
       let positionInjection = '';
       
       if (declaredPosition) {
+        // Build the upgraded declared position block
+        const lockStatus = declaredPosition.lock_status ?? 'draft';
+        const strengthLabel = declaredPosition.position_strength_label ?? 'unknown';
+        const strengthScore = declaredPosition.position_strength_score ?? 0;
+        const driftRisk = declaredPosition.drift_risk ?? 'unknown';
+
         positionInjection = `
-=== DECLARED POSITION (LOCKED) ===
-Primary Cause of Loss: ${declaredPosition.primary_cause_of_loss}
-Primary Coverage Theory: ${declaredPosition.primary_coverage_theory}
-Primary Carrier Error: ${declaredPosition.primary_carrier_error}
-Carrier Dependency: ${declaredPosition.carrier_dependency_statement}
+=== DECLARED POSITION (AUTHORITATIVE) ===
+Lock Status: ${lockStatus}
+Strength: ${strengthLabel} (${strengthScore})
+Drift Risk: ${driftRisk}
+
+Observed Damage Condition:
+${declaredPosition.observed_damage_condition || declaredPosition.primary_cause_of_loss || ''}
+
+Primary Loss Mechanism:
+${declaredPosition.primary_loss_mechanism || ''}
+
+Coverage Trigger Theory:
+${declaredPosition.coverage_trigger_theory || declaredPosition.primary_coverage_theory || ''}
+
+Specific Carrier Failure:
+${declaredPosition.specific_carrier_failure || declaredPosition.primary_carrier_error || ''}
+
+Decisive Contradiction:
+${declaredPosition.decisive_contradiction || declaredPosition.carrier_dependency_statement || ''}
+
+Requested Remedy:
+${declaredPosition.requested_remedy || ''}
+
+Master Position Statement:
+${declaredPosition.master_position_statement || ''}
+
+Known Weaknesses:
+${Array.isArray(declaredPosition.known_weaknesses) ? declaredPosition.known_weaknesses.map((x: string) => '- ' + x).join('\n') : ''}
+
+Missing Proof Needed:
+${Array.isArray(declaredPosition.missing_proof_needed) ? declaredPosition.missing_proof_needed.map((x: string) => '- ' + x).join('\n') : ''}
+
+RULES:
+1. Do not contradict the declared loss mechanism.
+2. Do not introduce a new coverage theory unless explicitly labeled as an alternative theory.
+3. Do not request a remedy different from the declared requested remedy.
+4. The decisive contradiction must be addressed in the output.
+5. If provisional_override is true, label the output as provisional and avoid overstatement.
 
 ALL output must align with this declared position. Do not contradict or deviate.
 `;
+        if (declaredPosition.provisional_override) {
+          positionInjection += `\n=== WARNING: PROVISIONAL OVERRIDE ===\nPosition is not strategically locked. Label output as PROVISIONAL. Avoid overstatement.\n`;
+        }
       } else if (isProvisional) {
         positionInjection = `
 === WARNING: PROVISIONAL MODE ===
