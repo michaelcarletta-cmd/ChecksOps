@@ -1,222 +1,148 @@
- import {
-   CausationFormData,
-   CausationResult,
-   IndicatorBreakdown,
-   ScoringResult,
-   IndicatorState,
-   DECISION_THRESHOLD,
-   MINIMUM_EVIDENCE_INDICATORS,
- } from './types';
- import { ALL_INDICATORS, PERILS } from './indicators';
- 
- /**
-  * Core scoring rule:
-  * - Present (Yes): apply full weight
-  * - Absent (No): apply zero weight (evidence of absence is NOT evidence against unless it's an alternative indicator)
-  * - Unknown: apply zero weight and add to evidence gaps
-  * 
-  * CRITICAL: Unknown information must NEVER be treated as evidence against causation.
-  */
- export function calculateCausation(formData: CausationFormData): CausationResult {
-   const indicatorBreakdown: IndicatorBreakdown[] = [];
-   const evidenceGaps: string[] = [];
-   let windEvidenceScore = 0;
-   let alternativeCauseScore = 0;
- 
-   // Process all indicators
-   ALL_INDICATORS.forEach(indicator => {
-     const value = formData.indicators[indicator.id];
-     const state: IndicatorState = value?.state || 'unknown';
-     
-     let appliedWeight = 0;
-     
-     if (state === 'present') {
-       // Full weight applied
-       appliedWeight = indicator.weight;
-       if (indicator.isPositive) {
-         windEvidenceScore += indicator.weight;
-       } else {
-         alternativeCauseScore += indicator.weight;
-       }
-     } else if (state === 'absent') {
-       // Zero weight - absence is NOT evidence against
-       // Exception: For alternative cause indicators, "absent" means the alternative was checked and ruled out
-       appliedWeight = 0;
-     } else {
-       // Unknown - zero weight, add to gaps if it's a supporting indicator
-       appliedWeight = 0;
-       if (indicator.isPositive && indicator.category === 'core_evidence') {
-         evidenceGaps.push(`${indicator.label} — not observed, not documented, or not evaluated`);
-       }
-     }
- 
-     indicatorBreakdown.push({
-       id: indicator.id,
-       label: indicator.label,
-       state,
-       weight: indicator.weight,
-       appliedWeight,
-       isPositive: indicator.isPositive,
-     });
-   });
- 
-   // Add general evidence gaps for unknown/missing documentation
-   if (!formData.eventDate) {
-     evidenceGaps.push('Date/time of alleged event not specified');
-   }
-   if (!formData.damageNoticedDate) {
-     evidenceGaps.push('Date damage was first noticed not specified');
-   }
-   if (!formData.weatherEvidence) {
-     evidenceGaps.push('Weather/event documentation not provided');
-   }
-   if (!formData.roofAge) {
-     evidenceGaps.push('Roof age unknown');
-   }
- 
-   // Check minimum evidence requirement
-   const minimumEvidenceDetails: string[] = [];
-   const coreIndicatorsPresent = MINIMUM_EVIDENCE_INDICATORS.filter(id => {
-     const value = formData.indicators[id];
-     return value?.state === 'present';
-   });
-   
-   const minimumEvidenceMet = coreIndicatorsPresent.length >= 1;
-   
-   if (!minimumEvidenceMet) {
-     minimumEvidenceDetails.push(
-       'At least ONE of the following must be present to support causation:',
-       '• Directional damage pattern documented',
-       '• Displaced/missing roofing materials consistent with wind',
-       '• Collateral damage on same exposure (gutters, flashing, siding)',
-       '• Verified storm event plus localized damage inconsistent with uniform aging'
-     );
-   } else {
-     coreIndicatorsPresent.forEach(id => {
-       const indicator = ALL_INDICATORS.find(i => i.id === id);
-       if (indicator) {
-         minimumEvidenceDetails.push(`✓ ${indicator.label}`);
-       }
-     });
-   }
- 
-   // Calculate net score
-   const netScore = windEvidenceScore - alternativeCauseScore;
-   const scoring: ScoringResult = {
-     windEvidenceScore,
-     alternativeCauseScore,
-     netScore,
-   };
- 
-   // Get top supporting and opposing indicators
-   const presentIndicators = indicatorBreakdown.filter(i => i.state === 'present');
-   const topSupportingIndicators = presentIndicators
-     .filter(i => i.isPositive)
-     .sort((a, b) => b.appliedWeight - a.appliedWeight)
-     .slice(0, 3);
-   
-   const topOpposingIndicators = presentIndicators
-     .filter(i => !i.isPositive)
-     .sort((a, b) => b.appliedWeight - a.appliedWeight)
-     .slice(0, 3);
- 
-   // Determine decision using proper logic
-   let decision: 'supported' | 'not_supported' | 'indeterminate';
-   
-   // Apply minimum evidence hard rule
-   if (!minimumEvidenceMet) {
-     // Cannot be "Supported" without minimum evidence
-     if (alternativeCauseScore - windEvidenceScore >= DECISION_THRESHOLD) {
-       decision = 'not_supported';
-     } else {
-       decision = 'indeterminate';
-     }
-   } else {
-     // Minimum evidence met - apply threshold logic
-     if (netScore >= DECISION_THRESHOLD) {
-       decision = 'supported';
-     } else if (alternativeCauseScore - windEvidenceScore >= DECISION_THRESHOLD) {
-       decision = 'not_supported';
-     } else {
-       decision = 'indeterminate';
-     }
-   }
- 
-   // Generate statements with cautious insurance language
-   const perilLabel = PERILS.find(p => p.value === formData.perilTested)?.label || formData.perilTested;
-   
-   let butForStatement: string;
-   let decisionStatement: string;
-   
-   switch (decision) {
-     case 'supported':
-       butForStatement = `If not for the ${perilLabel.toLowerCase()} event, the ${formData.damageTypes.join(', ').toLowerCase()} would LIKELY NOT have occurred. The documented evidence is consistent with ${perilLabel.toLowerCase()}-induced damage.`;
-       decisionStatement = `The available evidence suggests ${perilLabel.toLowerCase()} as the proximate cause. ${topSupportingIndicators.length} key indicators support this conclusion. Pre-existing conditions, if present, do not exclude coverage—the covered peril appears to be the triggering event.`;
-       break;
-     case 'not_supported':
-       butForStatement = `The evidence is INSUFFICIENT to conclude that ${perilLabel.toLowerCase()} was the proximate cause of the ${formData.damageTypes.join(', ').toLowerCase()}.`;
-       decisionStatement = `Available evidence suggests alternative causation factors. However, if the carrier is relying on competing causes (installation, maintenance, manufacturing), specific counter-arguments and evidence requirements should be reviewed.`;
-       break;
-     default:
-       butForStatement = `Insufficient evidence exists to conclusively determine whether the ${formData.damageTypes.join(', ').toLowerCase()} would have occurred without the ${perilLabel.toLowerCase()} event.`;
-       decisionStatement = minimumEvidenceMet 
-         ? `Additional documentation is recommended to strengthen the causation argument. Focus on filling the identified evidence gaps.`
-         : `Minimum evidence requirements are not met. At least one core indicator must be documented before causation can be supported.`;
-   }
- 
-   // Generate "what would change" recommendations
-   const whatWouldChange: string[] = [];
-   
-   if (decision !== 'supported') {
-     if (!minimumEvidenceMet) {
-       whatWouldChange.push('Document at least ONE core evidence indicator (directional pattern, displaced materials, collateral damage, or storm + localized damage)');
-     }
-     
-     // Find high-value unknown indicators
-     const unknownHighValue = indicatorBreakdown
-       .filter(i => i.state === 'unknown' && i.isPositive && i.weight >= 12)
-       .slice(0, 2);
-     
-     unknownHighValue.forEach(i => {
-       whatWouldChange.push(`Document "${i.label}" (+${i.weight} points if present)`);
-     });
-   }
-   
-   if (decision === 'supported' && topOpposingIndicators.length > 0) {
-     topOpposingIndicators.forEach(i => {
-       whatWouldChange.push(`Address "${i.label}" with counter-evidence to strengthen position`);
-     });
-   }
- 
-   // Generate baseline susceptibility statement (contextual, not scored)
-   let baselineSusceptibility = '';
-   const roofAgeNum = parseInt(formData.roofAge) || 0;
-   
-   if (roofAgeNum > 0) {
-     if (roofAgeNum < 5) {
-       baselineSusceptibility = `Given the roof's relatively young age (${roofAgeNum} years), minimal deterioration would be expected absent the covered peril.`;
-     } else if (roofAgeNum < 15) {
-       baselineSusceptibility = `Given the roof's age (${roofAgeNum} years) and material, some seal strip degradation per ARMA TB-201 would be expected; however, this increases susceptibility to wind damage rather than causing it independently.`;
-     } else {
-       baselineSusceptibility = `Given the roof's age (${roofAgeNum} years), deterioration and reduced wind resistance would be expected absent the peril; however, the ${decision === 'supported' ? 'observed damage pattern is' : 'question is whether damage is'} consistent with ${perilLabel.toLowerCase()}-induced failure versus normal aging.`;
-     }
-   }
- 
-   return {
-     decision,
-     decisionStatement,
-     butForStatement,
-     minimumEvidenceMet,
-     minimumEvidenceDetails,
-     topSupportingIndicators,
-     topOpposingIndicators,
-     evidenceGaps,
-     whatWouldChange,
-     scoring,
-     indicatorBreakdown,
-     baselineSusceptibility,
-     counterArgumentsSummary: formData.carrierBlameTactics.length > 0 
-       ? `Carrier blame-shifting tactics identified: ${formData.carrierBlameTactics.length} defensive arguments prepared.`
-       : undefined,
-   };
- }
+import {
+  CausationFormData,
+  CausationResult,
+  IndicatorBreakdown,
+  IndicatorState,
+} from './types';
+import { ALL_INDICATORS, PERILS } from './indicators';
+
+function joinDamageTypes(damageTypes: string[]): string {
+  if (!damageTypes.length) return 'reported damage';
+  if (damageTypes.length === 1) return damageTypes[0].toLowerCase();
+  if (damageTypes.length === 2) {
+    return `${damageTypes[0].toLowerCase()} and ${damageTypes[1].toLowerCase()}`;
+  }
+  return `${damageTypes.slice(0, -1).map(d => d.toLowerCase()).join(', ')}, and ${damageTypes[damageTypes.length - 1].toLowerCase()}`;
+}
+
+function buildCounterfactualQuestion(perilLabel: string, damageText: string): string {
+  return `If not for ${perilLabel.toLowerCase()}, would the ${damageText} be present?`;
+}
+
+function buildBaselineContext(formData: CausationFormData, perilLabel: string): string {
+  const roofAgeNum = parseInt(formData.roofAge || '', 10);
+
+  if (!roofAgeNum) return '';
+
+  if (roofAgeNum < 5) {
+    return `The roof is relatively young (${roofAgeNum} years old), which makes ordinary age-related failure a less persuasive explanation absent specific contrary evidence.`;
+  }
+
+  if (roofAgeNum < 15) {
+    return `The roof is approximately ${roofAgeNum} years old. Age may affect susceptibility, but susceptibility is not the same as cause. The question remains whether ${perilLabel.toLowerCase()} caused the reported condition.`;
+  }
+
+  return `The roof is approximately ${roofAgeNum} years old. Age and prior wear may increase vulnerability, but they do not by themselves explain why the reported damage appeared in the documented pattern and timing.`;
+}
+
+export function calculateCausation(formData: CausationFormData): CausationResult {
+  const perilLabel =
+    PERILS.find((p) => p.value === formData.perilTested)?.label || formData.perilTested || 'the reported peril';
+
+  const damageText = joinDamageTypes(formData.damageTypes);
+
+  const indicatorBreakdown: IndicatorBreakdown[] = ALL_INDICATORS.map((indicator) => {
+    const state: IndicatorState = formData.indicators[indicator.id]?.state || 'unknown';
+
+    return {
+      id: indicator.id,
+      label: indicator.label,
+      state,
+      isPositive: indicator.isPositive,
+      category: indicator.category,
+    };
+  });
+
+  const supportingObservations = indicatorBreakdown.filter(
+    (i) => i.isPositive && i.state === 'present'
+  );
+
+  const opposingObservations = indicatorBreakdown.filter(
+    (i) => !i.isPositive && i.state === 'present'
+  );
+
+  const unknownObservations = indicatorBreakdown.filter((i) => i.state === 'unknown');
+
+  const evidenceGaps: string[] = [];
+
+  if (!formData.eventDate) evidenceGaps.push('Date of reported event is not documented.');
+  if (!formData.damageNoticedDate) evidenceGaps.push('Date damage was first noticed is not documented.');
+  if (!formData.weatherEvidence?.trim()) evidenceGaps.push('Weather or event documentation is not provided.');
+  if (!formData.observationsNotes?.trim() && supportingObservations.length === 0) {
+    evidenceGaps.push('No narrative field observations have been entered.');
+  }
+
+  const coreSupportCount = supportingObservations.filter(
+    (i) => i.category === 'core_evidence'
+  ).length;
+
+  const hasAffirmativeAlternative = opposingObservations.length > 0;
+  const hasMeaningfulSupport = coreSupportCount > 0 || supportingObservations.length >= 2;
+
+  let decision: 'supported' | 'not_supported' | 'indeterminate' = 'indeterminate';
+  let decisionLabel = 'More Documentation Needed';
+  let directAnswer = '';
+  let conclusion = '';
+  let reasoningSummary = '';
+
+  if (hasMeaningfulSupport && !hasAffirmativeAlternative) {
+    decision = 'supported';
+    decisionLabel = 'Causation Supported';
+    directAnswer = `No. Based on the documented observations, the ${damageText} would not reasonably be expected in the same form absent ${perilLabel.toLowerCase()}.`;
+    conclusion = `${perilLabel} is the most supported cause of the reported damage based on the currently documented observations.`;
+    reasoningSummary =
+      supportingObservations.length > 0
+        ? `This conclusion is supported by documented observations including ${supportingObservations
+            .slice(0, 3)
+            .map((i) => i.label.toLowerCase())
+            .join(', ')}.`
+        : `This conclusion is supported by the currently documented file materials.`;
+  } else if (!hasMeaningfulSupport && hasAffirmativeAlternative) {
+    decision = 'not_supported';
+    decisionLabel = 'Causation Not Supported';
+    directAnswer = `Yes, based on the current file, the reported condition could exist without ${perilLabel.toLowerCase()} because affirmative alternative-cause evidence has been documented.`;
+    conclusion = `The current file does not support ${perilLabel.toLowerCase()} as the most supported cause of the reported damage.`;
+    reasoningSummary = `This is due to documented alternative-cause observations including ${opposingObservations
+      .slice(0, 3)
+      .map((i) => i.label.toLowerCase())
+      .join(', ')}.`;
+  } else {
+    decision = 'indeterminate';
+    decisionLabel = 'More Documentation Needed';
+    directAnswer = `It cannot yet be determined from the current documentation whether the ${damageText} would exist absent ${perilLabel.toLowerCase()}.`;
+    conclusion = `The current file does not yet contain enough clear documented observations to firmly answer the counterfactual question.`;
+    if (supportingObservations.length > 0 && opposingObservations.length > 0) {
+      reasoningSummary = `There is evidence pointing in both directions. The file contains support for ${perilLabel.toLowerCase()} causation, but it also contains documented alternative-cause issues that must be addressed directly.`;
+    } else if (supportingObservations.length > 0) {
+      reasoningSummary = `Some observations support ${perilLabel.toLowerCase()} causation, but the file still needs clearer documentation before the conclusion can be stated firmly.`;
+    } else if (opposingObservations.length > 0) {
+      reasoningSummary = `Alternative-cause issues are documented, but the file does not yet clearly establish whether they fully explain the reported condition.`;
+    } else {
+      reasoningSummary = `The file currently lacks enough documented observations to make a firm causation statement.`;
+    }
+  }
+
+  const carrierBurdenStatement =
+    `If the carrier contends that ${perilLabel.toLowerCase()} did not cause the reported damage, it should identify what specific cause did, and point to the documented facts supporting that alternative explanation.`;
+
+  const baselineContext = buildBaselineContext(formData, perilLabel);
+
+  return {
+    decision,
+    decisionLabel,
+    counterfactualQuestion: buildCounterfactualQuestion(perilLabel, damageText),
+    directAnswer,
+    conclusion,
+    reasoningSummary,
+    supportingObservations,
+    opposingObservations,
+    unknownObservations,
+    evidenceGaps,
+    carrierBurdenStatement,
+    baselineContext,
+    rebuttalSummary:
+      formData.carrierBlameTactics.length > 0
+        ? `${formData.carrierBlameTactics.length} carrier blame-shifting argument(s) were identified for rebuttal.`
+        : undefined,
+  };
+}
