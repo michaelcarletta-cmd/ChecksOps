@@ -259,10 +259,9 @@ export const DarwinDenialAnalyzer = ({ claimId }: DarwinDenialAnalyzerProps) => 
       </CardHeader>
       <CardContent className="space-y-4">
         <PositionGateBanner
-          position={position}
-          isLocked={isLocked}
+          lockStatus={position?.lock_status || "draft"}
           loading={positionLoading}
-          onOverride={() => setProvisionalOverride(true)}
+          onProceedProvisional={() => setProvisionalOverride(true)}
         />
         <DarwinModeToggle value={mode} onChange={setMode} />
         {lastAnalyzed && (
