@@ -492,6 +492,24 @@ export function NewClaimDialog() {
         }
       }
 
+      // Auto-create Darwin automation with passive mode + semi-autonomous
+      if (claim?.id) {
+        await supabase
+          .from("claim_automations")
+          .insert({
+            claim_id: claim.id,
+            is_enabled: true,
+            autonomy_level: "semi_autonomous",
+            settings: {
+              auto_respond_emails: true,
+              auto_update_notes: true,
+              auto_send_sms: false,
+              notify_client_on_updates: false,
+            } as any,
+            darwin_source_mode: "passive",
+          });
+      }
+
       // Assign contractor if selected
       if (claim?.id && formData.contractorId) {
         await supabase
