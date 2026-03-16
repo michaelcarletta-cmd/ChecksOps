@@ -52,6 +52,7 @@ export function useCanonicalTimeline(claimId: string) {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    console.log(`[useCanonicalTimeline] load() called for claim=${claimId}`);
     setLoading(true);
     setError(null);
     try {
@@ -60,6 +61,7 @@ export function useCanonicalTimeline(claimId: string) {
       });
       if (fnErr) throw fnErr;
       const payload = data as CanonicalTimelinePayload;
+      console.log(`[useCanonicalTimeline] Received ${payload.events?.length ?? 0} events, summary:`, payload.summary);
       setEvents(payload.events || []);
       setSummary(payload.summary || null);
       setClaim(payload.claim || null);
@@ -77,16 +79,20 @@ export function useCanonicalTimeline(claimId: string) {
 
   // Subscribe to all canonical source tables for auto-refresh
   useEffect(() => {
+    const onRealtimeChange = (table: string) => () => {
+      console.log(`[useCanonicalTimeline] Realtime change on "${table}" for claim=${claimId}, triggering reload`);
+      load();
+    };
     const channel = supabase
       .channel(`canonical-timeline-${claimId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "claim_events", filter: `claim_id=eq.${claimId}` }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "claim_updates", filter: `claim_id=eq.${claimId}` }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "claim_files", filter: `claim_id=eq.${claimId}` }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "emails", filter: `claim_id=eq.${claimId}` }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "inspections", filter: `claim_id=eq.${claimId}` }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "claim_payments", filter: `claim_id=eq.${claimId}` }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "claim_checks", filter: `claim_id=eq.${claimId}` }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "claims", filter: `id=eq.${claimId}` }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "claim_events", filter: `claim_id=eq.${claimId}` }, onRealtimeChange("claim_events"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "claim_updates", filter: `claim_id=eq.${claimId}` }, onRealtimeChange("claim_updates"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "claim_files", filter: `claim_id=eq.${claimId}` }, onRealtimeChange("claim_files"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "emails", filter: `claim_id=eq.${claimId}` }, onRealtimeChange("emails"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "inspections", filter: `claim_id=eq.${claimId}` }, onRealtimeChange("inspections"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "claim_payments", filter: `claim_id=eq.${claimId}` }, onRealtimeChange("claim_payments"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "claim_checks", filter: `claim_id=eq.${claimId}` }, onRealtimeChange("claim_checks"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "claims", filter: `id=eq.${claimId}` }, onRealtimeChange("claims"))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [claimId, load]);

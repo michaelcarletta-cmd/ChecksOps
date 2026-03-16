@@ -69,7 +69,7 @@ export const DarwinDocumentTimeline = ({ claimId, claim }: DarwinDocumentTimelin
   const [lastGenerated, setLastGenerated] = useState<Date | null>(null);
   const [claimEvents, setClaimEvents] = useState<ClaimEvent[]>([]);
   const [textCoverage, setTextCoverage] = useState<{ total: number; withText: number } | null>(null);
-  const { events: canonicalEvents } = useCanonicalTimeline(claimId);
+  const { events: canonicalEvents, reload: reloadCanonical } = useCanonicalTimeline(claimId);
 
   useEffect(() => {
     loadPreviousTimeline();
@@ -176,8 +176,10 @@ export const DarwinDocumentTimeline = ({ claimId, claim }: DarwinDocumentTimelin
         }
       }
 
-      // 4) Reload events and regenerate AI timeline
+      // 4) Reload events and canonical timeline
       await loadClaimEvents();
+      console.log('[DarwinDocumentTimeline] Rebuild complete, hard-reloading canonical timeline');
+      await reloadCanonical();
       toast.success(`Timeline rebuilt: ${processed} files reprocessed`);
 
       // 5) Now generate the AI-driven timeline summary
@@ -250,6 +252,8 @@ export const DarwinDocumentTimeline = ({ claimId, claim }: DarwinDocumentTimelin
       });
 
       await loadClaimEvents();
+      console.log('[DarwinDocumentTimeline] Generate complete, hard-reloading canonical timeline');
+      await reloadCanonical();
       toast.success(`Timeline built from ${claimEvents.length} events + ${filesWithText.length} docs`);
     } catch (err: any) {
       console.error("Timeline generation error:", err);
