@@ -25,6 +25,7 @@ export interface LossOfUseExpense {
   description: string;
   amount: number;
   receipt_file_path: string | null;
+  receipt_file_name: string | null;
   is_submitted_to_insurer: boolean;
   submitted_date: string | null;
   is_reimbursed: boolean;
