@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { cn } from "@/lib/utils";
+import { TimelineExport } from "@/components/claim-detail/TimelineExport";
 
 const EVENT_TYPES = [
   "inspection", "estimate", "payment", "denial", "supplement",

@@ -319,6 +319,7 @@ export const DarwinDocumentTimeline = ({ claimId, claim }: DarwinDocumentTimelin
           </div>
           {hasContent && (
             <div className="flex gap-2">
+              <TimelineExport events={canonicalEvents} claimNumber={claim?.claim_number} />
               <Button variant="outline" size="sm" onClick={rebuildTimeline} disabled={loading}>
                 <RefreshCw className={cn("h-4 w-4 mr-1", loading && "animate-spin")} />
                 Rebuild
