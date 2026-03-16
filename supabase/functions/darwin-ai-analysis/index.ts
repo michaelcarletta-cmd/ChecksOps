@@ -9457,6 +9457,11 @@ Return the full revised ${docLabel} with the requested changes applied:`;
         const strengthScore = declaredPosition.position_strength_score ?? 0;
         const driftRisk = declaredPosition.drift_risk ?? 'unknown';
 
+        const formatEvidenceArray = (arr: any[], label: string) => {
+          if (!Array.isArray(arr) || arr.length === 0) return `${label}: (none)`;
+          return `${label}:\n${arr.map((e: any) => `- [${e.type || 'other'}] ${e.label || ''}${e.citation ? ` (${e.citation})` : ''}${e.note ? ` — ${e.note}` : ''}`).join('\n')}`;
+        };
+
         positionInjection = `
 === DECLARED POSITION (AUTHORITATIVE) ===
 Lock Status: ${lockStatus}
@@ -9484,11 +9489,17 @@ ${declaredPosition.requested_remedy || ''}
 Master Position Statement:
 ${declaredPosition.master_position_statement || ''}
 
+${formatEvidenceArray(declaredPosition.key_supporting_evidence, 'Key Supporting Evidence')}
+
+${formatEvidenceArray(declaredPosition.policy_standard_support, 'Policy / Standard Support')}
+
+${formatEvidenceArray(declaredPosition.carrier_evidence_rebutted, 'Carrier Evidence Being Rebutted')}
+
 Known Weaknesses:
-${Array.isArray(declaredPosition.known_weaknesses) ? declaredPosition.known_weaknesses.map((x: string) => '- ' + x).join('\n') : ''}
+${Array.isArray(declaredPosition.known_weaknesses) ? declaredPosition.known_weaknesses.map((x: string) => '- ' + x).join('\n') : '(none)'}
 
 Missing Proof Needed:
-${Array.isArray(declaredPosition.missing_proof_needed) ? declaredPosition.missing_proof_needed.map((x: string) => '- ' + x).join('\n') : ''}
+${Array.isArray(declaredPosition.missing_proof_needed) ? declaredPosition.missing_proof_needed.map((x: string) => '- ' + x).join('\n') : '(none)'}
 
 RULES:
 1. Do not contradict the declared loss mechanism.
@@ -9496,6 +9507,13 @@ RULES:
 3. Do not request a remedy different from the declared requested remedy.
 4. The decisive contradiction must be addressed in the output.
 5. If provisional_override is true, label the output as provisional and avoid overstatement.
+
+REQUIRED OUTPUT SECTIONS (must appear as headers or clearly labeled blocks):
+- Cause of Loss
+- Coverage Analysis
+- Carrier Error
+- Decisive Contradiction
+- Requested Remedy
 
 ALL output must align with this declared position. Do not contradict or deviate.
 `;
