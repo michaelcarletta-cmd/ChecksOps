@@ -500,6 +500,106 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
           </div>
         </div>
 
+        {/* Normal Bills / Baseline Section */}
+        <div className="mb-6 border rounded-lg p-4 bg-muted/30">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-muted-foreground" />
+              <h4 className="font-medium">Client's Normal Monthly Bills</h4>
+              {totalNormalBills > 0 && (
+                <Badge variant="secondary" className="text-xs">${totalNormalBills.toLocaleString()}/mo</Badge>
+              )}
+            </div>
+            <Button size="sm" variant="outline" onClick={() => setShowNormalBills(!showNormalBills)}>
+              {showNormalBills ? "Hide" : "Manage"}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            Enter the client's normal monthly expenses (groceries, meals, etc.) to calculate the <strong>additional</strong> expense above their baseline.
+          </p>
+
+          {showNormalBills && (
+            <div className="space-y-3">
+              {normalBills.map((bill) => (
+                <div key={bill.id} className="flex items-center gap-2">
+                  <span className="text-sm w-40 truncate">{NORMAL_BILL_CATEGORIES.find(c => c.value === bill.category)?.icon || "📋"} {bill.label}</span>
+                  <span className="text-xs text-muted-foreground">$</span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    className="w-28 h-8 text-sm"
+                    defaultValue={bill.monthly_amount}
+                    onBlur={(e) => {
+                      const val = parseFloat(e.target.value);
+                      if (!isNaN(val) && val !== bill.monthly_amount) {
+                        handleUpdateNormalBill(bill.id, val);
+                      }
+                    }}
+                  />
+                  <span className="text-xs text-muted-foreground">/mo</span>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => handleDeleteNormalBill(bill.id)}>
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+
+              <div className="flex items-center gap-2 pt-2 border-t">
+                <Select value={newBillCategory} onValueChange={setNewBillCategory}>
+                  <SelectTrigger className="w-44 h-8 text-sm"><SelectValue placeholder="Category" /></SelectTrigger>
+                  <SelectContent>
+                    {NORMAL_BILL_CATEGORIES.filter(c => !normalBills.find(b => b.category === c.value)).map(cat => (
+                      <SelectItem key={cat.value} value={cat.value}>{cat.icon} {cat.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-xs text-muted-foreground">$</span>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  className="w-28 h-8 text-sm"
+                  value={newBillAmount}
+                  onChange={(e) => setNewBillAmount(e.target.value)}
+                />
+                <span className="text-xs text-muted-foreground">/mo</span>
+                <Button size="sm" className="h-8" onClick={handleAddNormalBill}><Plus className="h-3 w-3 mr-1" /> Add</Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Monthly Additional Expense Summary */}
+        {monthlyAdditionalExpenses.length > 0 && totalNormalBills > 0 && (
+          <div className="mb-6 border rounded-lg overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Month</TableHead>
+                  <TableHead className="text-right">Total Spent</TableHead>
+                  <TableHead className="text-right">Normal Bills</TableHead>
+                  <TableHead className="text-right font-semibold">Additional Expense</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {monthlyAdditionalExpenses.map((m) => (
+                  <TableRow key={m.monthLabel}>
+                    <TableCell className="font-medium">{m.monthLabel}</TableCell>
+                    <TableCell className="text-right">${m.total.toLocaleString()}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">-${m.normalBills.toLocaleString()}</TableCell>
+                    <TableCell className="text-right font-bold text-primary">${m.additional.toLocaleString()}</TableCell>
+                  </TableRow>
+                ))}
+                <TableRow className="bg-muted/50 font-semibold">
+                  <TableCell>Total Additional</TableCell>
+                  <TableCell className="text-right">${monthlyAdditionalExpenses.reduce((s, m) => s + m.total, 0).toLocaleString()}</TableCell>
+                  <TableCell className="text-right text-muted-foreground">-${(totalNormalBills * monthlyAdditionalExpenses.length).toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-bold text-primary">${monthlyAdditionalExpenses.reduce((s, m) => s + m.additional, 0).toLocaleString()}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        )}
+
         {/* Category Breakdown */}
         {Object.keys(categoryTotals).length > 0 && (
           <div className="mb-6">
