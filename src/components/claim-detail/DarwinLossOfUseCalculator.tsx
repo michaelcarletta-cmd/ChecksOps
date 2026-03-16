@@ -488,6 +488,7 @@ function ExpenseTable({ expenses, categories, markAsSubmitted, markAsReimbursed,
               <TableHead>Date</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Description</TableHead>
+              <TableHead>Document</TableHead>
               <TableHead className="text-right">Amount</TableHead>
               <TableHead>Paid</TableHead>
               <TableHead>Insurer Status</TableHead>
@@ -508,6 +509,17 @@ function ExpenseTable({ expenses, categories, markAsSubmitted, markAsReimbursed,
                   <TableCell>
                     {expense.vendor_name && <span className="font-medium">{expense.vendor_name}: </span>}
                     {expense.description}
+                  </TableCell>
+                  <TableCell>
+                    {expense.receipt_file_name ? (
+                      <span className="text-xs text-muted-foreground truncate max-w-[120px] block" title={expense.receipt_file_name}>
+                        📄 {expense.receipt_file_name}
+                      </span>
+                    ) : expense.receipt_file_path ? (
+                      <span className="text-xs text-muted-foreground">📎 Attached</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground opacity-50">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right font-medium">${expense.amount.toLocaleString()}</TableCell>
                   <TableCell>
