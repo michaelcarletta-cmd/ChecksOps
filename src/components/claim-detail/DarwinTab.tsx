@@ -137,12 +137,6 @@ const workspaceSections: DarwinWorkspaceSection[] = [
     icon: Calculator,
   },
   {
-    key: "timeline-history",
-    title: "Timeline & History",
-    description: "Visual and document-driven timelines",
-    icon: Clock,
-  },
-  {
     key: "automation",
     title: "Automation Settings",
     description: "Configure autonomous Darwin workflows",
