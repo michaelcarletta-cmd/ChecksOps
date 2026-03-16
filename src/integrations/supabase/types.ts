@@ -6714,6 +6714,36 @@ export type Database = {
           },
         ]
       }
+      darwin_declared_position_audit_logs: {
+        Row: {
+          action: string
+          after_json: Json | null
+          before_json: Json | null
+          claim_id: string
+          created_at: string
+          id: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          after_json?: Json | null
+          before_json?: Json | null
+          claim_id: string
+          created_at?: string
+          id?: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          after_json?: Json | null
+          before_json?: Json | null
+          claim_id?: string
+          created_at?: string
+          id?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       darwin_declared_positions: {
         Row: {
           carrier_dependency_statement: string | null

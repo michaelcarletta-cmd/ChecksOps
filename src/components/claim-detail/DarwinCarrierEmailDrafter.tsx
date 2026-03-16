@@ -5,9 +5,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Mail, Loader2, Copy, Send, Sparkles } from "lucide-react";
+import { Mail, Loader2, Copy, Send, Sparkles, AlertTriangle } from "lucide-react";
 import { useDeclaredPosition } from "@/hooks/useDeclaredPosition";
 import { PositionGateBanner } from "./PositionGateBanner";
 
@@ -27,6 +28,21 @@ const EMAIL_TYPES = [
   { value: "bad_faith_warning", label: "Bad Faith Warning", description: "Formal notice of potential bad faith" },
 ];
 
+async function logProvisionalOverride(claimId: string) {
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    await supabase.from("darwin_declared_position_audit_logs" as any).insert({
+      claim_id: claimId,
+      user_id: userData.user?.id ?? null,
+      action: "provisional_override_used",
+      before_json: null,
+      after_json: { source: "carrier_email_drafter" },
+    } as any);
+  } catch (err) {
+    console.error("Provisional override audit log failed:", err);
+  }
+}
+
 export const DarwinCarrierEmailDrafter = ({ claimId, claim }: DarwinCarrierEmailDrafterProps) => {
   const { toast } = useToast();
   const [emailType, setEmailType] = useState("");
@@ -45,6 +61,7 @@ export const DarwinCarrierEmailDrafter = ({ claimId, claim }: DarwinCarrierEmail
   } = useDeclaredPosition(claimId);
 
   const canGenerate = isStrategicLocked || isLitigationGrade;
+  const isProvisionalMode = !canGenerate && provisionalOverride;
 
   const buildPositionPayload = () => {
     if (!position) return null;
@@ -62,12 +79,15 @@ export const DarwinCarrierEmailDrafter = ({ claimId, claim }: DarwinCarrierEmail
       drift_risk: position.drift_risk,
       known_weaknesses: position.known_weaknesses,
       missing_proof_needed: position.missing_proof_needed,
-      provisional_override: !canGenerate && provisionalOverride,
-      provisional_reason: !canGenerate && provisionalOverride
+      key_supporting_evidence: position.key_supporting_evidence,
+      policy_standard_support: position.policy_standard_support,
+      carrier_evidence_rebutted: position.carrier_evidence_rebutted,
+      provisional_override: isProvisionalMode,
+      provisional_reason: isProvisionalMode
         ? "Strategic lock bypassed by adjuster for urgent output."
         : null,
-      // Legacy fields for backwards compat with existing prompt injection
-      primary_cause_of_loss: position.observed_damage_condition || position.primary_cause_of_loss,
+      // Legacy fields for backwards compat
+      primary_cause_of_loss: position.primary_loss_mechanism || position.primary_cause_of_loss,
       primary_coverage_theory: position.coverage_trigger_theory || position.primary_coverage_theory,
       primary_carrier_error: position.specific_carrier_failure || position.primary_carrier_error,
       carrier_dependency_statement: position.decisive_contradiction || position.carrier_dependency_statement,
@@ -78,6 +98,11 @@ export const DarwinCarrierEmailDrafter = ({ claimId, claim }: DarwinCarrierEmail
     if (!emailType) {
       toast({ title: "Select email type", description: "Please select the type of email you want to generate", variant: "destructive" });
       return;
+    }
+
+    // Log provisional override before invoking
+    if (isProvisionalMode) {
+      await logProvisionalOverride(claimId);
     }
 
     setIsGenerating(true);
@@ -93,7 +118,7 @@ export const DarwinCarrierEmailDrafter = ({ claimId, claim }: DarwinCarrierEmail
             userContext: additionalContext,
             emailTypeLabel: EMAIL_TYPES.find(t => t.value === emailType)?.label,
             declaredPosition: declaredPositionPayload,
-            provisionalPosition: !canGenerate && provisionalOverride,
+            provisionalPosition: isProvisionalMode,
           },
           claim,
         },
@@ -106,9 +131,17 @@ export const DarwinCarrierEmailDrafter = ({ claimId, claim }: DarwinCarrierEmail
         const subjectMatch = result.match(/SUBJECT:\s*(.+?)(?:\n|$)/i);
         const bodyMatch = result.match(/BODY:\s*([\s\S]+)/i);
 
-        if (subjectMatch) setGeneratedSubject(subjectMatch[1].trim());
-        if (bodyMatch) setGeneratedBody(bodyMatch[1].trim());
-        else setGeneratedBody(result);
+        let subject = subjectMatch ? subjectMatch[1].trim() : "";
+        let body = bodyMatch ? bodyMatch[1].trim() : result;
+
+        // Prepend provisional markers
+        if (isProvisionalMode) {
+          subject = `[PROVISIONAL] ${subject}`;
+          body = `PROVISIONAL DRAFT — generated without strategic lock. Use with caution and review before sending.\n\n${body}`;
+        }
+
+        setGeneratedSubject(subject);
+        setGeneratedBody(body);
 
         toast({ title: "Email drafted", description: "Darwin has generated your carrier communication" });
       }
@@ -151,6 +184,16 @@ export const DarwinCarrierEmailDrafter = ({ claimId, claim }: DarwinCarrierEmail
             onProceedProvisional={() => setProvisionalOverride(true)}
             allowProvisional
           />
+        )}
+
+        {isProvisionalMode && (
+          <Alert className="border-orange-500/50 bg-orange-50 dark:bg-orange-950/20">
+            <AlertTriangle className="h-4 w-4 text-orange-600" />
+            <AlertDescription className="text-xs">
+              <strong>Provisional Mode Active</strong> — Output will be marked as provisional.
+              Strategic lock is bypassed. Review carefully before sending to carrier.
+            </AlertDescription>
+          </Alert>
         )}
 
         <div className="grid gap-4 md:grid-cols-2">

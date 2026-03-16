@@ -9457,6 +9457,11 @@ Return the full revised ${docLabel} with the requested changes applied:`;
         const strengthScore = declaredPosition.position_strength_score ?? 0;
         const driftRisk = declaredPosition.drift_risk ?? 'unknown';
 
+        const formatEvidenceArray = (arr: any[], label: string) => {
+          if (!Array.isArray(arr) || arr.length === 0) return `${label}: (none)`;
+          return `${label}:\n${arr.map((e: any) => `- [${e.type || 'other'}] ${e.label || ''}${e.citation ? ` (${e.citation})` : ''}${e.note ? ` — ${e.note}` : ''}`).join('\n')}`;
+        };
+
         positionInjection = `
 === DECLARED POSITION (AUTHORITATIVE) ===
 Lock Status: ${lockStatus}
@@ -9484,11 +9489,17 @@ ${declaredPosition.requested_remedy || ''}
 Master Position Statement:
 ${declaredPosition.master_position_statement || ''}
 
+${formatEvidenceArray(declaredPosition.key_supporting_evidence, 'Key Supporting Evidence')}
+
+${formatEvidenceArray(declaredPosition.policy_standard_support, 'Policy / Standard Support')}
+
+${formatEvidenceArray(declaredPosition.carrier_evidence_rebutted, 'Carrier Evidence Being Rebutted')}
+
 Known Weaknesses:
-${Array.isArray(declaredPosition.known_weaknesses) ? declaredPosition.known_weaknesses.map((x: string) => '- ' + x).join('\n') : ''}
+${Array.isArray(declaredPosition.known_weaknesses) ? declaredPosition.known_weaknesses.map((x: string) => '- ' + x).join('\n') : '(none)'}
 
 Missing Proof Needed:
-${Array.isArray(declaredPosition.missing_proof_needed) ? declaredPosition.missing_proof_needed.map((x: string) => '- ' + x).join('\n') : ''}
+${Array.isArray(declaredPosition.missing_proof_needed) ? declaredPosition.missing_proof_needed.map((x: string) => '- ' + x).join('\n') : '(none)'}
 
 RULES:
 1. Do not contradict the declared loss mechanism.
@@ -9496,6 +9507,13 @@ RULES:
 3. Do not request a remedy different from the declared requested remedy.
 4. The decisive contradiction must be addressed in the output.
 5. If provisional_override is true, label the output as provisional and avoid overstatement.
+
+REQUIRED OUTPUT SECTIONS (must appear as headers or clearly labeled blocks):
+- Cause of Loss
+- Coverage Analysis
+- Carrier Error
+- Decisive Contradiction
+- Requested Remedy
 
 ALL output must align with this declared position. Do not contradict or deviate.
 `;
@@ -10550,6 +10568,59 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     }
 
     await persistAnalysisSnapshot(finalResponseText);
+
+    // === POST-GENERATION DECLARED POSITION DRIFT VALIDATION ===
+    const carrierFacingForDrift = ['denial_rebuttal', 'auto_draft_rebuttal', 'systematic_dismantling', 'carrier_email_draft', 'engineer_report_rebuttal'];
+    if (carrierFacingForDrift.includes(analysisType) && additionalContext?.declaredPosition) {
+      const dp = additionalContext.declaredPosition;
+      const driftReasons: string[] = [];
+      const outputLower = finalResponseText.toLowerCase();
+
+      // Check required section presence
+      const requiredSections = ['cause of loss', 'coverage analysis', 'carrier error', 'decisive contradiction', 'requested remedy'];
+      for (const section of requiredSections) {
+        if (!outputLower.includes(section)) {
+          driftReasons.push(`Output missing required section: "${section}"`);
+        }
+      }
+
+      // Concept/token coverage check
+      const tokenize = (text: string): Set<string> => new Set(
+        text.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((t: string) => t.length > 2)
+      );
+      const checkCoverage = (fieldValue: string, label: string) => {
+        if (!fieldValue || fieldValue.trim().length === 0) return;
+        const declaredTokens = tokenize(fieldValue);
+        if (declaredTokens.size === 0) return;
+        const outputTokens = tokenize(finalResponseText);
+        let matched = 0;
+        for (const token of declaredTokens) {
+          if (outputTokens.has(token)) matched++;
+        }
+        const coverage = matched / declaredTokens.size;
+        if (coverage < 0.35) {
+          driftReasons.push(`Output may drift from declared ${label} (concept coverage: ${Math.round(coverage * 100)}%)`);
+        }
+      };
+
+      checkCoverage(dp.primary_loss_mechanism, 'primary loss mechanism');
+      checkCoverage(dp.coverage_trigger_theory, 'coverage trigger theory');
+      checkCoverage(dp.specific_carrier_failure, 'specific carrier failure');
+      checkCoverage(dp.decisive_contradiction, 'decisive contradiction');
+      checkCoverage(dp.requested_remedy, 'requested remedy');
+
+      if (driftReasons.length > 0) {
+        console.warn(`[darwin][drift-validation] Drift detected: ${driftReasons.join('; ')}`);
+        return new Response(
+          JSON.stringify({
+            error: 'Declared position drift detected',
+            drift_reasons: driftReasons,
+            result: finalResponseText,
+          }),
+          { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+    }
 
     const responseBuildStep = startStep('response', 'Build response payload');
     const responsePayload: any = {

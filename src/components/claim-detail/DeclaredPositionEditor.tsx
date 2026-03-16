@@ -1,14 +1,17 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDeclaredPosition } from "@/hooks/useDeclaredPosition";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Shield, Lock, Unlock, Scale, AlertTriangle, Sparkles, CheckCircle2 } from "lucide-react";
-import { DECLARED_POSITION_FIELD_HELP, PositionLockStatus } from "@/types/darwinDeclaredPosition";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, Shield, Lock, Unlock, Scale, AlertTriangle, Sparkles, CheckCircle2, Plus, Trash2 } from "lucide-react";
+import { DECLARED_POSITION_FIELD_HELP, PositionLockStatus, EvidenceAnchor } from "@/types/darwinDeclaredPosition";
 import { validateDeclaredPosition } from "@/lib/declared-position/positionEngine";
 import { useToast } from "@/hooks/use-toast";
+import { v4 as uuidv4 } from "uuid";
 
 interface DeclaredPositionEditorProps {
   claimId: string;
@@ -38,6 +41,19 @@ const LOCK_LABELS: Record<string, string> = {
   strategic_lock: "Strategic Lock",
   litigation_grade: "Litigation Grade",
 };
+
+const EVIDENCE_TYPES: Array<{ value: EvidenceAnchor["type"]; label: string }> = [
+  { value: "document", label: "Document" },
+  { value: "photo", label: "Photo" },
+  { value: "policy", label: "Policy" },
+  { value: "manufacturer", label: "Manufacturer" },
+  { value: "code", label: "Building Code" },
+  { value: "estimate", label: "Estimate" },
+  { value: "carrier_letter", label: "Carrier Letter" },
+  { value: "expert_report", label: "Expert Report" },
+  { value: "timeline_event", label: "Timeline Event" },
+  { value: "other", label: "Other" },
+];
 
 export function DeclaredPositionEditor({ claimId, claim }: DeclaredPositionEditorProps) {
   const {
@@ -74,7 +90,6 @@ export function DeclaredPositionEditor({ claimId, claim }: DeclaredPositionEdito
     setSaving(false);
   }, [unlockPosition]);
 
-  // Validation preview for strategic lock
   const strategicValidation = useMemo(() => {
     if (!position) return null;
     return validateDeclaredPosition(position, "strategic_lock");
@@ -188,7 +203,35 @@ export function DeclaredPositionEditor({ claimId, claim }: DeclaredPositionEdito
           </div>
         </div>
 
-        {/* Section 2: Risks and Missing Proof */}
+        {/* Section 2: Evidence Support */}
+        <div className="space-y-1">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Evidence Support</h3>
+          <div className="space-y-4">
+            <EvidenceArrayField
+              label="Key Supporting Evidence"
+              items={position?.key_supporting_evidence || []}
+              onSave={(v) => persist({ key_supporting_evidence: v })}
+              disabled={!isEditable}
+              saving={saving}
+            />
+            <EvidenceArrayField
+              label="Policy / Standard / Manufacturer Support"
+              items={position?.policy_standard_support || []}
+              onSave={(v) => persist({ policy_standard_support: v })}
+              disabled={!isEditable}
+              saving={saving}
+            />
+            <EvidenceArrayField
+              label="Carrier Evidence Being Rebutted"
+              items={position?.carrier_evidence_rebutted || []}
+              onSave={(v) => persist({ carrier_evidence_rebutted: v })}
+              disabled={!isEditable}
+              saving={saving}
+            />
+          </div>
+        </div>
+
+        {/* Section 3: Risks and Missing Proof */}
         <div className="space-y-1">
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Risks & Missing Proof</h3>
           <div className="space-y-4">
@@ -209,7 +252,7 @@ export function DeclaredPositionEditor({ claimId, claim }: DeclaredPositionEdito
           </div>
         </div>
 
-        {/* Section 3: Master Position Statement */}
+        {/* Section 4: Master Position Statement */}
         <div className="space-y-2">
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Master Position Statement</h3>
           <div className="p-3 bg-muted/50 rounded-md border">
@@ -324,6 +367,12 @@ function PositionField({
   const [local, setLocal] = useState(value);
   const [dirty, setDirty] = useState(false);
 
+  // Sync from props when value changes externally
+  useEffect(() => {
+    setLocal(value);
+    setDirty(false);
+  }, [value]);
+
   const handleChange = (v: string) => {
     setLocal(v);
     setDirty(v !== value);
@@ -374,6 +423,11 @@ function ArrayField({
   const [local, setLocal] = useState(values.join("\n"));
   const [dirty, setDirty] = useState(false);
 
+  useEffect(() => {
+    setLocal(values.join("\n"));
+    setDirty(false);
+  }, [values]);
+
   const handleChange = (v: string) => {
     setLocal(v);
     setDirty(true);
@@ -398,6 +452,123 @@ function ArrayField({
         disabled={disabled}
         className="min-h-[72px] text-sm"
       />
+      {dirty && !disabled && (
+        <div className="flex justify-end">
+          <Button size="sm" variant="outline" onClick={handleSave} disabled={saving}>
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Save
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EvidenceArrayField({
+  label,
+  items,
+  onSave,
+  disabled,
+  saving,
+}: {
+  label: string;
+  items: EvidenceAnchor[];
+  onSave: (v: EvidenceAnchor[]) => void;
+  disabled: boolean;
+  saving: boolean;
+}) {
+  const [localItems, setLocalItems] = useState<EvidenceAnchor[]>(items);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    setLocalItems(items);
+    setDirty(false);
+  }, [items]);
+
+  const addItem = () => {
+    setLocalItems([...localItems, { id: uuidv4(), type: "document", label: "", citation: "", note: "" }]);
+    setDirty(true);
+  };
+
+  const removeItem = (id: string) => {
+    setLocalItems(localItems.filter((i) => i.id !== id));
+    setDirty(true);
+  };
+
+  const updateItem = (id: string, field: keyof EvidenceAnchor, value: string) => {
+    setLocalItems(localItems.map((i) => (i.id === id ? { ...i, [field]: value } : i)));
+    setDirty(true);
+  };
+
+  const handleSave = () => {
+    onSave(localItems.filter((i) => i.label.trim().length > 0));
+    setDirty(false);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-semibold">{label}</label>
+        {!disabled && (
+          <Button size="sm" variant="ghost" onClick={addItem} className="h-6 px-2 text-xs">
+            <Plus className="h-3 w-3 mr-1" />
+            Add
+          </Button>
+        )}
+      </div>
+      {localItems.length === 0 && (
+        <p className="text-xs text-muted-foreground italic">No items added yet.</p>
+      )}
+      {localItems.map((item) => (
+        <div key={item.id} className="border rounded-md p-2 space-y-2 bg-muted/20">
+          <div className="flex items-center gap-2">
+            <Select
+              value={item.type}
+              onValueChange={(v) => updateItem(item.id, "type", v)}
+              disabled={disabled}
+            >
+              <SelectTrigger className="w-[140px] h-7 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {EVIDENCE_TYPES.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              value={item.label}
+              onChange={(e) => updateItem(item.id, "label", e.target.value)}
+              placeholder="Label / description"
+              disabled={disabled}
+              className="h-7 text-xs flex-1"
+            />
+            {!disabled && (
+              <Button size="sm" variant="ghost" onClick={() => removeItem(item.id)} className="h-7 w-7 p-0 text-destructive">
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              value={item.citation || ""}
+              onChange={(e) => updateItem(item.id, "citation", e.target.value)}
+              placeholder="Citation (optional)"
+              disabled={disabled}
+              className="h-7 text-xs"
+            />
+            <Input
+              value={item.note || ""}
+              onChange={(e) => updateItem(item.id, "note", e.target.value)}
+              placeholder="Note (optional)"
+              disabled={disabled}
+              className="h-7 text-xs"
+            />
+          </div>
+        </div>
+      ))}
       {dirty && !disabled && (
         <div className="flex justify-end">
           <Button size="sm" variant="outline" onClick={handleSave} disabled={saving}>
