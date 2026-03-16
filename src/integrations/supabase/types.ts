@@ -3903,6 +3903,7 @@ export type Database = {
           is_submitted_to_insurer: boolean | null
           notes: string | null
           paid_date: string | null
+          receipt_file_name: string | null
           receipt_file_path: string | null
           reimbursed_amount: number | null
           reimbursed_date: string | null
@@ -3925,6 +3926,7 @@ export type Database = {
           is_submitted_to_insurer?: boolean | null
           notes?: string | null
           paid_date?: string | null
+          receipt_file_name?: string | null
           receipt_file_path?: string | null
           reimbursed_amount?: number | null
           reimbursed_date?: string | null
@@ -3947,6 +3949,7 @@ export type Database = {
           is_submitted_to_insurer?: boolean | null
           notes?: string | null
           paid_date?: string | null
+          receipt_file_name?: string | null
           receipt_file_path?: string | null
           reimbursed_amount?: number | null
           reimbursed_date?: string | null
