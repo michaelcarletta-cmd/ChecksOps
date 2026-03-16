@@ -90,7 +90,6 @@ type DarwinWorkspaceKey =
   | "package-building"
   | "regulatory-compliance"
   | "contents-loss"
-  | "timeline-history"
   | "automation";
 
 interface DarwinWorkspaceSection {
