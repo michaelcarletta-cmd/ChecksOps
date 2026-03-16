@@ -149,7 +149,7 @@ export function useDeclaredPosition(claimId?: string) {
           toast({ title: "Save failed", description: error.message, variant: "destructive" });
           return { error: error.message };
         }
-        setPosition(data as DarwinDeclaredPosition);
+        setPosition(data as unknown as DarwinDeclaredPosition);
         return { data, error: null };
       }
     },
