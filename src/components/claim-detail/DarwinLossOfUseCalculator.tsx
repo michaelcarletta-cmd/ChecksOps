@@ -324,6 +324,34 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
 
   const activeFilters = (selectedMonth ? 1 : 0) + (selectedCategory ? 1 : 0);
 
+  // Normal bills total
+  const totalNormalBills = normalBills.reduce((sum, b) => sum + b.monthly_amount, 0);
+
+  // Monthly additional expense calculation
+  const monthlyAdditionalExpenses = useMemo(() => {
+    const monthMap = new Map<string, { monthLabel: string; total: number }>();
+    expenses.forEach((e) => {
+      const d = new Date(e.expense_date);
+      const key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}`;
+      const existing = monthMap.get(key);
+      if (existing) {
+        existing.total += e.amount;
+      } else {
+        monthMap.set(key, {
+          monthLabel: d.toLocaleString("en-US", { month: "long", year: "numeric" }),
+          total: e.amount,
+        });
+      }
+    });
+    return Array.from(monthMap.entries())
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([, v]) => ({
+        ...v,
+        normalBills: totalNormalBills,
+        additional: Math.max(0, v.total - totalNormalBills),
+      }));
+  }, [expenses, totalNormalBills]);
+
   return (
     <Card>
       <CardHeader>
