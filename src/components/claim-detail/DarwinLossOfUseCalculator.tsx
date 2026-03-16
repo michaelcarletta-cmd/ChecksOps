@@ -50,12 +50,37 @@ const EXPENSE_CATEGORIES = [
   { value: "other", label: "Other ALE", icon: "📋" },
 ];
 
+interface NormalBill {
+  id: string;
+  claim_id: string;
+  category: string;
+  label: string;
+  monthly_amount: number;
+  notes: string | null;
+}
+
+const NORMAL_BILL_CATEGORIES = [
+  { value: "groceries", label: "Groceries", icon: "🛒" },
+  { value: "meals", label: "Meals / Dining Out", icon: "🍽️" },
+  { value: "utilities", label: "Utilities", icon: "💡" },
+  { value: "laundry", label: "Laundry", icon: "🧺" },
+  { value: "transportation", label: "Transportation / Gas", icon: "🚗" },
+  { value: "pet_care", label: "Pet Care", icon: "🐕" },
+  { value: "other", label: "Other", icon: "📋" },
+];
+
 export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCalculatorProps) => {
   const [expenses, setExpenses] = useState<LossOfUseExpense[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [normalBills, setNormalBills] = useState<NormalBill[]>([]);
+  const [normalBillsLoading, setNormalBillsLoading] = useState(true);
+  const [showNormalBills, setShowNormalBills] = useState(false);
+  const [newBillCategory, setNewBillCategory] = useState("");
+  const [newBillAmount, setNewBillAmount] = useState("");
+  const [newBillLabel, setNewBillLabel] = useState("");
   const [formData, setFormData] = useState({
     expense_category: "",
     expense_date: format(new Date(), "yyyy-MM-dd"),
