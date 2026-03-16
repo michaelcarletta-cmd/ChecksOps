@@ -206,13 +206,14 @@ Deno.serve(async (req) => {
     const zip = new PizZip();
     
     // Check if we should add a header with logo
-    const hasLogoHeader = includeLogoHeader && branding?.letterhead_url;
+    const logoUrl = headerLogoUrl || branding?.letterhead_url || branding?.logo_url || null;
+    const hasLogoHeader = includeLogoHeader && logoUrl;
     let headerLogoBase64 = "";
     let headerLogoExtension = "png";
     
     if (hasLogoHeader) {
       try {
-        const logoResponse = await fetch(branding.letterhead_url);
+        const logoResponse = await fetch(logoUrl);
         if (logoResponse.ok) {
           const logoBuffer = await logoResponse.arrayBuffer();
           // Only include if under 500KB
