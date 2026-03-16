@@ -44,6 +44,7 @@ const STRATEGY_PRESETS: { value: string; label: string; description: string }[] 
   { value: "repairability_matching", label: "Repairability / Matching Dispute", description: "Arguing full replacement over repair" },
   { value: "code_upgrade", label: "Code Upgrade Dispute", description: "Building code upgrade requirements" },
   { value: "partial_denial_rebuttal", label: "Partial Denial Rebuttal", description: "Rebutting partial scope denials" },
+  { value: "coverage_trigger_dispute", label: "Coverage Trigger Dispute", description: "Direct physical loss, ensuing loss, storm-created opening, policy trigger language" },
 ];
 
 const REQUIRED_SECTIONS = [
