@@ -15,8 +15,41 @@ function joinDamageTypes(damageTypes: string[]): string {
   return `${damageTypes.slice(0, -1).map(d => d.toLowerCase()).join(', ')}, and ${damageTypes[damageTypes.length - 1].toLowerCase()}`;
 }
 
-function buildCounterfactualQuestion(perilLabel: string, damageText: string): string {
-  return `If not for ${perilLabel.toLowerCase()}, would the ${damageText} be present?`;
+function buildCounterfactualQuestion(peril: string, damageTypes: string[]): string {
+  const has = (text: string) => damageTypes.some(d => d.toLowerCase().includes(text));
+
+  if (peril === 'wind') {
+    if (has('missing shingles') || has('shingle creasing') || has('lifting')) {
+      return 'If not for wind, would the shingles be missing or creased?';
+    }
+    if (has('flashing')) {
+      return 'If not for wind, would the flashing be displaced or damaged?';
+    }
+    return 'If not for wind, would the reported damage be present?';
+  }
+
+  if (peril === 'ice') {
+    if (has('water intrusion')) {
+      return 'If not for the weight of snow and ice, would there be interior water damage?';
+    }
+    return 'If not for the weight of snow and ice, would the reported damage be present?';
+  }
+
+  if (peril === 'hail') {
+    if (has('bruising') || has('soft spots') || has('punctures')) {
+      return 'If not for hail impact, would these impact marks be present?';
+    }
+    return 'If not for hail impact, would the reported damage be present?';
+  }
+
+  if (peril === 'water') {
+    if (has('water intrusion')) {
+      return 'If not for water intrusion, would the interior damage be present?';
+    }
+    return 'If not for water, would the reported damage be present?';
+  }
+
+  return `If not for ${peril.toLowerCase()}, would the reported damage be present?`;
 }
 
 function buildBaselineContext(formData: CausationFormData, perilLabel: string): string {
@@ -130,7 +163,7 @@ export function calculateCausation(formData: CausationFormData): CausationResult
   return {
     decision,
     decisionLabel,
-    counterfactualQuestion: buildCounterfactualQuestion(perilLabel, damageText),
+    counterfactualQuestion: buildCounterfactualQuestion(formData.perilTested, formData.damageTypes),
     directAnswer,
     conclusion,
     reasoningSummary,
