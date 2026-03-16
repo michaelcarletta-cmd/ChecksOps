@@ -176,8 +176,10 @@ export const DarwinDocumentTimeline = ({ claimId, claim }: DarwinDocumentTimelin
         }
       }
 
-      // 4) Reload events and regenerate AI timeline
+      // 4) Reload events and canonical timeline
       await loadClaimEvents();
+      console.log('[DarwinDocumentTimeline] Rebuild complete, hard-reloading canonical timeline');
+      await reloadCanonical();
       toast.success(`Timeline rebuilt: ${processed} files reprocessed`);
 
       // 5) Now generate the AI-driven timeline summary
