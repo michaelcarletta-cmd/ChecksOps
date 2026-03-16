@@ -535,7 +535,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
         return (
           <>
             <ClaimAutonomySettings claimId={claimId} />
-            <ClaimAutomationSettings claimId={claimId} />
+            <RecoverableDepreciationFollowUps claimId={claimId} />
             <DarwinTaskGenerator claimId={claimId} claim={claim} />
             <DarwinSMSActivityLog claimId={claimId} limit={20} />
           </>
