@@ -56,7 +56,7 @@ export function useDeclaredPosition(claimId?: string) {
       console.error("Error fetching declared position:", error);
       setPosition(null);
     } else {
-      setPosition((data as DarwinDeclaredPosition | null) ?? null);
+      setPosition((data as unknown as DarwinDeclaredPosition | null) ?? null);
     }
     setLoading(false);
   }, [claimId]);
