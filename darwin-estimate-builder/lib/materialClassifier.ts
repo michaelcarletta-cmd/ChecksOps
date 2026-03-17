@@ -33,29 +33,33 @@ export function normalizeObservationMaterial(
   } else if (text.includes("window")) {
     material = "window unit";
   } else if (
-    text.includes("decking") ||
-    text.includes("sheathing") ||
-    text.includes("roof deck") ||
-    text.includes("wood plank") ||
-    text.includes("plank")
+    text.includes("baseboard") ||
+    text.includes("trim") ||
+    text.includes("molding")
   ) {
-    material = "wood roof decking";
-    assemblyLayer = "decking";
-    accessRequired = true;
-    measurementConfidence = "low";
+    material = "baseboard trim";
+    assemblyLayer = "trim";
   } else if (
     text.includes("rafter") ||
     text.includes("truss") ||
-    text.includes("joist") ||
-    text.includes("framing") ||
-    text.includes("wood member")
+    text.includes("joist")
   ) {
     material = "wood framing";
     assemblyLayer = "framing";
     structuralConcern = true;
     accessRequired = true;
     measurementConfidence = "low";
-  } else if (text.includes("baseboard") || text.includes("trim")) {
+  } else if (
+    text.includes("decking") ||
+    text.includes("sheathing") ||
+    text.includes("plank")
+  ) {
+    material = "wood roof decking";
+    assemblyLayer = "decking";
+    accessRequired = true;
+    measurementConfidence = "low";
+  } else if (text.includes("wood")) {
+    // fallback — classify generic wood as trim
     material = "baseboard trim";
     assemblyLayer = "trim";
   } else if (text.includes("insulation")) {

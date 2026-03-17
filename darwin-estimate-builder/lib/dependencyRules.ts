@@ -38,13 +38,12 @@ export function buildBaseScopeFromObservations(args: {
 
     if (
       obs.accessRequired &&
-      (obs.category === "roof" ||
-        obs.assemblyLayer === "decking" ||
+      (obs.assemblyLayer === "decking" ||
         obs.assemblyLayer === "framing")
     ) {
       warnings.push({
         type: "access_scope_required",
-        message: `Roof/substrate access scope likely required for ${obs.component} before full repair quantity can be confirmed.`,
+        message: `Substrate/framing access likely required for ${obs.component}.`,
         observationIndex: index
       });
     }
