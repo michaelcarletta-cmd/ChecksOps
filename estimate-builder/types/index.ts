@@ -33,8 +33,31 @@ export interface EstimateLineItem {
   reasoning: string;
 }
 
+export interface ScopeWarning {
+  type:
+    | "no_match"
+    | "low_confidence"
+    | "manual_review"
+    | "code_upgrade"
+    | "matching_issue";
+  message: string;
+  observationIndex?: number;
+}
+
 export interface AnalyzeResponse {
   observations: DamageObservation[];
   estimateItems: EstimateLineItem[];
   summary: string;
+  aiSummary?: string;
+  warnings?: ScopeWarning[];
+  assumptions?: string[];
+  metrics?: {
+    roofSquares: number;
+    sidingSf: number;
+    interiorSf: number;
+    gutterLf: number;
+    windowCount: number;
+    grossTotal: number;
+  };
+  contextUsed?: Record<string, unknown>;
 }
