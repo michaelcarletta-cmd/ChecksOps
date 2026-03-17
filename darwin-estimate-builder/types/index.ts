@@ -32,6 +32,11 @@ export type DamageMechanism =
   | "deterioration"
   | "unknown";
 
+export type RoomType = "closet" | "bedroom" | "bathroom" | "kitchen" | "hall" | "attic" | "garage" | "other";
+export type SurfaceOrientation = "ceiling" | "wall" | "sloped_ceiling" | "other";
+export type FinishLevel = "painted" | "textured" | "wallpaper" | "unfinished" | "unknown";
+export type ObstructionLevel = "low" | "medium" | "high";
+
 export interface DamageObservation {
   category: DamageCategory;
   component: string;
@@ -52,6 +57,12 @@ export interface DamageObservation {
   measurementConfidence?: MeasurementConfidence;
   provisionalQuantity?: boolean;
   visibleAreaOnly?: boolean;
+
+  attachedItems?: string[];
+  roomType?: RoomType;
+  surfaceOrientation?: SurfaceOrientation;
+  finishLevel?: FinishLevel;
+  obstructionLevel?: ObstructionLevel;
 }
 
 export interface EstimateLineItem {

@@ -23,7 +23,14 @@ export const PRICE_BOOK: Record<string, number> = {
   WINREPL: 850,
   GUT5K: 18,
   DWN23: 16,
-  FNCREP: 42
+  FNCREP: 42,
+  DRBASEDET: 4.5,
+  DRSHELFDET: 12,
+  DRRODDET: 45,
+  DRLIGHTDET: 65,
+  DRSWDET: 18,
+  FLOORPROT: 0.65,
+  DEBRIS: 0.95,
 };
 
 export function getUnitPrice(code: string): number {
