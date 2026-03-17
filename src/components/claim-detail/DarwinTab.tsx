@@ -69,6 +69,7 @@ const DarwinEscalationEngine = lazy(() => import("@/components/claim-detail/Darw
 const DarwinHealthCheck = lazy(() => import("@/components/claim-detail/DarwinHealthCheck"));
 const DarwinRoofEstimate = lazy(() => import("@/components/claim-detail/DarwinRoofEstimate").then(m => ({ default: m.DarwinRoofEstimate })));
 const DarwinEstimateBuilder = lazy(() => import("@/components/claim-detail/DarwinEstimateBuilder").then(m => ({ default: m.DarwinEstimateBuilder })));
+const DarwinScopeEngine = lazy(() => import("@/components/claim-detail/DarwinScopeEngine").then(m => ({ default: m.DarwinScopeEngine })));
 
 
 interface DarwinTabProps {
@@ -480,6 +481,7 @@ export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
             </div>
             <DarwinSupplementGenerator claimId={claimId} claim={claim} />
             <DarwinEstimateBuilder claimId={claimId} claim={claim} />
+            <DarwinScopeEngine claimId={claimId} claim={claim} />
             <DarwinCorrespondenceAnalyzer claimId={claimId} claim={claim} />
             <DarwinSmartFollowUps claimId={claimId} claim={claim} />
           </>
