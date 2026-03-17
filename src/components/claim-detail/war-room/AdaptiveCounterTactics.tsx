@@ -19,28 +19,20 @@ const CarrierBehaviorProfile = lazy(() =>
   }))
 );
 
-/* ---------------- TYPES ---------------- */
-
 interface CounterTactic {
   id?: string;
   title?: string;
   trigger_condition: string;
   current_situation?: string;
-
   recommended_action: string;
   action_purpose?: string;
-
   escalation_if_no_response?: string;
   escalation_timeline?: string;
-
   why_this_works?: string;
-
   letter_type?: string;
   success_rate_estimate?: number;
-
   priority?: "high" | "medium" | "low";
   confidence?: "high" | "medium" | "low";
-
   action_label?: string;
   escalation_label?: string;
 }
@@ -49,13 +41,10 @@ interface AdaptiveCounterTacticsProps {
   insights: any;
   claim: any;
   counterTactics: CounterTactic[] | null;
-
   onExecuteAction?: (tactic: CounterTactic) => void;
   onGenerateLetter?: (tactic: CounterTactic) => void;
   onAddToTimeline?: (tactic: CounterTactic) => void;
 }
-
-/* ---------------- STYLES ---------------- */
 
 const priorityStyles: Record<string, string> = {
   high: "bg-destructive/10 text-destructive border-destructive/30",
@@ -69,8 +58,6 @@ const confidenceStyles: Record<string, string> = {
   low: "bg-muted text-muted-foreground border-border",
 };
 
-/* ---------------- COMPONENT ---------------- */
-
 export const AdaptiveCounterTactics = ({
   insights,
   claim,
@@ -82,7 +69,6 @@ export const AdaptiveCounterTactics = ({
   return (
     <div className="space-y-4">
 
-      {/* Carrier Tactics */}
       {Array.isArray(insights?.matched_playbooks) &&
         insights.matched_playbooks.length > 0 && (
           <div>
@@ -114,7 +100,6 @@ export const AdaptiveCounterTactics = ({
           </div>
         )}
 
-      {/* Strategic Response Paths */}
       {counterTactics && counterTactics.length > 0 && (
         <div>
           <h4 className="text-xs font-semibold mb-2 flex items-center gap-1">
@@ -126,8 +111,6 @@ export const AdaptiveCounterTactics = ({
             {counterTactics.map((ct, i) => (
               <Card key={ct.id || i} className="border-border">
                 <CardContent className="p-3 space-y-3">
-
-                  {/* Header */}
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <div className="text-sm font-semibold text-foreground">
@@ -163,7 +146,6 @@ export const AdaptiveCounterTactics = ({
                     </div>
                   </div>
 
-                  {/* Trigger */}
                   <div className="p-2 rounded bg-warning/5 border border-warning/20 text-xs">
                     <div className="font-medium text-warning mb-0.5">
                       Trigger
@@ -171,7 +153,6 @@ export const AdaptiveCounterTactics = ({
                     <div className="text-foreground">{ct.trigger_condition}</div>
                   </div>
 
-                  {/* Action */}
                   <div className="p-2 rounded bg-success/5 border border-success/20 text-xs">
                     <div className="font-medium text-success mb-0.5">
                       Recommended Move Now
@@ -185,7 +166,6 @@ export const AdaptiveCounterTactics = ({
                     )}
                   </div>
 
-                  {/* Escalation */}
                   {ct.escalation_if_no_response && (
                     <div className="p-2 rounded bg-destructive/5 border border-destructive/20 text-xs">
                       <div className="font-medium text-destructive mb-0.5">
@@ -204,7 +184,6 @@ export const AdaptiveCounterTactics = ({
                     </div>
                   )}
 
-                  {/* Why */}
                   {ct.why_this_works && (
                     <div className="p-2 rounded bg-primary/5 border border-primary/20 text-xs">
                       <div className="font-medium text-primary mb-0.5">
@@ -214,7 +193,14 @@ export const AdaptiveCounterTactics = ({
                     </div>
                   )}
 
-                  {/* Actions */}
+                  {typeof ct.success_rate_estimate === "number" && (
+                    <div className="pt-1">
+                      <Badge variant="outline" className="text-[10px]">
+                        ~{ct.success_rate_estimate}% success rate
+                      </Badge>
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     <Button
                       size="sm"
@@ -259,7 +245,7 @@ export const AdaptiveCounterTactics = ({
                         }
                       >
                         <ShieldAlert className="h-3 w-3" />
-                        Escalate
+                        {ct.escalation_label || "Escalate"}
                         <ChevronRight className="h-3 w-3" />
                       </Button>
                     )}
@@ -272,7 +258,6 @@ export const AdaptiveCounterTactics = ({
         </div>
       )}
 
-      {/* Recommended Moves */}
       {Array.isArray(insights?.recommended_next_moves) &&
         insights.recommended_next_moves.length > 0 && (
           <div>
@@ -299,7 +284,6 @@ export const AdaptiveCounterTactics = ({
           </div>
         )}
 
-      {/* Fallback */}
       {(!insights?.matched_playbooks ||
         insights.matched_playbooks.length === 0) && (
         <Suspense fallback={null}>
