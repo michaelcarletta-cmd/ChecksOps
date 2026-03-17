@@ -8,6 +8,29 @@ export type DamageCategory =
   | "other";
 
 export type Severity = "low" | "medium" | "high";
+export type MeasurementConfidence = "low" | "medium" | "high";
+export type AssemblyLayer =
+  | "roof_covering"
+  | "underlayment"
+  | "decking"
+  | "framing"
+  | "interior_finish"
+  | "insulation"
+  | "flashing"
+  | "trim"
+  | "unknown";
+export type DamageMechanism =
+  | "water_staining"
+  | "rot"
+  | "delamination"
+  | "sagging"
+  | "active_leak"
+  | "missing_material"
+  | "creased"
+  | "hail_impact"
+  | "wind_damage"
+  | "deterioration"
+  | "unknown";
 
 export interface DamageObservation {
   category: DamageCategory;
@@ -21,6 +44,14 @@ export interface DamageObservation {
   unit: string;
   confidence: number;
   rationale: string;
+
+  assemblyLayer?: AssemblyLayer;
+  damageMechanism?: DamageMechanism;
+  accessRequired?: boolean;
+  structuralConcern?: boolean;
+  measurementConfidence?: MeasurementConfidence;
+  provisionalQuantity?: boolean;
+  visibleAreaOnly?: boolean;
 }
 
 export interface EstimateLineItem {
@@ -39,7 +70,10 @@ export interface ScopeWarning {
     | "low_confidence"
     | "manual_review"
     | "code_upgrade"
-    | "matching_issue";
+    | "matching_issue"
+    | "manual_measurement_required"
+    | "structural_review_recommended"
+    | "access_scope_required";
   message: string;
   observationIndex?: number;
 }

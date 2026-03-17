@@ -15,6 +15,7 @@ export function makeLineItem(args: {
   isCodeRequired?: boolean;
   isDependency?: boolean;
   isManualReviewRequired?: boolean;
+  isProvisionalQuantity?: boolean;
 }): ScopeLineItem {
   const unitPrice = getUnitPrice(args.code);
   return {
@@ -28,7 +29,8 @@ export function makeLineItem(args: {
     sourceObservationIndexes: args.sourceObservationIndexes ?? [],
     isCodeRequired: args.isCodeRequired,
     isDependency: args.isDependency,
-    isManualReviewRequired: args.isManualReviewRequired
+    isManualReviewRequired: args.isManualReviewRequired,
+    isProvisionalQuantity: args.isProvisionalQuantity
   };
 }
 
@@ -54,6 +56,8 @@ export function mergeDuplicateLineItems(items: ScopeLineItem[]): ScopeLineItem[]
     existing.isDependency = existing.isDependency || item.isDependency;
     existing.isManualReviewRequired =
       existing.isManualReviewRequired || item.isManualReviewRequired;
+    existing.isProvisionalQuantity =
+      existing.isProvisionalQuantity || item.isProvisionalQuantity;
   }
 
   return Array.from(map.values());

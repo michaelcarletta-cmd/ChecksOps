@@ -16,6 +16,8 @@ export function applyCodeAndMatchingRules(args: {
   const assumptions: string[] = [];
 
   const hasFullRoofReplacement = items.some((i) => i.code === "RFG240");
+  const hasDeckingScope = items.some((i) => i.code === "RFGDECK" || i.code === "RFGDECKREP");
+  const hasStructuralScope = items.some((i) => i.code === "FRMRAFREP");
 
   if (hasFullRoofReplacement) {
     if (!items.some((i) => i.code === "RFGST")) {
@@ -102,12 +104,39 @@ export function applyCodeAndMatchingRules(args: {
           description: "Ridge vent",
           quantity: ridgeLf,
           unit: "LF",
-          reasoning:
-            "Added because ridge vent is present and roof replacement should include replacement/reset.",
+          reasoning: "Added because ridge vent is present and roof replacement should include replacement/reset.",
           isDependency: true
         })
       );
     }
+  }
+
+  if (hasDeckingScope && !items.some((i) => i.code === "RFGDETACHRESET")) {
+    items.push(
+      makeLineItem({
+        code: "RFGDETACHRESET",
+        description: "Detach and reset roofing to access substrate",
+        quantity: Math.max(roofSquares * 100, 32),
+        unit: "SF",
+        reasoning: "Added because decking scope typically requires roofing detach/reset access.",
+        isDependency: true,
+        isProvisionalQuantity: true
+      })
+    );
+    warnings.push({
+      type: "access_scope_required",
+      message: "Decking damage indicates access/detach-reset scope is likely required."
+    });
+  }
+
+  if (hasStructuralScope) {
+    warnings.push({
+      type: "structural_review_recommended",
+      message: "Structural framing repair appears implicated; contractor/engineer review is recommended."
+    });
+    assumptions.push(
+      "Structural framing scope may expand after invasive inspection or contractor/engineer evaluation."
+    );
   }
 
   if (context.repairPercent && context.repairPercent >= 25 && !hasFullRoofReplacement) {

@@ -1,5 +1,3 @@
-import { createClient } from "npm:@supabase/supabase-js@2.39.3";
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -7,10 +5,11 @@ const corsHeaders = {
 
 // ─── Price Book ───
 const PRICE_BOOK: Record<string, number> = {
-  RFG240: 525, RFG220: 85, RFG300: 8.5, RFGST: 4.5, RFGFELTSYN: 45,
-  RFGICE: 1.85, RFGDRIP: 4.25, RFGVENT: 16, SIDVINYL: 74, SIDVINYLREP: 38,
-  SIDFIBER: 96, SIDDROP: 1.65, DRYWALL: 3.8, PAINT: 1.95, INSUL: 1.45,
-  WINREPL: 850, GUT5K: 18, DWN23: 16, FNCREP: 42,
+  RFG240: 525, RFG220: 85, RFGDECK: 12.5, RFGDECKREP: 8.75, RFGDETACHRESET: 4.5,
+  FRMRAFREP: 28, RFG300: 8.5, RFGST: 4.5, RFGFELTSYN: 45, RFGICE: 1.85,
+  RFGDRIP: 4.25, RFGVENT: 16, SIDVINYL: 74, SIDVINYLREP: 38, SIDFIBER: 96,
+  SIDDROP: 1.65, DRYWALL: 3.8, DRYWALLREPL: 5.9, PAINT: 1.95, INSUL: 1.45,
+  MOISTMAP: 185, WINREPL: 850, GUT5K: 18, DWN23: 16, FNCREP: 42,
 };
 function getUnitPrice(code: string): number { return PRICE_BOOK[code] ?? 0; }
 
@@ -18,12 +17,18 @@ function getUnitPrice(code: string): number { return PRICE_BOOK[code] ?? 0; }
 type DamageCategory = "roof"|"siding"|"interior"|"window"|"gutter"|"fence"|"other";
 type Severity = "low"|"medium"|"high";
 type Repairability = "repair"|"replace"|"undetermined";
+type AssemblyLayer = "roof_covering"|"underlayment"|"decking"|"framing"|"interior_finish"|"insulation"|"flashing"|"trim"|"unknown";
+type DamageMechanism = "water_staining"|"rot"|"delamination"|"sagging"|"active_leak"|"missing_material"|"creased"|"hail_impact"|"wind_damage"|"deterioration"|"unknown";
 
 interface DamageObservation {
   category: DamageCategory; component: string; material: string;
   damageType: string; severity: Severity; repairability: Repairability;
   quantityBasis: string; recommendedQuantity: number; unit: string;
   confidence: number; rationale: string;
+  assemblyLayer?: AssemblyLayer; damageMechanism?: DamageMechanism;
+  accessRequired?: boolean; structuralConcern?: boolean;
+  measurementConfidence?: "low"|"medium"|"high";
+  provisionalQuantity?: boolean; visibleAreaOnly?: boolean;
 }
 
 interface ScopeContext {
@@ -38,10 +43,11 @@ interface ScopeLineItem {
   unitPrice: number; total: number; reasoning: string;
   sourceObservationIndexes: number[]; isCodeRequired?: boolean;
   isDependency?: boolean; isManualReviewRequired?: boolean;
+  isProvisionalQuantity?: boolean;
 }
 
 interface ScopeWarning {
-  type: "no_match"|"low_confidence"|"manual_review"|"code_upgrade"|"matching_issue";
+  type: "no_match"|"low_confidence"|"manual_review"|"code_upgrade"|"matching_issue"|"manual_measurement_required"|"structural_review_recommended"|"access_scope_required";
   message: string; observationIndex?: number;
 }
 
@@ -52,6 +58,7 @@ function makeLineItem(args: {
   code: string; description: string; quantity: number; unit: string;
   reasoning: string; sourceObservationIndexes?: number[];
   isCodeRequired?: boolean; isDependency?: boolean; isManualReviewRequired?: boolean;
+  isProvisionalQuantity?: boolean;
 }): ScopeLineItem {
   const unitPrice = getUnitPrice(args.code);
   return {
@@ -61,6 +68,7 @@ function makeLineItem(args: {
     sourceObservationIndexes: args.sourceObservationIndexes ?? [],
     isCodeRequired: args.isCodeRequired, isDependency: args.isDependency,
     isManualReviewRequired: args.isManualReviewRequired,
+    isProvisionalQuantity: args.isProvisionalQuantity,
   };
 }
 
@@ -77,36 +85,73 @@ function mergeDuplicateLineItems(items: ScopeLineItem[]): ScopeLineItem[] {
     existing.isCodeRequired = existing.isCodeRequired || item.isCodeRequired;
     existing.isDependency = existing.isDependency || item.isDependency;
     existing.isManualReviewRequired = existing.isManualReviewRequired || item.isManualReviewRequired;
+    existing.isProvisionalQuantity = existing.isProvisionalQuantity || item.isProvisionalQuantity;
   }
   return Array.from(map.values());
 }
 
 // ─── Material Classifier ───
 function normalizeObservationMaterial(obs: DamageObservation): DamageObservation {
-  const text = `${obs.component} ${obs.material} ${obs.damageType}`.toLowerCase();
+  const text = `${obs.component} ${obs.material} ${obs.damageType} ${obs.rationale}`.toLowerCase();
   let material = obs.material;
-  if (text.includes("architectural") || text.includes("laminated") || text.includes("comp shingle") || text.includes("asphalt")) material = "architectural shingle";
-  else if (text.includes("vinyl")) material = "vinyl siding";
-  else if (text.includes("hardie") || text.includes("fiber cement")) material = "fiber cement siding";
-  else if (text.includes("drywall") || text.includes("sheetrock")) material = "drywall";
-  else if (text.includes("gutter")) material = "gutter";
-  else if (text.includes("window")) material = "window unit";
-  return { ...obs, material };
+  let assemblyLayer: AssemblyLayer = (obs.assemblyLayer as AssemblyLayer) ?? "unknown";
+  let damageMechanism: DamageMechanism = (obs.damageMechanism as DamageMechanism) ?? "unknown";
+  let structuralConcern = obs.structuralConcern ?? false;
+  let accessRequired = obs.accessRequired ?? false;
+  let measurementConfidence = obs.measurementConfidence ?? "medium";
+
+  if (text.includes("architectural") || text.includes("laminated") || text.includes("comp shingle") || text.includes("asphalt")) {
+    material = "architectural shingle";
+    if (assemblyLayer === "unknown") assemblyLayer = "roof_covering";
+  } else if (text.includes("vinyl")) { material = "vinyl siding"; }
+  else if (text.includes("hardie") || text.includes("fiber cement")) { material = "fiber cement siding"; }
+  else if (text.includes("drywall") || text.includes("sheetrock") || text.includes("gypsum")) {
+    material = "drywall";
+    if (assemblyLayer === "unknown") assemblyLayer = "interior_finish";
+  } else if (text.includes("gutter")) { material = "gutter"; }
+  else if (text.includes("window")) { material = "window unit"; }
+  else if (text.includes("decking") || text.includes("sheathing") || text.includes("roof deck") || text.includes("wood plank") || text.includes("plank")) {
+    material = "wood roof decking"; assemblyLayer = "decking"; accessRequired = true; measurementConfidence = "low";
+  } else if (text.includes("rafter") || text.includes("truss") || text.includes("joist") || text.includes("framing") || text.includes("wood member")) {
+    material = "wood framing"; assemblyLayer = "framing"; structuralConcern = true; accessRequired = true; measurementConfidence = "low";
+  } else if (text.includes("insulation")) { material = "insulation"; assemblyLayer = "insulation"; }
+
+  if (text.includes("water stain") || text.includes("staining") || text.includes("water damage")) damageMechanism = "water_staining";
+  if (text.includes("rot") || text.includes("rotted") || text.includes("decay")) {
+    damageMechanism = "rot";
+    structuralConcern = structuralConcern || assemblyLayer === "framing" || assemblyLayer === "decking";
+  }
+  if (text.includes("delamin")) damageMechanism = "delamination";
+  if (text.includes("sag") || text.includes("bow")) { damageMechanism = "sagging"; structuralConcern = true; }
+  if (text.includes("active leak") || text.includes("drip")) damageMechanism = "active_leak";
+
+  const visibleAreaOnly = obs.visibleAreaOnly ?? measurementConfidence === "low";
+  const provisionalQuantity = obs.provisionalQuantity ?? measurementConfidence === "low";
+
+  return { ...obs, material, assemblyLayer, damageMechanism, structuralConcern, accessRequired, measurementConfidence, visibleAreaOnly, provisionalQuantity };
 }
 
 // ─── Xactimate Map ───
 interface XactimateTemplate {
   code: string; description: string; defaultUnit: string; category: string;
-  appliesWhen: { category?: DamageCategory; materialIncludes?: string[]; damageTypeIncludes?: string[]; repairability?: Repairability[]; };
+  appliesWhen: {
+    category?: DamageCategory; materialIncludes?: string[]; damageTypeIncludes?: string[];
+    repairability?: Repairability[]; assemblyLayers?: AssemblyLayer[];
+    damageMechanisms?: DamageMechanism[]; structuralConcern?: boolean;
+  };
 }
 
 const XACTIMATE_MAP: XactimateTemplate[] = [
   { code: "RFG240", description: "Remove and replace laminated composition shingles", defaultUnit: "SQ", category: "roof", appliesWhen: { category: "roof", materialIncludes: ["architectural","laminated","composition","asphalt"], repairability: ["replace"] }},
   { code: "RFG220", description: "Repair composition shingle roofing", defaultUnit: "EA", category: "roof", appliesWhen: { category: "roof", materialIncludes: ["architectural","laminated","composition","asphalt"], repairability: ["repair"] }},
+  { code: "RFGDECK", description: "Remove and replace roof decking", defaultUnit: "SF", category: "roof", appliesWhen: { category: "roof", assemblyLayers: ["decking"], damageMechanisms: ["rot","delamination","water_staining","deterioration"], repairability: ["replace","undetermined"] }},
+  { code: "RFGDECKREP", description: "Repair roof decking", defaultUnit: "SF", category: "roof", appliesWhen: { category: "roof", assemblyLayers: ["decking"], repairability: ["repair"] }},
+  { code: "FRMRAFREP", description: "Repair or reinforce roof framing member", defaultUnit: "LF", category: "roof", appliesWhen: { category: "roof", assemblyLayers: ["framing"], structuralConcern: true }},
   { code: "SIDVINYL", description: "Remove and replace vinyl siding", defaultUnit: "SF", category: "siding", appliesWhen: { category: "siding", materialIncludes: ["vinyl"], repairability: ["replace"] }},
   { code: "SIDVINYLREP", description: "Repair vinyl siding", defaultUnit: "SF", category: "siding", appliesWhen: { category: "siding", materialIncludes: ["vinyl"], repairability: ["repair"] }},
   { code: "SIDFIBER", description: "Remove and replace fiber cement siding", defaultUnit: "SF", category: "siding", appliesWhen: { category: "siding", materialIncludes: ["fiber cement","hardie","cement board"], repairability: ["replace"] }},
   { code: "DRYWALL", description: "Repair drywall", defaultUnit: "SF", category: "interior", appliesWhen: { category: "interior", materialIncludes: ["drywall","gypsum","sheetrock"] }},
+  { code: "DRYWALLREPL", description: "Remove and replace drywall", defaultUnit: "SF", category: "interior", appliesWhen: { category: "interior", materialIncludes: ["drywall","gypsum","sheetrock"], repairability: ["replace"] }},
   { code: "WINREPL", description: "Replace window unit", defaultUnit: "EA", category: "window", appliesWhen: { category: "window", repairability: ["replace"] }},
   { code: "GUT5K", description: "Replace 5-inch gutter", defaultUnit: "LF", category: "gutter", appliesWhen: { category: "gutter", repairability: ["replace","repair"] }},
   { code: "DWN23", description: "Replace downspout", defaultUnit: "LF", category: "gutter", appliesWhen: { category: "gutter", materialIncludes: ["downspout"] }},
@@ -120,6 +165,9 @@ function findBestTemplate(obs: DamageObservation): XactimateTemplate | null {
     const a = t.appliesWhen;
     if (a.category && a.category !== obs.category) continue;
     if (a.repairability && !a.repairability.includes(obs.repairability)) continue;
+    if (a.structuralConcern !== undefined && a.structuralConcern !== !!obs.structuralConcern) continue;
+    if (a.assemblyLayers && (!obs.assemblyLayer || !a.assemblyLayers.includes(obs.assemblyLayer))) continue;
+    if (a.damageMechanisms && (!obs.damageMechanism || !a.damageMechanisms.includes(obs.damageMechanism))) continue;
     if (a.materialIncludes && !a.materialIncludes.some(m => material.includes(m))) continue;
     if (a.damageTypeIncludes && !a.damageTypeIncludes.some(d => damageType.includes(d))) continue;
     return t;
@@ -131,6 +179,12 @@ function findBestTemplate(obs: DamageObservation): XactimateTemplate | null {
 function deriveQuantity(obs: DamageObservation, defaultUnit: string, context: ScopeContext): number {
   const q = obs.recommendedQuantity || 1;
   const wf = context.wasteFactor ?? 0.1;
+  if (obs.measurementConfidence === "low") {
+    if (defaultUnit === "SQ") return Math.max(0.25, q * (1 + wf));
+    if (defaultUnit === "SF") return Math.max(16, q);
+    if (defaultUnit === "LF") return Math.max(8, q);
+    return Math.max(1, q);
+  }
   if (defaultUnit === "SQ") {
     if (obs.unit === "SQ") return q * (1 + wf);
     if (obs.unit === "SF") return (q / 100) * (1 + wf);
@@ -140,18 +194,46 @@ function deriveQuantity(obs: DamageObservation, defaultUnit: string, context: Sc
   return Math.max(1, q);
 }
 
+function deriveAccessQuantity(obs: DamageObservation): number {
+  const q = obs.recommendedQuantity || 1;
+  if (obs.unit === "SQ") return q * 100;
+  if (obs.unit === "SF") return Math.max(q, 16);
+  if (obs.measurementConfidence === "low") return Math.max(32, q);
+  return Math.max(q, 16);
+}
+
 function buildBaseScopeFromObservations(observations: DamageObservation[], context: ScopeContext): { items: ScopeLineItem[]; warnings: ScopeWarning[] } {
   const items: ScopeLineItem[] = [];
   const warnings: ScopeWarning[] = [];
   observations.forEach((obs, index) => {
     if (obs.confidence < 0.45) warnings.push({ type: "low_confidence", message: `Low-confidence observation for ${obs.component}. Review before relying on automated scope.`, observationIndex: index });
+    if (obs.measurementConfidence === "low" || obs.provisionalQuantity) warnings.push({ type: "manual_measurement_required", message: `Manual measurement required for ${obs.component}; visible area does not provide reliable final quantity.`, observationIndex: index });
+    if (obs.structuralConcern) warnings.push({ type: "structural_review_recommended", message: `Structural concern flagged for ${obs.component}; framing/decking review recommended.`, observationIndex: index });
+    if (obs.accessRequired) warnings.push({ type: "access_scope_required", message: `Access-related scope likely required for ${obs.component} before full repair quantity can be confirmed.`, observationIndex: index });
+
     const template = findBestTemplate(obs);
     if (!template) { warnings.push({ type: "no_match", message: `No Xactimate mapping found for ${obs.category} / ${obs.material} / ${obs.damageType}.`, observationIndex: index }); return; }
     const quantity = deriveQuantity(obs, template.defaultUnit, context);
-    items.push(makeLineItem({ code: template.code, description: template.description, quantity, unit: template.defaultUnit, reasoning: `${obs.component}: ${obs.damageType}; material ${obs.material}; severity ${obs.severity}; basis ${obs.quantityBasis}`, sourceObservationIndexes: [index], isManualReviewRequired: obs.confidence < 0.6 }));
-    if (obs.category === "interior") items.push(makeLineItem({ code: "PAINT", description: "Seal and paint affected area", quantity: Math.max(quantity, 1), unit: "SF", reasoning: `Paint added as dependency after interior repair for ${obs.component}.`, sourceObservationIndexes: [index], isDependency: true }));
-    if (obs.category === "interior" && /insulation|wet insulation|ceiling leak|water damage/i.test(`${obs.damageType} ${obs.rationale}`)) items.push(makeLineItem({ code: "INSUL", description: "Replace insulation", quantity: Math.max(quantity, 1), unit: "SF", reasoning: `Insulation replacement added due to probable wet/damaged cavity insulation at ${obs.component}.`, sourceObservationIndexes: [index], isDependency: true }));
-    if (obs.category === "siding" && obs.repairability === "replace" && !items.some(i => i.code === "SIDDROP")) items.push(makeLineItem({ code: "SIDDROP", description: "Remove and reset house wrap / weather barrier", quantity: Math.max(quantity, 1), unit: "SF", reasoning: `Weather barrier reset added as siding replacement dependency for ${obs.component}.`, sourceObservationIndexes: [index], isDependency: true }));
+    items.push(makeLineItem({ code: template.code, description: template.description, quantity, unit: template.defaultUnit, reasoning: `${obs.component}: ${obs.damageType}; material ${obs.material}; layer ${obs.assemblyLayer ?? "unknown"}; basis ${obs.quantityBasis}`, sourceObservationIndexes: [index], isManualReviewRequired: obs.confidence < 0.6 || !!obs.structuralConcern, isProvisionalQuantity: !!obs.provisionalQuantity }));
+
+    // Interior dependencies
+    if (obs.category === "interior") {
+      const drywallReplace = obs.repairability === "replace" || obs.damageMechanism === "rot" || obs.damageMechanism === "active_leak";
+      items.push(makeLineItem({ code: drywallReplace ? "DRYWALLREPL" : "PAINT", description: drywallReplace ? "Remove and replace drywall" : "Seal and paint affected area", quantity: Math.max(quantity, 1), unit: "SF", reasoning: `${drywallReplace ? "Drywall replacement" : "Paint"} added based on interior finish damage at ${obs.component}.`, sourceObservationIndexes: [index], isDependency: true, isProvisionalQuantity: !!obs.provisionalQuantity }));
+      if (drywallReplace) items.push(makeLineItem({ code: "PAINT", description: "Seal and paint affected area", quantity: Math.max(quantity, 1), unit: "SF", reasoning: `Paint added as dependency after drywall replacement at ${obs.component}.`, sourceObservationIndexes: [index], isDependency: true, isProvisionalQuantity: !!obs.provisionalQuantity }));
+    }
+    if (obs.category === "interior" && (obs.assemblyLayer === "insulation" || /insulation|wet insulation|ceiling leak|water damage/i.test(`${obs.damageType} ${obs.rationale}`))) items.push(makeLineItem({ code: "INSUL", description: "Replace insulation", quantity: Math.max(quantity, 1), unit: "SF", reasoning: `Insulation replacement added due to probable wet/damaged insulation at ${obs.component}.`, sourceObservationIndexes: [index], isDependency: true, isProvisionalQuantity: !!obs.provisionalQuantity }));
+
+    // Roof access/investigation dependencies
+    if (obs.category === "roof" && obs.accessRequired && (obs.assemblyLayer === "decking" || obs.assemblyLayer === "framing")) {
+      items.push(makeLineItem({ code: "RFGDETACHRESET", description: "Detach and reset roofing to access substrate", quantity: deriveAccessQuantity(obs), unit: "SF", reasoning: `Access scope added to reach ${obs.assemblyLayer} at ${obs.component}.`, sourceObservationIndexes: [index], isDependency: true, isProvisionalQuantity: true }));
+    }
+    if (obs.category === "roof" && obs.structuralConcern && !items.some(i => i.code === "MOISTMAP")) {
+      items.push(makeLineItem({ code: "MOISTMAP", description: "Moisture mapping / investigative moisture readings", quantity: 1, unit: "EA", reasoning: `Investigation item added due to structural/water-damage concerns at ${obs.component}.`, sourceObservationIndexes: [index], isDependency: true }));
+    }
+
+    // Siding dependencies
+    if (obs.category === "siding" && obs.repairability === "replace" && !items.some(i => i.code === "SIDDROP")) items.push(makeLineItem({ code: "SIDDROP", description: "Remove and reset house wrap / weather barrier", quantity: Math.max(quantity, 1), unit: "SF", reasoning: `Weather barrier reset added as siding replacement dependency for ${obs.component}.`, sourceObservationIndexes: [index], isDependency: true, isProvisionalQuantity: !!obs.provisionalQuantity }));
   });
   return { items, warnings };
 }
@@ -163,6 +245,9 @@ function applyCodeAndMatchingRules(args: { items: ScopeLineItem[]; context: Scop
   const warnings = [...args.warnings];
   const assumptions: string[] = [];
   const hasFullRoof = items.some(i => i.code === "RFG240");
+  const hasDeckingScope = items.some(i => i.code === "RFGDECK" || i.code === "RFGDECKREP");
+  const hasStructuralScope = items.some(i => i.code === "FRMRAFREP");
+
   if (hasFullRoof) {
     if (!items.some(i => i.code === "RFGST")) items.push(makeLineItem({ code: "RFGST", description: "Starter course - composition shingles", quantity: roofPerimeterLf, unit: "LF", reasoning: "Added as roof-system dependency for full shingle replacement.", isDependency: true }));
     if (!items.some(i => i.code === "RFG300")) items.push(makeLineItem({ code: "RFG300", description: "Ridge cap - composition shingles", quantity: ridgeLf, unit: "LF", reasoning: "Added as roof-system dependency for full shingle replacement.", isDependency: true }));
@@ -171,6 +256,17 @@ function applyCodeAndMatchingRules(args: { items: ScopeLineItem[]; context: Scop
     if ((context.state === "NJ" || context.state === "PA") && !context.iceBarrierPresent && !items.some(i => i.code === "RFGICE")) { items.push(makeLineItem({ code: "RFGICE", description: "Ice and water barrier", quantity: Math.max(roofPerimeterLf * 2, roofSquares * 100 * 0.35), unit: "SF", reasoning: "Added as likely code-required cold-climate eave protection item.", isCodeRequired: true })); warnings.push({ type: "code_upgrade", message: "Ice and water barrier added for probable NJ/PA code compliance." }); }
     if (context.ridgeVentPresent && !items.some(i => i.code === "RFGVENT")) items.push(makeLineItem({ code: "RFGVENT", description: "Ridge vent", quantity: ridgeLf, unit: "LF", reasoning: "Added because ridge vent is present and roof replacement should include replacement/reset.", isDependency: true }));
   }
+
+  if (hasDeckingScope && !items.some(i => i.code === "RFGDETACHRESET")) {
+    items.push(makeLineItem({ code: "RFGDETACHRESET", description: "Detach and reset roofing to access substrate", quantity: Math.max(roofSquares * 100, 32), unit: "SF", reasoning: "Added because decking scope typically requires roofing detach/reset access.", isDependency: true, isProvisionalQuantity: true }));
+    warnings.push({ type: "access_scope_required", message: "Decking damage indicates access/detach-reset scope is likely required." });
+  }
+
+  if (hasStructuralScope) {
+    warnings.push({ type: "structural_review_recommended", message: "Structural framing repair appears implicated; contractor/engineer review is recommended." });
+    assumptions.push("Structural framing scope may expand after invasive inspection or contractor/engineer evaluation.");
+  }
+
   if (context.repairPercent && context.repairPercent >= 25 && !hasFullRoof) warnings.push({ type: "code_upgrade", message: "Repair area is at or above 25%; verify whether full replacement is required by applicable code or ordinance." });
   if (context.discontinuedMaterial || context.matchingRequired) { warnings.push({ type: "matching_issue", message: "Discontinued or matching-sensitive material flagged. Verify full elevation/slope replacement requirements." }); assumptions.push("Matching/discontinued-material issue may require broader replacement than visible direct damage."); }
   if (context.brittleTestFailed) { warnings.push({ type: "manual_review", message: "Brittle test failed. Repairability should be escalated toward replacement review." }); assumptions.push("Brittleness may make spot repair infeasible and justify replacement scope."); }
@@ -207,6 +303,7 @@ function buildFullScope(observations: DamageObservation[], ctx?: ScopeContext) {
   const assumptions = [
     "Xactimate-style line item codes are internal placeholders and should be mapped to your exact approved price list/code set.",
     "Quantities derived from photos are provisional until field measurements or roof reports confirm dimensions.",
+    "Low measurement-confidence observations are treated as visible-area indicators, not final measured scope.",
     ...coded.assumptions,
   ];
 
@@ -279,15 +376,25 @@ Return this exact schema:
       "recommendedQuantity": 1,
       "unit": "EA|SF|LF|SQ",
       "confidence": 0.0,
-      "rationale": "string"
+      "rationale": "string",
+      "assemblyLayer": "roof_covering|underlayment|decking|framing|interior_finish|insulation|flashing|trim|unknown",
+      "damageMechanism": "water_staining|rot|delamination|sagging|active_leak|missing_material|creased|hail_impact|wind_damage|deterioration|unknown",
+      "accessRequired": true,
+      "structuralConcern": false,
+      "measurementConfidence": "low|medium|high",
+      "provisionalQuantity": true,
+      "visibleAreaOnly": true
     }
   ]
 }
 
 Rules:
 - Be conservative and evidence-based.
-- Identify probable material when reasonably visible.
-- If quantity cannot be measured from image, use a reasonable visible estimate and explain quantityBasis.
+- Identify probable material and assembly layer when reasonably visible.
+- For wood framing, sheathing, roof decking, leaks, staining, or rot, set assemblyLayer and damageMechanism carefully.
+- If exact quantity cannot be measured from image, use a provisional visible-area estimate and set measurementConfidence to low.
+- Set structuralConcern true for rafters, trusses, framing, sagging members, or rot affecting structure.
+- Set accessRequired true when roofing, finishes, or coverings would need removal to access damaged substrate/framing.
 - confidence must be a number from 0 to 1.
 - Return no markdown fences.
 - Return an empty observations array if the image does not clearly show property damage.`;
@@ -310,6 +417,8 @@ Rules:
 
     if (!aiResp.ok) {
       const errText = await aiResp.text();
+      if (aiResp.status === 429) return new Response(JSON.stringify({ error: "Rate limit exceeded, please try again later." }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      if (aiResp.status === 402) return new Response(JSON.stringify({ error: "Payment required, please add credits." }), { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       throw new Error(`AI gateway error ${aiResp.status}: ${errText.slice(0, 200)}`);
     }
 

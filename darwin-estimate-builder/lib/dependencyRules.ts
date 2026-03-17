@@ -19,6 +19,30 @@ export function buildBaseScopeFromObservations(args: {
       });
     }
 
+    if (obs.measurementConfidence === "low" || obs.provisionalQuantity) {
+      warnings.push({
+        type: "manual_measurement_required",
+        message: `Manual measurement required for ${obs.component}; visible area does not provide reliable final quantity.`,
+        observationIndex: index
+      });
+    }
+
+    if (obs.structuralConcern) {
+      warnings.push({
+        type: "structural_review_recommended",
+        message: `Structural concern flagged for ${obs.component}; framing/decking review recommended.`,
+        observationIndex: index
+      });
+    }
+
+    if (obs.accessRequired) {
+      warnings.push({
+        type: "access_scope_required",
+        message: `Access-related scope likely required for ${obs.component} before full repair quantity can be confirmed.`,
+        observationIndex: index
+      });
+    }
+
     const template = findBestTemplate(obs);
 
     if (!template) {
@@ -31,37 +55,63 @@ export function buildBaseScopeFromObservations(args: {
     }
 
     const quantity = deriveQuantity(obs, template.defaultUnit, args.context);
+
     items.push(
       makeLineItem({
         code: template.code,
         description: template.description,
         quantity,
         unit: template.defaultUnit,
-        reasoning: `${obs.component}: ${obs.damageType}; material ${obs.material}; severity ${obs.severity}; basis ${obs.quantityBasis}`,
+        reasoning: `${obs.component}: ${obs.damageType}; material ${obs.material}; layer ${obs.assemblyLayer ?? "unknown"}; basis ${obs.quantityBasis}`,
         sourceObservationIndexes: [index],
-        isManualReviewRequired: obs.confidence < 0.6
+        isManualReviewRequired: obs.confidence < 0.6 || !!obs.structuralConcern,
+        isProvisionalQuantity: !!obs.provisionalQuantity
       })
     );
 
     if (obs.category === "interior") {
+      const drywallReplace =
+        obs.repairability === "replace" ||
+        obs.damageMechanism === "rot" ||
+        obs.damageMechanism === "active_leak";
+
       items.push(
         makeLineItem({
-          code: "PAINT",
-          description: "Seal and paint affected area",
+          code: drywallReplace ? "DRYWALLREPL" : "PAINT",
+          description: drywallReplace
+            ? "Remove and replace drywall"
+            : "Seal and paint affected area",
           quantity: Math.max(quantity, 1),
           unit: "SF",
-          reasoning: `Paint added as dependency after interior wall/ceiling repair for ${obs.component}.`,
+          reasoning: `${drywallReplace ? "Drywall replacement" : "Paint"} added based on interior finish damage at ${obs.component}.`,
           sourceObservationIndexes: [index],
-          isDependency: true
+          isDependency: true,
+          isProvisionalQuantity: !!obs.provisionalQuantity
         })
       );
+
+      if (drywallReplace) {
+        items.push(
+          makeLineItem({
+            code: "PAINT",
+            description: "Seal and paint affected area",
+            quantity: Math.max(quantity, 1),
+            unit: "SF",
+            reasoning: `Paint added as dependency after drywall replacement at ${obs.component}.`,
+            sourceObservationIndexes: [index],
+            isDependency: true,
+            isProvisionalQuantity: !!obs.provisionalQuantity
+          })
+        );
+      }
     }
 
     if (
       obs.category === "interior" &&
-      /insulation|wet insulation|ceiling leak|water damage/i.test(
-        `${obs.damageType} ${obs.rationale}`
-      )
+      (obs.assemblyLayer === "insulation" ||
+        /insulation|wet insulation|ceiling leak|water damage/i.test(
+          `${obs.damageType} ${obs.rationale}`
+        ))
     ) {
       items.push(
         makeLineItem({
@@ -69,7 +119,45 @@ export function buildBaseScopeFromObservations(args: {
           description: "Replace insulation",
           quantity: Math.max(quantity, 1),
           unit: "SF",
-          reasoning: `Insulation replacement added due to probable wet/damaged cavity insulation at ${obs.component}.`,
+          reasoning: `Insulation replacement added due to probable wet/damaged insulation at ${obs.component}.`,
+          sourceObservationIndexes: [index],
+          isDependency: true,
+          isProvisionalQuantity: !!obs.provisionalQuantity
+        })
+      );
+    }
+
+    if (
+      obs.category === "roof" &&
+      obs.accessRequired &&
+      (obs.assemblyLayer === "decking" || obs.assemblyLayer === "framing")
+    ) {
+      items.push(
+        makeLineItem({
+          code: "RFGDETACHRESET",
+          description: "Detach and reset roofing to access substrate",
+          quantity: deriveAccessQuantity(obs, args.context),
+          unit: "SF",
+          reasoning: `Access scope added to reach ${obs.assemblyLayer} at ${obs.component}.`,
+          sourceObservationIndexes: [index],
+          isDependency: true,
+          isProvisionalQuantity: true
+        })
+      );
+    }
+
+    if (
+      obs.category === "roof" &&
+      obs.structuralConcern &&
+      !items.some((i) => i.code === "MOISTMAP")
+    ) {
+      items.push(
+        makeLineItem({
+          code: "MOISTMAP",
+          description: "Moisture mapping / investigative moisture readings",
+          quantity: 1,
+          unit: "EA",
+          reasoning: `Investigation item added due to structural/water-damage concerns at ${obs.component}.`,
           sourceObservationIndexes: [index],
           isDependency: true
         })
@@ -89,7 +177,8 @@ export function buildBaseScopeFromObservations(args: {
           unit: "SF",
           reasoning: `Weather barrier reset added as siding replacement dependency for ${obs.component}.`,
           sourceObservationIndexes: [index],
-          isDependency: true
+          isDependency: true,
+          isProvisionalQuantity: !!obs.provisionalQuantity
         })
       );
     }
@@ -106,6 +195,13 @@ function deriveQuantity(
   const q = obs.recommendedQuantity || 1;
   const wasteFactor = context.wasteFactor ?? 0.1;
 
+  if (obs.measurementConfidence === "low") {
+    if (defaultUnit === "SQ") return Math.max(0.25, q * (1 + wasteFactor));
+    if (defaultUnit === "SF") return Math.max(16, q);
+    if (defaultUnit === "LF") return Math.max(8, q);
+    return Math.max(1, q);
+  }
+
   if (defaultUnit === "SQ") {
     if (obs.unit === "SQ") return q * (1 + wasteFactor);
     if (obs.unit === "SF") return (q / 100) * (1 + wasteFactor);
@@ -118,4 +214,14 @@ function deriveQuantity(
   }
 
   return Math.max(1, q);
+}
+
+function deriveAccessQuantity(obs: DamageObservation, context: ScopeContext): number {
+  const q = obs.recommendedQuantity || 1;
+
+  if (obs.unit === "SQ") return q * 100;
+  if (obs.unit === "SF") return Math.max(q, 16);
+  if (obs.measurementConfidence === "low") return Math.max(32, q);
+
+  return Math.max(q, 16);
 }

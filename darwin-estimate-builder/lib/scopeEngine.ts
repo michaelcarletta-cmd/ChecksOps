@@ -49,6 +49,7 @@ export function buildFullScope(args: {
   const assumptions = [
     "Xactimate-style line item codes are internal placeholders and should be mapped to your exact approved price list/code set.",
     "Quantities derived from photos are provisional until field measurements or roof reports confirm dimensions.",
+    "Low measurement-confidence observations are treated as visible-area indicators, not final measured scope.",
     ...coded.assumptions
   ];
 
