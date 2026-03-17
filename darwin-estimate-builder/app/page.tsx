@@ -33,7 +33,13 @@ export default function Page() {
         },
         body: JSON.stringify({
           imageBase64: base64,
-          mimeType: file.type
+          mimeType: file.type,
+          state: "NJ",
+          matchingRequired: true,
+          ridgeVentPresent: true,
+          dripEdgePresent: false,
+          iceBarrierPresent: false,
+          wasteFactor: 0.1
         })
       });
 
@@ -57,26 +63,20 @@ export default function Page() {
   return (
     <main
       style={{
-        maxWidth: 1100,
+        maxWidth: 1180,
         margin: "0 auto",
         padding: 24,
         fontFamily: "Arial, sans-serif"
       }}
     >
-      <h1 style={{ fontSize: 32, marginBottom: 8 }}>AI Estimate Builder</h1>
+      <h1 style={{ fontSize: 32, marginBottom: 8 }}>Darwin Scope Engine</h1>
       <p style={{ marginBottom: 24 }}>
-        Upload a damage photo. AI will generate observations and estimate line
-        items.
+        Upload a damage photo. Darwin will analyze material/damage, build a
+        deterministic scope, add dependency items, and flag likely code or
+        matching issues.
       </p>
 
-      <div
-        style={{
-          border: "1px solid #ddd",
-          padding: 20,
-          borderRadius: 12,
-          marginBottom: 24
-        }}
-      >
+      <div style={card}>
         <input
           type="file"
           accept="image/*"
@@ -89,33 +89,64 @@ export default function Page() {
 
       {result && (
         <>
-          <section
-            style={{
-              border: "1px solid #ddd",
-              padding: 20,
-              borderRadius: 12,
-              marginBottom: 24
-            }}
-          >
-            <h2 style={{ fontSize: 24, marginBottom: 12 }}>Summary</h2>
-            <p>{result.summary}</p>
+          <section style={card}>
+            <h2 style={h2}>Scope Summary</h2>
+            <p>
+              <strong>AI Summary:</strong> {result.aiSummary || "—"}
+            </p>
+            <p>
+              <strong>Scope Summary:</strong> {result.summary}
+            </p>
           </section>
 
-          <section
-            style={{
-              border: "1px solid #ddd",
-              padding: 20,
-              borderRadius: 12,
-              marginBottom: 24
-            }}
-          >
-            <h2 style={{ fontSize: 24, marginBottom: 12 }}>Observations</h2>
+          <section style={card}>
+            <h2 style={h2}>Metrics</h2>
+            <div>Roof: {result.metrics?.roofSquares ?? 0} SQ</div>
+            <div>Siding: {result.metrics?.sidingSf ?? 0} SF</div>
+            <div>Interior: {result.metrics?.interiorSf ?? 0} SF</div>
+            <div>Gutters: {result.metrics?.gutterLf ?? 0} LF</div>
+            <div>Windows: {result.metrics?.windowCount ?? 0} EA</div>
+            <div>
+              <strong>
+                Gross Total: $
+                {result.metrics?.grossTotal?.toFixed(2) ?? grandTotal.toFixed(2)}
+              </strong>
+            </div>
+          </section>
+
+          <section style={card}>
+            <h2 style={h2}>Warnings</h2>
+            {result.warnings?.length ? (
+              <ul>
+                {result.warnings.map((w, i) => (
+                  <li key={i}>
+                    <strong>{w.type}</strong>: {w.message}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>No warnings.</p>
+            )}
+          </section>
+
+          <section style={card}>
+            <h2 style={h2}>Assumptions</h2>
+            {result.assumptions?.length ? (
+              <ul>
+                {result.assumptions.map((a, i) => (
+                  <li key={i}>{a}</li>
+                ))}
+              </ul>
+            ) : (
+              <p>No assumptions recorded.</p>
+            )}
+          </section>
+
+          <section style={card}>
+            <h2 style={h2}>Observations</h2>
             <div style={{ display: "grid", gap: 12 }}>
               {result.observations.map((obs, i) => (
-                <div
-                  key={i}
-                  style={{ border: "1px solid #eee", borderRadius: 10, padding: 14 }}
-                >
+                <div key={i} style={subCard}>
                   <strong>{obs.component}</strong>
                   <div>Category: {obs.category}</div>
                   <div>Material: {obs.material}</div>
@@ -133,8 +164,8 @@ export default function Page() {
             </div>
           </section>
 
-          <section style={{ border: "1px solid #ddd", padding: 20, borderRadius: 12 }}>
-            <h2 style={{ fontSize: 24, marginBottom: 12 }}>Estimate Line Items</h2>
+          <section style={card}>
+            <h2 style={h2}>Xactimate-Ready Scope</h2>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
@@ -144,6 +175,7 @@ export default function Page() {
                   <th style={th}>Unit</th>
                   <th style={th}>Unit Price</th>
                   <th style={th}>Total</th>
+                  <th style={th}>Reasoning</th>
                 </tr>
               </thead>
               <tbody>
@@ -155,6 +187,7 @@ export default function Page() {
                     <td style={td}>{item.unit}</td>
                     <td style={td}>${item.unitPrice.toFixed(2)}</td>
                     <td style={td}>${item.total.toFixed(2)}</td>
+                    <td style={td}>{item.reasoning}</td>
                   </tr>
                 ))}
               </tbody>
@@ -167,13 +200,33 @@ export default function Page() {
   );
 }
 
+const h2: CSSProperties = {
+  fontSize: 24,
+  marginBottom: 12
+};
+
+const card: CSSProperties = {
+  border: "1px solid #ddd",
+  padding: 20,
+  borderRadius: 12,
+  marginBottom: 24
+};
+
+const subCard: CSSProperties = {
+  border: "1px solid #eee",
+  borderRadius: 10,
+  padding: 14
+};
+
 const th: CSSProperties = {
   borderBottom: "1px solid #ddd",
   textAlign: "left",
-  padding: "10px 8px"
+  padding: "10px 8px",
+  verticalAlign: "top"
 };
 
 const td: CSSProperties = {
   borderBottom: "1px solid #eee",
-  padding: "10px 8px"
+  padding: "10px 8px",
+  verticalAlign: "top"
 };

@@ -1,7 +1,8 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
-import { buildEstimateItems } from "@/lib/rulesEngine";
 import { DamageObservation } from "@/types";
+import { buildFullScope } from "@/lib/scopeEngine";
+import { ScopeContext } from "@/lib/xactimateMap";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -29,6 +30,18 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const imageBase64 = body?.imageBase64 as string | undefined;
     const mimeType = body?.mimeType as string | undefined;
+
+    const context: ScopeContext = {
+      state: body?.state ?? "NJ",
+      repairPercent: body?.repairPercent,
+      discontinuedMaterial: body?.discontinuedMaterial,
+      brittleTestFailed: body?.brittleTestFailed,
+      matchingRequired: body?.matchingRequired,
+      ridgeVentPresent: body?.ridgeVentPresent,
+      dripEdgePresent: body?.dripEdgePresent,
+      iceBarrierPresent: body?.iceBarrierPresent,
+      wasteFactor: body?.wasteFactor
+    };
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
@@ -70,6 +83,7 @@ Return this exact schema:
 
 Rules:
 - Be conservative and evidence-based.
+- Identify probable material when reasonably visible.
 - If quantity cannot be measured from image, use a reasonable visible estimate and explain quantityBasis.
 - confidence must be a number from 0 to 1.
 - Return no markdown fences.
@@ -89,7 +103,7 @@ Rules:
           content: [
             {
               type: "text",
-              text: "Analyze this property damage photo for estimate-building."
+              text: "Analyze this property damage photo for estimate-building and scope mapping."
             },
             {
               type: "image_url",
@@ -114,12 +128,20 @@ Rules:
       ? parsed.observations
       : [];
 
-    const estimateItems = buildEstimateItems(observations);
+    const scope = buildFullScope({
+      observations,
+      context
+    });
 
     return NextResponse.json({
-      summary: parsed.summary ?? "",
-      observations,
-      estimateItems
+      aiSummary: parsed.summary ?? "",
+      summary: scope.summary,
+      observations: scope.observations,
+      estimateItems: scope.lineItems,
+      warnings: scope.warnings,
+      assumptions: scope.assumptions,
+      metrics: scope.metrics,
+      contextUsed: scope.contextUsed
     });
   } catch (error) {
     console.error("Analyze route error:", error);
