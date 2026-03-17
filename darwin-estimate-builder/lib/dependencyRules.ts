@@ -2,6 +2,7 @@ import { DamageObservation } from "@/types";
 import { ScopeContext, findBestTemplate } from "@/lib/xactimateMap";
 import { ScopeLineItem, ScopeWarning } from "@/lib/scopeTypes";
 import { makeLineItem } from "@/lib/scopeUtils";
+import { addInteriorAccessItems } from "@/lib/interiorAccessRules";
 
 export function buildBaseScopeFromObservations(args: {
   observations: DamageObservation[];

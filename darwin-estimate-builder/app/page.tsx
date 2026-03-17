@@ -35,10 +35,6 @@ export default function Page() {
           imageBase64: base64,
           mimeType: file.type,
           state: "NJ",
-          matchingRequired: true,
-          ridgeVentPresent: true,
-          dripEdgePresent: false,
-          iceBarrierPresent: false,
           wasteFactor: 0.1
         })
       });

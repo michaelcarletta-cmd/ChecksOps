@@ -286,6 +286,28 @@ export const XACTIMATE_MAP: XactimateTemplate[] = [
     appliesWhen: {
       category: "fence"
     }
+  },
+  {
+    code: "TRMBASE",
+    description: "Replace baseboard trim",
+    defaultUnit: "LF",
+    category: "interior",
+    appliesWhen: {
+      category: "interior",
+      materialIncludes: ["baseboard", "trim", "wood trim"],
+      repairability: ["replace", "undetermined"]
+    }
+  },
+  {
+    code: "TRMBASEREP",
+    description: "Repair baseboard trim",
+    defaultUnit: "LF",
+    category: "interior",
+    appliesWhen: {
+      category: "interior",
+      materialIncludes: ["baseboard", "trim", "wood trim"],
+      repairability: ["repair"]
+    }
   }
 ];
 
