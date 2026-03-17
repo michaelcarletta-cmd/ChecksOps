@@ -463,6 +463,9 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
                       insights={insights}
                       claim={claim}
                       counterTactics={counterTactics}
+                      onExecuteAction={(tactic) => console.log("Execute", tactic)}
+                      onGenerateLetter={(tactic) => console.log("Generate Letter", tactic)}
+                      onAddToTimeline={(tactic) => console.log("Add to Timeline", tactic)}
                     />
                   ) : (
                     <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
