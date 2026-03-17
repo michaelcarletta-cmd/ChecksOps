@@ -7,11 +7,35 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
+function extractJson(text: string): string {
+  const trimmed = text.trim();
+
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    return trimmed;
+  }
+
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    return trimmed.slice(firstBrace, lastBrace + 1);
+  }
+
+  throw new Error("No valid JSON object found in model response");
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const imageBase64 = body?.imageBase64 as string | undefined;
     const mimeType = body?.mimeType as string | undefined;
+
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json(
+        { error: "OPENAI_API_KEY is missing" },
+        { status: 500 }
+      );
+    }
 
     if (!imageBase64 || !mimeType) {
       return NextResponse.json(
@@ -47,8 +71,9 @@ Return this exact schema:
 Rules:
 - Be conservative and evidence-based.
 - If quantity cannot be measured from image, use a reasonable visible estimate and explain quantityBasis.
-- confidence must be 0 to 1.
+- confidence must be a number from 0 to 1.
 - Return no markdown fences.
+- Return an empty observations array if the image does not clearly show property damage.
 `;
 
     const response = await client.chat.completions.create({
@@ -78,22 +103,31 @@ Rules:
     });
 
     const raw = response.choices[0]?.message?.content ?? "{}";
-    const parsed = JSON.parse(raw) as {
-      summary: string;
-      observations: DamageObservation[];
+    const jsonText = extractJson(raw);
+
+    const parsed = JSON.parse(jsonText) as {
+      summary?: string;
+      observations?: DamageObservation[];
     };
 
-    const estimateItems = buildEstimateItems(parsed.observations || []);
+    const observations = Array.isArray(parsed.observations)
+      ? parsed.observations
+      : [];
+
+    const estimateItems = buildEstimateItems(observations);
 
     return NextResponse.json({
       summary: parsed.summary ?? "",
-      observations: parsed.observations ?? [],
+      observations,
       estimateItems
     });
   } catch (error) {
     console.error("Analyze route error:", error);
     return NextResponse.json(
-      { error: "Failed to analyze image" },
+      {
+        error:
+          error instanceof Error ? error.message : "Failed to analyze image"
+      },
       { status: 500 }
     );
   }
