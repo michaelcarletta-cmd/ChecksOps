@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { supabase } from "@/integrations/supabase/client";
 
 type ScopeWarning = {
   type: "no_match" | "low_confidence" | "manual_review" | "code_upgrade" | "matching_issue";
@@ -55,9 +56,6 @@ interface DarwinScopeEngineProps {
   claim: any;
 }
 
-const API_ENDPOINT =
-  (import.meta.env.VITE_DARWIN_SCOPE_API_URL as string | undefined) ?? "/api/analyze";
-
 export const DarwinScopeEngine = ({ claim }: DarwinScopeEngineProps) => {
   const [fileName, setFileName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -86,12 +84,8 @@ export const DarwinScopeEngine = ({ claim }: DarwinScopeEngineProps) => {
       }
       const base64 = btoa(binary);
 
-      const res = await fetch(API_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
+      const { data, error: fnError } = await supabase.functions.invoke("darwin-scope-engine", {
+        body: {
           imageBase64: base64,
           mimeType: file.type,
           state: stateCode,
@@ -99,12 +93,12 @@ export const DarwinScopeEngine = ({ claim }: DarwinScopeEngineProps) => {
           ridgeVentPresent: true,
           dripEdgePresent: false,
           iceBarrierPresent: false,
-          wasteFactor: 0.1
-        })
+          wasteFactor: 0.1,
+        },
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Analyze failed");
+      if (fnError) throw new Error(fnError.message || "Analyze failed");
+      if (data?.error) throw new Error(data.error);
       setResult(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unknown error");
