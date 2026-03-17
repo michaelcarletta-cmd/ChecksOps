@@ -35,10 +35,15 @@ export function buildBaseScopeFromObservations(args: {
       });
     }
 
-    if (obs.accessRequired) {
+    if (
+      obs.accessRequired &&
+      (obs.category === "roof" ||
+        obs.assemblyLayer === "decking" ||
+        obs.assemblyLayer === "framing")
+    ) {
       warnings.push({
         type: "access_scope_required",
-        message: `Access-related scope likely required for ${obs.component} before full repair quantity can be confirmed.`,
+        message: `Roof/substrate access scope likely required for ${obs.component} before full repair quantity can be confirmed.`,
         observationIndex: index
       });
     }
