@@ -55,6 +55,9 @@ export function normalizeObservationMaterial(
     structuralConcern = true;
     accessRequired = true;
     measurementConfidence = "low";
+  } else if (text.includes("baseboard") || text.includes("trim")) {
+    material = "baseboard trim";
+    assemblyLayer = "trim";
   } else if (text.includes("insulation")) {
     material = "insulation";
     assemblyLayer = "insulation";

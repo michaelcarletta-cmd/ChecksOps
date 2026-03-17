@@ -31,6 +31,8 @@ export const PRICE_BOOK: Record<string, number> = {
   DRSWDET: 18,
   FLOORPROT: 0.65,
   DEBRIS: 0.95,
+  TRMBASE: 6.5,
+  TRMBASEREP: 4.25,
 };
 
 export function getUnitPrice(code: string): number {
