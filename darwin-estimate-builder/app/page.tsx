@@ -43,10 +43,20 @@ export default function Page() {
         })
       });
 
-      const data = await res.json();
+      const rawText = await res.text();
+      console.log("RAW API RESPONSE:", rawText);
+
+      let data: any;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        throw new Error(
+          `Non-JSON response from server. Status ${res.status}. First 300 chars: ${rawText.slice(0, 300)}`
+        );
+      }
 
       if (!res.ok) {
-        throw new Error(data?.error || "Analyze failed");
+        throw new Error(data?.error || `Analyze failed with status ${res.status}`);
       }
 
       setResult(data);
