@@ -347,8 +347,15 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
         extractedText = allText.join("\n\n");
       } else {
         // For PDFs and other binary docs, convert to base64 and use vision extraction
+        // Use chunked approach (browser-compatible, avoids stack overflow for large files)
         const buffer = await file.arrayBuffer();
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+        const uint8 = new Uint8Array(buffer);
+        let binary = "";
+        const chunkSize = 32768;
+        for (let i = 0; i < uint8.length; i += chunkSize) {
+          binary += String.fromCharCode.apply(null, Array.from(uint8.slice(i, i + chunkSize)));
+        }
+        const base64 = btoa(binary);
         
         // Use multimodal extraction via a simple edge function call
         const { data: extractData, error: extractError } = await supabase.functions.invoke("darwin-estimate-import", {
