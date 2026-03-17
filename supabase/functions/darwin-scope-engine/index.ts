@@ -10,6 +10,8 @@ const PRICE_BOOK: Record<string, number> = {
   RFGDRIP: 4.25, RFGVENT: 16, SIDVINYL: 74, SIDVINYLREP: 38, SIDFIBER: 96,
   SIDDROP: 1.65, DRYWALL: 3.8, DRYWALLREPL: 5.9, PAINT: 1.95, INSUL: 1.45,
   MOISTMAP: 185, WINREPL: 850, GUT5K: 18, DWN23: 16, FNCREP: 42,
+  DRBASEDET: 4.5, DRSHELFDET: 12, DRRODDET: 45, DRLIGHTDET: 65, DRSWDET: 18,
+  FLOORPROT: 0.65, DEBRIS: 0.95,
 };
 function getUnitPrice(code: string): number { return PRICE_BOOK[code] ?? 0; }
 
@@ -29,6 +31,11 @@ interface DamageObservation {
   accessRequired?: boolean; structuralConcern?: boolean;
   measurementConfidence?: "low"|"medium"|"high";
   provisionalQuantity?: boolean; visibleAreaOnly?: boolean;
+  attachedItems?: string[];
+  roomType?: "closet"|"bedroom"|"bathroom"|"kitchen"|"hall"|"attic"|"garage"|"other";
+  surfaceOrientation?: "ceiling"|"wall"|"sloped_ceiling"|"other";
+  finishLevel?: "painted"|"textured"|"wallpaper"|"unfinished"|"unknown";
+  obstructionLevel?: "low"|"medium"|"high";
 }
 
 interface ScopeContext {
@@ -175,6 +182,44 @@ function findBestTemplate(obs: DamageObservation): XactimateTemplate | null {
   return null;
 }
 
+// ─── Interior Access Rules ───
+function estimateBaseboardLf(areaSf: number): number {
+  if (!areaSf) return 8;
+  return Math.max(8, Math.sqrt(areaSf) * 2);
+}
+
+function addInteriorAccessItems(obs: DamageObservation, baseQuantitySf: number, observationIndex: number): ScopeLineItem[] {
+  const items: ScopeLineItem[] = [];
+  const text = `${obs.component} ${obs.rationale} ${obs.damageType}`.toLowerCase();
+  const attached = (obs.attachedItems ?? []).map(x => x.toLowerCase());
+  const roomType = (obs.roomType ?? "").toLowerCase();
+  const surface = (obs.surfaceOrientation ?? "").toLowerCase();
+
+  // Wall drywall → baseboard detach/reset
+  if (surface === "wall" || text.includes("wall")) {
+    items.push(makeLineItem({ code: "DRBASEDET", description: "Detach and reset baseboard trim", quantity: estimateBaseboardLf(baseQuantitySf), unit: "LF", reasoning: "Baseboard detach/reset added because wall drywall replacement typically requires trim removal at floor line.", sourceObservationIndexes: [observationIndex], isDependency: true, isProvisionalQuantity: true }));
+  }
+
+  // Closet → shelving & rod detach/reset
+  if (roomType === "closet" || text.includes("closet") || attached.includes("shelving")) {
+    items.push(makeLineItem({ code: "DRSHELFDET", description: "Detach and reset closet shelving", quantity: Math.max(4, estimateBaseboardLf(baseQuantitySf) / 2), unit: "LF", reasoning: "Closet shelving detach/reset added because drywall access is likely obstructed by installed shelves.", sourceObservationIndexes: [observationIndex], isDependency: true, isProvisionalQuantity: true }));
+    items.push(makeLineItem({ code: "DRRODDET", description: "Detach and reset closet rod/hardware", quantity: 1, unit: "EA", reasoning: "Closet rod/hardware detach/reset added as likely access dependency.", sourceObservationIndexes: [observationIndex], isDependency: true, isProvisionalQuantity: true }));
+  }
+
+  // Ceiling → light fixture detach/reset
+  if (surface === "ceiling" || text.includes("ceiling")) {
+    items.push(makeLineItem({ code: "DRLIGHTDET", description: "Detach and reset light fixture", quantity: 1, unit: "EA", reasoning: "Ceiling work may require fixture detach/reset in affected area.", sourceObservationIndexes: [observationIndex], isDependency: true, isProvisionalQuantity: true }));
+  }
+
+  // Floor protection (always for interior demo/replacement)
+  items.push(makeLineItem({ code: "FLOORPROT", description: "Floor and contents protection", quantity: Math.max(baseQuantitySf, 16), unit: "SF", reasoning: "Protection added because drywall demolition/replacement creates dust and debris in occupied interior space.", sourceObservationIndexes: [observationIndex], isDependency: true, isProvisionalQuantity: true }));
+
+  // Debris removal (always for interior demo/replacement)
+  items.push(makeLineItem({ code: "DEBRIS", description: "Debris removal", quantity: Math.max(baseQuantitySf, 16), unit: "SF", reasoning: "Debris removal added due to drywall demolition and disposal needs.", sourceObservationIndexes: [observationIndex], isDependency: true, isProvisionalQuantity: true }));
+
+  return items;
+}
+
 // ─── Dependency Rules ───
 function deriveQuantity(obs: DamageObservation, defaultUnit: string, context: ScopeContext): number {
   const q = obs.recommendedQuantity || 1;
@@ -221,7 +266,12 @@ function buildBaseScopeFromObservations(observations: DamageObservation[], conte
       const drywallReplace = obs.repairability === "replace" || obs.damageMechanism === "rot" || obs.damageMechanism === "active_leak";
       items.push(makeLineItem({ code: drywallReplace ? "DRYWALLREPL" : "PAINT", description: drywallReplace ? "Remove and replace drywall" : "Seal and paint affected area", quantity: Math.max(quantity, 1), unit: "SF", reasoning: `${drywallReplace ? "Drywall replacement" : "Paint"} added based on interior finish damage at ${obs.component}.`, sourceObservationIndexes: [index], isDependency: true, isProvisionalQuantity: !!obs.provisionalQuantity }));
       if (drywallReplace) items.push(makeLineItem({ code: "PAINT", description: "Seal and paint affected area", quantity: Math.max(quantity, 1), unit: "SF", reasoning: `Paint added as dependency after drywall replacement at ${obs.component}.`, sourceObservationIndexes: [index], isDependency: true, isProvisionalQuantity: !!obs.provisionalQuantity }));
+
+      // Interior access items (baseboard, shelving, rod, light, floor protection, debris)
+      const accessItems = addInteriorAccessItems(obs, Math.max(quantity, 1), index);
+      items.push(...accessItems);
     }
+
     if (obs.category === "interior" && (obs.assemblyLayer === "insulation" || /insulation|wet insulation|ceiling leak|water damage/i.test(`${obs.damageType} ${obs.rationale}`))) items.push(makeLineItem({ code: "INSUL", description: "Replace insulation", quantity: Math.max(quantity, 1), unit: "SF", reasoning: `Insulation replacement added due to probable wet/damaged insulation at ${obs.component}.`, sourceObservationIndexes: [index], isDependency: true, isProvisionalQuantity: !!obs.provisionalQuantity }));
 
     // Roof access/investigation dependencies
@@ -383,7 +433,12 @@ Return this exact schema:
       "structuralConcern": false,
       "measurementConfidence": "low|medium|high",
       "provisionalQuantity": true,
-      "visibleAreaOnly": true
+      "visibleAreaOnly": true,
+      "attachedItems": ["shelving", "closet rod"],
+      "roomType": "closet|bedroom|bathroom|kitchen|hall|attic|garage|other",
+      "surfaceOrientation": "ceiling|wall|sloped_ceiling|other",
+      "finishLevel": "painted|textured|wallpaper|unfinished|unknown",
+      "obstructionLevel": "low|medium|high"
     }
   ]
 }
@@ -395,6 +450,11 @@ Rules:
 - If exact quantity cannot be measured from image, use a provisional visible-area estimate and set measurementConfidence to low.
 - Set structuralConcern true for rafters, trusses, framing, sagging members, or rot affecting structure.
 - Set accessRequired true when roofing, finishes, or coverings would need removal to access damaged substrate/framing.
+- Identify roomType when visible (closet, bedroom, bathroom, kitchen, hall, attic, garage).
+- Identify surfaceOrientation (ceiling, wall, sloped_ceiling) when the damaged surface is visible.
+- List any attachedItems visible that would need detach/reset for repair access (e.g. shelving, closet rod, baseboard, light fixture).
+- Set finishLevel based on the visible surface finish (painted, textured, wallpaper, unfinished).
+- Set obstructionLevel to indicate how obstructed the damaged area is by contents/fixtures.
 - confidence must be a number from 0 to 1.
 - Return no markdown fences.
 - Return an empty observations array if the image does not clearly show property damage.`;
