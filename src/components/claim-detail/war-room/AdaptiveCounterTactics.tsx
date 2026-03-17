@@ -9,6 +9,7 @@ import {
   CalendarClock,
   ShieldAlert,
   ChevronRight,
+  TrendingUp,
   PlayCircle,
 } from "lucide-react";
 import { lazy, Suspense } from "react";
@@ -24,15 +25,23 @@ interface CounterTactic {
   title?: string;
   trigger_condition: string;
   current_situation?: string;
+
   recommended_action: string;
   action_purpose?: string;
+
   escalation_if_no_response?: string;
   escalation_timeline?: string;
+
   why_this_works?: string;
+
   letter_type?: string;
   success_rate_estimate?: number;
+
   priority?: "high" | "medium" | "low";
   confidence?: "high" | "medium" | "low";
+  pressure_impact?: "high" | "medium" | "low";
+  recommended_due?: string;
+
   action_label?: string;
   escalation_label?: string;
 }
@@ -41,6 +50,7 @@ interface AdaptiveCounterTacticsProps {
   insights: any;
   claim: any;
   counterTactics: CounterTactic[] | null;
+
   onExecuteAction?: (tactic: CounterTactic) => void;
   onGenerateLetter?: (tactic: CounterTactic) => void;
   onAddToTimeline?: (tactic: CounterTactic) => void;
@@ -56,6 +66,12 @@ const confidenceStyles: Record<string, string> = {
   high: "bg-success/10 text-success border-success/30",
   medium: "bg-primary/10 text-primary border-primary/30",
   low: "bg-muted text-muted-foreground border-border",
+};
+
+const pressureStyles: Record<string, string> = {
+  high: "bg-destructive/10 text-destructive border-destructive/30",
+  medium: "bg-warning/10 text-warning border-warning/30",
+  low: "bg-success/10 text-success border-success/30",
 };
 
 export const AdaptiveCounterTactics = ({
@@ -111,6 +127,7 @@ export const AdaptiveCounterTactics = ({
             {counterTactics.map((ct, i) => (
               <Card key={ct.id || i} className="border-border">
                 <CardContent className="p-3 space-y-3">
+                  {/* Header */}
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <div className="text-sm font-semibold text-foreground">
@@ -137,6 +154,13 @@ export const AdaptiveCounterTactics = ({
                         </Badge>
                       )}
 
+                      {ct.pressure_impact && (
+                        <Badge variant="outline" className={`text-[10px] ${pressureStyles[ct.pressure_impact]}`}>
+                          <TrendingUp className="h-2.5 w-2.5 mr-0.5" />
+                          {ct.pressure_impact} pressure impact
+                        </Badge>
+                      )}
+
                       {ct.letter_type && (
                         <Badge variant="outline" className="text-[10px]">
                           <FileText className="h-2.5 w-2.5 mr-0.5" />
@@ -146,111 +170,133 @@ export const AdaptiveCounterTactics = ({
                     </div>
                   </div>
 
-                  <div className="p-2 rounded bg-warning/5 border border-warning/20 text-xs">
-                    <div className="font-medium text-warning mb-0.5">
-                      Trigger
+                  {/* Sections */}
+                  <div className="space-y-2 text-xs">
+                    <div className="p-2 rounded bg-warning/5 border border-warning/20">
+                      <div className="font-medium text-warning mb-0.5">
+                        Trigger
+                      </div>
+                      <div className="text-foreground">
+                        {ct.trigger_condition}
+                      </div>
                     </div>
-                    <div className="text-foreground">{ct.trigger_condition}</div>
-                  </div>
 
-                  <div className="p-2 rounded bg-success/5 border border-success/20 text-xs">
-                    <div className="font-medium text-success mb-0.5">
-                      Recommended Move Now
+                    <div className="p-2 rounded bg-success/5 border border-success/20">
+                      <div className="font-medium text-success mb-0.5">
+                        Recommended Move Now
+                      </div>
+
+                      <div className="text-foreground">
+                        {ct.recommended_action}
+                      </div>
+
+                      {ct.action_purpose && (
+                        <div className="text-muted-foreground mt-1 italic">
+                          Purpose: {ct.action_purpose}
+                        </div>
+                      )}
                     </div>
-                    <div className="text-foreground">{ct.recommended_action}</div>
 
-                    {ct.action_purpose && (
-                      <div className="text-muted-foreground mt-1 italic">
-                        Purpose: {ct.action_purpose}
+                    {ct.escalation_if_no_response && (
+                      <div className="p-2 rounded bg-destructive/5 border border-destructive/20">
+                        <div className="font-medium text-destructive mb-0.5">
+                          Escalate If No Response
+                        </div>
+
+                        <div className="text-foreground">
+                          {ct.escalation_if_no_response}
+                        </div>
+
+                        {ct.escalation_timeline && (
+                          <div className="text-muted-foreground mt-1 italic">
+                            Timeline: {ct.escalation_timeline}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {ct.why_this_works && (
+                      <div className="p-2 rounded bg-primary/5 border border-primary/20">
+                        <div className="font-medium text-primary mb-0.5">
+                          Why This Works
+                        </div>
+                        <div className="text-foreground">
+                          {ct.why_this_works}
+                        </div>
                       </div>
                     )}
                   </div>
 
-                  {ct.escalation_if_no_response && (
-                    <div className="p-2 rounded bg-destructive/5 border border-destructive/20 text-xs">
-                      <div className="font-medium text-destructive mb-0.5">
-                        If No Response
-                      </div>
-
-                      <div className="text-foreground">
-                        {ct.escalation_if_no_response}
-                      </div>
-
-                      {ct.escalation_timeline && (
-                        <div className="text-muted-foreground mt-1 italic">
-                          Timeline: {ct.escalation_timeline}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {ct.why_this_works && (
-                    <div className="p-2 rounded bg-primary/5 border border-primary/20 text-xs">
-                      <div className="font-medium text-primary mb-0.5">
-                        Why This Works
-                      </div>
-                      <div className="text-foreground">{ct.why_this_works}</div>
-                    </div>
-                  )}
-
-                  {typeof ct.success_rate_estimate === "number" && (
-                    <div className="pt-1">
+                  {/* Meta badges */}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {typeof ct.success_rate_estimate === "number" && (
                       <Badge variant="outline" className="text-[10px]">
                         ~{ct.success_rate_estimate}% success rate
                       </Badge>
-                    </div>
-                  )}
+                    )}
 
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    <Button
-                      size="sm"
-                      className="h-7 text-xs gap-1"
-                      onClick={() => onExecuteAction?.(ct)}
-                    >
-                      <PlayCircle className="h-3 w-3" />
-                      {ct.action_label || "Execute"}
-                    </Button>
-                    {ct.letter_type && (
+                    {ct.recommended_due && (
+                      <Badge variant="outline" className="text-[10px]">
+                        <CalendarClock className="h-2.5 w-2.5 mr-0.5" />
+                        due {ct.recommended_due}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex flex-wrap gap-1.5 pt-1 border-t border-border">
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => onExecuteAction?.(ct)}
+                      >
+                        <PlayCircle className="h-3 w-3" />
+                        {ct.action_label || "Execute Action"}
+                      </Button>
+                      {ct.letter_type && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs gap-1"
+                          onClick={() => onGenerateLetter?.(ct)}
+                        >
+                          <FileText className="h-3 w-3" />
+                          Generate Letter
+                        </Button>
+                      )}
+
                       <Button
                         size="sm"
                         variant="outline"
                         className="h-7 text-xs gap-1"
-                        onClick={() => onGenerateLetter?.(ct)}
+                        onClick={() => onAddToTimeline?.(ct)}
                       >
-                        <FileText className="h-3 w-3" />
-                        Letter
+                        <CalendarClock className="h-3 w-3" />
+                        Add to Timeline
                       </Button>
-                    )}
 
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 text-xs gap-1"
-                      onClick={() => onAddToTimeline?.(ct)}
-                    >
-                      <CalendarClock className="h-3 w-3" />
-                      Timeline
-                    </Button>
-
-                    {ct.escalation_if_no_response && (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="h-7 text-xs gap-1"
-                        onClick={() =>
-                          onExecuteAction?.({
-                            ...ct,
-                            recommended_action: ct.escalation_if_no_response!,
-                          })
-                        }
-                      >
-                        <ShieldAlert className="h-3 w-3" />
-                        {ct.escalation_label || "Escalate"}
-                        <ChevronRight className="h-3 w-3" />
-                      </Button>
-                    )}
+                      {ct.escalation_if_no_response && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="h-7 text-xs gap-1"
+                          onClick={() =>
+                            onExecuteAction?.({
+                              ...ct,
+                              recommended_action:
+                                ct.escalation_if_no_response || ct.recommended_action,
+                              action_label: ct.escalation_label || "Escalate",
+                            })
+                          }
+                        >
+                          <ShieldAlert className="h-3 w-3" />
+                          {ct.escalation_label || "Escalate"}
+                          <ChevronRight className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
-
                 </CardContent>
               </Card>
             ))}
