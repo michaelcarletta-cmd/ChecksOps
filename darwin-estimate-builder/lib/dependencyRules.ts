@@ -82,33 +82,39 @@ export function buildBaseScopeFromObservations(args: {
 
       items.push(
         makeLineItem({
-          code: drywallReplace ? "DRYWALLREPL" : "PAINT",
+          code: drywallReplace ? "DRYWALLREPL" : "DRYWALL",
           description: drywallReplace
             ? "Remove and replace drywall"
-            : "Seal and paint affected area",
+            : "Repair drywall",
           quantity: Math.max(quantity, 1),
           unit: "SF",
-          reasoning: `${drywallReplace ? "Drywall replacement" : "Paint"} added based on interior finish damage at ${obs.component}.`,
+          reasoning: `${drywallReplace ? "Replacement" : "Repair"} selected for interior finish damage at ${obs.component}.`,
+          sourceObservationIndexes: [index],
+          isManualReviewRequired: obs.confidence < 0.6,
+          isProvisionalQuantity: !!obs.provisionalQuantity
+        })
+      );
+
+      items.push(
+        makeLineItem({
+          code: "PAINT",
+          description: "Seal and paint affected area",
+          quantity: Math.max(quantity, 1),
+          unit: "SF",
+          reasoning: `Paint added after interior finish work at ${obs.component}.`,
           sourceObservationIndexes: [index],
           isDependency: true,
           isProvisionalQuantity: !!obs.provisionalQuantity
         })
       );
 
-      if (drywallReplace) {
-        items.push(
-          makeLineItem({
-            code: "PAINT",
-            description: "Seal and paint affected area",
-            quantity: Math.max(quantity, 1),
-            unit: "SF",
-            reasoning: `Paint added as dependency after drywall replacement at ${obs.component}.`,
-            sourceObservationIndexes: [index],
-            isDependency: true,
-            isProvisionalQuantity: !!obs.provisionalQuantity
-          })
-        );
-      }
+      // Interior access items (baseboard, shelving, fixtures, floor protection, debris)
+      const accessItems = addInteriorAccessItems({
+        observation: obs,
+        baseQuantitySf: Math.max(quantity, 1),
+        observationIndex: index
+      });
+      items.push(...accessItems);
     }
 
     if (
