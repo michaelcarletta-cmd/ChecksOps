@@ -13,6 +13,7 @@ export interface ScopeLineItem {
   isCodeRequired?: boolean;
   isDependency?: boolean;
   isManualReviewRequired?: boolean;
+  isProvisionalQuantity?: boolean;
 }
 
 export interface ScopeWarning {
@@ -21,7 +22,10 @@ export interface ScopeWarning {
     | "low_confidence"
     | "manual_review"
     | "code_upgrade"
-    | "matching_issue";
+    | "matching_issue"
+    | "manual_measurement_required"
+    | "structural_review_recommended"
+    | "access_scope_required";
   message: string;
   observationIndex?: number;
 }

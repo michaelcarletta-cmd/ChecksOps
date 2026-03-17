@@ -76,15 +76,25 @@ Return this exact schema:
       "recommendedQuantity": 1,
       "unit": "EA|SF|LF|SQ",
       "confidence": 0.0,
-      "rationale": "string"
+      "rationale": "string",
+      "assemblyLayer": "roof_covering|underlayment|decking|framing|interior_finish|insulation|flashing|trim|unknown",
+      "damageMechanism": "water_staining|rot|delamination|sagging|active_leak|missing_material|creased|hail_impact|wind_damage|deterioration|unknown",
+      "accessRequired": true,
+      "structuralConcern": false,
+      "measurementConfidence": "low|medium|high",
+      "provisionalQuantity": true,
+      "visibleAreaOnly": true
     }
   ]
 }
 
 Rules:
 - Be conservative and evidence-based.
-- Identify probable material when reasonably visible.
-- If quantity cannot be measured from image, use a reasonable visible estimate and explain quantityBasis.
+- Identify probable material and assembly layer when reasonably visible.
+- For wood framing, sheathing, roof decking, leaks, staining, or rot, set assemblyLayer and damageMechanism carefully.
+- If exact quantity cannot be measured from image, use a provisional visible-area estimate and set measurementConfidence to low.
+- Set structuralConcern true for rafters, trusses, framing, sagging members, or rot affecting structure.
+- Set accessRequired true when roofing, finishes, or coverings would need removal to access damaged substrate/framing.
 - confidence must be a number from 0 to 1.
 - Return no markdown fences.
 - Return an empty observations array if the image does not clearly show property damage.
