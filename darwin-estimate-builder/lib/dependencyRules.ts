@@ -38,13 +38,12 @@ export function buildBaseScopeFromObservations(args: {
 
     if (
       obs.accessRequired &&
-      (obs.category === "roof" ||
-        obs.assemblyLayer === "decking" ||
+      (obs.assemblyLayer === "decking" ||
         obs.assemblyLayer === "framing")
     ) {
       warnings.push({
         type: "access_scope_required",
-        message: `Roof/substrate access scope likely required for ${obs.component} before full repair quantity can be confirmed.`,
+        message: `Substrate/framing access likely required for ${obs.component}.`,
         observationIndex: index
       });
     }
@@ -76,25 +75,31 @@ export function buildBaseScopeFromObservations(args: {
     );
 
     if (obs.category === "interior") {
-      const drywallReplace =
-        obs.repairability === "replace" ||
-        obs.damageMechanism === "rot" ||
-        obs.damageMechanism === "active_leak";
-
-      items.push(
-        makeLineItem({
-          code: drywallReplace ? "DRYWALLREPL" : "DRYWALL",
-          description: drywallReplace
-            ? "Remove and replace drywall"
-            : "Repair drywall",
-          quantity: Math.max(quantity, 1),
-          unit: "SF",
-          reasoning: `${drywallReplace ? "Replacement" : "Repair"} selected for interior finish damage at ${obs.component}.`,
-          sourceObservationIndexes: [index],
-          isManualReviewRequired: obs.confidence < 0.6,
-          isProvisionalQuantity: !!obs.provisionalQuantity
-        })
+      const hasDrywallItem = items.some(
+        (i) => i.code === "DRYWALL" || i.code === "DRYWALLREPL"
       );
+
+      if (!hasDrywallItem) {
+        const drywallReplace =
+          obs.repairability === "replace" ||
+          obs.damageMechanism === "rot" ||
+          obs.damageMechanism === "active_leak";
+
+        items.push(
+          makeLineItem({
+            code: drywallReplace ? "DRYWALLREPL" : "DRYWALL",
+            description: drywallReplace
+              ? "Remove and replace drywall"
+              : "Repair drywall",
+            quantity: Math.max(quantity, 1),
+            unit: "SF",
+            reasoning: `${drywallReplace ? "Replacement" : "Repair"} selected for interior finish damage at ${obs.component}.`,
+            sourceObservationIndexes: [index],
+            isManualReviewRequired: obs.confidence < 0.6,
+            isProvisionalQuantity: !!obs.provisionalQuantity
+          })
+        );
+      }
 
       items.push(
         makeLineItem({

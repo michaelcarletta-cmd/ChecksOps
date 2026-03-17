@@ -46,8 +46,13 @@ export function mergeDuplicateLineItems(items: ScopeLineItem[]): ScopeLineItem[]
       continue;
     }
 
-    existing.quantity = round2(existing.quantity + item.quantity);
-    existing.total = round2(existing.total + item.total);
+    // Prevent double-counting EA-based reset items
+    if (item.unit === "EA") {
+      existing.quantity = Math.max(existing.quantity, item.quantity);
+    } else {
+      existing.quantity = round2(existing.quantity + item.quantity);
+    }
+    existing.total = round2(existing.unitPrice * existing.quantity);
     existing.reasoning = `${existing.reasoning} | ${item.reasoning}`;
     existing.sourceObservationIndexes = Array.from(
       new Set([...existing.sourceObservationIndexes, ...item.sourceObservationIndexes])

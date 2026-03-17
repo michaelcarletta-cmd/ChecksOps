@@ -43,6 +43,8 @@ export async function POST(req: NextRequest) {
       wasteFactor: body?.wasteFactor
     };
 
+    console.log("Context:", context);
+
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
         { error: "OPENAI_API_KEY is missing" },

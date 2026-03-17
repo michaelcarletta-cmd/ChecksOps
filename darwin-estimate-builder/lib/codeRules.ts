@@ -147,7 +147,10 @@ export function applyCodeAndMatchingRules(args: {
     });
   }
 
-  if (context.discontinuedMaterial || context.matchingRequired) {
+  if (
+    (context.discontinuedMaterial || context.matchingRequired) &&
+    items.some(i => i.code.startsWith("RFG") || i.code.startsWith("SID"))
+  ) {
     warnings.push({
       type: "matching_issue",
       message:
