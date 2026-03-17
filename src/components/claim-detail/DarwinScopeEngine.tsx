@@ -121,10 +121,9 @@ export const DarwinScopeEngine = ({ claim }: DarwinScopeEngineProps) => {
       </CardHeader>
       <CardContent className="space-y-4">
         <Alert>
-          <AlertTitle>Scope API endpoint</AlertTitle>
+          <AlertTitle>Darwin Scope Engine</AlertTitle>
           <AlertDescription>
-            Using <code>{API_ENDPOINT}</code>. Configure{" "}
-            <code>VITE_DARWIN_SCOPE_API_URL</code> if your analyze API is hosted elsewhere.
+            Upload a damage photo to auto-generate Xactimate-ready scope with dependency items, code upgrades, and matching warnings.
           </AlertDescription>
         </Alert>
 
