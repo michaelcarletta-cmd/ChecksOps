@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { AnalyzeResponse } from "@/types";
 
 export default function Page() {
@@ -167,13 +167,13 @@ export default function Page() {
   );
 }
 
-const th: React.CSSProperties = {
+const th: CSSProperties = {
   borderBottom: "1px solid #ddd",
   textAlign: "left",
   padding: "10px 8px"
 };
 
-const td: React.CSSProperties = {
+const td: CSSProperties = {
   borderBottom: "1px solid #eee",
   padding: "10px 8px"
 };
