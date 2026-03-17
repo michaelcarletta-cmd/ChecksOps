@@ -1,4 +1,4 @@
-import { DamageCategory } from "@/types";
+import { DamageCategory, AssemblyLayer, DamageMechanism } from "@/types";
 
 export type Repairability = "repair" | "replace" | "undetermined";
 
@@ -34,6 +34,14 @@ export interface ScopeObservation {
   unit: string;
   confidence: number;
   rationale: string;
+
+  assemblyLayer?: AssemblyLayer;
+  damageMechanism?: DamageMechanism;
+  accessRequired?: boolean;
+  structuralConcern?: boolean;
+  measurementConfidence?: "low" | "medium" | "high";
+  provisionalQuantity?: boolean;
+  visibleAreaOnly?: boolean;
 }
 
 export interface XactimateTemplate {
@@ -46,6 +54,9 @@ export interface XactimateTemplate {
     materialIncludes?: string[];
     damageTypeIncludes?: string[];
     repairability?: Repairability[];
+    assemblyLayers?: AssemblyLayer[];
+    damageMechanisms?: DamageMechanism[];
+    structuralConcern?: boolean;
   };
 }
 
@@ -70,6 +81,47 @@ export const XACTIMATE_MAP: XactimateTemplate[] = [
       category: "roof",
       materialIncludes: ["architectural", "laminated", "composition", "asphalt"],
       repairability: ["repair"]
+    }
+  },
+  {
+    code: "RFGDECK",
+    description: "Remove and replace roof decking",
+    defaultUnit: "SF",
+    category: "roof",
+    appliesWhen: {
+      category: "roof",
+      assemblyLayers: ["decking"],
+      damageMechanisms: ["rot", "delamination", "water_staining", "deterioration"],
+      repairability: ["replace", "undetermined"]
+    }
+  },
+  {
+    code: "RFGDECKREP",
+    description: "Repair roof decking",
+    defaultUnit: "SF",
+    category: "roof",
+    appliesWhen: {
+      category: "roof",
+      assemblyLayers: ["decking"],
+      repairability: ["repair"]
+    }
+  },
+  {
+    code: "RFGDETACHRESET",
+    description: "Detach and reset roofing to access substrate",
+    defaultUnit: "SF",
+    category: "supplement",
+    appliesWhen: {}
+  },
+  {
+    code: "FRMRAFREP",
+    description: "Repair or reinforce roof framing member",
+    defaultUnit: "LF",
+    category: "roof",
+    appliesWhen: {
+      category: "roof",
+      assemblyLayers: ["framing"],
+      structuralConcern: true
     }
   },
   {
@@ -165,6 +217,17 @@ export const XACTIMATE_MAP: XactimateTemplate[] = [
     }
   },
   {
+    code: "DRYWALLREPL",
+    description: "Remove and replace drywall",
+    defaultUnit: "SF",
+    category: "interior",
+    appliesWhen: {
+      category: "interior",
+      materialIncludes: ["drywall", "gypsum", "sheetrock"],
+      repairability: ["replace"]
+    }
+  },
+  {
     code: "PAINT",
     description: "Seal and paint affected area",
     defaultUnit: "SF",
@@ -175,6 +238,13 @@ export const XACTIMATE_MAP: XactimateTemplate[] = [
     code: "INSUL",
     description: "Replace insulation",
     defaultUnit: "SF",
+    category: "supplement",
+    appliesWhen: {}
+  },
+  {
+    code: "MOISTMAP",
+    description: "Moisture mapping / investigative moisture readings",
+    defaultUnit: "EA",
     category: "supplement",
     appliesWhen: {}
   },
@@ -235,6 +305,29 @@ export function findBestTemplate(
     if (
       appliesWhen.repairability &&
       !appliesWhen.repairability.includes(observation.repairability)
+    ) {
+      continue;
+    }
+
+    if (
+      appliesWhen.structuralConcern !== undefined &&
+      appliesWhen.structuralConcern !== !!observation.structuralConcern
+    ) {
+      continue;
+    }
+
+    if (
+      appliesWhen.assemblyLayers &&
+      (!observation.assemblyLayer ||
+        !appliesWhen.assemblyLayers.includes(observation.assemblyLayer))
+    ) {
+      continue;
+    }
+
+    if (
+      appliesWhen.damageMechanisms &&
+      (!observation.damageMechanism ||
+        !appliesWhen.damageMechanisms.includes(observation.damageMechanism))
     ) {
       continue;
     }
