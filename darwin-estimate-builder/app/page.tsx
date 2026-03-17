@@ -61,19 +61,11 @@ export default function Page() {
     result?.estimateItems?.reduce((sum, item) => sum + item.total, 0) ?? 0;
 
   return (
-    <main
-      style={{
-        maxWidth: 1180,
-        margin: "0 auto",
-        padding: 24,
-        fontFamily: "Arial, sans-serif"
-      }}
-    >
+    <main style={{ maxWidth: 1180, margin: "0 auto", padding: 24, fontFamily: "Arial, sans-serif" }}>
       <h1 style={{ fontSize: 32, marginBottom: 8 }}>Darwin Scope Engine</h1>
       <p style={{ marginBottom: 24 }}>
-        Upload a damage photo. Darwin will analyze material/damage, build a
-        deterministic scope, add dependency items, and flag likely code or
-        matching issues.
+        Upload a damage photo. Darwin will analyze material and damage, build a deterministic scope,
+        add dependency items, and flag likely code or matching issues.
       </p>
 
       <div style={card}>
@@ -153,9 +145,7 @@ export default function Page() {
                   <div>Damage: {obs.damageType}</div>
                   <div>Severity: {obs.severity}</div>
                   <div>Repairability: {obs.repairability}</div>
-                  <div>
-                    Qty: {obs.recommendedQuantity} {obs.unit}
-                  </div>
+                  <div>Qty: {obs.recommendedQuantity} {obs.unit}</div>
                   <div>Confidence: {obs.confidence}</div>
                   <div>Basis: {obs.quantityBasis}</div>
                   <div>Rationale: {obs.rationale}</div>
