@@ -9,6 +9,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { subscribeCarrierDismantler } from "@/lib/darwinDismantlerBus";
@@ -180,6 +182,7 @@ const analysisTypeLabels: Record<string, { label: string; section: string }> = {
 };
 
 export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpdated }: DarwinTabProps) => {
+  const isMobile = useIsMobile();
   const [showCopilot, setShowCopilot] = useState(true);
   const [copilotExpanded, setCopilotExpanded] = useState(false);
   const [copilotView, setCopilotView] = useState<'conversation' | 'dismantler'>('conversation');
@@ -686,27 +689,48 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
       )}
 
       {/* Workspace navigation - top of page */}
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-        {workspaceSections.map((section) => {
-          const SectionIcon = section.icon;
-          return (
-            <Button
-              key={section.key}
-              size="sm"
-              variant={activeWorkspace === section.key ? "default" : "outline"}
-              onClick={() => setActiveWorkspace(section.key)}
-              aria-pressed={activeWorkspace === section.key}
-              className={cn(
-                "whitespace-nowrap gap-2",
-                activeWorkspace === section.key && "ring-1 ring-primary/30",
-              )}
-            >
-              <SectionIcon className="h-4 w-4" />
-              {section.title}
-            </Button>
-          );
-        })}
-      </div>
+      {isMobile ? (
+        <div className="space-y-2">
+          <Select
+            value={activeWorkspace}
+            onValueChange={(value) => setActiveWorkspace(value as DarwinWorkspaceKey)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select Darwin workspace" />
+            </SelectTrigger>
+            <SelectContent>
+              {workspaceSections.map((section) => (
+                <SelectItem key={section.key} value={section.key}>
+                  {section.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground px-1">{activeWorkspaceMeta.description}</p>
+        </div>
+      ) : (
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          {workspaceSections.map((section) => {
+            const SectionIcon = section.icon;
+            return (
+              <Button
+                key={section.key}
+                size="sm"
+                variant={activeWorkspace === section.key ? "default" : "outline"}
+                onClick={() => setActiveWorkspace(section.key)}
+                aria-pressed={activeWorkspace === section.key}
+                className={cn(
+                  "whitespace-nowrap gap-2",
+                  activeWorkspace === section.key && "ring-1 ring-primary/30",
+                )}
+              >
+                <SectionIcon className="h-4 w-4" />
+                {section.title}
+              </Button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Top context pills */}
       <div className="flex flex-wrap gap-2 pb-1">
