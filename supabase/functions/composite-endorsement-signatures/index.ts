@@ -156,8 +156,8 @@ Deno.serve(async (req) => {
 
     const centerX = ezLeftPad + ezContentWidth / 2;
 
-    const lineGap = Math.round(imgHeight * 0.006);
-    const sectionGap = Math.round(imgHeight * 0.010);
+    const lineGap = Math.round(imgHeight * 0.005);
+    const sectionGap = Math.round(imgHeight * 0.008);
 
     // --- Restrictive endorsement legend ---
     // "Pay to the order of"
