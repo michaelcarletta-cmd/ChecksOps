@@ -63,3 +63,6 @@ verify_jwt = false
 
 [functions.darwin-document-meaning-worker]
 verify_jwt = false
+
+[functions.save-user-roof-outline]
+verify_jwt = false
