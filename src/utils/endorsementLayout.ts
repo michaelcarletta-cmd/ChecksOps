@@ -25,18 +25,18 @@ export function getStandardEndorsementLayout(
   imageHeight: number,
 ): EndorsementLayout {
   // Endorsement zone – centered in the endorsement area
-  const x = imageWidth * 0.26;
+  const x = imageWidth * 0.34;
   const y = imageHeight * 0.10;
-  const width = imageWidth * 0.30;
+  const width = imageWidth * 0.26;
   const height = imageHeight * 0.22;
 
-  // Scale from image HEIGHT – ~15% smaller than previous
-  const payToFont = imageHeight * 0.020;
-  const companyFont = imageHeight * 0.030;
-  const mobileOnlyFont = imageHeight * 0.022;
-  const byLineFont = imageHeight * 0.024;
-  const signatureFont = imageHeight * 0.036;
-  const signatureHeight = imageHeight * 0.052;
+  // Scale from image HEIGHT – reduced ~10-15% from previous
+  const payToFont = imageHeight * 0.018;
+  const companyFont = imageHeight * 0.028;
+  const mobileOnlyFont = imageHeight * 0.020;
+  const byLineFont = imageHeight * 0.022;
+  const signatureFont = imageHeight * 0.033;
+  const signatureHeight = imageHeight * 0.046;
   const lineGap = imageHeight * 0.010;
   const sectionGap = imageHeight * 0.016;
 
