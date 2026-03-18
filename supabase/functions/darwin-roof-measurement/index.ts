@@ -2743,6 +2743,12 @@ function deriveRoofEstimate(
     // Debug: intermediate calculation values
     slope_factor_used: hasGeometry ? slopeFactor : null,
     correction_factor_used: correctionFactorUsed,
+    // Shape conflict
+    roof_shape_conflict,
+    roof_shape_conflict_reason,
+    provisional_complexity_uplift_used,
+    shape_conflicted_roof_area_sqft,
+    shape_conflicted_squares,
   };
 }
 
