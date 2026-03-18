@@ -1202,7 +1202,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                 geocodedLng={estimate.geocoded_lng ?? 0}
                 suggestedPolygon={estimate.suggested_roof_polygon_geojson}
                 footprintPolygon={estimate.footprint_polygon}
-                roofPolygonGeojson={estimate.roof_polygon_geojson}
+                roofPolygon={estimate.roof_polygon_geojson}
                 userDrawnPolygon={estimate.user_drawn_roof_polygon_geojson}
                 onSaved={() => runEstimate(estimate.selected_candidate_index ?? undefined)}
               />
