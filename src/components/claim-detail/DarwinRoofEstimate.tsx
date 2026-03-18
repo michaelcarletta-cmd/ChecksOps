@@ -17,7 +17,7 @@ import { logAudit } from "@/hooks/useAuditLog";
 import { DarwinRoofValidation } from "./DarwinRoofValidation";
 import { RoofConfirmationDialog, type ConfirmationLevel, type ConfirmationBasis } from "./RoofConfirmationDialog";
 import { DarwinRoofAreaDebug } from "./DarwinRoofAreaDebug";
-import { DarwinRoofOutlineMapEditor } from "./DarwinRoofOutlineMapEditor";
+import { DarwinRoofOutlineStaticEditor } from "./DarwinRoofOutlineStaticEditor";
 
 type DerivationSource = "geometry" | "ai_estimated" | "user_override";
 type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative" | "unknown_insufficient_geometry";
@@ -1196,8 +1196,10 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
             {(estimate.roof_shape_conflict ||
               (estimate.imagery_source || "").toLowerCase().includes("ai vision") ||
               (estimate.geometry_quality_score ?? 0) < 60) && (
-              <DarwinRoofOutlineMapEditor
+              <DarwinRoofOutlineStaticEditor
                 roofMeasurementId={estimate.id}
+                geocodedLat={estimate.geocoded_lat}
+                geocodedLng={estimate.geocoded_lng}
                 suggestedPolygon={estimate.suggested_roof_polygon_geojson}
                 footprintPolygon={
                   estimate.footprint_polygon ??
