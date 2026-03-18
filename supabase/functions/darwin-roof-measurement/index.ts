@@ -2402,6 +2402,7 @@ function deriveRoofEstimate(
   let roofPolyResult: RoofPolygonResult | null = null;
   let roofPolygonGeoJson: any = null;
   let planarRoofAreaSqft = 0;
+  let correctionFactorUsed: number | null = null;
 
   if (hasGeometry && selectedCandidate) {
     const [cLng, cLat] = polygonCentroid(selectedCandidate.polygon);
@@ -2419,14 +2420,14 @@ function deriveRoofEstimate(
     roofPolygonGeoJson = buildPolygonGeoJson(roofPolyResult.roof_polygon, { lng: cLng, lat: cLat });
 
     // Apply validation-derived correction factor
-    const correctionFactor = getValidationDerivedAreaCorrection({
+    correctionFactorUsed = getValidationDerivedAreaCorrection({
       inferredRoofForm: roofFormInference?.inferred_roof_form ?? null,
       geometrySource: selectedCandidate.geometry_metadata?.source_name ?? null,
       geometryQualityScore: selectedCandidate.geometry_quality_score,
       pitchBand: pitchBand,
     });
 
-    roofArea = roundTo(planarRoofAreaSqft * slopeFactor * correctionFactor, 0);
+    roofArea = roundTo(planarRoofAreaSqft * slopeFactor * correctionFactorUsed, 0);
     squares = roundTo(roofArea / 100, 1);
   }
 
