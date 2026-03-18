@@ -1357,11 +1357,26 @@ function CheckDetailPanel({
                       onClick={async () => {
                         if (!frontImageUrl || !backImageUrl) return;
 
+                        // Open window immediately (synchronous) to avoid popup blocker
+                        const printWindow = window.open("", "_blank");
+                        if (!printWindow) {
+                          toast({
+                            title: "Popup blocked",
+                            description: "Please allow popups for this site to print checks.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        printWindow.document.write("<html><body><p>Preparing deposit print...</p></body></html>");
+
                         let printableBackImageUrl = backImageUrl;
                         if (check.back_image_path) {
                           printableBackImageUrl = await ensureDepositReadyBackImage();
                         }
-                        if (!printableBackImageUrl) return;
+                        if (!printableBackImageUrl) {
+                          printWindow.close();
+                          return;
+                        }
 
                         const [resolvedFrontDims, resolvedBackDims, compositedBackDims] = await Promise.all([
                           loadImageDimensions(frontImageUrl).catch(() => frontImageDimensions),
