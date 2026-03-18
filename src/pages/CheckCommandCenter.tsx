@@ -1469,7 +1469,7 @@ function CheckDetailPanel({
                               .header p { font-size: 12px; color: #666; margin: 4px 0; }
                               .check-section { margin-bottom: 16px; }
                               .check-section p.label { font-size: 12px; color: #666; margin: 0 0 4px 0; }
-                              .check-print-wrap { position: relative; display: inline-block; width: min(100%, var(--render-width)); }
+                              .check-print-wrap { position: relative; display: inline-block; width: min(100%, var(--render-width)); container-type: inline-size; }
                               .check-front-image, .check-back-image { display: block; width: 100%; height: auto; border: 1px solid #ddd; }
                               .endorsement-overlay {
                                 position: absolute;
@@ -1481,15 +1481,15 @@ function CheckDetailPanel({
                                 color: #111111;
                               }
                               .overlay-body { font-weight: 600; line-height: 1.15; }
-                              .overlay-header { text-align: center; margin: 0; font-size: 15px; font-weight: 700; }
-                              .overlay-company { text-align: center; margin: 2px 0 0; font-size: 18px; font-weight: 700; }
-                              .overlay-by { text-align: center; margin: 2px 0 0; font-size: 15px; }
-                              .overlay-separator { margin: 6px 0; border-top: 1px solid #111111; opacity: 0.3; }
-                              .sig-block { margin-top: 6px; }
-                              .sig-name { text-align: center; margin: 0; font-size: 15px; }
-                              .sig-typed { text-align: center; margin: 0; font-size: 17px; font-style: italic; font-family: serif; }
-                              .sig-waived { text-align: center; margin: 0; font-size: 14px; font-style: italic; }
-                              .sig-img { display: block; margin: 4px auto 0; max-width: 50%; max-height: 44px; filter: brightness(0); }
+                              .overlay-header { margin: 0 0 ${(0.012 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.030 * backAr * 100).toFixed(2)}cqw; font-weight: 700; }
+                              .overlay-company { margin: 0 0 ${(0.012 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.048 * backAr * 100).toFixed(2)}cqw; font-weight: 700; }
+                              .overlay-by { margin: 0 0 ${(0.012 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.040 * backAr * 100).toFixed(2)}cqw; }
+                              .overlay-separator { margin: ${(0.010 * backAr * 100).toFixed(2)}cqw 0; border-top: 1px solid #111111; opacity: 0.3; }
+                              .sig-block { margin-top: ${(0.012 * backAr * 100).toFixed(2)}cqw; }
+                              .sig-name { margin: 0; font-size: ${(0.040 * backAr * 100).toFixed(2)}cqw; }
+                              .sig-typed { margin: 0; font-size: ${(0.056 * backAr * 100).toFixed(2)}cqw; font-style: italic; font-family: "Brush Script MT", cursive; }
+                              .sig-waived { margin: 0; font-size: ${(0.034 * backAr * 100).toFixed(2)}cqw; font-style: italic; }
+                              .sig-img { display: block; margin: ${(0.006 * backAr * 100).toFixed(2)}cqw auto 0; max-width: 50%; height: ${(0.085 * backAr * 100).toFixed(2)}cqw; filter: brightness(0); object-fit: contain; }
                               @media print {
                                 .no-print { display: none; }
                                 body { padding: 8px; }
