@@ -172,7 +172,7 @@ export function DarwinRoofOutlineStaticEditor({
   const [saving, setSaving] = useState(false);
   const [loadingImage, setLoadingImage] = useState(true);
   const [imageError, setImageError] = useState<string | null>(null);
-  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const [tilePayload, setTilePayload] = useState<any | null>(null);
 
   const [showFootprint, setShowFootprint] = useState(true);
   const [showRoof, setShowRoof] = useState(true);
