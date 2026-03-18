@@ -3822,6 +3822,14 @@ Deno.serve(async (req) => {
         provisional_complexity_uplift_used: estimate.provisional_complexity_uplift_used ?? null,
         shape_conflicted_roof_area_sqft: estimate.shape_conflicted_roof_area_sqft ?? null,
         shape_conflicted_squares: estimate.shape_conflicted_squares ?? null,
+        suggested_roof_polygon_geojson: estimate.suggested_roof_polygon_geojson ?? null,
+        suggested_roof_polygon_source: estimate.suggested_roof_polygon_source ?? null,
+        suggested_roof_polygon_confidence: estimate.suggested_roof_polygon_confidence ?? null,
+        suggested_roof_outline_notes: estimate.suggested_roof_outline_notes ?? null,
+        roof_mass_count: estimate.roof_mass_count ?? null,
+        roof_mass_polygons: estimate.roof_mass_polygons ?? null,
+        imagery_analysis: estimate.imagery_analysis ?? null,
+        calibration_adjustment_factor: estimate.calibration_adjustment_factor ?? null,
         created_by: user.id,
       })
       .select()
