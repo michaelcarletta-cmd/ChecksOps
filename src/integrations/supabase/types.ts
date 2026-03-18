@@ -4945,6 +4945,7 @@ export type Database = {
           perpendicular_axis_length_ft: number | null
           pitch_band: string | null
           pitch_type: string
+          planar_area_gain_sqft: number | null
           pre_tuning_values: Json | null
           rake_lf: number | null
           raw_geojson: Json | null
@@ -4954,6 +4955,8 @@ export type Database = {
           roof_form_confidence: number | null
           roof_form_reasoning: string | null
           roof_mass_decomposition: Json | null
+          roof_planar_area_sqft: number | null
+          roof_polygon_geojson: Json | null
           selected_candidate_index: number | null
           squares: number | null
           suppression_records: Json | null
@@ -5008,6 +5011,7 @@ export type Database = {
           perpendicular_axis_length_ft?: number | null
           pitch_band?: string | null
           pitch_type?: string
+          planar_area_gain_sqft?: number | null
           pre_tuning_values?: Json | null
           rake_lf?: number | null
           raw_geojson?: Json | null
@@ -5017,6 +5021,8 @@ export type Database = {
           roof_form_confidence?: number | null
           roof_form_reasoning?: string | null
           roof_mass_decomposition?: Json | null
+          roof_planar_area_sqft?: number | null
+          roof_polygon_geojson?: Json | null
           selected_candidate_index?: number | null
           squares?: number | null
           suppression_records?: Json | null
@@ -5071,6 +5077,7 @@ export type Database = {
           perpendicular_axis_length_ft?: number | null
           pitch_band?: string | null
           pitch_type?: string
+          planar_area_gain_sqft?: number | null
           pre_tuning_values?: Json | null
           rake_lf?: number | null
           raw_geojson?: Json | null
@@ -5080,6 +5087,8 @@ export type Database = {
           roof_form_confidence?: number | null
           roof_form_reasoning?: string | null
           roof_mass_decomposition?: Json | null
+          roof_planar_area_sqft?: number | null
+          roof_polygon_geojson?: Json | null
           selected_candidate_index?: number | null
           squares?: number | null
           suppression_records?: Json | null

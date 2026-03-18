@@ -74,6 +74,7 @@ interface RoofEstimate {
   geocoded_lat: number | null;
   geocoded_lng: number | null;
   footprint_area_sqft: number | null;
+  roof_planar_area_sqft: number | null;
   estimated_roof_area_sqft: number | null;
   squares: number | null;
   dominant_pitch: string | null;
@@ -126,6 +127,15 @@ interface RoofEstimate {
   confirmation_notes: string | null;
   confirmation_strength_score: number | null;
   confirmation_attachments: { name: string; path: string; type: string }[] | null;
+  // Phase 3: Roof polygon expansion
+  planar_area_gain_sqft: number | null;
+  overhang_config: {
+    eave_overhang_ft: number;
+    rake_overhang_ft: number;
+    unknown_overhang_ft: number;
+    source: "default" | "user" | "regional";
+  } | null;
+  roof_polygon_geojson: any | null;
   created_at: string;
   updated_at: string;
 }
@@ -527,9 +537,9 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
               value={(editValues as any).dominant_pitch ?? ""}
               onValueChange={(pitch) => {
                 const slopeFactor = PITCH_SLOPE_FACTORS[pitch];
-                const footprint = (editValues as any).footprint_area_sqft ?? estimate?.footprint_area_sqft;
-                if (slopeFactor && footprint) {
-                  const newRoofArea = Math.round(footprint * slopeFactor);
+                const roofPlanar = (editValues as any).roof_planar_area_sqft ?? estimate?.roof_planar_area_sqft ?? (editValues as any).footprint_area_sqft ?? estimate?.footprint_area_sqft;
+                if (slopeFactor && roofPlanar) {
+                  const newRoofArea = Math.round(roofPlanar * slopeFactor);
                   const newSquares = Math.round((newRoofArea / 100) * 10) / 10;
                   setEditValues((prev) => ({
                     ...prev,
@@ -1093,9 +1103,21 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-0">
               <div>
                 <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-1">Area</h4>
-                <EstimateField label="Footprint Area" value={estimate.footprint_area_sqft} unit="sqft" editKey="footprint_area_sqft" fieldKey="footprint_area_sqft" />
-                <EstimateField label="Roof Area (slope-adjusted)" value={estimate.estimated_roof_area_sqft} unit="sqft" editKey="estimated_roof_area_sqft" fieldKey="estimated_roof_area_sqft" />
+                <EstimateField label="Building Footprint" value={estimate.footprint_area_sqft} unit="sqft" editKey="footprint_area_sqft" fieldKey="footprint_area_sqft" />
+                <EstimateField label="Roof Planar Area" value={estimate.roof_planar_area_sqft} unit="sqft" editKey="roof_planar_area_sqft" fieldKey="roof_planar_area_sqft" />
+                <EstimateField label="Slope-Adjusted Roof Area" value={estimate.estimated_roof_area_sqft} unit="sqft" editKey="estimated_roof_area_sqft" fieldKey="estimated_roof_area_sqft" />
                 <EstimateField label="Squares" value={estimate.squares} editKey="squares" fieldKey="squares" />
+                {estimate.planar_area_gain_sqft != null && estimate.planar_area_gain_sqft > 0 && (
+                  <div className="flex items-center justify-between py-0.5 text-xs">
+                    <span className="text-muted-foreground">Area Gain From Overhang</span>
+                    <span className="font-medium">+{estimate.planar_area_gain_sqft} sqft</span>
+                  </div>
+                )}
+                {estimate.overhang_config && (
+                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                    Overhang: eave {estimate.overhang_config.eave_overhang_ft}ft, rake {estimate.overhang_config.rake_overhang_ft}ft, unknown {estimate.overhang_config.unknown_overhang_ft}ft ({estimate.overhang_config.source})
+                  </div>
+                )}
                 <EstimateField label="Dominant Pitch" value={estimate.dominant_pitch} editKey="dominant_pitch" fieldKey="dominant_pitch" />
               </div>
               <div>

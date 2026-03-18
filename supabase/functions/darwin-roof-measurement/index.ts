@@ -138,12 +138,14 @@ interface CandidateFootprint {
 interface OverhangConfig {
   eave_overhang_ft: number;
   rake_overhang_ft: number;
+  unknown_overhang_ft: number;
   source: "default" | "user" | "regional";
 }
 
 const DEFAULT_OVERHANG: OverhangConfig = {
   eave_overhang_ft: 1.0,
   rake_overhang_ft: 0.75,
+  unknown_overhang_ft: 0.5,
   source: "default",
 };
 
@@ -241,6 +243,10 @@ interface RoofEstimateResult {
   // Phase 2G: Mass decomposition + overhang config
   roof_mass_decomposition: RoofMassDecomposition | null;
   overhang_config: OverhangConfig;
+  // Phase 3: Roof polygon expansion
+  roof_planar_area_sqft: number | null;
+  roof_polygon_geojson: any | null;
+  planar_area_gain_sqft: number | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -345,6 +351,172 @@ function polygonHash(ring: number[][]): string {
   }
   return Math.abs(h).toString(36);
 }
+
+// ── Phase 3: Roof polygon expansion (overhang-based) ─────────────────
+
+type LocalPoint = { x: number; y: number };
+type EdgeClass = "likely_eave" | "likely_rake" | "unknown";
+
+interface EdgeClassForExpansion {
+  classification: EdgeClass;
+}
+
+interface RoofPolygonResult {
+  roof_polygon: LocalPoint[];
+  original_planar_area_sqft: number;
+  expanded_planar_area_sqft: number;
+  area_gain_sqft: number;
+}
+
+function localPolygonArea(points: LocalPoint[]): number {
+  if (!points || points.length < 3) return 0;
+  let sum = 0;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    sum += a.x * b.y - b.x * a.y;
+  }
+  return Math.abs(sum) / 2;
+}
+
+function localPolygonSignedArea(points: LocalPoint[]): number {
+  if (!points || points.length < 3) return 0;
+  let sum = 0;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    sum += a.x * b.y - b.x * a.y;
+  }
+  return sum / 2;
+}
+
+function vecNormalize(v: LocalPoint): LocalPoint {
+  const mag = Math.hypot(v.x, v.y);
+  if (mag === 0) return { x: 0, y: 0 };
+  return { x: v.x / mag, y: v.y / mag };
+}
+
+function vecSub(a: LocalPoint, b: LocalPoint): LocalPoint {
+  return { x: a.x - b.x, y: a.y - b.y };
+}
+
+function vecAdd(a: LocalPoint, b: LocalPoint): LocalPoint {
+  return { x: a.x + b.x, y: a.y + b.y };
+}
+
+function vecScale(v: LocalPoint, s: number): LocalPoint {
+  return { x: v.x * s, y: v.y * s };
+}
+
+function outwardNormal(start: LocalPoint, end: LocalPoint, isCCW: boolean): LocalPoint {
+  const dir = vecNormalize(vecSub(end, start));
+  const normal = isCCW
+    ? { x: dir.y, y: -dir.x }
+    : { x: -dir.y, y: dir.x };
+  return vecNormalize(normal);
+}
+
+function lineIntersection2D(
+  p1: LocalPoint, p2: LocalPoint, p3: LocalPoint, p4: LocalPoint,
+): LocalPoint | null {
+  const denom = (p1.x - p2.x) * (p3.y - p4.y) - (p1.y - p2.y) * (p3.x - p4.x);
+  if (Math.abs(denom) < 1e-8) return null;
+  const px = ((p1.x * p2.y - p1.y * p2.x) * (p3.x - p4.x) - (p1.x - p2.x) * (p3.x * p4.y - p3.y * p4.x)) / denom;
+  const py = ((p1.x * p2.y - p1.y * p2.x) * (p3.y - p4.y) - (p1.y - p2.y) * (p3.x * p4.y - p3.y * p4.x)) / denom;
+  return { x: px, y: py };
+}
+
+function getEdgeOffsetFt(classification: EdgeClass, config: OverhangConfig): number {
+  if (classification === "likely_eave") return config.eave_overhang_ft;
+  if (classification === "likely_rake") return config.rake_overhang_ft;
+  return config.unknown_overhang_ft;
+}
+
+function buildRoofPolygonFromFootprint(
+  footprint: LocalPoint[],
+  edgeClassifications: EdgeClassForExpansion[],
+  overhangConfig: OverhangConfig,
+): RoofPolygonResult {
+  if (!footprint || footprint.length < 3) {
+    return { roof_polygon: footprint || [], original_planar_area_sqft: 0, expanded_planar_area_sqft: 0, area_gain_sqft: 0 };
+  }
+
+  const originalPlanarArea = localPolygonArea(footprint);
+  const isCCW = localPolygonSignedArea(footprint) > 0;
+
+  if (!edgeClassifications || edgeClassifications.length !== footprint.length) {
+    return { roof_polygon: footprint, original_planar_area_sqft: originalPlanarArea, expanded_planar_area_sqft: originalPlanarArea, area_gain_sqft: 0 };
+  }
+
+  const offsetLines: Array<{ a: LocalPoint; b: LocalPoint }> = [];
+  for (let i = 0; i < footprint.length; i++) {
+    const start = footprint[i];
+    const end = footprint[(i + 1) % footprint.length];
+    const cls = edgeClassifications[i]?.classification ?? "unknown";
+    const offsetFt = getEdgeOffsetFt(cls, overhangConfig);
+    const normal = outwardNormal(start, end, isCCW);
+    const shift = vecScale(normal, offsetFt);
+    offsetLines.push({ a: vecAdd(start, shift), b: vecAdd(end, shift) });
+  }
+
+  const expanded: LocalPoint[] = [];
+  for (let i = 0; i < footprint.length; i++) {
+    const prev = offsetLines[(i - 1 + offsetLines.length) % offsetLines.length];
+    const curr = offsetLines[i];
+    const intersection = lineIntersection2D(prev.a, prev.b, curr.a, curr.b);
+    expanded.push(intersection ?? curr.a);
+  }
+
+  const expandedPlanarArea = localPolygonArea(expanded);
+  return {
+    roof_polygon: expanded,
+    original_planar_area_sqft: originalPlanarArea,
+    expanded_planar_area_sqft: expandedPlanarArea,
+    area_gain_sqft: Math.max(0, expandedPlanarArea - originalPlanarArea),
+  };
+}
+
+/** Convert a lng/lat polygon ring to local XY feet coordinates */
+function lngLatRingToLocalXY(ring: number[][], originLat: number, originLng: number): LocalPoint[] {
+  const feetPerDegreeLat = 364000;
+  const feetPerDegreeLng = 364000 * Math.cos(toRad(originLat));
+  const pts = ring[ring.length - 1][0] === ring[0][0] && ring[ring.length - 1][1] === ring[0][1]
+    ? ring.slice(0, -1) : ring;
+  return pts.map(p => ({ x: (p[0] - originLng) * feetPerDegreeLng, y: (p[1] - originLat) * feetPerDegreeLat }));
+}
+
+type LngLat = { lng: number; lat: number };
+
+function localXYToLngLat(pt: LocalPoint, origin: LngLat): LngLat {
+  const feetPerDegreeLat = 364000;
+  const feetPerDegreeLng = 364000 * Math.cos((origin.lat * Math.PI) / 180);
+  return { lng: origin.lng + pt.x / feetPerDegreeLng, lat: origin.lat + pt.y / feetPerDegreeLat };
+}
+
+function buildPolygonGeoJson(localPoints: LocalPoint[], origin: LngLat): { type: "Polygon"; coordinates: number[][][] } | null {
+  if (!localPoints || localPoints.length < 3) return null;
+  const ring = localPoints.map((pt) => {
+    const ll = localXYToLngLat(pt, origin);
+    return [ll.lng, ll.lat];
+  });
+  ring.push(ring[0]);
+  return { type: "Polygon", coordinates: [ring] };
+}
+
+function getValidationDerivedAreaCorrection(args: {
+  inferredRoofForm: string | null;
+  geometrySource: string | null;
+  geometryQualityScore: number | null;
+  pitchBand: string | null;
+}): number {
+  const { inferredRoofForm, geometrySource, geometryQualityScore, pitchBand } = args;
+  let factor = 1.0;
+  if (geometrySource === "NJGIN" && (geometryQualityScore ?? 0) >= 70) factor += 0.02;
+  if (inferredRoofForm === "gable" && pitchBand?.toLowerCase().includes("steep")) factor += 0.03;
+  if ((geometryQualityScore ?? 0) < 40) factor -= 0.03;
+  return factor;
+}
+
 
 // ── Phase 2B: Edge classification ────────────────────────────────────
 
@@ -2222,11 +2394,36 @@ function deriveRoofEstimate(
     pitchIsDefaultFallback = true;
   }
 
-  // ── Area ──
-  // Always compute area when geometry exists — pitch fallback ensures non-zero
+  // ── Area (with roof polygon expansion) ──
   let roofArea = 0, squares = 0;
-  if (hasGeometry) {
-    roofArea = roundTo(footprintArea * slopeFactor, 0);
+  let roofPolyResult: RoofPolygonResult | null = null;
+  let roofPolygonGeoJson: any = null;
+  let planarRoofAreaSqft = 0;
+
+  if (hasGeometry && selectedCandidate) {
+    const [cLng, cLat] = polygonCentroid(selectedCandidate.polygon);
+    const localXY = lngLatRingToLocalXY(selectedCandidate.polygon, cLat, cLng);
+
+    // Map edge classifications for polygon expansion
+    const edgeClsForExpansion: EdgeClassForExpansion[] = (selectedCandidate.edge_classifications || []).map(ec => ({
+      classification: ec.classification as EdgeClass,
+    }));
+
+    roofPolyResult = buildRoofPolygonFromFootprint(localXY, edgeClsForExpansion, overhang);
+    planarRoofAreaSqft = roofPolyResult.expanded_planar_area_sqft;
+
+    // Build GeoJSON for the expanded roof polygon
+    roofPolygonGeoJson = buildPolygonGeoJson(roofPolyResult.roof_polygon, { lng: cLng, lat: cLat });
+
+    // Apply validation-derived correction factor
+    const correctionFactor = getValidationDerivedAreaCorrection({
+      inferredRoofForm: roofFormInference?.inferred_roof_form ?? null,
+      geometrySource: selectedCandidate.geometry_metadata?.source_name ?? null,
+      geometryQualityScore: selectedCandidate.geometry_quality_score,
+      pitchBand: pitchBand,
+    });
+
+    roofArea = roundTo(planarRoofAreaSqft * slopeFactor * correctionFactor, 0);
     squares = roundTo(roofArea / 100, 1);
   }
 
@@ -2273,6 +2470,7 @@ function deriveRoofEstimate(
   // ── Field sources ──
   const fieldSources: Record<string, DerivationSource> = {
     footprint_area_sqft: hasGeometry ? "geometry" : "ai_estimated",
+    roof_planar_area_sqft: hasGeometry ? "geometry" : "ai_estimated",
     estimated_roof_area_sqft: (hasGeometry && pitchBand !== "unknown") ? "geometry" : "ai_estimated",
     squares: (hasGeometry && pitchBand !== "unknown") ? "geometry" : "ai_estimated",
     dominant_pitch: (visionResult && !visionResult.pitch_band.abstain) ? "satellite_imagery" : "ai_estimated",
@@ -2288,9 +2486,10 @@ function deriveRoofEstimate(
 
   // ── Field confidence ──
   const fieldConfidence: Record<string, number> = {
-    footprint_area_sqft: hasGeometry ? 75 : 0,
-    estimated_roof_area_sqft: hasGeometry ? (pitchIsDefaultFallback ? 35 : 60) : 0,
-    squares: hasGeometry ? (pitchIsDefaultFallback ? 35 : 60) : 0,
+    footprint_area_sqft: hasGeometry ? Math.max(75, 70) : 0,
+    roof_planar_area_sqft: hasGeometry ? 65 : 0,
+    estimated_roof_area_sqft: hasGeometry ? Math.max((pitchIsDefaultFallback ? 35 : 60), 45) : 0,
+    squares: hasGeometry ? Math.max((pitchIsDefaultFallback ? 35 : 60), 45) : 0,
     dominant_pitch: pitchIsDefaultFallback ? 15 : ((visionResult && !visionResult.pitch_band.abstain) ? visionResult.pitch_band.confidence : 0),
     ridge_lf: linear.linear_confidence.ridge_lf ?? 0,
     hip_lf: linear.linear_confidence.hip_lf ?? 0,
@@ -2303,6 +2502,7 @@ function deriveRoofEstimate(
   // ── Field authority: null values get explicit unknown status ──
   const fieldAuthority: Record<string, FieldAuthority> = {
     footprint_area_sqft: hasGeometry ? "geometry_authoritative" : "ai_provisional",
+    roof_planar_area_sqft: hasGeometry ? "geometry_authoritative" : "ai_provisional",
     estimated_roof_area_sqft: hasGeometry ? (pitchIsDefaultFallback ? "ai_provisional" : "geometry_authoritative") : "ai_provisional",
     squares: hasGeometry ? (pitchIsDefaultFallback ? "ai_provisional" : "geometry_authoritative") : "ai_provisional",
     dominant_pitch: "ai_provisional",
@@ -2321,7 +2521,10 @@ function deriveRoofEstimate(
   notes.push(`📐 Overhang: eave=${overhang.eave_overhang_ft}ft, rake=${overhang.rake_overhang_ft}ft (${overhang.source}).`);
   if (hasGeometry) {
     notes.push(`📐 Footprint: ${footprintArea} sqft from ${selectedCandidate!.source} (quality: ${selectedCandidate!.geometry_quality_score}/100).`);
-    if (roofArea > 0) notes.push(`📐 Area: ${footprintArea} × ${slopeFactor} = ${roofArea} sqft.`);
+    if (roofPolyResult) {
+      notes.push(`📐 Roof polygon expansion: ${roundTo(roofPolyResult.original_planar_area_sqft, 0)} sqft → ${roundTo(roofPolyResult.expanded_planar_area_sqft, 0)} sqft (+${roundTo(roofPolyResult.area_gain_sqft, 0)} sqft from overhang).`);
+    }
+    if (roofArea > 0) notes.push(`📐 Slope-adjusted area: ${roundTo(planarRoofAreaSqft, 0)} × ${slopeFactor} = ${roofArea} sqft.`);
   }
   if (decomposition && decomposition.masses.length > 1) {
     const promoted = decomposition.junction_valleys.filter(jv => jv.status === "promoted").length;
@@ -2379,6 +2582,7 @@ function deriveRoofEstimate(
       "Deterministic Linear Derivation Engine v3",
       ...(decomposition && decomposition.masses.length > 1 ? ["Roof Mass Decomposition + Classification"] : []),
       ...(decomposition && decomposition.masses.some(m => m.classification) ? ["Mass Type Weighting"] : []),
+      ...(roofPolyResult ? ["Roof Polygon Expansion (Overhang)"] : []),
     ],
     field_sources: fieldSources,
     field_confidence: fieldConfidence,
@@ -2405,6 +2609,10 @@ function deriveRoofEstimate(
     suppression_records: suppressions.length > 0 ? suppressions : null,
     roof_mass_decomposition: decomposition,
     overhang_config: overhang,
+    // Phase 3: Roof polygon expansion
+    roof_planar_area_sqft: roofPolyResult ? roundTo(roofPolyResult.expanded_planar_area_sqft, 0) : null,
+    roof_polygon_geojson: roofPolygonGeoJson,
+    planar_area_gain_sqft: roofPolyResult ? roundTo(roofPolyResult.area_gain_sqft, 0) : null,
   };
 }
 
@@ -3188,6 +3396,9 @@ Deno.serve(async (req) => {
         suppression_records: estimate.suppression_records,
         roof_mass_decomposition: estimate.roof_mass_decomposition,
         overhang_config: estimate.overhang_config,
+        roof_planar_area_sqft: estimate.roof_planar_area_sqft,
+        roof_polygon_geojson: estimate.roof_polygon_geojson,
+        planar_area_gain_sqft: estimate.planar_area_gain_sqft,
         tuning_applied: tuningApplied,
         pre_tuning_values: Object.keys(preTuningValues).length > 0 ? preTuningValues : null,
         created_by: user.id,
