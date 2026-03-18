@@ -172,7 +172,7 @@ export function DarwinRoofOutlineStaticEditor({
   const [saving, setSaving] = useState(false);
   const [loadingImage, setLoadingImage] = useState(true);
   const [imageError, setImageError] = useState<string | null>(null);
-  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const [tilePayload, setTilePayload] = useState<any | null>(null);
 
   const [showFootprint, setShowFootprint] = useState(true);
   const [showRoof, setShowRoof] = useState(true);
@@ -187,55 +187,34 @@ export function DarwinRoofOutlineStaticEditor({
   useEffect(() => {
     let cancelled = false;
 
-    const extractInvokeErrorMessage = (error: any) => {
-      const context = error?.context;
-      if (typeof context === "string" && context.trim().length > 0) {
-        try {
-          const parsed = JSON.parse(context);
-          if (parsed?.error) return String(parsed.error);
-          return context;
-        } catch {
-          return context;
-        }
-      }
-      return error?.message || "Failed to load aerial image";
-    };
-
     const loadImage = async () => {
       setLoadingImage(true);
       setImageError(null);
-      setImageDataUrl(null);
+      setTilePayload(null);
 
       try {
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Aerial image request timed out")), 15000)
-        );
-
-        const invokePromise = supabase.functions.invoke("fetch-aerial-image", {
+        const result: any = await supabase.functions.invoke("fetch-aerial-image", {
           body: {
             minLng: bounds.minLng,
             minLat: bounds.minLat,
             maxLng: bounds.maxLng,
             maxLat: bounds.maxLat,
-            width: 1024,
-            height: 1024,
           },
         });
 
-        const result: any = await Promise.race([invokePromise, timeoutPromise]);
-
         if (result?.error) {
-          throw new Error(extractInvokeErrorMessage(result.error));
+          throw new Error(result.error.message || "Edge function failed");
         }
-        if (result?.data?.error) throw new Error(result.data.error);
-        if (!result?.data?.data_url) throw new Error("No aerial image returned");
+        if (!result?.data?.success) {
+          throw new Error(result?.data?.error || "No tile payload returned");
+        }
 
         if (!cancelled) {
-          setImageDataUrl(result.data.data_url);
+          setTilePayload(result.data);
         }
       } catch (err: any) {
         if (!cancelled) {
-          setImageError(err?.message || "Failed to load aerial image");
+          setImageError(err.message || "Failed to load aerial image");
         }
       } finally {
         if (!cancelled) {
@@ -316,14 +295,8 @@ export function DarwinRoofOutlineStaticEditor({
         {selectedFootprintSource || "unknown"}
       </p>
       <div className="text-xs text-muted-foreground">
-        Image request size: 1024 × 1024
+        Tile-stitched imagery (zoom 19)
       </div>
-
-      {imageError && (
-        <p className="text-xs text-destructive">
-          Failed to load aerial image: {imageError}
-        </p>
-      )}
 
       <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
         <label className="flex items-center gap-1">
@@ -354,18 +327,39 @@ export function DarwinRoofOutlineStaticEditor({
           </div>
         )}
 
-        {imageDataUrl && (
-          <img
-            src={imageDataUrl}
-            alt="Aerial imagery"
-            className="absolute inset-0 h-full w-full object-contain"
-            draggable={false}
-          />
+        {tilePayload && (
+          <div className="absolute inset-0">
+            {tilePayload.tiles.map((tile: any) => {
+              const left =
+                ((tile.x - tilePayload.xMin) / (tilePayload.xMax - tilePayload.xMin + 1)) * 100;
+              const top =
+                ((tile.y - tilePayload.yMin) / (tilePayload.yMax - tilePayload.yMin + 1)) * 100;
+              const widthPct = 100 / (tilePayload.xMax - tilePayload.xMin + 1);
+              const heightPct = 100 / (tilePayload.yMax - tilePayload.yMin + 1);
+
+              return (
+                <img
+                  key={`${tile.x}-${tile.y}`}
+                  src={tile.dataUrl}
+                  alt=""
+                  className="absolute"
+                  style={{
+                    left: `${left}%`,
+                    top: `${top}%`,
+                    width: `${widthPct}%`,
+                    height: `${heightPct}%`,
+                    objectFit: "cover",
+                  }}
+                  draggable={false}
+                />
+              );
+            })}
+          </div>
         )}
 
         {imageError && !loadingImage && (
-          <div className="absolute inset-0 grid place-items-center text-sm text-red-400 bg-black/10">
-            Failed to load aerial imagery: {imageError}
+          <div className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm">
+            Failed to load aerial image: {imageError}
           </div>
         )}
 
