@@ -20,17 +20,17 @@ interface ClaimTabsDropdownProps {
   isStaffOrAdmin: boolean;
 }
 
-const tabOptions: TabOption[] = [
-  { value: "darwin", label: "Darwin", icon: <Brain className="h-4 w-4 mr-2" />, staffOnly: true },
+const staffTabOptions: TabOption[] = [
+  { value: "darwin", label: "Darwin", icon: <Brain className="h-4 w-4 mr-2" /> },
+];
+
+const portalTabOptions: TabOption[] = [
   { value: "overview", label: "Overview" },
-  { value: "assigned", label: "Assigned", staffOnly: true },
   { value: "activity", label: "Notes & Activity" },
-  { value: "tasks", label: "Tasks", staffOnly: true },
   { value: "inspections", label: "Inspections" },
   { value: "photos", label: "Photos" },
   { value: "files", label: "Files" },
   { value: "accounting", label: "Accounting" },
-  { value: "access", label: "Portal Access", staffOnly: true },
 ];
 
 export function ClaimTabsDropdown({ activeTab, onTabChange, isStaffOrAdmin }: ClaimTabsDropdownProps) {
