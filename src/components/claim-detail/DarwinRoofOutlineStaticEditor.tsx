@@ -48,14 +48,21 @@ function getBoundsFromGeometry(
   const minLat = Math.min(...lats);
   const maxLat = Math.max(...lats);
 
-  const dLng = Math.max(maxLng - minLng, 0.0001);
-  const dLat = Math.max(maxLat - minLat, 0.0001);
+  const spanLng = maxLng - minLng;
+  const spanLat = maxLat - minLat;
+  const minSpan = 0.0016;
+
+  const paddedSpanLng = Math.max(spanLng * 1.36, minSpan);
+  const paddedSpanLat = Math.max(spanLat * 1.36, minSpan);
+
+  const centerLng = (minLng + maxLng) / 2;
+  const centerLat = (minLat + maxLat) / 2;
 
   return {
-    minLng: minLng - dLng * 0.18,
-    maxLng: maxLng + dLng * 0.18,
-    minLat: minLat - dLat * 0.18,
-    maxLat: maxLat + dLat * 0.18,
+    minLng: centerLng - paddedSpanLng / 2,
+    maxLng: centerLng + paddedSpanLng / 2,
+    minLat: centerLat - paddedSpanLat / 2,
+    maxLat: centerLat + paddedSpanLat / 2,
   };
 }
 
@@ -140,6 +147,20 @@ export function DarwinRoofOutlineStaticEditor({
   useEffect(() => {
     let cancelled = false;
 
+    const extractInvokeErrorMessage = (error: any) => {
+      const context = error?.context;
+      if (typeof context === "string" && context.trim().length > 0) {
+        try {
+          const parsed = JSON.parse(context);
+          if (parsed?.error) return String(parsed.error);
+          return context;
+        } catch {
+          return context;
+        }
+      }
+      return error?.message || "Failed to load aerial image";
+    };
+
     const loadImage = async () => {
       setLoadingImage(true);
       setImageError(null);
@@ -163,7 +184,9 @@ export function DarwinRoofOutlineStaticEditor({
 
         const result: any = await Promise.race([invokePromise, timeoutPromise]);
 
-        if (result?.error) throw result.error;
+        if (result?.error) {
+          throw new Error(extractInvokeErrorMessage(result.error));
+        }
         if (result?.data?.error) throw new Error(result.data.error);
         if (!result?.data?.data_url) throw new Error("No aerial image returned");
 
@@ -172,7 +195,7 @@ export function DarwinRoofOutlineStaticEditor({
         }
       } catch (err: any) {
         if (!cancelled) {
-          setImageError(err.message || "Failed to load aerial image");
+          setImageError(err?.message || "Failed to load aerial image");
         }
       } finally {
         if (!cancelled) {
