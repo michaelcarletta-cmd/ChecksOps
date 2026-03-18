@@ -2431,6 +2431,100 @@ function deriveRoofEstimate(
     squares = roundTo(roofArea / 100, 1);
   }
 
+  // ── Shape Conflict Detection ──
+  function isSimpleGeometryShape(vertexCount: number | null, inferredForm: string | null): boolean {
+    const v = vertexCount ?? 0;
+    const form = (inferredForm || "").toLowerCase();
+    return v <= 4 || form === "gable" || form === "hip";
+  }
+
+  function detectShapeConflict(
+    vertexCount: number | null,
+    inferredForm: string | null,
+    vision: SatelliteVisionResult | null
+  ): { conflict: boolean; reason: string | null } {
+    const simpleGeom = isSimpleGeometryShape(vertexCount, inferredForm);
+    if (!simpleGeom || !vision) return { conflict: false, reason: null };
+
+    const visionForm = vision.roof_form.value;
+    const visionFormConf = vision.roof_form.confidence;
+    const visionFacets = vision.visible_facets.value;
+    const visionFacetConf = vision.visible_facets.confidence;
+
+    const complexVision = (visionForm === "complex" || visionForm === "cross_gable" || visionForm === "cross_hip") && visionFormConf >= 70;
+    const highFacetVision = typeof visionFacets === "number" && visionFacets >= 8 && visionFacetConf >= 70;
+
+    if (complexVision || highFacetVision) {
+      const reasons: string[] = [];
+      reasons.push(`Selected footprint is simple (${vertexCount ?? 0} vertices / ${inferredForm ?? "unknown"} geometry)`);
+      if (complexVision) reasons.push(`satellite vision says ${visionForm} @ ${visionFormConf}%`);
+      if (highFacetVision) reasons.push(`visible facets ${visionFacets} @ ${visionFacetConf}%`);
+      return { conflict: true, reason: reasons.join("; ") };
+    }
+    return { conflict: false, reason: null };
+  }
+
+  function getComplexityUplift(
+    facets: number | null,
+    qualityScore: number | null,
+    source: string | null,
+    hasBetterAlt: boolean
+  ): number {
+    const src = (source || "").toLowerCase();
+    const sourceIsWeak = src.includes("ai vision") || src.includes("satellite") || src.includes("vision");
+    if (!sourceIsWeak) return 1.0;
+    if ((qualityScore ?? 0) >= 60) return 1.0;
+    if (hasBetterAlt) return 1.0;
+    const f = facets ?? 0;
+    if (f >= 12) return 1.20;
+    if (f >= 10) return 1.15;
+    if (f >= 8) return 1.10;
+    return 1.0;
+  }
+
+  function findBetterAlternate(
+    selectedIdx: number | null | undefined,
+    candidates: any[] | null
+  ): { found: boolean; betterIndex: number | null } {
+    if (selectedIdx == null || !candidates || !candidates[selectedIdx]) return { found: false, betterIndex: null };
+    const currentQ = candidates[selectedIdx].geometry_quality_score ?? 0;
+    let bestIdx: number | null = null;
+    let bestScore = currentQ;
+    for (let i = 0; i < candidates.length; i++) {
+      if (i === selectedIdx) continue;
+      const q = candidates[i].geometry_quality_score ?? 0;
+      const src = (candidates[i].source || "").toLowerCase();
+      const nonAI = !src.includes("ai vision") && !src.includes("satellite") && !src.includes("vision");
+      if (nonAI && q >= currentQ + 15 && q > bestScore) {
+        bestScore = q;
+        bestIdx = i;
+      }
+    }
+    return { found: bestIdx != null, betterIndex: bestIdx };
+  }
+
+  // Compute vertex count for selected candidate
+  const selectedVertexCount = selectedCandidate
+    ? (selectedCandidate.polygon.length > 0 && selectedCandidate.polygon[selectedCandidate.polygon.length - 1][0] === selectedCandidate.polygon[0][0]
+      ? selectedCandidate.polygon.length - 1
+      : selectedCandidate.polygon.length)
+    : null;
+
+  const shapeConflictCheck = detectShapeConflict(
+    selectedVertexCount,
+    roofFormInference?.inferred_roof_form ?? null,
+    visionResult,
+  );
+
+  const selectedIdx = selectedCandidate && allCandidates.length > 0 ? allCandidates.indexOf(selectedCandidate) : null;
+  const betterAlt = findBetterAlternate(selectedIdx, allCandidates.length > 0 ? allCandidates : null);
+
+  let roof_shape_conflict = shapeConflictCheck.conflict;
+  let roof_shape_conflict_reason = shapeConflictCheck.reason;
+  let provisional_complexity_uplift_used = 1.0;
+  let shape_conflicted_roof_area_sqft: number | null = null;
+  let shape_conflicted_squares: number | null = null;
+
   // ── Resolve roof form ──
   // Start with geometry inference — use it even at low confidence as a baseline
   let resolvedRoofForm: RoofForm = roofFormInference?.inferred_roof_form ?? "unknown";
@@ -2517,6 +2611,35 @@ function deriveRoofEstimate(
     rake_lf: linear.rake_lf !== null ? (hasGeometry ? "geometry_authoritative" : "ai_provisional") : "unknown_insufficient_geometry",
     facet_count: resolvedFacets !== null ? "ai_provisional" : "unknown_insufficient_geometry",
   };
+
+  // ── Apply shape conflict ──
+  if (roof_shape_conflict) {
+    const visibleFacetCount = visionResult?.visible_facets?.value ?? null;
+    provisional_complexity_uplift_used = getComplexityUplift(
+      visibleFacetCount,
+      selectedCandidate?.geometry_quality_score ?? null,
+      selectedCandidate?.source ?? null,
+      betterAlt.found,
+    );
+
+    if (provisional_complexity_uplift_used > 1.0 && roofArea > 0) {
+      shape_conflicted_roof_area_sqft = Math.round(roofArea * provisional_complexity_uplift_used);
+      shape_conflicted_squares = Math.round((shape_conflicted_roof_area_sqft / 100) * 10) / 10;
+    }
+
+    fieldAuthority.estimated_roof_area_sqft = "ai_provisional";
+    fieldAuthority.squares = "ai_provisional";
+    fieldConfidence.estimated_roof_area_sqft = Math.min(fieldConfidence.estimated_roof_area_sqft ?? 45, 35);
+    fieldConfidence.squares = Math.min(fieldConfidence.squares ?? 45, 35);
+
+    notes.push(`⚠️ SHAPE CONFLICT: ${roof_shape_conflict_reason}`);
+    if (provisional_complexity_uplift_used > 1.0) {
+      notes.push(`📊 Provisional complexity uplift: ×${provisional_complexity_uplift_used} → ${shape_conflicted_roof_area_sqft} sqft / ${shape_conflicted_squares} squares`);
+    }
+    if (betterAlt.found) {
+      notes.push(`💡 Better alternate footprint candidate available at index ${betterAlt.betterIndex}`);
+    }
+  }
 
   // ── Notes ──
   const displayPitch = pitchBand !== "unknown" ? bandToDisplayPitch(pitchBand) : "unknown";
@@ -2620,6 +2743,12 @@ function deriveRoofEstimate(
     // Debug: intermediate calculation values
     slope_factor_used: hasGeometry ? slopeFactor : null,
     correction_factor_used: correctionFactorUsed,
+    // Shape conflict
+    roof_shape_conflict,
+    roof_shape_conflict_reason,
+    provisional_complexity_uplift_used,
+    shape_conflicted_roof_area_sqft,
+    shape_conflicted_squares,
   };
 }
 
@@ -3439,6 +3568,11 @@ Deno.serve(async (req) => {
         correction_factor_used: estimate.correction_factor_used,
         tuning_applied: tuningApplied,
         pre_tuning_values: Object.keys(preTuningValues).length > 0 ? preTuningValues : null,
+        roof_shape_conflict: estimate.roof_shape_conflict ?? false,
+        roof_shape_conflict_reason: estimate.roof_shape_conflict_reason ?? null,
+        provisional_complexity_uplift_used: estimate.provisional_complexity_uplift_used ?? null,
+        shape_conflicted_roof_area_sqft: estimate.shape_conflicted_roof_area_sqft ?? null,
+        shape_conflicted_squares: estimate.shape_conflicted_squares ?? null,
         created_by: user.id,
       })
       .select()
