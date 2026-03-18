@@ -140,13 +140,16 @@ Deno.serve(async (req) => {
     const ezTopPad = Math.round(imgHeight * ENDORSEMENT_TOP_PCT);
     const ezContentWidth = Math.round(imgWidth * ENDORSEMENT_WIDTH_PCT);
 
-    // Scale font sizes relative to actual check image width for consistent
-    // rendering across any resolution (2000px scans, 4000px phone photos, etc.)
-    const headerFont = Math.max(14, Math.round(imgWidth * 0.018));
-    const companyFont = Math.max(18, Math.round(imgWidth * 0.025));
-    const bodyFont = headerFont;
-    const sigNameFont = Math.max(18, Math.round(imgWidth * 0.028));
-    const sigHeight = Math.max(40, Math.round(imgWidth * 0.06));
+    // Scale font sizes relative to actual check image HEIGHT for consistent
+    // rendering across any resolution. These MUST match endorsementLayout.ts.
+    const headerFont = Math.max(10, Math.round(imgHeight * 0.014));    // "Pay to the order of"
+    const companyFont = Math.max(12, Math.round(imgHeight * 0.022));   // "Freedom Adjustment"
+    const bodyFont = Math.max(10, Math.round(imgHeight * 0.016));      // "For Mobile Deposit Only"
+    const byLineFont = Math.max(12, Math.round(imgHeight * 0.018));    // "By: Michael Carletta" + payee names
+    const sigNameFont = byLineFont;                                     // payee name labels
+    const sigHeight = Math.max(20, Math.round(imgHeight * 0.026));     // signature image height
+
+    console.log(`[COMPOSITE][FONT-DEBUG] imgHeight=${imgHeight}, headerFont=${headerFont}, companyFont=${companyFont}, bodyFont=${bodyFont}, byLineFont=${byLineFont}, sigHeight=${sigHeight}`);
 
     let curY = ezTopPad;
     let endorsementSvg = "";
