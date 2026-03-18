@@ -142,12 +142,12 @@ Deno.serve(async (req) => {
 
     // Scale font sizes relative to actual check image HEIGHT for consistent
     // rendering across any resolution. These MUST match endorsementLayout.ts.
-    const headerFont = Math.max(10, Math.round(imgHeight * 0.014));    // "Pay to the order of"
-    const companyFont = Math.max(12, Math.round(imgHeight * 0.022));   // "Freedom Adjustment"
-    const bodyFont = Math.max(10, Math.round(imgHeight * 0.016));      // "For Mobile Deposit Only"
-    const byLineFont = Math.max(12, Math.round(imgHeight * 0.018));    // "By: Michael Carletta" + payee names
+    const headerFont = Math.max(8, Math.round(imgHeight * 0.011));     // "Pay to the order of"
+    const companyFont = Math.max(10, Math.round(imgHeight * 0.018));   // "Freedom Adjustment"
+    const bodyFont = Math.max(8, Math.round(imgHeight * 0.013));       // "For Mobile Deposit Only"
+    const byLineFont = Math.max(10, Math.round(imgHeight * 0.014));   // "By: Michael Carletta" + payee names
     const sigNameFont = byLineFont;                                     // payee name labels
-    const sigHeight = Math.max(20, Math.round(imgHeight * 0.026));     // signature image height
+    const sigHeight = Math.max(16, Math.round(imgHeight * 0.021));     // signature image height
 
     console.log(`[COMPOSITE][FONT-DEBUG] imgHeight=${imgHeight}, headerFont=${headerFont}, companyFont=${companyFont}, bodyFont=${bodyFont}, byLineFont=${byLineFont}, sigHeight=${sigHeight}`);
 
@@ -156,8 +156,8 @@ Deno.serve(async (req) => {
 
     const centerX = ezLeftPad + ezContentWidth / 2;
 
-    const lineGap = Math.round(imgHeight * 0.006);
-    const sectionGap = Math.round(imgHeight * 0.010);
+    const lineGap = Math.round(imgHeight * 0.005);
+    const sectionGap = Math.round(imgHeight * 0.008);
 
     // --- Restrictive endorsement legend ---
     // "Pay to the order of"
