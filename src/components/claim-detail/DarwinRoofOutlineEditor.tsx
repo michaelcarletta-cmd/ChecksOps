@@ -2,7 +2,8 @@ import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Undo2, Trash2, Save, Eye, EyeOff, GripVertical, X, Plus } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Undo2, Trash2, Save, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type LngLat = [number, number];
