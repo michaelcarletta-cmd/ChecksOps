@@ -275,6 +275,30 @@ export function DarwinRoofAreaDebug({ estimate }: Props) {
             />
           </div>
 
+          {/* Shape Conflict Section */}
+          {e.roof_shape_conflict && (
+            <div className="rounded border border-yellow-500/40 overflow-hidden">
+              <div className="bg-yellow-500/20 px-2 py-1 text-[10px] font-semibold uppercase text-yellow-700">
+                7. Shape Conflict
+              </div>
+              <DebugRow label="Conflict" value="YES ⚠️" warn />
+              <DebugRow label="Reason" value={e.roof_shape_conflict_reason ?? "—"} warn />
+              <DebugRow
+                label="Uplift Factor"
+                value={e.provisional_complexity_uplift_used != null ? `×${e.provisional_complexity_uplift_used}` : "none"}
+                warn={e.provisional_complexity_uplift_used != null && e.provisional_complexity_uplift_used > 1.0}
+              />
+              <DebugRow
+                label="Uplifted Area"
+                value={e.shape_conflicted_roof_area_sqft != null ? `${e.shape_conflicted_roof_area_sqft.toLocaleString()} sqft` : "—"}
+              />
+              <DebugRow
+                label="Uplifted Squares"
+                value={e.shape_conflicted_squares != null ? e.shape_conflicted_squares.toFixed(1) : "—"}
+              />
+            </div>
+          )}
+
           {/* Polygon overlay */}
           {(e.footprint_polygon || e.roof_polygon_geojson) && (
             <PolygonOverlay
