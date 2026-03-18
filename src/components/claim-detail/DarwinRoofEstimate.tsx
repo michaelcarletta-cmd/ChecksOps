@@ -1110,6 +1110,52 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
               </span>
             </div>
 
+            {/* Shape Conflict Warning */}
+            {estimate.roof_shape_conflict && (
+              <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 space-y-2">
+                <div className="flex items-center gap-2 font-medium text-sm">
+                  <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                  Visible roof complexity exceeds selected footprint geometry
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {estimate.roof_shape_conflict_reason}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <div className="text-muted-foreground">Base Deterministic Squares</div>
+                    <div className="font-medium">{estimate.squares ?? "—"}</div>
+                  </div>
+                  {estimate.shape_conflicted_squares != null && (
+                    <div>
+                      <div className="text-muted-foreground">Provisional Complexity-Adjusted Squares</div>
+                      <div className="font-medium text-yellow-700">{estimate.shape_conflicted_squares}</div>
+                    </div>
+                  )}
+                </div>
+                {estimate.provisional_complexity_uplift_used != null && estimate.provisional_complexity_uplift_used > 1.0 && (
+                  <div className="text-xs text-muted-foreground">
+                    Uplift factor: ×{estimate.provisional_complexity_uplift_used} applied because visible roof complexity appears greater than the selected footprint.
+                    Manual confirmation is still required.
+                  </div>
+                )}
+                <div className="text-xs text-muted-foreground">
+                  Base values are computed from current geometry. Provisional adjusted values are shown
+                  only because visible roof complexity appears greater than the selected footprint.
+                </div>
+                {estimate.candidate_footprints && estimate.candidate_footprints.length > 1 && (
+                  <div className="flex gap-2 pt-1">
+                    {estimate.candidate_footprints.map((c, i) => (
+                      i !== estimate.selected_candidate_index && (
+                        <Button key={i} size="sm" variant="outline" className="text-xs" onClick={() => runEstimate(i)}>
+                          Try {c.source} (Q:{c.geometry_quality_score})
+                        </Button>
+                      )
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Detail Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-0">
               <div>
@@ -1118,6 +1164,12 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                 <EstimateField label="Roof Planar Area" value={estimate.roof_planar_area_sqft} unit="sqft" editKey="roof_planar_area_sqft" fieldKey="roof_planar_area_sqft" />
                 <EstimateField label="Slope-Adjusted Roof Area" value={estimate.estimated_roof_area_sqft} unit="sqft" editKey="estimated_roof_area_sqft" fieldKey="estimated_roof_area_sqft" />
                 <EstimateField label="Squares" value={estimate.squares} editKey="squares" fieldKey="squares" />
+                {estimate.shape_conflicted_squares != null && (
+                  <div className="flex items-center justify-between py-0.5 text-xs">
+                    <span className="text-yellow-600 font-medium">Provisional Complexity-Adjusted</span>
+                    <span className="font-medium text-yellow-700">{estimate.shape_conflicted_roof_area_sqft?.toLocaleString()} sqft / {estimate.shape_conflicted_squares} sq</span>
+                  </div>
+                )}
                 {estimate.planar_area_gain_sqft != null && estimate.planar_area_gain_sqft > 0 && (
                   <div className="flex items-center justify-between py-0.5 text-xs">
                     <span className="text-muted-foreground">Area Gain From Overhang</span>
