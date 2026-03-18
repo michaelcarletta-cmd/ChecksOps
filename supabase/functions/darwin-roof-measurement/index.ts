@@ -2431,6 +2431,100 @@ function deriveRoofEstimate(
     squares = roundTo(roofArea / 100, 1);
   }
 
+  // ── Shape Conflict Detection ──
+  function isSimpleGeometryShape(vertexCount: number | null, inferredForm: string | null): boolean {
+    const v = vertexCount ?? 0;
+    const form = (inferredForm || "").toLowerCase();
+    return v <= 4 || form === "gable" || form === "hip";
+  }
+
+  function detectShapeConflict(
+    vertexCount: number | null,
+    inferredForm: string | null,
+    vision: SatelliteVisionResult | null
+  ): { conflict: boolean; reason: string | null } {
+    const simpleGeom = isSimpleGeometryShape(vertexCount, inferredForm);
+    if (!simpleGeom || !vision) return { conflict: false, reason: null };
+
+    const visionForm = vision.roof_form.value;
+    const visionFormConf = vision.roof_form.confidence;
+    const visionFacets = vision.visible_facets.value;
+    const visionFacetConf = vision.visible_facets.confidence;
+
+    const complexVision = (visionForm === "complex" || visionForm === "cross_gable" || visionForm === "cross_hip") && visionFormConf >= 70;
+    const highFacetVision = typeof visionFacets === "number" && visionFacets >= 8 && visionFacetConf >= 70;
+
+    if (complexVision || highFacetVision) {
+      const reasons: string[] = [];
+      reasons.push(`Selected footprint is simple (${vertexCount ?? 0} vertices / ${inferredForm ?? "unknown"} geometry)`);
+      if (complexVision) reasons.push(`satellite vision says ${visionForm} @ ${visionFormConf}%`);
+      if (highFacetVision) reasons.push(`visible facets ${visionFacets} @ ${visionFacetConf}%`);
+      return { conflict: true, reason: reasons.join("; ") };
+    }
+    return { conflict: false, reason: null };
+  }
+
+  function getComplexityUplift(
+    facets: number | null,
+    qualityScore: number | null,
+    source: string | null,
+    hasBetterAlt: boolean
+  ): number {
+    const src = (source || "").toLowerCase();
+    const sourceIsWeak = src.includes("ai vision") || src.includes("satellite") || src.includes("vision");
+    if (!sourceIsWeak) return 1.0;
+    if ((qualityScore ?? 0) >= 60) return 1.0;
+    if (hasBetterAlt) return 1.0;
+    const f = facets ?? 0;
+    if (f >= 12) return 1.20;
+    if (f >= 10) return 1.15;
+    if (f >= 8) return 1.10;
+    return 1.0;
+  }
+
+  function findBetterAlternate(
+    selectedIdx: number | null | undefined,
+    candidates: any[] | null
+  ): { found: boolean; betterIndex: number | null } {
+    if (selectedIdx == null || !candidates || !candidates[selectedIdx]) return { found: false, betterIndex: null };
+    const currentQ = candidates[selectedIdx].geometry_quality_score ?? 0;
+    let bestIdx: number | null = null;
+    let bestScore = currentQ;
+    for (let i = 0; i < candidates.length; i++) {
+      if (i === selectedIdx) continue;
+      const q = candidates[i].geometry_quality_score ?? 0;
+      const src = (candidates[i].source || "").toLowerCase();
+      const nonAI = !src.includes("ai vision") && !src.includes("satellite") && !src.includes("vision");
+      if (nonAI && q >= currentQ + 15 && q > bestScore) {
+        bestScore = q;
+        bestIdx = i;
+      }
+    }
+    return { found: bestIdx != null, betterIndex: bestIdx };
+  }
+
+  // Compute vertex count for selected candidate
+  const selectedVertexCount = selectedCandidate
+    ? (selectedCandidate.polygon.length > 0 && selectedCandidate.polygon[selectedCandidate.polygon.length - 1][0] === selectedCandidate.polygon[0][0]
+      ? selectedCandidate.polygon.length - 1
+      : selectedCandidate.polygon.length)
+    : null;
+
+  const shapeConflictCheck = detectShapeConflict(
+    selectedVertexCount,
+    roofFormInference?.inferred_roof_form ?? null,
+    visionResult,
+  );
+
+  const selectedIdx = selectedCandidate && allCandidates.length > 0 ? allCandidates.indexOf(selectedCandidate) : null;
+  const betterAlt = findBetterAlternate(selectedIdx, allCandidates.length > 0 ? allCandidates : null);
+
+  let roof_shape_conflict = shapeConflictCheck.conflict;
+  let roof_shape_conflict_reason = shapeConflictCheck.reason;
+  let provisional_complexity_uplift_used = 1.0;
+  let shape_conflicted_roof_area_sqft: number | null = null;
+  let shape_conflicted_squares: number | null = null;
+
   // ── Resolve roof form ──
   // Start with geometry inference — use it even at low confidence as a baseline
   let resolvedRoofForm: RoofForm = roofFormInference?.inferred_roof_form ?? "unknown";

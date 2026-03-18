@@ -140,6 +140,13 @@ interface RoofEstimate {
   // Debug: intermediate calculation values
   slope_factor_used: number | null;
   correction_factor_used: number | null;
+  // Shape conflict
+  roof_shape_conflict: boolean | null;
+  roof_shape_conflict_reason: string | null;
+  provisional_complexity_uplift_used: number | null;
+  shape_conflicted_roof_area_sqft: number | null;
+  shape_conflicted_squares: number | null;
+  user_drawn_roof_polygon_geojson: any | null;
   created_at: string;
   updated_at: string;
 }
