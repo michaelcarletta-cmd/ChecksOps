@@ -140,6 +140,20 @@ export function DarwinRoofOutlineStaticEditor({
   useEffect(() => {
     let cancelled = false;
 
+    const extractInvokeErrorMessage = (error: any) => {
+      const context = error?.context;
+      if (typeof context === "string" && context.trim().length > 0) {
+        try {
+          const parsed = JSON.parse(context);
+          if (parsed?.error) return String(parsed.error);
+          return context;
+        } catch {
+          return context;
+        }
+      }
+      return error?.message || "Failed to load aerial image";
+    };
+
     const loadImage = async () => {
       setLoadingImage(true);
       setImageError(null);
@@ -163,7 +177,9 @@ export function DarwinRoofOutlineStaticEditor({
 
         const result: any = await Promise.race([invokePromise, timeoutPromise]);
 
-        if (result?.error) throw result.error;
+        if (result?.error) {
+          throw new Error(extractInvokeErrorMessage(result.error));
+        }
         if (result?.data?.error) throw new Error(result.data.error);
         if (!result?.data?.data_url) throw new Error("No aerial image returned");
 
@@ -172,7 +188,7 @@ export function DarwinRoofOutlineStaticEditor({
         }
       } catch (err: any) {
         if (!cancelled) {
-          setImageError(err.message || "Failed to load aerial image");
+          setImageError(err?.message || "Failed to load aerial image");
         }
       } finally {
         if (!cancelled) {
