@@ -48,8 +48,8 @@ function getBoundsFromGeometry(
   const minLat = Math.min(...lats);
   const maxLat = Math.max(...lats);
 
-  const dLng = Math.max(maxLng - minLng, 0.0001);
-  const dLat = Math.max(maxLat - minLat, 0.0001);
+  const dLng = Math.max(maxLng - minLng, 0.0016);
+  const dLat = Math.max(maxLat - minLat, 0.0016);
 
   return {
     minLng: minLng - dLng * 0.18,
