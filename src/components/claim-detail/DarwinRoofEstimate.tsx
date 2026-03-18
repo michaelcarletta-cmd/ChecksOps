@@ -537,9 +537,9 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
               value={(editValues as any).dominant_pitch ?? ""}
               onValueChange={(pitch) => {
                 const slopeFactor = PITCH_SLOPE_FACTORS[pitch];
-                const footprint = (editValues as any).footprint_area_sqft ?? estimate?.footprint_area_sqft;
-                if (slopeFactor && footprint) {
-                  const newRoofArea = Math.round(footprint * slopeFactor);
+                const roofPlanar = (editValues as any).roof_planar_area_sqft ?? estimate?.roof_planar_area_sqft ?? (editValues as any).footprint_area_sqft ?? estimate?.footprint_area_sqft;
+                if (slopeFactor && roofPlanar) {
+                  const newRoofArea = Math.round(roofPlanar * slopeFactor);
                   const newSquares = Math.round((newRoofArea / 100) * 10) / 10;
                   setEditValues((prev) => ({
                     ...prev,
