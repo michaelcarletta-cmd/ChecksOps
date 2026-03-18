@@ -192,6 +192,7 @@ Deno.serve(async (req) => {
             fileId: file.id,
             claimId: file.claim_id,
             fileName: file.file_name,
+            force: true,
           }),
         });
 
