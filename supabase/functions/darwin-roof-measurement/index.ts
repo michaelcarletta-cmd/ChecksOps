@@ -243,6 +243,10 @@ interface RoofEstimateResult {
   // Phase 2G: Mass decomposition + overhang config
   roof_mass_decomposition: RoofMassDecomposition | null;
   overhang_config: OverhangConfig;
+  // Phase 3: Roof polygon expansion
+  roof_planar_area_sqft: number | null;
+  roof_polygon_geojson: any | null;
+  planar_area_gain_sqft: number | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
