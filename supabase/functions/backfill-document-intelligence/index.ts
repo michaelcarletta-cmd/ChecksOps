@@ -394,7 +394,7 @@ async function processFile(
         fileId: file.id,
         claimId: file.claim_id,
         fileName: file.file_name,
-        force: force,
+        force: true,
       }),
     });
 
