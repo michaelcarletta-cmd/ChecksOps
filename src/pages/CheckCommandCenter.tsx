@@ -1069,7 +1069,7 @@ function CheckDetailPanel({
 
   const showWatermark = !isFinalDepositImage;
   // Proportional overlay coordinates (% of image)
-  const overlayCoordinates = { topPercent: 8, leftPercent: 12, widthPercent: 42 };
+  const overlayCoordinates = { topPercent: 9, leftPercent: 18, widthPercent: 34 };
   const endorsementStyle = {
     position: "absolute" as const,
     top: `${overlayCoordinates.topPercent}%`,
