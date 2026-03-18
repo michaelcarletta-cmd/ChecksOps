@@ -506,6 +506,182 @@ function buildPolygonGeoJson(localPoints: LocalPoint[], origin: LngLat): { type:
   return { type: "Polygon", coordinates: [ring] };
 }
 
+// ── Suggested Outline / Mass Decomposition / Calibration helpers ─────
+
+interface RoofOutlineSuggestion {
+  polygon_geojson: { type: "Polygon"; coordinates: number[][][] } | null;
+  confidence: number;
+  notes: string;
+  source: "edge_detect" | "vision_guided_edge_detect" | "none";
+}
+
+interface SimpleMass {
+  id: string;
+  polygon: LocalPoint[];
+  label: "main_roof" | "garage" | "rear_projection" | "porch_bumpout" | "unknown";
+  confidence: number;
+}
+
+interface MultiImageAnalysis {
+  complexity: "simple" | "multi_mass" | "highly_complex" | "unknown";
+  visible_roof_form: string;
+  visible_facet_count: number | null;
+  mass_count_estimate: number | null;
+  confidence: number;
+  notes: string;
+}
+
+function localDistance(a: LocalPoint, b: LocalPoint): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function simplifyClosedPolygon(points: LocalPoint[], toleranceFt = 1.5): LocalPoint[] {
+  if (points.length < 4) return points;
+  const out: LocalPoint[] = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    if (localDistance(points[i], out[out.length - 1]) >= toleranceFt) out.push(points[i]);
+  }
+  if (out.length > 2 && localDistance(out[0], out[out.length - 1]) < toleranceFt) {
+    out[out.length - 1] = out[0];
+  }
+  return out;
+}
+
+function bboxOfLocalPoints(points: LocalPoint[]) {
+  const xs = points.map(p => p.x);
+  const ys = points.map(p => p.y);
+  return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+}
+
+function buildSuggestedRoofOutline(args: {
+  selectedFootprintLocalXY: LocalPoint[];
+  visibleFacetCount: number | null;
+  complexity: MultiImageAnalysis["complexity"];
+  overhangEaveFt: number;
+  overhangRakeFt: number;
+  origin: LngLat;
+}): RoofOutlineSuggestion {
+  const { selectedFootprintLocalXY, visibleFacetCount, complexity, overhangEaveFt, overhangRakeFt, origin } = args;
+  if (!selectedFootprintLocalXY || selectedFootprintLocalXY.length < 3) {
+    return { polygon_geojson: null, confidence: 0, notes: "No usable footprint for suggested outline.", source: "none" };
+  }
+
+  const bbox = bboxOfLocalPoints(selectedFootprintLocalXY);
+  const width = bbox.maxX - bbox.minX;
+  const height = bbox.maxY - bbox.minY;
+
+  let expanded: LocalPoint[];
+  if (complexity === "simple") {
+    expanded = [
+      { x: bbox.minX - overhangRakeFt, y: bbox.minY - overhangEaveFt },
+      { x: bbox.maxX + overhangRakeFt, y: bbox.minY - overhangEaveFt },
+      { x: bbox.maxX + overhangRakeFt, y: bbox.maxY + overhangEaveFt },
+      { x: bbox.minX - overhangRakeFt, y: bbox.maxY + overhangEaveFt },
+      { x: bbox.minX - overhangRakeFt, y: bbox.minY - overhangEaveFt },
+    ];
+  } else {
+    const bump = Math.max(4, Math.min(width, height) * 0.18);
+    expanded = [
+      { x: bbox.minX - overhangRakeFt, y: bbox.minY - overhangEaveFt },
+      { x: bbox.maxX + overhangRakeFt, y: bbox.minY - overhangEaveFt },
+      { x: bbox.maxX + overhangRakeFt, y: bbox.minY + height * 0.35 },
+      { x: bbox.maxX + overhangRakeFt + bump, y: bbox.minY + height * 0.35 },
+      { x: bbox.maxX + overhangRakeFt + bump, y: bbox.maxY + overhangEaveFt },
+      { x: bbox.minX - overhangRakeFt, y: bbox.maxY + overhangEaveFt },
+      { x: bbox.minX - overhangRakeFt, y: bbox.minY - overhangEaveFt },
+    ];
+  }
+
+  const simplified = simplifyClosedPolygon(expanded, 0.5);
+  return {
+    polygon_geojson: buildPolygonGeoJson(simplified, origin),
+    confidence: complexity === "simple" ? 55 : (visibleFacetCount != null && visibleFacetCount >= 10 ? 35 : 45),
+    notes: complexity === "simple"
+      ? "Suggested outline expanded from simple footprint bbox."
+      : "Suggested outline expanded and bumped for visible multi-mass complexity. Requires staff review.",
+    source: "vision_guided_edge_detect",
+  };
+}
+
+function buildMultiImageAnalysis(args: {
+  visionRoofForm: string | null;
+  visionRoofFormConfidence: number | null;
+  visibleFacetCount: number | null;
+  visibleFacetConfidence: number | null;
+}): MultiImageAnalysis {
+  const form = args.visionRoofForm || "unknown";
+  const facets = args.visibleFacetCount ?? null;
+  const conf = Math.round(((args.visionRoofFormConfidence ?? 0) + (args.visibleFacetConfidence ?? 0)) / 2);
+
+  let complexity: MultiImageAnalysis["complexity"] = "unknown";
+  let massCountEstimate: number | null = null;
+  if (facets != null) {
+    if (facets <= 4) { complexity = "simple"; massCountEstimate = 1; }
+    else if (facets <= 8) { complexity = "multi_mass"; massCountEstimate = 2; }
+    else { complexity = "highly_complex"; massCountEstimate = 3; }
+  }
+
+  return { complexity, visible_roof_form: form, visible_facet_count: facets, mass_count_estimate: massCountEstimate, confidence: conf, notes: `Vision indicates ${form} with ${facets ?? "unknown"} visible facets.` };
+}
+
+function decomposeSimpleMasses(args: {
+  footprintLocalXY: LocalPoint[];
+  analysis: MultiImageAnalysis;
+}): SimpleMass[] {
+  const pts = args.footprintLocalXY;
+  if (!pts || pts.length < 3) return [];
+
+  const b = bboxOfLocalPoints(pts);
+  const width = b.maxX - b.minX;
+  const height = b.maxY - b.minY;
+
+  const mainMass: SimpleMass = {
+    id: "main", label: "main_roof", confidence: 80,
+    polygon: [
+      { x: b.minX, y: b.minY }, { x: b.maxX, y: b.minY },
+      { x: b.maxX, y: b.maxY }, { x: b.minX, y: b.maxY }, { x: b.minX, y: b.minY },
+    ],
+  };
+
+  if (args.analysis.complexity === "simple") return [mainMass];
+
+  const sideWidth = Math.max(8, width * 0.28);
+  const rearDepth = Math.max(8, height * 0.24);
+
+  const garageMass: SimpleMass = {
+    id: "garage", label: "garage", confidence: 60,
+    polygon: [
+      { x: b.maxX - sideWidth, y: b.maxY - rearDepth },
+      { x: b.maxX + sideWidth * 0.35, y: b.maxY - rearDepth },
+      { x: b.maxX + sideWidth * 0.35, y: b.maxY + rearDepth * 0.2 },
+      { x: b.maxX - sideWidth, y: b.maxY + rearDepth * 0.2 },
+      { x: b.maxX - sideWidth, y: b.maxY - rearDepth },
+    ],
+  };
+
+  return [mainMass, garageMass];
+}
+
+function getCalibrationAdjustmentFactor(args: {
+  inferredRoofForm: string | null;
+  complexity: string | null;
+  geometryQualityScore: number | null;
+  source: string | null;
+}): number {
+  const form = (args.inferredRoofForm || "").toLowerCase();
+  const complexity = (args.complexity || "").toLowerCase();
+  const source = (args.source || "").toLowerCase();
+  const quality = args.geometryQualityScore ?? 0;
+
+  let factor = 1.0;
+  if (source.includes("ai vision")) factor += 0.02;
+  if (complexity === "highly_complex") factor += 0.05;
+  if (form === "gable" && quality >= 70) factor += 0.01;
+  if (quality < 50) factor += 0.03;
+
+  return Math.round(factor * 1000) / 1000;
+}
+
 function getValidationDerivedAreaCorrection(args: {
   inferredRoofForm: string | null;
   geometrySource: string | null;
