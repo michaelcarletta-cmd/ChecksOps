@@ -250,6 +250,21 @@ interface RoofEstimateResult {
   // Debug: intermediate calculation values
   slope_factor_used: number | null;
   correction_factor_used: number | null;
+  // Shape conflict (existing)
+  roof_shape_conflict: boolean;
+  roof_shape_conflict_reason: string | null;
+  provisional_complexity_uplift_used: number;
+  shape_conflicted_roof_area_sqft: number | null;
+  shape_conflicted_squares: number | null;
+  // New: suggested outline, mass, imagery, calibration
+  suggested_roof_polygon_geojson: any | null;
+  suggested_roof_polygon_source: string | null;
+  suggested_roof_polygon_confidence: number | null;
+  suggested_roof_outline_notes: string | null;
+  roof_mass_count: number | null;
+  roof_mass_polygons: any[] | null;
+  imagery_analysis: MultiImageAnalysis | null;
+  calibration_adjustment_factor: number | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
