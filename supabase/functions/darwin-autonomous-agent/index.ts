@@ -35,7 +35,8 @@ Deno.serve(async (req) => {
           policyholder_name,
           status,
           is_closed,
-          insurance_company
+          insurance_company,
+          created_at
         )
       `)
       .eq('is_enabled', true)
