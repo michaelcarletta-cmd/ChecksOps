@@ -292,6 +292,12 @@ export function DarwinRoofOutlineStaticEditor({
           <img src={imageDataUrl} alt="Aerial imagery" className="absolute inset-0 w-full h-full object-cover" />
         )}
 
+        {imageError && !loadingImage && (
+          <div className="absolute inset-0 grid place-items-center text-sm text-red-400 bg-black/10">
+            Failed to load aerial imagery: {imageError}
+          </div>
+        )}
+
         <svg
           viewBox={`0 0 ${width} ${height}`}
           className="absolute inset-0 w-full h-full cursor-crosshair"

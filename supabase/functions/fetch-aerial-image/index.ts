@@ -1,7 +1,17 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -9,7 +19,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { minLng, minLat, maxLng, maxLat, width, height } = await req.json();
+    const body = await req.json();
+    const { minLng, minLat, maxLng, maxLat, width, height } = body ?? {};
 
     if (
       typeof minLng !== "number" ||
@@ -20,8 +31,8 @@ Deno.serve(async (req) => {
       throw new Error("Invalid bounds");
     }
 
-    const imgW = typeof width === "number" ? width : 1000;
-    const imgH = typeof height === "number" ? height : 700;
+    const imgW = Math.min(Math.max(Number(width) || 800, 300), 1200);
+    const imgH = Math.min(Math.max(Number(height) || 600, 200), 900);
 
     const bbox = `${minLng},${minLat},${maxLng},${maxLat}`;
     const size = `${imgW},${imgH}`;
@@ -32,35 +43,53 @@ Deno.serve(async (req) => {
       `&bboxSR=4326` +
       `&imageSR=4326` +
       `&size=${encodeURIComponent(size)}` +
-      `&format=png32` +
+      `&format=jpg` +
       `&transparent=false` +
       `&f=image`;
 
-    const res = await fetch(esriUrl, {
-      headers: {
-        "User-Agent": "DarwinRoofEditor/1.0",
-      },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    let res: Response;
+    try {
+      res = await fetch(esriUrl, {
+        method: "GET",
+        headers: {
+          "User-Agent": "DarwinRoofEditor/1.0",
+          "Accept": "image/*",
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!res.ok) {
-      throw new Error(`Aerial image fetch failed: ${res.status}`);
+      throw new Error(`Esri fetch failed: ${res.status}`);
     }
 
-    const contentType = res.headers.get("content-type") || "image/png";
+    const contentType = res.headers.get("content-type") || "image/jpeg";
     const bytes = new Uint8Array(await res.arrayBuffer());
 
-    let binary = "";
-    for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
+    if (bytes.length === 0) {
+      throw new Error("Esri returned empty image");
     }
-    const base64 = btoa(binary);
-    const dataUrl = `data:${contentType};base64,${base64}`;
+
+    if (bytes.length > 8_000_000) {
+      throw new Error(`Image too large: ${bytes.length} bytes`);
+    }
+
+    const dataUrl = `data:${contentType};base64,${toBase64(bytes)}`;
 
     return new Response(
       JSON.stringify({
         success: true,
         data_url: dataUrl,
         source_url: esriUrl,
+        byte_length: bytes.length,
+        content_type: contentType,
+        width: imgW,
+        height: imgH,
       }),
       {
         headers: {
@@ -70,10 +99,13 @@ Deno.serve(async (req) => {
       }
     );
   } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Unknown aerial image error";
+
     return new Response(
       JSON.stringify({
         success: false,
-        error: err instanceof Error ? err.message : "Unknown error",
+        error: message,
       }),
       {
         status: 400,
