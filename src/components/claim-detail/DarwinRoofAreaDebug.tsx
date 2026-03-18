@@ -22,6 +22,7 @@ interface DebugEstimate {
   dominant_pitch: string | null;
   slope_factor_used: number | null;
   correction_factor_used: number | null;
+  calibration_adjustment_factor: number | null;
   geometry_quality_score: number | null;
   selected_candidate_index: number | null;
   imagery_source: string | null;
