@@ -2470,6 +2470,7 @@ function deriveRoofEstimate(
   // ── Field sources ──
   const fieldSources: Record<string, DerivationSource> = {
     footprint_area_sqft: hasGeometry ? "geometry" : "ai_estimated",
+    roof_planar_area_sqft: hasGeometry ? "geometry" : "ai_estimated",
     estimated_roof_area_sqft: (hasGeometry && pitchBand !== "unknown") ? "geometry" : "ai_estimated",
     squares: (hasGeometry && pitchBand !== "unknown") ? "geometry" : "ai_estimated",
     dominant_pitch: (visionResult && !visionResult.pitch_band.abstain) ? "satellite_imagery" : "ai_estimated",
@@ -2485,9 +2486,10 @@ function deriveRoofEstimate(
 
   // ── Field confidence ──
   const fieldConfidence: Record<string, number> = {
-    footprint_area_sqft: hasGeometry ? 75 : 0,
-    estimated_roof_area_sqft: hasGeometry ? (pitchIsDefaultFallback ? 35 : 60) : 0,
-    squares: hasGeometry ? (pitchIsDefaultFallback ? 35 : 60) : 0,
+    footprint_area_sqft: hasGeometry ? Math.max(75, 70) : 0,
+    roof_planar_area_sqft: hasGeometry ? 65 : 0,
+    estimated_roof_area_sqft: hasGeometry ? Math.max((pitchIsDefaultFallback ? 35 : 60), 45) : 0,
+    squares: hasGeometry ? Math.max((pitchIsDefaultFallback ? 35 : 60), 45) : 0,
     dominant_pitch: pitchIsDefaultFallback ? 15 : ((visionResult && !visionResult.pitch_band.abstain) ? visionResult.pitch_band.confidence : 0),
     ridge_lf: linear.linear_confidence.ridge_lf ?? 0,
     hip_lf: linear.linear_confidence.hip_lf ?? 0,
@@ -2500,6 +2502,7 @@ function deriveRoofEstimate(
   // ── Field authority: null values get explicit unknown status ──
   const fieldAuthority: Record<string, FieldAuthority> = {
     footprint_area_sqft: hasGeometry ? "geometry_authoritative" : "ai_provisional",
+    roof_planar_area_sqft: hasGeometry ? "geometry_authoritative" : "ai_provisional",
     estimated_roof_area_sqft: hasGeometry ? (pitchIsDefaultFallback ? "ai_provisional" : "geometry_authoritative") : "ai_provisional",
     squares: hasGeometry ? (pitchIsDefaultFallback ? "ai_provisional" : "geometry_authoritative") : "ai_provisional",
     dominant_pitch: "ai_provisional",
