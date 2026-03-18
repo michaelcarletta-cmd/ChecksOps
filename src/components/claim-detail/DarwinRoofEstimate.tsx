@@ -1171,6 +1171,40 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
               </div>
             )}
 
+            {/* User-Drawn Authoritative Roof Outline */}
+            {estimate.user_drawn_squares != null && (
+              <div className="rounded-md border border-green-500/40 bg-green-500/10 p-3">
+                <div className="font-medium text-sm">User-Drawn Authoritative Roof Outline</div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm mt-2">
+                  <div>
+                    <div className="text-muted-foreground">User-Drawn Planar Area</div>
+                    <div className="font-medium">{estimate.user_drawn_planar_area_sqft} sqft</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">User-Drawn Roof Area</div>
+                    <div className="font-medium">{estimate.user_drawn_roof_area_sqft} sqft</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">User-Drawn Squares</div>
+                    <div className="font-medium">{estimate.user_drawn_squares}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Manual Roof Outline Editor */}
+            {(estimate.roof_shape_conflict ||
+              (estimate.imagery_source || "").toLowerCase().includes("ai vision") ||
+              (estimate.geometry_quality_score ?? 0) < 60) && (
+              <DarwinRoofOutlineEditor
+                roofMeasurementId={estimate.id}
+                geocodedLat={estimate.geocoded_lat ?? 0}
+                geocodedLng={estimate.geocoded_lng ?? 0}
+                suggestedPolygon={estimate.suggested_roof_polygon_geojson}
+                onSaved={() => runEstimate(estimate.selected_candidate_index ?? undefined)}
+              />
+            )}
+
             {/* Detail Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-0">
               <div>
