@@ -170,7 +170,7 @@ export function DarwinRoofAreaDebug({ estimate }: Props) {
   const hasPipeline = e.footprint_area_sqft != null && e.footprint_area_sqft > 0;
 
   // Compute verification: does planar × slope × correction = final?
-  const expectedArea = (e.roof_planar_area_sqft ?? 0) * (e.slope_factor_used ?? 1) * (e.correction_factor_used ?? 1);
+  const expectedArea = (e.roof_planar_area_sqft ?? 0) * (e.slope_factor_used ?? 1) * (e.correction_factor_used ?? 1) * (e.calibration_adjustment_factor ?? 1);
   const actualArea = e.estimated_roof_area_sqft ?? 0;
   const areaDelta = Math.abs(expectedArea - actualArea);
   const areaMatch = areaDelta <= 1; // within rounding
