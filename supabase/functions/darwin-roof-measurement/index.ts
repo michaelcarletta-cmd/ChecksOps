@@ -247,6 +247,9 @@ interface RoofEstimateResult {
   roof_planar_area_sqft: number | null;
   roof_polygon_geojson: any | null;
   planar_area_gain_sqft: number | null;
+  // Debug: intermediate calculation values
+  slope_factor_used: number | null;
+  correction_factor_used: number | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
