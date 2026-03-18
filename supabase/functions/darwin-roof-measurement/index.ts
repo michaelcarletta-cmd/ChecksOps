@@ -138,12 +138,14 @@ interface CandidateFootprint {
 interface OverhangConfig {
   eave_overhang_ft: number;
   rake_overhang_ft: number;
+  unknown_overhang_ft: number;
   source: "default" | "user" | "regional";
 }
 
 const DEFAULT_OVERHANG: OverhangConfig = {
   eave_overhang_ft: 1.0,
   rake_overhang_ft: 0.75,
+  unknown_overhang_ft: 0.5,
   source: "default",
 };
 
