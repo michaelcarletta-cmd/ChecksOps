@@ -211,9 +211,25 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { fileId, claimId, fileName, fileContent, force } = await req.json();
+    const {
+      fileId,
+      claimId,
+      fileName,
+      fileContent,
+      force,
+      forceIntelligence,
+    } = await req.json();
 
-    console.log("Darwin Document Processing starting...", { fileId, claimId, fileName });
+    const shouldForceReextract = force === true;
+    const shouldBypassProcessedGuard = shouldForceReextract || forceIntelligence === true;
+
+    console.log("Darwin Document Processing starting...", {
+      fileId,
+      claimId,
+      fileName,
+      shouldForceReextract,
+      forceIntelligence: forceIntelligence === true,
+    });
 
     let file: any = null;
     let textContent = '';
@@ -237,8 +253,8 @@ Deno.serve(async (req) => {
       file = fileData;
       targetClaimId = file.claim_id;
 
-      // Check if already processed (skip if force=true for reprocessing)
-      if (file.processed_by_darwin && !force) {
+      // Skip only when we're not explicitly forcing re-extraction or intelligence backfill.
+      if (file.processed_by_darwin && !shouldBypassProcessedGuard) {
         return new Response(
           JSON.stringify({ 
             success: true, 
@@ -260,22 +276,21 @@ Deno.serve(async (req) => {
         );
       }
       
-      // If force reprocessing, clear previous classification so it gets re-analyzed
-      if (force && file.processed_by_darwin) {
+      if (shouldForceReextract && file.processed_by_darwin) {
         console.log(`[Darwin] Force reprocessing file ${fileId}, clearing previous classification`);
       }
 
       // GUARANTEE extracted_text is populated before any analysis
-      // When force-reprocessing or existing text is garbage, re-extract from source
+      // Only re-extract from source when we're doing a true force reprocess or the saved text is garbage.
       const existingTextIsGarbage = file.extracted_text && file.extracted_text.length > 50 && isGarbageText(file.extracted_text);
       const existingTextUsable = file.extracted_text && file.extracted_text.length > 50 && !existingTextIsGarbage;
       
-      if (!force && existingTextUsable) {
+      if (!shouldForceReextract && existingTextUsable) {
         textContent = file.extracted_text;
         extractionMethod = 'existing_text';
         console.log(`[TextExtract] Using existing extracted_text (${textContent.length} chars) for ${file.file_name}`);
       } else {
-        if (force) console.log(`[TextExtract] Force reprocess — re-extracting text from source for ${file.file_name}`);
+        if (shouldForceReextract) console.log(`[TextExtract] Force reprocess — re-extracting text from source for ${file.file_name}`);
         if (existingTextIsGarbage) console.log(`[TextExtract] Existing text is garbage (${file.extracted_text.length} chars) — re-extracting from source for ${file.file_name}`);
         // Download file and extract text
         const { data: fileBlob, error: downloadError } = await supabase.storage
