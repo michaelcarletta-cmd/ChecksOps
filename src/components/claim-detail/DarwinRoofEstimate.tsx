@@ -147,6 +147,20 @@ interface RoofEstimate {
   shape_conflicted_roof_area_sqft: number | null;
   shape_conflicted_squares: number | null;
   user_drawn_roof_polygon_geojson: any | null;
+  // New fields
+  suggested_roof_polygon_geojson: any | null;
+  suggested_roof_polygon_source: string | null;
+  suggested_roof_polygon_confidence: number | null;
+  suggested_roof_outline_notes: string | null;
+  user_drawn_planar_area_sqft: number | null;
+  user_drawn_roof_area_sqft: number | null;
+  user_drawn_squares: number | null;
+  user_drawn_at: string | null;
+  user_drawn_by: string | null;
+  roof_mass_count: number | null;
+  roof_mass_polygons: any[] | null;
+  imagery_analysis: any | null;
+  calibration_adjustment_factor: number | null;
   created_at: string;
   updated_at: string;
 }
