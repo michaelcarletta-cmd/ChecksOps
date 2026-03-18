@@ -2617,6 +2617,9 @@ function deriveRoofEstimate(
     roof_planar_area_sqft: roofPolyResult ? roundTo(roofPolyResult.expanded_planar_area_sqft, 0) : null,
     roof_polygon_geojson: roofPolygonGeoJson,
     planar_area_gain_sqft: roofPolyResult ? roundTo(roofPolyResult.area_gain_sqft, 0) : null,
+    // Debug: intermediate calculation values
+    slope_factor_used: hasGeometry ? slopeFactor : null,
+    correction_factor_used: correctionFactorUsed,
   };
 }
 
