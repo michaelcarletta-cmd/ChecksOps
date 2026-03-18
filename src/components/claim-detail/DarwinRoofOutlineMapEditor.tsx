@@ -155,43 +155,10 @@ export function DarwinRoofOutlineMapEditor({
     return { type: "FeatureCollection" as const, features };
   }, [footprintPolygon, roofPolygon, suggestedPolygon, currentDrawn, showFootprint, showRoof, showSuggested, showDrawn]);
 
-  // Add Esri imagery + draw control after base style loads
+  // Add draw control after base style loads
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !mapLoaded || drawRef.current) return;
-
-    // Add Esri World Imagery as a raster source/layer
-    try {
-      if (!map.getSource("esri-imagery")) {
-        map.addSource("esri-imagery", {
-          type: "raster",
-          tiles: [
-            "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-          ],
-          tileSize: 256,
-          attribution: "Esri World Imagery",
-        } as any);
-      }
-
-      if (!map.getLayer("esri-imagery-layer")) {
-        // Insert imagery below any existing overlay layers
-        const firstLayerId = map.getStyle().layers?.[0]?.id;
-        map.addLayer(
-          {
-            id: "esri-imagery-layer",
-            type: "raster",
-            source: "esri-imagery",
-            minzoom: 0,
-            maxzoom: 22,
-          } as any,
-          firstLayerId
-        );
-      }
-
-      setMapError(null);
-    } catch (err: any) {
-      setMapError(err?.message || "Failed to initialize imagery layer");
-    }
 
     // Add Mapbox Draw control
     const draw = new MapboxDraw({
@@ -241,8 +208,27 @@ export function DarwinRoofOutlineMapEditor({
     }
   }, [mapLoaded]);
 
-  const handleMapLoad = () => {
-    setMapLoaded(true);
+  const imageryOnlyStyle = {
+    version: 8,
+    sources: {
+      esri: {
+        type: "raster",
+        tiles: [
+          "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        ],
+        tileSize: 256,
+        attribution: "Esri World Imagery",
+      },
+    },
+    layers: [
+      {
+        id: "esri-world-imagery",
+        type: "raster",
+        source: "esri",
+        minzoom: 0,
+        maxzoom: 22,
+      },
+    ],
   };
 
   const saveOutline = async () => {
@@ -328,14 +314,15 @@ export function DarwinRoofOutlineMapEditor({
       <div className="rounded-lg overflow-hidden border border-border" style={{ height: 500 }}>
         <Map
           ref={mapRef}
-          onLoad={handleMapLoad}
-          onError={(e) => setMapError(e?.error?.message || "Map data not available")}
+          mapLib={maplibregl}
+          onLoad={() => setMapLoaded(true)}
+          onError={(e: any) => setMapError(e?.error?.message || "Map data not available")}
           initialViewState={{
             ...initialCenter,
             zoom: 20,
           }}
           style={{ width: "100%", height: "100%" }}
-          mapStyle="https://demotiles.maplibre.org/style.json"
+          mapStyle={imageryOnlyStyle as any}
         >
           <Source id="overlays" type="geojson" data={overlayFeatures}>
             <Layer {...footprintFillLayer} />
