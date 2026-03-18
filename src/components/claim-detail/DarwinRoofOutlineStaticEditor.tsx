@@ -22,47 +22,87 @@ function extractRing(geojson: any): LngLat[] {
   return geojson.coordinates[0] as LngLat[];
 }
 
+function getCentroidFromRing(ring: LngLat[]): LngLat | null {
+  if (!ring || ring.length < 3) return null;
+  let sumLng = 0;
+  let sumLat = 0;
+  let count = 0;
+
+  for (const [lng, lat] of ring) {
+    sumLng += lng;
+    sumLat += lat;
+    count += 1;
+  }
+
+  if (!count) return null;
+  return [sumLng / count, sumLat / count];
+}
+
+function feetToLngDegrees(feet: number, lat: number) {
+  const feetPerDegreeLng = 364000 * Math.cos((lat * Math.PI) / 180);
+  return feet / feetPerDegreeLng;
+}
+
+function feetToLatDegrees(feet: number) {
+  return feet / 364000;
+}
+
 function getBoundsFromGeometry(
   polygons: Array<any | null | undefined>,
   geocodedLat: number,
   geocodedLng: number
 ) {
-  const coords = polygons
-    .flatMap((g) => extractRing(g))
-    .filter((p) => Array.isArray(p) && p.length === 2);
+  const rings = polygons
+    .map((g) => extractRing(g))
+    .filter((r) => r.length >= 3);
 
-  if (coords.length === 0) {
-    return {
-      minLng: geocodedLng - 0.0008,
-      maxLng: geocodedLng + 0.0008,
-      minLat: geocodedLat - 0.0008,
-      maxLat: geocodedLat + 0.0008,
-    };
+  let centroid: LngLat = [geocodedLng, geocodedLat];
+
+  if (rings.length > 0) {
+    const c = getCentroidFromRing(rings[0]);
+    if (c) centroid = c;
   }
 
-  const lngs = coords.map((p) => p[0]);
-  const lats = coords.map((p) => p[1]);
+  const coords = rings.flat();
 
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
+  let minLng = centroid[0];
+  let maxLng = centroid[0];
+  let minLat = centroid[1];
+  let maxLat = centroid[1];
 
-  const spanLng = maxLng - minLng;
-  const spanLat = maxLat - minLat;
-  const minSpan = 0.0016;
+  if (coords.length > 0) {
+    const lngs = coords.map((p) => p[0]);
+    const lats = coords.map((p) => p[1]);
+    minLng = Math.min(...lngs);
+    maxLng = Math.max(...lngs);
+    minLat = Math.min(...lats);
+    maxLat = Math.max(...lats);
+  }
 
-  const paddedSpanLng = Math.max(spanLng * 1.36, minSpan);
-  const paddedSpanLat = Math.max(spanLat * 1.36, minSpan);
+  const rawWidthDeg = Math.max(maxLng - minLng, 0);
+  const rawHeightDeg = Math.max(maxLat - minLat, 0);
 
-  const centerLng = (minLng + maxLng) / 2;
-  const centerLat = (minLat + maxLat) / 2;
+  const minWidthDeg = feetToLngDegrees(250, centroid[1]);
+  const minHeightDeg = feetToLatDegrees(250);
+
+  const finalWidthDeg = Math.max(rawWidthDeg, minWidthDeg);
+  const finalHeightDeg = Math.max(rawHeightDeg, minHeightDeg);
+
+  minLng = centroid[0] - finalWidthDeg / 2;
+  maxLng = centroid[0] + finalWidthDeg / 2;
+  minLat = centroid[1] - finalHeightDeg / 2;
+  maxLat = centroid[1] + finalHeightDeg / 2;
+
+  const padLng = finalWidthDeg * 0.15;
+  const padLat = finalHeightDeg * 0.15;
 
   return {
-    minLng: centerLng - paddedSpanLng / 2,
-    maxLng: centerLng + paddedSpanLng / 2,
-    minLat: centerLat - paddedSpanLat / 2,
-    maxLat: centerLat + paddedSpanLat / 2,
+    minLng: minLng - padLng,
+    maxLng: maxLng + padLng,
+    minLat: minLat - padLat,
+    maxLat: maxLat + padLat,
+    centroidLng: centroid[0],
+    centroidLat: centroid[1],
   };
 }
 
@@ -107,8 +147,8 @@ export function DarwinRoofOutlineStaticEditor({
   selectedFootprintSource,
   onSaved,
 }: Props) {
-  const width = 1000;
-  const height = 700;
+  const width = 1024;
+  const height = 1024;
 
   const bounds = useMemo(
     () =>
@@ -177,8 +217,8 @@ export function DarwinRoofOutlineStaticEditor({
             minLat: bounds.minLat,
             maxLng: bounds.maxLng,
             maxLat: bounds.maxLat,
-            width: 900,
-            height: 650,
+            width: 1024,
+            height: 1024,
           },
         });
 
@@ -276,7 +316,7 @@ export function DarwinRoofOutlineStaticEditor({
         {selectedFootprintSource || "unknown"}
       </p>
       <div className="text-xs text-muted-foreground">
-        Image request size: 900 × 650
+        Image request size: 1024 × 1024
       </div>
 
       {imageError && (
@@ -304,7 +344,10 @@ export function DarwinRoofOutlineStaticEditor({
         </label>
       </div>
 
-      <div className="rounded-lg overflow-hidden border border-border relative" style={{ aspectRatio: `${width}/${height}` }}>
+      <div
+        className="relative overflow-hidden rounded-md border bg-black/5"
+        style={{ aspectRatio: "1 / 1" }}
+      >
         {loadingImage && (
           <div className="absolute inset-0 flex items-center justify-center bg-muted/50 z-10">
             <span className="text-xs text-muted-foreground">Loading aerial imagery...</span>
@@ -312,7 +355,12 @@ export function DarwinRoofOutlineStaticEditor({
         )}
 
         {imageDataUrl && (
-          <img src={imageDataUrl} alt="Aerial imagery" className="absolute inset-0 w-full h-full object-cover" />
+          <img
+            src={imageDataUrl}
+            alt="Aerial imagery"
+            className="absolute inset-0 h-full w-full object-contain"
+            draggable={false}
+          />
         )}
 
         {imageError && !loadingImage && (
@@ -322,8 +370,8 @@ export function DarwinRoofOutlineStaticEditor({
         )}
 
         <svg
-          viewBox={`0 0 ${width} ${height}`}
-          className="absolute inset-0 w-full h-full cursor-crosshair"
+          viewBox="0 0 1024 1024"
+          className="absolute inset-0 h-full w-full cursor-crosshair"
           onClick={addPoint}
         >
           {roofPath && <path d={roofPath} fill="rgba(59,130,246,0.10)" stroke="#3b82f6" strokeWidth="2" />}
@@ -336,6 +384,20 @@ export function DarwinRoofOutlineStaticEditor({
             const y = ((bounds.maxLat - lat) / (bounds.maxLat - bounds.minLat)) * height;
             return <circle key={i} cx={x} cy={y} r={5} fill="#22c55e" stroke="#fff" strokeWidth={2} />;
           })}
+
+          {(() => {
+            const cx =
+              ((bounds.centroidLng - bounds.minLng) / (bounds.maxLng - bounds.minLng)) * width;
+            const cy =
+              ((bounds.maxLat - bounds.centroidLat) / (bounds.maxLat - bounds.minLat)) * height;
+
+            return (
+              <>
+                <line x1={cx - 12} y1={cy} x2={cx + 12} y2={cy} stroke="#facc15" strokeWidth="2" />
+                <line x1={cx} y1={cy - 12} x2={cx} y2={cy + 12} stroke="#facc15" strokeWidth="2" />
+              </>
+            );
+          })()}
         </svg>
       </div>
 
@@ -346,6 +408,15 @@ export function DarwinRoofOutlineStaticEditor({
         <Button variant="outline" size="sm" onClick={clearAll} disabled={points.length === 0}>
           Clear
         </Button>
+        <button
+          type="button"
+          className="rounded-md border px-3 py-2 text-sm"
+          onClick={() => {
+            setPoints([]);
+          }}
+        >
+          Recenter to Property
+        </button>
         <Button size="sm" onClick={saveOutline} disabled={saving || closedRing.length < 4}>
           {saving ? "Saving..." : "Save Roof Outline"}
         </Button>
