@@ -1069,7 +1069,7 @@ function CheckDetailPanel({
 
   const showWatermark = !isFinalDepositImage;
   // Proportional overlay coordinates (% of image)
-  const overlayCoordinates = { topPercent: 9, leftPercent: 18, widthPercent: 34 };
+  const overlayCoordinates = { topPercent: 10, leftPercent: 38, widthPercent: 22 };
   const endorsementStyle = {
     position: "absolute" as const,
     top: `${overlayCoordinates.topPercent}%`,
@@ -1489,17 +1489,36 @@ function CheckDetailPanel({
                                   color: #111111;
                                 }
                                 .overlay-body { font-weight: 600; line-height: 1.15; }
-                                .overlay-header { margin: 0 0 ${(0.008 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.022 * backAr * 100).toFixed(2)}cqw; font-weight: 700; }
-                                .overlay-company { margin: 0 0 ${(0.008 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.034 * backAr * 100).toFixed(2)}cqw; font-weight: 700; }
-                                .overlay-by { margin: 0 0 ${(0.008 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.026 * backAr * 100).toFixed(2)}cqw; }
-                                .overlay-separator { margin: ${(0.006 * backAr * 100).toFixed(2)}cqw 0; border-top: 1px solid #111111; opacity: 0.3; }
-                                .sig-block { margin-top: ${(0.008 * backAr * 100).toFixed(2)}cqw; }
-                                .sig-name { margin: 0; font-size: ${(0.026 * backAr * 100).toFixed(2)}cqw; }
-                                .sig-typed { margin: 0; font-size: ${(0.042 * backAr * 100).toFixed(2)}cqw; font-style: italic; font-family: "Brush Script MT", cursive; }
-                                .sig-waived { margin: 0; font-size: ${(0.024 * backAr * 100).toFixed(2)}cqw; font-style: italic; }
-                                .sig-img { display: block; margin: ${(0.004 * backAr * 100).toFixed(2)}cqw auto 0; max-width: 50%; height: ${(0.060 * backAr * 100).toFixed(2)}cqw; filter: brightness(0); object-fit: contain; }
+                                .overlay-header { margin: 0 0 ${(0.006 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.018 * backAr * 100).toFixed(2)}cqw; font-weight: 700; }
+                                .overlay-company { margin: 0 0 ${(0.006 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.028 * backAr * 100).toFixed(2)}cqw; font-weight: 700; }
+                                .overlay-by { margin: 0 0 ${(0.006 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.022 * backAr * 100).toFixed(2)}cqw; }
+                                .overlay-separator { margin: ${(0.004 * backAr * 100).toFixed(2)}cqw 0; border-top: 1px solid #111111; opacity: 0.3; }
+                                .sig-block { margin-top: ${(0.006 * backAr * 100).toFixed(2)}cqw; }
+                                .sig-name { margin: 0; font-size: ${(0.022 * backAr * 100).toFixed(2)}cqw; }
+                                .sig-typed { margin: 0; font-size: ${(0.035 * backAr * 100).toFixed(2)}cqw; font-style: italic; font-family: "Brush Script MT", cursive; }
+                                .sig-waived { margin: 0; font-size: ${(0.020 * backAr * 100).toFixed(2)}cqw; font-style: italic; }
+                                .sig-img { display: block; margin: ${(0.003 * backAr * 100).toFixed(2)}cqw auto 0; max-width: 50%; height: ${(0.050 * backAr * 100).toFixed(2)}cqw; filter: brightness(0); object-fit: contain; }
                                 @media print {
-                                  body { padding: 8px; }
+                                  body { padding: 8px; margin: 0; }
+                                  .check-front-page, .check-back-page {
+                                    page-break-after: always;
+                                    break-after: page;
+                                    page-break-inside: avoid;
+                                    break-inside: avoid;
+                                  }
+                                  .check-front-page:last-child, .check-back-page:last-child {
+                                    page-break-after: auto;
+                                    break-after: auto;
+                                  }
+                                  .check-print-wrap, .check-front-image, .check-back-image {
+                                    page-break-inside: avoid;
+                                    break-inside: avoid;
+                                  }
+                                  .check-back-image {
+                                    max-height: 85vh;
+                                    width: auto;
+                                    max-width: 100%;
+                                  }
                                 }
                               </style>
                             </head>
@@ -1509,17 +1528,21 @@ function CheckDetailPanel({
                                 <p>Amount: $${check.amount?.toLocaleString("en-US", { minimumFractionDigits: 2 }) ?? "N/A"} · Printed: ${new Date().toLocaleDateString()}</p>
                                 <p>All endorsements verified ✓</p>
                               </div>
-                              <div class="check-section">
-                                <p class="label">Front</p>
-                                <div class="check-print-wrap">
-                                  <img class="check-front-image" src="${frontImageUrl}" width="${finalFrontWidth}" height="${finalFrontHeight}" alt="Check front" />
+                              <div class="check-front-page">
+                                <div class="check-section">
+                                  <p class="label">Front</p>
+                                  <div class="check-print-wrap">
+                                    <img class="check-front-image" src="${frontImageUrl}" width="${finalFrontWidth}" height="${finalFrontHeight}" alt="Check front" />
+                                  </div>
                                 </div>
                               </div>
-                              <div class="check-section">
-                                <p class="label">Back (Endorsed)</p>
-                                <div class="check-print-wrap">
-                                  <img class="check-back-image" src="${backImageUrl}" width="${finalBackWidth}" height="${finalBackHeight}" alt="Check back" />
-                                  ${endorsementOverlayHtml}
+                              <div class="check-back-page">
+                                <div class="check-section">
+                                  <p class="label">Back (Endorsed)</p>
+                                  <div class="check-print-wrap">
+                                    <img class="check-back-image" src="${backImageUrl}" width="${finalBackWidth}" height="${finalBackHeight}" alt="Check back" />
+                                    ${endorsementOverlayHtml}
+                                  </div>
                                 </div>
                               </div>
                             </body>
