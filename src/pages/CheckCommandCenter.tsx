@@ -1388,6 +1388,7 @@ function CheckDetailPanel({
                         const finalBackWidth = originalBackImageWidth;
                         const finalBackHeight = originalBackImageHeight;
                         const normalizedRenderWidth = Math.max(finalFrontWidth, finalBackWidth);
+                        const backAr = finalBackHeight / finalBackWidth;
 
                         const dimensionDebugPayload = {
                           originalFrontImageWidth,
