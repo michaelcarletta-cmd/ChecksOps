@@ -295,14 +295,8 @@ export function DarwinRoofOutlineStaticEditor({
         {selectedFootprintSource || "unknown"}
       </p>
       <div className="text-xs text-muted-foreground">
-        Image request size: 1024 × 1024
+        Tile-stitched imagery (zoom 19)
       </div>
-
-      {imageError && (
-        <p className="text-xs text-destructive">
-          Failed to load aerial image: {imageError}
-        </p>
-      )}
 
       <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
         <label className="flex items-center gap-1">
