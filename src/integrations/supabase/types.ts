@@ -4903,6 +4903,7 @@ export type Database = {
           address: string
           ai_notes: string | null
           aspect_ratio: number | null
+          calibration_adjustment_factor: number | null
           candidate_footprints: Json | null
           claim_id: string
           confidence_score: number | null
@@ -4937,6 +4938,7 @@ export type Database = {
           hip_lf: number | null
           hip_valley_candidates: Json | null
           id: string
+          imagery_analysis: Json | null
           imagery_date: string | null
           imagery_source: string | null
           inferred_roof_form: string | null
@@ -4956,7 +4958,9 @@ export type Database = {
           ridge_lf: number | null
           roof_form_confidence: number | null
           roof_form_reasoning: string | null
+          roof_mass_count: number | null
           roof_mass_decomposition: Json | null
+          roof_mass_polygons: Json | null
           roof_planar_area_sqft: number | null
           roof_polygon_geojson: Json | null
           roof_shape_conflict: boolean | null
@@ -4966,10 +4970,19 @@ export type Database = {
           shape_conflicted_squares: number | null
           slope_factor_used: number | null
           squares: number | null
+          suggested_roof_outline_notes: string | null
+          suggested_roof_polygon_confidence: number | null
+          suggested_roof_polygon_geojson: Json | null
+          suggested_roof_polygon_source: string | null
           suppression_records: Json | null
           tuning_applied: Json | null
           updated_at: string
+          user_drawn_at: string | null
+          user_drawn_by: string | null
+          user_drawn_planar_area_sqft: number | null
+          user_drawn_roof_area_sqft: number | null
           user_drawn_roof_polygon_geojson: Json | null
+          user_drawn_squares: number | null
           valley_lf: number | null
           vision_classifications: Json | null
         }
@@ -4977,6 +4990,7 @@ export type Database = {
           address: string
           ai_notes?: string | null
           aspect_ratio?: number | null
+          calibration_adjustment_factor?: number | null
           candidate_footprints?: Json | null
           claim_id: string
           confidence_score?: number | null
@@ -5011,6 +5025,7 @@ export type Database = {
           hip_lf?: number | null
           hip_valley_candidates?: Json | null
           id?: string
+          imagery_analysis?: Json | null
           imagery_date?: string | null
           imagery_source?: string | null
           inferred_roof_form?: string | null
@@ -5030,7 +5045,9 @@ export type Database = {
           ridge_lf?: number | null
           roof_form_confidence?: number | null
           roof_form_reasoning?: string | null
+          roof_mass_count?: number | null
           roof_mass_decomposition?: Json | null
+          roof_mass_polygons?: Json | null
           roof_planar_area_sqft?: number | null
           roof_polygon_geojson?: Json | null
           roof_shape_conflict?: boolean | null
@@ -5040,10 +5057,19 @@ export type Database = {
           shape_conflicted_squares?: number | null
           slope_factor_used?: number | null
           squares?: number | null
+          suggested_roof_outline_notes?: string | null
+          suggested_roof_polygon_confidence?: number | null
+          suggested_roof_polygon_geojson?: Json | null
+          suggested_roof_polygon_source?: string | null
           suppression_records?: Json | null
           tuning_applied?: Json | null
           updated_at?: string
+          user_drawn_at?: string | null
+          user_drawn_by?: string | null
+          user_drawn_planar_area_sqft?: number | null
+          user_drawn_roof_area_sqft?: number | null
           user_drawn_roof_polygon_geojson?: Json | null
+          user_drawn_squares?: number | null
           valley_lf?: number | null
           vision_classifications?: Json | null
         }
@@ -5051,6 +5077,7 @@ export type Database = {
           address?: string
           ai_notes?: string | null
           aspect_ratio?: number | null
+          calibration_adjustment_factor?: number | null
           candidate_footprints?: Json | null
           claim_id?: string
           confidence_score?: number | null
@@ -5085,6 +5112,7 @@ export type Database = {
           hip_lf?: number | null
           hip_valley_candidates?: Json | null
           id?: string
+          imagery_analysis?: Json | null
           imagery_date?: string | null
           imagery_source?: string | null
           inferred_roof_form?: string | null
@@ -5104,7 +5132,9 @@ export type Database = {
           ridge_lf?: number | null
           roof_form_confidence?: number | null
           roof_form_reasoning?: string | null
+          roof_mass_count?: number | null
           roof_mass_decomposition?: Json | null
+          roof_mass_polygons?: Json | null
           roof_planar_area_sqft?: number | null
           roof_polygon_geojson?: Json | null
           roof_shape_conflict?: boolean | null
@@ -5114,10 +5144,19 @@ export type Database = {
           shape_conflicted_squares?: number | null
           slope_factor_used?: number | null
           squares?: number | null
+          suggested_roof_outline_notes?: string | null
+          suggested_roof_polygon_confidence?: number | null
+          suggested_roof_polygon_geojson?: Json | null
+          suggested_roof_polygon_source?: string | null
           suppression_records?: Json | null
           tuning_applied?: Json | null
           updated_at?: string
+          user_drawn_at?: string | null
+          user_drawn_by?: string | null
+          user_drawn_planar_area_sqft?: number | null
+          user_drawn_roof_area_sqft?: number | null
           user_drawn_roof_polygon_geojson?: Json | null
+          user_drawn_squares?: number | null
           valley_lf?: number | null
           vision_classifications?: Json | null
         }
@@ -5134,6 +5173,50 @@ export type Database = {
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_roof_outline_edits: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          edit_source: string
+          id: string
+          new_planar_area_sqft: number | null
+          new_polygon_geojson: Json | null
+          prior_planar_area_sqft: number | null
+          prior_polygon_geojson: Json | null
+          roof_measurement_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          edit_source: string
+          id?: string
+          new_planar_area_sqft?: number | null
+          new_polygon_geojson?: Json | null
+          prior_planar_area_sqft?: number | null
+          prior_polygon_geojson?: Json | null
+          roof_measurement_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          edit_source?: string
+          id?: string
+          new_planar_area_sqft?: number | null
+          new_polygon_geojson?: Json | null
+          prior_planar_area_sqft?: number | null
+          prior_polygon_geojson?: Json | null
+          roof_measurement_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_roof_outline_edits_roof_measurement_id_fkey"
+            columns: ["roof_measurement_id"]
+            isOneToOne: false
+            referencedRelation: "claim_roof_measurements"
             referencedColumns: ["id"]
           },
         ]

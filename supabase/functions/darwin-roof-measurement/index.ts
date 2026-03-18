@@ -250,6 +250,21 @@ interface RoofEstimateResult {
   // Debug: intermediate calculation values
   slope_factor_used: number | null;
   correction_factor_used: number | null;
+  // Shape conflict (existing)
+  roof_shape_conflict: boolean;
+  roof_shape_conflict_reason: string | null;
+  provisional_complexity_uplift_used: number;
+  shape_conflicted_roof_area_sqft: number | null;
+  shape_conflicted_squares: number | null;
+  // New: suggested outline, mass, imagery, calibration
+  suggested_roof_polygon_geojson: any | null;
+  suggested_roof_polygon_source: string | null;
+  suggested_roof_polygon_confidence: number | null;
+  suggested_roof_outline_notes: string | null;
+  roof_mass_count: number | null;
+  roof_mass_polygons: any[] | null;
+  imagery_analysis: MultiImageAnalysis | null;
+  calibration_adjustment_factor: number | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -504,6 +519,182 @@ function buildPolygonGeoJson(localPoints: LocalPoint[], origin: LngLat): { type:
   });
   ring.push(ring[0]);
   return { type: "Polygon", coordinates: [ring] };
+}
+
+// ── Suggested Outline / Mass Decomposition / Calibration helpers ─────
+
+interface RoofOutlineSuggestion {
+  polygon_geojson: { type: "Polygon"; coordinates: number[][][] } | null;
+  confidence: number;
+  notes: string;
+  source: "edge_detect" | "vision_guided_edge_detect" | "none";
+}
+
+interface SimpleMass {
+  id: string;
+  polygon: LocalPoint[];
+  label: "main_roof" | "garage" | "rear_projection" | "porch_bumpout" | "unknown";
+  confidence: number;
+}
+
+interface MultiImageAnalysis {
+  complexity: "simple" | "multi_mass" | "highly_complex" | "unknown";
+  visible_roof_form: string;
+  visible_facet_count: number | null;
+  mass_count_estimate: number | null;
+  confidence: number;
+  notes: string;
+}
+
+function localDistance(a: LocalPoint, b: LocalPoint): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function simplifyClosedPolygon(points: LocalPoint[], toleranceFt = 1.5): LocalPoint[] {
+  if (points.length < 4) return points;
+  const out: LocalPoint[] = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    if (localDistance(points[i], out[out.length - 1]) >= toleranceFt) out.push(points[i]);
+  }
+  if (out.length > 2 && localDistance(out[0], out[out.length - 1]) < toleranceFt) {
+    out[out.length - 1] = out[0];
+  }
+  return out;
+}
+
+function bboxOfLocalPoints(points: LocalPoint[]) {
+  const xs = points.map(p => p.x);
+  const ys = points.map(p => p.y);
+  return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+}
+
+function buildSuggestedRoofOutline(args: {
+  selectedFootprintLocalXY: LocalPoint[];
+  visibleFacetCount: number | null;
+  complexity: MultiImageAnalysis["complexity"];
+  overhangEaveFt: number;
+  overhangRakeFt: number;
+  origin: LngLat;
+}): RoofOutlineSuggestion {
+  const { selectedFootprintLocalXY, visibleFacetCount, complexity, overhangEaveFt, overhangRakeFt, origin } = args;
+  if (!selectedFootprintLocalXY || selectedFootprintLocalXY.length < 3) {
+    return { polygon_geojson: null, confidence: 0, notes: "No usable footprint for suggested outline.", source: "none" };
+  }
+
+  const bbox = bboxOfLocalPoints(selectedFootprintLocalXY);
+  const width = bbox.maxX - bbox.minX;
+  const height = bbox.maxY - bbox.minY;
+
+  let expanded: LocalPoint[];
+  if (complexity === "simple") {
+    expanded = [
+      { x: bbox.minX - overhangRakeFt, y: bbox.minY - overhangEaveFt },
+      { x: bbox.maxX + overhangRakeFt, y: bbox.minY - overhangEaveFt },
+      { x: bbox.maxX + overhangRakeFt, y: bbox.maxY + overhangEaveFt },
+      { x: bbox.minX - overhangRakeFt, y: bbox.maxY + overhangEaveFt },
+      { x: bbox.minX - overhangRakeFt, y: bbox.minY - overhangEaveFt },
+    ];
+  } else {
+    const bump = Math.max(4, Math.min(width, height) * 0.18);
+    expanded = [
+      { x: bbox.minX - overhangRakeFt, y: bbox.minY - overhangEaveFt },
+      { x: bbox.maxX + overhangRakeFt, y: bbox.minY - overhangEaveFt },
+      { x: bbox.maxX + overhangRakeFt, y: bbox.minY + height * 0.35 },
+      { x: bbox.maxX + overhangRakeFt + bump, y: bbox.minY + height * 0.35 },
+      { x: bbox.maxX + overhangRakeFt + bump, y: bbox.maxY + overhangEaveFt },
+      { x: bbox.minX - overhangRakeFt, y: bbox.maxY + overhangEaveFt },
+      { x: bbox.minX - overhangRakeFt, y: bbox.minY - overhangEaveFt },
+    ];
+  }
+
+  const simplified = simplifyClosedPolygon(expanded, 0.5);
+  return {
+    polygon_geojson: buildPolygonGeoJson(simplified, origin),
+    confidence: complexity === "simple" ? 55 : (visibleFacetCount != null && visibleFacetCount >= 10 ? 35 : 45),
+    notes: complexity === "simple"
+      ? "Suggested outline expanded from simple footprint bbox."
+      : "Suggested outline expanded and bumped for visible multi-mass complexity. Requires staff review.",
+    source: "vision_guided_edge_detect",
+  };
+}
+
+function buildMultiImageAnalysis(args: {
+  visionRoofForm: string | null;
+  visionRoofFormConfidence: number | null;
+  visibleFacetCount: number | null;
+  visibleFacetConfidence: number | null;
+}): MultiImageAnalysis {
+  const form = args.visionRoofForm || "unknown";
+  const facets = args.visibleFacetCount ?? null;
+  const conf = Math.round(((args.visionRoofFormConfidence ?? 0) + (args.visibleFacetConfidence ?? 0)) / 2);
+
+  let complexity: MultiImageAnalysis["complexity"] = "unknown";
+  let massCountEstimate: number | null = null;
+  if (facets != null) {
+    if (facets <= 4) { complexity = "simple"; massCountEstimate = 1; }
+    else if (facets <= 8) { complexity = "multi_mass"; massCountEstimate = 2; }
+    else { complexity = "highly_complex"; massCountEstimate = 3; }
+  }
+
+  return { complexity, visible_roof_form: form, visible_facet_count: facets, mass_count_estimate: massCountEstimate, confidence: conf, notes: `Vision indicates ${form} with ${facets ?? "unknown"} visible facets.` };
+}
+
+function decomposeSimpleMasses(args: {
+  footprintLocalXY: LocalPoint[];
+  analysis: MultiImageAnalysis;
+}): SimpleMass[] {
+  const pts = args.footprintLocalXY;
+  if (!pts || pts.length < 3) return [];
+
+  const b = bboxOfLocalPoints(pts);
+  const width = b.maxX - b.minX;
+  const height = b.maxY - b.minY;
+
+  const mainMass: SimpleMass = {
+    id: "main", label: "main_roof", confidence: 80,
+    polygon: [
+      { x: b.minX, y: b.minY }, { x: b.maxX, y: b.minY },
+      { x: b.maxX, y: b.maxY }, { x: b.minX, y: b.maxY }, { x: b.minX, y: b.minY },
+    ],
+  };
+
+  if (args.analysis.complexity === "simple") return [mainMass];
+
+  const sideWidth = Math.max(8, width * 0.28);
+  const rearDepth = Math.max(8, height * 0.24);
+
+  const garageMass: SimpleMass = {
+    id: "garage", label: "garage", confidence: 60,
+    polygon: [
+      { x: b.maxX - sideWidth, y: b.maxY - rearDepth },
+      { x: b.maxX + sideWidth * 0.35, y: b.maxY - rearDepth },
+      { x: b.maxX + sideWidth * 0.35, y: b.maxY + rearDepth * 0.2 },
+      { x: b.maxX - sideWidth, y: b.maxY + rearDepth * 0.2 },
+      { x: b.maxX - sideWidth, y: b.maxY - rearDepth },
+    ],
+  };
+
+  return [mainMass, garageMass];
+}
+
+function getCalibrationAdjustmentFactor(args: {
+  inferredRoofForm: string | null;
+  complexity: string | null;
+  geometryQualityScore: number | null;
+  source: string | null;
+}): number {
+  const form = (args.inferredRoofForm || "").toLowerCase();
+  const complexity = (args.complexity || "").toLowerCase();
+  const source = (args.source || "").toLowerCase();
+  const quality = args.geometryQualityScore ?? 0;
+
+  let factor = 1.0;
+  if (source.includes("ai vision")) factor += 0.02;
+  if (complexity === "highly_complex") factor += 0.05;
+  if (form === "gable" && quality >= 70) factor += 0.01;
+  if (quality < 50) factor += 0.03;
+
+  return Math.round(factor * 1000) / 1000;
 }
 
 function getValidationDerivedAreaCorrection(args: {
@@ -2431,6 +2622,47 @@ function deriveRoofEstimate(
     squares = roundTo(roofArea / 100, 1);
   }
 
+  // ── Imagery Analysis, Suggested Outline, Mass Decomposition, Calibration ──
+  const origin: LngLat = { lng, lat };
+  const selectedRing: number[][] = selectedCandidate?.polygon ?? [];
+  const selectedLocalXY: LocalPoint[] = selectedRing.length >= 3
+    ? lngLatRingToLocalXY(selectedRing, lat, lng)
+    : [];
+
+  const imageryAnalysis = buildMultiImageAnalysis({
+    visionRoofForm: visionResult?.roof_form?.value ?? null,
+    visionRoofFormConfidence: visionResult?.roof_form?.confidence ?? null,
+    visibleFacetCount: visionResult?.visible_facets?.value ?? null,
+    visibleFacetConfidence: visionResult?.visible_facets?.confidence ?? null,
+  });
+
+  const suggestedOutline = buildSuggestedRoofOutline({
+    selectedFootprintLocalXY: selectedLocalXY,
+    visibleFacetCount: imageryAnalysis.visible_facet_count,
+    complexity: imageryAnalysis.complexity,
+    overhangEaveFt: overhang.eave_overhang_ft,
+    overhangRakeFt: overhang.rake_overhang_ft,
+    origin,
+  });
+
+  const simpleMasses = decomposeSimpleMasses({
+    footprintLocalXY: selectedLocalXY,
+    analysis: imageryAnalysis,
+  });
+
+  const calibrationAdjustmentFactor = getCalibrationAdjustmentFactor({
+    inferredRoofForm: roofFormInference?.inferred_roof_form ?? null,
+    complexity: imageryAnalysis.complexity,
+    geometryQualityScore: selectedCandidate?.geometry_quality_score ?? null,
+    source: selectedCandidate?.source ?? null,
+  });
+
+  // Apply calibration factor to area if it differs from 1.0
+  if (calibrationAdjustmentFactor !== 1.0 && roofArea > 0) {
+    roofArea = roundTo(roofArea * calibrationAdjustmentFactor, 0);
+    squares = roundTo(roofArea / 100, 1);
+  }
+
   // ── Shape Conflict Detection ──
   function isSimpleGeometryShape(vertexCount: number | null, inferredForm: string | null): boolean {
     const v = vertexCount ?? 0;
@@ -2754,6 +2986,18 @@ function deriveRoofEstimate(
     provisional_complexity_uplift_used,
     shape_conflicted_roof_area_sqft,
     shape_conflicted_squares,
+    // New: suggested outline, mass, imagery, calibration
+    suggested_roof_polygon_geojson: suggestedOutline.polygon_geojson,
+    suggested_roof_polygon_source: suggestedOutline.source,
+    suggested_roof_polygon_confidence: suggestedOutline.confidence,
+    suggested_roof_outline_notes: suggestedOutline.notes,
+    roof_mass_count: simpleMasses.length > 0 ? simpleMasses.length : null,
+    roof_mass_polygons: simpleMasses.length > 0 ? simpleMasses.map(m => ({
+      id: m.id, label: m.label, confidence: m.confidence,
+      polygon_geojson: buildPolygonGeoJson(m.polygon, origin),
+    })) : null,
+    imagery_analysis: imageryAnalysis,
+    calibration_adjustment_factor: calibrationAdjustmentFactor,
   };
 }
 
@@ -3578,6 +3822,14 @@ Deno.serve(async (req) => {
         provisional_complexity_uplift_used: estimate.provisional_complexity_uplift_used ?? null,
         shape_conflicted_roof_area_sqft: estimate.shape_conflicted_roof_area_sqft ?? null,
         shape_conflicted_squares: estimate.shape_conflicted_squares ?? null,
+        suggested_roof_polygon_geojson: estimate.suggested_roof_polygon_geojson ?? null,
+        suggested_roof_polygon_source: estimate.suggested_roof_polygon_source ?? null,
+        suggested_roof_polygon_confidence: estimate.suggested_roof_polygon_confidence ?? null,
+        suggested_roof_outline_notes: estimate.suggested_roof_outline_notes ?? null,
+        roof_mass_count: estimate.roof_mass_count ?? null,
+        roof_mass_polygons: estimate.roof_mass_polygons ?? null,
+        imagery_analysis: estimate.imagery_analysis ?? null,
+        calibration_adjustment_factor: estimate.calibration_adjustment_factor ?? null,
         created_by: user.id,
       })
       .select()
