@@ -16,6 +16,7 @@ import {
 import { logAudit } from "@/hooks/useAuditLog";
 import { DarwinRoofValidation } from "./DarwinRoofValidation";
 import { RoofConfirmationDialog, type ConfirmationLevel, type ConfirmationBasis } from "./RoofConfirmationDialog";
+import { DarwinRoofAreaDebug } from "./DarwinRoofAreaDebug";
 
 type DerivationSource = "geometry" | "ai_estimated" | "user_override";
 type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative" | "unknown_insufficient_geometry";
@@ -136,6 +137,9 @@ interface RoofEstimate {
     source: "default" | "user" | "regional";
   } | null;
   roof_polygon_geojson: any | null;
+  // Debug: intermediate calculation values
+  slope_factor_used: number | null;
+  correction_factor_used: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -1180,6 +1184,9 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                 {estimate.address} ({estimate.geocoded_lat.toFixed(5)}, {estimate.geocoded_lng.toFixed(5)})
               </div>
             )}
+
+            {/* Roof Area Debug Panel */}
+            <DarwinRoofAreaDebug estimate={estimate} />
 
             {/* Benchmarking & Validation */}
             <DarwinRoofValidation claimId={claimId} estimate={estimate} />

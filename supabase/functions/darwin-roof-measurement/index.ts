@@ -247,6 +247,9 @@ interface RoofEstimateResult {
   roof_planar_area_sqft: number | null;
   roof_polygon_geojson: any | null;
   planar_area_gain_sqft: number | null;
+  // Debug: intermediate calculation values
+  slope_factor_used: number | null;
+  correction_factor_used: number | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -2399,6 +2402,7 @@ function deriveRoofEstimate(
   let roofPolyResult: RoofPolygonResult | null = null;
   let roofPolygonGeoJson: any = null;
   let planarRoofAreaSqft = 0;
+  let correctionFactorUsed: number | null = null;
 
   if (hasGeometry && selectedCandidate) {
     const [cLng, cLat] = polygonCentroid(selectedCandidate.polygon);
@@ -2416,14 +2420,14 @@ function deriveRoofEstimate(
     roofPolygonGeoJson = buildPolygonGeoJson(roofPolyResult.roof_polygon, { lng: cLng, lat: cLat });
 
     // Apply validation-derived correction factor
-    const correctionFactor = getValidationDerivedAreaCorrection({
+    correctionFactorUsed = getValidationDerivedAreaCorrection({
       inferredRoofForm: roofFormInference?.inferred_roof_form ?? null,
       geometrySource: selectedCandidate.geometry_metadata?.source_name ?? null,
       geometryQualityScore: selectedCandidate.geometry_quality_score,
       pitchBand: pitchBand,
     });
 
-    roofArea = roundTo(planarRoofAreaSqft * slopeFactor * correctionFactor, 0);
+    roofArea = roundTo(planarRoofAreaSqft * slopeFactor * correctionFactorUsed, 0);
     squares = roundTo(roofArea / 100, 1);
   }
 
@@ -2613,6 +2617,9 @@ function deriveRoofEstimate(
     roof_planar_area_sqft: roofPolyResult ? roundTo(roofPolyResult.expanded_planar_area_sqft, 0) : null,
     roof_polygon_geojson: roofPolygonGeoJson,
     planar_area_gain_sqft: roofPolyResult ? roundTo(roofPolyResult.area_gain_sqft, 0) : null,
+    // Debug: intermediate calculation values
+    slope_factor_used: hasGeometry ? slopeFactor : null,
+    correction_factor_used: correctionFactorUsed,
   };
 }
 
@@ -3428,6 +3435,8 @@ Deno.serve(async (req) => {
         roof_planar_area_sqft: estimate.roof_planar_area_sqft,
         roof_polygon_geojson: estimate.roof_polygon_geojson,
         planar_area_gain_sqft: estimate.planar_area_gain_sqft,
+        slope_factor_used: estimate.slope_factor_used,
+        correction_factor_used: estimate.correction_factor_used,
         tuning_applied: tuningApplied,
         pre_tuning_values: Object.keys(preTuningValues).length > 0 ? preTuningValues : null,
         created_by: user.id,
