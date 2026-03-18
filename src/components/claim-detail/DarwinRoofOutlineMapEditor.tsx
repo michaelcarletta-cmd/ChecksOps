@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Map, { Layer, Source, MapRef } from "react-map-gl/maplibre";
+import maplibregl from "maplibre-gl";
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
@@ -12,10 +13,10 @@ type LngLat = [number, number];
 
 interface Props {
   roofMeasurementId: string;
-  suggestedPolygon?: any | null;
-  footprintPolygon?: any | null;
-  roofPolygon?: any | null;
-  userDrawnPolygon?: any | null;
+  suggestedPolygon?: GeoJSON.Polygon | null;
+  footprintPolygon?: GeoJSON.Polygon | null;
+  roofPolygon?: GeoJSON.Polygon | null;
+  userDrawnPolygon?: GeoJSON.Polygon | null;
   selectedFootprintSource?: string | null;
   onSaved?: () => void;
 }
@@ -48,16 +49,6 @@ function getBoundsFromGeometry(polygons: Array<any | null | undefined>) {
     maxLng: maxLng + dLng * 0.15,
     minLat: minLat - dLat * 0.15,
     maxLat: maxLat + dLat * 0.15,
-  };
-}
-
-function polygonFeature(geojson: any, id: string): GeoJSON.Feature | null {
-  if (!geojson?.coordinates?.[0]) return null;
-  return {
-    type: "Feature" as const,
-    id,
-    properties: {},
-    geometry: geojson,
   };
 }
 
@@ -128,7 +119,10 @@ export function DarwinRoofOutlineMapEditor({
 }: Props) {
   const mapRef = useRef<MapRef>(null);
   const drawRef = useRef<MapboxDraw | null>(null);
+
   const [saving, setSaving] = useState(false);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
   const [currentDrawn, setCurrentDrawn] = useState<any>(userDrawnPolygon ?? null);
   const [showFootprint, setShowFootprint] = useState(true);
   const [showRoof, setShowRoof] = useState(true);
@@ -161,18 +155,62 @@ export function DarwinRoofOutlineMapEditor({
     return { type: "FeatureCollection" as const, features };
   }, [footprintPolygon, roofPolygon, suggestedPolygon, currentDrawn, showFootprint, showRoof, showSuggested, showDrawn]);
 
-  const handleMapLoad = () => {
+  // Add Esri imagery + draw control after base style loads
+  useEffect(() => {
     const map = mapRef.current?.getMap();
-    if (!map || drawRef.current) return;
+    if (!map || !mapLoaded || drawRef.current) return;
 
+    // Add Esri World Imagery as a raster source/layer
+    try {
+      if (!map.getSource("esri-imagery")) {
+        map.addSource("esri-imagery", {
+          type: "raster",
+          tiles: [
+            "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+          ],
+          tileSize: 256,
+          attribution: "Esri World Imagery",
+        } as any);
+      }
+
+      if (!map.getLayer("esri-imagery-layer")) {
+        // Insert imagery below any existing overlay layers
+        const firstLayerId = map.getStyle().layers?.[0]?.id;
+        map.addLayer(
+          {
+            id: "esri-imagery-layer",
+            type: "raster",
+            source: "esri-imagery",
+            minzoom: 0,
+            maxzoom: 22,
+          } as any,
+          firstLayerId
+        );
+      }
+
+      setMapError(null);
+    } catch (err: any) {
+      setMapError(err?.message || "Failed to initialize imagery layer");
+    }
+
+    // Add Mapbox Draw control
     const draw = new MapboxDraw({
       displayControlsDefault: false,
       controls: { polygon: true, trash: true },
-      defaultMode: "draw_polygon",
+      defaultMode: currentDrawn ? "simple_select" : "draw_polygon",
     });
 
     drawRef.current = draw;
     map.addControl(draw as any, "top-left");
+
+    // Pre-load existing drawn polygon into draw
+    if (currentDrawn) {
+      draw.add({
+        type: "Feature",
+        properties: {},
+        geometry: currentDrawn,
+      } as any);
+    }
 
     map.on("draw.create", () => {
       const data = draw.getAll();
@@ -194,12 +232,17 @@ export function DarwinRoofOutlineMapEditor({
       setCurrentDrawn(null);
     });
 
+    // Fit to bounds
     if (bounds) {
       map.fitBounds(
         [[bounds.minLng, bounds.minLat], [bounds.maxLng, bounds.maxLat]],
         { padding: 40, duration: 0 }
       );
     }
+  }, [mapLoaded]);
+
+  const handleMapLoad = () => {
+    setMapLoaded(true);
   };
 
   const saveOutline = async () => {
@@ -257,6 +300,12 @@ export function DarwinRoofOutlineMapEditor({
         </p>
       )}
 
+      {mapError && (
+        <p className="text-xs text-destructive">
+          Map failed to load: {mapError}
+        </p>
+      )}
+
       <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
         <label className="flex items-center gap-1">
           <input type="checkbox" checked={showFootprint} onChange={(e) => setShowFootprint(e.target.checked)} />
@@ -268,11 +317,11 @@ export function DarwinRoofOutlineMapEditor({
         </label>
         <label className="flex items-center gap-1">
           <input type="checkbox" checked={showSuggested} onChange={(e) => setShowSuggested(e.target.checked)} />
-          <span className="text-purple-500">■</span> Suggested Outline
+          <span className="text-purple-500">■</span> Suggested
         </label>
         <label className="flex items-center gap-1">
           <input type="checkbox" checked={showDrawn} onChange={(e) => setShowDrawn(e.target.checked)} />
-          <span className="text-green-500">■</span> User Drawn
+          <span className="text-green-500">■</span> Drawn
         </label>
       </div>
 
@@ -280,33 +329,13 @@ export function DarwinRoofOutlineMapEditor({
         <Map
           ref={mapRef}
           onLoad={handleMapLoad}
+          onError={(e) => setMapError(e?.error?.message || "Map data not available")}
           initialViewState={{
             ...initialCenter,
-            zoom: 19,
+            zoom: 20,
           }}
           style={{ width: "100%", height: "100%" }}
-          mapStyle={{
-            version: 8,
-            sources: {
-              "esri-imagery": {
-                type: "raster",
-                tiles: [
-                  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                ],
-                tileSize: 256,
-                attribution: "Esri World Imagery",
-              },
-            },
-            layers: [
-              {
-                id: "esri-imagery-layer",
-                type: "raster",
-                source: "esri-imagery",
-                minzoom: 0,
-                maxzoom: 22,
-              },
-            ],
-          }}
+          mapStyle="https://demotiles.maplibre.org/style.json"
         >
           <Source id="overlays" type="geojson" data={overlayFeatures}>
             <Layer {...footprintFillLayer} />
