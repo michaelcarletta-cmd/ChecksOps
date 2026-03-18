@@ -31,14 +31,14 @@ export function getStandardEndorsementLayout(
   const height = imageHeight * 0.22;
 
   // Scale from image HEIGHT
-  const payToFont = imageHeight * 0.016;
-  const companyFont = imageHeight * 0.024;
-  const mobileOnlyFont = imageHeight * 0.018;
-  const byLineFont = imageHeight * 0.020;
-  const signatureFont = imageHeight * 0.030;
-  const signatureHeight = imageHeight * 0.042;
-  const lineGap = imageHeight * 0.008;
-  const sectionGap = imageHeight * 0.012;
+  const payToFont = imageHeight * 0.014;
+  const companyFont = imageHeight * 0.022;
+  const mobileOnlyFont = imageHeight * 0.016;
+  const byLineFont = imageHeight * 0.018;
+  const signatureFont = imageHeight * 0.026;
+  const signatureHeight = imageHeight * 0.036;
+  const lineGap = imageHeight * 0.006;
+  const sectionGap = imageHeight * 0.010;
 
   return {
     x,
