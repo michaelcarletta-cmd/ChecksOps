@@ -2518,7 +2518,10 @@ function deriveRoofEstimate(
   notes.push(`📐 Overhang: eave=${overhang.eave_overhang_ft}ft, rake=${overhang.rake_overhang_ft}ft (${overhang.source}).`);
   if (hasGeometry) {
     notes.push(`📐 Footprint: ${footprintArea} sqft from ${selectedCandidate!.source} (quality: ${selectedCandidate!.geometry_quality_score}/100).`);
-    if (roofArea > 0) notes.push(`📐 Area: ${footprintArea} × ${slopeFactor} = ${roofArea} sqft.`);
+    if (roofPolyResult) {
+      notes.push(`📐 Roof polygon expansion: ${roundTo(roofPolyResult.original_planar_area_sqft, 0)} sqft → ${roundTo(roofPolyResult.expanded_planar_area_sqft, 0)} sqft (+${roundTo(roofPolyResult.area_gain_sqft, 0)} sqft from overhang).`);
+    }
+    if (roofArea > 0) notes.push(`📐 Slope-adjusted area: ${roundTo(planarRoofAreaSqft, 0)} × ${slopeFactor} = ${roofArea} sqft.`);
   }
   if (decomposition && decomposition.masses.length > 1) {
     const promoted = decomposition.junction_valleys.filter(jv => jv.status === "promoted").length;
