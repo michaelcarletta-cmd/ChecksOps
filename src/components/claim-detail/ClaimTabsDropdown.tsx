@@ -34,7 +34,7 @@ const portalTabOptions: TabOption[] = [
 ];
 
 export function ClaimTabsDropdown({ activeTab, onTabChange, isStaffOrAdmin }: ClaimTabsDropdownProps) {
-  const filteredTabs = tabOptions.filter(tab => !tab.staffOnly || isStaffOrAdmin);
+  const filteredTabs = isStaffOrAdmin ? staffTabOptions : portalTabOptions;
   const activeTabOption = filteredTabs.find(tab => tab.value === activeTab) || filteredTabs[0];
 
   return (
