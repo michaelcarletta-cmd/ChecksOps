@@ -22,6 +22,7 @@ interface DebugEstimate {
   dominant_pitch: string | null;
   slope_factor_used: number | null;
   correction_factor_used: number | null;
+  calibration_adjustment_factor: number | null;
   geometry_quality_score: number | null;
   selected_candidate_index: number | null;
   imagery_source: string | null;
@@ -169,7 +170,7 @@ export function DarwinRoofAreaDebug({ estimate }: Props) {
   const hasPipeline = e.footprint_area_sqft != null && e.footprint_area_sqft > 0;
 
   // Compute verification: does planar × slope × correction = final?
-  const expectedArea = (e.roof_planar_area_sqft ?? 0) * (e.slope_factor_used ?? 1) * (e.correction_factor_used ?? 1);
+  const expectedArea = (e.roof_planar_area_sqft ?? 0) * (e.slope_factor_used ?? 1) * (e.correction_factor_used ?? 1) * (e.calibration_adjustment_factor ?? 1);
   const actualArea = e.estimated_roof_area_sqft ?? 0;
   const areaDelta = Math.abs(expectedArea - actualArea);
   const areaMatch = areaDelta <= 1; // within rounding
@@ -247,7 +248,8 @@ export function DarwinRoofAreaDebug({ estimate }: Props) {
             <div className="bg-muted/50 px-2 py-1 text-[10px] font-semibold uppercase text-muted-foreground">
               5. Validation Correction
             </div>
-            <DebugRow label="Correction Factor" value={e.correction_factor_used?.toFixed(4) ?? "—"} warn={e.correction_factor_used != null && e.correction_factor_used !== 1.0} />
+            <DebugRow label="Correction Factor" value={e.correction_factor_used?.toFixed(4) ?? "—"} warn={e.correction_factor_used != null && e.correction_factor_used !== 1.0} formula="validation-derived area correction" />
+            <DebugRow label="Calibration Adjustment" value={(e.calibration_adjustment_factor ?? 1).toFixed(4)} warn={e.calibration_adjustment_factor != null && e.calibration_adjustment_factor !== 1.0} formula="complexity/source/quality tuning factor" />
             <DebugRow label="Inferred Roof Form" value={e.inferred_roof_form ?? "unknown"} />
 
             <div className="bg-muted/50 px-2 py-1 text-[10px] font-semibold uppercase text-muted-foreground">
@@ -256,7 +258,7 @@ export function DarwinRoofAreaDebug({ estimate }: Props) {
             <DebugRow
               label="Expected Area"
               value={`${Math.round(expectedArea).toLocaleString()} sqft`}
-              formula={`${e.roof_planar_area_sqft ?? 0} × ${e.slope_factor_used?.toFixed(4) ?? "?"} × ${e.correction_factor_used?.toFixed(4) ?? "?"}`}
+              formula={`${e.roof_planar_area_sqft ?? 0} × ${(e.slope_factor_used ?? 1).toFixed(4)} × ${(e.correction_factor_used ?? 1).toFixed(4)} × ${(e.calibration_adjustment_factor ?? 1).toFixed(4)}`}
             />
             <DebugRow
               label="Actual Area (stored)"
