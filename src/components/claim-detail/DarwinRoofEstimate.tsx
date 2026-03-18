@@ -74,6 +74,7 @@ interface RoofEstimate {
   geocoded_lat: number | null;
   geocoded_lng: number | null;
   footprint_area_sqft: number | null;
+  roof_planar_area_sqft: number | null;
   estimated_roof_area_sqft: number | null;
   squares: number | null;
   dominant_pitch: string | null;
@@ -126,6 +127,15 @@ interface RoofEstimate {
   confirmation_notes: string | null;
   confirmation_strength_score: number | null;
   confirmation_attachments: { name: string; path: string; type: string }[] | null;
+  // Phase 3: Roof polygon expansion
+  planar_area_gain_sqft: number | null;
+  overhang_config: {
+    eave_overhang_ft: number;
+    rake_overhang_ft: number;
+    unknown_overhang_ft: number;
+    source: "default" | "user" | "regional";
+  } | null;
+  roof_polygon_geojson: any | null;
   created_at: string;
   updated_at: string;
 }
