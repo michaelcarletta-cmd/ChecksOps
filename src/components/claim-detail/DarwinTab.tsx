@@ -93,6 +93,7 @@ type DarwinWorkspaceKey =
   | "claim-intelligence"
   | "document-analysis"
   | "rebuttals"
+  | "estimates"
   | "package-building"
   | "regulatory-compliance"
   | "contents-loss"
@@ -109,26 +110,32 @@ const workspaceSections: DarwinWorkspaceSection[] = [
   {
     key: "claim-control-center",
     title: "Claim Control Center",
-    description: "Manage overview, assignments, activity, tasks, photos, files, and accounting",
+    description: "Manage overview, assignments, activity, tasks, and inspections",
     icon: Clipboard,
   },
   {
     key: "claim-intelligence",
     title: "Claim Intelligence",
-    description: "Insights, causation analysis, and recommendations",
+    description: "Insights, accounting, strategic command, and quick actions",
     icon: Search,
   },
   {
     key: "document-analysis",
     title: "Document Analysis",
-    description: "Compare documents and extract key evidence",
+    description: "Files, photos, extraction, comparison, and sorting",
     icon: FileText,
   },
   {
     key: "rebuttals",
     title: "Rebuttals & Responses",
-    description: "Counter denials and draft responses quickly",
+    description: "Counter denials, causation analysis, and draft responses",
     icon: Shield,
+  },
+  {
+    key: "estimates",
+    title: "Estimate Workspace",
+    description: "Roof measurements, estimate building, and scope engine",
+    icon: Calculator,
   },
   {
     key: "package-building",
