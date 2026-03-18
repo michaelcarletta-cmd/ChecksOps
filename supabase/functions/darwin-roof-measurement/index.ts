@@ -2394,11 +2394,36 @@ function deriveRoofEstimate(
     pitchIsDefaultFallback = true;
   }
 
-  // ── Area ──
-  // Always compute area when geometry exists — pitch fallback ensures non-zero
+  // ── Area (with roof polygon expansion) ──
   let roofArea = 0, squares = 0;
-  if (hasGeometry) {
-    roofArea = roundTo(footprintArea * slopeFactor, 0);
+  let roofPolyResult: RoofPolygonResult | null = null;
+  let roofPolygonGeoJson: any = null;
+  let planarRoofAreaSqft = 0;
+
+  if (hasGeometry && selectedCandidate) {
+    const [cLng, cLat] = polygonCentroid(selectedCandidate.polygon);
+    const localXY = lngLatRingToLocalXY(selectedCandidate.polygon, cLat, cLng);
+
+    // Map edge classifications for polygon expansion
+    const edgeClsForExpansion: EdgeClassForExpansion[] = (selectedCandidate.edge_classifications || []).map(ec => ({
+      classification: ec.classification as EdgeClass,
+    }));
+
+    roofPolyResult = buildRoofPolygonFromFootprint(localXY, edgeClsForExpansion, overhang);
+    planarRoofAreaSqft = roofPolyResult.expanded_planar_area_sqft;
+
+    // Build GeoJSON for the expanded roof polygon
+    roofPolygonGeoJson = buildPolygonGeoJson(roofPolyResult.roof_polygon, { lng: cLng, lat: cLat });
+
+    // Apply validation-derived correction factor
+    const correctionFactor = getValidationDerivedAreaCorrection({
+      inferredRoofForm: roofFormInference?.inferred_roof_form ?? null,
+      geometrySource: selectedCandidate.geometry_metadata?.source_name ?? null,
+      geometryQualityScore: selectedCandidate.geometry_quality_score,
+      pitchBand: pitchBand,
+    });
+
+    roofArea = roundTo(planarRoofAreaSqft * slopeFactor * correctionFactor, 0);
     squares = roundTo(roofArea / 100, 1);
   }
 
