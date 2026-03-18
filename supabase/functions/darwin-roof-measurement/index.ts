@@ -2676,6 +2676,16 @@ function deriveRoofEstimate(
   if (suppressions.length > 0) {
     notes.push(`⚠️ ${suppressions.length} suppression(s): ${suppressions.map(s => `${s.rule}→${s.field}`).join(", ")}`);
   }
+  // Shape conflict notes (deferred from above to avoid accessing notes before init)
+  if (roof_shape_conflict) {
+    notes.push(`⚠️ SHAPE CONFLICT: ${roof_shape_conflict_reason}`);
+    if (provisional_complexity_uplift_used > 1.0) {
+      notes.push(`📊 Provisional complexity uplift: ×${provisional_complexity_uplift_used} → ${shape_conflicted_roof_area_sqft} sqft / ${shape_conflicted_squares} squares`);
+    }
+    if (betterAlt.found) {
+      notes.push(`💡 Better alternate footprint candidate available at index ${betterAlt.betterIndex}`);
+    }
+  }
   notes.push("\n⚠️ PRELIMINARY. Linear values are geometry-derived with null for unsupported fields. Overhang is configurable. All values require manual confirmation.");
 
   return {
