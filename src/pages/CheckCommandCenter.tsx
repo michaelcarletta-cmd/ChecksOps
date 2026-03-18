@@ -1068,7 +1068,7 @@ function CheckDetailPanel({
     check.status === "endorsements_complete";
 
   const showWatermark = !isFinalDepositImage;
-  // Proportional overlay: position/size as percentages of image dimensions
+  // Proportional overlay coordinates (% of image)
   const overlayCoordinates = { topPercent: 8, leftPercent: 12, widthPercent: 42 };
   const endorsementStyle = {
     position: "absolute" as const,
@@ -1079,33 +1079,6 @@ function CheckDetailPanel({
     color: "#111111",
     pointerEvents: "none" as const,
   };
-  // Compute proportional font sizes from back image height
-  const bH = backImageDimensions?.height ?? 600;
-  const scaledFonts = {
-    payTo: `${bH * 0.030}px`,
-    company: `${bH * 0.048}px`,
-    mobileOnly: `${bH * 0.034}px`,
-    byLine: `${bH * 0.040}px`,
-    signature: `${bH * 0.056}px`,
-    sigHeight: bH * 0.085,
-    lineGap: bH * 0.012,
-    sectionGap: bH * 0.022,
-  };
-  // Scale factor: ratio of rendered image height to natural image height
-  // The overlay is inside a container where the image is displayed at 100% width,
-  // so CSS sizes need to be in the rendered coordinate space.
-  // Since font sizes are in px based on natural height, we scale them to rendered size.
-  const renderedBackHeight = backImageDimensions
-    ? (backImageDimensions.height / backImageDimensions.width) * 100 // percentage concept
-    : null;
-  // For the preview, we use vw-relative scaling: fonts scale with container width
-  // We'll use percentage-based font sizes relative to the container
-  const containerScaleFactor = backImageDimensions
-    ? 1 / backImageDimensions.height
-    : 1 / 600;
-  const pctFont = (naturalPx: number) => `${(naturalPx * containerScaleFactor * 100).toFixed(2)}cqh`;
-  // Fallback: use simple percentage scaling via inline style calc
-  // Since the overlay container matches the image aspect ratio, we scale fonts from container height
 
   console.log("[CHECK-RENDER] check.status:", check.status);
   console.log("[CHECK-RENDER] endorsementData:", endorsementRows);
