@@ -66,3 +66,6 @@ verify_jwt = false
 
 [functions.save-user-roof-outline]
 verify_jwt = false
+
+[functions.fetch-aerial-image]
+verify_jwt = false

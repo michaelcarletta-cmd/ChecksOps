@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -123,6 +123,10 @@ export function DarwinRoofOutlineStaticEditor({
 
   const [points, setPoints] = useState<LngLat[]>(initialPoints);
   const [saving, setSaving] = useState(false);
+  const [loadingImage, setLoadingImage] = useState(true);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+
   const [showFootprint, setShowFootprint] = useState(true);
   const [showRoof, setShowRoof] = useState(true);
   const [showSuggested, setShowSuggested] = useState(true);
@@ -133,15 +137,50 @@ export function DarwinRoofOutlineStaticEditor({
     return [...points, points[0]];
   }, [points]);
 
-  const aerialImageUrl = useMemo(() => {
-    const bbox = `${bounds.minLng},${bounds.minLat},${bounds.maxLng},${bounds.maxLat}`;
-    const size = `${width},${height}`;
-    return `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${encodeURIComponent(
-      bbox
-    )}&bboxSR=4326&imageSR=4326&size=${encodeURIComponent(
-      size
-    )}&format=png32&f=image`;
-  }, [bounds]);
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadImage = async () => {
+      setLoadingImage(true);
+      setImageError(null);
+
+      try {
+        const { data, error } = await supabase.functions.invoke("fetch-aerial-image", {
+          body: {
+            minLng: bounds.minLng,
+            minLat: bounds.minLat,
+            maxLng: bounds.maxLng,
+            maxLat: bounds.maxLat,
+            width,
+            height,
+          },
+        });
+
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        if (!data?.data_url) throw new Error("No aerial image returned");
+
+        if (!cancelled) {
+          setImageDataUrl(data.data_url);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setImageError(err.message || "Failed to load aerial image");
+          setImageDataUrl(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingImage(false);
+        }
+      }
+    };
+
+    loadImage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bounds.minLng, bounds.minLat, bounds.maxLng, bounds.maxLat]);
 
   const addPoint = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -199,7 +238,7 @@ export function DarwinRoofOutlineStaticEditor({
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-foreground">Trace Roof Outline on Aerial Image</h3>
       <p className="text-xs text-muted-foreground">
-        Static aerial editor fallback. Same geographic bounds are used for image, overlays, and clicks.
+        Static aerial editor. Same geographic bounds are used for image, overlays, and clicks.
       </p>
 
       <p className="text-[10px] text-muted-foreground font-mono">
@@ -207,6 +246,12 @@ export function DarwinRoofOutlineStaticEditor({
         {bounds.minLat.toFixed(6)} to {bounds.maxLat.toFixed(6)} · source:{" "}
         {selectedFootprintSource || "unknown"}
       </p>
+
+      {imageError && (
+        <p className="text-xs text-destructive">
+          Failed to load aerial image: {imageError}
+        </p>
+      )}
 
       <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
         <label className="flex items-center gap-1">
@@ -228,7 +273,16 @@ export function DarwinRoofOutlineStaticEditor({
       </div>
 
       <div className="rounded-lg overflow-hidden border border-border relative" style={{ aspectRatio: `${width}/${height}` }}>
-        <img src={aerialImageUrl} alt="Aerial imagery" className="absolute inset-0 w-full h-full object-cover" />
+        {loadingImage && (
+          <div className="absolute inset-0 flex items-center justify-center bg-muted/50 z-10">
+            <span className="text-xs text-muted-foreground">Loading aerial imagery...</span>
+          </div>
+        )}
+
+        {imageDataUrl && (
+          <img src={imageDataUrl} alt="Aerial imagery" className="absolute inset-0 w-full h-full object-cover" />
+        )}
+
         <svg
           viewBox={`0 0 ${width} ${height}`}
           className="absolute inset-0 w-full h-full cursor-crosshair"
