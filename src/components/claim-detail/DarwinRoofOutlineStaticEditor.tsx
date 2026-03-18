@@ -252,6 +252,9 @@ export function DarwinRoofOutlineStaticEditor({
         {bounds.minLat.toFixed(6)} to {bounds.maxLat.toFixed(6)} · source:{" "}
         {selectedFootprintSource || "unknown"}
       </p>
+      <div className="text-xs text-muted-foreground">
+        Image request size: 900 × 650
+      </div>
 
       {imageError && (
         <p className="text-xs text-destructive">
