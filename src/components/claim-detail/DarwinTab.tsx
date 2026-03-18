@@ -481,15 +481,48 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
                 }
               }}
             />
-            <DarwinButForCausation claimId={claimId} claim={claim} />
-            <DarwinRoofEstimate claimId={claimId} claim={claim} />
+            <ClaimAccounting claim={claim} userRole={userRole} />
+            <DarwinProximityPrecedents claimId={claimId} claim={claim} />
+            <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Swords className="h-4 w-4 text-primary" />
+                  Strategic Command
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-wrap gap-2">
+                <Suspense fallback={<LoadingFallback />}>
+                  <ClaimWarRoom claimId={claimId} claim={claim} />
+                  <CarrierPlaybookDialog
+                    carrierName={claim?.insurance_company}
+                    stateCode={claim?.property_state}
+                  />
+                </Suspense>
+              </CardContent>
+            </Card>
+            <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-primary" />
+                  Quick Actions
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-wrap gap-2">
+                <Suspense fallback={<LoadingFallback />}>
+                  <DarwinAutoSummary claimId={claimId} claim={claim} />
+                  <DarwinOneClickPackage claimId={claimId} claim={claim} />
+                  <ProofOfLossGenerator claimId={claimId} claim={claim} />
+                  <ClaimContextPipeline claimId={claimId} claim={claim} />
+                </Suspense>
+              </CardContent>
+            </Card>
           </>
         );
       case "document-analysis":
         return (
           <>
-            <DarwinEstimateComparison claimId={claimId} claim={claim} />
-            <DarwinEstimateGapAnalysis claimId={claimId} claim={claim} />
+            <ClaimFiles claimId={claimId} claim={claim} isStaffOrAdmin={isStaffOrAdmin} />
+            <ClaimPhotos claimId={claimId} claim={claim} isPortalUser={false} />
             <DarwinSmartExtraction claimId={claimId} claim={claim} />
             <DarwinDocumentComparison claimId={claimId} claim={claim} />
             <DarwinSmartDocumentSort claimId={claimId} claim={claim} />
@@ -500,7 +533,7 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
         return (
           <>
             <DarwinDeclaredPosition claimId={claimId} claim={claim} />
-            <DarwinProximityPrecedents claimId={claimId} claim={claim} />
+            <DarwinButForCausation claimId={claimId} claim={claim} />
             <DarwinSystematicDismantler claimId={claimId} claim={claim} />
             <DarwinAutoDraftRebuttal claimId={claimId} claim={claim} />
             <div className="grid gap-4 lg:grid-cols-2">
@@ -508,10 +541,18 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
               <DarwinEngineerReportAnalyzer claimId={claimId} claim={claim} />
             </div>
             <DarwinSupplementGenerator claimId={claimId} claim={claim} />
-            <DarwinEstimateBuilder claimId={claimId} claim={claim} />
-            <DarwinScopeEngine claimId={claimId} claim={claim} />
             <DarwinCorrespondenceAnalyzer claimId={claimId} claim={claim} />
             <DarwinSmartFollowUps claimId={claimId} claim={claim} />
+          </>
+        );
+      case "estimates":
+        return (
+          <>
+            <DarwinRoofEstimate claimId={claimId} claim={claim} />
+            <DarwinEstimateComparison claimId={claimId} claim={claim} />
+            <DarwinEstimateGapAnalysis claimId={claimId} claim={claim} />
+            <DarwinEstimateBuilder claimId={claimId} claim={claim} />
+            <DarwinScopeEngine claimId={claimId} claim={claim} />
           </>
         );
       case "package-building":
