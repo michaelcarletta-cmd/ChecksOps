@@ -70,15 +70,11 @@ const DarwinHealthCheck = lazy(() => import("@/components/claim-detail/DarwinHea
 const DarwinRoofEstimate = lazy(() => import("@/components/claim-detail/DarwinRoofEstimate").then(m => ({ default: m.DarwinRoofEstimate })));
 const DarwinEstimateBuilder = lazy(() => import("@/components/claim-detail/DarwinEstimateBuilder").then(m => ({ default: m.DarwinEstimateBuilder })));
 const DarwinScopeEngine = lazy(() => import("@/components/claim-detail/DarwinScopeEngine").then(m => ({ default: m.DarwinScopeEngine })));
-const DarwinClaimControlCenter = lazy(() => import("@/components/claim-detail/DarwinClaimControlCenter").then(m => ({ default: m.DarwinClaimControlCenter })));
 
 
 interface DarwinTabProps {
   claimId: string;
   claim: any;
-  userRole: string | null;
-  isStaffOrAdmin: boolean;
-  onClaimUpdated?: (claim: any) => void;
 }
 
 const LoadingFallback = () => (
@@ -89,7 +85,6 @@ const LoadingFallback = () => (
 );
 
 type DarwinWorkspaceKey =
-  | "claim-control-center"
   | "claim-intelligence"
   | "document-analysis"
   | "rebuttals"
@@ -106,12 +101,6 @@ interface DarwinWorkspaceSection {
 }
 
 const workspaceSections: DarwinWorkspaceSection[] = [
-  {
-    key: "claim-control-center",
-    title: "Claim Control Center",
-    description: "Manage overview, assignments, activity, tasks, photos, files, and accounting",
-    icon: Clipboard,
-  },
   {
     key: "claim-intelligence",
     title: "Claim Intelligence",
@@ -169,11 +158,11 @@ const analysisTypeLabels: Record<string, { label: string; section: string }> = {
   systematic_dismantling: { label: 'Systematic Dismantling', section: 'rebuttals' },
 };
 
-export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpdated }: DarwinTabProps) => {
+export const DarwinTab = ({ claimId, claim }: DarwinTabProps) => {
   const [showCopilot, setShowCopilot] = useState(true);
   const [copilotExpanded, setCopilotExpanded] = useState(false);
   const [copilotView, setCopilotView] = useState<'conversation' | 'dismantler'>('conversation');
-  const [activeWorkspace, setActiveWorkspace] = useState<DarwinWorkspaceKey>("claim-control-center");
+  const [activeWorkspace, setActiveWorkspace] = useState<DarwinWorkspaceKey>("claim-intelligence");
   const [autoAnalyses, setAutoAnalyses] = useState<Array<{ id: string; analysis_type: string; created_at: string; input_summary: string }>>([]);
   const [dismissedAnalyses, setDismissedAnalyses] = useState<Set<string>>(new Set());
   const [liveCarrierDismantler, setLiveCarrierDismantler] = useState<{
@@ -451,16 +440,6 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
 
   const renderActiveWorkspace = () => {
     switch (activeWorkspace) {
-      case "claim-control-center":
-        return (
-          <DarwinClaimControlCenter
-            claimId={claimId}
-            claim={claim}
-            userRole={userRole}
-            isStaffOrAdmin={isStaffOrAdmin}
-            onClaimUpdated={onClaimUpdated}
-          />
-        );
       case "claim-intelligence":
         return (
           <>
