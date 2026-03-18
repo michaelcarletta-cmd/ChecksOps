@@ -248,7 +248,8 @@ export function DarwinRoofAreaDebug({ estimate }: Props) {
             <div className="bg-muted/50 px-2 py-1 text-[10px] font-semibold uppercase text-muted-foreground">
               5. Validation Correction
             </div>
-            <DebugRow label="Correction Factor" value={e.correction_factor_used?.toFixed(4) ?? "—"} warn={e.correction_factor_used != null && e.correction_factor_used !== 1.0} />
+            <DebugRow label="Correction Factor" value={e.correction_factor_used?.toFixed(4) ?? "—"} warn={e.correction_factor_used != null && e.correction_factor_used !== 1.0} formula="validation-derived area correction" />
+            <DebugRow label="Calibration Adjustment" value={(e.calibration_adjustment_factor ?? 1).toFixed(4)} warn={e.calibration_adjustment_factor != null && e.calibration_adjustment_factor !== 1.0} formula="complexity/source/quality tuning factor" />
             <DebugRow label="Inferred Roof Form" value={e.inferred_roof_form ?? "unknown"} />
 
             <div className="bg-muted/50 px-2 py-1 text-[10px] font-semibold uppercase text-muted-foreground">
