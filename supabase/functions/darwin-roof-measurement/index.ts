@@ -3435,6 +3435,8 @@ Deno.serve(async (req) => {
         roof_planar_area_sqft: estimate.roof_planar_area_sqft,
         roof_polygon_geojson: estimate.roof_polygon_geojson,
         planar_area_gain_sqft: estimate.planar_area_gain_sqft,
+        slope_factor_used: estimate.slope_factor_used,
+        correction_factor_used: estimate.correction_factor_used,
         tuning_applied: tuningApplied,
         pre_tuning_values: Object.keys(preTuningValues).length > 0 ? preTuningValues : null,
         created_by: user.id,
