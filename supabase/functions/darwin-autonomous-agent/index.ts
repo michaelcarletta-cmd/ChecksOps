@@ -861,6 +861,21 @@ async function processIdleClaimUpdates(
   const idleThresholdDays = 14; // 2 weeks
   const idleThreshold = new Date();
   idleThreshold.setDate(idleThreshold.getDate() - idleThresholdDays);
+
+  // Safety: never send idle updates for claims younger than the idle threshold
+  const { data: claimAge } = await supabase
+    .from('claims')
+    .select('created_at')
+    .eq('id', claim.id)
+    .single();
+
+  if (claimAge?.created_at) {
+    const claimCreated = new Date(claimAge.created_at);
+    if (claimCreated > idleThreshold) {
+      console.log(`Claim ${claim.claim_number}: too new for idle updates (created ${claimCreated.toISOString()})`);
+      return;
+    }
+  }
   
   // Check for any recent activity
   const { data: recentActivity } = await supabase
