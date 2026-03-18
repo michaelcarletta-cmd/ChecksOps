@@ -21,7 +21,7 @@ interface Props {
   geocodedLng: number;
   suggestedPolygon?: any | null;
   footprintPolygon?: any | null;
-  roofPolygonGeojson?: any | null;
+  roofPolygon?: any | null;
   userDrawnPolygon?: any | null;
   onSaved?: () => void;
 }
@@ -29,19 +29,13 @@ interface Props {
 const SVG_W = 1000;
 const SVG_H = 700;
 
-function extractRing(geojson: any): LngLat[] | null {
-  if (!geojson) return null;
-  const coords = geojson?.coordinates?.[0];
-  if (!Array.isArray(coords) || coords.length < 3) return null;
-  return coords as LngLat[];
+function extractRing(geojson: any): LngLat[] {
+  if (!geojson?.coordinates?.[0]) return [];
+  return geojson.coordinates[0] as LngLat[];
 }
 
-function getBoundsFromRings(rings: (LngLat[] | null)[]): Bounds | null {
-  const pts = rings
-    .filter((r): r is LngLat[] => !!r && r.length >= 3)
-    .flat()
-    .filter((p) => Array.isArray(p) && p.length === 2);
-
+function getBoundsFromRings(rings: LngLat[][]): Bounds | null {
+  const pts = rings.flat().filter((p) => Array.isArray(p) && p.length === 2);
   if (pts.length === 0) return null;
 
   const lngs = pts.map((p) => p[0]);
@@ -104,17 +98,17 @@ export function DarwinRoofOutlineEditor({
   geocodedLng,
   suggestedPolygon,
   footprintPolygon,
-  roofPolygonGeojson,
+  roofPolygon,
   userDrawnPolygon,
   onSaved,
 }: Props) {
   const footprintRing = useMemo(() => extractRing(footprintPolygon), [footprintPolygon]);
-  const expandedRing = useMemo(() => extractRing(roofPolygonGeojson), [roofPolygonGeojson]);
+  const expandedRing = useMemo(() => extractRing(roofPolygon), [roofPolygon]);
   const suggestedRing = useMemo(() => extractRing(suggestedPolygon), [suggestedPolygon]);
   const existingUserRing = useMemo(() => extractRing(userDrawnPolygon), [userDrawnPolygon]);
 
   const [points, setPoints] = useState<LngLat[]>(() => {
-    const ring = existingUserRing ?? suggestedRing;
+    const ring = existingUserRing.length > 0 ? existingUserRing : suggestedRing;
     if (ring && ring.length >= 3) {
       const pts = [...ring];
       const first = pts[0];
@@ -144,18 +138,17 @@ export function DarwinRoofOutlineEditor({
     return [...points, points[0]];
   }, [points]);
 
-  // Derive bounds from all available geometry, priority: user > suggested > expanded > footprint
   const bounds = useMemo<Bounds>(() => {
-    const allRings = [
+    const preferredRings = [
       existingUserRing,
       suggestedRing,
       expandedRing,
       footprintRing,
-      closedRing.length >= 3 ? closedRing : null,
-    ];
+      closedRing.length >= 3 ? closedRing : [],
+    ].filter((r) => r.length >= 3);
 
-    return getBoundsFromRings(allRings) ?? fallbackBounds(geocodedLat, geocodedLng);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return getBoundsFromRings(preferredRings) ?? fallbackBounds(geocodedLat, geocodedLng);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingUserRing, suggestedRing, expandedRing, footprintRing, closedRing, geocodedLat, geocodedLng, viewResetKey]);
 
   const tileUrl = useMemo(() => buildTileUrl(bounds), [bounds]);
@@ -282,7 +275,7 @@ export function DarwinRoofOutlineEditor({
 
   const ringToPath = useCallback(
     (ring: LngLat[]) => {
-      if (ring.length < 3) return "";
+      if (!ring || ring.length < 3) return "";
       return (
         ring
           .map(([lng, lat], i) => {
@@ -296,14 +289,14 @@ export function DarwinRoofOutlineEditor({
   );
 
   const userPath = useMemo(() => ringToPath(closedRing), [closedRing, ringToPath]);
-  const footprintPath = useMemo(() => (footprintRing ? ringToPath(footprintRing) : ""), [footprintRing, ringToPath]);
-  const expandedPath = useMemo(() => (expandedRing ? ringToPath(expandedRing) : ""), [expandedRing, ringToPath]);
-  const suggestedPath = useMemo(() => (suggestedRing ? ringToPath(suggestedRing) : ""), [suggestedRing, ringToPath]);
+  const footprintPath = useMemo(() => ringToPath(footprintRing), [footprintRing, ringToPath]);
+  const expandedPath = useMemo(() => ringToPath(expandedRing), [expandedRing, ringToPath]);
+  const suggestedPath = useMemo(() => ringToPath(suggestedRing), [suggestedRing, ringToPath]);
 
   const layerConfig: { key: keyof typeof layers; label: string; color: string; ring: LngLat[] | null }[] = [
-    { key: "footprint", label: "Original Footprint", color: "hsl(var(--muted-foreground))", ring: footprintRing },
-    { key: "expanded", label: "Expanded Roof Polygon", color: "hsl(200, 80%, 55%)", ring: expandedRing },
-    { key: "suggested", label: "Suggested Outline", color: "hsl(45, 90%, 55%)", ring: suggestedRing },
+    { key: "footprint", label: "Original Footprint", color: "hsl(var(--muted-foreground))", ring: footprintRing.length >= 3 ? footprintRing : null },
+    { key: "expanded", label: "Expanded Roof Polygon", color: "hsl(200, 80%, 55%)", ring: expandedRing.length >= 3 ? expandedRing : null },
+    { key: "suggested", label: "Suggested Outline", color: "hsl(45, 90%, 55%)", ring: suggestedRing.length >= 3 ? suggestedRing : null },
     { key: "userDrawn", label: "User-Drawn (Editable)", color: "hsl(var(--primary))", ring: points.length > 0 ? closedRing : null },
   ];
 
@@ -313,7 +306,7 @@ export function DarwinRoofOutlineEditor({
         <div>
           <div className="font-medium text-sm">Roof Outline Tracing Tool</div>
           <div className="text-xs text-muted-foreground">
-            Click to add points on the visible drip edge. Drag vertices to adjust. Right-click a vertex to delete. View is anchored to roof geometry.
+            Trace the visible outer roof drip edge. The editor view is anchored to the actual roof geometry.
           </div>
         </div>
         <Badge variant="outline" className="text-xs">
@@ -423,27 +416,6 @@ export function DarwinRoofOutlineEditor({
               pointerEvents="none"
             />
           )}
-
-          {layers.userDrawn &&
-            points.length >= 2 &&
-            points.map(([lng, lat], i) => {
-              if (i === 0) return null;
-              const [x1, y1] = toSvg(points[i - 1][0], points[i - 1][1]);
-              const [x2, y2] = toSvg(lng, lat);
-              return (
-                <line
-                  key={`edge-${i}`}
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke="hsl(var(--primary))"
-                  strokeWidth="2"
-                  opacity={0.5}
-                  pointerEvents="none"
-                />
-              );
-            })}
 
           {layers.userDrawn &&
             points.map(([lng, lat], i) => {
