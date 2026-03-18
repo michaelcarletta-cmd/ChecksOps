@@ -2,12 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Map, { Layer, Source, MapRef } from "react-map-gl/maplibre";
 import maplibregl from "maplibre-gl";
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
-import "maplibre-gl/dist/maplibre-gl.css";
-import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { RotateCcw, Save } from "lucide-react";
+import "maplibre-gl/dist/maplibre-gl.css";
+import "@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css";
 
 type LngLat = [number, number];
 
@@ -51,6 +51,39 @@ function getBoundsFromGeometry(polygons: Array<any | null | undefined>) {
     maxLat: maxLat + dLat * 0.15,
   };
 }
+
+function polygonFeature(geojson: any, id: string) {
+  if (!geojson?.coordinates?.[0]) return null;
+  return {
+    type: "Feature" as const,
+    id,
+    properties: { layerId: id },
+    geometry: geojson,
+  };
+}
+
+const imageryOnlyStyle = {
+  version: 8,
+  sources: {
+    esri: {
+      type: "raster",
+      tiles: [
+        "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      ],
+      tileSize: 256,
+      attribution: "Esri World Imagery",
+    },
+  },
+  layers: [
+    {
+      id: "esri-world-imagery",
+      type: "raster",
+      source: "esri",
+      minzoom: 0,
+      maxzoom: 22,
+    },
+  ],
+};
 
 const footprintFillLayer: any = {
   id: "footprint-fill",
@@ -139,38 +172,42 @@ export function DarwinRoofOutlineMapEditor({
   }, [userDrawnPolygon, suggestedPolygon, roofPolygon, footprintPolygon]);
 
   const overlayFeatures = useMemo(() => {
-    const features: GeoJSON.Feature[] = [];
-    if (showFootprint && footprintPolygon?.coordinates?.[0]) {
-      features.push({ type: "Feature", properties: { layerId: "footprint" }, geometry: footprintPolygon });
-    }
-    if (showRoof && roofPolygon?.coordinates?.[0]) {
-      features.push({ type: "Feature", properties: { layerId: "roof" }, geometry: roofPolygon });
-    }
-    if (showSuggested && suggestedPolygon?.coordinates?.[0]) {
-      features.push({ type: "Feature", properties: { layerId: "suggested" }, geometry: suggestedPolygon });
-    }
-    if (showDrawn && currentDrawn?.coordinates?.[0]) {
-      features.push({ type: "Feature", properties: { layerId: "drawn" }, geometry: currentDrawn });
-    }
-    return { type: "FeatureCollection" as const, features };
-  }, [footprintPolygon, roofPolygon, suggestedPolygon, currentDrawn, showFootprint, showRoof, showSuggested, showDrawn]);
+    return {
+      type: "FeatureCollection" as const,
+      features: [
+        showFootprint ? polygonFeature(footprintPolygon, "footprint") : null,
+        showRoof ? polygonFeature(roofPolygon, "roof") : null,
+        showSuggested ? polygonFeature(suggestedPolygon, "suggested") : null,
+        showDrawn ? polygonFeature(currentDrawn, "drawn") : null,
+      ].filter(Boolean),
+    };
+  }, [
+    footprintPolygon,
+    roofPolygon,
+    suggestedPolygon,
+    currentDrawn,
+    showFootprint,
+    showRoof,
+    showSuggested,
+    showDrawn,
+  ]);
 
-  // Add draw control after base style loads
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map || !mapLoaded || drawRef.current) return;
 
-    // Add Mapbox Draw control
     const draw = new MapboxDraw({
       displayControlsDefault: false,
-      controls: { polygon: true, trash: true },
+      controls: {
+        polygon: true,
+        trash: true,
+      },
       defaultMode: currentDrawn ? "simple_select" : "draw_polygon",
     });
 
     drawRef.current = draw;
     map.addControl(draw as any, "top-left");
 
-    // Pre-load existing drawn polygon into draw
     if (currentDrawn) {
       draw.add({
         type: "Feature",
@@ -179,56 +216,51 @@ export function DarwinRoofOutlineMapEditor({
       } as any);
     }
 
-    map.on("draw.create", () => {
+    const syncDrawn = () => {
       const data = draw.getAll();
       const first = data.features?.[0];
       if (first?.geometry?.type === "Polygon") {
-        setCurrentDrawn(first.geometry);
+        setCurrentDrawn(first.geometry as GeoJSON.Polygon);
+      } else {
+        setCurrentDrawn(null);
       }
-    });
+    };
 
-    map.on("draw.update", () => {
-      const data = draw.getAll();
-      const first = data.features?.[0];
-      if (first?.geometry?.type === "Polygon") {
-        setCurrentDrawn(first.geometry);
+    map.on("draw.create", syncDrawn);
+    map.on("draw.update", syncDrawn);
+    map.on("draw.delete", syncDrawn);
+
+    return () => {
+      try {
+        map.off("draw.create", syncDrawn);
+        map.off("draw.update", syncDrawn);
+        map.off("draw.delete", syncDrawn);
+        map.removeControl(draw as any);
+      } catch {
+        // ignore cleanup issues
       }
-    });
+      drawRef.current = null;
+    };
+  }, [mapLoaded, currentDrawn]);
 
-    map.on("draw.delete", () => {
-      setCurrentDrawn(null);
-    });
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || !bounds || !mapLoaded) return;
 
-    // Fit to bounds
-    if (bounds) {
-      map.fitBounds(
-        [[bounds.minLng, bounds.minLat], [bounds.maxLng, bounds.maxLat]],
-        { padding: 40, duration: 0 }
-      );
-    }
-  }, [mapLoaded]);
+    map.fitBounds(
+      [[bounds.minLng, bounds.minLat], [bounds.maxLng, bounds.maxLat]],
+      { padding: 40, duration: 0 }
+    );
+  }, [bounds, mapLoaded]);
 
-  const imageryOnlyStyle = {
-    version: 8,
-    sources: {
-      esri: {
-        type: "raster",
-        tiles: [
-          "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        ],
-        tileSize: 256,
-        attribution: "Esri World Imagery",
-      },
-    },
-    layers: [
-      {
-        id: "esri-world-imagery",
-        type: "raster",
-        source: "esri",
-        minzoom: 0,
-        maxzoom: 22,
-      },
-    ],
+  const resetView = () => {
+    const map = mapRef.current?.getMap();
+    if (!map || !bounds) return;
+
+    map.fitBounds(
+      [[bounds.minLng, bounds.minLat], [bounds.maxLng, bounds.maxLat]],
+      { padding: 40, duration: 300 }
+    );
   };
 
   const saveOutline = async () => {
@@ -256,15 +288,6 @@ export function DarwinRoofOutlineMapEditor({
     } finally {
       setSaving(false);
     }
-  };
-
-  const resetView = () => {
-    const map = mapRef.current?.getMap();
-    if (!map || !bounds) return;
-    map.fitBounds(
-      [[bounds.minLng, bounds.minLat], [bounds.maxLng, bounds.maxLat]],
-      { padding: 40, duration: 300 }
-    );
   };
 
   const initialCenter = bounds
@@ -315,14 +338,20 @@ export function DarwinRoofOutlineMapEditor({
         <Map
           ref={mapRef}
           mapLib={maplibregl}
-          onLoad={() => setMapLoaded(true)}
-          onError={(e: any) => setMapError(e?.error?.message || "Map data not available")}
           initialViewState={{
             ...initialCenter,
             zoom: 20,
           }}
           style={{ width: "100%", height: "100%" }}
           mapStyle={imageryOnlyStyle as any}
+          onLoad={() => {
+            setMapLoaded(true);
+            setMapError(null);
+          }}
+          onError={(e: any) => {
+            const msg = e?.error?.message || e?.message || "Map data not available";
+            setMapError(String(msg));
+          }}
         >
           <Source id="overlays" type="geojson" data={overlayFeatures}>
             <Layer {...footprintFillLayer} />
