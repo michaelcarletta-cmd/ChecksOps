@@ -1103,9 +1103,21 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-0">
               <div>
                 <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-1">Area</h4>
-                <EstimateField label="Footprint Area" value={estimate.footprint_area_sqft} unit="sqft" editKey="footprint_area_sqft" fieldKey="footprint_area_sqft" />
-                <EstimateField label="Roof Area (slope-adjusted)" value={estimate.estimated_roof_area_sqft} unit="sqft" editKey="estimated_roof_area_sqft" fieldKey="estimated_roof_area_sqft" />
+                <EstimateField label="Building Footprint" value={estimate.footprint_area_sqft} unit="sqft" editKey="footprint_area_sqft" fieldKey="footprint_area_sqft" />
+                <EstimateField label="Roof Planar Area" value={estimate.roof_planar_area_sqft} unit="sqft" editKey="roof_planar_area_sqft" fieldKey="roof_planar_area_sqft" />
+                <EstimateField label="Slope-Adjusted Roof Area" value={estimate.estimated_roof_area_sqft} unit="sqft" editKey="estimated_roof_area_sqft" fieldKey="estimated_roof_area_sqft" />
                 <EstimateField label="Squares" value={estimate.squares} editKey="squares" fieldKey="squares" />
+                {estimate.planar_area_gain_sqft != null && estimate.planar_area_gain_sqft > 0 && (
+                  <div className="flex items-center justify-between py-0.5 text-xs">
+                    <span className="text-muted-foreground">Area Gain From Overhang</span>
+                    <span className="font-medium">+{estimate.planar_area_gain_sqft} sqft</span>
+                  </div>
+                )}
+                {estimate.overhang_config && (
+                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                    Overhang: eave {estimate.overhang_config.eave_overhang_ft}ft, rake {estimate.overhang_config.rake_overhang_ft}ft, unknown {estimate.overhang_config.unknown_overhang_ft}ft ({estimate.overhang_config.source})
+                  </div>
+                )}
                 <EstimateField label="Dominant Pitch" value={estimate.dominant_pitch} editKey="dominant_pitch" fieldKey="dominant_pitch" />
               </div>
               <div>
