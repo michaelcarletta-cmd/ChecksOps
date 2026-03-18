@@ -685,160 +685,73 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
         </Alert>
       )}
 
-      {/* Main Layout: sticky navigator + workspace panel + assistant drawer */}
+      {/* Workspace navigation - top of page */}
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        {workspaceSections.map((section) => {
+          const SectionIcon = section.icon;
+          return (
+            <Button
+              key={section.key}
+              size="sm"
+              variant={activeWorkspace === section.key ? "default" : "outline"}
+              onClick={() => setActiveWorkspace(section.key)}
+              aria-pressed={activeWorkspace === section.key}
+              className={cn(
+                "whitespace-nowrap gap-2",
+                activeWorkspace === section.key && "ring-1 ring-primary/30",
+              )}
+            >
+              <SectionIcon className="h-4 w-4" />
+              {section.title}
+            </Button>
+          );
+        })}
+      </div>
+
+      {/* Top context pills */}
+      <div className="flex flex-wrap gap-2 pb-1">
+        {claim?.insurance_company && (
+          <span className="px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs flex items-center gap-1">
+            <Building2 className="h-3 w-3" />
+            {claim.insurance_company}
+          </span>
+        )}
+        {(claim?.policyholder_state || claim?.property_state) && (
+          <span className="px-2.5 py-1 rounded-full bg-muted text-muted-foreground text-xs">
+            State: {claim.policyholder_state || claim.property_state}
+          </span>
+        )}
+        {claim?.loss_type && (
+          <span className="px-2.5 py-1 rounded-full bg-muted text-muted-foreground text-xs">
+            Loss: {claim.loss_type}
+          </span>
+        )}
+      </div>
+
+      <Suspense fallback={<LoadingFallback />}>
+        <DarwinCommandBar
+          claimId={claimId}
+          claim={claim}
+          placeholder="Hey Darwin… run an analysis, write a case study, or ask: What's been paid and what hasn't?"
+        />
+      </Suspense>
+
+      {/* Main Layout: workspace panel + assistant drawer */}
       <div
         className={cn(
           "grid gap-4 items-start",
           showCopilot
             ? copilotExpanded
-              ? "md:grid-cols-[12rem_minmax(0,1fr)] xl:grid-cols-[12rem_minmax(0,1fr)_40rem]"
-              : "md:grid-cols-[12rem_minmax(0,1fr)] xl:grid-cols-[12rem_minmax(0,1fr)_22rem]"
-            : "md:grid-cols-[12rem_minmax(0,1fr)]",
+              ? "xl:grid-cols-[minmax(0,1fr)_40rem]"
+              : "xl:grid-cols-[minmax(0,1fr)_22rem]"
+            : "",
         )}
       >
-        {/* Left rail */}
-        <div className="hidden md:block flex-shrink-0 w-52">
-          <Card className="border-border/50 md:sticky md:top-4">
-            <CardHeader className="py-3">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Zap className="h-4 w-4 text-primary" />
-                Workspaces
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Open one workspace at a time to reduce scrolling.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {workspaceSections.map((section) => {
-                const SectionIcon = section.icon;
-                return (
-                  <Button
-                    key={section.key}
-                    size="sm"
-                    variant={activeWorkspace === section.key ? "default" : "outline"}
-                    onClick={() => setActiveWorkspace(section.key)}
-                    aria-pressed={activeWorkspace === section.key}
-                    className={cn(
-                      "w-full justify-start items-start gap-2 h-auto py-2.5 text-left whitespace-normal",
-                      activeWorkspace === section.key && "ring-1 ring-primary/30",
-                    )}
-                  >
-                    <SectionIcon className="h-4 w-4 shrink-0 mt-0.5" />
-                    <span className="text-xs leading-4 break-words">{section.title}</span>
-                  </Button>
-                );
-              })}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Center column */}
-        <div className="min-w-0 space-y-4">
-          {/* Mobile workspace switcher */}
-          <div className="md:hidden">
-            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-              {workspaceSections.map((section) => {
-                const SectionIcon = section.icon;
-                return (
-                  <Button
-                    key={section.key}
-                    size="sm"
-                    variant={activeWorkspace === section.key ? "default" : "outline"}
-                    onClick={() => setActiveWorkspace(section.key)}
-                    className="whitespace-nowrap gap-2"
-                  >
-                    <SectionIcon className="h-4 w-4" />
-                    {section.title}
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Top context pills */}
-          <div className="flex flex-wrap gap-2 pb-1">
-            {claim?.insurance_company && (
-              <span className="px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs flex items-center gap-1">
-                <Building2 className="h-3 w-3" />
-                {claim.insurance_company}
-              </span>
-            )}
-            {(claim?.policyholder_state || claim?.property_state) && (
-              <span className="px-2.5 py-1 rounded-full bg-muted text-muted-foreground text-xs">
-                State: {claim.policyholder_state || claim.property_state}
-              </span>
-            )}
-            {claim?.loss_type && (
-              <span className="px-2.5 py-1 rounded-full bg-muted text-muted-foreground text-xs">
-                Loss: {claim.loss_type}
-              </span>
-            )}
-          </div>
-
+        {/* Center column - full width workspace */}
+        <div className="min-w-0">
           <Suspense fallback={<LoadingFallback />}>
-            <DarwinCommandBar
-              claimId={claimId}
-              claim={claim}
-              placeholder="Hey Darwin… run an analysis, write a case study, or ask: What's been paid and what hasn't?"
-            />
+            <div className="space-y-4">{renderActiveWorkspace()}</div>
           </Suspense>
-
-          <Suspense fallback={<LoadingFallback />}>
-            <DarwinGeneratedAssets claimId={claimId} />
-          </Suspense>
-
-          <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Swords className="h-4 w-4 text-primary" />
-                Strategic Command
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              <Suspense fallback={<LoadingFallback />}>
-                <ClaimWarRoom claimId={claimId} claim={claim} />
-                <CarrierPlaybookDialog
-                  carrierName={claim?.insurance_company}
-                  stateCode={claim?.property_state}
-                />
-              </Suspense>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Zap className="h-4 w-4 text-primary" />
-                Quick Actions
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              <Suspense fallback={<LoadingFallback />}>
-                <DarwinAutoSummary claimId={claimId} claim={claim} />
-                <DarwinOneClickPackage claimId={claimId} claim={claim} />
-                <ProofOfLossGenerator claimId={claimId} claim={claim} />
-                <ClaimContextPipeline claimId={claimId} claim={claim} />
-              </Suspense>
-            </CardContent>
-          </Card>
-
-          <Card
-            id="darwin-workspace"
-            className="border-primary/20 flex flex-col md:h-[calc(100vh-8.5rem)]"
-          >
-            <CardHeader className="pb-3 border-b bg-gradient-to-r from-primary/5 to-transparent shrink-0">
-              <CardTitle className="text-base flex items-center gap-2">
-                <activeWorkspaceMeta.icon className="h-4 w-4 text-primary" />
-                {activeWorkspaceMeta.title}
-              </CardTitle>
-              <CardDescription>{activeWorkspaceMeta.description}</CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 md:flex-1 md:overflow-y-auto">
-              <Suspense fallback={<LoadingFallback />}>
-                <div className="space-y-4">{renderActiveWorkspace()}</div>
-              </Suspense>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Right drawer */}
