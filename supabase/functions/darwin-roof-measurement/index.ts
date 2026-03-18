@@ -352,6 +352,172 @@ function polygonHash(ring: number[][]): string {
   return Math.abs(h).toString(36);
 }
 
+// ── Phase 3: Roof polygon expansion (overhang-based) ─────────────────
+
+type LocalPoint = { x: number; y: number };
+type EdgeClass = "likely_eave" | "likely_rake" | "unknown";
+
+interface EdgeClassForExpansion {
+  classification: EdgeClass;
+}
+
+interface RoofPolygonResult {
+  roof_polygon: LocalPoint[];
+  original_planar_area_sqft: number;
+  expanded_planar_area_sqft: number;
+  area_gain_sqft: number;
+}
+
+function localPolygonArea(points: LocalPoint[]): number {
+  if (!points || points.length < 3) return 0;
+  let sum = 0;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    sum += a.x * b.y - b.x * a.y;
+  }
+  return Math.abs(sum) / 2;
+}
+
+function localPolygonSignedArea(points: LocalPoint[]): number {
+  if (!points || points.length < 3) return 0;
+  let sum = 0;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    sum += a.x * b.y - b.x * a.y;
+  }
+  return sum / 2;
+}
+
+function vecNormalize(v: LocalPoint): LocalPoint {
+  const mag = Math.hypot(v.x, v.y);
+  if (mag === 0) return { x: 0, y: 0 };
+  return { x: v.x / mag, y: v.y / mag };
+}
+
+function vecSub(a: LocalPoint, b: LocalPoint): LocalPoint {
+  return { x: a.x - b.x, y: a.y - b.y };
+}
+
+function vecAdd(a: LocalPoint, b: LocalPoint): LocalPoint {
+  return { x: a.x + b.x, y: a.y + b.y };
+}
+
+function vecScale(v: LocalPoint, s: number): LocalPoint {
+  return { x: v.x * s, y: v.y * s };
+}
+
+function outwardNormal(start: LocalPoint, end: LocalPoint, isCCW: boolean): LocalPoint {
+  const dir = vecNormalize(vecSub(end, start));
+  const normal = isCCW
+    ? { x: dir.y, y: -dir.x }
+    : { x: -dir.y, y: dir.x };
+  return vecNormalize(normal);
+}
+
+function lineIntersection2D(
+  p1: LocalPoint, p2: LocalPoint, p3: LocalPoint, p4: LocalPoint,
+): LocalPoint | null {
+  const denom = (p1.x - p2.x) * (p3.y - p4.y) - (p1.y - p2.y) * (p3.x - p4.x);
+  if (Math.abs(denom) < 1e-8) return null;
+  const px = ((p1.x * p2.y - p1.y * p2.x) * (p3.x - p4.x) - (p1.x - p2.x) * (p3.x * p4.y - p3.y * p4.x)) / denom;
+  const py = ((p1.x * p2.y - p1.y * p2.x) * (p3.y - p4.y) - (p1.y - p2.y) * (p3.x * p4.y - p3.y * p4.x)) / denom;
+  return { x: px, y: py };
+}
+
+function getEdgeOffsetFt(classification: EdgeClass, config: OverhangConfig): number {
+  if (classification === "likely_eave") return config.eave_overhang_ft;
+  if (classification === "likely_rake") return config.rake_overhang_ft;
+  return config.unknown_overhang_ft;
+}
+
+function buildRoofPolygonFromFootprint(
+  footprint: LocalPoint[],
+  edgeClassifications: EdgeClassForExpansion[],
+  overhangConfig: OverhangConfig,
+): RoofPolygonResult {
+  if (!footprint || footprint.length < 3) {
+    return { roof_polygon: footprint || [], original_planar_area_sqft: 0, expanded_planar_area_sqft: 0, area_gain_sqft: 0 };
+  }
+
+  const originalPlanarArea = localPolygonArea(footprint);
+  const isCCW = localPolygonSignedArea(footprint) > 0;
+
+  if (!edgeClassifications || edgeClassifications.length !== footprint.length) {
+    return { roof_polygon: footprint, original_planar_area_sqft: originalPlanarArea, expanded_planar_area_sqft: originalPlanarArea, area_gain_sqft: 0 };
+  }
+
+  const offsetLines: Array<{ a: LocalPoint; b: LocalPoint }> = [];
+  for (let i = 0; i < footprint.length; i++) {
+    const start = footprint[i];
+    const end = footprint[(i + 1) % footprint.length];
+    const cls = edgeClassifications[i]?.classification ?? "unknown";
+    const offsetFt = getEdgeOffsetFt(cls, overhangConfig);
+    const normal = outwardNormal(start, end, isCCW);
+    const shift = vecScale(normal, offsetFt);
+    offsetLines.push({ a: vecAdd(start, shift), b: vecAdd(end, shift) });
+  }
+
+  const expanded: LocalPoint[] = [];
+  for (let i = 0; i < footprint.length; i++) {
+    const prev = offsetLines[(i - 1 + offsetLines.length) % offsetLines.length];
+    const curr = offsetLines[i];
+    const intersection = lineIntersection2D(prev.a, prev.b, curr.a, curr.b);
+    expanded.push(intersection ?? curr.a);
+  }
+
+  const expandedPlanarArea = localPolygonArea(expanded);
+  return {
+    roof_polygon: expanded,
+    original_planar_area_sqft: originalPlanarArea,
+    expanded_planar_area_sqft: expandedPlanarArea,
+    area_gain_sqft: Math.max(0, expandedPlanarArea - originalPlanarArea),
+  };
+}
+
+/** Convert a lng/lat polygon ring to local XY feet coordinates */
+function lngLatRingToLocalXY(ring: number[][], originLat: number, originLng: number): LocalPoint[] {
+  const feetPerDegreeLat = 364000;
+  const feetPerDegreeLng = 364000 * Math.cos(toRad(originLat));
+  const pts = ring[ring.length - 1][0] === ring[0][0] && ring[ring.length - 1][1] === ring[0][1]
+    ? ring.slice(0, -1) : ring;
+  return pts.map(p => ({ x: (p[0] - originLng) * feetPerDegreeLng, y: (p[1] - originLat) * feetPerDegreeLat }));
+}
+
+type LngLat = { lng: number; lat: number };
+
+function localXYToLngLat(pt: LocalPoint, origin: LngLat): LngLat {
+  const feetPerDegreeLat = 364000;
+  const feetPerDegreeLng = 364000 * Math.cos((origin.lat * Math.PI) / 180);
+  return { lng: origin.lng + pt.x / feetPerDegreeLng, lat: origin.lat + pt.y / feetPerDegreeLat };
+}
+
+function buildPolygonGeoJson(localPoints: LocalPoint[], origin: LngLat): { type: "Polygon"; coordinates: number[][][] } | null {
+  if (!localPoints || localPoints.length < 3) return null;
+  const ring = localPoints.map((pt) => {
+    const ll = localXYToLngLat(pt, origin);
+    return [ll.lng, ll.lat];
+  });
+  ring.push(ring[0]);
+  return { type: "Polygon", coordinates: [ring] };
+}
+
+function getValidationDerivedAreaCorrection(args: {
+  inferredRoofForm: string | null;
+  geometrySource: string | null;
+  geometryQualityScore: number | null;
+  pitchBand: string | null;
+}): number {
+  const { inferredRoofForm, geometrySource, geometryQualityScore, pitchBand } = args;
+  let factor = 1.0;
+  if (geometrySource === "NJGIN" && (geometryQualityScore ?? 0) >= 70) factor += 0.02;
+  if (inferredRoofForm === "gable" && pitchBand?.toLowerCase().includes("steep")) factor += 0.03;
+  if ((geometryQualityScore ?? 0) < 40) factor -= 0.03;
+  return factor;
+}
+
+
 // ── Phase 2B: Edge classification ────────────────────────────────────
 
 interface AxisAnalysis {
