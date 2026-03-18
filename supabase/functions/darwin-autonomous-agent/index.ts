@@ -35,7 +35,8 @@ Deno.serve(async (req) => {
           policyholder_name,
           status,
           is_closed,
-          insurance_company
+          insurance_company,
+          created_at
         )
       `)
       .eq('is_enabled', true)
@@ -74,6 +75,19 @@ Deno.serve(async (req) => {
       // Skip closed/settled claims entirely
       if (claim.is_closed || CLOSED_STATUSES.includes(claim.status)) {
         console.log(`Skipping claim ${claim.claim_number} - status: ${claim.status} (closed/settled)`);
+        continue;
+      }
+
+      // Calculate claim age in days
+      const claimCreatedAt = claim.created_at ? new Date(claim.created_at) : null;
+      const claimAgeDays = claimCreatedAt
+        ? (Date.now() - claimCreatedAt.getTime()) / (1000 * 60 * 60 * 24)
+        : Infinity;
+      const NEW_CLAIM_GRACE_PERIOD_DAYS = 7;
+      const isNewClaim = claimAgeDays < NEW_CLAIM_GRACE_PERIOD_DAYS;
+
+      if (isNewClaim) {
+        console.log(`Skipping claim ${claim.claim_number} - created ${Math.round(claimAgeDays)}d ago (grace period: ${NEW_CLAIM_GRACE_PERIOD_DAYS}d)`);
         continue;
       }
 
@@ -847,6 +861,21 @@ async function processIdleClaimUpdates(
   const idleThresholdDays = 14; // 2 weeks
   const idleThreshold = new Date();
   idleThreshold.setDate(idleThreshold.getDate() - idleThresholdDays);
+
+  // Safety: never send idle updates for claims younger than the idle threshold
+  const { data: claimAge } = await supabase
+    .from('claims')
+    .select('created_at')
+    .eq('id', claim.id)
+    .single();
+
+  if (claimAge?.created_at) {
+    const claimCreated = new Date(claimAge.created_at);
+    if (claimCreated > idleThreshold) {
+      console.log(`Claim ${claim.claim_number}: too new for idle updates (created ${claimCreated.toISOString()})`);
+      return;
+    }
+  }
   
   // Check for any recent activity
   const { data: recentActivity } = await supabase
