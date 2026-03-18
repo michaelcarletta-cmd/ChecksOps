@@ -113,6 +113,18 @@ export default function Page() {
           </section>
 
           <section style={card}>
+            <h2 style={h2}>Quantity Logic</h2>
+            <div>Visible affected area: {result.quantitySummary?.visibleAreaSf ?? 0} SF</div>
+            <div>Working scoped area: {result.quantitySummary?.workingScopeSf ?? 0} SF</div>
+            <div>
+              Final measured area:{" "}
+              {result.quantitySummary?.finalMeasuredSf == null
+                ? "Pending field measurement"
+                : `${result.quantitySummary.finalMeasuredSf} SF`}
+            </div>
+          </section>
+
+          <section style={card}>
             <h2 style={h2}>Warnings</h2>
             {result.warnings?.length ? (
               <ul>
