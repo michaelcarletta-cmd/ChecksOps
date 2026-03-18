@@ -29,8 +29,8 @@ const BOTTOM_ZONE_LIMIT = 0.75;
 
 // Endorsement placement (anchored to image/check bounds)
 const ENDORSEMENT_TOP_PCT = 0.10;
-const ENDORSEMENT_LEFT_PCT = 0.18;
-const ENDORSEMENT_WIDTH_PCT = 0.55;
+const ENDORSEMENT_LEFT_PCT = 0.38;
+const ENDORSEMENT_WIDTH_PCT = 0.22;
 
 // Rasterizing very large images can exceed edge runtime memory.
 // For oversized checks we save a composited SVG fallback directly.
