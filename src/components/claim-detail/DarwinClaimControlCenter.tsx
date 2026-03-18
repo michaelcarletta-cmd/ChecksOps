@@ -5,9 +5,7 @@ import { ClaimCashFlowCard } from "@/components/loss-draft/ClaimCashFlowCard";
 import { ClaimAssigned } from "@/components/claim-detail/ClaimAssigned";
 import { ClaimActivity } from "@/components/claim-detail/ClaimActivity";
 import { ClaimTasks } from "@/components/claim-detail/ClaimTasks";
-import { ClaimPhotos } from "@/components/claim-detail/ClaimPhotos";
-import { ClaimFiles } from "@/components/claim-detail/ClaimFiles";
-import { ClaimAccounting } from "@/components/claim-detail/ClaimAccounting";
+import { ClaimInspections } from "@/components/claim-detail/ClaimInspections";
 
 interface DarwinClaimControlCenterProps {
   claimId: string;
@@ -28,9 +26,7 @@ const controlTabs: ControlTab[] = [
   { value: "assigned", label: "Assigned", staffOnly: true },
   { value: "activity", label: "Notes & Activity" },
   { value: "tasks", label: "Tasks", staffOnly: true },
-  { value: "photos", label: "Photos" },
-  { value: "files", label: "Files" },
-  { value: "accounting", label: "Accounting" },
+  { value: "inspections", label: "Inspections" },
 ];
 
 export function DarwinClaimControlCenter({
@@ -59,13 +55,6 @@ export function DarwinClaimControlCenter({
 
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className="text-base font-semibold">Claim Control Center</h3>
-        <p className="text-sm text-muted-foreground">
-          Control your core claim tabs directly inside Darwin.
-        </p>
-      </div>
-
       <Tabs value={activeControlTab} onValueChange={setActiveControlTab} className="w-full">
         <TabsList className="flex flex-row w-full bg-muted p-2 gap-1 h-auto rounded-md overflow-x-auto">
           {visibleTabs.map((tab) => (
@@ -100,16 +89,8 @@ export function DarwinClaimControlCenter({
           </TabsContent>
         )}
 
-        <TabsContent value="photos" className="mt-6">
-          <ClaimPhotos claimId={claimId} claim={claim} isPortalUser={false} />
-        </TabsContent>
-
-        <TabsContent value="files" className="mt-6">
-          <ClaimFiles claimId={claimId} claim={claim} isStaffOrAdmin={isStaffOrAdmin} />
-        </TabsContent>
-
-        <TabsContent value="accounting" className="mt-6">
-          <ClaimAccounting claim={claim} userRole={userRole} />
+        <TabsContent value="inspections" className="mt-6">
+          <ClaimInspections claimId={claimId} />
         </TabsContent>
       </Tabs>
     </div>
