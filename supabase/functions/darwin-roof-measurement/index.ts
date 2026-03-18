@@ -2622,6 +2622,47 @@ function deriveRoofEstimate(
     squares = roundTo(roofArea / 100, 1);
   }
 
+  // ── Imagery Analysis, Suggested Outline, Mass Decomposition, Calibration ──
+  const origin: LngLat = { lng, lat };
+  const selectedRing: number[][] = selectedCandidate?.polygon ?? [];
+  const selectedLocalXY: LocalPoint[] = selectedRing.length >= 3
+    ? lngLatRingToLocalXY(selectedRing, lat, lng)
+    : [];
+
+  const imageryAnalysis = buildMultiImageAnalysis({
+    visionRoofForm: visionResult?.roof_form?.value ?? null,
+    visionRoofFormConfidence: visionResult?.roof_form?.confidence ?? null,
+    visibleFacetCount: visionResult?.visible_facets?.value ?? null,
+    visibleFacetConfidence: visionResult?.visible_facets?.confidence ?? null,
+  });
+
+  const suggestedOutline = buildSuggestedRoofOutline({
+    selectedFootprintLocalXY: selectedLocalXY,
+    visibleFacetCount: imageryAnalysis.visible_facet_count,
+    complexity: imageryAnalysis.complexity,
+    overhangEaveFt: overhang.eave_overhang_ft,
+    overhangRakeFt: overhang.rake_overhang_ft,
+    origin,
+  });
+
+  const simpleMasses = decomposeSimpleMasses({
+    footprintLocalXY: selectedLocalXY,
+    analysis: imageryAnalysis,
+  });
+
+  const calibrationAdjustmentFactor = getCalibrationAdjustmentFactor({
+    inferredRoofForm: roofFormInference?.inferred_roof_form ?? null,
+    complexity: imageryAnalysis.complexity,
+    geometryQualityScore: selectedCandidate?.geometry_quality_score ?? null,
+    source: selectedCandidate?.source ?? null,
+  });
+
+  // Apply calibration factor to area if it differs from 1.0
+  if (calibrationAdjustmentFactor !== 1.0 && roofArea > 0) {
+    roofArea = roundTo(roofArea * calibrationAdjustmentFactor, 0);
+    squares = roundTo(roofArea / 100, 1);
+  }
+
   // ── Shape Conflict Detection ──
   function isSimpleGeometryShape(vertexCount: number | null, inferredForm: string | null): boolean {
     const v = vertexCount ?? 0;
