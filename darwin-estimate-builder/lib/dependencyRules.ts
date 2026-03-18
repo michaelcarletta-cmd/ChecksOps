@@ -61,13 +61,16 @@ export function buildBaseScopeFromObservations(args: {
 
     const quantity = deriveQuantity(obs, template.defaultUnit, args.context);
 
-    const isDrywallTemplate =
+    const isDrywallObservation =
       obs.category === "interior" &&
-      obs.material.toLowerCase().includes("drywall") &&
-      (template.code === "DRYWALL" || template.code === "DRYWALLREPL");
+      obs.material.toLowerCase().includes("drywall");
 
-    // Let the interior decision block below handle drywall exclusively
-    if (!isDrywallTemplate) {
+    const isDrywallTemplate =
+      template.code === "DRYWALL" || template.code === "DRYWALLREPL";
+
+    // Skip the generic template push for drywall.
+    // Let the interior decision block below choose repair OR replace.
+    if (!(isDrywallObservation && isDrywallTemplate)) {
       items.push(
         makeLineItem({
           code: template.code,
@@ -87,11 +90,13 @@ export function buildBaseScopeFromObservations(args: {
     }
 
     if (obs.category === "interior") {
-      const hasDrywallItem = items.some(
-        (i) => i.code === "DRYWALL" || i.code === "DRYWALLREPL"
+      const hasDrywallItemForObservation = items.some(
+        (i) =>
+          i.sourceObservationIndexes.includes(index) &&
+          (i.code === "DRYWALL" || i.code === "DRYWALLREPL")
       );
 
-      if (!hasDrywallItem) {
+      if (!hasDrywallItemForObservation && obs.material.toLowerCase().includes("drywall")) {
         const drywallReplace =
           obs.repairability === "replace" ||
           obs.damageMechanism === "rot" ||
@@ -108,23 +113,33 @@ export function buildBaseScopeFromObservations(args: {
             reasoning: `${drywallReplace ? "Replacement" : "Repair"} selected for interior finish damage at ${obs.component}.`,
             sourceObservationIndexes: [index],
             isManualReviewRequired: obs.confidence < 0.6,
-            isProvisionalQuantity: !!obs.provisionalQuantity
+            isProvisionalQuantity: !!obs.provisionalQuantity,
+            visibleQuantity: obs.visibleQuantity ?? obs.recommendedQuantity ?? null,
+            visibleQuantityUnit: obs.visibleQuantityUnit ?? obs.unit ?? null,
+            finalMeasuredQuantity: obs.finalMeasuredQuantity ?? null,
+            finalMeasuredQuantityUnit: obs.finalMeasuredQuantityUnit ?? null
           })
         );
       }
 
-      items.push(
-        makeLineItem({
-          code: "PAINT",
-          description: "Seal and paint affected area",
-          quantity: Math.max(quantity, 1),
-          unit: "SF",
-          reasoning: `Paint added after interior finish work at ${obs.component}.`,
-          sourceObservationIndexes: [index],
-          isDependency: true,
-          isProvisionalQuantity: !!obs.provisionalQuantity
-        })
-      );
+      if (!items.some((i) => i.code === "PAINT" && i.sourceObservationIndexes.includes(index))) {
+        items.push(
+          makeLineItem({
+            code: "PAINT",
+            description: "Seal and paint affected area",
+            quantity: Math.max(quantity, 1),
+            unit: "SF",
+            reasoning: `Paint added after interior finish work at ${obs.component}.`,
+            sourceObservationIndexes: [index],
+            isDependency: true,
+            isProvisionalQuantity: !!obs.provisionalQuantity,
+            visibleQuantity: obs.visibleQuantity ?? obs.recommendedQuantity ?? null,
+            visibleQuantityUnit: obs.visibleQuantityUnit ?? obs.unit ?? null,
+            finalMeasuredQuantity: obs.finalMeasuredQuantity ?? null,
+            finalMeasuredQuantityUnit: obs.finalMeasuredQuantityUnit ?? null
+          })
+        );
+      }
 
       // Interior access items (baseboard, shelving, fixtures, floor protection, debris)
       const accessItems = addInteriorAccessItems({
