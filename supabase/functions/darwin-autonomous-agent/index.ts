@@ -78,6 +78,19 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      // Calculate claim age in days
+      const claimCreatedAt = claim.created_at ? new Date(claim.created_at) : null;
+      const claimAgeDays = claimCreatedAt
+        ? (Date.now() - claimCreatedAt.getTime()) / (1000 * 60 * 60 * 24)
+        : Infinity;
+      const NEW_CLAIM_GRACE_PERIOD_DAYS = 7;
+      const isNewClaim = claimAgeDays < NEW_CLAIM_GRACE_PERIOD_DAYS;
+
+      if (isNewClaim) {
+        console.log(`Skipping claim ${claim.claim_number} - created ${Math.round(claimAgeDays)}d ago (grace period: ${NEW_CLAIM_GRACE_PERIOD_DAYS}d)`);
+        continue;
+      }
+
       try {
         console.log(`Processing claim ${claim.claim_number}...`);
 
