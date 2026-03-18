@@ -1107,10 +1107,9 @@ function getReadyForAnalysisDecision(params: {
   if (params.textQualityStatus === "unusable") {
     return { ready: false, reason: "text_quality_unusable" };
   }
-  if (params.textQualityStatus === "poor") {
-    return { ready: false, reason: "text_quality_poor" };
-  }
-  return { ready: true, reason: "ready" };
+  // "poor" quality files often still have enough text for meaningful intelligence.
+  // Only block on "unusable"; let the intelligence extractor judge content quality.
+  return { ready: true, reason: params.textQualityStatus === "poor" ? "ready_poor_quality" : "ready" };
 }
 
 function hasMeaningfulIntelligencePayload(intel: any): boolean {
