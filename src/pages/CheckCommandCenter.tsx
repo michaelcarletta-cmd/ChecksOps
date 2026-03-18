@@ -1528,17 +1528,21 @@ function CheckDetailPanel({
                                 <p>Amount: $${check.amount?.toLocaleString("en-US", { minimumFractionDigits: 2 }) ?? "N/A"} · Printed: ${new Date().toLocaleDateString()}</p>
                                 <p>All endorsements verified ✓</p>
                               </div>
-                              <div class="check-section">
-                                <p class="label">Front</p>
-                                <div class="check-print-wrap">
-                                  <img class="check-front-image" src="${frontImageUrl}" width="${finalFrontWidth}" height="${finalFrontHeight}" alt="Check front" />
+                              <div class="check-front-page">
+                                <div class="check-section">
+                                  <p class="label">Front</p>
+                                  <div class="check-print-wrap">
+                                    <img class="check-front-image" src="${frontImageUrl}" width="${finalFrontWidth}" height="${finalFrontHeight}" alt="Check front" />
+                                  </div>
                                 </div>
                               </div>
-                              <div class="check-section">
-                                <p class="label">Back (Endorsed)</p>
-                                <div class="check-print-wrap">
-                                  <img class="check-back-image" src="${backImageUrl}" width="${finalBackWidth}" height="${finalBackHeight}" alt="Check back" />
-                                  ${endorsementOverlayHtml}
+                              <div class="check-back-page">
+                                <div class="check-section">
+                                  <p class="label">Back (Endorsed)</p>
+                                  <div class="check-print-wrap">
+                                    <img class="check-back-image" src="${backImageUrl}" width="${finalBackWidth}" height="${finalBackHeight}" alt="Check back" />
+                                    ${endorsementOverlayHtml}
+                                  </div>
                                 </div>
                               </div>
                             </body>
