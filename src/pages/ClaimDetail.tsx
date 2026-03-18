@@ -60,11 +60,17 @@ const ClaimDetail = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [notifyDialogOpen, setNotifyDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(
+    userRole === "admin" || userRole === "staff" ? "darwin" : "overview",
+  );
 
   // Check if user is a portal user (client, contractor)
   const isPortalUser = userRole === "client" || userRole === "contractor";
   const isStaffOrAdmin = userRole === "admin" || userRole === "staff";
+
+  useEffect(() => {
+    setActiveTab(isStaffOrAdmin ? "darwin" : "overview");
+  }, [id, isStaffOrAdmin]);
 
   // Fetch claim with React Query for caching
   const { data: claim, isLoading, error: claimError } = useQuery({
@@ -366,6 +372,12 @@ const ClaimDetail = () => {
         ) : (
           /* Desktop: Horizontal tabs */
           <TabsList className="flex flex-row w-full bg-muted p-2 gap-1 h-auto rounded-md">
+            {isStaffOrAdmin && (
+              <TabsTrigger value="darwin" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
+                <Brain className="h-4 w-4 mr-1" />
+                Darwin
+              </TabsTrigger>
+            )}
             <TabsTrigger value="overview" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
               Overview
             </TabsTrigger>
@@ -397,12 +409,6 @@ const ClaimDetail = () => {
             {isStaffOrAdmin && (
               <TabsTrigger value="access" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
                 Portal Access
-              </TabsTrigger>
-            )}
-            {isStaffOrAdmin && (
-              <TabsTrigger value="darwin" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-                <Brain className="h-4 w-4 mr-1" />
-                Darwin
               </TabsTrigger>
             )}
           </TabsList>
@@ -460,7 +466,13 @@ const ClaimDetail = () => {
         {isStaffOrAdmin && (
           <TabsContent value="darwin" className="mt-6">
             <Suspense fallback={<DarwinLoadingFallback />}>
-              <DarwinTab claimId={claim.id} claim={claim} />
+              <DarwinTab
+                claimId={claim.id}
+                claim={claim}
+                userRole={userRole}
+                isStaffOrAdmin={isStaffOrAdmin}
+                onClaimUpdated={handleClaimUpdated}
+              />
             </Suspense>
           </TabsContent>
         )}
