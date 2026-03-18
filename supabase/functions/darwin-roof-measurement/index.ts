@@ -3114,7 +3114,7 @@ Deno.serve(async (req) => {
     let visionSuppressions: SuppressionRecord[] = [];
 
     // Try zoom levels in order: 20 (highest detail), 19, 18
-    let usedTileGrid: typeof tileGrid | null = null;
+    let usedTileGrid: { base64: string; row: number; col: number; tileX: number; tileY: number }[] | null = null;
     for (const zoom of [20, 19, 18]) {
       const gridSize = zoom >= 20 ? 3 : zoom >= 19 ? 3 : 1;
       const tileGrid = await fetchSatelliteTileGrid(geo.lat, geo.lng, gridSize, zoom);
