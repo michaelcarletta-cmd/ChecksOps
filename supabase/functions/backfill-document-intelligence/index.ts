@@ -394,37 +394,73 @@ async function processFile(
         fileId: file.id,
         claimId: file.claim_id,
         fileName: file.file_name,
-        force: true,
+        forceIntelligence: true,
       }),
     });
 
     const data = await res.json().catch(() => ({}));
-    const ok = res.ok && data.success !== false;
+    const appError = typeof data?.error === "string" ? data.error : null;
+    const processingError = typeof data?.processing_error === "string" ? data.processing_error : null;
+    const skippedReason =
+      data?.intelligence && typeof data.intelligence.skipped_reason === "string"
+        ? data.intelligence.skipped_reason
+        : null;
 
-    if (!ok) {
-      // Mark needs_reprocessing on failure
+    if (!res.ok) {
+      const reason = appError || processingError || `HTTP ${res.status}`;
       await supabase
         .from("claim_files")
-        .update({ needs_reprocessing: true, processing_error: data.error || `HTTP ${res.status}` })
+        .update({ needs_reprocessing: true, processing_error: reason })
         .eq("id", file.id);
 
       return {
         ...baseResult,
-        reason: data.error || `HTTP ${res.status}`,
+        reason,
       };
     }
 
-    // Check if intelligence was actually written
+    if (data?.success === false) {
+      const reason = appError || processingError || `HTTP ${res.status}`;
+      const shouldSkip =
+        reason === "No readable text extracted from file" ||
+        reason === "Extracted text detected as garbage/binary data" ||
+        skippedReason?.startsWith("not_ready_for_analysis:") === true;
+
+      return {
+        ...baseResult,
+        skipped: shouldSkip,
+        reason,
+      };
+    }
+
     const { data: intelRow } = await supabase
       .from("claim_document_intelligence")
       .select("id")
       .eq("claim_file_id", file.id)
       .maybeSingle();
 
+    const { data: queueRow } = intelRow
+      ? { data: null }
+      : await supabase
+          .from("document_intelligence_queue")
+          .select("id, status")
+          .eq("file_id", file.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+    const countedAsSuccess = !!intelRow || !!queueRow;
+    const shouldSkip = !countedAsSuccess && skippedReason?.startsWith("not_ready_for_analysis:") === true;
+
     return {
       ...baseResult,
-      intelligence_written: !!intelRow,
-      reason: intelRow ? "intelligence_extracted" : "processed_but_no_intelligence_row",
+      intelligence_written: countedAsSuccess,
+      skipped: shouldSkip,
+      reason: intelRow
+        ? "intelligence_extracted"
+        : queueRow
+        ? `queued_for_async_intelligence:${queueRow.status}`
+        : skippedReason || "processed_but_no_intelligence_row",
     };
   } catch (err) {
     const isTimeout = err instanceof DOMException && err.name === "AbortError";
