@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, lazy, Suspense } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClaimOverview } from "@/components/claim-detail/ClaimOverview";
 import { ClaimCashFlowCard } from "@/components/loss-draft/ClaimCashFlowCard";
@@ -6,6 +6,10 @@ import { ClaimAssigned } from "@/components/claim-detail/ClaimAssigned";
 import { ClaimActivity } from "@/components/claim-detail/ClaimActivity";
 import { ClaimTasks } from "@/components/claim-detail/ClaimTasks";
 import { ClaimInspections } from "@/components/claim-detail/ClaimInspections";
+import { Loader2 } from "lucide-react";
+
+const ClaimExternalSync = lazy(() => import("@/components/claim-detail/ClaimExternalSync").then(m => ({ default: m.ClaimExternalSync })));
+const ClaimAccessManagement = lazy(() => import("@/components/claim-detail/ClaimAccessManagement").then(m => ({ default: m.ClaimAccessManagement })));
 
 interface DarwinClaimControlCenterProps {
   claimId: string;
@@ -27,6 +31,7 @@ const controlTabs: ControlTab[] = [
   { value: "activity", label: "Notes & Activity" },
   { value: "tasks", label: "Tasks", staffOnly: true },
   { value: "inspections", label: "Inspections" },
+  { value: "access", label: "Portal Access", staffOnly: true },
 ];
 
 export function DarwinClaimControlCenter({
@@ -92,6 +97,15 @@ export function DarwinClaimControlCenter({
         <TabsContent value="inspections" className="mt-6">
           <ClaimInspections claimId={claimId} />
         </TabsContent>
+
+        {isStaffOrAdmin && (
+          <TabsContent value="access" className="mt-6 space-y-6">
+            <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-primary mr-2" /><span className="text-muted-foreground">Loading...</span></div>}>
+              <ClaimExternalSync claimId={claimId} />
+              <ClaimAccessManagement claimId={claimId} />
+            </Suspense>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
