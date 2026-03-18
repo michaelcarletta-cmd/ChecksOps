@@ -2986,6 +2986,18 @@ function deriveRoofEstimate(
     provisional_complexity_uplift_used,
     shape_conflicted_roof_area_sqft,
     shape_conflicted_squares,
+    // New: suggested outline, mass, imagery, calibration
+    suggested_roof_polygon_geojson: suggestedOutline.polygon_geojson,
+    suggested_roof_polygon_source: suggestedOutline.source,
+    suggested_roof_polygon_confidence: suggestedOutline.confidence,
+    suggested_roof_outline_notes: suggestedOutline.notes,
+    roof_mass_count: simpleMasses.length > 0 ? simpleMasses.length : null,
+    roof_mass_polygons: simpleMasses.length > 0 ? simpleMasses.map(m => ({
+      id: m.id, label: m.label, confidence: m.confidence,
+      polygon_geojson: buildPolygonGeoJson(m.polygon, origin),
+    })) : null,
+    imagery_analysis: imageryAnalysis,
+    calibration_adjustment_factor: calibrationAdjustmentFactor,
   };
 }
 
