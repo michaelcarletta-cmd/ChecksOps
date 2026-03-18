@@ -11783,6 +11783,42 @@ export type Database = {
         }
         Relationships: []
       }
+      storage_backup_log: {
+        Row: {
+          backup_bucket: string
+          backup_path: string
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          source_bucket: string
+          source_path: string
+          status: string
+        }
+        Insert: {
+          backup_bucket: string
+          backup_path: string
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          source_bucket: string
+          source_path: string
+          status?: string
+        }
+        Update: {
+          backup_bucket?: string
+          backup_path?: string
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          source_bucket?: string
+          source_path?: string
+          status?: string
+        }
+        Relationships: []
+      }
       strategic_weight_versions: {
         Row: {
           carrier_risk_weight: number
