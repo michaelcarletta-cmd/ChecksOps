@@ -17,7 +17,7 @@ import { logAudit } from "@/hooks/useAuditLog";
 import { DarwinRoofValidation } from "./DarwinRoofValidation";
 import { RoofConfirmationDialog, type ConfirmationLevel, type ConfirmationBasis } from "./RoofConfirmationDialog";
 import { DarwinRoofAreaDebug } from "./DarwinRoofAreaDebug";
-import { DarwinRoofOutlineEditor } from "./DarwinRoofOutlineEditor";
+import { DarwinRoofOutlineMapEditor } from "./DarwinRoofOutlineMapEditor";
 
 type DerivationSource = "geometry" | "ai_estimated" | "user_override";
 type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative" | "unknown_insufficient_geometry";
@@ -1196,14 +1196,21 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
             {(estimate.roof_shape_conflict ||
               (estimate.imagery_source || "").toLowerCase().includes("ai vision") ||
               (estimate.geometry_quality_score ?? 0) < 60) && (
-              <DarwinRoofOutlineEditor
+              <DarwinRoofOutlineMapEditor
                 roofMeasurementId={estimate.id}
-                geocodedLat={estimate.geocoded_lat ?? 0}
-                geocodedLng={estimate.geocoded_lng ?? 0}
                 suggestedPolygon={estimate.suggested_roof_polygon_geojson}
-                footprintPolygon={estimate.footprint_polygon}
+                footprintPolygon={
+                  estimate.footprint_polygon ??
+                  estimate.candidate_footprints?.[estimate.selected_candidate_index ?? 0]?.polygon ??
+                  null
+                }
                 roofPolygon={estimate.roof_polygon_geojson}
                 userDrawnPolygon={estimate.user_drawn_roof_polygon_geojson}
+                selectedFootprintSource={
+                  estimate.imagery_source ??
+                  estimate.candidate_footprints?.[estimate.selected_candidate_index ?? 0]?.source ??
+                  null
+                }
                 onSaved={() => runEstimate(estimate.selected_candidate_index ?? undefined)}
               />
             )}
