@@ -24,8 +24,7 @@ export function buildFullScope(args: {
   const roofPerimeterLf = estimateRoofPerimeterLf(roofApproxSf);
   const ridgeLf = estimateRidgeLf(roofApproxSf);
 
-  const sidingSf = sumByCategoryUnit(observations, "siding", "SF");
-  const interiorSf = sumByCategoryUnit(observations, "interior", "SF");
+  const sidingSfFromScopeSeed = sumByCategoryUnit(observations, "siding", "SF");
   const gutterLf = sumByCategoryUnit(observations, "gutter", "LF");
   const windowCount = observations.filter((o) => o.category === "window").length;
 
@@ -45,6 +44,41 @@ export function buildFullScope(args: {
   );
 
   const grossTotal = round2(lineItems.reduce((sum, item) => sum + item.total, 0));
+
+  const interiorSf = round2(
+    lineItems
+      .filter((i) => ["DRYWALL", "DRYWALLREPL"].includes(i.code) && i.unit === "SF")
+      .reduce((sum, i) => sum + i.quantity, 0)
+  );
+
+  const sidingSf = round2(
+    Math.max(
+      sidingSfFromScopeSeed,
+      lineItems
+        .filter((i) => i.unit === "SF" && ["SIDVINYL", "SIDVINYLREP", "SIDFIBER"].includes(i.code))
+        .reduce((sum, i) => sum + i.quantity, 0)
+    )
+  );
+
+  const visibleAreaSf = round2(
+    observations
+      .filter((o) => (o.visibleQuantityUnit ?? o.unit) === "SF")
+      .reduce((sum, o) => sum + (o.visibleQuantity ?? o.recommendedQuantity ?? 0), 0)
+  );
+
+  const workingScopeSf = round2(
+    lineItems
+      .filter((i) => i.unit === "SF")
+      .reduce((sum, i) => sum + i.quantity, 0)
+  );
+
+  const measuredItems = lineItems.filter(
+    (i) => i.finalMeasuredQuantity != null && i.finalMeasuredQuantityUnit === "SF"
+  );
+  const finalMeasuredSf =
+    measuredItems.length > 0
+      ? round2(measuredItems.reduce((sum, i) => sum + (i.finalMeasuredQuantity ?? 0), 0))
+      : null;
 
   const assumptions = [
     "Xactimate-style line item codes are internal placeholders and should be mapped to your exact approved price list/code set.",
@@ -77,6 +111,11 @@ export function buildFullScope(args: {
       gutterLf,
       windowCount,
       grossTotal
+    },
+    quantitySummary: {
+      visibleAreaSf,
+      workingScopeSf,
+      finalMeasuredSf
     },
     contextUsed: context
   };
