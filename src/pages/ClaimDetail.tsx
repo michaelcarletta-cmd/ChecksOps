@@ -361,23 +361,26 @@ const ClaimDetail = () => {
         </>
       )}
 
-      <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="w-full">
-        {/* Mobile: Dropdown selector */}
-        {isMobile ? (
-          <ClaimTabsDropdown 
-            activeTab={activeTab} 
-            onTabChange={setActiveTab} 
-            isStaffOrAdmin={isStaffOrAdmin} 
+      {isStaffOrAdmin ? (
+        /* Staff/Admin: Render Darwin directly, no tab bar needed */
+        <Suspense fallback={<DarwinLoadingFallback />}>
+          <DarwinTab
+            claimId={claim.id}
+            claim={claim}
+            userRole={userRole}
+            isStaffOrAdmin={isStaffOrAdmin}
+            onClaimUpdated={handleClaimUpdated}
           />
-        ) : (
-          /* Desktop: Horizontal tabs - Staff/Admin only see Darwin (everything else is inside Control Center) */
-          isStaffOrAdmin ? (
-            <TabsList className="flex flex-row w-full bg-muted p-2 gap-1 h-auto rounded-md">
-              <TabsTrigger value="darwin" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
-                <Brain className="h-4 w-4 mr-1" />
-                Darwin
-              </TabsTrigger>
-            </TabsList>
+        </Suspense>
+      ) : (
+        /* Portal users: Keep existing tab navigation */
+        <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="w-full">
+          {isMobile ? (
+            <ClaimTabsDropdown 
+              activeTab={activeTab} 
+              onTabChange={setActiveTab} 
+              isStaffOrAdmin={isStaffOrAdmin} 
+            />
           ) : (
             <TabsList className="flex flex-row w-full bg-muted p-2 gap-1 h-auto rounded-md">
               <TabsTrigger value="overview" className="w-auto justify-start text-base font-medium px-4 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm">
@@ -399,56 +402,37 @@ const ClaimDetail = () => {
                 Accounting
               </TabsTrigger>
             </TabsList>
-          )
-        )}
+          )}
 
-        {/* Portal user tab contents - only rendered for non-staff */}
-        {!isStaffOrAdmin && (
-          <>
-            <TabsContent value="overview" className="mt-6 space-y-6">
-              <ClaimOverview 
-                claim={claim} 
-                isPortalUser={isPortalUser} 
-                onClaimUpdated={handleClaimUpdated}
-              />
-            </TabsContent>
-
-            <TabsContent value="activity" className="mt-6">
-              <ClaimActivity claimId={id || ""} claim={claim} isPortalUser={isPortalUser} />
-            </TabsContent>
-
-            <TabsContent value="inspections" className="mt-6">
-              <ClaimInspections claimId={id || ""} />
-            </TabsContent>
-
-            <TabsContent value="photos" className="mt-6">
-              <ClaimPhotos claimId={id || ""} claim={claim} isPortalUser={isPortalUser} />
-            </TabsContent>
-
-            <TabsContent value="files" className="mt-6">
-              <ClaimFiles claimId={id || ""} claim={claim} isStaffOrAdmin={isStaffOrAdmin} />
-            </TabsContent>
-
-            <TabsContent value="accounting" className="mt-6">
-              <ClaimAccounting claim={claim} userRole={userRole} />
-            </TabsContent>
-          </>
-        )}
-
-        {isStaffOrAdmin && (
-          <TabsContent value="darwin" className="mt-6">
-            <Suspense fallback={<DarwinLoadingFallback />}>
-              <DarwinTab
-                claimId={claim.id}
-                claim={claim}
-                userRole={userRole}
-                isStaffOrAdmin={isStaffOrAdmin}
-                onClaimUpdated={handleClaimUpdated}
-              />
-            </Suspense>
+          <TabsContent value="overview" className="mt-6 space-y-6">
+            <ClaimOverview 
+              claim={claim} 
+              isPortalUser={isPortalUser} 
+              onClaimUpdated={handleClaimUpdated}
+            />
           </TabsContent>
-        )}
-      </Tabs>
+
+          <TabsContent value="activity" className="mt-6">
+            <ClaimActivity claimId={id || ""} claim={claim} isPortalUser={isPortalUser} />
+          </TabsContent>
+
+          <TabsContent value="inspections" className="mt-6">
+            <ClaimInspections claimId={id || ""} />
+          </TabsContent>
+
+          <TabsContent value="photos" className="mt-6">
+            <ClaimPhotos claimId={id || ""} claim={claim} isPortalUser={isPortalUser} />
+          </TabsContent>
+
+          <TabsContent value="files" className="mt-6">
+            <ClaimFiles claimId={id || ""} claim={claim} isStaffOrAdmin={isStaffOrAdmin} />
+          </TabsContent>
+
+          <TabsContent value="accounting" className="mt-6">
+            <ClaimAccounting claim={claim} userRole={userRole} />
+          </TabsContent>
+        </Tabs>
+      )}
 
       {isStaffOrAdmin && activeTab === "overview" && (
         <div className="pt-6 border-t border-destructive/30">
