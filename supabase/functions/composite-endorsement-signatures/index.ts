@@ -337,7 +337,9 @@ async function uploadAndFinalize(
   endorsementBottomY: number,
   maxAllowedY: number,
 ) {
-  const compositePath = backImagePath.replace(/(\.[^.]+)$/, suffix);
+  // Cache-bust: use timestamp in filename so a fresh asset is always generated
+  const cacheBuster = Date.now();
+  const compositePath = backImagePath.replace(/(\.[^.]+)$/, `_endorsed_${cacheBuster}${suffix.replace('_endorsed', '')}`);
   const renderMode = suffix.includes("png") ? "rasterized_png" : "svg_fallback";
   const pixelCount = imgWidth * imgHeight;
 
