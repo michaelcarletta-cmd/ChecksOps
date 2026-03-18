@@ -1196,18 +1196,22 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
             {(estimate.roof_shape_conflict ||
               (estimate.imagery_source || "").toLowerCase().includes("ai vision") ||
               (estimate.geometry_quality_score ?? 0) < 60) && (
-              <DarwinRoofOutlineMapEditor
+              <DarwinRoofOutlineStaticEditor
                 roofMeasurementId={estimate.id}
+                geocodedLat={estimate.geocoded_lat}
+                geocodedLng={estimate.geocoded_lng}
                 suggestedPolygon={estimate.suggested_roof_polygon_geojson}
                 footprintPolygon={
                   estimate.footprint_polygon ??
-                  estimate.candidate_footprints?.[estimate.selected_candidate_index ?? 0]?.polygon ??
+                  estimate.selected_footprint_polygon ??
+                  estimate.candidate_footprints?.[estimate.selected_candidate_index ?? 0]?.polygon_geojson ??
                   null
                 }
                 roofPolygon={estimate.roof_polygon_geojson}
                 userDrawnPolygon={estimate.user_drawn_roof_polygon_geojson}
                 selectedFootprintSource={
                   estimate.imagery_source ??
+                  estimate.source ??
                   estimate.candidate_footprints?.[estimate.selected_candidate_index ?? 0]?.source ??
                   null
                 }
