@@ -187,55 +187,34 @@ export function DarwinRoofOutlineStaticEditor({
   useEffect(() => {
     let cancelled = false;
 
-    const extractInvokeErrorMessage = (error: any) => {
-      const context = error?.context;
-      if (typeof context === "string" && context.trim().length > 0) {
-        try {
-          const parsed = JSON.parse(context);
-          if (parsed?.error) return String(parsed.error);
-          return context;
-        } catch {
-          return context;
-        }
-      }
-      return error?.message || "Failed to load aerial image";
-    };
-
     const loadImage = async () => {
       setLoadingImage(true);
       setImageError(null);
-      setImageDataUrl(null);
+      setTilePayload(null);
 
       try {
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Aerial image request timed out")), 15000)
-        );
-
-        const invokePromise = supabase.functions.invoke("fetch-aerial-image", {
+        const result: any = await supabase.functions.invoke("fetch-aerial-image", {
           body: {
             minLng: bounds.minLng,
             minLat: bounds.minLat,
             maxLng: bounds.maxLng,
             maxLat: bounds.maxLat,
-            width: 1024,
-            height: 1024,
           },
         });
 
-        const result: any = await Promise.race([invokePromise, timeoutPromise]);
-
         if (result?.error) {
-          throw new Error(extractInvokeErrorMessage(result.error));
+          throw new Error(result.error.message || "Edge function failed");
         }
-        if (result?.data?.error) throw new Error(result.data.error);
-        if (!result?.data?.data_url) throw new Error("No aerial image returned");
+        if (!result?.data?.success) {
+          throw new Error(result?.data?.error || "No tile payload returned");
+        }
 
         if (!cancelled) {
-          setImageDataUrl(result.data.data_url);
+          setTilePayload(result.data);
         }
       } catch (err: any) {
         if (!cancelled) {
-          setImageError(err?.message || "Failed to load aerial image");
+          setImageError(err.message || "Failed to load aerial image");
         }
       } finally {
         if (!cancelled) {
