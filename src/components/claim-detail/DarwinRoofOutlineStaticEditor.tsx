@@ -143,30 +143,36 @@ export function DarwinRoofOutlineStaticEditor({
     const loadImage = async () => {
       setLoadingImage(true);
       setImageError(null);
+      setImageDataUrl(null);
 
       try {
-        const { data, error } = await supabase.functions.invoke("fetch-aerial-image", {
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Aerial image request timed out")), 15000)
+        );
+
+        const invokePromise = supabase.functions.invoke("fetch-aerial-image", {
           body: {
             minLng: bounds.minLng,
             minLat: bounds.minLat,
             maxLng: bounds.maxLng,
             maxLat: bounds.maxLat,
-            width,
-            height,
+            width: 900,
+            height: 650,
           },
         });
 
-        if (error) throw error;
-        if (data?.error) throw new Error(data.error);
-        if (!data?.data_url) throw new Error("No aerial image returned");
+        const result: any = await Promise.race([invokePromise, timeoutPromise]);
+
+        if (result?.error) throw result.error;
+        if (result?.data?.error) throw new Error(result.data.error);
+        if (!result?.data?.data_url) throw new Error("No aerial image returned");
 
         if (!cancelled) {
-          setImageDataUrl(data.data_url);
+          setImageDataUrl(result.data.data_url);
         }
       } catch (err: any) {
         if (!cancelled) {
           setImageError(err.message || "Failed to load aerial image");
-          setImageDataUrl(null);
         }
       } finally {
         if (!cancelled) {
