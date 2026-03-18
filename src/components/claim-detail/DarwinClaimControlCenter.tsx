@@ -97,6 +97,15 @@ export function DarwinClaimControlCenter({
         <TabsContent value="inspections" className="mt-6">
           <ClaimInspections claimId={claimId} />
         </TabsContent>
+
+        {isStaffOrAdmin && (
+          <TabsContent value="access" className="mt-6 space-y-6">
+            <Suspense fallback={<div className="flex items-center justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-primary mr-2" /><span className="text-muted-foreground">Loading...</span></div>}>
+              <ClaimExternalSync claimId={claimId} />
+              <ClaimAccessManagement claimId={claimId} />
+            </Suspense>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

@@ -402,53 +402,37 @@ const ClaimDetail = () => {
           )
         )}
 
-        <TabsContent value="overview" className="mt-6 space-y-6">
-          <ClaimOverview 
-            claim={claim} 
-            isPortalUser={isPortalUser} 
-            onClaimUpdated={handleClaimUpdated}
-          />
-          {isStaffOrAdmin && <ClaimCashFlowCard claimId={id || ""} />}
-        </TabsContent>
+        {/* Portal user tab contents - only rendered for non-staff */}
+        {!isStaffOrAdmin && (
+          <>
+            <TabsContent value="overview" className="mt-6 space-y-6">
+              <ClaimOverview 
+                claim={claim} 
+                isPortalUser={isPortalUser} 
+                onClaimUpdated={handleClaimUpdated}
+              />
+            </TabsContent>
 
-        {isStaffOrAdmin && (
-          <TabsContent value="assigned" className="mt-6">
-            <ClaimAssigned claim={claim} />
-          </TabsContent>
-        )}
+            <TabsContent value="activity" className="mt-6">
+              <ClaimActivity claimId={id || ""} claim={claim} isPortalUser={isPortalUser} />
+            </TabsContent>
 
-        <TabsContent value="activity" className="mt-6">
-          <ClaimActivity claimId={id || ""} claim={claim} isPortalUser={isPortalUser} />
-        </TabsContent>
+            <TabsContent value="inspections" className="mt-6">
+              <ClaimInspections claimId={id || ""} />
+            </TabsContent>
 
-        {isStaffOrAdmin && (
-          <TabsContent value="tasks" className="mt-6">
-            <ClaimTasks claimId={id || ""} />
-          </TabsContent>
-        )}
+            <TabsContent value="photos" className="mt-6">
+              <ClaimPhotos claimId={id || ""} claim={claim} isPortalUser={isPortalUser} />
+            </TabsContent>
 
+            <TabsContent value="files" className="mt-6">
+              <ClaimFiles claimId={id || ""} claim={claim} isStaffOrAdmin={isStaffOrAdmin} />
+            </TabsContent>
 
-        <TabsContent value="inspections" className="mt-6">
-          <ClaimInspections claimId={id || ""} />
-        </TabsContent>
-
-        <TabsContent value="photos" className="mt-6">
-          <ClaimPhotos claimId={id || ""} claim={claim} isPortalUser={isPortalUser} />
-        </TabsContent>
-
-        <TabsContent value="files" className="mt-6">
-          <ClaimFiles claimId={id || ""} claim={claim} isStaffOrAdmin={isStaffOrAdmin} />
-        </TabsContent>
-
-        <TabsContent value="accounting" className="mt-6">
-          <ClaimAccounting claim={claim} userRole={userRole} />
-        </TabsContent>
-
-        {isStaffOrAdmin && (
-          <TabsContent value="access" className="mt-6 space-y-6">
-            <ClaimExternalSync claimId={id!} />
-            <ClaimAccessManagement claimId={id!} />
-          </TabsContent>
+            <TabsContent value="accounting" className="mt-6">
+              <ClaimAccounting claim={claim} userRole={userRole} />
+            </TabsContent>
+          </>
         )}
 
         {isStaffOrAdmin && (
