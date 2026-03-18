@@ -1069,7 +1069,7 @@ function CheckDetailPanel({
 
   const showWatermark = !isFinalDepositImage;
   // Proportional overlay coordinates (% of image)
-  const overlayCoordinates = { topPercent: 8, leftPercent: 12, widthPercent: 42 };
+  const overlayCoordinates = { topPercent: 9, leftPercent: 18, widthPercent: 34 };
   const endorsementStyle = {
     position: "absolute" as const,
     top: `${overlayCoordinates.topPercent}%`,
@@ -1283,50 +1283,50 @@ function CheckDetailPanel({
                             <div className="endorsement-overlay absolute select-none" style={endorsementStyle}>
                               <div className="leading-tight font-semibold" style={{ lineHeight: 1.15 }}>
                                 {/* Header */}
-                                <p style={{ fontSize: f(0.030), marginBottom: g(0.012), color: "#111111", fontWeight: 600 }}>Pay to the order of</p>
+                                <p style={{ fontSize: f(0.022), marginBottom: g(0.008), color: "#111111", fontWeight: 600 }}>Pay to the order of</p>
                                 {/* Company payee */}
-                                <p style={{ fontSize: f(0.048), marginBottom: g(0.012), color: "#111111", fontWeight: 700 }}>Freedom Adjustment</p>
+                                <p style={{ fontSize: f(0.034), marginBottom: g(0.008), color: "#111111", fontWeight: 700 }}>Freedom Adjustment</p>
                                 {/* Mobile deposit */}
-                                <p style={{ fontSize: f(0.034), marginBottom: g(0.022), color: "#111111", fontWeight: 700 }}>For Mobile Deposit Only</p>
+                                <p style={{ fontSize: f(0.024), marginBottom: g(0.014), color: "#111111", fontWeight: 700 }}>For Mobile Deposit Only</p>
 
                                 {/* Separator before signatures */}
-                                <div style={{ marginTop: g(0.010), marginBottom: g(0.010), borderTop: "1px solid #111111", opacity: 0.3 }} />
+                                <div style={{ marginTop: g(0.006), marginBottom: g(0.006), borderTop: "1px solid #111111", opacity: 0.3 }} />
 
                                 {/* Client signatures first (non-Freedom, non-Carletta) */}
                                 {endorsementRows.map((e) => {
                                   const nameLC = e.payee_name.toLowerCase();
                                   if (nameLC.includes("freedom") || nameLC.includes("carletta")) return null;
                                   return (
-                                    <div key={e.id} style={{ marginTop: g(0.012) }}>
+                                    <div key={e.id} style={{ marginTop: g(0.008) }}>
                                       {e.signature_image_url && e.signature_image_url.startsWith("data:image/") ? (
                                         <>
-                                          <p style={{ fontSize: f(0.040), fontWeight: 500, color: "#111111" }}>{e.payee_name}</p>
-                                          <img src={e.signature_image_url} alt={`${e.payee_name} signature`} style={{ height: f(0.085), margin: "0 auto", display: "block", objectFit: "contain", filter: "brightness(0)" }} />
+                                          <p style={{ fontSize: f(0.026), fontWeight: 500, color: "#111111" }}>{e.payee_name}</p>
+                                          <img src={e.signature_image_url} alt={`${e.payee_name} signature`} style={{ height: f(0.060), margin: "0 auto", display: "block", objectFit: "contain", filter: "brightness(0)" }} />
                                         </>
                                       ) : e.signature_image_url && e.signature_image_url.startsWith("typed:") ? (
-                                        <p style={{ fontSize: f(0.056), fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
+                                        <p style={{ fontSize: f(0.042), fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
                                       ) : e.status === "waived" ? (
-                                        <p style={{ fontSize: f(0.034), fontStyle: "italic", color: "#111111" }}>{e.payee_name} — Waived</p>
+                                        <p style={{ fontSize: f(0.024), fontStyle: "italic", color: "#111111" }}>{e.payee_name} — Waived</p>
                                       ) : (
-                                        <p style={{ fontSize: f(0.040), fontWeight: 500, color: "#111111" }}>{e.payee_name}</p>
+                                        <p style={{ fontSize: f(0.026), fontWeight: 500, color: "#111111" }}>{e.payee_name}</p>
                                       )}
                                     </div>
                                   );
                                 })}
 
                                 {/* Freedom Adjustment / By: Michael Carletta — always grouped */}
-                                <div style={{ marginTop: g(0.022) }}>
-                                  <p style={{ fontSize: f(0.048), fontWeight: 700, color: "#111111" }}>Freedom Adjustment</p>
-                                  <p style={{ fontSize: f(0.040), fontWeight: 600, color: "#111111" }}>By: Michael Carletta</p>
+                                <div style={{ marginTop: g(0.014) }}>
+                                  <p style={{ fontSize: f(0.034), fontWeight: 700, color: "#111111" }}>Freedom Adjustment</p>
+                                  <p style={{ fontSize: f(0.026), fontWeight: 600, color: "#111111" }}>By: Michael Carletta</p>
                                   {endorsementRows.filter((e) => {
                                     const n = e.payee_name.toLowerCase();
                                     return (n.includes("freedom") || n.includes("carletta")) && e.signature_image_url;
                                   }).slice(0, 1).map((e) => (
-                                    <div key={`sig-${e.id}`} style={{ marginTop: g(0.006) }}>
+                                    <div key={`sig-${e.id}`} style={{ marginTop: g(0.004) }}>
                                       {e.signature_image_url?.startsWith("data:image/") ? (
-                                        <img src={e.signature_image_url} alt="Carletta signature" style={{ height: f(0.085), margin: "0 auto", display: "block", objectFit: "contain", filter: "brightness(0)" }} />
+                                        <img src={e.signature_image_url} alt="Carletta signature" style={{ height: f(0.060), margin: "0 auto", display: "block", objectFit: "contain", filter: "brightness(0)" }} />
                                       ) : e.signature_image_url?.startsWith("typed:") ? (
-                                        <p style={{ fontSize: f(0.056), fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
+                                        <p style={{ fontSize: f(0.042), fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
                                       ) : null}
                                     </div>
                                   ))}
@@ -1482,15 +1482,15 @@ function CheckDetailPanel({
                                 color: #111111;
                               }
                               .overlay-body { font-weight: 600; line-height: 1.15; }
-                              .overlay-header { margin: 0 0 ${(0.012 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.030 * backAr * 100).toFixed(2)}cqw; font-weight: 700; }
-                              .overlay-company { margin: 0 0 ${(0.012 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.048 * backAr * 100).toFixed(2)}cqw; font-weight: 700; }
-                              .overlay-by { margin: 0 0 ${(0.012 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.040 * backAr * 100).toFixed(2)}cqw; }
-                              .overlay-separator { margin: ${(0.010 * backAr * 100).toFixed(2)}cqw 0; border-top: 1px solid #111111; opacity: 0.3; }
-                              .sig-block { margin-top: ${(0.012 * backAr * 100).toFixed(2)}cqw; }
-                              .sig-name { margin: 0; font-size: ${(0.040 * backAr * 100).toFixed(2)}cqw; }
-                              .sig-typed { margin: 0; font-size: ${(0.056 * backAr * 100).toFixed(2)}cqw; font-style: italic; font-family: "Brush Script MT", cursive; }
-                              .sig-waived { margin: 0; font-size: ${(0.034 * backAr * 100).toFixed(2)}cqw; font-style: italic; }
-                              .sig-img { display: block; margin: ${(0.006 * backAr * 100).toFixed(2)}cqw auto 0; max-width: 50%; height: ${(0.085 * backAr * 100).toFixed(2)}cqw; filter: brightness(0); object-fit: contain; }
+                              .overlay-header { margin: 0 0 ${(0.008 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.022 * backAr * 100).toFixed(2)}cqw; font-weight: 700; }
+                              .overlay-company { margin: 0 0 ${(0.008 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.034 * backAr * 100).toFixed(2)}cqw; font-weight: 700; }
+                              .overlay-by { margin: 0 0 ${(0.008 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.026 * backAr * 100).toFixed(2)}cqw; }
+                              .overlay-separator { margin: ${(0.006 * backAr * 100).toFixed(2)}cqw 0; border-top: 1px solid #111111; opacity: 0.3; }
+                              .sig-block { margin-top: ${(0.008 * backAr * 100).toFixed(2)}cqw; }
+                              .sig-name { margin: 0; font-size: ${(0.026 * backAr * 100).toFixed(2)}cqw; }
+                              .sig-typed { margin: 0; font-size: ${(0.042 * backAr * 100).toFixed(2)}cqw; font-style: italic; font-family: "Brush Script MT", cursive; }
+                              .sig-waived { margin: 0; font-size: ${(0.024 * backAr * 100).toFixed(2)}cqw; font-style: italic; }
+                              .sig-img { display: block; margin: ${(0.004 * backAr * 100).toFixed(2)}cqw auto 0; max-width: 50%; height: ${(0.060 * backAr * 100).toFixed(2)}cqw; filter: brightness(0); object-fit: contain; }
                               @media print {
                                 .no-print { display: none; }
                                 body { padding: 8px; }
