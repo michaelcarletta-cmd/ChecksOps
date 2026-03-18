@@ -2612,6 +2612,35 @@ function deriveRoofEstimate(
     facet_count: resolvedFacets !== null ? "ai_provisional" : "unknown_insufficient_geometry",
   };
 
+  // ── Apply shape conflict ──
+  if (roof_shape_conflict) {
+    const visibleFacetCount = visionResult?.visible_facets?.value ?? null;
+    provisional_complexity_uplift_used = getComplexityUplift(
+      visibleFacetCount,
+      selectedCandidate?.geometry_quality_score ?? null,
+      selectedCandidate?.source ?? null,
+      betterAlt.found,
+    );
+
+    if (provisional_complexity_uplift_used > 1.0 && roofArea > 0) {
+      shape_conflicted_roof_area_sqft = Math.round(roofArea * provisional_complexity_uplift_used);
+      shape_conflicted_squares = Math.round((shape_conflicted_roof_area_sqft / 100) * 10) / 10;
+    }
+
+    fieldAuthority.estimated_roof_area_sqft = "ai_provisional";
+    fieldAuthority.squares = "ai_provisional";
+    fieldConfidence.estimated_roof_area_sqft = Math.min(fieldConfidence.estimated_roof_area_sqft ?? 45, 35);
+    fieldConfidence.squares = Math.min(fieldConfidence.squares ?? 45, 35);
+
+    notes.push(`⚠️ SHAPE CONFLICT: ${roof_shape_conflict_reason}`);
+    if (provisional_complexity_uplift_used > 1.0) {
+      notes.push(`📊 Provisional complexity uplift: ×${provisional_complexity_uplift_used} → ${shape_conflicted_roof_area_sqft} sqft / ${shape_conflicted_squares} squares`);
+    }
+    if (betterAlt.found) {
+      notes.push(`💡 Better alternate footprint candidate available at index ${betterAlt.betterIndex}`);
+    }
+  }
+
   // ── Notes ──
   const displayPitch = pitchBand !== "unknown" ? bandToDisplayPitch(pitchBand) : "unknown";
   const notes: string[] = [];
