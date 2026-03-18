@@ -688,7 +688,10 @@ Deno.serve(async (req) => {
     }
 
     // === STEP 3.5: INLINE STRUCTURED INTELLIGENCE EXTRACTION ===
-    if (!readyForAnalysis) {
+    // When force=true (backfill/reprocessing), attempt intelligence even if readyForAnalysis is false,
+    // as long as there's enough clean text to work with.
+    const shouldAttemptIntelligence = readyForAnalysis || (force && cleanText.length >= 100);
+    if (!shouldAttemptIntelligence) {
       intelligenceSkippedReason = `not_ready_for_analysis:${readyReason}`;
       console.log(`[DocIntel] skipped file_id=${fileId} reason=${intelligenceSkippedReason}`);
     } else if (targetClaimId && fileId && cleanText.length >= 100) {
