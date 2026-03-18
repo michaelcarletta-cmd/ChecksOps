@@ -14,6 +14,11 @@ export interface ScopeLineItem {
   isDependency?: boolean;
   isManualReviewRequired?: boolean;
   isProvisionalQuantity?: boolean;
+
+  visibleQuantity?: number | null;
+  visibleQuantityUnit?: string | null;
+  finalMeasuredQuantity?: number | null;
+  finalMeasuredQuantityUnit?: string | null;
 }
 
 export interface ScopeWarning {
@@ -43,6 +48,11 @@ export interface ScopeBuildResult {
     gutterLf: number;
     windowCount: number;
     grossTotal: number;
+  };
+  quantitySummary: {
+    visibleAreaSf: number;
+    workingScopeSf: number;
+    finalMeasuredSf: number | null;
   };
   contextUsed: ScopeContext;
 }

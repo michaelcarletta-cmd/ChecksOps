@@ -30,12 +30,8 @@ export type DamageMechanism =
   | "hail_impact"
   | "wind_damage"
   | "deterioration"
+  | "none"
   | "unknown";
-
-export type RoomType = "closet" | "bedroom" | "bathroom" | "kitchen" | "hall" | "attic" | "garage" | "other";
-export type SurfaceOrientation = "ceiling" | "wall" | "sloped_ceiling" | "other";
-export type FinishLevel = "painted" | "textured" | "wallpaper" | "unfinished" | "unknown";
-export type ObstructionLevel = "low" | "medium" | "high";
 
 export interface DamageObservation {
   category: DamageCategory;
@@ -58,11 +54,15 @@ export interface DamageObservation {
   provisionalQuantity?: boolean;
   visibleAreaOnly?: boolean;
 
+  visibleQuantity?: number;
+  visibleQuantityUnit?: string;
+  finalMeasuredQuantity?: number | null;
+  finalMeasuredQuantityUnit?: string | null;
+
+  roomType?: "closet" | "bedroom" | "bathroom" | "kitchen" | "hall" | "attic" | "garage" | "other";
+  surfaceOrientation?: "wall" | "ceiling" | "sloped_ceiling" | "floor" | "other";
+  finishLevel?: "painted" | "textured" | "wallpaper" | "unfinished" | "unknown";
   attachedItems?: string[];
-  roomType?: RoomType;
-  surfaceOrientation?: SurfaceOrientation;
-  finishLevel?: FinishLevel;
-  obstructionLevel?: ObstructionLevel;
 }
 
 export interface EstimateLineItem {
@@ -103,6 +103,11 @@ export interface AnalyzeResponse {
     gutterLf: number;
     windowCount: number;
     grossTotal: number;
+  };
+  quantitySummary?: {
+    visibleAreaSf: number;
+    workingScopeSf: number;
+    finalMeasuredSf: number | null;
   };
   contextUsed?: Record<string, unknown>;
 }

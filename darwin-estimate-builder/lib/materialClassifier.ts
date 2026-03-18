@@ -12,6 +12,8 @@ export function normalizeObservationMaterial(
   let structuralConcern = observation.structuralConcern ?? false;
   let accessRequired = observation.accessRequired ?? false;
   let measurementConfidence = observation.measurementConfidence ?? "medium";
+  let roomType = observation.roomType ?? "other";
+  let surfaceOrientation = observation.surfaceOrientation ?? "other";
 
   if (
     text.includes("architectural") ||
@@ -40,31 +42,34 @@ export function normalizeObservationMaterial(
     material = "baseboard trim";
     assemblyLayer = "trim";
   } else if (
-    text.includes("rafter") ||
-    text.includes("truss") ||
-    text.includes("joist")
-  ) {
-    material = "wood framing";
-    assemblyLayer = "framing";
-    structuralConcern = true;
-    accessRequired = true;
-    measurementConfidence = "low";
-  } else if (
     text.includes("decking") ||
     text.includes("sheathing") ||
+    text.includes("roof deck") ||
+    text.includes("wood plank") ||
     text.includes("plank")
   ) {
     material = "wood roof decking";
     assemblyLayer = "decking";
     accessRequired = true;
     measurementConfidence = "low";
-  } else if (text.includes("wood")) {
-    // fallback — classify generic wood as trim
-    material = "baseboard trim";
-    assemblyLayer = "trim";
+  } else if (
+    text.includes("rafter") ||
+    text.includes("truss") ||
+    text.includes("joist") ||
+    text.includes("framing") ||
+    text.includes("wood member")
+  ) {
+    material = "wood framing";
+    assemblyLayer = "framing";
+    structuralConcern = true;
+    accessRequired = true;
+    measurementConfidence = "low";
   } else if (text.includes("insulation")) {
     material = "insulation";
     assemblyLayer = "insulation";
+  } else if (text.includes("wood")) {
+    material = "baseboard trim";
+    assemblyLayer = "trim";
   }
 
   if (
@@ -88,7 +93,24 @@ export function normalizeObservationMaterial(
   if (text.includes("active leak") || text.includes("drip")) {
     damageMechanism = "active_leak";
   }
+  if (text.includes("none")) {
+    damageMechanism = "none";
+  }
 
+  if (text.includes("closet")) roomType = "closet";
+  if (text.includes("attic")) roomType = "attic";
+  if (text.includes("bath")) roomType = "bathroom";
+  if (text.includes("kitchen")) roomType = "kitchen";
+
+  if (text.includes("sloped ceiling")) surfaceOrientation = "sloped_ceiling";
+  else if (text.includes("ceiling")) surfaceOrientation = "ceiling";
+  else if (text.includes("wall")) surfaceOrientation = "wall";
+
+  const visibleQuantity =
+    observation.visibleQuantity ??
+    (typeof observation.recommendedQuantity === "number" ? observation.recommendedQuantity : null);
+
+  const visibleQuantityUnit = observation.visibleQuantityUnit ?? observation.unit ?? null;
   const visibleAreaOnly = observation.visibleAreaOnly ?? measurementConfidence === "low";
   const provisionalQuantity = observation.provisionalQuantity ?? measurementConfidence === "low";
 
@@ -101,6 +123,12 @@ export function normalizeObservationMaterial(
     accessRequired,
     measurementConfidence,
     visibleAreaOnly,
-    provisionalQuantity
+    provisionalQuantity,
+    visibleQuantity: visibleQuantity ?? undefined,
+    visibleQuantityUnit: visibleQuantityUnit ?? undefined,
+    finalMeasuredQuantity: observation.finalMeasuredQuantity ?? null,
+    finalMeasuredQuantityUnit: observation.finalMeasuredQuantityUnit ?? null,
+    roomType,
+    surfaceOrientation
   };
 }
