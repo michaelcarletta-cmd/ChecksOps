@@ -29,8 +29,8 @@ const BOTTOM_ZONE_LIMIT = 0.75;
 
 // Endorsement placement (anchored to image/check bounds)
 const ENDORSEMENT_TOP_PCT = 0.10;
-const ENDORSEMENT_LEFT_PCT = 0.18;
-const ENDORSEMENT_WIDTH_PCT = 0.55;
+const ENDORSEMENT_LEFT_PCT = 0.38;
+const ENDORSEMENT_WIDTH_PCT = 0.22;
 
 // Rasterizing very large images can exceed edge runtime memory.
 // For oversized checks we save a composited SVG fallback directly.
@@ -140,36 +140,41 @@ Deno.serve(async (req) => {
     const ezTopPad = Math.round(imgHeight * ENDORSEMENT_TOP_PCT);
     const ezContentWidth = Math.round(imgWidth * ENDORSEMENT_WIDTH_PCT);
 
-    // Scale font sizes relative to actual check image width for consistent
-    // rendering across any resolution (2000px scans, 4000px phone photos, etc.)
-    const headerFont = Math.max(14, Math.round(imgWidth * 0.018));
-    const companyFont = Math.max(18, Math.round(imgWidth * 0.025));
-    const bodyFont = headerFont;
-    const sigNameFont = Math.max(18, Math.round(imgWidth * 0.028));
-    const sigHeight = Math.max(40, Math.round(imgWidth * 0.06));
+    // Scale font sizes relative to actual check image HEIGHT for consistent
+    // rendering across any resolution. These MUST match endorsementLayout.ts.
+    const headerFont = Math.max(10, Math.round(imgHeight * 0.014));    // "Pay to the order of"
+    const companyFont = Math.max(12, Math.round(imgHeight * 0.022));   // "Freedom Adjustment"
+    const bodyFont = Math.max(10, Math.round(imgHeight * 0.016));      // "For Mobile Deposit Only"
+    const byLineFont = Math.max(12, Math.round(imgHeight * 0.018));    // "By: Michael Carletta" + payee names
+    const sigNameFont = byLineFont;                                     // payee name labels
+    const sigHeight = Math.max(20, Math.round(imgHeight * 0.026));     // signature image height
+
+    console.log(`[COMPOSITE][FONT-DEBUG] imgHeight=${imgHeight}, headerFont=${headerFont}, companyFont=${companyFont}, bodyFont=${bodyFont}, byLineFont=${byLineFont}, sigHeight=${sigHeight}`);
 
     let curY = ezTopPad;
     let endorsementSvg = "";
 
     const centerX = ezLeftPad + ezContentWidth / 2;
 
+    const lineGap = Math.round(imgHeight * 0.006);
+    const sectionGap = Math.round(imgHeight * 0.010);
+
     // --- Restrictive endorsement legend ---
-    // "Pay to the order of" — base header
+    // "Pay to the order of"
     endorsementSvg += svgText(centerX, curY + headerFont, headerFont, "#111111", "bold", "Pay to the order of");
-    curY += Math.round(headerFont * 1.3);
-    // "Freedom Adjustment" — 1.3x header (company payee)
+    curY += headerFont + lineGap;
+    // "Freedom Adjustment" (top)
     endorsementSvg += svgText(centerX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
-    curY += Math.round(companyFont * 1.25);
-    // "For Mobile Deposit Only" — same as header
+    curY += companyFont + lineGap;
+    // "For Mobile Deposit Only"
     endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#111111", "bold", "For Mobile Deposit Only");
-    curY += Math.round(bodyFont * 1.4);
+    curY += bodyFont + sectionGap;
 
     // --- Separator ---
     endorsementSvg += `<line x1="${ezLeftPad}" y1="${curY}" x2="${ezLeftPad + ezContentWidth}" y2="${curY}" stroke="#111111" stroke-width="2" opacity="0.3"/>`;
-    curY += Math.round(imgWidth * 0.008);
+    curY += sectionGap;
 
     // --- Render endorsement signatures ---
-    // Separate client/insured endorsements from Freedom/Carletta
     const isFreedomOrCarletta = (name: string) => {
       const lc = name.toLowerCase();
       return lc.includes("freedom") || lc.includes("carletta");
@@ -177,53 +182,50 @@ Deno.serve(async (req) => {
     const clientEndorsements = endorsements.filter((e: EndorsementRecord) => !isFreedomOrCarletta(e.payee_name));
     const companyEndorsements = endorsements.filter((e: EndorsementRecord) => isFreedomOrCarletta(e.payee_name));
 
-    // --- Client signatures first (most prominent — sigNameFont) ---
+    // --- Client signatures first (byLineFont for name) ---
     for (const e of clientEndorsements) {
       if (e.signature_image_url && e.signature_image_url.startsWith("data:image/")) {
-        endorsementSvg += svgText(centerX, curY + sigNameFont, sigNameFont, "#111111", "normal", e.payee_name);
-        curY += Math.round(sigNameFont * 1.2);
-        const sigWidth = Math.min(ezContentWidth - 20, Math.round(imgWidth * 0.22));
-        // Use a feColorMatrix filter to force signature image to solid black
+        endorsementSvg += svgText(centerX, curY + byLineFont, byLineFont, "#111111", "normal", e.payee_name);
+        curY += byLineFont + lineGap;
+        const sigWidth = Math.min(ezContentWidth - 20, Math.round(imgHeight * 0.10));
         const sigFilterId = `blackInk_${e.id.replace(/[^a-zA-Z0-9]/g, "")}`;
         endorsementSvg += `<defs><filter id="${sigFilterId}"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></defs>`;
         endorsementSvg += `<image href="${escHtml(e.signature_image_url)}" x="${centerX - sigWidth / 2}" y="${curY}" width="${sigWidth}" height="${sigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${sigFilterId})"/>`;
-        curY += sigHeight + Math.round(imgWidth * 0.003);
+        curY += sigHeight + lineGap;
       } else if (e.signature_image_url && e.signature_image_url.startsWith("typed:")) {
         const typedName = e.signature_image_url.slice(6);
-        endorsementSvg += `<text x="${centerX}" y="${curY + sigNameFont}" font-family="serif" font-size="${sigNameFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(typedName)}</text>`;
-        curY += Math.round(sigNameFont * 1.3);
+        endorsementSvg += `<text x="${centerX}" y="${curY + byLineFont}" font-family="serif" font-size="${byLineFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(typedName)}</text>`;
+        curY += byLineFont + lineGap;
       } else if (e.status === "waived") {
         endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#111111", "normal", `${e.payee_name} — Waived`, "italic");
-        curY += Math.round(bodyFont * 1.3);
+        curY += bodyFont + lineGap;
       } else {
-        endorsementSvg += svgText(centerX, curY + sigNameFont, sigNameFont, "#111111", "normal", e.payee_name);
-        curY += Math.round(sigNameFont * 1.2);
+        endorsementSvg += svgText(centerX, curY + byLineFont, byLineFont, "#111111", "normal", e.payee_name);
+        curY += byLineFont + lineGap;
         endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#111111", "normal", "signature", "italic");
-        curY += Math.round(bodyFont * 1.3);
+        curY += bodyFont + lineGap;
       }
-      curY += Math.round(imgWidth * 0.005);
+      curY += sectionGap;
     }
 
     // --- Freedom Adjustment / By: Michael Carletta — always grouped last ---
     if (companyEndorsements.length > 0 || true) {
-      curY += Math.round(imgWidth * 0.004); // extra spacing before company block
+      curY += sectionGap;
       endorsementSvg += svgText(centerX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
-      curY += Math.round(companyFont * 1.2);
-      endorsementSvg += svgText(centerX, curY + sigNameFont, sigNameFont, "#111111", "normal", "By: Michael Carletta");
-      curY += Math.round(sigNameFont * 1.2);
-      // Render the signature from whichever company endorsement has one
+      curY += companyFont + lineGap;
+      endorsementSvg += svgText(centerX, curY + byLineFont, byLineFont, "#111111", "normal", "By: Michael Carletta");
+      curY += byLineFont + lineGap;
       const sigEntry = companyEndorsements.find((e) => e.signature_image_url);
       if (sigEntry?.signature_image_url?.startsWith("data:image/")) {
-        const sigWidth = Math.min(ezContentWidth - 20, Math.round(imgWidth * 0.22));
-        // Force signature to black ink using feColorMatrix
+        const sigWidth = Math.min(ezContentWidth - 20, Math.round(imgHeight * 0.10));
         const coSigFilterId = `blackInkCo_${sigEntry.id.replace(/[^a-zA-Z0-9]/g, "")}`;
         endorsementSvg += `<defs><filter id="${coSigFilterId}"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></defs>`;
         endorsementSvg += `<image href="${escHtml(sigEntry.signature_image_url)}" x="${centerX - sigWidth / 2}" y="${curY}" width="${sigWidth}" height="${sigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${coSigFilterId})"/>`;
-        curY += sigHeight + Math.round(imgWidth * 0.003);
+        curY += sigHeight + lineGap;
       } else if (sigEntry?.signature_image_url?.startsWith("typed:")) {
         const typedName = sigEntry.signature_image_url.slice(6);
-        endorsementSvg += `<text x="${centerX}" y="${curY + sigNameFont}" font-family="serif" font-size="${sigNameFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(typedName)}</text>`;
-        curY += Math.round(sigNameFont * 1.3);
+        endorsementSvg += `<text x="${centerX}" y="${curY + byLineFont}" font-family="serif" font-size="${byLineFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(typedName)}</text>`;
+        curY += byLineFont + lineGap;
       }
       curY += Math.round(imgWidth * 0.006);
     }
@@ -334,7 +336,9 @@ async function uploadAndFinalize(
   endorsementBottomY: number,
   maxAllowedY: number,
 ) {
-  const compositePath = backImagePath.replace(/(\.[^.]+)$/, suffix);
+  // Cache-bust: use timestamp in filename so a fresh asset is always generated
+  const cacheBuster = Date.now();
+  const compositePath = backImagePath.replace(/(\.[^.]+)$/, `_endorsed_${cacheBuster}${suffix.replace('_endorsed', '')}`);
   const renderMode = suffix.includes("png") ? "rasterized_png" : "svg_fallback";
   const pixelCount = imgWidth * imgHeight;
 
