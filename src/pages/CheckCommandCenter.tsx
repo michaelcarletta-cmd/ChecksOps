@@ -1482,15 +1482,15 @@ function CheckDetailPanel({
                                 color: #111111;
                               }
                               .overlay-body { font-weight: 600; line-height: 1.15; }
-                              .overlay-header { margin: 0 0 ${(0.012 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.030 * backAr * 100).toFixed(2)}cqw; font-weight: 700; }
-                              .overlay-company { margin: 0 0 ${(0.012 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.048 * backAr * 100).toFixed(2)}cqw; font-weight: 700; }
-                              .overlay-by { margin: 0 0 ${(0.012 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.040 * backAr * 100).toFixed(2)}cqw; }
-                              .overlay-separator { margin: ${(0.010 * backAr * 100).toFixed(2)}cqw 0; border-top: 1px solid #111111; opacity: 0.3; }
-                              .sig-block { margin-top: ${(0.012 * backAr * 100).toFixed(2)}cqw; }
-                              .sig-name { margin: 0; font-size: ${(0.040 * backAr * 100).toFixed(2)}cqw; }
-                              .sig-typed { margin: 0; font-size: ${(0.056 * backAr * 100).toFixed(2)}cqw; font-style: italic; font-family: "Brush Script MT", cursive; }
-                              .sig-waived { margin: 0; font-size: ${(0.034 * backAr * 100).toFixed(2)}cqw; font-style: italic; }
-                              .sig-img { display: block; margin: ${(0.006 * backAr * 100).toFixed(2)}cqw auto 0; max-width: 50%; height: ${(0.085 * backAr * 100).toFixed(2)}cqw; filter: brightness(0); object-fit: contain; }
+                              .overlay-header { margin: 0 0 ${(0.008 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.022 * backAr * 100).toFixed(2)}cqw; font-weight: 700; }
+                              .overlay-company { margin: 0 0 ${(0.008 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.034 * backAr * 100).toFixed(2)}cqw; font-weight: 700; }
+                              .overlay-by { margin: 0 0 ${(0.008 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.026 * backAr * 100).toFixed(2)}cqw; }
+                              .overlay-separator { margin: ${(0.006 * backAr * 100).toFixed(2)}cqw 0; border-top: 1px solid #111111; opacity: 0.3; }
+                              .sig-block { margin-top: ${(0.008 * backAr * 100).toFixed(2)}cqw; }
+                              .sig-name { margin: 0; font-size: ${(0.026 * backAr * 100).toFixed(2)}cqw; }
+                              .sig-typed { margin: 0; font-size: ${(0.042 * backAr * 100).toFixed(2)}cqw; font-style: italic; font-family: "Brush Script MT", cursive; }
+                              .sig-waived { margin: 0; font-size: ${(0.024 * backAr * 100).toFixed(2)}cqw; font-style: italic; }
+                              .sig-img { display: block; margin: ${(0.004 * backAr * 100).toFixed(2)}cqw auto 0; max-width: 50%; height: ${(0.060 * backAr * 100).toFixed(2)}cqw; filter: brightness(0); object-fit: contain; }
                               @media print {
                                 .no-print { display: none; }
                                 body { padding: 8px; }
