@@ -2579,6 +2579,7 @@ function deriveRoofEstimate(
       "Deterministic Linear Derivation Engine v3",
       ...(decomposition && decomposition.masses.length > 1 ? ["Roof Mass Decomposition + Classification"] : []),
       ...(decomposition && decomposition.masses.some(m => m.classification) ? ["Mass Type Weighting"] : []),
+      ...(roofPolyResult ? ["Roof Polygon Expansion (Overhang)"] : []),
     ],
     field_sources: fieldSources,
     field_confidence: fieldConfidence,
@@ -2605,6 +2606,10 @@ function deriveRoofEstimate(
     suppression_records: suppressions.length > 0 ? suppressions : null,
     roof_mass_decomposition: decomposition,
     overhang_config: overhang,
+    // Phase 3: Roof polygon expansion
+    roof_planar_area_sqft: roofPolyResult ? roundTo(roofPolyResult.expanded_planar_area_sqft, 0) : null,
+    roof_polygon_geojson: roofPolygonGeoJson,
+    planar_area_gain_sqft: roofPolyResult ? roundTo(roofPolyResult.area_gain_sqft, 0) : null,
   };
 }
 
