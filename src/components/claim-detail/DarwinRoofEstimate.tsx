@@ -1203,15 +1203,13 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                 suggestedPolygon={estimate.suggested_roof_polygon_geojson}
                 footprintPolygon={
                   estimate.footprint_polygon ??
-                  estimate.selected_footprint_polygon ??
-                  estimate.candidate_footprints?.[estimate.selected_candidate_index ?? 0]?.polygon_geojson ??
+                  estimate.candidate_footprints?.[estimate.selected_candidate_index ?? 0]?.polygon ??
                   null
                 }
                 roofPolygon={estimate.roof_polygon_geojson}
                 userDrawnPolygon={estimate.user_drawn_roof_polygon_geojson}
                 selectedFootprintSource={
                   estimate.imagery_source ??
-                  estimate.source ??
                   estimate.candidate_footprints?.[estimate.selected_candidate_index ?? 0]?.source ??
                   null
                 }
