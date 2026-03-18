@@ -3568,6 +3568,11 @@ Deno.serve(async (req) => {
         correction_factor_used: estimate.correction_factor_used,
         tuning_applied: tuningApplied,
         pre_tuning_values: Object.keys(preTuningValues).length > 0 ? preTuningValues : null,
+        roof_shape_conflict: estimate.roof_shape_conflict ?? false,
+        roof_shape_conflict_reason: estimate.roof_shape_conflict_reason ?? null,
+        provisional_complexity_uplift_used: estimate.provisional_complexity_uplift_used ?? null,
+        shape_conflicted_roof_area_sqft: estimate.shape_conflicted_roof_area_sqft ?? null,
+        shape_conflicted_squares: estimate.shape_conflicted_squares ?? null,
         created_by: user.id,
       })
       .select()
