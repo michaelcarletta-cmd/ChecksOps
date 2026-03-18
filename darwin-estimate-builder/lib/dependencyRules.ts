@@ -61,18 +61,30 @@ export function buildBaseScopeFromObservations(args: {
 
     const quantity = deriveQuantity(obs, template.defaultUnit, args.context);
 
-    items.push(
-      makeLineItem({
-        code: template.code,
-        description: template.description,
-        quantity,
-        unit: template.defaultUnit,
-        reasoning: `${obs.component}: ${obs.damageType}; material ${obs.material}; layer ${obs.assemblyLayer ?? "unknown"}; basis ${obs.quantityBasis}`,
-        sourceObservationIndexes: [index],
-        isManualReviewRequired: obs.confidence < 0.6 || !!obs.structuralConcern,
-        isProvisionalQuantity: !!obs.provisionalQuantity
-      })
-    );
+    const isDrywallTemplate =
+      obs.category === "interior" &&
+      obs.material.toLowerCase().includes("drywall") &&
+      (template.code === "DRYWALL" || template.code === "DRYWALLREPL");
+
+    // Let the interior decision block below handle drywall exclusively
+    if (!isDrywallTemplate) {
+      items.push(
+        makeLineItem({
+          code: template.code,
+          description: template.description,
+          quantity,
+          unit: template.defaultUnit,
+          reasoning: `${obs.component}: ${obs.damageType}; material ${obs.material}; layer ${obs.assemblyLayer ?? "unknown"}; visible ${obs.visibleQuantity ?? obs.recommendedQuantity ?? 0} ${obs.visibleQuantityUnit ?? obs.unit}; basis ${obs.quantityBasis}`,
+          sourceObservationIndexes: [index],
+          isManualReviewRequired: obs.confidence < 0.6 || !!obs.structuralConcern,
+          isProvisionalQuantity: !!obs.provisionalQuantity,
+          visibleQuantity: obs.visibleQuantity ?? obs.recommendedQuantity ?? null,
+          visibleQuantityUnit: obs.visibleQuantityUnit ?? obs.unit ?? null,
+          finalMeasuredQuantity: obs.finalMeasuredQuantity ?? null,
+          finalMeasuredQuantityUnit: obs.finalMeasuredQuantityUnit ?? null
+        })
+      );
+    }
 
     if (obs.category === "interior") {
       const hasDrywallItem = items.some(
