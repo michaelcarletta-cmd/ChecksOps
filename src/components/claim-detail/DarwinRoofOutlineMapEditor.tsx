@@ -314,14 +314,15 @@ export function DarwinRoofOutlineMapEditor({
       <div className="rounded-lg overflow-hidden border border-border" style={{ height: 500 }}>
         <Map
           ref={mapRef}
-          onLoad={handleMapLoad}
-          onError={(e) => setMapError(e?.error?.message || "Map data not available")}
+          mapLib={maplibregl}
+          onLoad={() => setMapLoaded(true)}
+          onError={(e: any) => setMapError(e?.error?.message || "Map data not available")}
           initialViewState={{
             ...initialCenter,
             zoom: 20,
           }}
           style={{ width: "100%", height: "100%" }}
-          mapStyle="https://demotiles.maplibre.org/style.json"
+          mapStyle={imageryOnlyStyle as any}
         >
           <Source id="overlays" type="geojson" data={overlayFeatures}>
             <Layer {...footprintFillLayer} />
