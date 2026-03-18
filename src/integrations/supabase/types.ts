@@ -4913,6 +4913,7 @@ export type Database = {
           confirmation_strength_score: number | null
           confirmed_at: string | null
           confirmed_by: string | null
+          correction_factor_used: number | null
           created_at: string
           created_by: string | null
           data_sources: string[] | null
@@ -4958,6 +4959,7 @@ export type Database = {
           roof_planar_area_sqft: number | null
           roof_polygon_geojson: Json | null
           selected_candidate_index: number | null
+          slope_factor_used: number | null
           squares: number | null
           suppression_records: Json | null
           tuning_applied: Json | null
@@ -4979,6 +4981,7 @@ export type Database = {
           confirmation_strength_score?: number | null
           confirmed_at?: string | null
           confirmed_by?: string | null
+          correction_factor_used?: number | null
           created_at?: string
           created_by?: string | null
           data_sources?: string[] | null
@@ -5024,6 +5027,7 @@ export type Database = {
           roof_planar_area_sqft?: number | null
           roof_polygon_geojson?: Json | null
           selected_candidate_index?: number | null
+          slope_factor_used?: number | null
           squares?: number | null
           suppression_records?: Json | null
           tuning_applied?: Json | null
@@ -5045,6 +5049,7 @@ export type Database = {
           confirmation_strength_score?: number | null
           confirmed_at?: string | null
           confirmed_by?: string | null
+          correction_factor_used?: number | null
           created_at?: string
           created_by?: string | null
           data_sources?: string[] | null
@@ -5090,6 +5095,7 @@ export type Database = {
           roof_planar_area_sqft?: number | null
           roof_polygon_geojson?: Json | null
           selected_candidate_index?: number | null
+          slope_factor_used?: number | null
           squares?: number | null
           suppression_records?: Json | null
           tuning_applied?: Json | null
