@@ -136,6 +136,9 @@ interface RoofEstimate {
     source: "default" | "user" | "regional";
   } | null;
   roof_polygon_geojson: any | null;
+  // Debug: intermediate calculation values
+  slope_factor_used: number | null;
+  correction_factor_used: number | null;
   created_at: string;
   updated_at: string;
 }
