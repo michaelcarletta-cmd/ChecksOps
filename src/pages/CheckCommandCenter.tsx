@@ -1258,7 +1258,7 @@ function CheckDetailPanel({
                           <Button variant="ghost" size="icon" className="h-5 w-5"><Download className="h-3 w-3" /></Button>
                         </a>
                       </div>
-                      <div className="check-back-wrap relative inline-block max-w-full rounded border border-border" style={{ overflow: "visible" }}>
+                      <div className="check-back-wrap relative inline-block max-w-full rounded border border-border" style={{ overflow: "visible", containerType: "inline-size" as any }}>
                         <img
                           src={backImageUrl}
                           alt="Check back"
@@ -1272,61 +1272,69 @@ function CheckDetailPanel({
                           }}
                         />
 
-                        {hasEndorsement && (
-                          <div className="endorsement-overlay absolute select-none" style={endorsementStyle}>
-                            <div className="leading-tight font-semibold" style={{ lineHeight: 1.15 }}>
-                              {/* Header */}
-                              <p className="text-center text-[12px]">Pay to the order of</p>
-                              {/* Company payee — 1.3x header */}
-                              <p className="text-center text-[16px] font-bold mt-[2px]">Freedom Adjustment</p>
-                              {/* Mobile deposit — same as header */}
-                              <p className="text-center text-[12px] font-bold mt-[2px]">For Mobile Deposit Only</p>
+                        {hasEndorsement && backImageDimensions && (() => {
+                          // Scale all sizes from image height so endorsement looks like a real check
+                          const ar = backImageDimensions.height / backImageDimensions.width;
+                          // Font sizes as % of container width (since height = width * ar)
+                          // naturalHeight * ratio → cw-based: (ratio * ar * 100)cqw
+                          const f = (ratio: number) => `${(ratio * ar * 100).toFixed(3)}cqw`;
+                          const g = (ratio: number) => `${(ratio * ar * 100).toFixed(3)}cqw`; // gap
+                          return (
+                            <div className="endorsement-overlay absolute select-none" style={endorsementStyle}>
+                              <div className="leading-tight font-semibold" style={{ lineHeight: 1.15 }}>
+                                {/* Header */}
+                                <p style={{ fontSize: f(0.030), marginBottom: g(0.012), color: "#111111", fontWeight: 600 }}>Pay to the order of</p>
+                                {/* Company payee */}
+                                <p style={{ fontSize: f(0.048), marginBottom: g(0.012), color: "#111111", fontWeight: 700 }}>Freedom Adjustment</p>
+                                {/* Mobile deposit */}
+                                <p style={{ fontSize: f(0.034), marginBottom: g(0.022), color: "#111111", fontWeight: 700 }}>For Mobile Deposit Only</p>
 
-                              {/* Separator before signatures */}
-                              <div className="my-[5px]" style={{ borderTop: "1px solid #111111", opacity: 0.3 }} />
+                                {/* Separator before signatures */}
+                                <div style={{ marginTop: g(0.010), marginBottom: g(0.010), borderTop: "1px solid #111111", opacity: 0.3 }} />
 
-                              {/* Client signatures first (non-Freedom, non-Carletta) */}
-                              {endorsementRows.map((e) => {
-                                const nameLC = e.payee_name.toLowerCase();
-                                if (nameLC.includes("freedom") || nameLC.includes("carletta")) return null;
-                                return (
-                                  <div key={e.id} className="mt-[4px]">
-                                    {e.signature_image_url && e.signature_image_url.startsWith("data:image/") ? (
-                                      <>
-                                        <p className="text-center text-[14px] font-medium" style={{ color: "#111111" }}>{e.payee_name}</p>
-                                        <img src={e.signature_image_url} alt={`${e.payee_name} signature`} className="h-9 mx-auto object-contain" style={{ filter: "brightness(0)" }} />
-                                      </>
-                                    ) : e.signature_image_url && e.signature_image_url.startsWith("typed:") ? (
-                                      <p className="italic text-center text-[16px] font-serif" style={{ color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
-                                    ) : e.status === "waived" ? (
-                                      <p className="italic text-center text-[13px]" style={{ color: "#111111" }}>{e.payee_name} — Waived</p>
-                                    ) : (
-                                      <p className="text-center text-[14px] font-medium" style={{ color: "#111111" }}>{e.payee_name}</p>
-                                    )}
-                                  </div>
-                                );
-                              })}
+                                {/* Client signatures first (non-Freedom, non-Carletta) */}
+                                {endorsementRows.map((e) => {
+                                  const nameLC = e.payee_name.toLowerCase();
+                                  if (nameLC.includes("freedom") || nameLC.includes("carletta")) return null;
+                                  return (
+                                    <div key={e.id} style={{ marginTop: g(0.012) }}>
+                                      {e.signature_image_url && e.signature_image_url.startsWith("data:image/") ? (
+                                        <>
+                                          <p style={{ fontSize: f(0.040), fontWeight: 500, color: "#111111" }}>{e.payee_name}</p>
+                                          <img src={e.signature_image_url} alt={`${e.payee_name} signature`} style={{ height: f(0.085), margin: "0 auto", display: "block", objectFit: "contain", filter: "brightness(0)" }} />
+                                        </>
+                                      ) : e.signature_image_url && e.signature_image_url.startsWith("typed:") ? (
+                                        <p style={{ fontSize: f(0.056), fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
+                                      ) : e.status === "waived" ? (
+                                        <p style={{ fontSize: f(0.034), fontStyle: "italic", color: "#111111" }}>{e.payee_name} — Waived</p>
+                                      ) : (
+                                        <p style={{ fontSize: f(0.040), fontWeight: 500, color: "#111111" }}>{e.payee_name}</p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
 
-                              {/* Freedom Adjustment / By: Michael Carletta — always grouped */}
-                              <div className="mt-[6px]">
-                                <p className="text-center text-[16px] font-bold">Freedom Adjustment</p>
-                                <p className="text-center text-[13px]">By: Michael Carletta</p>
-                                {endorsementRows.filter((e) => {
-                                  const n = e.payee_name.toLowerCase();
-                                  return (n.includes("freedom") || n.includes("carletta")) && e.signature_image_url;
-                                }).slice(0, 1).map((e) => (
-                                  <div key={`sig-${e.id}`} className="mt-[2px]">
-                    {e.signature_image_url?.startsWith("data:image/") ? (
-                                      <img src={e.signature_image_url} alt="Carletta signature" className="h-9 mx-auto object-contain" style={{ filter: "brightness(0)" }} />
-                                    ) : e.signature_image_url?.startsWith("typed:") ? (
-                                      <p className="italic text-center text-[13px] font-serif" style={{ color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
-                                    ) : null}
-                                  </div>
-                                ))}
+                                {/* Freedom Adjustment / By: Michael Carletta — always grouped */}
+                                <div style={{ marginTop: g(0.022) }}>
+                                  <p style={{ fontSize: f(0.048), fontWeight: 700, color: "#111111" }}>Freedom Adjustment</p>
+                                  <p style={{ fontSize: f(0.040), fontWeight: 600, color: "#111111" }}>By: Michael Carletta</p>
+                                  {endorsementRows.filter((e) => {
+                                    const n = e.payee_name.toLowerCase();
+                                    return (n.includes("freedom") || n.includes("carletta")) && e.signature_image_url;
+                                  }).slice(0, 1).map((e) => (
+                                    <div key={`sig-${e.id}`} style={{ marginTop: g(0.006) }}>
+                                      {e.signature_image_url?.startsWith("data:image/") ? (
+                                        <img src={e.signature_image_url} alt="Carletta signature" style={{ height: f(0.085), margin: "0 auto", display: "block", objectFit: "contain", filter: "brightness(0)" }} />
+                                      ) : e.signature_image_url?.startsWith("typed:") ? (
+                                        <p style={{ fontSize: f(0.056), fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
+                                      ) : null}
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
 
                         {showWatermark && (
                           <div className="void-watermark absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ transform: "rotate(-30deg)", zIndex: 30 }}>
