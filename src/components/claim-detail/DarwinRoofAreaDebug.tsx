@@ -258,7 +258,7 @@ export function DarwinRoofAreaDebug({ estimate }: Props) {
             <DebugRow
               label="Expected Area"
               value={`${Math.round(expectedArea).toLocaleString()} sqft`}
-              formula={`${e.roof_planar_area_sqft ?? 0} × ${e.slope_factor_used?.toFixed(4) ?? "?"} × ${e.correction_factor_used?.toFixed(4) ?? "?"}`}
+              formula={`${e.roof_planar_area_sqft ?? 0} × ${(e.slope_factor_used ?? 1).toFixed(4)} × ${(e.correction_factor_used ?? 1).toFixed(4)} × ${(e.calibration_adjustment_factor ?? 1).toFixed(4)}`}
             />
             <DebugRow
               label="Actual Area (stored)"
