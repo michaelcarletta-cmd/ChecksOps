@@ -1201,7 +1201,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                 suggestedPolygon={estimate.suggested_roof_polygon_geojson}
                 footprintPolygon={
                   estimate.footprint_polygon ??
-                  estimate.candidate_footprints?.[estimate.selected_candidate_index ?? 0]?.polygon_geojson ??
+                  estimate.candidate_footprints?.[estimate.selected_candidate_index ?? 0]?.polygon ??
                   null
                 }
                 roofPolygon={estimate.roof_polygon_geojson}
