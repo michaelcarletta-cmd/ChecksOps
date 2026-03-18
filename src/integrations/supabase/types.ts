@@ -4948,6 +4948,7 @@ export type Database = {
           pitch_type: string
           planar_area_gain_sqft: number | null
           pre_tuning_values: Json | null
+          provisional_complexity_uplift_used: number | null
           rake_lf: number | null
           raw_geojson: Json | null
           review_required: boolean
@@ -4958,12 +4959,17 @@ export type Database = {
           roof_mass_decomposition: Json | null
           roof_planar_area_sqft: number | null
           roof_polygon_geojson: Json | null
+          roof_shape_conflict: boolean | null
+          roof_shape_conflict_reason: string | null
           selected_candidate_index: number | null
+          shape_conflicted_roof_area_sqft: number | null
+          shape_conflicted_squares: number | null
           slope_factor_used: number | null
           squares: number | null
           suppression_records: Json | null
           tuning_applied: Json | null
           updated_at: string
+          user_drawn_roof_polygon_geojson: Json | null
           valley_lf: number | null
           vision_classifications: Json | null
         }
@@ -5016,6 +5022,7 @@ export type Database = {
           pitch_type?: string
           planar_area_gain_sqft?: number | null
           pre_tuning_values?: Json | null
+          provisional_complexity_uplift_used?: number | null
           rake_lf?: number | null
           raw_geojson?: Json | null
           review_required?: boolean
@@ -5026,12 +5033,17 @@ export type Database = {
           roof_mass_decomposition?: Json | null
           roof_planar_area_sqft?: number | null
           roof_polygon_geojson?: Json | null
+          roof_shape_conflict?: boolean | null
+          roof_shape_conflict_reason?: string | null
           selected_candidate_index?: number | null
+          shape_conflicted_roof_area_sqft?: number | null
+          shape_conflicted_squares?: number | null
           slope_factor_used?: number | null
           squares?: number | null
           suppression_records?: Json | null
           tuning_applied?: Json | null
           updated_at?: string
+          user_drawn_roof_polygon_geojson?: Json | null
           valley_lf?: number | null
           vision_classifications?: Json | null
         }
@@ -5084,6 +5096,7 @@ export type Database = {
           pitch_type?: string
           planar_area_gain_sqft?: number | null
           pre_tuning_values?: Json | null
+          provisional_complexity_uplift_used?: number | null
           rake_lf?: number | null
           raw_geojson?: Json | null
           review_required?: boolean
@@ -5094,12 +5107,17 @@ export type Database = {
           roof_mass_decomposition?: Json | null
           roof_planar_area_sqft?: number | null
           roof_polygon_geojson?: Json | null
+          roof_shape_conflict?: boolean | null
+          roof_shape_conflict_reason?: string | null
           selected_candidate_index?: number | null
+          shape_conflicted_roof_area_sqft?: number | null
+          shape_conflicted_squares?: number | null
           slope_factor_used?: number | null
           squares?: number | null
           suppression_records?: Json | null
           tuning_applied?: Json | null
           updated_at?: string
+          user_drawn_roof_polygon_geojson?: Json | null
           valley_lf?: number | null
           vision_classifications?: Json | null
         }
