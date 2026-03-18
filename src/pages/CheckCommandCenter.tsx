@@ -1469,8 +1469,8 @@ function CheckDetailPanel({
                             </div>`
                           : "";
 
-                        const printWindow = window.open("", "_blank");
-                        if (!printWindow) return;
+                        // printWindow already opened above
+
 
                         printWindow.document.write(`
                           <!DOCTYPE html>
