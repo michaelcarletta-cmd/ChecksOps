@@ -31,6 +31,12 @@ interface DebugEstimate {
   geocoded_lng: number | null;
   inferred_roof_form: string | null;
   edge_classifications: any[] | null;
+  // Shape conflict
+  roof_shape_conflict: boolean | null;
+  roof_shape_conflict_reason: string | null;
+  provisional_complexity_uplift_used: number | null;
+  shape_conflicted_roof_area_sqft: number | null;
+  shape_conflicted_squares: number | null;
 }
 
 interface Props {
