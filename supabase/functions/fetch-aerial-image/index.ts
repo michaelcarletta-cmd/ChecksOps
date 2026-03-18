@@ -1,15 +1,26 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-function toBase64(bytes: Uint8Array): string {
+function lonToTileX(lon: number, zoom: number): number {
+  return Math.floor(((lon + 180) / 360) * Math.pow(2, zoom));
+}
+
+function latToTileY(lat: number, zoom: number): number {
+  const rad = (lat * Math.PI) / 180;
+  return Math.floor(
+    ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) *
+      Math.pow(2, zoom)
+  );
+}
+
+function uint8ToBase64(bytes: Uint8Array): string {
   let binary = "";
-  const chunkSize = 0x8000;
+  const chunkSize = 8192;
   for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
   }
   return btoa(binary);
 }
@@ -21,78 +32,71 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { minLng, minLat, maxLng, maxLat, width, height } = body ?? {};
+    const minLng = Number(body?.minLng);
+    const minLat = Number(body?.minLat);
+    const maxLng = Number(body?.maxLng);
+    const maxLat = Number(body?.maxLat);
 
     if (
-      typeof minLng !== "number" ||
-      typeof minLat !== "number" ||
-      typeof maxLng !== "number" ||
-      typeof maxLat !== "number"
+      !Number.isFinite(minLng) ||
+      !Number.isFinite(minLat) ||
+      !Number.isFinite(maxLng) ||
+      !Number.isFinite(maxLat)
     ) {
       throw new Error("Invalid bounds");
     }
 
-    const imgW = Math.min(Math.max(Number(width) || 800, 300), 1200);
-    const imgH = Math.min(Math.max(Number(height) || 600, 200), 900);
+    const zoom = 19;
 
-    const bbox = `${minLng},${minLat},${maxLng},${maxLat}`;
-    const size = `${imgW},${imgH}`;
+    const xMin = lonToTileX(minLng, zoom);
+    const xMax = lonToTileX(maxLng, zoom);
+    const yMin = latToTileY(maxLat, zoom);
+    const yMax = latToTileY(minLat, zoom);
 
-    const esriUrl =
-      `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export` +
-      `?bbox=${encodeURIComponent(bbox)}` +
-      `&bboxSR=4326` +
-      `&imageSR=4326` +
-      `&size=${encodeURIComponent(size)}` +
-      `&format=jpg` +
-      `&transparent=false` +
-      `&f=image`;
+    const xs = [];
+    for (let x = xMin; x <= xMax; x++) xs.push(x);
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
+    const ys = [];
+    for (let y = yMin; y <= yMax; y++) ys.push(y);
 
-    let res: Response;
-    try {
-      res = await fetch(esriUrl, {
-        method: "GET",
-        headers: {
-          "User-Agent": "DarwinRoofEditor/1.0",
-          "Accept": "image/*",
-        },
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timeout);
+    if (xs.length === 0 || ys.length === 0) {
+      throw new Error("No tiles computed");
     }
 
-    if (!res.ok) {
-      throw new Error(`Esri fetch failed: ${res.status}`);
+    const tiles: Array<{ x: number; y: number; dataUrl: string }> = [];
+
+    for (const y of ys) {
+      for (const x of xs) {
+        const url = `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`;
+        const res = await fetch(url, {
+          headers: { "User-Agent": "DarwinRoofEditor/1.0" },
+        });
+        if (!res.ok) {
+          throw new Error(`Tile fetch failed: ${res.status} for ${x}/${y}`);
+        }
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        const base64 = uint8ToBase64(bytes);
+        tiles.push({
+          x,
+          y,
+          dataUrl: `data:image/png;base64,${base64}`,
+        });
+      }
     }
-
-    const contentType = res.headers.get("content-type") || "image/jpeg";
-    const bytes = new Uint8Array(await res.arrayBuffer());
-
-    if (bytes.length === 0) {
-      throw new Error("Esri returned empty image");
-    }
-
-    if (bytes.length > 8_000_000) {
-      throw new Error(`Image too large: ${bytes.length} bytes`);
-    }
-
-    const dataUrl = `data:${contentType};base64,${toBase64(bytes)}`;
 
     return new Response(
       JSON.stringify({
         success: true,
-        data_url: dataUrl,
-        source_url: esriUrl,
-        byte_length: bytes.length,
-        content_type: contentType,
-        width: imgW,
-        height: imgH,
+        zoom,
+        xMin,
+        xMax,
+        yMin,
+        yMax,
+        tiles,
+        tileSize: 256,
       }),
       {
+        status: 200,
         headers: {
           ...corsHeaders,
           "Content-Type": "application/json",
@@ -100,15 +104,13 @@ Deno.serve(async (req) => {
       }
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown aerial image error";
-
     return new Response(
       JSON.stringify({
         success: false,
-        error: message,
+        error: err instanceof Error ? err.message : "Unknown function error",
       }),
       {
-        status: 400,
+        status: 500,
         headers: {
           ...corsHeaders,
           "Content-Type": "application/json",

@@ -333,18 +333,39 @@ export function DarwinRoofOutlineStaticEditor({
           </div>
         )}
 
-        {imageDataUrl && (
-          <img
-            src={imageDataUrl}
-            alt="Aerial imagery"
-            className="absolute inset-0 h-full w-full object-contain"
-            draggable={false}
-          />
+        {tilePayload && (
+          <div className="absolute inset-0">
+            {tilePayload.tiles.map((tile: any) => {
+              const left =
+                ((tile.x - tilePayload.xMin) / (tilePayload.xMax - tilePayload.xMin + 1)) * 100;
+              const top =
+                ((tile.y - tilePayload.yMin) / (tilePayload.yMax - tilePayload.yMin + 1)) * 100;
+              const widthPct = 100 / (tilePayload.xMax - tilePayload.xMin + 1);
+              const heightPct = 100 / (tilePayload.yMax - tilePayload.yMin + 1);
+
+              return (
+                <img
+                  key={`${tile.x}-${tile.y}`}
+                  src={tile.dataUrl}
+                  alt=""
+                  className="absolute"
+                  style={{
+                    left: `${left}%`,
+                    top: `${top}%`,
+                    width: `${widthPct}%`,
+                    height: `${heightPct}%`,
+                    objectFit: "cover",
+                  }}
+                  draggable={false}
+                />
+              );
+            })}
+          </div>
         )}
 
         {imageError && !loadingImage && (
-          <div className="absolute inset-0 grid place-items-center text-sm text-red-400 bg-black/10">
-            Failed to load aerial imagery: {imageError}
+          <div className="rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm">
+            Failed to load aerial image: {imageError}
           </div>
         )}
 
