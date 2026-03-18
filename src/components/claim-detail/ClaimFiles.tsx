@@ -376,19 +376,17 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
   const handleDownload = async (file: any) => {
     const { data, error } = await supabase.storage
       .from("claim-files")
-      .download(file.file_path);
+      .createSignedUrl(file.file_path, 300, { download: file.file_name });
 
-    if (error) {
+    if (error || !data?.signedUrl) {
       toast({ title: "Error", description: "Failed to download file.", variant: "destructive" });
       return;
     }
 
-    const url = URL.createObjectURL(data);
     const a = document.createElement("a");
-    a.href = url;
+    a.href = data.signedUrl;
     a.download = file.file_name;
     a.click();
-    URL.revokeObjectURL(url);
   };
 
   const handleView = async (file: any) => {
