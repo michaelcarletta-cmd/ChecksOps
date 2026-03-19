@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
+
 let render: ((svg: string) => Promise<Uint8Array>) | null = null;
 try {
   const resvg = await import("https://deno.land/x/resvg_wasm@0.2.0/mod.ts");
@@ -13,28 +14,33 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-/**
- * Composite endorsement signatures onto the back of a check image.
- * Produces a single FLATTENED PNG at the original check resolution.
- * Endorsements are rendered directly ON the check image in the
- * upper-left endorsement zone. A hard safety check prevents any
- * endorsement content from overlapping the bank's restricted bottom zone.
- *
- * Input: { checkId: string }
- */
-
-// Bank restricted zone: endorsements must stay above 75% of image height.
-// Below that is the "DO NOT WRITE BELOW THIS LINE" area.
 const BOTTOM_ZONE_LIMIT = 0.75;
-
-// Endorsement placement (anchored to image/check bounds)
 const ENDORSEMENT_TOP_PCT = 0.10;
 const ENDORSEMENT_LEFT_PCT = 0.38;
 const ENDORSEMENT_WIDTH_PCT = 0.22;
-
-// Rasterizing very large images can exceed edge runtime memory.
-// For oversized checks we save a composited SVG fallback directly.
 const MAX_RASTER_PIXELS = 8_000_000;
+
+type OverrideShape = {
+  xPct: number;
+  yPct: number;
+  scale: number;
+  rotationDeg: number;
+};
+
+interface EndorsementRecord {
+  id: string;
+  payee_name: string;
+  payee_type: string;
+  status: string;
+  signed_at: string | null;
+  signature_image_url: string | null;
+  signature_method: string | null;
+  check_payees?: { endorsement_image_path?: string | null } | { endorsement_image_path?: string | null }[] | null;
+  resolvedSignatureImageUrl?: string | null;
+  typedSignatureText?: string | null;
+  finalSignatureRef?: string | null;
+  signatureAssetLoaded?: boolean;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -43,15 +49,14 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(supabaseUrl, serviceKey);
+  const supabase: any = createClient(supabaseUrl, serviceKey);
 
   try {
     const { checkId } = await req.json();
     if (!checkId) throw new Error("checkId is required");
 
-    console.log(`[COMPOSITE] Starting for check ${checkId}`);
+    console.log(`[COMPOSITE] check id: ${checkId}`);
 
-    // 1. Get check details
     const { data: check, error: checkErr } = await supabase
       .from("check_intake_items")
       .select("id, back_image_path, front_image_path, check_number, carrier_name, amount, endorsement_override")
@@ -61,10 +66,7 @@ Deno.serve(async (req) => {
     if (checkErr || !check) throw new Error(`Check not found: ${checkErr?.message}`);
     if (!check.back_image_path) throw new Error("No back image to composite onto");
 
-    // Resolve a clean source image path without mutating DB source fields.
-    // If current path is already an endorsed artifact, recover the true original
-    // from the earliest composite audit entry.
-    let backImagePath = check.back_image_path;
+    let backImagePath = check.back_image_path as string;
     if (backImagePath.includes("_endorsed")) {
       const { data: firstCompositeAudit } = await supabase
         .from("check_audit_log")
@@ -80,25 +82,19 @@ Deno.serve(async (req) => {
         original_back_path?: string;
       } | null;
 
-      const recoveredOriginalPath =
-        auditData?.original_back_image_path ??
-        auditData?.original_back_path ??
-        null;
-
+      const recoveredOriginalPath = auditData?.original_back_image_path ?? auditData?.original_back_path ?? null;
       if (recoveredOriginalPath) {
-        console.log(`[COMPOSITE] Re-compositing from recovered original source path: ${recoveredOriginalPath}`);
         backImagePath = recoveredOriginalPath;
       } else {
         throw new Error("Current back image path points to an endorsed artifact and no original source path could be recovered");
       }
     }
 
-    console.log(`[COMPOSITE] original image path: ${backImagePath}`);
+    console.log(`[COMPOSITE] back image path: ${backImagePath}`);
 
-    // 2. Get signed endorsements
     const { data: endorsements, error: endErr } = await supabase
       .from("check_endorsements")
-      .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method")
+      .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_payees!check_endorsements_payee_id_fkey(endorsement_image_path)")
       .eq("check_id", checkId)
       .in("status", ["signed", "waived"])
       .order("created_at", { ascending: true });
@@ -109,7 +105,7 @@ Deno.serve(async (req) => {
       return jsonResp({ success: true, skipped: true, reason: "no_endorsements" });
     }
 
-    // 3. Download the original back image
+    console.log("[COMPOSITE] loading back image");
     const { data: imgBlob, error: dlErr } = await supabase.storage
       .from("claim-files")
       .download(backImagePath);
@@ -117,208 +113,215 @@ Deno.serve(async (req) => {
     if (dlErr || !imgBlob) throw new Error(`Cannot download back image: ${dlErr?.message}`);
 
     const originalBytes = new Uint8Array(await imgBlob.arrayBuffer());
-
-    // 4. Detect actual image dimensions from the binary data
     const dims = detectImageDimensions(originalBytes);
     const imgWidth = dims.width;
     const imgHeight = dims.height;
-    console.log(`[COMPOSITE] Detected image dimensions: ${imgWidth}x${imgHeight}`);
+    console.log(`[COMPOSITE] detected image dimensions: ${imgWidth}x${imgHeight}`);
 
-    // ── Load endorsement override if saved ──
-    const ov = (check.endorsement_override ?? null) as {
-      xPct?: number; yPct?: number; scale?: number; rotationDeg?: number;
-    } | null;
-    const ovXPct = ov?.xPct ?? ENDORSEMENT_LEFT_PCT;
-    const ovYPct = ov?.yPct ?? ENDORSEMENT_TOP_PCT;
-    const ovScale = ov?.scale ?? 1;
-    const ovRotation = ov?.rotationDeg ?? 0;
-    console.log(`[COMPOSITE] Override: xPct=${ovXPct}, yPct=${ovYPct}, scale=${ovScale}, rot=${ovRotation}`);
+    const rawOverride = (check.endorsement_override ?? null) as Partial<OverrideShape> | null;
+    const appliedOverride: OverrideShape = {
+      xPct: rawOverride?.xPct ?? ENDORSEMENT_LEFT_PCT,
+      yPct: rawOverride?.yPct ?? ENDORSEMENT_TOP_PCT,
+      scale: rawOverride?.scale ?? 1,
+      rotationDeg: rawOverride?.rotationDeg ?? 0,
+    };
+    console.log(`[COMPOSITE] applying override: ${JSON.stringify(appliedOverride)}`);
 
-    // Compute the maximum Y the endorsement block can reach
-    const maxEndorsementY = Math.floor(imgHeight * BOTTOM_ZONE_LIMIT);
-    const pixelCount = imgWidth * imgHeight;
-    console.log(`[COMPOSITE] width/height: ${imgWidth}x${imgHeight}`);
-    console.log(`[COMPOSITE] pixel count: ${pixelCount}`);
+    const resolvedEndorsements = await Promise.all(
+      (endorsements as EndorsementRecord[]).map(async (endorsement) => {
+        const { savedDrawnSignatureUrl, savedUploadedSignatureUrl, typedSignatureText } =
+          resolvePreferredSignatureRefs(endorsement);
+        const finalSignatureRef = savedDrawnSignatureUrl || savedUploadedSignatureUrl || null;
 
-    // 5. Build endorsement overlay INSIDE the check image bounds
-    const originalBase64 = uint8ToBase64(originalBytes);
-    const mimeType = backImagePath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+        let resolvedSignatureImageUrl: string | null = null;
+        let signatureAssetLoaded = false;
 
-    // Endorsement zone anchored to the check body using override or defaults
-    const ezLeftPad = Math.round(imgWidth * ovXPct);
-    const ezTopPad = Math.round(imgHeight * ovYPct);
-    const ezContentWidth = Math.round(imgWidth * 0.22 * ovScale);
+        if (finalSignatureRef) {
+          resolvedSignatureImageUrl = await loadSignatureDataUrl(supabase, finalSignatureRef);
+          signatureAssetLoaded = Boolean(resolvedSignatureImageUrl);
+          if (!signatureAssetLoaded) {
+            throw new Error(`Failed to load saved signature asset for ${endorsement.payee_name}`);
+          }
+        }
 
-    // UNIFIED baseFont scaling — everything derives from one value, scaled by override
-    const baseFont = Math.max(8, Math.round(imgHeight * 0.013 * ovScale));
-    const headerFont = Math.max(8, Math.round(baseFont * 0.9));       // "Pay to the order of"
-    const companyFont = Math.max(9, Math.round(baseFont * 1.2));      // "Freedom Adjustment"
-    const bodyFont = Math.max(8, Math.round(baseFont * 0.95));        // "For Mobile Deposit Only"
-    const byLineFont = Math.max(8, Math.round(baseFont * 1.0));       // "By: Michael Carletta" + payee names
-    const sigNameFont = byLineFont;
-    const sigHeight = Math.max(14, Math.round(baseFont * 2.2));       // signature image height
+        console.log(
+          `[COMPOSITE] signature debug | payee=${endorsement.payee_name} | method=${endorsement.signature_method ?? "unknown"} | client/owner source=${finalSignatureRef ?? "typed-only"} | asset loaded=${signatureAssetLoaded}`,
+        );
 
-    const lineGap = Math.max(2, Math.round(baseFont * 0.4));
-    const sectionGap = Math.max(3, Math.round(baseFont * 0.8));
+        return {
+          ...endorsement,
+          resolvedSignatureImageUrl,
+          typedSignatureText: finalSignatureRef ? null : typedSignatureText,
+          finalSignatureRef,
+          signatureAssetLoaded,
+        } satisfies EndorsementRecord;
+      }),
+    );
 
-    console.log(`[COMPOSITE][FONT-V4] imgHeight=${imgHeight}, baseFont=${baseFont}, headerFont=${headerFont}, companyFont=${companyFont}, bodyFont=${bodyFont}, byLineFont=${byLineFont}, sigHeight=${sigHeight}, lineGap=${lineGap}, sectionGap=${sectionGap}`);
-
-    // Initialize endorsement SVG overlay variables
-    let endorsementSvg = "";
-    const centerX = ezLeftPad + Math.round(ezContentWidth / 2);
-    let curY = ezTopPad;
-
-    // If rotation is set, wrap the endorsement group in a transform
-    const rotationTransform = ovRotation !== 0
-      ? `transform="rotate(${ovRotation}, ${ezLeftPad}, ${ezTopPad})"`
-      : "";
-
-    // --- Restrictive endorsement legend ---
-    // "Pay to the order of"
-    endorsementSvg += svgText(centerX, curY + headerFont, headerFont, "#111111", "bold", "Pay to the order of");
-    curY += headerFont + lineGap;
-    // "Freedom Adjustment" (top)
-    endorsementSvg += svgText(centerX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
-    curY += companyFont + lineGap;
-    // "For Mobile Deposit Only"
-    endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#111111", "bold", "For Mobile Deposit Only");
-    curY += bodyFont + sectionGap;
-
-    // --- Separator ---
-    endorsementSvg += `<line x1="${ezLeftPad}" y1="${curY}" x2="${ezLeftPad + ezContentWidth}" y2="${curY}" stroke="#111111" stroke-width="2" opacity="0.3"/>`;
-    curY += sectionGap;
-
-    // --- Render endorsement signatures ---
     const isFreedomOrCarletta = (name: string) => {
       const lc = name.toLowerCase();
       return lc.includes("freedom") || lc.includes("carletta");
     };
-    const clientEndorsements = endorsements.filter((e: EndorsementRecord) => !isFreedomOrCarletta(e.payee_name));
-    const companyEndorsements = endorsements.filter((e: EndorsementRecord) => isFreedomOrCarletta(e.payee_name));
 
-    // --- Client signatures first (byLineFont for name) ---
-    for (const e of clientEndorsements) {
-      if (e.signature_image_url && e.signature_image_url.startsWith("data:image/")) {
-        endorsementSvg += svgText(centerX, curY + byLineFont, byLineFont, "#111111", "normal", e.payee_name);
+    const clientEndorsements = resolvedEndorsements.filter((e) => !isFreedomOrCarletta(e.payee_name));
+    const companyEndorsements = resolvedEndorsements.filter((e) => isFreedomOrCarletta(e.payee_name));
+
+    console.log(`[COMPOSITE] client signature path/url: ${JSON.stringify(clientEndorsements.map((e) => ({ payee: e.payee_name, source: e.finalSignatureRef, method: e.signature_method, loaded: e.signatureAssetLoaded })) )}`);
+    console.log(`[COMPOSITE] owner signature path/url: ${JSON.stringify(companyEndorsements.map((e) => ({ payee: e.payee_name, source: e.finalSignatureRef, method: e.signature_method, loaded: e.signatureAssetLoaded })) )}`);
+
+    const maxEndorsementY = Math.floor(imgHeight * BOTTOM_ZONE_LIMIT);
+    const pixelCount = imgWidth * imgHeight;
+    const originalBase64 = uint8ToBase64(originalBytes);
+    const mimeType = backImagePath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+
+    const ezLeftPad = Math.round(imgWidth * appliedOverride.xPct);
+    const ezTopPad = Math.round(imgHeight * appliedOverride.yPct);
+    const ezContentWidth = Math.round(imgWidth * ENDORSEMENT_WIDTH_PCT * appliedOverride.scale);
+
+    const baseFont = Math.max(8, Math.round(imgHeight * 0.013 * appliedOverride.scale));
+    const headerFont = Math.max(8, Math.round(baseFont * 0.9));
+    const companyFont = Math.max(9, Math.round(baseFont * 1.2));
+    const bodyFont = Math.max(8, Math.round(baseFont * 0.95));
+    const byLineFont = Math.max(8, Math.round(baseFont * 1.0));
+    const sigHeight = Math.max(14, Math.round(baseFont * 2.2));
+    const lineGap = Math.max(2, Math.round(baseFont * 0.4));
+    const sectionGap = Math.max(3, Math.round(baseFont * 0.8));
+
+    let endorsementSvg = "";
+    const centerX = ezLeftPad + Math.round(ezContentWidth / 2);
+    let curY = ezTopPad;
+
+    const rotationTransform = appliedOverride.rotationDeg !== 0
+      ? `transform="rotate(${appliedOverride.rotationDeg}, ${ezLeftPad}, ${ezTopPad})"`
+      : "";
+
+    endorsementSvg += svgText(centerX, curY + headerFont, headerFont, "#111111", "bold", "Pay to the order of");
+    curY += headerFont + lineGap;
+    endorsementSvg += svgText(centerX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
+    curY += companyFont + lineGap;
+    endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#111111", "bold", "For Mobile Deposit Only");
+    curY += bodyFont + sectionGap;
+    endorsementSvg += `<line x1="${ezLeftPad}" y1="${curY}" x2="${ezLeftPad + ezContentWidth}" y2="${curY}" stroke="#111111" stroke-width="2" opacity="0.3"/>`;
+    curY += sectionGap;
+
+    for (const endorsement of clientEndorsements) {
+      if (endorsement.resolvedSignatureImageUrl) {
+        endorsementSvg += svgText(centerX, curY + byLineFont, byLineFont, "#111111", "normal", endorsement.payee_name);
         curY += byLineFont + lineGap;
         const sigWidth = Math.min(ezContentWidth - 20, Math.round(imgHeight * 0.10));
-        const sigFilterId = `blackInk_${e.id.replace(/[^a-zA-Z0-9]/g, "")}`;
+        const sigFilterId = `blackInk_${endorsement.id.replace(/[^a-zA-Z0-9]/g, "")}`;
         endorsementSvg += `<defs><filter id="${sigFilterId}"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></defs>`;
-        endorsementSvg += `<image href="${escHtml(e.signature_image_url)}" x="${centerX - sigWidth / 2}" y="${curY}" width="${sigWidth}" height="${sigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${sigFilterId})"/>`;
+        endorsementSvg += `<image href="${escHtml(endorsement.resolvedSignatureImageUrl)}" x="${centerX - sigWidth / 2}" y="${curY}" width="${sigWidth}" height="${sigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${sigFilterId})"/>`;
         curY += sigHeight + lineGap;
-      } else if (e.signature_image_url && e.signature_image_url.startsWith("typed:")) {
-        const typedName = e.signature_image_url.slice(6);
-        endorsementSvg += `<text x="${centerX}" y="${curY + byLineFont}" font-family="serif" font-size="${byLineFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(typedName)}</text>`;
+      } else if (endorsement.typedSignatureText) {
+        endorsementSvg += `<text x="${centerX}" y="${curY + byLineFont}" font-family="serif" font-size="${byLineFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(endorsement.typedSignatureText)}</text>`;
         curY += byLineFont + lineGap;
-      } else if (e.status === "waived") {
-        endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#111111", "normal", `${e.payee_name} — Waived`, "italic");
+      } else if (endorsement.status === "waived") {
+        endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#111111", "normal", `${endorsement.payee_name} — Waived`, "italic");
         curY += bodyFont + lineGap;
       } else {
-        endorsementSvg += svgText(centerX, curY + byLineFont, byLineFont, "#111111", "normal", e.payee_name);
+        endorsementSvg += svgText(centerX, curY + byLineFont, byLineFont, "#111111", "normal", endorsement.payee_name);
         curY += byLineFont + lineGap;
-        endorsementSvg += svgText(centerX, curY + bodyFont, bodyFont, "#111111", "normal", "signature", "italic");
-        curY += bodyFont + lineGap;
       }
       curY += sectionGap;
     }
 
-    // --- Freedom Adjustment / By: Michael Carletta — always grouped last ---
-    if (companyEndorsements.length > 0 || true) {
-      curY += sectionGap;
-      endorsementSvg += svgText(centerX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
-      curY += companyFont + lineGap;
-      endorsementSvg += svgText(centerX, curY + byLineFont, byLineFont, "#111111", "normal", "By: Michael Carletta");
+    curY += sectionGap;
+    endorsementSvg += svgText(centerX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
+    curY += companyFont + lineGap;
+    endorsementSvg += svgText(centerX, curY + byLineFont, byLineFont, "#111111", "normal", "By: Michael Carletta");
+    curY += byLineFont + lineGap;
+
+    const companySignature = companyEndorsements.find((e) => e.resolvedSignatureImageUrl || e.typedSignatureText);
+    if (companySignature?.resolvedSignatureImageUrl) {
+      const sigWidth = Math.min(ezContentWidth - 20, Math.round(imgHeight * 0.10));
+      const coSigFilterId = `blackInkCo_${companySignature.id.replace(/[^a-zA-Z0-9]/g, "")}`;
+      endorsementSvg += `<defs><filter id="${coSigFilterId}"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></defs>`;
+      endorsementSvg += `<image href="${escHtml(companySignature.resolvedSignatureImageUrl)}" x="${centerX - sigWidth / 2}" y="${curY}" width="${sigWidth}" height="${sigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${coSigFilterId})"/>`;
+      curY += sigHeight + lineGap;
+    } else if (companySignature?.typedSignatureText) {
+      endorsementSvg += `<text x="${centerX}" y="${curY + byLineFont}" font-family="serif" font-size="${byLineFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(companySignature.typedSignatureText)}</text>`;
       curY += byLineFont + lineGap;
-      const sigEntry = companyEndorsements.find((e) => e.signature_image_url);
-      if (sigEntry?.signature_image_url?.startsWith("data:image/")) {
-        const sigWidth = Math.min(ezContentWidth - 20, Math.round(imgHeight * 0.10));
-        const coSigFilterId = `blackInkCo_${sigEntry.id.replace(/[^a-zA-Z0-9]/g, "")}`;
-        endorsementSvg += `<defs><filter id="${coSigFilterId}"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></defs>`;
-        endorsementSvg += `<image href="${escHtml(sigEntry.signature_image_url)}" x="${centerX - sigWidth / 2}" y="${curY}" width="${sigWidth}" height="${sigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${coSigFilterId})"/>`;
-        curY += sigHeight + lineGap;
-      } else if (sigEntry?.signature_image_url?.startsWith("typed:")) {
-        const typedName = sigEntry.signature_image_url.slice(6);
-        endorsementSvg += `<text x="${centerX}" y="${curY + byLineFont}" font-family="serif" font-size="${byLineFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(typedName)}</text>`;
-        curY += byLineFont + lineGap;
-      }
-      curY += Math.round(imgWidth * 0.006);
     }
 
-    // ──── HARD SAFETY CHECK ────
-    // Reject if the endorsement block would overlap the bank's restricted bottom zone
     if (curY > maxEndorsementY) {
-      const msg = `SAFETY REJECTION: Endorsement block extends to Y=${curY} which exceeds the bank restricted zone limit at Y=${maxEndorsementY} (${Math.round(BOTTOM_ZONE_LIMIT * 100)}% of ${imgHeight}px image height). Reduce endorsement count or increase image resolution.`;
+      const msg = `SAFETY REJECTION: Endorsement block extends to Y=${curY} which exceeds the bank restricted zone limit at Y=${maxEndorsementY}`;
       console.error(`[COMPOSITE] ${msg}`);
-      return jsonResp({
-        success: false,
-        error: msg,
-        safety_rejected: true,
-        endorsement_bottom_y: curY,
-        max_allowed_y: maxEndorsementY,
-        image_height: imgHeight,
-      }, 400);
+      return jsonResp({ success: false, error: msg, safety_rejected: true, endorsement_bottom_y: curY, max_allowed_y: maxEndorsementY, image_height: imgHeight }, 400);
     }
 
-    console.log(`[COMPOSITE] Endorsement block ends at Y=${curY}, limit=${maxEndorsementY} — PASS`);
-
-    // 6. Validate endorsement block fits within image bounds
     if (ezLeftPad + ezContentWidth > imgWidth) {
       const msg = `SAFETY REJECTION: Endorsement width (${ezLeftPad + ezContentWidth}px) exceeds image width (${imgWidth}px).`;
       console.error(`[COMPOSITE] ${msg}`);
       return jsonResp({ success: false, error: msg, safety_rejected: true }, 400);
     }
 
-    // 7. Build the intermediate SVG for rasterization.
-    // The endorsement is a child of a <clipPath> that constrains it
-    // strictly to the check image rectangle — nothing can render outside.
     const compositeSvg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
-     width="${imgWidth}" height="${imgHeight}" viewBox="0 0 ${imgWidth} ${imgHeight}">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${imgWidth}" height="${imgHeight}" viewBox="0 0 ${imgWidth} ${imgHeight}">
   <defs>
     <clipPath id="checkBounds">
       <rect x="0" y="0" width="${imgWidth}" height="${imgHeight}"/>
     </clipPath>
   </defs>
-  <image href="data:${mimeType};base64,${originalBase64}" 
-         x="0" y="0" width="${imgWidth}" height="${imgHeight}" 
-         preserveAspectRatio="none"/>
+  <image href="data:${mimeType};base64,${originalBase64}" x="0" y="0" width="${imgWidth}" height="${imgHeight}" preserveAspectRatio="none"/>
   <g clip-path="url(#checkBounds)" ${rotationTransform}>
     ${endorsementSvg}
   </g>
 </svg>`;
 
-    // 7. Flatten SVG → PNG at original resolution using resvg WASM.
-    // For very large images or when resvg is unavailable, use SVG fallback.
     if (pixelCount > MAX_RASTER_PIXELS || !render) {
       const reason = !render ? "resvg_unavailable" : `oversized (${pixelCount} px > ${MAX_RASTER_PIXELS})`;
-      console.log(`[COMPOSITE] rasterized vs svg-fallback mode: svg_fallback (${reason})`);
+      console.log(`[COMPOSITE] compositor/export succeeded via svg_fallback (${reason})`);
       return await uploadAndFinalize(
-        supabase, check, backImagePath, checkId, endorsements,
+        supabase,
+        backImagePath,
+        checkId,
+        resolvedEndorsements,
         new Blob([compositeSvg], { type: "image/svg+xml" }),
-        "image/svg+xml", "_endorsed.svg",
-        imgWidth, imgHeight, curY, maxEndorsementY,
-        { xPct: ovXPct, yPct: ovYPct, scale: ovScale, rotationDeg: ovRotation },
+        "image/svg+xml",
+        "_endorsed.svg",
+        imgWidth,
+        imgHeight,
+        curY,
+        maxEndorsementY,
+        appliedOverride,
       );
     }
 
-    let pngBytes: Uint8Array;
-    const appliedOv = { xPct: ovXPct, yPct: ovYPct, scale: ovScale, rotationDeg: ovRotation };
     try {
-      console.log("[COMPOSITE] rasterized vs svg-fallback mode: rasterized_png");
-      pngBytes = await render(compositeSvg);
-      console.log(`[COMPOSITE] Rasterized to PNG: ${pngBytes.length} bytes`);
+      const pngBytes = await render(compositeSvg);
+      console.log(`[COMPOSITE] compositor/export succeeded via rasterized_png (${pngBytes.length} bytes)`);
+      return await uploadAndFinalize(
+        supabase,
+        backImagePath,
+        checkId,
+        resolvedEndorsements,
+        new Blob([toArrayBuffer(pngBytes)], { type: "image/png" }),
+        "image/png",
+        "_endorsed.png",
+        imgWidth,
+        imgHeight,
+        curY,
+        maxEndorsementY,
+        appliedOverride,
+      );
     } catch (renderErr) {
       console.error(`[COMPOSITE] PNG rasterization failed, falling back to SVG: ${renderErr}`);
-      return await uploadAndFinalize(supabase, check, backImagePath, checkId, endorsements,
-        new Blob([compositeSvg], { type: "image/svg+xml" }), "image/svg+xml", "_endorsed.svg",
-        imgWidth, imgHeight, curY, maxEndorsementY, appliedOv);
+      return await uploadAndFinalize(
+        supabase,
+        backImagePath,
+        checkId,
+        resolvedEndorsements,
+        new Blob([compositeSvg], { type: "image/svg+xml" }),
+        "image/svg+xml",
+        "_endorsed.svg",
+        imgWidth,
+        imgHeight,
+        curY,
+        maxEndorsementY,
+        appliedOverride,
+      );
     }
-
-    // 8. Upload flattened PNG
-    return await uploadAndFinalize(supabase, check, backImagePath, checkId, endorsements,
-      new Blob([pngBytes], { type: "image/png" }), "image/png", "_endorsed.png",
-      imgWidth, imgHeight, curY, maxEndorsementY, appliedOv);
-
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     console.error(`[COMPOSITE] ERROR: ${msg}`);
@@ -326,13 +329,8 @@ Deno.serve(async (req) => {
   }
 });
 
-/* ------------------------------------------------------------------ */
-/*  Upload + finalize helper                                           */
-/* ------------------------------------------------------------------ */
-
 async function uploadAndFinalize(
-  supabase: ReturnType<typeof createClient>,
-  check: { id: string; back_image_path: string; endorsement_override?: unknown },
+  supabase: any,
   backImagePath: string,
   checkId: string,
   endorsements: EndorsementRecord[],
@@ -343,16 +341,8 @@ async function uploadAndFinalize(
   imgHeight: number,
   endorsementBottomY: number,
   maxAllowedY: number,
-  appliedOverride?: { xPct: number; yPct: number; scale: number; rotationDeg: number } | null,
-  blob: Blob,
-  contentType: string,
-  suffix: string,
-  imgWidth: number,
-  imgHeight: number,
-  endorsementBottomY: number,
-  maxAllowedY: number,
+  appliedOverride: OverrideShape,
 ) {
-  // Cache-bust: use timestamp in filename so a fresh asset is always generated
   const cacheBuster = Date.now();
   const compositePath = backImagePath.replace(/(\.[^.]+)$/, `_endorsed_${cacheBuster}${suffix.replace('_endorsed', '')}`);
   const renderMode = suffix.includes("png") ? "rasterized_png" : "svg_fallback";
@@ -363,24 +353,9 @@ async function uploadAndFinalize(
     .upload(compositePath, blob, { contentType, upsert: true });
 
   if (uploadErr) {
-    console.error(`[COMPOSITE] generated output path (failed upload): ${compositePath}`);
-    console.error("[COMPOSITE] DB path update committed: false");
+    console.error(`[COMPOSITE] final generated asset path (failed upload): ${compositePath}`);
     throw new Error(`Failed to upload composite: ${uploadErr.message}`);
   }
-
-  // IMPORTANT: never overwrite source path on check_intake_items.
-  // Keep source image references untouched even after successful composition.
-  const dbPathUpdateCommitted = false;
-  const overlayCoordinates = appliedOverride ? {
-    xPct: appliedOverride.xPct,
-    yPct: appliedOverride.yPct,
-    scale: appliedOverride.scale,
-    rotationDeg: appliedOverride.rotationDeg,
-  } : {
-    top_percent: Math.round(ENDORSEMENT_TOP_PCT * 100),
-    left_percent: Math.round(ENDORSEMENT_LEFT_PCT * 100),
-    width_percent: Math.round(ENDORSEMENT_WIDTH_PCT * 100),
-  };
 
   await supabase.from("check_audit_log").insert({
     check_id: checkId,
@@ -392,47 +367,49 @@ async function uploadAndFinalize(
       endorsed_back_image_path: compositePath,
       composited_back_path: compositePath,
       endorsement_count: endorsements.length,
-      endorsement_ids: endorsements.map((e: { id: string }) => e.id),
-      placement: "upper_left_on_image",
-      overlay_coordinates: overlayCoordinates,
+      endorsement_ids: endorsements.map((endorsement) => endorsement.id),
+      overlay_coordinates: appliedOverride,
       image_dimensions: { width: imgWidth, height: imgHeight },
       pixel_count: pixelCount,
       endorsement_bottom_y: endorsementBottomY,
       max_allowed_y: maxAllowedY,
       output_format: renderMode,
-      db_path_update_committed: dbPathUpdateCommitted,
+      signature_debug: endorsements.map((endorsement) => ({
+        payee_name: endorsement.payee_name,
+        signature_method: endorsement.signature_method,
+        signature_source: endorsement.finalSignatureRef,
+        signature_asset_loaded: endorsement.signatureAssetLoaded,
+        typed_fallback_used: Boolean(endorsement.typedSignatureText),
+      })),
+      db_path_update_committed: false,
     },
   });
 
-  const { data: signedUrlData } = await supabase.storage
+  const { data: signedUrlData, error: signedUrlErr } = await supabase.storage
     .from("claim-files")
     .createSignedUrl(compositePath, 3600);
-  const compositedSignedUrl = signedUrlData?.signedUrl ?? null;
+  if (signedUrlErr) {
+    console.error(`[COMPOSITE] signed URL generation failed for ${compositePath}: ${signedUrlErr.message}`);
+  }
 
-  console.log(`[COMPOSITE] original image path: ${backImagePath}`);
-  console.log(`[COMPOSITE] generated output path: ${compositePath}`);
-  console.log(`[COMPOSITE] rasterized vs svg-fallback mode: ${renderMode}`);
-  console.log(`[COMPOSITE] DB path update committed: ${dbPathUpdateCommitted}`);
-  console.log(`[COMPOSITE] Done — saved to ${compositePath} (${imgWidth}x${imgHeight})`);
+  console.log(`[COMPOSITE] final generated asset path: ${compositePath}`);
+  console.log(`[COMPOSITE] storage upload succeeded: true`);
+  console.log(`[COMPOSITE] signed URL generation succeeded: ${!signedUrlErr}`);
 
   return jsonResp({
     success: true,
     original_back_image_path: backImagePath,
     endorsed_back_image_path: compositePath,
     composited_path: compositePath,
-    composited_signed_url: compositedSignedUrl,
+    composited_signed_url: signedUrlData?.signedUrl ?? null,
     endorsement_count: endorsements.length,
     output_format: renderMode,
-    overlay_coordinates: overlayCoordinates,
+    overlay_coordinates: appliedOverride,
     image_dimensions: { width: imgWidth, height: imgHeight },
     pixel_count: pixelCount,
-    db_path_update_committed: dbPathUpdateCommitted,
+    db_path_update_committed: false,
   });
 }
-
-/* ------------------------------------------------------------------ */
-/*  Helpers                                                            */
-/* ------------------------------------------------------------------ */
 
 function jsonResp(data: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -441,50 +418,44 @@ function jsonResp(data: Record<string, unknown>, status = 200) {
   });
 }
 
-function escHtml(s: string | number | null | undefined): string {
+function escHtml(s: string | number | null | undefined) {
   if (s == null) return "";
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;");
 }
 
-function svgText(
-  x: number, y: number, size: number, fill: string,
-  weight: string, text: string, style?: string,
-): string {
+function svgText(x: number, y: number, size: number, fill: string, weight: string, text: string, style?: string) {
   const styleAttr = style ? ` font-style="${style}"` : "";
   return `<text x="${x}" y="${y}" font-family="Arial, sans-serif" font-size="${size}" fill="${fill}" font-weight="${weight}" text-anchor="middle"${styleAttr}>${escHtml(text)}</text>`;
 }
 
-function uint8ToBase64(bytes: Uint8Array): string {
-  // Avoid O(n²) string concatenation for large images (can trigger edge memory limits).
+function uint8ToBase64(bytes: Uint8Array) {
   const chunkSize = 0x8000;
-  const binaryChunks: string[] = [];
-
+  const chunks: string[] = [];
   for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binaryChunks.push(String.fromCharCode(...chunk));
+    chunks.push(String.fromCharCode(...bytes.subarray(i, i + chunkSize)));
   }
-
-  return btoa(binaryChunks.join(""));
+  return btoa(chunks.join(""));
 }
 
-/**
- * Detect image dimensions from binary headers (JPEG / PNG).
- * Falls back to 1200×800 if detection fails.
- */
 function detectImageDimensions(bytes: Uint8Array): { width: number; height: number } {
   const fallback = { width: 1200, height: 800 };
   try {
-    // PNG: IHDR chunk at bytes 16-23
     if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) {
       const width = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
       const height = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
       if (width > 0 && height > 0 && width < 20000 && height < 20000) return { width, height };
     }
-    // JPEG: scan for SOF marker
     if (bytes[0] === 0xFF && bytes[1] === 0xD8) {
       let offset = 2;
       while (offset < bytes.length - 8) {
-        if (bytes[offset] !== 0xFF) { offset++; continue; }
+        if (bytes[offset] !== 0xFF) {
+          offset++;
+          continue;
+        }
         const marker = bytes[offset + 1];
         if (marker >= 0xC0 && marker <= 0xC3) {
           const height = (bytes[offset + 5] << 8) | bytes[offset + 6];
@@ -495,17 +466,102 @@ function detectImageDimensions(bytes: Uint8Array): { width: number; height: numb
         offset += 2 + segLen;
       }
     }
-  } catch { /* fall through */ }
+  } catch {
+    // no-op
+  }
   console.log("[COMPOSITE] Could not detect image dimensions, using fallback 1200x800");
   return fallback;
 }
 
-interface EndorsementRecord {
-  id: string;
-  payee_name: string;
-  payee_type: string;
-  status: string;
-  signed_at: string | null;
-  signature_image_url: string | null;
-  signature_method: string | null;
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+function isTypedSignatureRef(value: string | null | undefined): value is string {
+  return typeof value === "string" && value.startsWith("typed:");
+}
+
+function isHttpUrl(value: string) {
+  return value.startsWith("http://") || value.startsWith("https://");
+}
+
+function isRealSignatureRef(value: string | null | undefined): value is string {
+  return typeof value === "string" && value.trim().length > 0 && !isTypedSignatureRef(value);
+}
+
+function classifySignatureMethod(method: string | null | undefined) {
+  const normalized = method?.toLowerCase() ?? "";
+  if (normalized.includes("upload")) return "uploaded";
+  if (normalized.includes("type")) return "typed";
+  if (normalized.includes("draw") || normalized.includes("portal") || normalized.includes("internal")) return "drawn";
+  return "unknown";
+}
+
+function extractLegacyPayeeSignaturePath(record: EndorsementRecord) {
+  const linkedPayee = record.check_payees;
+  if (Array.isArray(linkedPayee)) {
+    return linkedPayee.find((entry) => isRealSignatureRef(entry?.endorsement_image_path))?.endorsement_image_path ?? null;
+  }
+  return isRealSignatureRef(linkedPayee?.endorsement_image_path) ? linkedPayee.endorsement_image_path : null;
+}
+
+function resolvePreferredSignatureRefs(record: EndorsementRecord) {
+  const methodClass = classifySignatureMethod(record.signature_method);
+  const currentSignatureRef = isRealSignatureRef(record.signature_image_url) ? record.signature_image_url : null;
+  const legacyStoredSignatureRef = extractLegacyPayeeSignaturePath(record);
+
+  const savedDrawnSignatureUrl =
+    legacyStoredSignatureRef ||
+    ((methodClass === "drawn" || methodClass === "unknown") && currentSignatureRef ? currentSignatureRef : null);
+
+  const savedUploadedSignatureUrl =
+    savedDrawnSignatureUrl
+      ? null
+      : methodClass === "uploaded" && currentSignatureRef
+        ? currentSignatureRef
+        : null;
+
+  const typedSignatureText =
+    !savedDrawnSignatureUrl &&
+    !savedUploadedSignatureUrl &&
+    isTypedSignatureRef(record.signature_image_url)
+      ? record.signature_image_url.slice(6)
+      : null;
+
+  return {
+    savedDrawnSignatureUrl,
+    savedUploadedSignatureUrl,
+    typedSignatureText,
+  };
+}
+
+async function loadSignatureDataUrl(supabase: any, signatureRef: string): Promise<string | null> {
+  if (signatureRef.startsWith("data:image/")) return signatureRef;
+
+  let blob: Blob | null = null;
+
+  if (isHttpUrl(signatureRef)) {
+    const response = await fetch(signatureRef);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch signature asset: HTTP ${response.status}`);
+    }
+    blob = await response.blob();
+  } else {
+    const { data, error } = await supabase.storage.from("claim-files").download(signatureRef);
+    if (error || !data) {
+      throw new Error(`Failed to download signature asset: ${error?.message ?? signatureRef}`);
+    }
+    blob = data;
+  }
+
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const contentType = blob.type || inferImageContentType(signatureRef);
+  return `data:${contentType};base64,${uint8ToBase64(bytes)}`;
+}
+
+function inferImageContentType(path: string) {
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".webp")) return "image/webp";
+  return "image/png";
 }
