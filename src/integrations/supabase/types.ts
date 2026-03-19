@@ -1405,6 +1405,65 @@ export type Database = {
           },
         ]
       }
+      check_payment_directions: {
+        Row: {
+          answer_notes: string | null
+          answer_source: string | null
+          answered_at: string | null
+          check_id: string
+          claim_id: string
+          contractor_name: string | null
+          created_at: string
+          decision: string | null
+          expires_at: string | null
+          id: string
+          request_status: string
+          requested_at: string
+          secure_token: string
+          updated_at: string
+        }
+        Insert: {
+          answer_notes?: string | null
+          answer_source?: string | null
+          answered_at?: string | null
+          check_id: string
+          claim_id: string
+          contractor_name?: string | null
+          created_at?: string
+          decision?: string | null
+          expires_at?: string | null
+          id?: string
+          request_status?: string
+          requested_at?: string
+          secure_token?: string
+          updated_at?: string
+        }
+        Update: {
+          answer_notes?: string | null
+          answer_source?: string | null
+          answered_at?: string | null
+          check_id?: string
+          claim_id?: string
+          contractor_name?: string | null
+          created_at?: string
+          decision?: string | null
+          expires_at?: string | null
+          id?: string
+          request_status?: string
+          requested_at?: string
+          secure_token?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "check_payment_directions_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "claim_checks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       check_reissue_requests: {
         Row: {
           check_id: string
@@ -2163,14 +2222,17 @@ export type Database = {
           check_number: string | null
           check_type: string
           claim_id: string
+          cleared_status: string | null
           created_at: string | null
           created_by: string | null
           deposit_status: string | null
           eligibility_status: string | null
+          endorsement_status: string | null
           id: string
           mortgage_flag: boolean | null
           notes: string | null
           payee_line: string | null
+          payment_direction_status: string | null
           received_date: string | null
           source: string | null
           updated_at: string | null
@@ -2183,14 +2245,17 @@ export type Database = {
           check_number?: string | null
           check_type: string
           claim_id: string
+          cleared_status?: string | null
           created_at?: string | null
           created_by?: string | null
           deposit_status?: string | null
           eligibility_status?: string | null
+          endorsement_status?: string | null
           id?: string
           mortgage_flag?: boolean | null
           notes?: string | null
           payee_line?: string | null
+          payment_direction_status?: string | null
           received_date?: string | null
           source?: string | null
           updated_at?: string | null
@@ -2203,14 +2268,17 @@ export type Database = {
           check_number?: string | null
           check_type?: string
           claim_id?: string
+          cleared_status?: string | null
           created_at?: string | null
           created_by?: string | null
           deposit_status?: string | null
           eligibility_status?: string | null
+          endorsement_status?: string | null
           id?: string
           mortgage_flag?: boolean | null
           notes?: string | null
           payee_line?: string | null
+          payment_direction_status?: string | null
           received_date?: string | null
           source?: string | null
           updated_at?: string | null
@@ -2515,6 +2583,66 @@ export type Database = {
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_disbursements: {
+        Row: {
+          amount: number | null
+          check_id: string
+          claim_id: string
+          created_at: string
+          id: string
+          method: string | null
+          notes: string | null
+          payment_direction_id: string | null
+          recipient_name: string | null
+          recipient_type: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number | null
+          check_id: string
+          claim_id: string
+          created_at?: string
+          id?: string
+          method?: string | null
+          notes?: string | null
+          payment_direction_id?: string | null
+          recipient_name?: string | null
+          recipient_type: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number | null
+          check_id?: string
+          claim_id?: string
+          created_at?: string
+          id?: string
+          method?: string | null
+          notes?: string | null
+          payment_direction_id?: string | null
+          recipient_name?: string | null
+          recipient_type?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_disbursements_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "claim_checks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_disbursements_payment_direction_id_fkey"
+            columns: ["payment_direction_id"]
+            isOneToOne: false
+            referencedRelation: "check_payment_directions"
             referencedColumns: ["id"]
           },
         ]
