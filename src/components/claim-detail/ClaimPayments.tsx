@@ -102,7 +102,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
       const contractorIds = roleData.map((r) => r.user_id);
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("id, full_name, email, ramp_vendor_id")
+        .select("id, full_name, email")
         .in("id", contractorIds);
 
       setContractors(profileData || []);
@@ -112,7 +112,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   const fetchReferrers = async () => {
     const { data } = await supabase
       .from("referrers")
-      .select("id, name, email, ramp_vendor_id")
+      .select("id, name, email")
       .eq("is_active", true)
       .order("name");
 
@@ -282,17 +282,9 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
     
     // Save the Ramp vendor ID to the appropriate table
     if (selectedRecipient.type === 'contractor') {
-      const contractor = contractors.find(c => c.full_name === selectedRecipient.name || c.email === selectedRecipient.email);
-      if (contractor) {
-        await supabase.from('profiles').update({ ramp_vendor_id: vendorId }).eq('id', contractor.id);
-        fetchContractors();
-      }
+      fetchContractors();
     } else if (selectedRecipient.type === 'referrer') {
-      const referrer = referrers.find(r => r.name === selectedRecipient.name);
-      if (referrer) {
-        await supabase.from('referrers').update({ ramp_vendor_id: vendorId }).eq('id', referrer.id);
-        fetchReferrers();
-      }
+      fetchReferrers();
     }
     
     // Update selected recipient with new vendor ID
