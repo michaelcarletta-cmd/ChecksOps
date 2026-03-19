@@ -6576,6 +6576,12 @@ export type Database = {
           company_name: string | null
           company_phone: string | null
           created_at: string
+          endorsement_email_body: string | null
+          endorsement_email_button_color: string | null
+          endorsement_email_header_color: string | null
+          endorsement_email_subject: string | null
+          endorsement_reminder_body: string | null
+          endorsement_reminder_subject: string | null
           esign_date_height: number | null
           esign_date_page: number | null
           esign_date_width: number | null
@@ -6605,6 +6611,12 @@ export type Database = {
           company_name?: string | null
           company_phone?: string | null
           created_at?: string
+          endorsement_email_body?: string | null
+          endorsement_email_button_color?: string | null
+          endorsement_email_header_color?: string | null
+          endorsement_email_subject?: string | null
+          endorsement_reminder_body?: string | null
+          endorsement_reminder_subject?: string | null
           esign_date_height?: number | null
           esign_date_page?: number | null
           esign_date_width?: number | null
@@ -6634,6 +6646,12 @@ export type Database = {
           company_name?: string | null
           company_phone?: string | null
           created_at?: string
+          endorsement_email_body?: string | null
+          endorsement_email_button_color?: string | null
+          endorsement_email_header_color?: string | null
+          endorsement_email_subject?: string | null
+          endorsement_reminder_body?: string | null
+          endorsement_reminder_subject?: string | null
           esign_date_height?: number | null
           esign_date_page?: number | null
           esign_date_width?: number | null

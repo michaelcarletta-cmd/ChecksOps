@@ -362,49 +362,90 @@ function renderEndorsementPage(endorsement: Endorsement, supabaseUrl: string): s
 </html>`;
 }
 
+interface EndorsementBranding {
+  company_name?: string;
+  company_email?: string;
+  company_phone?: string;
+  endorsement_email_subject?: string;
+  endorsement_email_body?: string;
+  endorsement_email_header_color?: string;
+  endorsement_email_button_color?: string;
+  letterhead_url?: string;
+}
+
+function replaceEndorsementMergeFields(text: string, payeeName: string, checkNum: string, carrier: string, amount: number | null, endorsementUrl: string, branding: EndorsementBranding): string {
+  const amountStr = amount != null ? `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "N/A";
+  return text
+    .replace(/\{payee\.name\}/g, payeeName)
+    .replace(/\{check\.number\}/g, checkNum)
+    .replace(/\{check\.carrier\}/g, carrier)
+    .replace(/\{check\.amount\}/g, amountStr)
+    .replace(/\{endorse\.url\}/g, endorsementUrl)
+    .replace(/\{company\.name\}/g, branding.company_name || "Freedom Claims")
+    .replace(/\{company\.email\}/g, branding.company_email || "")
+    .replace(/\{company\.phone\}/g, branding.company_phone || "");
+}
+
 function buildEndorsementEmailHtml(
   payeeName: string,
   checkNum: string,
   carrier: string,
   amount: number | null,
   endorsementUrl: string,
+  branding: EndorsementBranding = {},
 ): string {
   const amountStr = amount != null
     ? `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
     : "N/A";
+  const headerColor = branding.endorsement_email_header_color || "#1e293b";
+  const buttonColor = branding.endorsement_email_button_color || "#2563eb";
+  const companyName = branding.company_name || "Freedom Claims";
+  const logoUrl = branding.letterhead_url || "";
+
+  const rawBody = branding.endorsement_email_body || "An insurance check requires your endorsement before it can be processed. Please review the details below and complete your endorsement.";
+  const processedBody = replaceEndorsementMergeFields(rawBody, payeeName, checkNum, carrier, amount, endorsementUrl, branding).replace(/\n/g, "<br>");
+
+  const logoBlock = logoUrl
+    ? `<img src="${escHtml(logoUrl)}" alt="${escHtml(companyName)}" style="max-height:48px;max-width:200px;object-fit:contain;" />`
+    : `<span style="font-size:20px;font-weight:700;color:#ffffff;">${escHtml(companyName)}</span>`;
+
   return `<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:40px 20px;">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f0f2f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f2f5;padding:40px 20px;">
     <tr><td align="center">
-      <table width="480" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-        <tr><td style="background:#1e293b;padding:24px 32px;text-align:center;">
-          <h1 style="color:#ffffff;margin:0;font-size:20px;">Insurance Check Endorsement</h1>
+      <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+        <tr><td style="background-color:${headerColor};padding:24px 32px;text-align:center;">
+          ${logoBlock}
         </td></tr>
         <tr><td style="padding:32px;">
-          <p style="color:#334155;font-size:16px;margin:0 0 20px;">Hello ${escHtml(payeeName)},</p>
-          <p style="color:#475569;font-size:14px;margin:0 0 24px;">An insurance check requires your endorsement before it can be processed.</p>
-          <table width="100%" style="margin:0 0 24px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
-            <tr style="background:#f8fafc;">
-              <td style="padding:12px 16px;color:#64748b;font-size:13px;border-bottom:1px solid #e2e8f0;">Carrier</td>
-              <td style="padding:12px 16px;font-weight:600;color:#1e293b;font-size:13px;border-bottom:1px solid #e2e8f0;text-align:right;">${escHtml(carrier)}</td>
+          <p style="color:#1a1a2e;font-size:16px;font-weight:600;margin:0 0 8px;">Hello ${escHtml(payeeName)},</p>
+          <p style="color:#4a4a68;font-size:15px;margin:0 0 24px;line-height:1.6;">${processedBody}</p>
+          <table width="100%" style="margin:0 0 24px;background-color:#f8f9fb;border-radius:8px;overflow:hidden;">
+            <tr>
+              <td style="padding:12px 20px;color:#6b7280;font-size:13px;border-bottom:1px solid #e5e7eb;">Carrier</td>
+              <td style="padding:12px 20px;font-weight:600;color:#1a1a2e;font-size:13px;border-bottom:1px solid #e5e7eb;text-align:right;">${escHtml(carrier)}</td>
             </tr>
             <tr>
-              <td style="padding:12px 16px;color:#64748b;font-size:13px;border-bottom:1px solid #e2e8f0;">Check #</td>
-              <td style="padding:12px 16px;font-weight:600;color:#1e293b;font-size:13px;border-bottom:1px solid #e2e8f0;text-align:right;">${escHtml(checkNum)}</td>
+              <td style="padding:12px 20px;color:#6b7280;font-size:13px;border-bottom:1px solid #e5e7eb;">Check #</td>
+              <td style="padding:12px 20px;font-weight:600;color:#1a1a2e;font-size:13px;border-bottom:1px solid #e5e7eb;text-align:right;">${escHtml(checkNum)}</td>
             </tr>
-            <tr style="background:#f8fafc;">
-              <td style="padding:12px 16px;color:#64748b;font-size:13px;">Amount</td>
-              <td style="padding:12px 16px;font-weight:700;color:#16a34a;font-size:16px;text-align:right;">${escHtml(amountStr)}</td>
+            <tr>
+              <td style="padding:12px 20px;color:#6b7280;font-size:13px;">Amount</td>
+              <td style="padding:12px 20px;font-weight:700;color:#16a34a;font-size:16px;text-align:right;">${escHtml(amountStr)}</td>
             </tr>
           </table>
           <table width="100%" cellpadding="0" cellspacing="0">
             <tr><td align="center" style="padding:8px 0 24px;">
-              <a href="${escHtml(endorsementUrl)}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">Review &amp; Endorse Check</a>
+              <a href="${escHtml(endorsementUrl)}" style="display:inline-block;background-color:${buttonColor};color:#ffffff;text-decoration:none;padding:14px 40px;border-radius:6px;font-size:16px;font-weight:600;">Review &amp; Endorse Check</a>
             </td></tr>
           </table>
-          <p style="color:#94a3b8;font-size:12px;margin:0;text-align:center;">This link expires in 30 days. If you did not expect this, please disregard.</p>
+          <p style="color:#9ca3af;font-size:12px;margin:0;text-align:center;">This link expires in 30 days. If you did not expect this, please disregard.</p>
+        </td></tr>
+        <tr><td style="padding:20px 32px;border-top:1px solid #e5e7eb;background-color:#f8f9fb;">
+          <p style="color:#6b7280;font-size:12px;margin:0 0 4px;">${escHtml(companyName)}${branding.company_phone ? ` &bull; ${escHtml(branding.company_phone)}` : ""}${branding.company_email ? ` &bull; ${escHtml(branding.company_email)}` : ""}</p>
+          <p style="color:#9ca3af;font-size:11px;margin:0;">This is an automated message. Please do not reply directly to this email.</p>
         </td></tr>
       </table>
     </td></tr>
@@ -604,13 +645,23 @@ Deno.serve(async (req) => {
           smsError = "Missing payee phone number";
         }
 
+        // Load branding for email customization
+        const { data: brandingRow } = await supabase
+          .from("company_branding")
+          .select("company_name, company_email, company_phone, endorsement_email_subject, endorsement_email_body, endorsement_email_header_color, endorsement_email_button_color, letterhead_url")
+          .limit(1)
+          .maybeSingle();
+        const emailBranding: EndorsementBranding = brandingRow || {};
+
         if ((method === "email" || method === "both") && endorsement.contact_email) {
           try {
+            const rawSubject = emailBranding.endorsement_email_subject || "Endorsement Required — Check #{check.number}";
+            const finalSubject = replaceEndorsementMergeFields(rawSubject, endorsement.payee_name, checkNum, carrier, amount, endorsementUrl, emailBranding);
             const { error: invokeErr } = await supabase.functions.invoke("send-email", {
               body: {
                 to: endorsement.contact_email,
-                subject: `Endorsement Required — Check #${checkNum}`,
-                body: buildEndorsementEmailHtml(endorsement.payee_name, checkNum, carrier, amount, endorsementUrl),
+                subject: finalSubject,
+                body: buildEndorsementEmailHtml(endorsement.payee_name, checkNum, carrier, amount, endorsementUrl, emailBranding),
               },
             });
             if (invokeErr) throw invokeErr;

@@ -22,6 +22,16 @@ const MERGE_FIELDS = [
   { field: "{sign.expiry_hours}", label: "Link Expiry (hrs)" },
 ];
 
+const ENDORSEMENT_MERGE_FIELDS = [
+  { field: "{payee.name}", label: "Payee Name" },
+  { field: "{check.number}", label: "Check #" },
+  { field: "{check.carrier}", label: "Carrier" },
+  { field: "{check.amount}", label: "Amount" },
+  { field: "{company.name}", label: "Company Name" },
+  { field: "{company.email}", label: "Company Email" },
+  { field: "{company.phone}", label: "Company Phone" },
+];
+
 export function CompanyBrandingSettings() {
   const [companyName, setCompanyName] = useState("");
   const [address, setAddress] = useState("");
@@ -33,6 +43,14 @@ export function CompanyBrandingSettings() {
   const [esignEmailBody, setEsignEmailBody] = useState("You have been requested to electronically sign a document. Please review the details below and click the button to proceed.");
   const [esignHeaderColor, setEsignHeaderColor] = useState("#1a56db");
   const [esignButtonColor, setEsignButtonColor] = useState("#1a56db");
+  // Endorsement email settings
+  const [endorseEmailSubject, setEndorseEmailSubject] = useState("Endorsement Required — Check #{check.number}");
+  const [endorseEmailBody, setEndorseEmailBody] = useState("An insurance check requires your endorsement before it can be processed. Please review the details below and complete your endorsement.");
+  const [endorseReminderSubject, setEndorseReminderSubject] = useState("Reminder: Endorsement Required — Check #{check.number}");
+  const [endorseReminderBody, setEndorseReminderBody] = useState("This is a reminder that your endorsement is still needed for the check below. Please take a moment to review and endorse.");
+  const [endorseHeaderColor, setEndorseHeaderColor] = useState("#1e293b");
+  const [endorseButtonColor, setEndorseButtonColor] = useState("#2563eb");
+  const [showEndorsePreview, setShowEndorsePreview] = useState(false);
   const [sigCoords, setSigCoords] = useState({ page: 1, x: 100, y: 600, w: 200, h: 50 });
   const [dateCoords, setDateCoords] = useState({ page: 1, x: 350, y: 600, w: 100, h: 25 });
   const [uploading, setUploading] = useState(false);
@@ -65,6 +83,12 @@ export function CompanyBrandingSettings() {
       setEsignEmailBody(branding.esign_email_body || "You have been requested to electronically sign a document. Please review the details below and click the button to proceed.");
       setEsignHeaderColor(branding.esign_email_header_color || "#1a56db");
       setEsignButtonColor(branding.esign_email_button_color || "#1a56db");
+      setEndorseEmailSubject(branding.endorsement_email_subject || "Endorsement Required — Check #{check.number}");
+      setEndorseEmailBody(branding.endorsement_email_body || "An insurance check requires your endorsement before it can be processed. Please review the details below and complete your endorsement.");
+      setEndorseReminderSubject(branding.endorsement_reminder_subject || "Reminder: Endorsement Required — Check #{check.number}");
+      setEndorseReminderBody(branding.endorsement_reminder_body || "This is a reminder that your endorsement is still needed for the check below. Please take a moment to review and endorse.");
+      setEndorseHeaderColor(branding.endorsement_email_header_color || "#1e293b");
+      setEndorseButtonColor(branding.endorsement_email_button_color || "#2563eb");
       setSigCoords({ page: branding.esign_signature_page || 1, x: branding.esign_signature_x || 100, y: branding.esign_signature_y || 600, w: branding.esign_signature_width || 200, h: branding.esign_signature_height || 50 });
       setDateCoords({ page: branding.esign_date_page || 1, x: branding.esign_date_x || 350, y: branding.esign_date_y || 600, w: branding.esign_date_width || 100, h: branding.esign_date_height || 25 });
     }
@@ -111,6 +135,12 @@ export function CompanyBrandingSettings() {
         esign_email_body: esignEmailBody,
         esign_email_header_color: esignHeaderColor,
         esign_email_button_color: esignButtonColor,
+        endorsement_email_subject: endorseEmailSubject,
+        endorsement_email_body: endorseEmailBody,
+        endorsement_reminder_subject: endorseReminderSubject,
+        endorsement_reminder_body: endorseReminderBody,
+        endorsement_email_header_color: endorseHeaderColor,
+        endorsement_email_button_color: endorseButtonColor,
         esign_signature_page: sigCoords.page,
         esign_signature_x: sigCoords.x,
         esign_signature_y: sigCoords.y,
@@ -438,6 +468,161 @@ export function CompanyBrandingSettings() {
                   {/* Subject preview */}
                   <p className="text-center text-xs text-gray-500 mt-3">
                     <strong>Subject:</strong> {previewSubject}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Check Endorsement Email Template */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="h-5 w-5" />
+            Check Endorsement Email Template
+          </CardTitle>
+          <CardDescription>
+            Customize the email sent to payees when a check endorsement is required. Reminder emails use a separate subject and body.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div>
+            <Label className="text-xs text-muted-foreground mb-2 block">Available Merge Fields (click to insert)</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {ENDORSEMENT_MERGE_FIELDS.map((mf) => (
+                <Badge
+                  key={mf.field}
+                  variant="outline"
+                  className="cursor-pointer hover:bg-accent text-[11px] font-mono"
+                  onClick={() => setEndorseEmailBody((prev) => prev + mf.field)}
+                >
+                  {mf.field}
+                </Badge>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-4 border rounded-lg p-4">
+            <p className="text-sm font-medium">Initial Request Email</p>
+            <div>
+              <Label>Subject</Label>
+              <Input
+                value={endorseEmailSubject}
+                onChange={(e) => setEndorseEmailSubject(e.target.value)}
+                placeholder="Endorsement Required — Check #{check.number}"
+              />
+            </div>
+            <div>
+              <Label>Body</Label>
+              <Textarea
+                value={endorseEmailBody}
+                onChange={(e) => setEndorseEmailBody(e.target.value)}
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground mt-1">Check details table and endorsement button are added automatically.</p>
+            </div>
+          </div>
+
+          <div className="space-y-4 border rounded-lg p-4">
+            <p className="text-sm font-medium">Reminder Email</p>
+            <div>
+              <Label>Subject</Label>
+              <Input
+                value={endorseReminderSubject}
+                onChange={(e) => setEndorseReminderSubject(e.target.value)}
+                placeholder="Reminder: Endorsement Required — Check #{check.number}"
+              />
+            </div>
+            <div>
+              <Label>Body</Label>
+              <Textarea
+                value={endorseReminderBody}
+                onChange={(e) => setEndorseReminderBody(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+
+          {/* Colors */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="flex items-center gap-1.5">
+                <Palette className="h-3.5 w-3.5" />
+                Header Color
+              </Label>
+              <div className="flex gap-2 items-center mt-1">
+                <input type="color" value={endorseHeaderColor} onChange={(e) => setEndorseHeaderColor(e.target.value)} className="w-10 h-9 rounded border border-border cursor-pointer" />
+                <Input value={endorseHeaderColor} onChange={(e) => setEndorseHeaderColor(e.target.value)} className="flex-1 font-mono text-sm" />
+              </div>
+            </div>
+            <div>
+              <Label className="flex items-center gap-1.5">
+                <Palette className="h-3.5 w-3.5" />
+                Button Color
+              </Label>
+              <div className="flex gap-2 items-center mt-1">
+                <input type="color" value={endorseButtonColor} onChange={(e) => setEndorseButtonColor(e.target.value)} className="w-10 h-9 rounded border border-border cursor-pointer" />
+                <Input value={endorseButtonColor} onChange={(e) => setEndorseButtonColor(e.target.value)} className="flex-1 font-mono text-sm" />
+              </div>
+            </div>
+          </div>
+
+          {/* Preview */}
+          <div>
+            <Button type="button" variant="outline" size="sm" onClick={() => setShowEndorsePreview(!showEndorsePreview)} className="mb-3">
+              {showEndorsePreview ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
+              {showEndorsePreview ? "Hide Preview" : "Show Email Preview"}
+            </Button>
+
+            {showEndorsePreview && (
+              <div className="border rounded-lg overflow-hidden bg-[#f0f2f5]">
+                <div className="p-4 max-h-[500px] overflow-y-auto">
+                  <div className="max-w-[480px] mx-auto bg-white rounded-lg overflow-hidden shadow-sm">
+                    <div style={{ backgroundColor: endorseHeaderColor }} className="py-5 px-8 text-center">
+                      {letterheadUrl ? (
+                        <img src={letterheadUrl} alt="Logo" className="max-h-10 mx-auto object-contain" />
+                      ) : (
+                        <span className="text-white font-bold text-lg">{companyName || "Freedom Claims"}</span>
+                      )}
+                    </div>
+                    <div className="p-6 text-sm">
+                      <p className="font-semibold text-gray-900 mb-1">Hello John Smith,</p>
+                      <p className="text-gray-600 leading-relaxed mb-4 whitespace-pre-line">
+                        {endorseEmailBody
+                          .replace(/\{payee\.name\}/g, "John Smith")
+                          .replace(/\{check\.number\}/g, "10042")
+                          .replace(/\{check\.carrier\}/g, "State Farm")
+                          .replace(/\{check\.amount\}/g, "$12,450.00")
+                          .replace(/\{company\.name\}/g, companyName || "Freedom Claims")
+                          .replace(/\{company\.email\}/g, email)
+                          .replace(/\{company\.phone\}/g, phone)}
+                      </p>
+                      <div className="bg-gray-50 rounded-lg overflow-hidden mb-5 text-xs">
+                        <div className="grid grid-cols-2">
+                          <span className="px-4 py-3 text-gray-500 border-b border-gray-200">Carrier</span>
+                          <span className="px-4 py-3 font-semibold text-gray-900 text-right border-b border-gray-200">State Farm</span>
+                          <span className="px-4 py-3 text-gray-500 border-b border-gray-200">Check #</span>
+                          <span className="px-4 py-3 font-semibold text-gray-900 text-right border-b border-gray-200">10042</span>
+                          <span className="px-4 py-3 text-gray-500">Amount</span>
+                          <span className="px-4 py-3 font-bold text-green-600 text-right">$12,450.00</span>
+                        </div>
+                      </div>
+                      <div className="text-center mb-4">
+                        <span style={{ backgroundColor: endorseButtonColor }} className="inline-block text-white px-8 py-3 rounded-md font-semibold text-sm">
+                          Review & Endorse Check
+                        </span>
+                      </div>
+                      <p className="text-center text-[11px] text-gray-400">This link expires in 30 days.</p>
+                    </div>
+                    <div className="border-t bg-gray-50 px-6 py-4">
+                      <p className="text-[11px] text-gray-500">{companyName || "Freedom Claims"}{phone ? ` • ${phone}` : ""}{email ? ` • ${email}` : ""}</p>
+                      <p className="text-[10px] text-gray-400">This is an automated message. Please do not reply directly to this email.</p>
+                    </div>
+                  </div>
+                  <p className="text-center text-xs text-gray-500 mt-3">
+                    <strong>Subject:</strong> {endorseEmailSubject.replace(/\{check\.number\}/g, "10042")}
                   </p>
                 </div>
               </div>

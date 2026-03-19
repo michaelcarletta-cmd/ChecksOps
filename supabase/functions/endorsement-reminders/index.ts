@@ -16,6 +16,15 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
+    // Load branding for email customization
+    const { data: brandingRow } = await supabase
+      .from("company_branding")
+      .select("endorsement_reminder_subject, endorsement_reminder_body")
+      .limit(1)
+      .maybeSingle();
+    const reminderSubject = brandingRow?.endorsement_reminder_subject || "Reminder: Endorsement Required — Check #{check.number}";
+    const reminderBody = brandingRow?.endorsement_reminder_body || "This is a reminder that your endorsement is still needed for the check below. Please take a moment to review and endorse.";
+
     // Fetch stale unsigned endorsements (> 48 hours since last contact, max 5 reminders)
     const { data: stale, error: staleErr } = await supabase
       .from("check_endorsements")
@@ -60,8 +69,8 @@ Deno.serve(async (req) => {
           const { error } = await supabase.functions.invoke("send-email", {
             body: {
               to: endorsement.contact_email,
-              subject: `Reminder: Endorsement Required — Check #${checkInfo?.check_number ?? "N/A"}`,
-              html: `<p>Hi ${endorsement.payee_name},</p><p>This is a reminder that your endorsement is still needed for check #${checkInfo?.check_number ?? "N/A"} ($${checkInfo?.amount ?? "N/A"}) from ${checkInfo?.carrier_name ?? "your insurance carrier"}.</p><p><a href="${endorsementUrl}">Click here to review &amp; endorse</a></p><p>This is reminder #${endorsement.reminder_count + 1}.</p>`,
+              subject: reminderSubject.replace(/\{check\.number\}/g, checkInfo?.check_number ?? "N/A").replace(/\{check\.amount\}/g, checkInfo?.amount ?? "N/A").replace(/\{check\.carrier\}/g, checkInfo?.carrier_name ?? "your insurance carrier").replace(/\{payee\.name\}/g, endorsement.payee_name),
+              body: `<p>Hi ${endorsement.payee_name},</p><p>${reminderBody.replace(/\{check\.number\}/g, checkInfo?.check_number ?? "N/A").replace(/\{check\.amount\}/g, `$${checkInfo?.amount ?? "N/A"}`).replace(/\{check\.carrier\}/g, checkInfo?.carrier_name ?? "your insurance carrier").replace(/\{payee\.name\}/g, endorsement.payee_name).replace(/\n/g, "</p><p>")}</p><p>This is reminder #${endorsement.reminder_count + 1}.</p><p><a href="${endorsementUrl}">Click here to review &amp; endorse</a></p>`,
             },
           });
           if (!error) sent = true;
