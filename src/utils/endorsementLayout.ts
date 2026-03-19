@@ -30,15 +30,16 @@ export function getStandardEndorsementLayout(
   const width = imageWidth * 0.22;
   const height = imageHeight * 0.22;
 
-  // Scale from image HEIGHT
-  const payToFont = imageHeight * 0.011;
-  const companyFont = imageHeight * 0.018;
-  const mobileOnlyFont = imageHeight * 0.013;
-  const byLineFont = imageHeight * 0.014;
-  const signatureFont = imageHeight * 0.021;
-  const signatureHeight = imageHeight * 0.021;
-  const lineGap = imageHeight * 0.005;
-  const sectionGap = imageHeight * 0.008;
+  // UNIFIED baseFont scaling — everything derives from one value
+  const baseFont = imageHeight * 0.013;
+  const payToFont = baseFont * 0.9;
+  const companyFont = baseFont * 1.2;
+  const mobileOnlyFont = baseFont * 0.95;
+  const byLineFont = baseFont * 1.0;
+  const signatureFont = baseFont * 1.0;
+  const signatureHeight = baseFont * 2.2;
+  const lineGap = baseFont * 0.4;
+  const sectionGap = baseFont * 0.8;
 
   return {
     x,

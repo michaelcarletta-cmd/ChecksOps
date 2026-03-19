@@ -140,24 +140,19 @@ Deno.serve(async (req) => {
     const ezTopPad = Math.round(imgHeight * ENDORSEMENT_TOP_PCT);
     const ezContentWidth = Math.round(imgWidth * ENDORSEMENT_WIDTH_PCT);
 
-    // Scale font sizes relative to actual check image HEIGHT for consistent
-    // rendering across any resolution. These MUST match endorsementLayout.ts.
-    const headerFont = Math.max(8, Math.round(imgHeight * 0.011));     // "Pay to the order of"
-    const companyFont = Math.max(10, Math.round(imgHeight * 0.018));   // "Freedom Adjustment"
-    const bodyFont = Math.max(8, Math.round(imgHeight * 0.013));       // "For Mobile Deposit Only"
-    const byLineFont = Math.max(10, Math.round(imgHeight * 0.014));   // "By: Michael Carletta" + payee names
-    const sigNameFont = byLineFont;                                     // payee name labels
-    const sigHeight = Math.max(16, Math.round(imgHeight * 0.021));     // signature image height
+    // UNIFIED baseFont scaling — everything derives from one value
+    const baseFont = Math.max(8, Math.round(imgHeight * 0.013));
+    const headerFont = Math.max(8, Math.round(baseFont * 0.9));       // "Pay to the order of"
+    const companyFont = Math.max(9, Math.round(baseFont * 1.2));      // "Freedom Adjustment"
+    const bodyFont = Math.max(8, Math.round(baseFont * 0.95));        // "For Mobile Deposit Only"
+    const byLineFont = Math.max(8, Math.round(baseFont * 1.0));       // "By: Michael Carletta" + payee names
+    const sigNameFont = byLineFont;
+    const sigHeight = Math.max(14, Math.round(baseFont * 2.2));       // signature image height
 
-    console.log(`[COMPOSITE][FONT-DEBUG] imgHeight=${imgHeight}, headerFont=${headerFont}, companyFont=${companyFont}, bodyFont=${bodyFont}, byLineFont=${byLineFont}, sigHeight=${sigHeight}`);
+    const lineGap = Math.max(2, Math.round(baseFont * 0.4));
+    const sectionGap = Math.max(3, Math.round(baseFont * 0.8));
 
-    let curY = ezTopPad;
-    let endorsementSvg = "";
-
-    const centerX = ezLeftPad + ezContentWidth / 2;
-
-    const lineGap = Math.round(imgHeight * 0.005);
-    const sectionGap = Math.round(imgHeight * 0.008);
+    console.log(`[COMPOSITE][FONT-V3] imgHeight=${imgHeight}, baseFont=${baseFont}, headerFont=${headerFont}, companyFont=${companyFont}, bodyFont=${bodyFont}, byLineFont=${byLineFont}, sigHeight=${sigHeight}, lineGap=${lineGap}, sectionGap=${sectionGap}`);
 
     // --- Restrictive endorsement legend ---
     // "Pay to the order of"
