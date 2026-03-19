@@ -302,6 +302,7 @@ Deno.serve(async (req) => {
     }
 
     let pngBytes: Uint8Array;
+    const appliedOv = { xPct: ovXPct, yPct: ovYPct, scale: ovScale, rotationDeg: ovRotation };
     try {
       console.log("[COMPOSITE] rasterized vs svg-fallback mode: rasterized_png");
       pngBytes = await render(compositeSvg);
@@ -310,7 +311,7 @@ Deno.serve(async (req) => {
       console.error(`[COMPOSITE] PNG rasterization failed, falling back to SVG: ${renderErr}`);
       return await uploadAndFinalize(supabase, check, backImagePath, checkId, endorsements,
         new Blob([compositeSvg], { type: "image/svg+xml" }), "image/svg+xml", "_endorsed.svg",
-        imgWidth, imgHeight, curY, maxEndorsementY);
+        imgWidth, imgHeight, curY, maxEndorsementY, appliedOv);
     }
 
     // 8. Upload flattened PNG
