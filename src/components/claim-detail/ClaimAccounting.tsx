@@ -752,6 +752,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
   const totalChecksReceived = checks?.reduce((sum: number, check: any) => sum + Number(check.amount), 0) || 0;
   const outstandingAmount = expectedChecks - totalChecksReceived;
   const [open, setOpen] = useState(false);
+  const [expandedCheckId, setExpandedCheckId] = useState<string | null>(null);
   const [editingCheck, setEditingCheck] = useState<any>(null);
   const [formData, setFormData] = useState({
     check_number: "",
