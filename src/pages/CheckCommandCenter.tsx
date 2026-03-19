@@ -1285,11 +1285,12 @@ function CheckDetailPanel({
 
                         {hasEndorsement && backImageDimensions && (() => {
                           // Scale all sizes from image height so endorsement looks like a real check
+                          const ovScale = savedOverride?.scale ?? 1;
                           const ar = backImageDimensions.height / backImageDimensions.width;
                           // Font sizes as % of container width (since height = width * ar)
                           // naturalHeight * ratio → cw-based: (ratio * ar * 100)cqw
-                          const f = (ratio: number) => `${(ratio * ar * 100).toFixed(3)}cqw`;
-                          const g = (ratio: number) => `${(ratio * ar * 100).toFixed(3)}cqw`; // gap
+                          const f = (ratio: number) => `${(ratio * ovScale * ar * 100).toFixed(3)}cqw`;
+                          const g = (ratio: number) => `${(ratio * ovScale * ar * 100).toFixed(3)}cqw`; // gap
                           return (
                             <div className="endorsement-overlay absolute select-none" style={endorsementStyle}>
                               <div className="leading-tight font-semibold" style={{ lineHeight: 1.15 }}>
