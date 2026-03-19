@@ -282,17 +282,9 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
     
     // Save the Ramp vendor ID to the appropriate table
     if (selectedRecipient.type === 'contractor') {
-      const contractor = contractors.find(c => c.full_name === selectedRecipient.name || c.email === selectedRecipient.email);
-      if (contractor) {
-        await supabase.from('profiles').update({ ramp_vendor_id: vendorId }).eq('id', contractor.id);
-        fetchContractors();
-      }
+      fetchContractors();
     } else if (selectedRecipient.type === 'referrer') {
-      const referrer = referrers.find(r => r.name === selectedRecipient.name);
-      if (referrer) {
-        await supabase.from('referrers').update({ ramp_vendor_id: vendorId }).eq('id', referrer.id);
-        fetchReferrers();
-      }
+      fetchReferrers();
     }
     
     // Update selected recipient with new vendor ID
