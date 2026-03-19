@@ -28,6 +28,8 @@ import { EndorsementChecklist } from "@/components/check-review/EndorsementCheck
 import { DepositPacketGenerator } from "@/components/check-review/DepositPacketGenerator";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards";
 import { LossDraftDashboard } from "@/components/loss-draft/LossDraftDashboard";
+import { EndorsementAdjuster } from "@/components/checks/EndorsementAdjuster";
+import { EndorsementOverride } from "@/lib/endorsementLayout";
 import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
 import { DepositOperationsConsole, BranchDepositManifest } from "@/components/deposit-ops/DepositOperationsConsole";
 import { ReconciliationDashboard } from "@/components/deposit-ops/ReconciliationDashboard";
