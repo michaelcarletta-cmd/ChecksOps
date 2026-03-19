@@ -317,7 +317,7 @@ Deno.serve(async (req) => {
     // 8. Upload flattened PNG
     return await uploadAndFinalize(supabase, check, backImagePath, checkId, endorsements,
       new Blob([pngBytes], { type: "image/png" }), "image/png", "_endorsed.png",
-      imgWidth, imgHeight, curY, maxEndorsementY);
+      imgWidth, imgHeight, curY, maxEndorsementY, appliedOv);
 
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
