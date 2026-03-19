@@ -364,6 +364,18 @@ Deno.serve(async (req) => {
       return jsonResponse(200, { success: true, ...defaults });
     }
 
+    if (action === "lookup-user") {
+      const email = typeof body.email === "string" ? body.email.trim() : "";
+      if (!email) throw new Error("email is required for user lookup.");
+      const usersRes = await rampRequest(token, "/developer/v1/users", { query: {} });
+      const users = asArray((usersRes as JsonRecord).data);
+      const match = users.find((u: JsonRecord) => (u.email as string)?.toLowerCase() === email.toLowerCase());
+      if (match) {
+        return jsonResponse(200, { success: true, user: { id: match.id, email: match.email, first_name: match.first_name, last_name: match.last_name, role: match.role } });
+      }
+      return jsonResponse(200, { success: false, error: `No Ramp user found with email ${email}`, available_users: users.map((u: JsonRecord) => ({ id: u.id, email: u.email, first_name: u.first_name, last_name: u.last_name })) });
+    }
+
     if (action === "upsert-vendor") {
       const name = typeof body.name === "string" ? body.name.trim() : "";
       const email = typeof body.email === "string" ? body.email.trim() : "";
