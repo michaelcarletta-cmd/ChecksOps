@@ -43,6 +43,14 @@ export function CompanyBrandingSettings() {
   const [esignEmailBody, setEsignEmailBody] = useState("You have been requested to electronically sign a document. Please review the details below and click the button to proceed.");
   const [esignHeaderColor, setEsignHeaderColor] = useState("#1a56db");
   const [esignButtonColor, setEsignButtonColor] = useState("#1a56db");
+  // Endorsement email settings
+  const [endorseEmailSubject, setEndorseEmailSubject] = useState("Endorsement Required — Check #{check.number}");
+  const [endorseEmailBody, setEndorseEmailBody] = useState("An insurance check requires your endorsement before it can be processed. Please review the details below and complete your endorsement.");
+  const [endorseReminderSubject, setEndorseReminderSubject] = useState("Reminder: Endorsement Required — Check #{check.number}");
+  const [endorseReminderBody, setEndorseReminderBody] = useState("This is a reminder that your endorsement is still needed for the check below. Please take a moment to review and endorse.");
+  const [endorseHeaderColor, setEndorseHeaderColor] = useState("#1e293b");
+  const [endorseButtonColor, setEndorseButtonColor] = useState("#2563eb");
+  const [showEndorsePreview, setShowEndorsePreview] = useState(false);
   const [sigCoords, setSigCoords] = useState({ page: 1, x: 100, y: 600, w: 200, h: 50 });
   const [dateCoords, setDateCoords] = useState({ page: 1, x: 350, y: 600, w: 100, h: 25 });
   const [uploading, setUploading] = useState(false);
