@@ -111,7 +111,50 @@ async function sendResend(to: string, subject: string, html: string) {
 // Email HTML builder
 // ---------------------------------------------------------------------------
 
-function emailHtml(signer: any, request: any, signUrl: string): string {
+interface BrandingConfig {
+  company_name?: string;
+  company_email?: string;
+  company_phone?: string;
+  esign_email_subject?: string;
+  esign_email_body?: string;
+  esign_email_header_color?: string;
+  esign_email_button_color?: string;
+  letterhead_url?: string;
+}
+
+function replaceMergeFields(text: string, signer: any, request: any, signUrl: string, branding: BrandingConfig): string {
+  const claim = request.claims || {};
+  return text
+    .replace(/\{signer\.name\}/g, signer.signer_name || "")
+    .replace(/\{signer\.email\}/g, signer.signer_email || "")
+    .replace(/\{document\.name\}/g, request.document_name || "")
+    .replace(/\{claim\.number\}/g, claim.claim_number || "N/A")
+    .replace(/\{claim\.policyholder\}/g, claim.policyholder_name || "N/A")
+    .replace(/\{claim\.policy_number\}/g, claim.policy_number || "N/A")
+    .replace(/\{company\.name\}/g, branding.company_name || "Freedom Claims")
+    .replace(/\{company\.email\}/g, branding.company_email || "")
+    .replace(/\{company\.phone\}/g, branding.company_phone || "")
+    .replace(/\{sign\.url\}/g, signUrl)
+    .replace(/\{sign\.expiry_hours\}/g, "72");
+}
+
+function emailHtml(signer: any, request: any, signUrl: string, branding: BrandingConfig): string {
+  const companyName = branding.company_name || "Freedom Claims";
+  const headerColor = branding.esign_email_header_color || "#1a56db";
+  const buttonColor = branding.esign_email_button_color || "#1a56db";
+  const logoUrl = branding.letterhead_url || "";
+
+  // Process custom body — replace merge fields and convert newlines to <br>
+  const rawBody = branding.esign_email_body || "You have been requested to electronically sign a document. Please review the details below and click the button to proceed.";
+  const processedBody = replaceMergeFields(rawBody, signer, request, signUrl, branding)
+    .replace(/\n/g, "<br>");
+
+  const claim = request.claims || {};
+
+  const logoBlock = logoUrl
+    ? `<img src="${logoUrl}" alt="${companyName}" style="max-height:48px;max-width:200px;object-fit:contain;" />`
+    : `<span style="font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;">${companyName}</span>`;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -119,52 +162,75 @@ function emailHtml(signer: any, request: any, signUrl: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Signature Required</title>
 </head>
-<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:Arial,Helvetica,sans-serif;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f4f5f7;">
+<body style="margin:0;padding:0;background-color:#f0f2f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f0f2f5;">
     <tr>
       <td align="center" style="padding:40px 20px;">
-        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+          <!-- Header -->
           <tr>
-            <td style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:30px 40px;text-align:center;">
-              <h1 style="color:#ffffff;margin:0;font-size:26px;font-weight:700;">&#128221; Signature Required</h1>
+            <td style="background-color:${headerColor};padding:24px 40px;text-align:center;">
+              ${logoBlock}
             </td>
           </tr>
+          <!-- Body -->
           <tr>
-            <td style="padding:30px 40px;">
-              <p style="font-size:16px;color:#333333;margin:0 0 16px;">Hello <strong>${signer.signer_name}</strong>,</p>
-              <p style="font-size:16px;color:#333333;margin:0 0 24px;">
-                You have been requested to electronically sign a document. This will only take a moment.
+            <td style="padding:32px 40px;">
+              <p style="font-size:16px;color:#1a1a2e;margin:0 0 8px;font-weight:600;">Hello ${signer.signer_name},</p>
+              <p style="font-size:15px;color:#4a4a68;margin:0 0 24px;line-height:1.6;">
+                ${processedBody}
               </p>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f8f9fa;border-left:4px solid #667eea;border-radius:6px;margin:0 0 28px;">
+              <!-- Document Details -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f8f9fb;border-radius:8px;margin:0 0 28px;">
                 <tr>
-                  <td style="padding:18px 20px;">
-                    <p style="margin:6px 0;color:#555555;font-size:14px;"><strong style="color:#333333;">&#128203; Claim:</strong> ${request.claims?.claim_number || "N/A"}</p>
-                    <p style="margin:6px 0;color:#555555;font-size:14px;"><strong style="color:#333333;">&#128196; Document:</strong> ${request.document_name}</p>
-                    <p style="margin:6px 0;color:#555555;font-size:14px;"><strong style="color:#333333;">&#128100; Policyholder:</strong> ${request.claims?.policyholder_name || "N/A"}</p>
+                  <td style="padding:20px 24px;">
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td style="padding:4px 0;color:#6b7280;font-size:13px;width:120px;vertical-align:top;">Document</td>
+                        <td style="padding:4px 0;color:#1a1a2e;font-size:13px;font-weight:600;">${request.document_name}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding:4px 0;color:#6b7280;font-size:13px;vertical-align:top;">Claim #</td>
+                        <td style="padding:4px 0;color:#1a1a2e;font-size:13px;font-weight:600;">${claim.claim_number || "N/A"}</td>
+                      </tr>
+                      <tr>
+                        <td style="padding:4px 0;color:#6b7280;font-size:13px;vertical-align:top;">Policyholder</td>
+                        <td style="padding:4px 0;color:#1a1a2e;font-size:13px;font-weight:600;">${claim.policyholder_name || "N/A"}</td>
+                      </tr>
+                      ${claim.policy_number ? `<tr>
+                        <td style="padding:4px 0;color:#6b7280;font-size:13px;vertical-align:top;">Policy #</td>
+                        <td style="padding:4px 0;color:#1a1a2e;font-size:13px;font-weight:600;">${claim.policy_number}</td>
+                      </tr>` : ""}
+                    </table>
                   </td>
                 </tr>
               </table>
+              <!-- CTA Button -->
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
                 <tr>
-                  <td align="center" style="padding:8px 0 28px;">
-                    <a href="${signUrl}" target="_blank" style="display:inline-block;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#ffffff;padding:14px 40px;text-decoration:none;border-radius:50px;font-size:18px;font-weight:bold;box-shadow:0 4px 15px rgba(102,126,234,0.4);">&#9997;&#65039; Click Here to Sign</a>
+                  <td align="center" style="padding:4px 0 28px;">
+                    <a href="${signUrl}" target="_blank" style="display:inline-block;background-color:${buttonColor};color:#ffffff;padding:14px 48px;text-decoration:none;border-radius:6px;font-size:16px;font-weight:600;">Review &amp; Sign Document</a>
                   </td>
                 </tr>
               </table>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#e9ecef;border-radius:6px;">
+              <!-- Fallback link -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f8f9fb;border-radius:6px;">
                 <tr>
                   <td style="padding:14px 18px;">
-                    <p style="margin:0 0 8px;font-size:13px;color:#666666;"><strong>Can&#39;t click the button?</strong> Copy and paste this link:</p>
-                    <p style="margin:0;"><a href="${signUrl}" style="color:#667eea;word-break:break-all;font-size:12px;">${signUrl}</a></p>
+                    <p style="margin:0 0 6px;font-size:12px;color:#6b7280;">Can't click the button? Copy and paste this link into your browser:</p>
+                    <p style="margin:0;"><a href="${signUrl}" style="color:${buttonColor};word-break:break-all;font-size:11px;">${signUrl}</a></p>
                   </td>
                 </tr>
               </table>
+              <!-- Expiry notice -->
+              <p style="font-size:12px;color:#9ca3af;margin:20px 0 0;text-align:center;">This link expires in 72 hours.</p>
             </td>
           </tr>
+          <!-- Footer -->
           <tr>
-            <td style="padding:20px 40px;border-top:1px solid #dee2e6;">
-              <p style="color:#6c757d;font-size:13px;margin:0 0 6px;">&#128231; Questions? Contact Freedom Claims support</p>
-              <p style="color:#adb5bd;font-size:11px;margin:0;">Automated message — do not reply directly to this email.</p>
+            <td style="padding:20px 40px;border-top:1px solid #e5e7eb;background-color:#f8f9fb;">
+              <p style="color:#6b7280;font-size:12px;margin:0 0 4px;">${companyName}${branding.company_phone ? ` &bull; ${branding.company_phone}` : ""}${branding.company_email ? ` &bull; ${branding.company_email}` : ""}</p>
+              <p style="color:#9ca3af;font-size:11px;margin:0;">This is an automated message. Please do not reply directly to this email.</p>
             </td>
           </tr>
         </table>
