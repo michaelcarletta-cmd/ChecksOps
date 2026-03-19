@@ -293,18 +293,11 @@ Deno.serve(async (req) => {
       const reason = !render ? "resvg_unavailable" : `oversized (${pixelCount} px > ${MAX_RASTER_PIXELS})`;
       console.log(`[COMPOSITE] rasterized vs svg-fallback mode: svg_fallback (${reason})`);
       return await uploadAndFinalize(
-        supabase,
-        check,
-        backImagePath,
-        checkId,
-        endorsements,
+        supabase, check, backImagePath, checkId, endorsements,
         new Blob([compositeSvg], { type: "image/svg+xml" }),
-        "image/svg+xml",
-        "_endorsed.svg",
-        imgWidth,
-        imgHeight,
-        curY,
-        maxEndorsementY,
+        "image/svg+xml", "_endorsed.svg",
+        imgWidth, imgHeight, curY, maxEndorsementY,
+        { xPct: ovXPct, yPct: ovYPct, scale: ovScale, rotationDeg: ovRotation },
       );
     }
 
