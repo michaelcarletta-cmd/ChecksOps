@@ -185,7 +185,7 @@ type LogClaimEventParams = {
   claimId: string;
   eventType: string;
   summary: string;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, string | number | boolean | null>;
 };
 
 export async function logClaimEvent({
