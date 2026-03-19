@@ -78,14 +78,15 @@ const getRampToken = async () => {
 
   const params = new URLSearchParams();
   params.set("grant_type", "client_credentials");
-  params.set("client_id", clientId);
-  params.set("client_secret", clientSecret);
   if (scope) params.set("scope", scope);
+
+  const basicAuth = btoa(`${clientId}:${clientSecret}`);
 
   const response = await fetch(tokenUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
+      "Authorization": `Basic ${basicAuth}`,
     },
     body: params.toString(),
   });
