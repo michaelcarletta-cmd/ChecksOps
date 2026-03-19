@@ -62,11 +62,15 @@ async function sendPaymentDirectionEmail({
   const appUrl = import.meta.env.VITE_APP_URL || window.location.origin;
   const requestUrl = `${appUrl}/payment-direction/${token}`;
 
-  console.log("[paymentDirection] Send email/sms here", {
-    claimId,
-    checkId,
-    requestUrl,
+  const { error } = await supabase.functions.invoke("send-payment-direction-request", {
+    body: {
+      claimId,
+      checkId,
+      requestUrl,
+      subject: "Payment direction needed for your insurance check",
+      message: `We have received the required endorsement for your insurance check.\n\nPlease tell us how you want funds handled so we can move your claim forward.\n\nDo you authorize us to pay your contractor directly for work to commence?\n\nRespond here:\n${requestUrl}`,
+    },
   });
 
-  // TODO: Replace with actual email/SMS edge function call
+  if (error) throw error;
 }

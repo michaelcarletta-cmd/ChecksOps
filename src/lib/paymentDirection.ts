@@ -70,6 +70,18 @@ export async function getPaymentDirectionByToken(token: string) {
     .single();
 
   if (error) throw error;
+
+  // Expiry check
+  if (data.expires_at && new Date(data.expires_at) < new Date()) {
+    if (data.request_status === "pending") {
+      await supabase
+        .from("check_payment_directions")
+        .update({ request_status: "expired" })
+        .eq("id", data.id);
+    }
+    throw new Error("This payment direction request has expired.");
+  }
+
   return data;
 }
 
@@ -94,6 +106,15 @@ export async function submitPaymentDirection({
 
   if (requestError) throw requestError;
   if (!request) throw new Error("Payment direction request not found.");
+
+  // Expiry check
+  if (request.expires_at && new Date(request.expires_at) < new Date()) {
+    await supabase
+      .from("check_payment_directions")
+      .update({ request_status: "expired" })
+      .eq("id", request.id);
+    throw new Error("This payment direction request has expired.");
+  }
 
   if (request.request_status !== "pending") {
     throw new Error("This payment direction request is no longer active.");
@@ -163,6 +184,15 @@ export async function createDraftDisbursementFromDecision({
   decision,
   contractorName,
 }: DraftDisbursementParams) {
+  // Idempotency: check for existing draft
+  const { data: existing } = await supabase
+    .from("claim_disbursements")
+    .select("id")
+    .eq("payment_direction_id", paymentDirectionId)
+    .maybeSingle();
+
+  if (existing) return existing;
+
   const recipientType = decision === "pay_contractor" ? "contractor" : "insured";
   const recipientName = decision === "pay_contractor" ? contractorName ?? "Contractor" : "Insured";
 
