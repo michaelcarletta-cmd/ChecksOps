@@ -170,7 +170,7 @@ export default function CheckCommandCenter() {
         "check_audit_log",
         "check_payees",
       ] as const;
-      
+
       for (const table of tables) {
         const { error } = await supabase.from(table).delete().eq("check_id", checkId);
         if (error) {
@@ -178,11 +178,20 @@ export default function CheckCommandCenter() {
           throw new Error(`Failed to clear ${table}: ${error.message}`);
         }
       }
-      
-      // Also unlink from claim_checks if linked
+
+      // Remove any accounting rows and unlink any active loss draft before deleting the check
       const { error: ccErr } = await supabase.from("claim_checks").delete().eq("check_intake_item_id", checkId);
       if (ccErr) console.warn("[DELETE] claim_checks cleanup:", ccErr.message);
-      
+
+      const { error: lossDraftErr } = await supabase
+        .from("loss_draft_tracking")
+        .update({ check_intake_item_id: null })
+        .eq("check_intake_item_id", checkId);
+      if (lossDraftErr) {
+        console.error("[DELETE] loss_draft_tracking unlink:", lossDraftErr);
+        throw new Error(`Failed to unlink loss draft: ${lossDraftErr.message}`);
+      }
+
       const { error } = await supabase.from("check_intake_items").delete().eq("id", checkId);
       if (error) throw new Error(`Failed to delete check: ${error.message}`);
     },
