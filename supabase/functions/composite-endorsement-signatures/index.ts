@@ -282,7 +282,7 @@ Deno.serve(async (req) => {
   <image href="data:${mimeType};base64,${originalBase64}" 
          x="0" y="0" width="${imgWidth}" height="${imgHeight}" 
          preserveAspectRatio="none"/>
-  <g clip-path="url(#checkBounds)">
+  <g clip-path="url(#checkBounds)" ${rotationTransform}>
     ${endorsementSvg}
   </g>
 </svg>`;
