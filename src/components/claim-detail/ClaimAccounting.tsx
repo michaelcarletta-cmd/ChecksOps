@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ClaimPayments } from "./ClaimPayments";
 import { InvoiceDialog } from "@/components/InvoiceDialog";
 import { EstimateUploadDialog } from "./EstimateUploadDialog";
+import { CheckProcessingCard } from "@/components/claims/CheckProcessingCard";
 interface ClaimAccountingProps {
   claim: any;
   userRole: string | null;
