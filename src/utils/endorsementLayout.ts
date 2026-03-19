@@ -3,7 +3,15 @@
 // Drop-in helper for the back-of-check render/compositor
 // All sizes scale from image height so the endorsement stays
 // proportional regardless of image resolution.
+//
+// NOW DELEGATES to src/lib/endorsementLayout.ts for unified logic.
 // ============================================================
+
+import {
+  getEndorsementLayout,
+  type EndorsementLayout as NewLayout,
+  type EndorsementOverride,
+} from "@/lib/endorsementLayout";
 
 export type EndorsementLayout = {
   x: number;
@@ -18,42 +26,29 @@ export type EndorsementLayout = {
   signatureHeight: number;
   lineGap: number;
   sectionGap: number;
+  rotationDeg: number;
 };
 
 export function getStandardEndorsementLayout(
   imageWidth: number,
   imageHeight: number,
+  override?: Partial<EndorsementOverride> | null,
 ): EndorsementLayout {
-  // Endorsement zone – centered in the endorsement area
-  const x = imageWidth * 0.38;
-  const y = imageHeight * 0.10;
-  const width = imageWidth * 0.22;
-  const height = imageHeight * 0.22;
-
-  // UNIFIED baseFont scaling — everything derives from one value
-  const baseFont = imageHeight * 0.013;
-  const payToFont = baseFont * 0.9;
-  const companyFont = baseFont * 1.2;
-  const mobileOnlyFont = baseFont * 0.95;
-  const byLineFont = baseFont * 1.0;
-  const signatureFont = baseFont * 1.0;
-  const signatureHeight = baseFont * 2.2;
-  const lineGap = baseFont * 0.4;
-  const sectionGap = baseFont * 0.8;
-
+  const L = getEndorsementLayout(imageWidth, imageHeight, override);
   return {
-    x,
-    y,
-    width,
-    height,
-    payToFont,
-    companyFont,
-    mobileOnlyFont,
-    byLineFont,
-    signatureFont,
-    signatureHeight,
-    lineGap,
-    sectionGap,
+    x: L.x,
+    y: L.y,
+    width: L.width,
+    height: imageHeight * 0.22 * (override?.scale ?? 1),
+    payToFont: L.payToFont,
+    companyFont: L.companyFont,
+    mobileOnlyFont: L.mobileOnlyFont,
+    byLineFont: L.byLineFont,
+    signatureFont: L.payeeFont,
+    signatureHeight: L.signatureHeight,
+    lineGap: L.lineGap,
+    sectionGap: L.sectionGap,
+    rotationDeg: L.rotationDeg,
   };
 }
 
@@ -74,6 +69,7 @@ export function renderBackCheckEndorsementToCanvas(
   ctx: CanvasRenderingContext2D,
   backImage: HTMLImageElement,
   sig: SignatureInput,
+  override?: Partial<EndorsementOverride> | null,
 ) {
   const canvas = ctx.canvas;
   canvas.width = backImage.naturalWidth || backImage.width;
@@ -87,7 +83,7 @@ export function renderBackCheckEndorsementToCanvas(
   ctx.drawImage(backImage, 0, 0, imgW, imgH);
 
   // 2) overlay endorsement at proportional size
-  const L = getStandardEndorsementLayout(imgW, imgH);
+  const L = getStandardEndorsementLayout(imgW, imgH, override);
 
   ctx.save();
 
@@ -95,6 +91,13 @@ export function renderBackCheckEndorsementToCanvas(
   ctx.beginPath();
   ctx.rect(0, 0, imgW, imgH);
   ctx.clip();
+
+  // Apply rotation if set
+  if (L.rotationDeg !== 0) {
+    ctx.translate(L.x, L.y);
+    ctx.rotate((L.rotationDeg * Math.PI) / 180);
+    ctx.translate(-L.x, -L.y);
+  }
 
   ctx.fillStyle = "#111111";
   ctx.strokeStyle = "#111111";
@@ -118,15 +121,6 @@ export function renderBackCheckEndorsementToCanvas(
   ctx.fillText("For Mobile Deposit Only", L.x, cy);
   cy += L.mobileOnlyFont + L.sectionGap;
 
-  // Company + owner grouped together
-  ctx.font = `700 ${L.companyFont}px Arial, sans-serif`;
-  ctx.fillText(sig.companyName, L.x, cy);
-  cy += L.companyFont + L.lineGap * 0.6;
-
-  ctx.font = `600 ${L.byLineFont}px Arial, sans-serif`;
-  ctx.fillText(`By: ${sig.ownerName}`, L.x, cy);
-  cy += L.byLineFont + L.sectionGap;
-
   // Client signature/name
   if (sig.clientSignature) {
     const sigAspect =
@@ -139,6 +133,15 @@ export function renderBackCheckEndorsementToCanvas(
     ctx.fillText(sig.clientName, L.x, cy);
     cy += L.signatureFont + L.lineGap * 0.5;
   }
+
+  // Company + owner grouped together
+  ctx.font = `700 ${L.companyFont}px Arial, sans-serif`;
+  ctx.fillText(sig.companyName, L.x, cy);
+  cy += L.companyFont + L.lineGap * 0.6;
+
+  ctx.font = `600 ${L.byLineFont}px Arial, sans-serif`;
+  ctx.fillText(`By: ${sig.ownerName}`, L.x, cy);
+  cy += L.byLineFont + L.sectionGap;
 
   // Owner signature/name
   if (sig.ownerSignature) {
