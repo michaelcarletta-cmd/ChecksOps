@@ -102,7 +102,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
       const contractorIds = roleData.map((r) => r.user_id);
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("id, full_name, email, ramp_vendor_id")
+        .select("id, full_name, email")
         .in("id", contractorIds);
 
       setContractors(profileData || []);
