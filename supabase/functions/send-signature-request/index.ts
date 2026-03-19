@@ -407,10 +407,12 @@ Deno.serve(async (req) => {
       });
 
       try {
-        const html = emailHtml(signer, request, signUrl);
+        const html = emailHtml(signer, request, signUrl, branding);
+        const rawSubject = branding.esign_email_subject || "Action Required: Sign {document.name}";
+        const subject = replaceMergeFields(rawSubject, signer, request, signUrl, branding);
         const emailRes = await sendResend(
           signer.signer_email,
-          `🔔 Action Required: Sign ${request.document_name}`,
+          subject,
           html,
         );
 
