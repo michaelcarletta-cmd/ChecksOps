@@ -631,6 +631,8 @@ export function CompanyBrandingSettings() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
             SignNow Integration (via Make.com)
