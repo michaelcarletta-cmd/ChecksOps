@@ -35,77 +35,117 @@ export function EndorsementAdjuster({
   initialOverride,
   onSave,
 }: EndorsementAdjusterProps) {
-  const wrapRef = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const rafRef = useRef<number | null>(null);
   const [override, setOverride] = useState<EndorsementOverride>(
     initialOverride ?? DEFAULT_ENDORSEMENT_OVERRIDE,
   );
   const [dragging, setDragging] = useState(false);
   const [resizing, setResizing] = useState(false);
+  const [activePointerId, setActivePointerId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setOverride(initialOverride ?? DEFAULT_ENDORSEMENT_OVERRIDE);
   }, [initialOverride]);
 
+  const containerWidth = wrapRef.current?.clientWidth ?? imageWidth;
+  const displayScale = containerWidth / imageWidth;
+
   const layout = useMemo(
     () => getEndorsementLayout(imageWidth, imageHeight, override),
     [imageWidth, imageHeight, override],
   );
 
-  // Compute display scale factor (image → container)
-  const containerWidth = wrapRef.current?.clientWidth ?? imageWidth;
-  const displayScale = containerWidth / imageWidth;
+  const runNextFrame = (fn: () => void) => {
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      fn();
+      rafRef.current = null;
+    });
+  };
 
-  const beginDrag = (e: React.MouseEvent) => {
+  const beginDrag = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
+    e.stopPropagation();
+    if (activePointerId !== null) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setActivePointerId(e.pointerId);
     setDragging(true);
   };
 
-  const beginResize = (e: React.MouseEvent) => {
+  const beginResize = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
+    if (activePointerId !== null) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setActivePointerId(e.pointerId);
     setResizing(true);
   };
 
   useEffect(() => {
-    const onMove = (e: MouseEvent) => {
+    const onMove = (e: PointerEvent) => {
       if (!wrapRef.current) return;
+      if (activePointerId !== e.pointerId) return;
+      if (!dragging && !resizing) return;
+
       const rect = wrapRef.current.getBoundingClientRect();
+      const liveContainerWidth = wrapRef.current.clientWidth || imageWidth;
+      const liveDisplayScale = liveContainerWidth / imageWidth;
+      const liveLayout = getEndorsementLayout(imageWidth, imageHeight, override);
 
-      if (dragging) {
-        const next = clampEndorsementOverride({
-          ...override,
-          xPct: (e.clientX - rect.left - (layout.width * displayScale) / 2) / rect.width,
-          yPct: (e.clientY - rect.top - 20) / rect.height,
-        });
-        setOverride(next);
-      }
+      runNextFrame(() => {
+        if (dragging) {
+          setOverride(
+            clampEndorsementOverride({
+              ...override,
+              xPct:
+                (e.clientX - rect.left - (liveLayout.width * liveDisplayScale) / 2) /
+                rect.width,
+              yPct: (e.clientY - rect.top - 20) / rect.height,
+              scale: override.scale,
+              rotationDeg: override.rotationDeg,
+            }),
+          );
+        }
 
-      if (resizing) {
-        const centerX = rect.left + layout.x * displayScale;
-        const deltaX = e.clientX - centerX;
-        const nextScale = Math.max(0.4, Math.min(2, deltaX / (imageWidth * 0.20 * displayScale)));
-        setOverride((prev) =>
-          clampEndorsementOverride({
-            ...prev,
-            scale: nextScale,
-          }),
-        );
-      }
+        if (resizing) {
+          const overlayLeft = rect.left + liveLayout.x * liveDisplayScale;
+          const deltaX = e.clientX - overlayLeft;
+          const nextScale = Math.max(
+            0.4,
+            Math.min(2, deltaX / (imageWidth * 0.20 * liveDisplayScale)),
+          );
+          setOverride((prev) =>
+            clampEndorsementOverride({
+              ...prev,
+              scale: nextScale,
+            }),
+          );
+        }
+      });
     };
 
-    const onUp = () => {
+    const onUp = (e: PointerEvent) => {
+      if (activePointerId !== e.pointerId) return;
       setDragging(false);
       setResizing(false);
+      setActivePointerId(null);
     };
 
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp, { passive: false });
+    window.addEventListener("pointercancel", onUp, { passive: false });
     return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
     };
-  }, [dragging, resizing, override, layout, imageWidth, displayScale]);
+  }, [activePointerId, dragging, resizing, override, imageWidth, imageHeight]);
 
   const handleReset = () => {
     setOverride(DEFAULT_ENDORSEMENT_OVERRIDE);
@@ -125,14 +165,20 @@ export function EndorsementAdjuster({
       {/* Image preview with draggable overlay */}
       <div
         ref={wrapRef}
-        className="relative w-full overflow-hidden rounded-md border border-border bg-muted"
-        style={{ aspectRatio: `${imageWidth} / ${imageHeight}` }}
+        className="relative mx-auto overflow-hidden rounded border bg-white"
+        style={{ width: "100%", maxWidth: 900, touchAction: "none" }}
       >
         <img
           src={imageUrl}
-          alt="Check back"
-          className="absolute inset-0 w-full h-full object-contain"
+          alt="Back of check"
+          className="block h-auto w-full object-contain"
           draggable={false}
+          onLoad={(e) => {
+            console.log("loaded image", {
+              width: e.currentTarget.naturalWidth,
+              height: e.currentTarget.naturalHeight,
+            });
+          }}
         />
 
         {/* endorsement zone guide (faint outline) */}
@@ -148,43 +194,66 @@ export function EndorsementAdjuster({
 
         {/* draggable overlay */}
         <div
-          className="absolute cursor-move select-none"
+          onPointerDown={beginDrag}
+          className="absolute select-none"
           style={{
-            left: `${(layout.x / imageWidth) * 100}%`,
-            top: `${(layout.y / imageHeight) * 100}%`,
+            left: layout.x * displayScale,
+            top: layout.y * displayScale,
+            width: layout.width * displayScale,
+            color: "#111111",
             transform: `rotate(${layout.rotationDeg}deg)`,
             transformOrigin: "top left",
+            userSelect: "none",
+            touchAction: "none",
+            cursor: dragging ? "grabbing" : "grab",
+            opacity: dragging ? 0.92 : 1,
+            zIndex: 20,
           }}
-          onMouseDown={beginDrag}
         >
           <div
-            style={{ fontSize: `${layout.payToFont * displayScale}px`, fontWeight: 600 }}
-            className="text-foreground whitespace-nowrap"
+            style={{
+              fontSize: layout.payToFont * displayScale,
+              fontWeight: 600,
+              lineHeight: 1.1,
+              marginBottom: layout.lineGap * displayScale,
+              color: "#111111",
+            }}
           >
             Pay to the order of
           </div>
 
           <div
-            style={{ fontSize: `${layout.companyFont * displayScale}px`, fontWeight: 700 }}
-            className="text-foreground whitespace-nowrap"
+            style={{
+              fontSize: layout.companyFont * displayScale,
+              fontWeight: 700,
+              lineHeight: 1.05,
+              marginBottom: layout.lineGap * displayScale,
+              color: "#111111",
+            }}
           >
             {companyName}
           </div>
 
           <div
-            style={{ fontSize: `${layout.mobileOnlyFont * displayScale}px`, fontWeight: 700 }}
-            className="text-foreground whitespace-nowrap"
+            style={{
+              fontSize: layout.mobileOnlyFont * displayScale,
+              fontWeight: 700,
+              lineHeight: 1.1,
+              marginBottom: layout.sectionGap * displayScale,
+              color: "#111111",
+            }}
           >
             For Mobile Deposit Only
           </div>
 
           <div
             style={{
-              fontSize: `${layout.payeeFont * displayScale}px`,
+              fontSize: layout.payeeFont * displayScale,
               fontWeight: 700,
-              marginTop: `${layout.sectionGap * displayScale}px`,
+              lineHeight: 1.1,
+              marginBottom: layout.lineGap * displayScale,
+              color: "#111111",
             }}
-            className="text-foreground whitespace-nowrap"
           >
             {clientName}
           </div>
@@ -193,18 +262,22 @@ export function EndorsementAdjuster({
             <img
               src={clientSignatureUrl}
               alt="Client signature"
-              style={{ height: `${layout.signatureHeight * displayScale}px` }}
+              style={{
+                height: layout.signatureHeight * displayScale,
+                marginBottom: layout.sectionGap * displayScale,
+              }}
               className="object-contain"
               draggable={false}
             />
           ) : (
             <div
               style={{
-                fontSize: `${layout.payeeFont * displayScale}px`,
+                fontSize: layout.payeeFont * displayScale,
                 fontStyle: "italic",
                 fontFamily: '"Brush Script MT", cursive',
+                marginBottom: layout.sectionGap * displayScale,
+                color: "#111111",
               }}
-              className="text-foreground whitespace-nowrap"
             >
               {clientName}
             </div>
@@ -212,18 +285,24 @@ export function EndorsementAdjuster({
 
           <div
             style={{
-              fontSize: `${layout.companyFont * displayScale}px`,
+              fontSize: layout.companyFont * displayScale,
               fontWeight: 700,
-              marginTop: `${layout.sectionGap * displayScale}px`,
+              lineHeight: 1.05,
+              marginBottom: layout.lineGap * displayScale,
+              color: "#111111",
             }}
-            className="text-foreground whitespace-nowrap"
           >
             {companyName}
           </div>
 
           <div
-            style={{ fontSize: `${layout.byLineFont * displayScale}px`, fontWeight: 600 }}
-            className="text-foreground whitespace-nowrap"
+            style={{
+              fontSize: layout.byLineFont * displayScale,
+              fontWeight: 600,
+              lineHeight: 1.1,
+              marginBottom: layout.lineGap * displayScale,
+              color: "#111111",
+            }}
           >
             By: {ownerName}
           </div>
@@ -232,18 +311,18 @@ export function EndorsementAdjuster({
             <img
               src={ownerSignatureUrl}
               alt="Owner signature"
-              style={{ height: `${layout.signatureHeight * displayScale}px` }}
+              style={{ height: layout.signatureHeight * displayScale }}
               className="object-contain"
               draggable={false}
             />
           ) : (
             <div
               style={{
-                fontSize: `${layout.byLineFont * displayScale}px`,
+                fontSize: layout.byLineFont * displayScale,
                 fontStyle: "italic",
                 fontFamily: '"Brush Script MT", cursive',
+                color: "#111111",
               }}
-              className="text-foreground whitespace-nowrap"
             >
               {ownerName}
             </div>
@@ -251,8 +330,17 @@ export function EndorsementAdjuster({
 
           {/* resize handle */}
           <div
-            className="absolute -right-2 -bottom-2 w-4 h-4 bg-primary rounded-full cursor-se-resize border-2 border-background"
-            onMouseDown={beginResize}
+            onPointerDown={beginResize}
+            className="absolute rounded-full border-2 border-background bg-foreground shadow"
+            style={{
+              width: 32,
+              height: 32,
+              right: -16,
+              bottom: -16,
+              cursor: "nwse-resize",
+              touchAction: "none",
+              opacity: resizing ? 0.85 : 1,
+            }}
           />
         </div>
       </div>
@@ -263,34 +351,54 @@ export function EndorsementAdjuster({
           <CardTitle className="text-sm">Adjust Endorsement</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">Horizontal Position</p>
-            <Slider
-              min={0.05}
-              max={0.75}
-              step={0.01}
-              value={[override.xPct]}
-              onValueChange={([v]) =>
+          {/* D-pad nudge buttons */}
+          <div className="grid grid-cols-3 gap-2">
+            <div />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
                 setOverride((prev) =>
-                  clampEndorsementOverride({ ...prev, xPct: v }),
+                  clampEndorsementOverride({ ...prev, yPct: prev.yPct - 0.005 }),
                 )
               }
-            />
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">Vertical Position</p>
-            <Slider
-              min={0.03}
-              max={0.30}
-              step={0.01}
-              value={[override.yPct]}
-              onValueChange={([v]) =>
+            >
+              Up
+            </Button>
+            <div />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
                 setOverride((prev) =>
-                  clampEndorsementOverride({ ...prev, yPct: v }),
+                  clampEndorsementOverride({ ...prev, xPct: prev.xPct - 0.005 }),
                 )
               }
-            />
+            >
+              Left
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setOverride((prev) =>
+                  clampEndorsementOverride({ ...prev, yPct: prev.yPct + 0.005 }),
+                )
+              }
+            >
+              Down
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setOverride((prev) =>
+                  clampEndorsementOverride({ ...prev, xPct: prev.xPct + 0.005 }),
+                )
+              }
+            >
+              Right
+            </Button>
           </div>
 
           <div className="space-y-1">
