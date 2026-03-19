@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     // 1. Get check details
     const { data: check, error: checkErr } = await supabase
       .from("check_intake_items")
-      .select("id, back_image_path, front_image_path, check_number, carrier_name, amount")
+      .select("id, back_image_path, front_image_path, check_number, carrier_name, amount, endorsement_override")
       .eq("id", checkId)
       .single();
 
