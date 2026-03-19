@@ -154,6 +154,11 @@ Deno.serve(async (req) => {
 
     console.log(`[COMPOSITE][FONT-V3] imgHeight=${imgHeight}, baseFont=${baseFont}, headerFont=${headerFont}, companyFont=${companyFont}, bodyFont=${bodyFont}, byLineFont=${byLineFont}, sigHeight=${sigHeight}, lineGap=${lineGap}, sectionGap=${sectionGap}`);
 
+    // Initialize endorsement SVG overlay variables
+    let endorsementSvg = "";
+    const centerX = ezLeftPad + Math.round(ezContentWidth / 2);
+    let curY = ezTopPad;
+
     // --- Restrictive endorsement legend ---
     // "Pay to the order of"
     endorsementSvg += svgText(centerX, curY + headerFont, headerFont, "#111111", "bold", "Pay to the order of");
