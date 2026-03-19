@@ -170,6 +170,86 @@ async function reEvaluateAfterEndorsement(
       console.error("Auto signature composite failed (non-blocking):", compositeErr);
     }
 
+    // Trigger payment direction workflow for linked claim_checks
+    try {
+      const { data: linkedCheck } = await supabase
+        .from("claim_checks")
+        .select("id, claim_id")
+        .eq("check_intake_item_id", checkId)
+        .maybeSingle();
+
+      if (linkedCheck) {
+        await supabase
+          .from("claim_checks")
+          .update({ endorsement_status: "signed" })
+          .eq("id", linkedCheck.id);
+
+        // Check if a payment direction request already exists
+        const { data: existingPD } = await supabase
+          .from("check_payment_directions")
+          .select("id")
+          .eq("check_id", linkedCheck.id)
+          .eq("request_status", "pending")
+          .maybeSingle();
+
+        if (!existingPD) {
+          const expiresAt = new Date();
+          expiresAt.setDate(expiresAt.getDate() + 21);
+
+          const { data: pdRequest } = await supabase
+            .from("check_payment_directions")
+            .insert({
+              claim_id: linkedCheck.claim_id,
+              check_id: linkedCheck.id,
+              request_status: "pending",
+              expires_at: expiresAt.toISOString(),
+            })
+            .select()
+            .single();
+
+          if (pdRequest) {
+            await supabase
+              .from("claim_checks")
+              .update({ payment_direction_status: "requested" })
+              .eq("id", linkedCheck.id);
+
+            // Send payment direction notification
+            const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+            const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+            // Determine app URL for the payment direction link
+            const appUrl = Deno.env.get("APP_URL") || `${supabaseUrl.replace('.supabase.co', '.lovable.app')}`;
+            const requestUrl = `${appUrl}/payment-direction/${pdRequest.secure_token}`;
+
+            await fetch(`${supabaseUrl}/functions/v1/send-payment-direction-request`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${serviceKey}`,
+              },
+              body: JSON.stringify({
+                claimId: linkedCheck.claim_id,
+                checkId: linkedCheck.id,
+                requestUrl,
+                subject: "Payment direction needed for your insurance check",
+              }),
+            });
+
+            console.log(`[ENDORSEMENT] Payment direction request created for claim_check ${linkedCheck.id}`);
+
+            await supabase.from("check_audit_log").insert({
+              check_id: checkId,
+              event_type: "payment_direction_triggered",
+              event_description: `Payment direction request automatically triggered after endorsement completion`,
+              event_data: { claim_check_id: linkedCheck.id, payment_direction_id: pdRequest.id },
+            });
+          }
+        }
+      }
+    } catch (pdErr) {
+      console.error("Payment direction trigger failed (non-blocking):", pdErr);
+    }
+
     return { allSigned: true, newStatus: check?.is_multi_payee || RESTRICTED_RECOMMENDATIONS.has(originalRec) ? "endorsements_complete" : "ready" };
   }
 

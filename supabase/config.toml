@@ -69,3 +69,6 @@ verify_jwt = false
 
 [functions.fetch-aerial-image]
 verify_jwt = false
+
+[functions.send-payment-direction-request]
+verify_jwt = false
