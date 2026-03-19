@@ -285,6 +285,14 @@ Deno.serve(async (req) => {
       throw new Error(msg);
     }
 
+    // Load company branding for email customization
+    const { data: brandingRow } = await sb
+      .from("company_branding")
+      .select("company_name, company_email, company_phone, esign_email_subject, esign_email_body, esign_email_header_color, esign_email_button_color, letterhead_url")
+      .limit(1)
+      .maybeSingle();
+    const branding: BrandingConfig = brandingRow || {};
+
     claimId = request.claim_id;
     const signersArr: any[] = request.signature_signers || [];
 
