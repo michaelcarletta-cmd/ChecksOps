@@ -6,7 +6,21 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, Building2, FileText, Loader2 } from "lucide-react";
+import { Upload, Building2, FileText, Loader2, Mail, Eye, EyeOff, Palette } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+
+const MERGE_FIELDS = [
+  { field: "{signer.name}", label: "Signer Name" },
+  { field: "{signer.email}", label: "Signer Email" },
+  { field: "{document.name}", label: "Document Name" },
+  { field: "{claim.number}", label: "Claim #" },
+  { field: "{claim.policyholder}", label: "Policyholder" },
+  { field: "{claim.policy_number}", label: "Policy #" },
+  { field: "{company.name}", label: "Company Name" },
+  { field: "{company.email}", label: "Company Email" },
+  { field: "{company.phone}", label: "Company Phone" },
+  { field: "{sign.expiry_hours}", label: "Link Expiry (hrs)" },
+];
 
 export function CompanyBrandingSettings() {
   const [companyName, setCompanyName] = useState("");
@@ -15,13 +29,16 @@ export function CompanyBrandingSettings() {
   const [email, setEmail] = useState("");
   const [letterheadUrl, setLetterheadUrl] = useState<string | null>(null);
   const [signnowWebhookUrl, setSignnowWebhookUrl] = useState("");
-  const [esignEmailSubject, setEsignEmailSubject] = useState("Please sign your document");
-  const [esignEmailBody, setEsignEmailBody] = useState("Please click the link to review and sign your document.");
+  const [esignEmailSubject, setEsignEmailSubject] = useState("Action Required: Sign {document.name}");
+  const [esignEmailBody, setEsignEmailBody] = useState("You have been requested to electronically sign a document. Please review the details below and click the button to proceed.");
+  const [esignHeaderColor, setEsignHeaderColor] = useState("#1a56db");
+  const [esignButtonColor, setEsignButtonColor] = useState("#1a56db");
   const [sigCoords, setSigCoords] = useState({ page: 1, x: 100, y: 600, w: 200, h: 50 });
   const [dateCoords, setDateCoords] = useState({ page: 1, x: 350, y: 600, w: 100, h: 25 });
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [brandingId, setBrandingId] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -44,8 +61,10 @@ export function CompanyBrandingSettings() {
       setEmail(branding.company_email || "");
       setLetterheadUrl(branding.letterhead_url || null);
       setSignnowWebhookUrl(branding.signnow_make_webhook_url || "");
-      setEsignEmailSubject(branding.esign_email_subject || "Please sign your document");
-      setEsignEmailBody(branding.esign_email_body || "Please click the link to review and sign your document.");
+      setEsignEmailSubject(branding.esign_email_subject || "Action Required: Sign {document.name}");
+      setEsignEmailBody(branding.esign_email_body || "You have been requested to electronically sign a document. Please review the details below and click the button to proceed.");
+      setEsignHeaderColor(branding.esign_email_header_color || "#1a56db");
+      setEsignButtonColor(branding.esign_email_button_color || "#1a56db");
       setSigCoords({ page: branding.esign_signature_page || 1, x: branding.esign_signature_x || 100, y: branding.esign_signature_y || 600, w: branding.esign_signature_width || 200, h: branding.esign_signature_height || 50 });
       setDateCoords({ page: branding.esign_date_page || 1, x: branding.esign_date_x || 350, y: branding.esign_date_y || 600, w: branding.esign_date_width || 100, h: branding.esign_date_height || 25 });
     }
@@ -90,6 +109,8 @@ export function CompanyBrandingSettings() {
         signnow_make_webhook_url: signnowWebhookUrl || null,
         esign_email_subject: esignEmailSubject,
         esign_email_body: esignEmailBody,
+        esign_email_header_color: esignHeaderColor,
+        esign_email_button_color: esignButtonColor,
         esign_signature_page: sigCoords.page,
         esign_signature_x: sigCoords.x,
         esign_signature_y: sigCoords.y,
@@ -124,6 +145,38 @@ export function CompanyBrandingSettings() {
       setSaving(false);
     }
   };
+
+  const insertMergeField = (field: string, target: "subject" | "body") => {
+    if (target === "subject") {
+      setEsignEmailSubject((prev) => prev + field);
+    } else {
+      setEsignEmailBody((prev) => prev + field);
+    }
+  };
+
+  const previewSubject = esignEmailSubject
+    .replace(/\{signer\.name\}/g, "John Smith")
+    .replace(/\{signer\.email\}/g, "john@example.com")
+    .replace(/\{document\.name\}/g, "Authorization to Represent")
+    .replace(/\{claim\.number\}/g, "CLM-2025-0042")
+    .replace(/\{claim\.policyholder\}/g, "Jane Doe")
+    .replace(/\{claim\.policy_number\}/g, "POL-12345")
+    .replace(/\{company\.name\}/g, companyName || "Freedom Claims")
+    .replace(/\{company\.email\}/g, email)
+    .replace(/\{company\.phone\}/g, phone)
+    .replace(/\{sign\.expiry_hours\}/g, "72");
+
+  const previewBody = esignEmailBody
+    .replace(/\{signer\.name\}/g, "John Smith")
+    .replace(/\{signer\.email\}/g, "john@example.com")
+    .replace(/\{document\.name\}/g, "Authorization to Represent")
+    .replace(/\{claim\.number\}/g, "CLM-2025-0042")
+    .replace(/\{claim\.policyholder\}/g, "Jane Doe")
+    .replace(/\{claim\.policy_number\}/g, "POL-12345")
+    .replace(/\{company\.name\}/g, companyName || "Freedom Claims")
+    .replace(/\{company\.email\}/g, email)
+    .replace(/\{company\.phone\}/g, phone)
+    .replace(/\{sign\.expiry_hours\}/g, "72");
 
   return (
     <div className="space-y-6">
@@ -223,6 +276,176 @@ export function CompanyBrandingSettings() {
         </CardContent>
       </Card>
 
+      {/* Signature Request Email Template */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Mail className="h-5 w-5" />
+            Signature Request Email Template
+          </CardTitle>
+          <CardDescription>
+            Customize the email sent to signers when a signature is requested. Use merge fields to personalize each email.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {/* Merge fields reference */}
+          <div>
+            <Label className="text-xs text-muted-foreground mb-2 block">Available Merge Fields (click to insert into body)</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {MERGE_FIELDS.map((mf) => (
+                <Badge
+                  key={mf.field}
+                  variant="outline"
+                  className="cursor-pointer hover:bg-accent text-[11px] font-mono"
+                  onClick={() => insertMergeField(mf.field, "body")}
+                >
+                  {mf.field}
+                </Badge>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <Label>Email Subject</Label>
+            <Input
+              value={esignEmailSubject}
+              onChange={(e) => setEsignEmailSubject(e.target.value)}
+              placeholder="Action Required: Sign {document.name}"
+            />
+            <p className="text-xs text-muted-foreground mt-1">Merge fields work in the subject line too.</p>
+          </div>
+
+          <div>
+            <Label>Email Body</Label>
+            <Textarea
+              value={esignEmailBody}
+              onChange={(e) => setEsignEmailBody(e.target.value)}
+              placeholder="You have been requested to electronically sign a document..."
+              rows={4}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              The document details table and sign button are added automatically below your message.
+            </p>
+          </div>
+
+          {/* Color customization */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label className="flex items-center gap-1.5">
+                <Palette className="h-3.5 w-3.5" />
+                Header Color
+              </Label>
+              <div className="flex gap-2 items-center mt-1">
+                <input
+                  type="color"
+                  value={esignHeaderColor}
+                  onChange={(e) => setEsignHeaderColor(e.target.value)}
+                  className="w-10 h-9 rounded border border-border cursor-pointer"
+                />
+                <Input
+                  value={esignHeaderColor}
+                  onChange={(e) => setEsignHeaderColor(e.target.value)}
+                  className="flex-1 font-mono text-sm"
+                  placeholder="#1a56db"
+                />
+              </div>
+            </div>
+            <div>
+              <Label className="flex items-center gap-1.5">
+                <Palette className="h-3.5 w-3.5" />
+                Button Color
+              </Label>
+              <div className="flex gap-2 items-center mt-1">
+                <input
+                  type="color"
+                  value={esignButtonColor}
+                  onChange={(e) => setEsignButtonColor(e.target.value)}
+                  className="w-10 h-9 rounded border border-border cursor-pointer"
+                />
+                <Input
+                  value={esignButtonColor}
+                  onChange={(e) => setEsignButtonColor(e.target.value)}
+                  className="flex-1 font-mono text-sm"
+                  placeholder="#1a56db"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Live Preview */}
+          <div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowPreview(!showPreview)}
+              className="mb-3"
+            >
+              {showPreview ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
+              {showPreview ? "Hide Preview" : "Show Email Preview"}
+            </Button>
+
+            {showPreview && (
+              <div className="border rounded-lg overflow-hidden bg-[#f0f2f5]">
+                <div className="p-4 max-h-[500px] overflow-y-auto">
+                  {/* Preview container */}
+                  <div className="max-w-[480px] mx-auto bg-white rounded-lg overflow-hidden shadow-sm">
+                    {/* Header */}
+                    <div style={{ backgroundColor: esignHeaderColor }} className="py-5 px-8 text-center">
+                      {letterheadUrl ? (
+                        <img src={letterheadUrl} alt="Logo" className="max-h-10 mx-auto object-contain" />
+                      ) : (
+                        <span className="text-white font-bold text-lg">{companyName || "Freedom Claims"}</span>
+                      )}
+                    </div>
+                    {/* Body */}
+                    <div className="p-6 text-sm">
+                      <p className="font-semibold text-gray-900 mb-1">Hello John Smith,</p>
+                      <p className="text-gray-600 leading-relaxed mb-4 whitespace-pre-line">{previewBody}</p>
+                      
+                      <div className="bg-gray-50 rounded-lg p-4 mb-5 text-xs">
+                        <div className="grid grid-cols-[100px_1fr] gap-y-1.5">
+                          <span className="text-gray-500">Document</span>
+                          <span className="font-semibold text-gray-900">Authorization to Represent</span>
+                          <span className="text-gray-500">Claim #</span>
+                          <span className="font-semibold text-gray-900">CLM-2025-0042</span>
+                          <span className="text-gray-500">Policyholder</span>
+                          <span className="font-semibold text-gray-900">Jane Doe</span>
+                          <span className="text-gray-500">Policy #</span>
+                          <span className="font-semibold text-gray-900">POL-12345</span>
+                        </div>
+                      </div>
+
+                      <div className="text-center mb-4">
+                        <span
+                          style={{ backgroundColor: esignButtonColor }}
+                          className="inline-block text-white px-8 py-3 rounded-md font-semibold text-sm"
+                        >
+                          Review & Sign Document
+                        </span>
+                      </div>
+
+                      <p className="text-center text-[11px] text-gray-400">This link expires in 72 hours.</p>
+                    </div>
+                    {/* Footer */}
+                    <div className="border-t bg-gray-50 px-6 py-4">
+                      <p className="text-[11px] text-gray-500">
+                        {companyName || "Freedom Claims"}{phone ? ` • ${phone}` : ""}{email ? ` • ${email}` : ""}
+                      </p>
+                      <p className="text-[10px] text-gray-400">This is an automated message. Please do not reply directly to this email.</p>
+                    </div>
+                  </div>
+                  {/* Subject preview */}
+                  <p className="text-center text-xs text-gray-500 mt-3">
+                    <strong>Subject:</strong> {previewSubject}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -254,16 +477,6 @@ export function CompanyBrandingSettings() {
             <p className="text-muted-foreground text-xs">
               Configure SignNow/Make to POST to this URL when documents are signed.
             </p>
-          </div>
-          <div className="grid grid-cols-2 gap-4 mt-4">
-            <div>
-              <Label>Email Subject</Label>
-              <Input value={esignEmailSubject} onChange={(e) => setEsignEmailSubject(e.target.value)} />
-            </div>
-            <div>
-              <Label>Email Body</Label>
-              <Textarea value={esignEmailBody} onChange={(e) => setEsignEmailBody(e.target.value)} rows={2} />
-            </div>
           </div>
           <div className="mt-4 space-y-3">
             <p className="font-medium text-sm">Signature Field Coordinates</p>
