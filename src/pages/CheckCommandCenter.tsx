@@ -28,6 +28,8 @@ import { EndorsementChecklist } from "@/components/check-review/EndorsementCheck
 import { DepositPacketGenerator } from "@/components/check-review/DepositPacketGenerator";
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards";
 import { LossDraftDashboard } from "@/components/loss-draft/LossDraftDashboard";
+import { EndorsementAdjuster } from "@/components/checks/EndorsementAdjuster";
+import { EndorsementOverride } from "@/lib/endorsementLayout";
 import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
 import { DepositOperationsConsole, BranchDepositManifest } from "@/components/deposit-ops/DepositOperationsConsole";
 import { ReconciliationDashboard } from "@/components/deposit-ops/ReconciliationDashboard";
@@ -77,6 +79,7 @@ interface CheckItem {
   reviewed_at: string | null;
   review_notes: string | null;
   endorsement_packet_path: string | null;
+  endorsement_override: Record<string, unknown> | null;
   check_payees?: CheckPayee[];
 }
 
@@ -741,6 +744,7 @@ function CheckDetailPanel({
   const [detailTab, setDetailTab] = useState("overview");
   const [undoing, setUndoing] = useState(false);
   const [preparingDepositPrint, setPreparingDepositPrint] = useState(false);
+  const [showEndorsementAdjuster, setShowEndorsementAdjuster] = useState(false);
   const [frontImageDimensions, setFrontImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [backImageDimensions, setBackImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const { user } = useAuth();
@@ -1644,11 +1648,51 @@ function CheckDetailPanel({
               )}
             </TabsContent>
 
-            <TabsContent value="endorsements" className="p-4 mt-0">
+            <TabsContent value="endorsements" className="p-4 mt-0 space-y-4">
               <EndorsementChecklist
                 checkId={checkId}
                 onRefresh={onRefresh}
               />
+
+              {backImageUrl && backImageDimensions && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setShowEndorsementAdjuster((v) => !v)}
+                  >
+                    {showEndorsementAdjuster ? "Hide" : "Adjust"} Endorsement Position
+                  </Button>
+
+                  {showEndorsementAdjuster && (
+                    <EndorsementAdjuster
+                      imageUrl={backImageUrl}
+                      imageWidth={backImageDimensions.width}
+                      imageHeight={backImageDimensions.height}
+                      clientName="ILDEFONSO ROSAS"
+                      ownerName="Michael Carletta"
+                      companyName="Freedom Adjustment"
+                      initialOverride={
+                        (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null
+                      }
+                      onSave={async (ov) => {
+                        const { error } = await supabase
+                          .from("check_intake_items")
+                          .update({
+                            endorsement_override: ov as any,
+                            updated_at: new Date().toISOString(),
+                          })
+                          .eq("id", checkId);
+                        if (error) throw error;
+                        toast({ title: "Endorsement override saved" });
+                        setShowEndorsementAdjuster(false);
+                        qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+                      }}
+                    />
+                  )}
+                </>
+              )}
             </TabsContent>
 
             <TabsContent value="payees" className="p-4 space-y-3 mt-0">
