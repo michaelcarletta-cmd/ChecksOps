@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { DollarSign, Trash2, CreditCard, Banknote, FileCheck } from "lucide-react";
 import { QuickBooksPaymentDialog } from "@/components/QuickBooksPaymentDialog";
-import { StripePaymentDialog } from "@/components/StripePaymentDialog";
+import { RampPaymentDialog } from "@/components/RampPaymentDialog";
 import { OnlineCheckWriterDialog } from "@/components/OnlineCheckWriterDialog";
 
 interface ClaimPaymentsProps {
@@ -35,14 +35,14 @@ interface Contractor {
   id: string;
   full_name: string | null;
   email: string;
-  stripe_account_id?: string | null;
+  ramp_vendor_id?: string | null;
 }
 
 interface Referrer {
   id: string;
   name: string;
   email: string | null;
-  stripe_account_id?: string | null;
+  ramp_vendor_id?: string | null;
 }
 
 export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
@@ -51,14 +51,15 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   const [referrers, setReferrers] = useState<Referrer[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [qbPaymentOpen, setQbPaymentOpen] = useState(false);
-  const [stripePaymentOpen, setStripePaymentOpen] = useState(false);
+  const [rampPaymentOpen, setRampPaymentOpen] = useState(false);
   const [ocwPaymentOpen, setOcwPaymentOpen] = useState(false);
   const [selectedRecipient, setSelectedRecipient] = useState<{ 
     name: string; 
     email?: string; 
     phone?: string;
     type: 'contractor' | 'client' | 'referrer';
-    stripeAccountId?: string;
+    rampVendorId?: string;
+    recipientReferenceId?: string;
   } | null>(null);
   const [formData, setFormData] = useState({
     payment_date: new Date().toISOString().split("T")[0],
@@ -101,7 +102,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
       const contractorIds = roleData.map((r) => r.user_id);
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("id, full_name, email, stripe_account_id")
+        .select("id, full_name, email, ramp_vendor_id")
         .in("id", contractorIds);
 
       setContractors(profileData || []);
@@ -111,7 +112,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   const fetchReferrers = async () => {
     const { data } = await supabase
       .from("referrers")
-      .select("id, name, email, stripe_account_id")
+      .select("id, name, email, ramp_vendor_id")
       .eq("is_active", true)
       .order("name");
 
@@ -209,7 +210,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   const totalReceived = receivedPayments.reduce((sum, payment) => sum + payment.amount, 0);
 
   const handleQuickBooksPayment = (recipientType: 'contractor' | 'client' | 'referrer', recipientId?: string) => {
-    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer'; stripeAccountId?: string } = { 
+    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer'; rampVendorId?: string; recipientReferenceId?: string } = { 
       name: 'Client (Policyholder)', 
       type: 'client' 
     };
@@ -221,7 +222,8 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
           name: contractor.full_name || contractor.email, 
           email: contractor.email,
           type: 'contractor',
-          stripeAccountId: contractor.stripe_account_id || undefined,
+          rampVendorId: contractor.ramp_vendor_id || undefined,
+          recipientReferenceId: contractor.id,
         };
       }
     } else if (recipientType === 'referrer' && recipientId) {
@@ -231,7 +233,8 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
           name: referrer.name,
           email: referrer.email || undefined,
           type: 'referrer',
-          stripeAccountId: referrer.stripe_account_id || undefined,
+          rampVendorId: referrer.ramp_vendor_id || undefined,
+          recipientReferenceId: referrer.id,
         };
       }
     }
@@ -240,8 +243,8 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
     setQbPaymentOpen(true);
   };
 
-  const handleStripePayment = (recipientType: 'contractor' | 'client' | 'referrer', recipientId?: string) => {
-    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer'; stripeAccountId?: string } = { 
+  const handleRampPayment = (recipientType: 'contractor' | 'client' | 'referrer', recipientId?: string) => {
+    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer'; rampVendorId?: string; recipientReferenceId?: string } = { 
       name: 'Client (Policyholder)', 
       type: 'client' 
     };
@@ -253,7 +256,8 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
           name: contractor.full_name || contractor.email, 
           email: contractor.email,
           type: 'contractor',
-          stripeAccountId: contractor.stripe_account_id || undefined,
+          rampVendorId: contractor.ramp_vendor_id || undefined,
+          recipientReferenceId: contractor.id,
         };
       }
     } else if (recipientType === 'referrer' && recipientId) {
@@ -263,35 +267,36 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
           name: referrer.name,
           email: referrer.email || undefined,
           type: 'referrer',
-          stripeAccountId: referrer.stripe_account_id || undefined,
+          rampVendorId: referrer.ramp_vendor_id || undefined,
+          recipientReferenceId: referrer.id,
         };
       }
     }
     
     setSelectedRecipient(recipient);
-    setStripePaymentOpen(true);
+    setRampPaymentOpen(true);
   };
 
-  const handleStripeAccountCreated = async (accountId: string) => {
+  const handleRampVendorCreated = async (vendorId: string) => {
     if (!selectedRecipient) return;
     
-    // Save the Stripe account ID to the appropriate table
+    // Save the Ramp vendor ID to the appropriate table
     if (selectedRecipient.type === 'contractor') {
       const contractor = contractors.find(c => c.full_name === selectedRecipient.name || c.email === selectedRecipient.email);
       if (contractor) {
-        await supabase.from('profiles').update({ stripe_account_id: accountId }).eq('id', contractor.id);
+        await supabase.from('profiles').update({ ramp_vendor_id: vendorId }).eq('id', contractor.id);
         fetchContractors();
       }
     } else if (selectedRecipient.type === 'referrer') {
       const referrer = referrers.find(r => r.name === selectedRecipient.name);
       if (referrer) {
-        await supabase.from('referrers').update({ stripe_account_id: accountId }).eq('id', referrer.id);
+        await supabase.from('referrers').update({ ramp_vendor_id: vendorId }).eq('id', referrer.id);
         fetchReferrers();
       }
     }
     
-    // Update selected recipient with new account ID
-    setSelectedRecipient(prev => prev ? { ...prev, stripeAccountId: accountId } : null);
+    // Update selected recipient with new vendor ID
+    setSelectedRecipient(prev => prev ? { ...prev, rampVendorId: vendorId } : null);
   };
 
   return (
@@ -473,15 +478,15 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
               </Select>
               <Select onValueChange={(value) => {
                 if (value === 'client') {
-                  handleStripePayment('client');
+                  handleRampPayment('client');
                 } else if (value.startsWith('contractor-')) {
-                  handleStripePayment('contractor', value.replace('contractor-', ''));
+                  handleRampPayment('contractor', value.replace('contractor-', ''));
                 } else if (value.startsWith('referrer-')) {
-                  handleStripePayment('referrer', value.replace('referrer-', ''));
+                  handleRampPayment('referrer', value.replace('referrer-', ''));
                 }
               }}>
                 <SelectTrigger>
-                  <SelectValue placeholder={<span className="flex items-center gap-2"><Banknote className="h-4 w-4" /> Stripe ACH</span>} />
+                  <SelectValue placeholder={<span className="flex items-center gap-2"><Banknote className="h-4 w-4" /> Ramp Bill Pay</span>} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="client">Client (Policyholder)</SelectItem>
@@ -579,8 +584,8 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => handleStripePayment(payment.recipient_type as 'contractor' | 'client' | 'referrer', payment.recipient_id || undefined)}
-                      title="Pay via Stripe"
+                      onClick={() => handleRampPayment(payment.recipient_type as 'contractor' | 'client' | 'referrer', payment.recipient_id || undefined)}
+                      title="Pay via Ramp"
                     >
                       <Banknote className="h-4 w-4" />
                     </Button>
@@ -655,15 +660,17 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
               recipientPhone={selectedRecipient.phone}
               onSuccess={fetchPayments}
             />
-            <StripePaymentDialog
-              open={stripePaymentOpen}
-              onOpenChange={setStripePaymentOpen}
+            <RampPaymentDialog
+              open={rampPaymentOpen}
+              onOpenChange={setRampPaymentOpen}
               recipientName={selectedRecipient.name}
               recipientEmail={selectedRecipient.email}
+              recipientPhone={selectedRecipient.phone}
               recipientType={selectedRecipient.type}
-              stripeAccountId={selectedRecipient.stripeAccountId}
+              recipientReferenceId={selectedRecipient.recipientReferenceId}
+              rampVendorId={selectedRecipient.rampVendorId}
               onSuccess={fetchPayments}
-              onAccountCreated={handleStripeAccountCreated}
+              onVendorCreated={handleRampVendorCreated}
             />
             <OnlineCheckWriterDialog
               open={ocwPaymentOpen}

@@ -1,5 +1,3 @@
-import Stripe from "https://esm.sh/stripe@18.5.0";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -16,11 +14,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
-
-    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-
     const {
       amount,
       description,
@@ -39,47 +32,52 @@ Deno.serve(async (req) => {
       );
     }
 
-    logStep("Creating checkout session", { amount, customerEmail, invoiceNumber });
+    logStep("Creating Ramp receivable link", { amount, customerEmail, invoiceNumber });
 
-    const origin = req.headers.get("origin") || "https://freedomclaims.lovable.app";
+    const template =
+      Deno.env.get("RAMP_RECEIVABLES_URL_TEMPLATE") ||
+      Deno.env.get("RAMP_PAYMENT_LINK_TEMPLATE");
 
-    // Build line item description
-    const lineItemName = [
-      description || "Payment",
-      invoiceNumber ? `(Invoice ${invoiceNumber})` : null,
-      claimNumber ? `- Claim #${claimNumber}` : null,
-    ].filter(Boolean).join(" ");
+    if (!template) {
+      throw new Error(
+        "Ramp receivable links are not configured. Set RAMP_RECEIVABLES_URL_TEMPLATE or RAMP_PAYMENT_LINK_TEMPLATE."
+      );
+    }
 
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      customer_email: customerEmail || undefined,
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: lineItemName,
-              description: customerName ? `Payment from ${customerName}` : undefined,
-            },
-            unit_amount: Math.round(amount * 100), // Convert dollars to cents
-          },
-          quantity: 1,
-        },
-      ],
-      mode: "payment",
-      success_url: successUrl || `${origin}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: cancelUrl || `${origin}/payment-canceled`,
-      metadata: {
-        invoice_number: invoiceNumber || "",
-        claim_number: claimNumber || "",
-        customer_name: customerName || "",
-      },
-    });
+    const replacements: Record<string, string> = {
+      amount: Number(amount).toFixed(2),
+      description: String(description || ""),
+      customerEmail: String(customerEmail || ""),
+      customerName: String(customerName || ""),
+      invoiceNumber: String(invoiceNumber || ""),
+      claimNumber: String(claimNumber || ""),
+      successUrl: String(successUrl || ""),
+      cancelUrl: String(cancelUrl || ""),
+    };
 
-    logStep("Checkout session created", { sessionId: session.id, url: session.url });
+    let url = template;
+    let replacedAny = false;
+    for (const [key, value] of Object.entries(replacements)) {
+      const token = `{${key}}`;
+      if (url.includes(token)) {
+        replacedAny = true;
+        url = url.split(token).join(encodeURIComponent(value));
+      }
+    }
+
+    if (!replacedAny) {
+      const parsed = new URL(template);
+      for (const [key, value] of Object.entries(replacements)) {
+        if (!value) continue;
+        parsed.searchParams.set(key, value);
+      }
+      url = parsed.toString();
+    }
+
+    logStep("Ramp receivable link created", { url });
 
     return new Response(
-      JSON.stringify({ success: true, url: session.url, sessionId: session.id }),
+      JSON.stringify({ success: true, url }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {

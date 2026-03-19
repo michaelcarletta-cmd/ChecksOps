@@ -4,7 +4,6 @@
     "https://esm.sh/@supabase/supabase-js@2.49.1": "npm:@supabase/supabase-js@2.49.1",
     "https://esm.sh/@supabase/supabase-js@2.49.4": "npm:@supabase/supabase-js@2.49.4",
     "https://esm.sh/@supabase/supabase-js@2": "npm:@supabase/supabase-js@2",
-    "https://esm.sh/stripe@18.5.0": "npm:stripe@18.5.0",
     "https://esm.sh/resend@2.0.0": "npm:resend@2.0.0",
     "https://esm.sh/pizzip@3.1.4": "npm:pizzip@3.1.4",
     "https://esm.sh/docxtemplater@3.42.0": "npm:docxtemplater@3.42.0"
