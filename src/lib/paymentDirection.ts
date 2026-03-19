@@ -194,14 +194,14 @@ export async function logClaimEvent({
   summary,
   metadata = {},
 }: LogClaimEventParams) {
-  const { error } = await supabase.from("claim_events").insert({
+  const { error } = await supabase.from("claim_events").insert([{
     claim_id: claimId,
     event_type: eventType,
     occurred_at: new Date().toISOString(),
     date_source: "system",
     summary,
     metadata_json: metadata,
-  });
+  }]);
 
   if (error) {
     console.warn("[paymentDirection] claim event insert failed", error);

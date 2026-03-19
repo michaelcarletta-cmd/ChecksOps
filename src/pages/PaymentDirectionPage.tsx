@@ -79,7 +79,7 @@ export default function PaymentDirectionPage() {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Card className="max-w-md w-full mx-4">
           <CardContent className="pt-6 text-center space-y-3">
-            <CheckCircle className="h-12 w-12 text-green-500 mx-auto" />
+            <CheckCircle className="h-12 w-12 text-primary mx-auto" />
             <h2 className="text-xl font-semibold text-foreground">Thank you</h2>
             <p className="text-muted-foreground">
               Your payment direction has been recorded successfully.

@@ -130,7 +130,7 @@ export function CheckProcessingCard({ claimId, checkId }: Props) {
         </div>
 
         {paymentDirection?.decision === "pay_contractor" && (
-          <Badge variant="default" className="bg-green-600">
+          <Badge variant="default">
             Client authorized direct contractor payment
           </Badge>
         )}
