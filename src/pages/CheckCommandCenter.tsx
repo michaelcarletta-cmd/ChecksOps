@@ -1072,8 +1072,13 @@ function CheckDetailPanel({
     check.status === "endorsements_complete";
 
   const showWatermark = !isFinalDepositImage;
-  // Proportional overlay coordinates (% of image)
-  const overlayCoordinates = { topPercent: 10, leftPercent: 38, widthPercent: 22 };
+  // Proportional overlay coordinates — use saved override if available
+  const savedOverride = (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null;
+  const overlayCoordinates = {
+    topPercent: (savedOverride?.yPct ?? 0.10) * 100,
+    leftPercent: (savedOverride?.xPct ?? 0.38) * 100,
+    widthPercent: 22 * (savedOverride?.scale ?? 1),
+  };
   const endorsementStyle = {
     position: "absolute" as const,
     top: `${overlayCoordinates.topPercent}%`,
@@ -1082,6 +1087,8 @@ function CheckDetailPanel({
     zIndex: 20,
     color: "#111111",
     pointerEvents: "none" as const,
+    transform: savedOverride?.rotationDeg ? `rotate(${savedOverride.rotationDeg}deg)` : undefined,
+    transformOrigin: "top left" as const,
   };
 
   console.log("[CHECK-RENDER] check.status:", check.status);
