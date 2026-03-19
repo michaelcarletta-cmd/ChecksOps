@@ -1,0 +1,1 @@
+DELETE FROM public.check_intake_items WHERE id = 'fa18378c-8d17-4b8e-b1cf-63a29175d61b';
