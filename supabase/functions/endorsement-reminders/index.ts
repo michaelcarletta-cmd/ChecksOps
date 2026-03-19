@@ -16,6 +16,15 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
+    // Load branding for email customization
+    const { data: brandingRow } = await supabase
+      .from("company_branding")
+      .select("endorsement_reminder_subject, endorsement_reminder_body")
+      .limit(1)
+      .maybeSingle();
+    const reminderSubject = brandingRow?.endorsement_reminder_subject || "Reminder: Endorsement Required — Check #{check.number}";
+    const reminderBody = brandingRow?.endorsement_reminder_body || "This is a reminder that your endorsement is still needed for the check below. Please take a moment to review and endorse.";
+
     // Fetch stale unsigned endorsements (> 48 hours since last contact, max 5 reminders)
     const { data: stale, error: staleErr } = await supabase
       .from("check_endorsements")
