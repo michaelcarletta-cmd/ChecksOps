@@ -377,7 +377,12 @@ async function uploadAndFinalize(
   // IMPORTANT: never overwrite source path on check_intake_items.
   // Keep source image references untouched even after successful composition.
   const dbPathUpdateCommitted = false;
-  const overlayCoordinates = {
+  const overlayCoordinates = appliedOverride ? {
+    xPct: appliedOverride.xPct,
+    yPct: appliedOverride.yPct,
+    scale: appliedOverride.scale,
+    rotationDeg: appliedOverride.rotationDeg,
+  } : {
     top_percent: Math.round(ENDORSEMENT_TOP_PCT * 100),
     left_percent: Math.round(ENDORSEMENT_LEFT_PCT * 100),
     width_percent: Math.round(ENDORSEMENT_WIDTH_PCT * 100),
