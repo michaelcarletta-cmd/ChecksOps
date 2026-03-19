@@ -83,6 +83,12 @@ export function CompanyBrandingSettings() {
       setEsignEmailBody(branding.esign_email_body || "You have been requested to electronically sign a document. Please review the details below and click the button to proceed.");
       setEsignHeaderColor(branding.esign_email_header_color || "#1a56db");
       setEsignButtonColor(branding.esign_email_button_color || "#1a56db");
+      setEndorseEmailSubject(branding.endorsement_email_subject || "Endorsement Required — Check #{check.number}");
+      setEndorseEmailBody(branding.endorsement_email_body || "An insurance check requires your endorsement before it can be processed. Please review the details below and complete your endorsement.");
+      setEndorseReminderSubject(branding.endorsement_reminder_subject || "Reminder: Endorsement Required — Check #{check.number}");
+      setEndorseReminderBody(branding.endorsement_reminder_body || "This is a reminder that your endorsement is still needed for the check below. Please take a moment to review and endorse.");
+      setEndorseHeaderColor(branding.endorsement_email_header_color || "#1e293b");
+      setEndorseButtonColor(branding.endorsement_email_button_color || "#2563eb");
       setSigCoords({ page: branding.esign_signature_page || 1, x: branding.esign_signature_x || 100, y: branding.esign_signature_y || 600, w: branding.esign_signature_width || 200, h: branding.esign_signature_height || 50 });
       setDateCoords({ page: branding.esign_date_page || 1, x: branding.esign_date_x || 350, y: branding.esign_date_y || 600, w: branding.esign_date_width || 100, h: branding.esign_date_height || 25 });
     }
