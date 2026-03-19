@@ -1648,11 +1648,51 @@ function CheckDetailPanel({
               )}
             </TabsContent>
 
-            <TabsContent value="endorsements" className="p-4 mt-0">
+            <TabsContent value="endorsements" className="p-4 mt-0 space-y-4">
               <EndorsementChecklist
                 checkId={checkId}
                 onRefresh={onRefresh}
               />
+
+              {backImageUrl && backImageDimensions && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setShowEndorsementAdjuster((v) => !v)}
+                  >
+                    {showEndorsementAdjuster ? "Hide" : "Adjust"} Endorsement Position
+                  </Button>
+
+                  {showEndorsementAdjuster && (
+                    <EndorsementAdjuster
+                      imageUrl={backImageUrl}
+                      imageWidth={backImageDimensions.width}
+                      imageHeight={backImageDimensions.height}
+                      clientName="ILDEFONSO ROSAS"
+                      ownerName="Michael Carletta"
+                      companyName="Freedom Adjustment"
+                      initialOverride={
+                        (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null
+                      }
+                      onSave={async (ov) => {
+                        const { error } = await supabase
+                          .from("check_intake_items")
+                          .update({
+                            endorsement_override: ov as any,
+                            updated_at: new Date().toISOString(),
+                          })
+                          .eq("id", checkId);
+                        if (error) throw error;
+                        toast({ title: "Endorsement override saved" });
+                        setShowEndorsementAdjuster(false);
+                        qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+                      }}
+                    />
+                  )}
+                </>
+              )}
             </TabsContent>
 
             <TabsContent value="payees" className="p-4 space-y-3 mt-0">
