@@ -6529,7 +6529,6 @@ export type Database = {
           policy_number: string | null
           state: string | null
           street: string | null
-          ramp_vendor_id: string | null
           stripe_account_id: string | null
           updated_at: string | null
           user_id: string | null
@@ -6545,7 +6544,6 @@ export type Database = {
           policy_number?: string | null
           state?: string | null
           street?: string | null
-          ramp_vendor_id?: string | null
           stripe_account_id?: string | null
           updated_at?: string | null
           user_id?: string | null
@@ -6561,7 +6559,6 @@ export type Database = {
           policy_number?: string | null
           state?: string | null
           street?: string | null
-          ramp_vendor_id?: string | null
           stripe_account_id?: string | null
           updated_at?: string | null
           user_id?: string | null
@@ -10968,7 +10965,6 @@ export type Database = {
           license_state: string | null
           logo_url: string | null
           phone: string | null
-          ramp_vendor_id: string | null
           stripe_account_id: string | null
           title: string | null
           updated_at: string | null
@@ -10988,7 +10984,6 @@ export type Database = {
           license_state?: string | null
           logo_url?: string | null
           phone?: string | null
-          ramp_vendor_id?: string | null
           stripe_account_id?: string | null
           title?: string | null
           updated_at?: string | null
@@ -11008,7 +11003,6 @@ export type Database = {
           license_state?: string | null
           logo_url?: string | null
           phone?: string | null
-          ramp_vendor_id?: string | null
           stripe_account_id?: string | null
           title?: string | null
           updated_at?: string | null
@@ -11102,7 +11096,6 @@ export type Database = {
           is_active: boolean
           name: string
           phone: string | null
-          ramp_vendor_id: string | null
           stripe_account_id: string | null
           updated_at: string
           user_id: string | null
@@ -11115,7 +11108,6 @@ export type Database = {
           is_active?: boolean
           name: string
           phone?: string | null
-          ramp_vendor_id?: string | null
           stripe_account_id?: string | null
           updated_at?: string
           user_id?: string | null
@@ -11128,7 +11120,6 @@ export type Database = {
           is_active?: boolean
           name?: string
           phone?: string | null
-          ramp_vendor_id?: string | null
           stripe_account_id?: string | null
           updated_at?: string
           user_id?: string | null
