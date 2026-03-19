@@ -1046,7 +1046,11 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
             </TableHeader>
             <TableBody>
               {checks.map((check: any) => (
-                <TableRow key={check.id}>
+                <Fragment key={check.id}>
+                <TableRow 
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => setExpandedCheckId(expandedCheckId === check.id ? null : check.id)}
+                >
                   <TableCell className="font-medium">{check.check_number || "—"}</TableCell>
                   <TableCell className="capitalize">{check.check_type.replace("_", " ")}</TableCell>
                   <TableCell>{format(new Date(check.check_date), "MMM dd, yyyy")}</TableCell>
@@ -1077,7 +1081,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                   </TableCell>
                   {isAdmin && (
                     <TableCell>
-                      <div className="flex gap-1">
+                      <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                         <Button variant="ghost" size="icon" onClick={() => handleEdit(check)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -1088,6 +1092,16 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                     </TableCell>
                   )}
                 </TableRow>
+                {expandedCheckId === check.id && (
+                  <TableRow>
+                    <TableCell colSpan={isAdmin ? 8 : 7} className="p-0 border-0">
+                      <div className="p-3 bg-muted/30">
+                        <CheckProcessingCard claimId={claimId} checkId={check.id} />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+                </Fragment>
               ))}
             </TableBody>
           </Table>
