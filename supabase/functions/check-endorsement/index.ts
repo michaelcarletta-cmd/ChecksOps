@@ -645,13 +645,23 @@ Deno.serve(async (req) => {
           smsError = "Missing payee phone number";
         }
 
+        // Load branding for email customization
+        const { data: brandingRow } = await supabase
+          .from("company_branding")
+          .select("company_name, company_email, company_phone, endorsement_email_subject, endorsement_email_body, endorsement_email_header_color, endorsement_email_button_color, letterhead_url")
+          .limit(1)
+          .maybeSingle();
+        const emailBranding: EndorsementBranding = brandingRow || {};
+
         if ((method === "email" || method === "both") && endorsement.contact_email) {
           try {
+            const rawSubject = emailBranding.endorsement_email_subject || "Endorsement Required — Check #{check.number}";
+            const finalSubject = replaceEndorsementMergeFields(rawSubject, endorsement.payee_name, checkNum, carrier, amount, endorsementUrl, emailBranding);
             const { error: invokeErr } = await supabase.functions.invoke("send-email", {
               body: {
                 to: endorsement.contact_email,
-                subject: `Endorsement Required — Check #${checkNum}`,
-                body: buildEndorsementEmailHtml(endorsement.payee_name, checkNum, carrier, amount, endorsementUrl),
+                subject: finalSubject,
+                body: buildEndorsementEmailHtml(endorsement.payee_name, checkNum, carrier, amount, endorsementUrl, emailBranding),
               },
             });
             if (invokeErr) throw invokeErr;
