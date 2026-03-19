@@ -40,6 +40,7 @@ import { MakeIntegrationSettings } from "@/components/settings/MakeIntegrationSe
 import { OrganizationSettings } from "@/components/settings/OrganizationSettings";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 import { AuditLogSettings } from "@/components/settings/AuditLogSettings";
+import { RampSettings } from "@/components/settings/RampSettings";
 import { useQuery } from "@tanstack/react-query";
 import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
 import { SignatureFieldTemplatesSettings } from "@/components/settings/SignatureFieldTemplatesSettings";
@@ -525,6 +526,7 @@ export default function Settings() {
                   <OutlookConnectionSettings embedded />
                   <MakeIntegrationSettings embedded />
                   <QuickBooksSettings embedded />
+                  {isAdmin && <RampSettings embedded />}
                 </CardContent>
               </CollapsibleContent>
             </Card>

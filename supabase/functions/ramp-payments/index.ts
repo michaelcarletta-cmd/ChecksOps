@@ -32,6 +32,39 @@ const cleanObject = <T extends JsonRecord>(obj: T): Partial<T> => {
 
 const getTodayDate = () => new Date().toISOString().slice(0, 10);
 
+const getReceivablesTemplateMeta = () => {
+  const template =
+    Deno.env.get("RAMP_RECEIVABLES_URL_TEMPLATE") || Deno.env.get("RAMP_PAYMENT_LINK_TEMPLATE") || null;
+  const hasTemplate = Boolean(template);
+  const hasPlaceholders = hasTemplate ? /\{[a-zA-Z0-9_]+\}/.test(template as string) : false;
+  const mode: "missing" | "placeholders" | "query-append" = hasTemplate
+    ? hasPlaceholders
+      ? "placeholders"
+      : "query-append"
+    : "missing";
+
+  let host: string | null = null;
+  let pathname: string | null = null;
+  if (template) {
+    try {
+      const parsed = new URL(template);
+      host = parsed.host;
+      pathname = parsed.pathname;
+    } catch {
+      host = null;
+      pathname = null;
+    }
+  }
+
+  return {
+    configured: hasTemplate,
+    hasPlaceholders,
+    mode,
+    host,
+    pathname,
+  };
+};
+
 const getRampToken = async () => {
   const clientId = Deno.env.get("RAMP_CLIENT_ID");
   const clientSecret = Deno.env.get("RAMP_CLIENT_SECRET");
@@ -233,6 +266,94 @@ Deno.serve(async (req) => {
       });
 
       return jsonResponse(200, { success: true, url: link });
+    }
+
+    if (action === "get-integration-status") {
+      const hasClientId = Boolean(Deno.env.get("RAMP_CLIENT_ID"));
+      const hasClientSecret = Boolean(Deno.env.get("RAMP_CLIENT_SECRET"));
+      const configuredEntityId = Deno.env.get("RAMP_ENTITY_ID") || null;
+      const configuredSourceBankAccountId = Deno.env.get("RAMP_SOURCE_BANK_ACCOUNT_ID") || null;
+      const configuredVendorOwnerId = Deno.env.get("RAMP_VENDOR_OWNER_ID") || null;
+      const configuredScopes = Deno.env.get("RAMP_SCOPES") || null;
+      const linkTemplate = getReceivablesTemplateMeta();
+      const issues: string[] = [];
+
+      if (!hasClientId) issues.push("RAMP_CLIENT_ID is missing");
+      if (!hasClientSecret) issues.push("RAMP_CLIENT_SECRET is missing");
+      if (!linkTemplate.configured) issues.push("RAMP_RECEIVABLES_URL_TEMPLATE (or fallback template) is missing");
+
+      if (!hasClientId || !hasClientSecret) {
+        return jsonResponse(200, {
+          success: true,
+          healthy: false,
+          credentials: {
+            clientId: hasClientId,
+            clientSecret: hasClientSecret,
+          },
+          apiAuth: false,
+          apiAuthError: "Ramp credentials are incomplete.",
+          linkTemplate,
+          configuredOverrides: {
+            entityId: configuredEntityId,
+            sourceBankAccountId: configuredSourceBankAccountId,
+            vendorOwnerId: configuredVendorOwnerId,
+            scopes: configuredScopes,
+          },
+          resolvedDefaults: null,
+          issues,
+        });
+      }
+
+      try {
+        const token = await getRampToken();
+        const defaults = await getRampDefaults(token);
+
+        if (!defaults.entityId) issues.push("No Ramp entity available/resolved");
+        if (!defaults.hasBillPayAccount) issues.push("No Ramp bill-pay source bank account resolved");
+        if (!defaults.vendorOwnerId) issues.push("No Ramp vendor owner resolved");
+
+        return jsonResponse(200, {
+          success: true,
+          healthy: issues.length === 0,
+          credentials: {
+            clientId: hasClientId,
+            clientSecret: hasClientSecret,
+          },
+          apiAuth: true,
+          apiAuthError: null,
+          linkTemplate,
+          configuredOverrides: {
+            entityId: configuredEntityId,
+            sourceBankAccountId: configuredSourceBankAccountId,
+            vendorOwnerId: configuredVendorOwnerId,
+            scopes: configuredScopes,
+          },
+          resolvedDefaults: defaults,
+          issues,
+        });
+      } catch (error) {
+        issues.push("Ramp API authentication failed");
+        const message = toErrorMessage(error);
+        return jsonResponse(200, {
+          success: true,
+          healthy: false,
+          credentials: {
+            clientId: hasClientId,
+            clientSecret: hasClientSecret,
+          },
+          apiAuth: false,
+          apiAuthError: message,
+          linkTemplate,
+          configuredOverrides: {
+            entityId: configuredEntityId,
+            sourceBankAccountId: configuredSourceBankAccountId,
+            vendorOwnerId: configuredVendorOwnerId,
+            scopes: configuredScopes,
+          },
+          resolvedDefaults: null,
+          issues,
+        });
+      }
     }
 
     const token = await getRampToken();
