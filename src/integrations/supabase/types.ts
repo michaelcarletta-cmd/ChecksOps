@@ -1246,6 +1246,7 @@ export type Database = {
           deposit_recommendation: string | null
           deposit_recommendation_reasons: Json | null
           detected_claim_number: string | null
+          endorsement_override: Json | null
           endorsement_packet_path: string | null
           front_image_path: string
           id: string
@@ -1273,6 +1274,7 @@ export type Database = {
           deposit_recommendation?: string | null
           deposit_recommendation_reasons?: Json | null
           detected_claim_number?: string | null
+          endorsement_override?: Json | null
           endorsement_packet_path?: string | null
           front_image_path: string
           id?: string
@@ -1300,6 +1302,7 @@ export type Database = {
           deposit_recommendation?: string | null
           deposit_recommendation_reasons?: Json | null
           detected_claim_number?: string | null
+          endorsement_override?: Json | null
           endorsement_packet_path?: string | null
           front_image_path?: string
           id?: string

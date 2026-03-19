@@ -1,0 +1,2 @@
+ALTER TABLE public.check_intake_items ADD COLUMN IF NOT EXISTS endorsement_override jsonb;
+COMMENT ON COLUMN public.check_intake_items.endorsement_override IS 'Manual override for endorsement placement. Shape: { xPct, yPct, scale, rotationDeg }';
