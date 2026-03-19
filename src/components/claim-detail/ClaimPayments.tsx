@@ -112,7 +112,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   const fetchReferrers = async () => {
     const { data } = await supabase
       .from("referrers")
-      .select("id, name, email, ramp_vendor_id")
+      .select("id, name, email")
       .eq("is_active", true)
       .order("name");
 
