@@ -22,6 +22,16 @@ const MERGE_FIELDS = [
   { field: "{sign.expiry_hours}", label: "Link Expiry (hrs)" },
 ];
 
+const ENDORSEMENT_MERGE_FIELDS = [
+  { field: "{payee.name}", label: "Payee Name" },
+  { field: "{check.number}", label: "Check #" },
+  { field: "{check.carrier}", label: "Carrier" },
+  { field: "{check.amount}", label: "Amount" },
+  { field: "{company.name}", label: "Company Name" },
+  { field: "{company.email}", label: "Company Email" },
+  { field: "{company.phone}", label: "Company Phone" },
+];
+
 export function CompanyBrandingSettings() {
   const [companyName, setCompanyName] = useState("");
   const [address, setAddress] = useState("");
