@@ -6582,6 +6582,8 @@ export type Database = {
           esign_date_x: number | null
           esign_date_y: number | null
           esign_email_body: string | null
+          esign_email_button_color: string | null
+          esign_email_header_color: string | null
           esign_email_subject: string | null
           esign_signature_height: number | null
           esign_signature_page: number | null
@@ -6609,6 +6611,8 @@ export type Database = {
           esign_date_x?: number | null
           esign_date_y?: number | null
           esign_email_body?: string | null
+          esign_email_button_color?: string | null
+          esign_email_header_color?: string | null
           esign_email_subject?: string | null
           esign_signature_height?: number | null
           esign_signature_page?: number | null
@@ -6636,6 +6640,8 @@ export type Database = {
           esign_date_x?: number | null
           esign_date_y?: number | null
           esign_email_body?: string | null
+          esign_email_button_color?: string | null
+          esign_email_header_color?: string | null
           esign_email_subject?: string | null
           esign_signature_height?: number | null
           esign_signature_page?: number | null
