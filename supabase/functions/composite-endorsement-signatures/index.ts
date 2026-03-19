@@ -124,6 +124,16 @@ Deno.serve(async (req) => {
     const imgHeight = dims.height;
     console.log(`[COMPOSITE] Detected image dimensions: ${imgWidth}x${imgHeight}`);
 
+    // ── Load endorsement override if saved ──
+    const ov = (check.endorsement_override ?? null) as {
+      xPct?: number; yPct?: number; scale?: number; rotationDeg?: number;
+    } | null;
+    const ovXPct = ov?.xPct ?? ENDORSEMENT_LEFT_PCT;
+    const ovYPct = ov?.yPct ?? ENDORSEMENT_TOP_PCT;
+    const ovScale = ov?.scale ?? 1;
+    const ovRotation = ov?.rotationDeg ?? 0;
+    console.log(`[COMPOSITE] Override: xPct=${ovXPct}, yPct=${ovYPct}, scale=${ovScale}, rot=${ovRotation}`);
+
     // Compute the maximum Y the endorsement block can reach
     const maxEndorsementY = Math.floor(imgHeight * BOTTOM_ZONE_LIMIT);
     const pixelCount = imgWidth * imgHeight;
@@ -134,14 +144,13 @@ Deno.serve(async (req) => {
     const originalBase64 = uint8ToBase64(originalBytes);
     const mimeType = backImagePath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
 
-    // Endorsement zone anchored to the check body (not page/container)
-    // Matches UI overlay coordinates for consistent final deposit output.
-    const ezLeftPad = Math.round(imgWidth * ENDORSEMENT_LEFT_PCT);
-    const ezTopPad = Math.round(imgHeight * ENDORSEMENT_TOP_PCT);
-    const ezContentWidth = Math.round(imgWidth * ENDORSEMENT_WIDTH_PCT);
+    // Endorsement zone anchored to the check body using override or defaults
+    const ezLeftPad = Math.round(imgWidth * ovXPct);
+    const ezTopPad = Math.round(imgHeight * ovYPct);
+    const ezContentWidth = Math.round(imgWidth * 0.22 * ovScale);
 
-    // UNIFIED baseFont scaling — everything derives from one value
-    const baseFont = Math.max(8, Math.round(imgHeight * 0.013));
+    // UNIFIED baseFont scaling — everything derives from one value, scaled by override
+    const baseFont = Math.max(8, Math.round(imgHeight * 0.013 * ovScale));
     const headerFont = Math.max(8, Math.round(baseFont * 0.9));       // "Pay to the order of"
     const companyFont = Math.max(9, Math.round(baseFont * 1.2));      // "Freedom Adjustment"
     const bodyFont = Math.max(8, Math.round(baseFont * 0.95));        // "For Mobile Deposit Only"
@@ -152,12 +161,17 @@ Deno.serve(async (req) => {
     const lineGap = Math.max(2, Math.round(baseFont * 0.4));
     const sectionGap = Math.max(3, Math.round(baseFont * 0.8));
 
-    console.log(`[COMPOSITE][FONT-V3] imgHeight=${imgHeight}, baseFont=${baseFont}, headerFont=${headerFont}, companyFont=${companyFont}, bodyFont=${bodyFont}, byLineFont=${byLineFont}, sigHeight=${sigHeight}, lineGap=${lineGap}, sectionGap=${sectionGap}`);
+    console.log(`[COMPOSITE][FONT-V4] imgHeight=${imgHeight}, baseFont=${baseFont}, headerFont=${headerFont}, companyFont=${companyFont}, bodyFont=${bodyFont}, byLineFont=${byLineFont}, sigHeight=${sigHeight}, lineGap=${lineGap}, sectionGap=${sectionGap}`);
 
     // Initialize endorsement SVG overlay variables
     let endorsementSvg = "";
     const centerX = ezLeftPad + Math.round(ezContentWidth / 2);
     let curY = ezTopPad;
+
+    // If rotation is set, wrap the endorsement group in a transform
+    const rotationTransform = ovRotation !== 0
+      ? `transform="rotate(${ovRotation}, ${ezLeftPad}, ${ezTopPad})"`
+      : "";
 
     // --- Restrictive endorsement legend ---
     // "Pay to the order of"
