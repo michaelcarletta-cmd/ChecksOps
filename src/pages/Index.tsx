@@ -18,12 +18,13 @@ const Index = () => {
   const { data: claims } = useQuery({
     queryKey: ["dashboard-claims"],
     queryFn: async () => {
+      const start = performance.now();
       const { data, error } = await supabase
         .from("claims")
-        .select("*")
+        .select("id, claim_number, policyholder_name, status, updated_at, loss_date, created_at")
         .eq("is_closed", false)
         .order("updated_at", { ascending: false });
-      
+      console.log(`[query] dashboard-claims: ${(performance.now() - start).toFixed(2)}ms, rows: ${data?.length ?? 0}`);
       if (error) throw error;
       return data;
     },
