@@ -36,7 +36,18 @@ const WorkspaceDetailPage = lazy(() => import("./pages/WorkspaceDetailPage"));
 const DarwinOperations = lazy(() => import("./pages/DarwinOperations"));
 const CheckCommandCenter = lazy(() => import("./pages/CheckCommandCenter"));
 
-export const queryClient = new QueryClient();
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5,
+      gcTime: 1000 * 60 * 30,
+      retry: 1,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      refetchOnMount: false,
+    },
+  },
+});
 
 // Loading fallback component
 const PageLoader = () => (
