@@ -4,7 +4,7 @@ import { uploadCompressedImage } from "@/lib/imageUpload";
 
 type ClaimPhotoUploaderProps = {
   claimId: string;
-  onUploaded?: () => Promise<void> | void;
+  onUploaded?: () => void;
 };
 
 export function ClaimPhotoUploader({
@@ -24,17 +24,16 @@ export function ClaimPhotoUploader({
 
         const { error } = await supabase.from("claim_photos").insert({
           claim_id: claimId,
-          public_url: result.publicUrl,
-          storage_path: result.path,
-          caption: file.name,
+          file_path: result.path,
+          file_name: result.fileName,
+          file_size: result.size,
+          description: file.name,
         });
 
-        if (error) {
-          throw error;
-        }
+        if (error) throw error;
       }
 
-      await onUploaded?.();
+      onUploaded?.();
     } finally {
       setUploading(false);
     }

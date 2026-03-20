@@ -14,7 +14,7 @@ export default function ClaimPhotosTab({ claimId }: ClaimPhotosTabProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-foreground">Photos</h3>
-        <ClaimPhotoUploader claimId={claimId} onUploaded={refetch} />
+        <ClaimPhotoUploader claimId={claimId} onUploaded={() => refetch()} />
       </div>
 
       {isLoading ? (
