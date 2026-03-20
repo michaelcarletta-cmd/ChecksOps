@@ -78,7 +78,7 @@ const ClaimDetail = () => {
   const { data: claim, isLoading, error: claimError } = useQuery({
     queryKey: ["claim", id],
     queryFn: async () => {
-      console.log("Fetching claim with id:", id, "userRole:", userRole);
+      const start = performance.now();
       const { data, error } = await supabase
         .from("claims")
         .select(`
@@ -88,17 +88,16 @@ const ClaimDetail = () => {
         `)
         .eq("id", id)
         .maybeSingle();
+      console.log(`[query] getClaimDetail: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) {
         console.error("Error fetching claim:", error);
         throw error;
       }
-      // Flatten joined data for easier access
       const flattenedData = data ? {
         ...data,
         insurance_company: data.insurance_companies?.name || null,
         loss_type: data.loss_types?.name || null,
       } : null;
-      console.log("Claim fetched successfully:", flattenedData?.status);
       return flattenedData;
     },
     enabled: !!id,
