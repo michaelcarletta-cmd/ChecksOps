@@ -1,6 +1,7 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useState, lazy, Suspense, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useRenderCount } from "@/hooks/useRenderCount";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClaimStatusSelect } from "@/components/ClaimStatusSelect";
@@ -50,6 +51,7 @@ interface Contractor {
 
 
 const ClaimDetail = () => {
+  useRenderCount("ClaimDetail");
   const { id } = useParams();
   const navigate = useNavigate();
   const { userRole } = useAuth();
@@ -76,7 +78,7 @@ const ClaimDetail = () => {
   const { data: claim, isLoading, error: claimError } = useQuery({
     queryKey: ["claim", id],
     queryFn: async () => {
-      console.log("Fetching claim with id:", id, "userRole:", userRole);
+      const start = performance.now();
       const { data, error } = await supabase
         .from("claims")
         .select(`
@@ -86,17 +88,16 @@ const ClaimDetail = () => {
         `)
         .eq("id", id)
         .maybeSingle();
+      console.log(`[query] getClaimDetail: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) {
         console.error("Error fetching claim:", error);
         throw error;
       }
-      // Flatten joined data for easier access
       const flattenedData = data ? {
         ...data,
         insurance_company: data.insurance_companies?.name || null,
         loss_type: data.loss_types?.name || null,
       } : null;
-      console.log("Claim fetched successfully:", flattenedData?.status);
       return flattenedData;
     },
     enabled: !!id,
@@ -139,10 +140,12 @@ const ClaimDetail = () => {
   const { data: contractors = [] } = useQuery({
     queryKey: ["claim-contractors", id],
     queryFn: async () => {
+      const start = performance.now();
       const { data, error } = await supabase
         .from("claim_contractors")
         .select("contractor_id")
         .eq("claim_id", id);
+      console.log(`[query] getClaimContractors: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) throw error;
       return (data || []) as Contractor[];
     },

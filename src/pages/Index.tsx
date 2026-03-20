@@ -6,8 +6,10 @@ import { formatDistanceToNow, startOfMonth, endOfMonth } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { DashboardCalendar } from "@/components/dashboard/DashboardCalendar";
 import { DashboardNotepad } from "@/components/dashboard/DashboardNotepad";
+import { useRenderCount } from "@/hooks/useRenderCount";
 
 const Index = () => {
+  useRenderCount("DashboardIndex");
   const navigate = useNavigate();
   const now = new Date();
   const monthStart = startOfMonth(now);
@@ -16,12 +18,13 @@ const Index = () => {
   const { data: claims } = useQuery({
     queryKey: ["dashboard-claims"],
     queryFn: async () => {
+      const start = performance.now();
       const { data, error } = await supabase
         .from("claims")
-        .select("*")
+        .select("id, claim_number, policyholder_name, status, updated_at, loss_date, created_at")
         .eq("is_closed", false)
         .order("updated_at", { ascending: false });
-      
+      console.log(`[query] dashboard-claims: ${(performance.now() - start).toFixed(2)}ms, rows: ${data?.length ?? 0}`);
       if (error) throw error;
       return data;
     },
@@ -30,17 +33,18 @@ const Index = () => {
   const { data: tasks } = useQuery({
     queryKey: ["dashboard-tasks"],
     queryFn: async () => {
+      const start = performance.now();
       const fortyEightHoursFromNow = new Date();
       fortyEightHoursFromNow.setHours(fortyEightHoursFromNow.getHours() + 48);
       
       const { data, error } = await supabase
         .from("tasks")
-        .select("*, claims(claim_number, policyholder_name)")
+        .select("id, title, due_date, status, claim_id, claims(claim_number, policyholder_name)")
         .eq("status", "pending")
         .not("due_date", "is", null)
         .lte("due_date", fortyEightHoursFromNow.toISOString())
         .order("due_date", { ascending: true });
-      
+      console.log(`[query] dashboard-tasks: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) throw error;
       return data;
     },
@@ -49,10 +53,11 @@ const Index = () => {
   const { data: settlements } = useQuery({
     queryKey: ["dashboard-settlements", monthStart.toISOString()],
     queryFn: async () => {
+      const start = performance.now();
       const { data, error } = await supabase
         .from("claim_settlements")
         .select("replacement_cost_value, created_at");
-      
+      console.log(`[query] dashboard-settlements: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) throw error;
       return data;
     },
@@ -61,10 +66,11 @@ const Index = () => {
   const { data: checks } = useQuery({
     queryKey: ["dashboard-checks"],
     queryFn: async () => {
+      const start = performance.now();
       const { data, error } = await supabase
         .from("claim_checks")
         .select("amount, check_date");
-      
+      console.log(`[query] dashboard-checks: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) throw error;
       return data;
     },
@@ -73,10 +79,11 @@ const Index = () => {
   const { data: expenses } = useQuery({
     queryKey: ["dashboard-expenses"],
     queryFn: async () => {
+      const start = performance.now();
       const { data, error } = await supabase
         .from("claim_expenses")
         .select("amount, expense_date");
-      
+      console.log(`[query] dashboard-expenses: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) throw error;
       return data;
     },
@@ -85,10 +92,11 @@ const Index = () => {
   const { data: payments } = useQuery({
     queryKey: ["dashboard-payments"],
     queryFn: async () => {
+      const start = performance.now();
       const { data, error } = await supabase
         .from("claim_payments")
         .select("amount, payment_date");
-      
+      console.log(`[query] dashboard-payments: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) throw error;
       return data;
     },
@@ -97,10 +105,11 @@ const Index = () => {
   const { data: fees } = useQuery({
     queryKey: ["dashboard-fees"],
     queryFn: async () => {
+      const start = performance.now();
       const { data, error } = await supabase
         .from("claim_fees")
         .select("adjuster_fee_amount");
-      
+      console.log(`[query] dashboard-fees: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) throw error;
       return data;
     },

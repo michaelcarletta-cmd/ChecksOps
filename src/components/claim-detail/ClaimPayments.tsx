@@ -78,11 +78,13 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   }, [claimId]);
 
   const fetchPayments = async () => {
+    const start = performance.now();
     const { data, error } = await supabase
       .from("claim_payments")
-      .select("*")
+      .select("id, payment_date, amount, payment_method, check_number, recipient_type, recipient_id, notes, direction")
       .eq("claim_id", claimId)
       .order("payment_date", { ascending: false });
+    console.log(`[query] fetchClaimPayments: ${(performance.now() - start).toFixed(2)}ms`);
 
     if (error) {
       toast.error("Failed to fetch payments");

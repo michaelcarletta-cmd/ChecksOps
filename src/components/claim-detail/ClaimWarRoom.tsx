@@ -48,6 +48,7 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
   const loadWarRoomData = async () => {
     setLoading(true);
     try {
+      const start = performance.now();
       const [insightsResult, deadlinesResult, strategiesResult, photoFindingsResult, argMapResult, intelSummaryResult] = await Promise.all([
         supabase.from('claim_strategic_insights').select('*').eq('claim_id', claimId).single(),
         supabase.from('claim_carrier_deadlines').select('*').eq('claim_id', claimId).order('deadline_date', { ascending: true }),
@@ -56,6 +57,7 @@ export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
         supabase.from('claim_argument_map').select('id').eq('claim_id', claimId),
         supabase.from('claim_intelligence_summary').select('*').eq('claim_id', claimId).order('version', { ascending: false }).limit(1).maybeSingle(),
       ]);
+      console.log(`[query] loadWarRoomData (6 parallel): ${(performance.now() - start).toFixed(2)}ms`);
       if (insightsResult.data) setInsights(insightsResult.data);
       if (deadlinesResult.data) setDeadlines(deadlinesResult.data);
       if (strategiesResult.data) setStrategySimulations(strategiesResult.data);
