@@ -9,6 +9,7 @@ import { DashboardNotepad } from "@/components/dashboard/DashboardNotepad";
 import { useRenderCount } from "@/hooks/useRenderCount";
 
 const Index = () => {
+  useRenderCount("DashboardIndex");
   const navigate = useNavigate();
   const now = new Date();
   const monthStart = startOfMonth(now);
