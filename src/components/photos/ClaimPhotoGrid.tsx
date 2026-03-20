@@ -86,14 +86,14 @@ export function ClaimPhotoGrid({ photos }: ClaimPhotoGridProps) {
             onClick={(e) => e.stopPropagation()}
           >
             <OptimizedImage
-              publicUrl={selected.public_url}
-              alt={selected.caption || "Claim photo"}
+              publicUrl={getPublicUrl(selected.file_path)}
+              alt={selected.description || "Claim photo"}
               preset="modal"
               aspectClassName="aspect-auto max-h-[80vh]"
             />
             <div className="flex items-center justify-between mt-3 px-1">
               <p className="text-sm text-white/80 truncate">
-                {selected.caption || "Claim photo"}
+                {selected.description || "Claim photo"}
               </p>
               <Button
                 variant="ghost"
