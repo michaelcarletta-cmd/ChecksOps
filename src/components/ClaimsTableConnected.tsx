@@ -190,6 +190,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
       }
 
       const { data, error } = await query.order("updated_at", { ascending: false });
+      console.log(`[query] claimsTable: ${(performance.now() - start).toFixed(2)}ms, rows: ${data?.length ?? 0}`);
       if (error) throw error;
       return (data || []) as Claim[];
     },
