@@ -183,6 +183,7 @@ const analysisTypeLabels: Record<string, { label: string; section: string }> = {
 };
 
 export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpdated }: DarwinTabProps) => {
+  useRenderCount("DarwinTab");
   const isMobile = useIsMobile();
   const [showCopilot, setShowCopilot] = useState(true);
   const [copilotExpanded, setCopilotExpanded] = useState(false);

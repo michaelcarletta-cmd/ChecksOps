@@ -113,6 +113,7 @@ interface WarRoomTimelineProps {
 }
 
 export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
+  useRenderCount("WarRoomTimeline");
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
