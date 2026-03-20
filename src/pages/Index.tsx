@@ -6,6 +6,7 @@ import { formatDistanceToNow, startOfMonth, endOfMonth } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { DashboardCalendar } from "@/components/dashboard/DashboardCalendar";
 import { DashboardNotepad } from "@/components/dashboard/DashboardNotepad";
+import { useRenderCount } from "@/hooks/useRenderCount";
 
 const Index = () => {
   const navigate = useNavigate();
