@@ -66,10 +66,11 @@ const Index = () => {
   const { data: checks } = useQuery({
     queryKey: ["dashboard-checks"],
     queryFn: async () => {
+      const start = performance.now();
       const { data, error } = await supabase
         .from("claim_checks")
         .select("amount, check_date");
-      
+      console.log(`[query] dashboard-checks: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) throw error;
       return data;
     },
