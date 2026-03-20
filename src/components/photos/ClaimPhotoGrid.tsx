@@ -1,41 +1,48 @@
 import React, { memo, useMemo, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { OptimizedImage } from "@/components/ui/OptimizedImage";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 
 export type ClaimPhoto = {
   id: string;
   file_path: string;
-  file_name: string;
+  file_name?: string | null;
   description?: string | null;
   created_at?: string | null;
 };
 
-function getPublicUrl(filePath: string): string {
-  const { data } = supabase.storage.from("claim-photos").getPublicUrl(filePath);
-  return data.publicUrl;
-}
-
 type ClaimPhotoGridProps = {
   photos: ClaimPhoto[];
+  bucket?: string;
 };
 
 const PAGE_SIZE = 24;
 
+function getPhotoPublicUrl(path: string, bucket = "claim-photos"): string {
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return data.publicUrl;
+}
+
 const PhotoCard = memo(function PhotoCard({
   photo,
+  bucket,
   onOpen,
 }: {
   photo: ClaimPhoto;
+  bucket: string;
   onOpen: (photo: ClaimPhoto) => void;
 }) {
+  const publicUrl = useMemo(() => {
+    return getPhotoPublicUrl(photo.file_path, bucket);
+  }, [photo.file_path, bucket]);
+
   return (
     <div
       className="cursor-pointer rounded-lg overflow-hidden border border-border shadow-sm hover:shadow-md transition-shadow"
       onClick={() => onOpen(photo)}
     >
-      <OptimizedImage publicUrl={getPublicUrl(photo.file_path)} alt={photo.description || "Claim photo"} preset="card" />
+      <OptimizedImage publicUrl={publicUrl} alt={photo.description || "Claim photo"} preset="card" />
       {photo.description ? (
         <p className="px-2 py-1.5 text-xs text-muted-foreground truncate">
           {photo.description}
@@ -45,26 +52,31 @@ const PhotoCard = memo(function PhotoCard({
   );
 });
 
-export function ClaimPhotoGrid({ photos }: ClaimPhotoGridProps) {
+export function ClaimPhotoGrid({
+  photos,
+  bucket = "claim-photos",
+}: ClaimPhotoGridProps) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [selected, setSelected] = useState<ClaimPhoto | null>(null);
 
-  const visiblePhotos = useMemo(
-    () => photos.slice(0, visibleCount),
-    [photos, visibleCount]
-  );
+  const visiblePhotos = useMemo(() => {
+    return photos.slice(0, visibleCount);
+  }, [photos, visibleCount]);
 
-  const canLoadMore = visibleCount < photos.length;
+  const selectedUrl = useMemo(() => {
+    if (!selected) return "";
+    return getPhotoPublicUrl(selected.file_path, bucket);
+  }, [selected, bucket]);
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
         {visiblePhotos.map((photo) => (
-          <PhotoCard key={photo.id} photo={photo} onOpen={setSelected} />
+          <PhotoCard key={photo.id} photo={photo} bucket={bucket} onOpen={setSelected} />
         ))}
       </div>
 
-      {canLoadMore && (
+      {visibleCount < photos.length ? (
         <div className="flex justify-center pt-2">
           <Button
             variant="outline"
@@ -74,9 +86,9 @@ export function ClaimPhotoGrid({ photos }: ClaimPhotoGridProps) {
             Load more photos
           </Button>
         </div>
-      )}
+      ) : null}
 
-      {selected && (
+      {selected ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
           onClick={() => setSelected(null)}
@@ -86,14 +98,14 @@ export function ClaimPhotoGrid({ photos }: ClaimPhotoGridProps) {
             onClick={(e) => e.stopPropagation()}
           >
             <OptimizedImage
-              publicUrl={getPublicUrl(selected.file_path)}
+              publicUrl={selectedUrl}
               alt={selected.description || "Claim photo"}
               preset="modal"
               aspectClassName="aspect-auto max-h-[80vh]"
             />
             <div className="flex items-center justify-between mt-3 px-1">
               <p className="text-sm text-white/80 truncate">
-                {selected.description || "Claim photo"}
+                {selected.description || selected.file_name || "Claim photo"}
               </p>
               <Button
                 variant="ghost"
@@ -106,7 +118,7 @@ export function ClaimPhotoGrid({ photos }: ClaimPhotoGridProps) {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

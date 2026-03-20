@@ -4,7 +4,7 @@ import { uploadCompressedImage } from "@/lib/imageUpload";
 
 type ClaimPhotoUploaderProps = {
   claimId: string;
-  onUploaded?: () => void;
+  onUploaded?: () => Promise<void> | void;
 };
 
 export function ClaimPhotoUploader({
@@ -30,10 +30,12 @@ export function ClaimPhotoUploader({
           description: file.name,
         });
 
-        if (error) throw error;
+        if (error) {
+          throw error;
+        }
       }
 
-      onUploaded?.();
+      await onUploaded?.();
     } finally {
       setUploading(false);
     }
