@@ -2,13 +2,20 @@ import React, { memo, useMemo, useState } from "react";
 import { OptimizedImage } from "@/components/ui/OptimizedImage";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 export type ClaimPhoto = {
   id: string;
-  public_url: string;
-  caption?: string | null;
-  created_at?: string;
+  file_path: string;
+  file_name: string;
+  description?: string | null;
+  created_at?: string | null;
 };
+
+function getPublicUrl(filePath: string): string {
+  const { data } = supabase.storage.from("claim-photos").getPublicUrl(filePath);
+  return data.publicUrl;
+}
 
 type ClaimPhotoGridProps = {
   photos: ClaimPhoto[];
