@@ -1,6 +1,7 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useState, lazy, Suspense, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useRenderCount } from "@/hooks/useRenderCount";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ClaimStatusSelect } from "@/components/ClaimStatusSelect";
