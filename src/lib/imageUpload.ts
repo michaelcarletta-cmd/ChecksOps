@@ -25,7 +25,8 @@ export async function uploadCompressedImage(
     fileType: file.type || "image/jpeg",
   });
 
-  const ext = (compressed.name.split(".").pop() || "jpg").toLowerCase();
+  const originalName = compressed.name || file.name || "image.jpg";
+  const ext = (originalName.split(".").pop() || "jpg").toLowerCase();
   const fileName = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
   const path = `${folder}/${sanitizeFileName(fileName)}`;
 
