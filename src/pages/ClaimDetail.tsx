@@ -51,6 +51,7 @@ interface Contractor {
 
 
 const ClaimDetail = () => {
+  useRenderCount("ClaimDetail");
   const { id } = useParams();
   const navigate = useNavigate();
   const { userRole } = useAuth();
