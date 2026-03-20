@@ -2,13 +2,20 @@ import React, { memo, useMemo, useState } from "react";
 import { OptimizedImage } from "@/components/ui/OptimizedImage";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 export type ClaimPhoto = {
   id: string;
-  public_url: string;
-  caption?: string | null;
-  created_at?: string;
+  file_path: string;
+  file_name: string;
+  description?: string | null;
+  created_at?: string | null;
 };
+
+function getPublicUrl(filePath: string): string {
+  const { data } = supabase.storage.from("claim-photos").getPublicUrl(filePath);
+  return data.publicUrl;
+}
 
 type ClaimPhotoGridProps = {
   photos: ClaimPhoto[];
@@ -28,10 +35,10 @@ const PhotoCard = memo(function PhotoCard({
       className="cursor-pointer rounded-lg overflow-hidden border border-border shadow-sm hover:shadow-md transition-shadow"
       onClick={() => onOpen(photo)}
     >
-      <OptimizedImage publicUrl={photo.public_url} alt={photo.caption || "Claim photo"} preset="card" />
-      {photo.caption ? (
+      <OptimizedImage publicUrl={getPublicUrl(photo.file_path)} alt={photo.description || "Claim photo"} preset="card" />
+      {photo.description ? (
         <p className="px-2 py-1.5 text-xs text-muted-foreground truncate">
-          {photo.caption}
+          {photo.description}
         </p>
       ) : null}
     </div>
@@ -79,14 +86,14 @@ export function ClaimPhotoGrid({ photos }: ClaimPhotoGridProps) {
             onClick={(e) => e.stopPropagation()}
           >
             <OptimizedImage
-              publicUrl={selected.public_url}
-              alt={selected.caption || "Claim photo"}
+              publicUrl={getPublicUrl(selected.file_path)}
+              alt={selected.description || "Claim photo"}
               preset="modal"
               aspectClassName="aspect-auto max-h-[80vh]"
             />
             <div className="flex items-center justify-between mt-3 px-1">
               <p className="text-sm text-white/80 truncate">
-                {selected.caption || "Claim photo"}
+                {selected.description || "Claim photo"}
               </p>
               <Button
                 variant="ghost"
