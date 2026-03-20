@@ -97,11 +97,13 @@ export const ClaimFiles = ({ claimId, claim, isStaffOrAdmin = false }: ClaimFile
   const { data: files, refetch: refetchFiles } = useQuery({
     queryKey: ["claim-files", claimId],
     queryFn: async () => {
+      const start = performance.now();
       const { data, error } = await supabase
         .from("claim_files")
-        .select("*, document_classification, classification_confidence, classification_metadata, processed_by_darwin, document_type, document_subtype, text_quality_status, extraction_method, is_scanned, ready_for_analysis, needs_reprocessing, processing_error, document_summary, page_count")
+        .select("id, claim_id, file_name, file_path, file_type, file_size, folder_id, uploaded_at, document_classification, classification_confidence, classification_metadata, processed_by_darwin, document_type, document_subtype, text_quality_status, extraction_method, is_scanned, ready_for_analysis, needs_reprocessing, processing_error, document_summary, page_count")
         .eq("claim_id", claimId)
         .order("uploaded_at", { ascending: false });
+      console.log(`[query] fetchClaimFiles: ${(performance.now() - start).toFixed(2)}ms, rows: ${data?.length ?? 0}`);
 
       if (error) throw error;
       return data;

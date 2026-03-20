@@ -105,10 +105,11 @@ const Index = () => {
   const { data: fees } = useQuery({
     queryKey: ["dashboard-fees"],
     queryFn: async () => {
+      const start = performance.now();
       const { data, error } = await supabase
         .from("claim_fees")
         .select("adjuster_fee_amount");
-      
+      console.log(`[query] dashboard-fees: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) throw error;
       return data;
     },

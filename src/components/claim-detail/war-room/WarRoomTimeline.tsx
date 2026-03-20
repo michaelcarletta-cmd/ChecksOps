@@ -126,12 +126,13 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
   const { toast } = useToast();
 
   const loadEvents = useCallback(async () => {
-    console.log(`[WarRoomTimeline] loadEvents() called for claim=${claimId}`);
     setLoading(true);
     try {
+      const start = performance.now();
       const { data, error } = await supabase.functions.invoke("get-claim-timeline", {
         body: { claimId },
       });
+      console.log(`[query] get-claim-timeline edge fn: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) throw error;
 
       const merged: TimelineEvent[] = (data?.events || []).map((e: TimelineEvent) => ({
@@ -140,7 +141,7 @@ export const WarRoomTimeline = ({ claimId, claim }: WarRoomTimelineProps) => {
       }));
 
       merged.sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime());
-      console.log(`[WarRoomTimeline] Loaded ${merged.length} events for claim=${claimId}`);
+      console.log(`[perf] WarRoomTimeline: ${merged.length} events loaded`);
       setEvents(merged);
     } catch (err) {
       console.error("Timeline load error:", err);

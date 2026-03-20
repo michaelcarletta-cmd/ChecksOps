@@ -140,10 +140,12 @@ const ClaimDetail = () => {
   const { data: contractors = [] } = useQuery({
     queryKey: ["claim-contractors", id],
     queryFn: async () => {
+      const start = performance.now();
       const { data, error } = await supabase
         .from("claim_contractors")
         .select("contractor_id")
         .eq("claim_id", id);
+      console.log(`[query] getClaimContractors: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) throw error;
       return (data || []) as Contractor[];
     },
