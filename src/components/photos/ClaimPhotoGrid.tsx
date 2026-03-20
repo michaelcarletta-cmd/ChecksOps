@@ -35,10 +35,10 @@ const PhotoCard = memo(function PhotoCard({
       className="cursor-pointer rounded-lg overflow-hidden border border-border shadow-sm hover:shadow-md transition-shadow"
       onClick={() => onOpen(photo)}
     >
-      <OptimizedImage publicUrl={photo.public_url} alt={photo.caption || "Claim photo"} preset="card" />
-      {photo.caption ? (
+      <OptimizedImage publicUrl={getPublicUrl(photo.file_path)} alt={photo.description || "Claim photo"} preset="card" />
+      {photo.description ? (
         <p className="px-2 py-1.5 text-xs text-muted-foreground truncate">
-          {photo.caption}
+          {photo.description}
         </p>
       ) : null}
     </div>
