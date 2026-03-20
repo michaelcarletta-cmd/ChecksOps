@@ -125,6 +125,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
     queryFn: async () => {
       if (!user?.id) return [];
 
+      const start = performance.now();
       let query = supabase.from("claims").select("*");
 
       if (portalType === "client") {
