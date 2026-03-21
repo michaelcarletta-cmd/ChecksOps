@@ -145,7 +145,9 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
       const { data: urlData, error } = await supabase.storage
         .from("claim-files")
         .createSignedUrl(selectedClaimFile.file_path, 3600);
-      if (error) throw error;
+      if (error) {
+        throw new Error("This file is no longer available in storage. Please upload the file directly instead.");
+      }
 
       setGeneratedDocPath(selectedClaimFile.file_path);
       setGeneratedDocUrl(urlData?.signedUrl || null);
@@ -160,6 +162,50 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
     },
     onError: (error: Error) => {
       toast({ title: "Failed to load file", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const uploadFileMutation = useMutation({
+    mutationFn: async () => {
+      if (!uploadedFile) throw new Error("No file selected");
+
+      const isPDF = uploadedFile.name.toLowerCase().endsWith(".pdf");
+      const isDocx = uploadedFile.name.toLowerCase().endsWith(".docx");
+      if (!isPDF && !isDocx) throw new Error("Please upload a PDF or DOCX file");
+
+      const sanitizedName = uploadedFile.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+      const fileName = `signatures/${claimId}/${Date.now()}-${sanitizedName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("claim-files")
+        .upload(fileName, uploadedFile);
+      if (uploadError) throw uploadError;
+
+      const { data: urlData, error: urlError } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(fileName, 3600);
+      if (urlError) throw urlError;
+
+      setGeneratedDocPath(fileName);
+      setIsDocxTemplate(isDocx);
+
+      if (isPDF) {
+        setGeneratedDocUrl(urlData?.signedUrl || null);
+        setGeneratedDocxData(null);
+      } else {
+        setGeneratedDocUrl(null);
+        const arrayBuffer = await uploadedFile.arrayBuffer();
+        setGeneratedDocxData(new Uint8Array(arrayBuffer));
+      }
+
+      return { fileName, url: urlData?.signedUrl };
+    },
+    onSuccess: () => {
+      setCurrentStep(2);
+      toast({ title: "File uploaded! Now place signature fields." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to upload file", description: error.message, variant: "destructive" });
     },
   });
 
