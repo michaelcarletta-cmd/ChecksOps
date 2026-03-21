@@ -28,6 +28,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { LossTypesSettings } from "@/components/settings/LossTypesSettings";
 import { AutomationsSettings } from "@/components/settings/AutomationsSettings";
 import { CustomFieldsSettings } from "@/components/settings/CustomFieldsSettings";
+import { SignaturePresetsSettings } from "@/components/settings/SignaturePresetsSettings";
 
 import { ImportSettings } from "@/components/settings/ImportSettings";
 import { UserManagementSettings } from "@/components/settings/UserManagementSettings";
