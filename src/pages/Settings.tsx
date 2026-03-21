@@ -431,6 +431,7 @@ export default function Settings() {
                               status={status}
                               onUpdateName={updateStatusName}
                               onUpdateColor={updateStatusColor}
+                              onUpdateGradient={updateStatusGradient}
                               onDelete={deleteStatus}
                               onRefresh={fetchStatuses}
                             />
