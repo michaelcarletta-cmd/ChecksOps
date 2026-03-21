@@ -683,7 +683,7 @@ async function callWebhook(supabase: any, config: any, execution: any) {
     .eq('id', execution.claim_id)
     .single();
 
-  // Build comprehensive payload for Make.com / external integrations
+  // Build comprehensive payload for Zapier / external integrations
   const payload: any = {
     execution_id: execution.id,
     automation_id: execution.automation_id,
