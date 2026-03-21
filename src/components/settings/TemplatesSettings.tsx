@@ -12,20 +12,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Upload, FileText, Trash2, Download, Loader2, Info, Layout, Mail, MessageSquare, ChevronDown, Edit, Save, X, Wand2 } from "lucide-react";
+import { Upload, FileText, Trash2, Download, Loader2, Info, Mail, MessageSquare, ChevronDown } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { SIGNER_DISPLAY_TEMPLATES, DOCUMENT_TYPE_OPTIONS, getFieldTemplateKey } from "@/lib/signer-display-templates";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { EmailTemplatesSettings } from "./EmailTemplatesSettings";
 import SMSTemplatesSettings from "./SMSTemplatesSettings";
 
