@@ -11555,6 +11555,7 @@ export type Database = {
           delivery_mode: string | null
           document_name: string
           document_path: string
+          document_type: string | null
           field_data: Json | null
           final_pdf_path: string | null
           id: string
@@ -11576,6 +11577,7 @@ export type Database = {
           delivery_mode?: string | null
           document_name: string
           document_path: string
+          document_type?: string | null
           field_data?: Json | null
           final_pdf_path?: string | null
           id?: string
@@ -11597,6 +11599,7 @@ export type Database = {
           delivery_mode?: string | null
           document_name?: string
           document_path?: string
+          document_type?: string | null
           field_data?: Json | null
           final_pdf_path?: string | null
           id?: string

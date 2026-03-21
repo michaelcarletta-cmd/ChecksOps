@@ -155,6 +155,12 @@ Deno.serve(async (req) => {
       .eq("signature_request_id", request.id)
       .eq("signer_index", signer.signing_order - 1);
 
+    // Load document presets so the signing page can show custom labels
+    const { data: presets } = await sb
+      .from("signature_document_presets")
+      .select("document_type, fields")
+      .order("label");
+
     return respond({
       ok: true,
       signer: {
@@ -171,10 +177,12 @@ Deno.serve(async (req) => {
         id: request.id,
         document_name: request.document_name,
         document_path: request.document_path,
+        document_type: request.document_type || null,
         field_data: request.field_data, // backwards compat
         status: request.status,
       },
       fields: fields || [], // normalized fields
+      presets: presets || [], // document presets for display labels
       signedUrl,
     });
   } catch (error) {

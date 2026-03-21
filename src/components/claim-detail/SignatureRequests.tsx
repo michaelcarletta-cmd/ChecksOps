@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { detectDocumentType } from "@/lib/signer-display-templates";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -184,6 +185,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
           claim_id: claimId,
           document_name: docName,
           document_path: generatedDocPath,
+          document_type: detectDocumentType(docName),
           field_data: placedFields,
           status: "draft",
         })
