@@ -533,7 +533,6 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
             <ClaimPhotos claimId={claimId} claim={claim} isPortalUser={false} />
             <DarwinSmartExtraction claimId={claimId} claim={claim} />
             <DarwinDocumentComparison claimId={claimId} claim={claim} />
-            <DarwinSmartDocumentSort claimId={claimId} claim={claim} />
             <DarwinPhotoLinker claimId={claimId} claim={claim} />
           </>
         );
@@ -637,6 +636,10 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
           {showCopilot ? "Hide Assistant Panel" : "Show Assistant Panel"}
         </Button>
       </div>
+
+      <Suspense fallback={<LoadingFallback />}>
+        <DarwinSmartDocumentSort claimId={claimId} claim={claim} />
+      </Suspense>
 
       {/* Auto-Analysis Ready Banner */}
       {visibleAnalyses.length > 0 && (

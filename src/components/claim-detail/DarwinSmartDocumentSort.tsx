@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,20 +6,18 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { 
-  FolderOpen, 
-  Upload, 
-  FileText, 
-  Sparkles, 
+import {
+  FolderOpen,
+  Upload,
+  FileText,
+  Sparkles,
   Loader2,
   CheckCircle2,
   AlertCircle,
-  Calendar,
-  User,
   Tag,
   ChevronDown,
   ChevronUp,
-  FolderPlus
+  FolderPlus,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -58,13 +56,14 @@ const FOLDER_MAPPING: Record<string, string> = {
   "Other": "Other",
 };
 
-export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentSortProps) => {
+export const DarwinSmartDocumentSort = ({ claimId }: DarwinSmartDocumentSortProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [documents, setDocuments] = useState<ClassifiedDocument[]>([]);
   const [isClassifying, setIsClassifying] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [classificationProgress, setClassificationProgress] = useState(0);
   const [selectedParentFolderId, setSelectedParentFolderId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
 
   // Fetch existing folders for parent folder selection
@@ -188,6 +187,12 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     await processFiles(files);
+    e.target.value = "";
+  };
+
+  const openFilePicker = () => {
+    setIsOpen(true);
+    fileInputRef.current?.click();
   };
 
   const processFiles = async (files: File[]) => {
@@ -347,6 +352,14 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        onChange={handleFileSelect}
+        className="hidden"
+        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.heic,.xls,.xlsx,.txt"
+      />
       <Card>
         <CollapsibleTrigger asChild>
           <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
@@ -357,6 +370,30 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
                 <Badge variant="secondary" className="ml-2">AI-Powered</Badge>
               </CardTitle>
               <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  disabled={isClassifying || isUploading}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openFilePicker();
+                  }}
+                >
+                  {isClassifying ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Classifying...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload & Sort
+                    </>
+                  )}
+                </Button>
                 {pendingCount > 0 && (
                   <Badge variant="default">{pendingCount} pending</Badge>
                 )}
@@ -399,37 +436,28 @@ export const DarwinSmartDocumentSort = ({ claimId, claim }: DarwinSmartDocumentS
             <div
               onDrop={handleFileDrop}
               onDragOver={(e) => e.preventDefault()}
+              onClick={openFilePicker}
               className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-8 text-center hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer"
             >
-              <input
-                type="file"
-                multiple
-                onChange={handleFileSelect}
-                className="hidden"
-                id="smart-upload-input"
-                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.heic,.xls,.xlsx,.txt"
-              />
-              <label htmlFor="smart-upload-input" className="cursor-pointer">
-                <div className="flex flex-col items-center gap-3">
-                  {isClassifying ? (
-                    <>
-                      <Loader2 className="h-10 w-10 text-primary animate-spin" />
-                      <p className="text-sm text-muted-foreground">Classifying documents...</p>
-                      <Progress value={classificationProgress} className="w-48" />
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-10 w-10 text-muted-foreground" />
-                      <div>
-                        <p className="font-medium">Drop files here or click to upload</p>
-                        <p className="text-sm text-muted-foreground">
-                          PDFs, images, documents - Darwin will sort them automatically
-                        </p>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </label>
+              <div className="flex flex-col items-center gap-3">
+                {isClassifying ? (
+                  <>
+                    <Loader2 className="h-10 w-10 text-primary animate-spin" />
+                    <p className="text-sm text-muted-foreground">Classifying documents...</p>
+                    <Progress value={classificationProgress} className="w-48" />
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-10 w-10 text-muted-foreground" />
+                    <div>
+                      <p className="font-medium">Drop files here or click to upload</p>
+                      <p className="text-sm text-muted-foreground">
+                        PDFs, images, documents - Darwin will sort them automatically
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Classified Documents List */}
