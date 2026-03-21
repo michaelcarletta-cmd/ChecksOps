@@ -117,6 +117,7 @@ export default function Sign() {
       setSigner(data.signer);
       setRequest(data.request);
       setDocumentUrl(data.signedUrl);
+      setDbPresets(data.presets || []);
 
       // Use normalized fields if available, fall back to field_data
       // Cross-reference field_data for display metadata
