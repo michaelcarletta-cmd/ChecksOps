@@ -52,6 +52,7 @@ interface ClaimStatus {
   id: string;
   name: string;
   color: string;
+  gradient: string | null;
   display_order: number;
   is_active: boolean;
 }
