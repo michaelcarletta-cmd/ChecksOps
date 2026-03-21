@@ -520,7 +520,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
                 <SelectValue placeholder="Apply label template..." />
               </SelectTrigger>
               <SelectContent>
-                {DOCUMENT_TYPE_OPTIONS.map((opt) => (
+                {docTypeOptions.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
                     {opt.label}
                   </SelectItem>
