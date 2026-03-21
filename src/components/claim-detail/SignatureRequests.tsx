@@ -494,6 +494,25 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                   </div>
                 )}
 
+                {sourceType === "upload" && (
+                  <div>
+                    <Label>Upload PDF or DOCX</Label>
+                    <div className="mt-1.5">
+                      <Input
+                        type="file"
+                        accept=".pdf,.docx"
+                        onChange={(e) => setUploadedFile(e.target.files?.[0] || null)}
+                      />
+                      {uploadedFile && (
+                        <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                          <Upload className="w-3 h-3" />
+                          {uploadedFile.name} ({(uploadedFile.size / 1024).toFixed(0)} KB)
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {sourceType === "claim_file" && (
                   <div>
                     <Label>Claim File (PDF or DOCX)</Label>
@@ -517,6 +536,9 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                         ))}
                       </SelectContent>
                     </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      If a file fails to load, use "Upload a File" instead.
+                    </p>
                   </div>
                 )}
               </div>
