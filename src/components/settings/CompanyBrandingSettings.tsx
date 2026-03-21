@@ -78,7 +78,7 @@ export function CompanyBrandingSettings() {
       setPhone(branding.company_phone || "");
       setEmail(branding.company_email || "");
       setLetterheadUrl(branding.letterhead_url || null);
-      setSignnowWebhookUrl(branding.signnow_make_webhook_url || "");
+      setSignnowWebhookUrl(branding.zapier_webhook_url || "");
       setEsignEmailSubject(branding.esign_email_subject || "Action Required: Sign {document.name}");
       setEsignEmailBody(branding.esign_email_body || "You have been requested to electronically sign a document. Please review the details below and click the button to proceed.");
       setEsignHeaderColor(branding.esign_email_header_color || "#1a56db");
