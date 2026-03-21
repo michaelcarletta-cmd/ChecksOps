@@ -54,12 +54,6 @@ interface DepositItem {
   nsf_flag: boolean | null;
   accounting_synced_at: string | null;
   created_at: string;
-  increase_account_id: string | null;
-  increase_check_deposit_id: string | null;
-  increase_status: string | null;
-  increase_submitted_at: string | null;
-  increase_last_synced_at: string | null;
-  increase_raw_response: Record<string, unknown> | null;
 }
 
 interface ApprovedCheck {
