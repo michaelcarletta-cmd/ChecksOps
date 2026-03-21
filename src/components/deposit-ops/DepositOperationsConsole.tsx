@@ -353,7 +353,7 @@ export function DepositOperationsConsole() {
               Deposit Pipeline ({items.length})
             </CardTitle>
             <div className="flex items-center gap-2">
-              <IncreaseSyncAllButton />
+              
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-48 h-8 text-xs">
                   <SelectValue />
