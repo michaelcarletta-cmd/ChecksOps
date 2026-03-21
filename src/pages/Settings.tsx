@@ -498,7 +498,7 @@ export default function Settings() {
                 <CardContent className="space-y-6">
                   <PhoneVerificationSettings />
                   <OutlookConnectionSettings embedded />
-                  <MakeIntegrationSettings embedded />
+                  <ZapierIntegrationSettings embedded />
                   <QuickBooksSettings embedded />
                   {isAdmin && <RampSettings embedded />}
                 </CardContent>

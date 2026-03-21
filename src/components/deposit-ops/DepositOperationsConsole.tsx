@@ -416,25 +416,6 @@ export function DepositOperationsConsole() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {item.increase_check_deposit_id ? (
-                            <DepositToIncreaseButton
-                              checkId={item.check_id}
-                              checkNumber={item.check_number}
-                              amount={item.amount}
-                              carrierName={item.carrier_name}
-                              status="approved_for_deposit"
-                              isMultiPayee={false}
-                              hasFrontImage={true}
-                              hasBackImage={true}
-                              depositItemId={item.id}
-                              increaseStatus={item.increase_status}
-                              increaseDepositId={item.increase_check_deposit_id}
-                            />
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
                           <span className="text-xs text-muted-foreground">
                             {item.bank_reference || (item.bank_confirmed_at ? "Confirmed" : "—")}
                           </span>

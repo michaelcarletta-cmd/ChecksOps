@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     console.log("Received signature webhook:", JSON.stringify(body));
 
-    // Extract data from webhook payload (supports Make.com and Adobe Sign formats)
+    // Extract data from webhook payload (supports Zapier and Adobe Sign formats)
     const {
       claim_id,
       claim_number,

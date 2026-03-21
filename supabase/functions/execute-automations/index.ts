@@ -755,7 +755,7 @@ async function callWebhook(supabase: any, config: any, execution: any) {
     body: JSON.stringify(payload)
   });
 
-  // Make.com may return empty response, that's OK
+  // Zapier may return empty response, that's OK
   if (!response.ok && response.status !== 0) {
     const errorText = await response.text().catch(() => 'Unknown error');
     throw new Error(`Webhook failed: ${response.status} ${response.statusText} - ${errorText}`);
