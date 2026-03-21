@@ -116,13 +116,13 @@ const ClientDetail = () => {
 
   const getStatusClassName = (status: string) => {
     const classes: Record<string, string> = {
-      new: "bg-accent text-accent-foreground",
-      in_progress: "bg-primary text-primary-foreground",
-      under_review: "bg-warning text-warning-foreground",
-      approved: "bg-success text-success-foreground",
-      rejected: "bg-destructive text-destructive-foreground",
+      new: "bg-accent/20 text-accent-foreground border border-accent/30",
+      in_progress: "bg-primary/10 text-primary border border-primary/20",
+      under_review: "bg-amber-500/10 text-amber-600 border border-amber-500/20",
+      approved: "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20",
+      rejected: "bg-destructive/10 text-destructive border border-destructive/20",
     };
-    return classes[status] || "bg-secondary";
+    return classes[status] || "bg-muted text-muted-foreground border border-border/50";
   };
 
   const handleSendEmail = () => {

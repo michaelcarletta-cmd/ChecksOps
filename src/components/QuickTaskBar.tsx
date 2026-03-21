@@ -271,13 +271,13 @@ export function QuickTaskBar() {
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
       case "open":
-        return "bg-blue-500/10 text-blue-500";
+        return "bg-blue-500/10 text-blue-600 border border-blue-500/20";
       case "in progress":
-        return "bg-yellow-500/10 text-yellow-500";
+        return "bg-amber-500/10 text-amber-600 border border-amber-500/20";
       case "closed":
-        return "bg-green-500/10 text-green-500";
+        return "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20";
       default:
-        return "bg-muted text-muted-foreground";
+        return "bg-muted text-muted-foreground border border-border/50";
     }
   };
 
