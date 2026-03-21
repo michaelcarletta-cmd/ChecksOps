@@ -11378,6 +11378,39 @@ export type Database = {
           },
         ]
       }
+      signature_document_presets: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          document_type: string
+          fields: Json
+          id: string
+          label: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          document_type: string
+          fields?: Json
+          id?: string
+          label: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          document_type?: string
+          fields?: Json
+          id?: string
+          label?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       signature_field_templates: {
         Row: {
           created_at: string | null
