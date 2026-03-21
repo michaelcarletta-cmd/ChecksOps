@@ -105,6 +105,19 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
     },
   });
 
+  // Fetch DB presets for document type dropdown
+  const { data: dbPresets } = useDocumentPresets();
+
+  // Merge DB presets with hardcoded options for dropdown
+  const docTypeOptions = useMemo(() => {
+    if (!dbPresets?.length) return DOCUMENT_TYPE_OPTIONS;
+    return dbPresets.map((p) => ({
+      value: p.document_type,
+      label: p.label,
+      description: p.description || "",
+    }));
+  }, [dbPresets]);
+
   // Convert DOCX to HTML using mammoth when docxData is provided
   useEffect(() => {
     if (!docxData) return;
