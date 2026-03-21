@@ -270,11 +270,25 @@ export default function Settings() {
       if (error) throw error;
 
       setStatuses(statuses.map(s => s.id === id ? { ...s, color: newColor } : s));
-      
+    } catch (error: any) {
       toast({
-        title: "Success",
-        description: "Color updated",
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
       });
+    }
+  };
+
+  const updateStatusGradient = async (id: string, gradient: string | null) => {
+    try {
+      const { error } = await supabase
+        .from("claim_statuses")
+        .update({ gradient })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setStatuses(statuses.map(s => s.id === id ? { ...s, gradient } : s));
     } catch (error: any) {
       toast({
         title: "Error",
