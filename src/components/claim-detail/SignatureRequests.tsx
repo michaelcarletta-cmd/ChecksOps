@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { FileSignature, Plus, Loader2, Mail, Check, Clock, X, ChevronRight, ChevronLeft, ExternalLink, Link2, RefreshCw, AlertTriangle } from "lucide-react";
+import { FileSignature, Plus, Loader2, Mail, Check, Clock, X, ChevronRight, ChevronLeft, ExternalLink, Link2, RefreshCw, AlertTriangle, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { FieldPlacementEditor } from "./FieldPlacementEditor";
 import { SignatureDiagnostics } from "./SignatureDiagnostics";
