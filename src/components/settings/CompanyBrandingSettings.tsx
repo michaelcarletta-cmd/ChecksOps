@@ -78,7 +78,7 @@ export function CompanyBrandingSettings() {
       setPhone(branding.company_phone || "");
       setEmail(branding.company_email || "");
       setLetterheadUrl(branding.letterhead_url || null);
-      setSignnowWebhookUrl(branding.signnow_make_webhook_url || "");
+      setSignnowWebhookUrl(branding.zapier_webhook_url || "");
       setEsignEmailSubject(branding.esign_email_subject || "Action Required: Sign {document.name}");
       setEsignEmailBody(branding.esign_email_body || "You have been requested to electronically sign a document. Please review the details below and click the button to proceed.");
       setEsignHeaderColor(branding.esign_email_header_color || "#1a56db");
@@ -130,7 +130,7 @@ export function CompanyBrandingSettings() {
         company_phone: phone,
         company_email: email,
         letterhead_url: letterheadUrl,
-        signnow_make_webhook_url: signnowWebhookUrl || null,
+        zapier_webhook_url: signnowWebhookUrl || null,
         esign_email_subject: esignEmailSubject,
         esign_email_body: esignEmailBody,
         esign_email_header_color: esignHeaderColor,
@@ -635,23 +635,23 @@ export function CompanyBrandingSettings() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            SignNow Integration (via Make.com)
+            Zapier Webhook Integration
           </CardTitle>
           <CardDescription>
-            Configure your Make.com webhook URL to send documents to SignNow for electronic signatures
+            Configure a Zapier webhook URL for external document signing or automation workflows
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label>Make.com Webhook URL</Label>
+            <Label>Zapier Webhook URL</Label>
             <Input
               value={signnowWebhookUrl}
               onChange={(e) => setSignnowWebhookUrl(e.target.value)}
-              placeholder="https://hook.us1.make.com/..."
+              placeholder="https://hooks.zapier.com/hooks/catch/..."
             />
             <p className="text-xs text-muted-foreground mt-1">
-              Create a Make.com scenario with a webhook trigger, connect it to SignNow, and paste the webhook URL here.
-              When you send documents for signature, they will be sent to this webhook.
+              Create a Zap with a Webhooks by Zapier trigger and paste the webhook URL here.
+              Documents sent for signature will trigger this webhook.
             </p>
           </div>
           <div className="bg-muted/50 rounded-lg p-4 text-sm space-y-2">

@@ -36,14 +36,14 @@ import { AIKnowledgeBaseSettings } from "@/components/settings/AIKnowledgeBaseSe
 import { CounterArgumentsSettings } from "@/components/settings/CounterArgumentsSettings";
 import { QuickBooksSettings } from "@/components/settings/QuickBooksSettings";
 import { BackupStatusSettings } from "@/components/settings/BackupStatusSettings";
-import { MakeIntegrationSettings } from "@/components/settings/MakeIntegrationSettings";
+import { ZapierIntegrationSettings } from "@/components/settings/ZapierIntegrationSettings";
 import { OrganizationSettings } from "@/components/settings/OrganizationSettings";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 import { AuditLogSettings } from "@/components/settings/AuditLogSettings";
 import { RampSettings } from "@/components/settings/RampSettings";
 import { useQuery } from "@tanstack/react-query";
 import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
-import { SignatureFieldTemplatesSettings } from "@/components/settings/SignatureFieldTemplatesSettings";
+
 
 import { RDAutomationSettings } from "@/components/settings/RDAutomationSettings";
 import { OutlookConnectionSettings } from "@/components/settings/OutlookConnectionSettings";
@@ -131,7 +131,7 @@ export default function Settings() {
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [companyBrandingOpen, setCompanyBrandingOpen] = useState(false);
   const [workspacesOpen, setWorkspacesOpen] = useState(false);
-  const [signatureTemplatesOpen, setSignatureTemplatesOpen] = useState(false);
+  
   const { toast } = useToast();
 
   // Check if current user is admin
@@ -477,32 +477,6 @@ export default function Settings() {
             </Card>
           </Collapsible>
 
-          {/* Signature Field Templates - Collapsible */}
-          <Collapsible open={signatureTemplatesOpen} onOpenChange={setSignatureTemplatesOpen}>
-            <Card>
-              <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <FileSignature className="h-5 w-5" />
-                      <div>
-                        <CardTitle>Signature Field Templates</CardTitle>
-                        <CardDescription>
-                          Define reusable signature, date, and text field layouts for documents
-                        </CardDescription>
-                      </div>
-                    </div>
-                    <ChevronDown className={`h-5 w-5 transition-transform ${signatureTemplatesOpen ? 'rotate-180' : ''}`} />
-                  </div>
-                </CardHeader>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <CardContent>
-                  <SignatureFieldTemplatesSettings embedded />
-                </CardContent>
-              </CollapsibleContent>
-            </Card>
-          </Collapsible>
 
           {/* Integrations - Collapsible */}
           <Collapsible open={integrationsOpen} onOpenChange={setIntegrationsOpen}>
@@ -524,7 +498,7 @@ export default function Settings() {
                 <CardContent className="space-y-6">
                   <PhoneVerificationSettings />
                   <OutlookConnectionSettings embedded />
-                  <MakeIntegrationSettings embedded />
+                  <ZapierIntegrationSettings embedded />
                   <QuickBooksSettings embedded />
                   {isAdmin && <RampSettings embedded />}
                 </CardContent>

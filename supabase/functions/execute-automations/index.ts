@@ -683,7 +683,7 @@ async function callWebhook(supabase: any, config: any, execution: any) {
     .eq('id', execution.claim_id)
     .single();
 
-  // Build comprehensive payload for Make.com / external integrations
+  // Build comprehensive payload for Zapier / external integrations
   const payload: any = {
     execution_id: execution.id,
     automation_id: execution.automation_id,
@@ -755,7 +755,7 @@ async function callWebhook(supabase: any, config: any, execution: any) {
     body: JSON.stringify(payload)
   });
 
-  // Make.com may return empty response, that's OK
+  // Zapier may return empty response, that's OK
   if (!response.ok && response.status !== 0) {
     const errorText = await response.text().catch(() => 'Unknown error');
     throw new Error(`Webhook failed: ${response.status} ${response.statusText} - ${errorText}`);

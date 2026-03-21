@@ -426,7 +426,7 @@ export const AutomationsSettings = () => {
       case 'update_claim_status':
         return `Change status to: ${action.config.new_status}`;
       case 'call_webhook':
-        return `Call webhook: ${action.config.webhook_url ? 'Make.com' : 'Not configured'}`;
+        return `Call webhook: ${action.config.webhook_url ? 'Zapier' : 'Not configured'}`;
       default:
         return action.type;
     }
@@ -759,7 +759,7 @@ export const AutomationsSettings = () => {
                           <SelectItem value="create_task">Create Task</SelectItem>
                           <SelectItem value="send_notification">Send Portal Notification</SelectItem>
                           <SelectItem value="update_claim_status">Change Claim Status</SelectItem>
-                          <SelectItem value="call_webhook">Call Webhook (Make.com)</SelectItem>
+                          <SelectItem value="call_webhook">Call Webhook (Zapier)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1217,9 +1217,9 @@ export const AutomationsSettings = () => {
                     {currentAction?.type === 'call_webhook' && (
                       <div className="space-y-4">
                         <div className="space-y-2">
-                          <Label>Make.com Webhook URL</Label>
+                          <Label>Zapier Webhook URL</Label>
                           <Input 
-                            placeholder="https://hook.make.com/..."
+                            placeholder="https://hooks.zapier.com/hooks/catch/..."
                             value={currentAction.config.webhook_url || ''}
                             onChange={(e) => setCurrentAction({
                               ...currentAction,
@@ -1227,7 +1227,7 @@ export const AutomationsSettings = () => {
                             })}
                           />
                           <p className="text-xs text-muted-foreground">
-                            Create a webhook trigger in Make.com and paste the URL here. The webhook will receive claim data including policyholder info, claim number, and documents.
+                            Create a Zap with a Webhooks by Zapier trigger and paste the URL here. The webhook will receive claim data including policyholder info, claim number, and documents.
                           </p>
                         </div>
                         <div className="flex items-center gap-2">

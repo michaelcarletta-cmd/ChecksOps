@@ -20,7 +20,7 @@ import {
   Printer, ArrowDownToLine, Upload, ShieldAlert, Landmark,
   CircleDollarSign, BookCheck, Ban, FileWarning,
 } from "lucide-react";
-import { IncreaseAccountSelector, DepositToIncreaseButton, IncreaseSyncAllButton, IncreaseStatusBadge } from "./IncreaseDeposit";
+
 import { format } from "date-fns";
 
 /* ------------------------------------------------------------------ */
@@ -54,12 +54,6 @@ interface DepositItem {
   nsf_flag: boolean | null;
   accounting_synced_at: string | null;
   created_at: string;
-  increase_account_id: string | null;
-  increase_check_deposit_id: string | null;
-  increase_status: string | null;
-  increase_submitted_at: string | null;
-  increase_last_synced_at: string | null;
-  increase_raw_response: Record<string, unknown> | null;
 }
 
 interface ApprovedCheck {
@@ -253,9 +247,6 @@ export function DepositOperationsConsole() {
 
   return (
     <div className="space-y-4">
-      {/* Increase Account Selector */}
-      <IncreaseAccountSelector />
-
       {/* Provider Status Banner */}
       {stubbedProviders.length > 0 && (
         <Card className="border-amber-500/30 bg-amber-500/5">
@@ -332,16 +323,6 @@ export function DepositOperationsConsole() {
                           <Button size="sm" onClick={() => setActionDialog({ action: "prepare_deposit", checkId: c.id })}>
                             <ArrowRight className="h-3 w-3 mr-1" />Prepare
                           </Button>
-                          <DepositToIncreaseButton
-                            checkId={c.id}
-                            checkNumber={c.check_number}
-                            amount={c.amount}
-                            carrierName={c.carrier_name}
-                            status={c.status}
-                            isMultiPayee={false}
-                            hasFrontImage={true}
-                            hasBackImage={true}
-                          />
                         </div>
                       </TableCell>
                     </TableRow>
@@ -362,7 +343,7 @@ export function DepositOperationsConsole() {
               Deposit Pipeline ({items.length})
             </CardTitle>
             <div className="flex items-center gap-2">
-              <IncreaseSyncAllButton />
+              
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-48 h-8 text-xs">
                   <SelectValue />
@@ -392,7 +373,6 @@ export function DepositOperationsConsole() {
                     <TableHead className="text-right">Amount</TableHead>
                      <TableHead>Provider</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Increase</TableHead>
                     <TableHead>Bank Ref</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -424,25 +404,6 @@ export function DepositOperationsConsole() {
                               <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-400">Δ</Badge>
                             )}
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          {item.increase_check_deposit_id ? (
-                            <DepositToIncreaseButton
-                              checkId={item.check_id}
-                              checkNumber={item.check_number}
-                              amount={item.amount}
-                              carrierName={item.carrier_name}
-                              status="approved_for_deposit"
-                              isMultiPayee={false}
-                              hasFrontImage={true}
-                              hasBackImage={true}
-                              depositItemId={item.id}
-                              increaseStatus={item.increase_status}
-                              increaseDepositId={item.increase_check_deposit_id}
-                            />
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
                         </TableCell>
                         <TableCell>
                           <span className="text-xs text-muted-foreground">
