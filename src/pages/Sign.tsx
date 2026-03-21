@@ -554,8 +554,8 @@ export default function Sign() {
 
             <div className="space-y-5">
               {(() => {
-                // Detect document type for template-based labels
-                const detectedDocType = detectDocumentType(request.document_name || "");
+                // Use stored document_type, fall back to heuristic detection
+                const detectedDocType = request.document_type || detectDocumentType(request.document_name || "");
                 
                 // Pre-compute type counts for template key resolution
                 const typeCounters: Record<string, number> = {};
