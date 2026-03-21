@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import "react-pdf/dist/esm/Page/TextLayer.css";
@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DOCUMENT_TYPE_OPTIONS, SIGNER_DISPLAY_TEMPLATES, getFieldTemplateKey } from "@/lib/signer-display-templates";
+import { useDocumentPresets } from "@/hooks/useDocumentPresets";
 
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -103,6 +104,19 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
       return data;
     },
   });
+
+  // Fetch DB presets for document type dropdown
+  const { data: dbPresets } = useDocumentPresets();
+
+  // Merge DB presets with hardcoded options for dropdown
+  const docTypeOptions = useMemo(() => {
+    if (!dbPresets?.length) return DOCUMENT_TYPE_OPTIONS;
+    return dbPresets.map((p) => ({
+      value: p.document_type,
+      label: p.label,
+      description: p.description || "",
+    }));
+  }, [dbPresets]);
 
   // Convert DOCX to HTML using mammoth when docxData is provided
   useEffect(() => {
@@ -377,15 +391,18 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
   };
   // Apply document type display labels to existing fields
   const applyDocTypeLabels = (docType: string) => {
-    const template = SIGNER_DISPLAY_TEMPLATES[docType];
-    if (!template) return;
+    // Check DB presets first, then hardcoded
+    const dbPreset = dbPresets?.find((p) => p.document_type === docType);
+    const templateFields = dbPreset?.fields || SIGNER_DISPLAY_TEMPLATES[docType]?.fields;
+    const templateLabel = dbPreset?.label || SIGNER_DISPLAY_TEMPLATES[docType]?.label || docType;
+    if (!templateFields) return;
 
     // Count fields by type to assign indexed keys
     const typeCounts: Record<string, number> = {};
     const updated = fields.map(f => {
       typeCounts[f.type] = (typeCounts[f.type] || 0) + 1;
       const key = getFieldTemplateKey(f.type, typeCounts[f.type]);
-      const meta = template.fields[key];
+      const meta = templateFields[key];
       if (meta) {
         return {
           ...f,
@@ -399,7 +416,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
     });
     setFields(updated);
     emitFieldsAsPercentages(updated);
-    toast({ title: `Applied "${template.label}" labels to ${Object.keys(typeCounts).length > 0 ? 'fields' : 'no fields'}` });
+    toast({ title: `Applied "${templateLabel}" labels to ${Object.keys(typeCounts).length > 0 ? 'fields' : 'no fields'}` });
   };
 
 
@@ -506,7 +523,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
                 <SelectValue placeholder="Apply label template..." />
               </SelectTrigger>
               <SelectContent>
-                {DOCUMENT_TYPE_OPTIONS.map((opt) => (
+                {docTypeOptions.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
                     {opt.label}
                   </SelectItem>

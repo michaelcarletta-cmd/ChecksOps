@@ -180,7 +180,9 @@ export function getFieldTemplateKey(fieldType: string, indexAmongSameType: numbe
 
 /**
  * Resolve display metadata for a field.
- * Priority: field-level overrides > document type template > null
+ * Priority: field-level overrides > DB presets > hardcoded template > null
+ * 
+ * Pass `dbPresets` from `useDocumentPresets()` to check database-managed presets first.
  */
 export function resolveFieldDisplay(
   field: {
@@ -193,6 +195,10 @@ export function resolveFieldDisplay(
   },
   documentType: string | null | undefined,
   indexAmongSameType: number,
+  dbPresets?: Array<{
+    document_type: string;
+    fields: Record<string, FieldDisplayMeta>;
+  }>,
 ): FieldDisplayMeta | null {
   // 1. Field-level overrides take priority
   if (field.display_label) {
@@ -204,11 +210,20 @@ export function resolveFieldDisplay(
     };
   }
 
-  // 2. Look up from document type template
+  const fieldType = field.type || field.field_type || "text";
+  const key = getFieldTemplateKey(fieldType, indexAmongSameType);
+
+  // 2. Look up from DB presets (takes priority over hardcoded)
+  if (documentType && dbPresets) {
+    const dbPreset = dbPresets.find((p) => p.document_type === documentType);
+    if (dbPreset?.fields?.[key]) {
+      return dbPreset.fields[key];
+    }
+  }
+
+  // 3. Fall back to hardcoded template
   if (documentType && SIGNER_DISPLAY_TEMPLATES[documentType]) {
     const template = SIGNER_DISPLAY_TEMPLATES[documentType];
-    const fieldType = field.type || field.field_type || "text";
-    const key = getFieldTemplateKey(fieldType, indexAmongSameType);
     if (template.fields[key]) {
       return template.fields[key];
     }
