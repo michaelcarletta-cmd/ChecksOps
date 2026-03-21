@@ -323,16 +323,6 @@ export function DepositOperationsConsole() {
                           <Button size="sm" onClick={() => setActionDialog({ action: "prepare_deposit", checkId: c.id })}>
                             <ArrowRight className="h-3 w-3 mr-1" />Prepare
                           </Button>
-                          <DepositToIncreaseButton
-                            checkId={c.id}
-                            checkNumber={c.check_number}
-                            amount={c.amount}
-                            carrierName={c.carrier_name}
-                            status={c.status}
-                            isMultiPayee={false}
-                            hasFrontImage={true}
-                            hasBackImage={true}
-                          />
                         </div>
                       </TableCell>
                     </TableRow>
