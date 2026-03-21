@@ -5744,6 +5744,7 @@ export type Database = {
           color: string | null
           created_at: string | null
           display_order: number
+          gradient: string | null
           id: string
           is_active: boolean | null
           name: string
@@ -5753,6 +5754,7 @@ export type Database = {
           color?: string | null
           created_at?: string | null
           display_order?: number
+          gradient?: string | null
           id?: string
           is_active?: boolean | null
           name: string
@@ -5762,6 +5764,7 @@ export type Database = {
           color?: string | null
           created_at?: string | null
           display_order?: number
+          gradient?: string | null
           id?: string
           is_active?: boolean | null
           name?: string
