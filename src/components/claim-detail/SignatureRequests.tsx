@@ -675,6 +675,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                         </>
                       )}
                     </Button>
+                  )}
                   {currentStep === 2 && (
                     <Button onClick={() => setCurrentStep(3)}>
                       Next
