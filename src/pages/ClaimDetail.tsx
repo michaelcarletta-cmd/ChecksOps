@@ -272,7 +272,7 @@ const ClaimDetail = () => {
               )}
               {/* Read-only status display for portal users only */}
               {isPortalUser && claim.status && (
-                <span className="px-3 py-1 text-sm rounded-none bg-primary text-primary-foreground w-fit">
+                <span className="px-3 py-1 text-xs font-semibold rounded-full bg-primary/10 text-primary border border-primary/20 w-fit whitespace-nowrap">
                   {claim.status}
                 </span>
               )}

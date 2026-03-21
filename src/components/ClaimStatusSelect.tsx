@@ -100,7 +100,7 @@ export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: Cl
 
   return (
     <Select value={currentStatus || ""} onValueChange={handleStatusChange} disabled={loading || statuses.length === 0}>
-      <SelectTrigger className="min-w-[180px] max-w-[280px] w-auto rounded-none border-blue-200/80 bg-[linear-gradient(135deg,#ffffff_0%,hsl(220,80%,92%)_50%,hsl(220,60%,55%)_100%)] text-blue-900 hover:shadow-md">
+      <SelectTrigger className="min-w-[180px] max-w-[280px] w-auto rounded-full border-border/50 bg-muted/60 text-foreground hover:bg-muted transition-colors shadow-sm h-8 text-sm px-3">
         {currentStatusObj ? (
           <div className="flex items-center gap-2">
             <div
