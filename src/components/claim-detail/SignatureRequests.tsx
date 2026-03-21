@@ -459,13 +459,14 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
               <div className="space-y-4">
                 <div>
                   <Label>Document Source</Label>
-                  <Select value={sourceType} onValueChange={(v) => { setSourceType(v as any); setSelectedTemplate(null); setSelectedClaimFile(null); }}>
+                  <Select value={sourceType} onValueChange={(v) => { setSourceType(v as any); setSelectedTemplate(null); setSelectedClaimFile(null); setUploadedFile(null); }}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="template">Generate from Template</SelectItem>
-                      <SelectItem value="claim_file">Use Existing Claim PDF</SelectItem>
+                      <SelectItem value="upload">Upload a File</SelectItem>
+                      <SelectItem value="claim_file">Use Existing Claim File</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
