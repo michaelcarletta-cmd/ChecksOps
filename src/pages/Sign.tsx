@@ -67,29 +67,11 @@ export default function Sign() {
   useEffect(() => {
     if (token) {
       fetchSignerData();
-      fetchPresets();
     } else {
       setError("No signing token provided");
       setLoading(false);
     }
   }, [token]);
-
-  const fetchPresets = async () => {
-    try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://yvagrvfkeuvzjezfsbun.supabase.co";
-      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2YWdydmZrZXV2emplemZzYnVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NzcyMjUsImV4cCI6MjA4NzQ1MzIyNX0.1Jgm-plSdEFFnPrtA492s0jH-GQcCN08WplZS_VrtEg";
-      const res = await fetch(
-        `${supabaseUrl}/rest/v1/signature_document_presets?select=document_type,fields&order=label`,
-        { headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` } }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        setDbPresets(data || []);
-      }
-    } catch {
-      // Non-critical — falls back to hardcoded templates
-    }
-  };
 
   const fetchSignerData = async () => {
     try {

@@ -185,6 +185,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
           claim_id: claimId,
           document_name: docName,
           document_path: generatedDocPath,
+          document_type: detectDocumentType(docName),
           field_data: placedFields,
           status: "draft",
         })
