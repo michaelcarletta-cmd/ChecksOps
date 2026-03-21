@@ -759,7 +759,7 @@ export const AutomationsSettings = () => {
                           <SelectItem value="create_task">Create Task</SelectItem>
                           <SelectItem value="send_notification">Send Portal Notification</SelectItem>
                           <SelectItem value="update_claim_status">Change Claim Status</SelectItem>
-                          <SelectItem value="call_webhook">Call Webhook (Make.com)</SelectItem>
+                          <SelectItem value="call_webhook">Call Webhook (Zapier)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
