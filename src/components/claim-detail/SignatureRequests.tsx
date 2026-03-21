@@ -224,6 +224,8 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
 
       const docName = sourceType === "claim_file" 
         ? selectedClaimFile?.file_name || "Document" 
+        : sourceType === "upload"
+        ? uploadedFile?.name || "Document"
         : selectedTemplate?.name || "Document";
 
       const { data: request, error: requestError } = await supabase
