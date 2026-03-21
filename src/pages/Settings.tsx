@@ -67,14 +67,34 @@ interface SortableStatusRowProps {
 }
 
 const PRESET_GRADIENTS = [
+  // Blues & Purples
   { label: "Ocean", value: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" },
-  { label: "Sunset", value: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)" },
-  { label: "Emerald", value: "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)" },
-  { label: "Fire", value: "linear-gradient(135deg, #f12711 0%, #f5af19 100%)" },
   { label: "Sky", value: "linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)" },
   { label: "Berry", value: "linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)" },
-  { label: "Slate", value: "linear-gradient(135deg, #868f96 0%, #596164 100%)" },
+  { label: "Royal", value: "linear-gradient(135deg, #6a11cb 0%, #2575fc 100%)" },
+  { label: "Indigo", value: "linear-gradient(135deg, #4338ca 0%, #818cf8 100%)" },
+  { label: "Violet", value: "linear-gradient(135deg, #7c3aed 0%, #c084fc 100%)" },
+  // Reds & Pinks
+  { label: "Sunset", value: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)" },
+  { label: "Fire", value: "linear-gradient(135deg, #f12711 0%, #f5af19 100%)" },
+  { label: "Rose", value: "linear-gradient(135deg, #ee9ca7 0%, #ffdde1 100%)" },
+  { label: "Cherry", value: "linear-gradient(135deg, #eb3349 0%, #f45c43 100%)" },
+  { label: "Coral", value: "linear-gradient(135deg, #ff6a88 0%, #ff99ac 100%)" },
+  // Greens & Teals
+  { label: "Emerald", value: "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)" },
+  { label: "Mint", value: "linear-gradient(135deg, #0cebeb 0%, #20e3b2 100%)" },
+  { label: "Forest", value: "linear-gradient(135deg, #134e5e 0%, #71b280 100%)" },
+  { label: "Lime", value: "linear-gradient(135deg, #56ab2f 0%, #a8e063 100%)" },
+  // Warm tones
   { label: "Gold", value: "linear-gradient(135deg, #f7971e 0%, #ffd200 100%)" },
+  { label: "Amber", value: "linear-gradient(135deg, #f09819 0%, #edde5d 100%)" },
+  { label: "Peach", value: "linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)" },
+  { label: "Bronze", value: "linear-gradient(135deg, #b8860b 0%, #daa520 100%)" },
+  // Neutrals & Dark
+  { label: "Slate", value: "linear-gradient(135deg, #868f96 0%, #596164 100%)" },
+  { label: "Steel", value: "linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%)" },
+  { label: "Charcoal", value: "linear-gradient(135deg, #232526 0%, #414345 100%)" },
+  { label: "Midnight", value: "linear-gradient(135deg, #0f0c29 0%, #302b63 100%)" },
 ];
 
 function SortableStatusRow({ status, onUpdateName, onUpdateColor, onUpdateGradient, onDelete, onRefresh }: SortableStatusRowProps) {
@@ -101,116 +121,118 @@ function SortableStatusRow({ status, onUpdateName, onUpdateColor, onUpdateGradie
     : { backgroundColor: status.color };
 
   return (
-    <TableRow ref={setNodeRef} style={style}>
-      <TableCell>
-        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="border rounded-lg p-3 mb-2 bg-card space-y-3"
+    >
+      {/* Top row: drag handle, preview pill, delete */}
+      <div className="flex items-center gap-2">
+        <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing flex-shrink-0">
           <GripVertical className="h-5 w-5 text-muted-foreground" />
         </div>
-      </TableCell>
-      <TableCell>
-        <Input
-          value={status.name}
-          onChange={(e) => onUpdateName(status.id, e.target.value)}
-          onBlur={onRefresh}
-          className="h-11 text-base"
-        />
-      </TableCell>
-      <TableCell>
-        <div className="space-y-2">
-          {/* Preview pill */}
-          <div
-            className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-white shadow-sm"
-            style={bgStyle}
-          >
-            {status.name}
-          </div>
-
-          {/* Toggle solid vs gradient */}
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-              <input
-                type="radio"
-                name={`colorMode-${status.id}`}
-                checked={!useGradient}
-                onChange={() => {
-                  setUseGradient(false);
-                  onUpdateGradient(status.id, null);
-                }}
-                className="accent-primary"
-              />
-              Solid
-            </label>
-            <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-              <input
-                type="radio"
-                name={`colorMode-${status.id}`}
-                checked={useGradient}
-                onChange={() => {
-                  setUseGradient(true);
-                  if (!customGradient) {
-                    const preset = PRESET_GRADIENTS[0].value;
-                    setCustomGradient(preset);
-                    onUpdateGradient(status.id, preset);
-                  } else {
-                    onUpdateGradient(status.id, customGradient);
-                  }
-                }}
-                className="accent-primary"
-              />
-              Gradient
-            </label>
-          </div>
-
-          {!useGradient ? (
-            <div className="flex items-center gap-2">
-              <Input
-                type="color"
-                value={status.color}
-                onChange={(e) => onUpdateColor(status.id, e.target.value)}
-                className="w-12 h-8 p-1 cursor-pointer"
-              />
-              <span className="text-xs text-muted-foreground font-mono">{status.color}</span>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex flex-wrap gap-1.5">
-                {PRESET_GRADIENTS.map((preset) => (
-                  <button
-                    key={preset.label}
-                    type="button"
-                    title={preset.label}
-                    onClick={() => {
-                      setCustomGradient(preset.value);
-                      onUpdateGradient(status.id, preset.value);
-                    }}
-                    className={`w-7 h-7 rounded-full border-2 transition-all ${
-                      customGradient === preset.value ? "border-primary scale-110" : "border-transparent hover:border-border"
-                    }`}
-                    style={{ background: preset.value }}
-                  />
-                ))}
-              </div>
-              <Input
-                value={customGradient}
-                onChange={(e) => setCustomGradient(e.target.value)}
-                onBlur={() => onUpdateGradient(status.id, customGradient)}
-                placeholder="linear-gradient(135deg, #color1, #color2)"
-                className="h-8 text-xs font-mono"
-              />
-            </div>
-          )}
+        <div
+          className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-white shadow-sm flex-shrink-0"
+          style={bgStyle}
+        >
+          {status.name}
         </div>
-      </TableCell>
-      <TableCell>
+        <div className="flex-1" />
         <Button
           variant="ghost"
           size="icon"
+          className="h-8 w-8 flex-shrink-0"
           onClick={() => onDelete(status.id)}
         >
           <Trash2 className="h-4 w-4" />
         </Button>
-      </TableCell>
-    </TableRow>
+      </div>
+
+      {/* Name input - full width for easy mobile editing */}
+      <Input
+        value={status.name}
+        onChange={(e) => onUpdateName(status.id, e.target.value)}
+        onBlur={onRefresh}
+        className="h-10 text-sm"
+        placeholder="Status name"
+      />
+
+      {/* Color mode toggle */}
+      <div className="flex items-center gap-3">
+        <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+          <input
+            type="radio"
+            name={`colorMode-${status.id}`}
+            checked={!useGradient}
+            onChange={() => {
+              setUseGradient(false);
+              onUpdateGradient(status.id, null);
+            }}
+            className="accent-primary"
+          />
+          Solid
+        </label>
+        <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+          <input
+            type="radio"
+            name={`colorMode-${status.id}`}
+            checked={useGradient}
+            onChange={() => {
+              setUseGradient(true);
+              if (!customGradient) {
+                const preset = PRESET_GRADIENTS[0].value;
+                setCustomGradient(preset);
+                onUpdateGradient(status.id, preset);
+              } else {
+                onUpdateGradient(status.id, customGradient);
+              }
+            }}
+            className="accent-primary"
+          />
+          Gradient
+        </label>
+      </div>
+
+      {/* Color picker or gradient swatches */}
+      {!useGradient ? (
+        <div className="flex items-center gap-2">
+          <Input
+            type="color"
+            value={status.color}
+            onChange={(e) => onUpdateColor(status.id, e.target.value)}
+            className="w-10 h-8 p-1 cursor-pointer"
+          />
+          <span className="text-xs text-muted-foreground font-mono">{status.color}</span>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="grid grid-cols-8 gap-1.5">
+            {PRESET_GRADIENTS.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                title={preset.label}
+                onClick={() => {
+                  setCustomGradient(preset.value);
+                  onUpdateGradient(status.id, preset.value);
+                }}
+                className={`w-full aspect-square rounded-full border-2 transition-all ${
+                  customGradient === preset.value ? "border-primary scale-110 ring-2 ring-primary/30" : "border-transparent hover:border-border"
+                }`}
+                style={{ background: preset.value }}
+              />
+            ))}
+          </div>
+          <Input
+            value={customGradient}
+            onChange={(e) => setCustomGradient(e.target.value)}
+            onBlur={() => onUpdateGradient(status.id, customGradient)}
+            placeholder="linear-gradient(135deg, #color1, #color2)"
+            className="h-8 text-xs font-mono"
+          />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -478,24 +500,26 @@ export default function Settings() {
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <CardContent className="space-y-4">
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       placeholder="Status name"
                       value={newStatusName}
                       onChange={(e) => setNewStatusName(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && addStatus()}
-                      className="h-11 text-base"
+                      className="h-10 text-sm flex-1"
                     />
-                    <Input
-                      type="color"
-                      value={newStatusColor}
-                      onChange={(e) => setNewStatusColor(e.target.value)}
-                      className="w-24 h-11"
-                    />
-                    <Button onClick={addStatus} className="h-11">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Status
-                    </Button>
+                    <div className="flex gap-2">
+                      <Input
+                        type="color"
+                        value={newStatusColor}
+                        onChange={(e) => setNewStatusColor(e.target.value)}
+                        className="w-14 h-10 p-1"
+                      />
+                      <Button onClick={addStatus} className="h-10 whitespace-nowrap">
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add
+                      </Button>
+                    </div>
                   </div>
 
                   <DndContext
@@ -503,34 +527,22 @@ export default function Settings() {
                     collisionDetection={closestCenter}
                     onDragEnd={handleDragEnd}
                   >
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12"></TableHead>
-                          <TableHead>Status Name</TableHead>
-                          <TableHead>Color</TableHead>
-                          <TableHead className="w-12"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        <SortableContext
-                          items={statuses.map(s => s.id)}
-                          strategy={verticalListSortingStrategy}
-                        >
-                          {statuses.map((status) => (
-                            <SortableStatusRow
-                              key={status.id}
-                              status={status}
-                              onUpdateName={updateStatusName}
-                              onUpdateColor={updateStatusColor}
-                              onUpdateGradient={updateStatusGradient}
-                              onDelete={deleteStatus}
-                              onRefresh={fetchStatuses}
-                            />
-                          ))}
-                        </SortableContext>
-                      </TableBody>
-                    </Table>
+                    <SortableContext
+                      items={statuses.map(s => s.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {statuses.map((status) => (
+                        <SortableStatusRow
+                          key={status.id}
+                          status={status}
+                          onUpdateName={updateStatusName}
+                          onUpdateColor={updateStatusColor}
+                          onUpdateGradient={updateStatusGradient}
+                          onDelete={deleteStatus}
+                          onRefresh={fetchStatuses}
+                        />
+                      ))}
+                    </SortableContext>
                   </DndContext>
                 </CardContent>
               </CollapsibleContent>
