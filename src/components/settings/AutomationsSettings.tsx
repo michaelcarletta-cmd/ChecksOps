@@ -426,7 +426,7 @@ export const AutomationsSettings = () => {
       case 'update_claim_status':
         return `Change status to: ${action.config.new_status}`;
       case 'call_webhook':
-        return `Call webhook: ${action.config.webhook_url ? 'Make.com' : 'Not configured'}`;
+        return `Call webhook: ${action.config.webhook_url ? 'Zapier' : 'Not configured'}`;
       default:
         return action.type;
     }
