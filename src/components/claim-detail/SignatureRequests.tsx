@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { FileSignature, Plus, Loader2, Mail, Check, Clock, X, ChevronRight, ChevronLeft, ExternalLink, Link2, RefreshCw, AlertTriangle } from "lucide-react";
+import { FileSignature, Plus, Loader2, Mail, Check, Clock, X, ChevronRight, ChevronLeft, ExternalLink, Link2, RefreshCw, AlertTriangle, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { FieldPlacementEditor } from "./FieldPlacementEditor";
 import { SignatureDiagnostics } from "./SignatureDiagnostics";
@@ -33,8 +33,9 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
   const [generatedDocPath, setGeneratedDocPath] = useState<string | null>(null);
   const [placedFields, setPlacedFields] = useState<any[]>([]);
   const [generatedDocxData, setGeneratedDocxData] = useState<Uint8Array | null>(null);
-  const [sourceType, setSourceType] = useState<"template" | "claim_file">("template");
+  const [sourceType, setSourceType] = useState<"template" | "claim_file" | "upload">("template");
   const [selectedClaimFile, setSelectedClaimFile] = useState<any>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
 
   const { data: templates } = useQuery({
     queryKey: ["document-templates"],
@@ -144,7 +145,9 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
       const { data: urlData, error } = await supabase.storage
         .from("claim-files")
         .createSignedUrl(selectedClaimFile.file_path, 3600);
-      if (error) throw error;
+      if (error) {
+        throw new Error("This file is no longer available in storage. Please upload the file directly instead.");
+      }
 
       setGeneratedDocPath(selectedClaimFile.file_path);
       setGeneratedDocUrl(urlData?.signedUrl || null);
@@ -159,6 +162,50 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
     },
     onError: (error: Error) => {
       toast({ title: "Failed to load file", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const uploadFileMutation = useMutation({
+    mutationFn: async () => {
+      if (!uploadedFile) throw new Error("No file selected");
+
+      const isPDF = uploadedFile.name.toLowerCase().endsWith(".pdf");
+      const isDocx = uploadedFile.name.toLowerCase().endsWith(".docx");
+      if (!isPDF && !isDocx) throw new Error("Please upload a PDF or DOCX file");
+
+      const sanitizedName = uploadedFile.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+      const fileName = `signatures/${claimId}/${Date.now()}-${sanitizedName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("claim-files")
+        .upload(fileName, uploadedFile);
+      if (uploadError) throw uploadError;
+
+      const { data: urlData, error: urlError } = await supabase.storage
+        .from("claim-files")
+        .createSignedUrl(fileName, 3600);
+      if (urlError) throw urlError;
+
+      setGeneratedDocPath(fileName);
+      setIsDocxTemplate(isDocx);
+
+      if (isPDF) {
+        setGeneratedDocUrl(urlData?.signedUrl || null);
+        setGeneratedDocxData(null);
+      } else {
+        setGeneratedDocUrl(null);
+        const arrayBuffer = await uploadedFile.arrayBuffer();
+        setGeneratedDocxData(new Uint8Array(arrayBuffer));
+      }
+
+      return { fileName, url: urlData?.signedUrl };
+    },
+    onSuccess: () => {
+      setCurrentStep(2);
+      toast({ title: "File uploaded! Now place signature fields." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to upload file", description: error.message, variant: "destructive" });
     },
   });
 
@@ -177,6 +224,8 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
 
       const docName = sourceType === "claim_file" 
         ? selectedClaimFile?.file_name || "Document" 
+        : sourceType === "upload"
+        ? uploadedFile?.name || "Document"
         : selectedTemplate?.name || "Document";
 
       const { data: request, error: requestError } = await supabase
@@ -235,6 +284,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
       setPlacedFields([]);
       setIsDocxTemplate(false);
       setGeneratedDocxData(null);
+      setUploadedFile(null);
       setSigners([{ name: claim.policyholder_name || "", email: claim.policyholder_email || "", type: "policyholder", order: 1 }]);
       queryClient.invalidateQueries({ queryKey: ["signature-requests"] });
       queryClient.invalidateQueries({ queryKey: ["sig-diagnostics"] });
@@ -412,13 +462,14 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
               <div className="space-y-4">
                 <div>
                   <Label>Document Source</Label>
-                  <Select value={sourceType} onValueChange={(v) => { setSourceType(v as any); setSelectedTemplate(null); setSelectedClaimFile(null); }}>
+                  <Select value={sourceType} onValueChange={(v) => { setSourceType(v as any); setSelectedTemplate(null); setSelectedClaimFile(null); setUploadedFile(null); }}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="template">Generate from Template</SelectItem>
-                      <SelectItem value="claim_file">Use Existing Claim PDF</SelectItem>
+                      <SelectItem value="upload">Upload a File</SelectItem>
+                      <SelectItem value="claim_file">Use Existing Claim File</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -446,6 +497,25 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                   </div>
                 )}
 
+                {sourceType === "upload" && (
+                  <div>
+                    <Label>Upload PDF or DOCX</Label>
+                    <div className="mt-1.5">
+                      <Input
+                        type="file"
+                        accept=".pdf,.docx"
+                        onChange={(e) => setUploadedFile(e.target.files?.[0] || null)}
+                      />
+                      {uploadedFile && (
+                        <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                          <Upload className="w-3 h-3" />
+                          {uploadedFile.name} ({(uploadedFile.size / 1024).toFixed(0)} KB)
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {sourceType === "claim_file" && (
                   <div>
                     <Label>Claim File (PDF or DOCX)</Label>
@@ -469,6 +539,9 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                         ))}
                       </SelectContent>
                     </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      If a file fails to load, use "Upload a File" instead.
+                    </p>
                   </div>
                 )}
               </div>
@@ -579,6 +652,24 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                           Loading...
+                        </>
+                      ) : (
+                        <>
+                          Next
+                          <ChevronRight className="w-4 h-4 ml-2" />
+                        </>
+                      )}
+                    </Button>
+                  )}
+                  {currentStep === 1 && sourceType === "upload" && (
+                    <Button
+                      onClick={() => uploadFileMutation.mutate()}
+                      disabled={!uploadedFile || uploadFileMutation.isPending}
+                    >
+                      {uploadFileMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Uploading...
                         </>
                       ) : (
                         <>
