@@ -284,6 +284,7 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
       setPlacedFields([]);
       setIsDocxTemplate(false);
       setGeneratedDocxData(null);
+      setUploadedFile(null);
       setSigners([{ name: claim.policyholder_name || "", email: claim.policyholder_email || "", type: "policyholder", order: 1 }]);
       queryClient.invalidateQueries({ queryKey: ["signature-requests"] });
       queryClient.invalidateQueries({ queryKey: ["sig-diagnostics"] });
