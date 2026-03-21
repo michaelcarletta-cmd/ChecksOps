@@ -51,18 +51,6 @@ export const TemplatesSettings = () => {
     },
   });
 
-  const { data: fieldTemplates, isLoading: fieldTemplatesLoading } = useQuery({
-    queryKey: ["signature-field-templates"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("signature_field_templates")
-        .select("*")
-        .eq("is_active", true)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-  });
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
