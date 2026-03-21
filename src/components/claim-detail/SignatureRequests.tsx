@@ -33,8 +33,9 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
   const [generatedDocPath, setGeneratedDocPath] = useState<string | null>(null);
   const [placedFields, setPlacedFields] = useState<any[]>([]);
   const [generatedDocxData, setGeneratedDocxData] = useState<Uint8Array | null>(null);
-  const [sourceType, setSourceType] = useState<"template" | "claim_file">("template");
+  const [sourceType, setSourceType] = useState<"template" | "claim_file" | "upload">("template");
   const [selectedClaimFile, setSelectedClaimFile] = useState<any>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
 
   const { data: templates } = useQuery({
     queryKey: ["document-templates"],
