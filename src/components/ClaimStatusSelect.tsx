@@ -14,12 +14,36 @@ interface ClaimStatus {
   id: string;
   name: string;
   color: string;
+  gradient: string | null;
 }
 
 interface ClaimStatusSelectProps {
   claimId: string;
   currentStatus: string;
   onStatusChange?: (newStatus: string) => void;
+}
+
+function getStatusStyle(status: ClaimStatus): React.CSSProperties {
+  if (status.gradient) {
+    return { background: status.gradient, color: "#fff" };
+  }
+  // Build a subtle tinted style from the solid color
+  return {
+    backgroundColor: `${status.color}18`,
+    color: status.color,
+    borderColor: `${status.color}30`,
+  };
+}
+
+function getStatusTriggerStyle(status: ClaimStatus): React.CSSProperties {
+  if (status.gradient) {
+    return { background: status.gradient, color: "#fff", borderColor: "transparent" };
+  }
+  return {
+    backgroundColor: `${status.color}15`,
+    color: status.color,
+    borderColor: `${status.color}30`,
+  };
 }
 
 export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: ClaimStatusSelectProps) {
@@ -36,7 +60,7 @@ export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: Cl
     try {
       const { data, error } = await supabase
         .from("claim_statuses")
-        .select("*")
+        .select("id, name, color, gradient")
         .eq("is_active", true)
         .order("display_order");
 
@@ -60,7 +84,6 @@ export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: Cl
 
       if (error) throw error;
 
-      // Trigger client notification for status change
       if (oldStatus !== newStatus) {
         supabase.functions.invoke("notify-client-claim-update", {
           body: {
@@ -92,35 +115,36 @@ export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: Cl
   };
 
   if (initialLoading) {
-    return <Skeleton className="h-10 w-[180px]" />;
+    return <Skeleton className="h-8 w-[160px] rounded-full" />;
   }
 
-  // Find the current status in the list
   const currentStatusObj = statuses.find(s => s.name === currentStatus);
 
   return (
     <Select value={currentStatus || ""} onValueChange={handleStatusChange} disabled={loading || statuses.length === 0}>
-      <SelectTrigger className="min-w-[180px] max-w-[280px] w-auto rounded-full border-border/50 bg-muted/60 text-foreground hover:bg-muted transition-colors shadow-sm h-8 text-sm px-3">
+      <SelectTrigger
+        className="min-w-[140px] max-w-[280px] w-auto rounded-full border shadow-sm h-8 text-xs font-semibold px-3 transition-colors [&>svg]:text-current"
+        style={currentStatusObj ? getStatusTriggerStyle(currentStatusObj) : undefined}
+      >
         {currentStatusObj ? (
-          <div className="flex items-center gap-2">
-            <div
-              className="w-2 h-2 rounded-full flex-shrink-0"
-              style={{ backgroundColor: currentStatusObj.color }}
-            />
-            <span className="text-left">{currentStatusObj.name}</span>
-          </div>
+          <span className="text-left whitespace-nowrap">{currentStatusObj.name}</span>
         ) : (
           <SelectValue placeholder="Select status" />
         )}
       </SelectTrigger>
       <SelectContent>
         {statuses.map((status) => (
-          <SelectItem key={status.id} value={status.name}>
-            <div className="flex items-center gap-2">
-              <div
-                className="w-2 h-2 rounded-full"
-                style={{ backgroundColor: status.color }}
-              />
+          <SelectItem key={status.id} value={status.name} className="p-0 my-0.5">
+            <div
+              className="flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap"
+              style={getStatusStyle(status)}
+            >
+              {!status.gradient && (
+                <div
+                  className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: status.color }}
+                />
+              )}
               {status.name}
             </div>
           </SelectItem>

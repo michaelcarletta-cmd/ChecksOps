@@ -52,6 +52,7 @@ interface ClaimStatus {
   id: string;
   name: string;
   color: string;
+  gradient: string | null;
   display_order: number;
   is_active: boolean;
 }
@@ -60,11 +61,23 @@ interface SortableStatusRowProps {
   status: ClaimStatus;
   onUpdateName: (id: string, name: string) => void;
   onUpdateColor: (id: string, color: string) => void;
+  onUpdateGradient: (id: string, gradient: string | null) => void;
   onDelete: (id: string) => void;
   onRefresh: () => void;
 }
 
-function SortableStatusRow({ status, onUpdateName, onUpdateColor, onDelete, onRefresh }: SortableStatusRowProps) {
+const PRESET_GRADIENTS = [
+  { label: "Ocean", value: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" },
+  { label: "Sunset", value: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)" },
+  { label: "Emerald", value: "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)" },
+  { label: "Fire", value: "linear-gradient(135deg, #f12711 0%, #f5af19 100%)" },
+  { label: "Sky", value: "linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)" },
+  { label: "Berry", value: "linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)" },
+  { label: "Slate", value: "linear-gradient(135deg, #868f96 0%, #596164 100%)" },
+  { label: "Gold", value: "linear-gradient(135deg, #f7971e 0%, #ffd200 100%)" },
+];
+
+function SortableStatusRow({ status, onUpdateName, onUpdateColor, onUpdateGradient, onDelete, onRefresh }: SortableStatusRowProps) {
   const {
     attributes,
     listeners,
@@ -74,11 +87,18 @@ function SortableStatusRow({ status, onUpdateName, onUpdateColor, onDelete, onRe
     isDragging,
   } = useSortable({ id: status.id });
 
+  const [useGradient, setUseGradient] = useState(!!status.gradient);
+  const [customGradient, setCustomGradient] = useState(status.gradient || "");
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
+
+  const bgStyle = status.gradient
+    ? { background: status.gradient }
+    : { backgroundColor: status.color };
 
   return (
     <TableRow ref={setNodeRef} style={style}>
@@ -96,16 +116,89 @@ function SortableStatusRow({ status, onUpdateName, onUpdateColor, onDelete, onRe
         />
       </TableCell>
       <TableCell>
-        <div className="flex items-center gap-2">
-          <Input
-            type="color"
-            value={status.color}
-            onChange={(e) => onUpdateColor(status.id, e.target.value)}
-            className="w-12 h-8 p-1 cursor-pointer"
-          />
-          <span className="text-sm text-muted-foreground">
-            {status.color}
-          </span>
+        <div className="space-y-2">
+          {/* Preview pill */}
+          <div
+            className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-white shadow-sm"
+            style={bgStyle}
+          >
+            {status.name}
+          </div>
+
+          {/* Toggle solid vs gradient */}
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+              <input
+                type="radio"
+                name={`colorMode-${status.id}`}
+                checked={!useGradient}
+                onChange={() => {
+                  setUseGradient(false);
+                  onUpdateGradient(status.id, null);
+                }}
+                className="accent-primary"
+              />
+              Solid
+            </label>
+            <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+              <input
+                type="radio"
+                name={`colorMode-${status.id}`}
+                checked={useGradient}
+                onChange={() => {
+                  setUseGradient(true);
+                  if (!customGradient) {
+                    const preset = PRESET_GRADIENTS[0].value;
+                    setCustomGradient(preset);
+                    onUpdateGradient(status.id, preset);
+                  } else {
+                    onUpdateGradient(status.id, customGradient);
+                  }
+                }}
+                className="accent-primary"
+              />
+              Gradient
+            </label>
+          </div>
+
+          {!useGradient ? (
+            <div className="flex items-center gap-2">
+              <Input
+                type="color"
+                value={status.color}
+                onChange={(e) => onUpdateColor(status.id, e.target.value)}
+                className="w-12 h-8 p-1 cursor-pointer"
+              />
+              <span className="text-xs text-muted-foreground font-mono">{status.color}</span>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-1.5">
+                {PRESET_GRADIENTS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    title={preset.label}
+                    onClick={() => {
+                      setCustomGradient(preset.value);
+                      onUpdateGradient(status.id, preset.value);
+                    }}
+                    className={`w-7 h-7 rounded-full border-2 transition-all ${
+                      customGradient === preset.value ? "border-primary scale-110" : "border-transparent hover:border-border"
+                    }`}
+                    style={{ background: preset.value }}
+                  />
+                ))}
+              </div>
+              <Input
+                value={customGradient}
+                onChange={(e) => setCustomGradient(e.target.value)}
+                onBlur={() => onUpdateGradient(status.id, customGradient)}
+                placeholder="linear-gradient(135deg, #color1, #color2)"
+                className="h-8 text-xs font-mono"
+              />
+            </div>
+          )}
         </div>
       </TableCell>
       <TableCell>
@@ -269,11 +362,25 @@ export default function Settings() {
       if (error) throw error;
 
       setStatuses(statuses.map(s => s.id === id ? { ...s, color: newColor } : s));
-      
+    } catch (error: any) {
       toast({
-        title: "Success",
-        description: "Color updated",
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
       });
+    }
+  };
+
+  const updateStatusGradient = async (id: string, gradient: string | null) => {
+    try {
+      const { error } = await supabase
+        .from("claim_statuses")
+        .update({ gradient })
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setStatuses(statuses.map(s => s.id === id ? { ...s, gradient } : s));
     } catch (error: any) {
       toast({
         title: "Error",
@@ -416,6 +523,7 @@ export default function Settings() {
                               status={status}
                               onUpdateName={updateStatusName}
                               onUpdateColor={updateStatusColor}
+                              onUpdateGradient={updateStatusGradient}
                               onDelete={deleteStatus}
                               onRefresh={fetchStatuses}
                             />
