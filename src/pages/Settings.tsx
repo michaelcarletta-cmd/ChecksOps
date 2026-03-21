@@ -131,7 +131,7 @@ export default function Settings() {
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [companyBrandingOpen, setCompanyBrandingOpen] = useState(false);
   const [workspacesOpen, setWorkspacesOpen] = useState(false);
-  const [signatureTemplatesOpen, setSignatureTemplatesOpen] = useState(false);
+  
   const { toast } = useToast();
 
   // Check if current user is admin
