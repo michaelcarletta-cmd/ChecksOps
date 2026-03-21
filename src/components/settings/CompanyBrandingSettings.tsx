@@ -130,7 +130,7 @@ export function CompanyBrandingSettings() {
         company_phone: phone,
         company_email: email,
         letterhead_url: letterheadUrl,
-        signnow_make_webhook_url: signnowWebhookUrl || null,
+        zapier_webhook_url: signnowWebhookUrl || null,
         esign_email_subject: esignEmailSubject,
         esign_email_body: esignEmailBody,
         esign_email_header_color: esignHeaderColor,
