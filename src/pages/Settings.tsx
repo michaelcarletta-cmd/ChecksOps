@@ -257,6 +257,7 @@ export default function Settings() {
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
   const [companyBrandingOpen, setCompanyBrandingOpen] = useState(false);
   const [workspacesOpen, setWorkspacesOpen] = useState(false);
+  const [sigPresetsOpen, setSigPresetsOpen] = useState(false);
   
   const { toast } = useToast();
 
