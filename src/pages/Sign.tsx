@@ -581,7 +581,7 @@ export default function Sign() {
                   typeCounters[fieldType] = (typeCounters[fieldType] || 0) + 1;
                   const indexAmongSameType = typeCounters[fieldType];
                   
-                  const displayMeta = resolveFieldDisplay(field, detectedDocType, indexAmongSameType);
+                  const displayMeta = resolveFieldDisplay(field, detectedDocType, indexAmongSameType, dbPresets);
                   return { ...field, _displayMeta: displayMeta, _indexAmongType: indexAmongSameType };
                 });
 
