@@ -29,12 +29,10 @@ const DarwinClaimBriefing = lazy(() => import("@/components/claim-detail/DarwinC
 const DarwinDocumentCompiler = lazy(() => import("@/components/claim-detail/DarwinDocumentCompiler").then(m => ({ default: m.DarwinDocumentCompiler })));
 const DarwinDemandPackage = lazy(() => import("@/components/claim-detail/DarwinDemandPackage").then(m => ({ default: m.DarwinDemandPackage })));
 const DarwinDocumentComparison = lazy(() => import("@/components/claim-detail/DarwinDocumentComparison").then(m => ({ default: m.DarwinDocumentComparison })));
-const DarwinSmartExtraction = lazy(() => import("@/components/claim-detail/DarwinSmartExtraction").then(m => ({ default: m.DarwinSmartExtraction })));
 const DarwinWeaknessDetection = lazy(() => import("@/components/claim-detail/DarwinWeaknessDetection").then(m => ({ default: m.DarwinWeaknessDetection })));
 const DarwinDeadlineTracker = lazy(() => import("@/components/claim-detail/DarwinDeadlineTracker").then(m => ({ default: m.DarwinDeadlineTracker })));
 const DarwinPhotoLinker = lazy(() => import("@/components/claim-detail/DarwinPhotoLinker").then(m => ({ default: m.DarwinPhotoLinker })));
 const DarwinBuildingCodes = lazy(() => import("@/components/claim-detail/DarwinBuildingCodes").then(m => ({ default: m.DarwinBuildingCodes })));
-const DarwinSmartFollowUps = lazy(() => import("@/components/claim-detail/DarwinSmartFollowUps").then(m => ({ default: m.DarwinSmartFollowUps })));
 const DarwinTaskGenerator = lazy(() => import("@/components/claim-detail/DarwinTaskGenerator").then(m => ({ default: m.DarwinTaskGenerator })));
 const DarwinOutcomePredictor = lazy(() => import("@/components/claim-detail/DarwinOutcomePredictor").then(m => ({ default: m.DarwinOutcomePredictor })));
 const DarwinStateLawAdvisor = lazy(() => import("@/components/claim-detail/DarwinStateLawAdvisor").then(m => ({ default: m.DarwinStateLawAdvisor })));
@@ -47,7 +45,6 @@ const DarwinCarrierEmailDrafter = lazy(() => import("@/components/claim-detail/D
 const DarwinWeatherHistory = lazy(() => import("@/components/claim-detail/DarwinWeatherHistory").then(m => ({ default: m.DarwinWeatherHistory })));
 const DarwinOneClickPackage = lazy(() => import("@/components/claim-detail/DarwinOneClickPackage").then(m => ({ default: m.DarwinOneClickPackage })));
 const DarwinAutoDraftRebuttal = lazy(() => import("@/components/claim-detail/DarwinAutoDraftRebuttal").then(m => ({ default: m.DarwinAutoDraftRebuttal })));
-const DarwinSystematicDismantler = lazy(() => import("@/components/claim-detail/DarwinSystematicDismantler").then(m => ({ default: m.DarwinSystematicDismantler })));
 const DarwinAutoSummary = lazy(() => import("@/components/claim-detail/DarwinAutoSummary").then(m => ({ default: m.DarwinAutoSummary })));
 const DarwinSmartDocumentSort = lazy(() => import("@/components/claim-detail/DarwinSmartDocumentSort").then(m => ({ default: m.DarwinSmartDocumentSort })));
 const DarwinEstimateGapAnalysis = lazy(() => import("@/components/claim-detail/DarwinEstimateGapAnalysis").then(m => ({ default: m.DarwinEstimateGapAnalysis })));
@@ -128,7 +125,7 @@ const workspaceSections: DarwinWorkspaceSection[] = [
   {
     key: "document-analysis",
     title: "Document Analysis",
-    description: "Files, photos, extraction, comparison, and sorting",
+    description: "Files, photos, comparison, and sorting",
     icon: FileText,
   },
   {
@@ -531,7 +528,6 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
           <>
             <ClaimFiles claimId={claimId} claim={claim} isStaffOrAdmin={isStaffOrAdmin} />
             <ClaimPhotos claimId={claimId} claim={claim} isPortalUser={false} />
-            <DarwinSmartExtraction claimId={claimId} claim={claim} />
             <DarwinDocumentComparison claimId={claimId} claim={claim} />
             <DarwinPhotoLinker claimId={claimId} claim={claim} />
           </>
@@ -541,15 +537,12 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
           <>
             <DarwinDeclaredPosition claimId={claimId} claim={claim} />
             <DarwinButForCausation claimId={claimId} claim={claim} />
-            <DarwinSystematicDismantler claimId={claimId} claim={claim} />
             <DarwinAutoDraftRebuttal claimId={claimId} claim={claim} />
             <div className="grid gap-4 lg:grid-cols-2">
               <DarwinDenialAnalyzer claimId={claimId} claim={claim} />
               <DarwinEngineerReportAnalyzer claimId={claimId} claim={claim} />
             </div>
-            <DarwinSupplementGenerator claimId={claimId} claim={claim} />
             <DarwinCorrespondenceAnalyzer claimId={claimId} claim={claim} />
-            <DarwinSmartFollowUps claimId={claimId} claim={claim} />
           </>
         );
       case "estimates":
@@ -558,6 +551,7 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
             <DarwinRoofEstimate claimId={claimId} claim={claim} />
             <DarwinEstimateComparison claimId={claimId} claim={claim} />
             <DarwinEstimateGapAnalysis claimId={claimId} claim={claim} />
+            <DarwinSupplementGenerator claimId={claimId} claim={claim} />
             <DarwinEstimateBuilder claimId={claimId} claim={claim} />
             <DarwinScopeEngine claimId={claimId} claim={claim} />
           </>
