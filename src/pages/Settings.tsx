@@ -67,14 +67,34 @@ interface SortableStatusRowProps {
 }
 
 const PRESET_GRADIENTS = [
+  // Blues & Purples
   { label: "Ocean", value: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" },
-  { label: "Sunset", value: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)" },
-  { label: "Emerald", value: "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)" },
-  { label: "Fire", value: "linear-gradient(135deg, #f12711 0%, #f5af19 100%)" },
   { label: "Sky", value: "linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)" },
   { label: "Berry", value: "linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)" },
-  { label: "Slate", value: "linear-gradient(135deg, #868f96 0%, #596164 100%)" },
+  { label: "Royal", value: "linear-gradient(135deg, #6a11cb 0%, #2575fc 100%)" },
+  { label: "Indigo", value: "linear-gradient(135deg, #4338ca 0%, #818cf8 100%)" },
+  { label: "Violet", value: "linear-gradient(135deg, #7c3aed 0%, #c084fc 100%)" },
+  // Reds & Pinks
+  { label: "Sunset", value: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)" },
+  { label: "Fire", value: "linear-gradient(135deg, #f12711 0%, #f5af19 100%)" },
+  { label: "Rose", value: "linear-gradient(135deg, #ee9ca7 0%, #ffdde1 100%)" },
+  { label: "Cherry", value: "linear-gradient(135deg, #eb3349 0%, #f45c43 100%)" },
+  { label: "Coral", value: "linear-gradient(135deg, #ff6a88 0%, #ff99ac 100%)" },
+  // Greens & Teals
+  { label: "Emerald", value: "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)" },
+  { label: "Mint", value: "linear-gradient(135deg, #0cebeb 0%, #20e3b2 100%)" },
+  { label: "Forest", value: "linear-gradient(135deg, #134e5e 0%, #71b280 100%)" },
+  { label: "Lime", value: "linear-gradient(135deg, #56ab2f 0%, #a8e063 100%)" },
+  // Warm tones
   { label: "Gold", value: "linear-gradient(135deg, #f7971e 0%, #ffd200 100%)" },
+  { label: "Amber", value: "linear-gradient(135deg, #f09819 0%, #edde5d 100%)" },
+  { label: "Peach", value: "linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)" },
+  { label: "Bronze", value: "linear-gradient(135deg, #b8860b 0%, #daa520 100%)" },
+  // Neutrals & Dark
+  { label: "Slate", value: "linear-gradient(135deg, #868f96 0%, #596164 100%)" },
+  { label: "Steel", value: "linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%)" },
+  { label: "Charcoal", value: "linear-gradient(135deg, #232526 0%, #414345 100%)" },
+  { label: "Midnight", value: "linear-gradient(135deg, #0f0c29 0%, #302b63 100%)" },
 ];
 
 function SortableStatusRow({ status, onUpdateName, onUpdateColor, onUpdateGradient, onDelete, onRefresh }: SortableStatusRowProps) {
