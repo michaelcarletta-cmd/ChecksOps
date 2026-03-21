@@ -6727,8 +6727,8 @@ export type Database = {
           id: string
           letterhead_url: string | null
           online_check_writer_bank_account_id: string | null
-          signnow_make_webhook_url: string | null
           updated_at: string
+          zapier_webhook_url: string | null
         }
         Insert: {
           automation_exclude_claims_older_than_days?: number | null
@@ -6762,8 +6762,8 @@ export type Database = {
           id?: string
           letterhead_url?: string | null
           online_check_writer_bank_account_id?: string | null
-          signnow_make_webhook_url?: string | null
           updated_at?: string
+          zapier_webhook_url?: string | null
         }
         Update: {
           automation_exclude_claims_older_than_days?: number | null
@@ -6797,8 +6797,8 @@ export type Database = {
           id?: string
           letterhead_url?: string | null
           online_check_writer_bank_account_id?: string | null
-          signnow_make_webhook_url?: string | null
           updated_at?: string
+          zapier_webhook_url?: string | null
         }
         Relationships: []
       }
