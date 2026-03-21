@@ -36,7 +36,7 @@ import { AIKnowledgeBaseSettings } from "@/components/settings/AIKnowledgeBaseSe
 import { CounterArgumentsSettings } from "@/components/settings/CounterArgumentsSettings";
 import { QuickBooksSettings } from "@/components/settings/QuickBooksSettings";
 import { BackupStatusSettings } from "@/components/settings/BackupStatusSettings";
-import { MakeIntegrationSettings } from "@/components/settings/MakeIntegrationSettings";
+import { ZapierIntegrationSettings } from "@/components/settings/ZapierIntegrationSettings";
 import { OrganizationSettings } from "@/components/settings/OrganizationSettings";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 import { AuditLogSettings } from "@/components/settings/AuditLogSettings";
