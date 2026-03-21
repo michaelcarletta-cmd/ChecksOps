@@ -609,8 +609,33 @@ export default function Settings() {
             </Card>
           </Collapsible>
 
+          {/* Signature Document Presets - Collapsible */}
+          <Collapsible open={sigPresetsOpen} onOpenChange={setSigPresetsOpen}>
+            <Card>
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileSignature className="h-5 w-5" />
+                      <div>
+                        <CardTitle>Signature Document Presets</CardTitle>
+                        <CardDescription>
+                          Default labels and help text shown to signers per document type
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <ChevronDown className={`h-5 w-5 transition-transform ${sigPresetsOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent>
+                  <SignaturePresetsSettings embedded />
+                </CardContent>
+              </CollapsibleContent>
+            </Card>
+          </Collapsible>
 
-          {/* Integrations - Collapsible */}
           <Collapsible open={integrationsOpen} onOpenChange={setIntegrationsOpen}>
             <Card>
               <CollapsibleTrigger asChild>
