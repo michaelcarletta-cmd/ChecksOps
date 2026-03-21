@@ -658,6 +658,23 @@ export function SignatureRequests({ claimId, claim }: SignatureRequestsProps) {
                       )}
                     </Button>
                   )}
+                  {currentStep === 1 && sourceType === "upload" && (
+                    <Button
+                      onClick={() => uploadFileMutation.mutate()}
+                      disabled={!uploadedFile || uploadFileMutation.isPending}
+                    >
+                      {uploadFileMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          Next
+                          <ChevronRight className="w-4 h-4 ml-2" />
+                        </>
+                      )}
+                    </Button>
                   {currentStep === 2 && (
                     <Button onClick={() => setCurrentStep(3)}>
                       Next
