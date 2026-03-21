@@ -27,7 +27,8 @@ export default function Sign() {
   const [errorStage, setErrorStage] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [fields, setFields] = useState<any[]>([]);
-  
+  const [dbPresets, setDbPresets] = useState<any[]>([]);
+
   const canvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
   const submitBtnRef = useRef<HTMLButtonElement | null>(null);
   const documentSectionRef = useRef<HTMLDivElement | null>(null);
