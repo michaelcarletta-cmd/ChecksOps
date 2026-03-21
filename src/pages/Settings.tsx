@@ -500,24 +500,26 @@ export default function Settings() {
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <CardContent className="space-y-4">
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       placeholder="Status name"
                       value={newStatusName}
                       onChange={(e) => setNewStatusName(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && addStatus()}
-                      className="h-11 text-base"
+                      className="h-10 text-sm flex-1"
                     />
-                    <Input
-                      type="color"
-                      value={newStatusColor}
-                      onChange={(e) => setNewStatusColor(e.target.value)}
-                      className="w-24 h-11"
-                    />
-                    <Button onClick={addStatus} className="h-11">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Status
-                    </Button>
+                    <div className="flex gap-2">
+                      <Input
+                        type="color"
+                        value={newStatusColor}
+                        onChange={(e) => setNewStatusColor(e.target.value)}
+                        className="w-14 h-10 p-1"
+                      />
+                      <Button onClick={addStatus} className="h-10 whitespace-nowrap">
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add
+                      </Button>
+                    </div>
                   </div>
 
                   <DndContext
@@ -525,34 +527,22 @@ export default function Settings() {
                     collisionDetection={closestCenter}
                     onDragEnd={handleDragEnd}
                   >
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12"></TableHead>
-                          <TableHead>Status Name</TableHead>
-                          <TableHead>Color</TableHead>
-                          <TableHead className="w-12"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        <SortableContext
-                          items={statuses.map(s => s.id)}
-                          strategy={verticalListSortingStrategy}
-                        >
-                          {statuses.map((status) => (
-                            <SortableStatusRow
-                              key={status.id}
-                              status={status}
-                              onUpdateName={updateStatusName}
-                              onUpdateColor={updateStatusColor}
-                              onUpdateGradient={updateStatusGradient}
-                              onDelete={deleteStatus}
-                              onRefresh={fetchStatuses}
-                            />
-                          ))}
-                        </SortableContext>
-                      </TableBody>
-                    </Table>
+                    <SortableContext
+                      items={statuses.map(s => s.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {statuses.map((status) => (
+                        <SortableStatusRow
+                          key={status.id}
+                          status={status}
+                          onUpdateName={updateStatusName}
+                          onUpdateColor={updateStatusColor}
+                          onUpdateGradient={updateStatusGradient}
+                          onDelete={deleteStatus}
+                          onRefresh={fetchStatuses}
+                        />
+                      ))}
+                    </SortableContext>
                   </DndContext>
                 </CardContent>
               </CollapsibleContent>
