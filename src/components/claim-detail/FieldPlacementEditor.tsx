@@ -391,15 +391,18 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
   };
   // Apply document type display labels to existing fields
   const applyDocTypeLabels = (docType: string) => {
-    const template = SIGNER_DISPLAY_TEMPLATES[docType];
-    if (!template) return;
+    // Check DB presets first, then hardcoded
+    const dbPreset = dbPresets?.find((p) => p.document_type === docType);
+    const templateFields = dbPreset?.fields || SIGNER_DISPLAY_TEMPLATES[docType]?.fields;
+    const templateLabel = dbPreset?.label || SIGNER_DISPLAY_TEMPLATES[docType]?.label || docType;
+    if (!templateFields) return;
 
     // Count fields by type to assign indexed keys
     const typeCounts: Record<string, number> = {};
     const updated = fields.map(f => {
       typeCounts[f.type] = (typeCounts[f.type] || 0) + 1;
       const key = getFieldTemplateKey(f.type, typeCounts[f.type]);
-      const meta = template.fields[key];
+      const meta = templateFields[key];
       if (meta) {
         return {
           ...f,
@@ -413,7 +416,7 @@ export function FieldPlacementEditor({ documentUrl, docxData, onFieldsChange, si
     });
     setFields(updated);
     emitFieldsAsPercentages(updated);
-    toast({ title: `Applied "${template.label}" labels to ${Object.keys(typeCounts).length > 0 ? 'fields' : 'no fields'}` });
+    toast({ title: `Applied "${templateLabel}" labels to ${Object.keys(typeCounts).length > 0 ? 'fields' : 'no fields'}` });
   };
 
 
