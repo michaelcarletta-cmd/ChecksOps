@@ -109,6 +109,7 @@ function SortableStatusRow({ status, onUpdateName, onUpdateColor, onUpdateGradie
 
   const [useGradient, setUseGradient] = useState(!!status.gradient);
   const [customGradient, setCustomGradient] = useState(status.gradient || "");
+  const [colorOpen, setColorOpen] = useState(false);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -124,12 +125,11 @@ function SortableStatusRow({ status, onUpdateName, onUpdateColor, onUpdateGradie
     <div
       ref={setNodeRef}
       style={style}
-      className="border rounded-lg p-3 mb-2 bg-card space-y-3"
+      className="border rounded-lg p-3 mb-2 bg-card space-y-2"
     >
-      {/* Top row: drag handle, preview pill, delete */}
       <div className="flex items-center gap-2">
         <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing flex-shrink-0">
-          <GripVertical className="h-5 w-5 text-muted-foreground" />
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
         </div>
         <div
           className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-white shadow-sm flex-shrink-0"
@@ -139,97 +139,107 @@ function SortableStatusRow({ status, onUpdateName, onUpdateColor, onUpdateGradie
         </div>
         <div className="flex-1" />
         <Button
+          variant="outline"
+          size="sm"
+          className="h-7 px-2 text-xs gap-1"
+          onClick={() => setColorOpen(!colorOpen)}
+        >
+          <div className="w-3 h-3 rounded-full border flex-shrink-0" style={bgStyle} />
+          {colorOpen ? "Hide" : "Color"}
+        </Button>
+        <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 flex-shrink-0"
+          className="h-7 w-7 flex-shrink-0"
           onClick={() => onDelete(status.id)}
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </div>
 
-      {/* Name input - full width for easy mobile editing */}
       <Input
         value={status.name}
         onChange={(e) => onUpdateName(status.id, e.target.value)}
         onBlur={onRefresh}
-        className="h-10 text-sm"
+        className="h-8 text-sm"
         placeholder="Status name"
       />
 
-      {/* Color mode toggle */}
-      <div className="flex items-center gap-3">
-        <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-          <input
-            type="radio"
-            name={`colorMode-${status.id}`}
-            checked={!useGradient}
-            onChange={() => {
-              setUseGradient(false);
-              onUpdateGradient(status.id, null);
-            }}
-            className="accent-primary"
-          />
-          Solid
-        </label>
-        <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-          <input
-            type="radio"
-            name={`colorMode-${status.id}`}
-            checked={useGradient}
-            onChange={() => {
-              setUseGradient(true);
-              if (!customGradient) {
-                const preset = PRESET_GRADIENTS[0].value;
-                setCustomGradient(preset);
-                onUpdateGradient(status.id, preset);
-              } else {
-                onUpdateGradient(status.id, customGradient);
-              }
-            }}
-            className="accent-primary"
-          />
-          Gradient
-        </label>
-      </div>
-
-      {/* Color picker or gradient swatches */}
-      {!useGradient ? (
-        <div className="flex items-center gap-2">
-          <Input
-            type="color"
-            value={status.color}
-            onChange={(e) => onUpdateColor(status.id, e.target.value)}
-            className="w-10 h-8 p-1 cursor-pointer"
-          />
-          <span className="text-xs text-muted-foreground font-mono">{status.color}</span>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <div className="grid grid-cols-8 gap-1.5">
-            {PRESET_GRADIENTS.map((preset) => (
-              <button
-                key={preset.label}
-                type="button"
-                title={preset.label}
-                onClick={() => {
-                  setCustomGradient(preset.value);
-                  onUpdateGradient(status.id, preset.value);
+      {colorOpen && (
+        <div className="space-y-2 pt-1 border-t">
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+              <input
+                type="radio"
+                name={`colorMode-${status.id}`}
+                checked={!useGradient}
+                onChange={() => {
+                  setUseGradient(false);
+                  onUpdateGradient(status.id, null);
                 }}
-                className={`w-full aspect-square rounded-full border-2 transition-all ${
-                  customGradient === preset.value ? "border-primary scale-110 ring-2 ring-primary/30" : "border-transparent hover:border-border"
-                }`}
-                style={{ background: preset.value }}
+                className="accent-primary"
               />
-            ))}
+              Solid
+            </label>
+            <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+              <input
+                type="radio"
+                name={`colorMode-${status.id}`}
+                checked={useGradient}
+                onChange={() => {
+                  setUseGradient(true);
+                  if (!customGradient) {
+                    const preset = PRESET_GRADIENTS[0].value;
+                    setCustomGradient(preset);
+                    onUpdateGradient(status.id, preset);
+                  } else {
+                    onUpdateGradient(status.id, customGradient);
+                  }
+                }}
+                className="accent-primary"
+              />
+              Gradient
+            </label>
           </div>
-          <Input
-            value={customGradient}
-            onChange={(e) => setCustomGradient(e.target.value)}
-            onBlur={() => onUpdateGradient(status.id, customGradient)}
-            placeholder="linear-gradient(135deg, #color1, #color2)"
-            className="h-8 text-xs font-mono"
-          />
+
+          {!useGradient ? (
+            <div className="flex items-center gap-2">
+              <Input
+                type="color"
+                value={status.color}
+                onChange={(e) => onUpdateColor(status.id, e.target.value)}
+                className="w-10 h-8 p-1 cursor-pointer"
+              />
+              <span className="text-xs text-muted-foreground font-mono">{status.color}</span>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="grid grid-cols-12 gap-1">
+                {PRESET_GRADIENTS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    title={preset.label}
+                    onClick={() => {
+                      setCustomGradient(preset.value);
+                      onUpdateGradient(status.id, preset.value);
+                    }}
+                    className={`w-full aspect-square rounded-full border-2 transition-all ${
+                      customGradient === preset.value ? "border-primary scale-110 ring-2 ring-primary/30" : "border-transparent hover:border-border"
+                    }`}
+                    style={{ background: preset.value }}
+                  />
+                ))}
+              </div>
+              <Input
+                value={customGradient}
+                onChange={(e) => setCustomGradient(e.target.value)}
+                onBlur={() => onUpdateGradient(status.id, customGradient)}
+                placeholder="linear-gradient(135deg, #color1, #color2)"
+                className="h-7 text-xs font-mono"
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
