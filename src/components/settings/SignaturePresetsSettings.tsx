@@ -175,7 +175,7 @@ export function SignaturePresetsSettings({ embedded }: SignaturePresetsSettingsP
     setEditingPreset({
       ...editingPreset,
       fields: {
-        ...editingPreset.fields,
+        ...(editingPreset.fields || {}),
         [addFieldKey]: {
           display_label: `${icon} New ${fieldType} field`,
           display_help_text: "",
