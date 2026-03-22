@@ -171,7 +171,7 @@ export function SignaturePresetsSettings({ embedded }: SignaturePresetsSettingsP
     if (!editingPreset || !addFieldKey) return;
     const fieldType = getFieldTypeFromKey(addFieldKey);
     const icon = FIELD_TYPE_ICONS[fieldType] || "📝";
-    const maxOrder = Math.max(0, ...Object.values(editingPreset.fields).map((f) => f.display_order || 0));
+    const maxOrder = Math.max(0, ...Object.values(editingPreset.fields || {}).map((f) => f.display_order || 0));
     setEditingPreset({
       ...editingPreset,
       fields: {
