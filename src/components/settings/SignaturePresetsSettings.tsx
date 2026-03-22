@@ -151,9 +151,9 @@ export function SignaturePresetsSettings({ embedded }: SignaturePresetsSettingsP
     setEditingPreset({
       ...editingPreset,
       fields: {
-        ...editingPreset.fields,
+        ...(editingPreset.fields || {}),
         [key]: {
-          ...editingPreset.fields[key],
+          ...((editingPreset.fields || {})[key]),
           [field]: value,
         },
       },
@@ -162,7 +162,7 @@ export function SignaturePresetsSettings({ embedded }: SignaturePresetsSettingsP
 
   function removeField(key: string) {
     if (!editingPreset) return;
-    const newFields = { ...editingPreset.fields };
+    const newFields = { ...(editingPreset.fields || {}) };
     delete newFields[key];
     setEditingPreset({ ...editingPreset, fields: newFields });
   }
@@ -171,11 +171,11 @@ export function SignaturePresetsSettings({ embedded }: SignaturePresetsSettingsP
     if (!editingPreset || !addFieldKey) return;
     const fieldType = getFieldTypeFromKey(addFieldKey);
     const icon = FIELD_TYPE_ICONS[fieldType] || "📝";
-    const maxOrder = Math.max(0, ...Object.values(editingPreset.fields).map((f) => f.display_order || 0));
+    const maxOrder = Math.max(0, ...Object.values(editingPreset.fields || {}).map((f) => f.display_order || 0));
     setEditingPreset({
       ...editingPreset,
       fields: {
-        ...editingPreset.fields,
+        ...(editingPreset.fields || {}),
         [addFieldKey]: {
           display_label: `${icon} New ${fieldType} field`,
           display_help_text: "",
@@ -210,7 +210,8 @@ export function SignaturePresetsSettings({ embedded }: SignaturePresetsSettingsP
           {presets.map((preset) => {
             const isExpanded = expandedPreset === preset.id;
             const isEditing = editingPreset?.id === preset.id;
-            const fieldKeys = Object.keys(isEditing ? editingPreset!.fields : preset.fields);
+            const safeFields = (isEditing ? editingPreset!.fields : preset.fields) || {};
+            const fieldKeys = Object.keys(safeFields);
 
             return (
               <Collapsible
@@ -281,12 +282,12 @@ export function SignaturePresetsSettings({ embedded }: SignaturePresetsSettingsP
                         <Label className="text-xs font-semibold">Signer-Facing Fields</Label>
                         {fieldKeys
                           .sort((a, b) => {
-                            const fa = (isEditing ? editingPreset!.fields : preset.fields)[a];
-                            const fb = (isEditing ? editingPreset!.fields : preset.fields)[b];
-                            return (fa.display_order || 0) - (fb.display_order || 0);
+                            const fa = safeFields[a];
+                            const fb = safeFields[b];
+                            return (fa?.display_order || 0) - (fb?.display_order || 0);
                           })
                           .map((key) => {
-                            const field = (isEditing ? editingPreset!.fields : preset.fields)[key];
+                            const field = safeFields[key];
                             const fieldType = getFieldTypeFromKey(key);
                             const icon = FIELD_TYPE_ICONS[fieldType] || "📝";
 
