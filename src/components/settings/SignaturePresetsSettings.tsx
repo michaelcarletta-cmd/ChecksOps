@@ -162,7 +162,7 @@ export function SignaturePresetsSettings({ embedded }: SignaturePresetsSettingsP
 
   function removeField(key: string) {
     if (!editingPreset) return;
-    const newFields = { ...editingPreset.fields };
+    const newFields = { ...(editingPreset.fields || {}) };
     delete newFields[key];
     setEditingPreset({ ...editingPreset, fields: newFields });
   }
