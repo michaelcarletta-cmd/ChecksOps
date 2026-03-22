@@ -287,7 +287,7 @@ export function SignaturePresetsSettings({ embedded }: SignaturePresetsSettingsP
                             return (fa?.display_order || 0) - (fb?.display_order || 0);
                           })
                           .map((key) => {
-                            const field = (isEditing ? editingPreset!.fields : preset.fields)[key];
+                            const field = safeFields[key];
                             const fieldType = getFieldTypeFromKey(key);
                             const icon = FIELD_TYPE_ICONS[fieldType] || "📝";
 
