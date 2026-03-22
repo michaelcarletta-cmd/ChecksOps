@@ -210,7 +210,8 @@ export function SignaturePresetsSettings({ embedded }: SignaturePresetsSettingsP
           {presets.map((preset) => {
             const isExpanded = expandedPreset === preset.id;
             const isEditing = editingPreset?.id === preset.id;
-            const fieldKeys = Object.keys(isEditing ? editingPreset!.fields : preset.fields);
+            const safeFields = (isEditing ? editingPreset!.fields : preset.fields) || {};
+            const fieldKeys = Object.keys(safeFields);
 
             return (
               <Collapsible
