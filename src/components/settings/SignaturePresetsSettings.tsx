@@ -282,9 +282,9 @@ export function SignaturePresetsSettings({ embedded }: SignaturePresetsSettingsP
                         <Label className="text-xs font-semibold">Signer-Facing Fields</Label>
                         {fieldKeys
                           .sort((a, b) => {
-                            const fa = (isEditing ? editingPreset!.fields : preset.fields)[a];
-                            const fb = (isEditing ? editingPreset!.fields : preset.fields)[b];
-                            return (fa.display_order || 0) - (fb.display_order || 0);
+                            const fa = safeFields[a];
+                            const fb = safeFields[b];
+                            return (fa?.display_order || 0) - (fb?.display_order || 0);
                           })
                           .map((key) => {
                             const field = (isEditing ? editingPreset!.fields : preset.fields)[key];
