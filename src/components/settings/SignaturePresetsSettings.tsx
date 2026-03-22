@@ -151,9 +151,9 @@ export function SignaturePresetsSettings({ embedded }: SignaturePresetsSettingsP
     setEditingPreset({
       ...editingPreset,
       fields: {
-        ...editingPreset.fields,
+        ...(editingPreset.fields || {}),
         [key]: {
-          ...editingPreset.fields[key],
+          ...((editingPreset.fields || {})[key]),
           [field]: value,
         },
       },
