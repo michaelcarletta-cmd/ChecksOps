@@ -613,16 +613,16 @@ export default function Settings() {
           <Collapsible open={sigPresetsOpen} onOpenChange={setSigPresetsOpen}>
             <Card>
               <CollapsibleTrigger asChild>
-                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors" role="button">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <FileSignature className="h-5 w-5" />
-                      <div>
-                        <CardTitle>Signature Document Presets</CardTitle>
-                        <CardDescription>
-                          Default labels and help text shown to signers per document type
-                        </CardDescription>
-                      </div>
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <FileSignature className="h-5 w-5" />
+                        Signature Document Presets
+                      </CardTitle>
+                      <CardDescription>
+                        Default labels and help text shown to signers per document type
+                      </CardDescription>
                     </div>
                     <ChevronDown className={`h-5 w-5 transition-transform ${sigPresetsOpen ? 'rotate-180' : ''}`} />
                   </div>
