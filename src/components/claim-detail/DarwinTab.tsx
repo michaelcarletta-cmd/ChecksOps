@@ -533,18 +533,7 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
           </>
         );
       case "rebuttals":
-        return (
-          <>
-            <DarwinDeclaredPosition claimId={claimId} claim={claim} />
-            <DarwinButForCausation claimId={claimId} claim={claim} />
-            <DarwinAutoDraftRebuttal claimId={claimId} claim={claim} />
-            <div className="grid gap-4 lg:grid-cols-2">
-              <DarwinDenialAnalyzer claimId={claimId} claim={claim} />
-              <DarwinEngineerReportAnalyzer claimId={claimId} claim={claim} />
-            </div>
-            <DarwinCorrespondenceAnalyzer claimId={claimId} claim={claim} />
-          </>
-        );
+        return <RebuttalResponsePanel claimId={claimId} claim={claim} />;
       case "estimates":
         return (
           <>
