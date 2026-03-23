@@ -191,8 +191,11 @@ Deno.serve(async (req) => {
     const centerX = ezLeftPad + Math.round(ezContentWidth / 2);
     let curY = ezTopPad;
 
+    // Compute center of endorsement block for center-origin rotation
+    const endorsementCenterX = ezLeftPad + Math.round(ezContentWidth / 2);
+    const endorsementCenterY = ezTopPad + Math.round((imgHeight * 0.22 * appliedOverride.scale) / 2);
     const rotationTransform = appliedOverride.rotationDeg !== 0
-      ? `transform="rotate(${appliedOverride.rotationDeg}, ${ezLeftPad}, ${ezTopPad})"`
+      ? `transform="rotate(${appliedOverride.rotationDeg}, ${endorsementCenterX}, ${endorsementCenterY})"`
       : "";
 
     endorsementSvg += svgText(centerX, curY + headerFont, headerFont, "#111111", "bold", "Pay to the order of");

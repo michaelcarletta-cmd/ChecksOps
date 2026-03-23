@@ -55,6 +55,11 @@ export function getEndorsementLayout(
   };
 }
 
+export function normalizeRotation(deg: number): number {
+  const n = deg % 360;
+  return n < 0 ? n + 360 : n;
+}
+
 export function clampEndorsementOverride(
   next: EndorsementOverride,
 ): EndorsementOverride {
@@ -62,6 +67,6 @@ export function clampEndorsementOverride(
     xPct: Math.min(0.75, Math.max(0.05, next.xPct)),
     yPct: Math.min(0.30, Math.max(0.03, next.yPct)),
     scale: Math.min(2, Math.max(0.4, next.scale)),
-    rotationDeg: Math.min(10, Math.max(-10, next.rotationDeg)),
+    rotationDeg: normalizeRotation(next.rotationDeg),
   };
 }
