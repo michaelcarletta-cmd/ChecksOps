@@ -174,7 +174,10 @@ const getRampDefaults = async (token: string) => {
   const entities = asArray<JsonRecord>(entitiesResponse.data);
   const configuredEntityId = Deno.env.get("RAMP_ENTITY_ID");
   const configuredBankAccountId = Deno.env.get("RAMP_SOURCE_BANK_ACCOUNT_ID");
-  const configuredVendorOwnerId = Deno.env.get("RAMP_VENDOR_OWNER_ID");
+  const rawVendorOwnerId = Deno.env.get("RAMP_VENDOR_OWNER_ID") || "";
+  // Extract UUID if the value is a full Ramp URL (e.g. https://app.ramp.com/people/all#/d/user/<uuid>)
+  const uuidMatch = rawVendorOwnerId.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  const configuredVendorOwnerId = uuidMatch ? uuidMatch[0] : (rawVendorOwnerId || undefined);
 
   const selectedEntity =
     entities.find((entity) => entity.id === configuredEntityId) ||
