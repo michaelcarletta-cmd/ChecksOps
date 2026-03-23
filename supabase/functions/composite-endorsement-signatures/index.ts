@@ -14,7 +14,9 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const BOTTOM_ZONE_LIMIT = 0.75;
+// Real bank endorsement zone (bottom area of check back)
+const ZONE_TOP_PCT = 0.55;
+const ZONE_BOTTOM_PCT = 0.92;
 const ENDORSEMENT_LEFT_PCT = 0.38;
 const ENDORSEMENT_WIDTH_PCT = 0.22;
 const MAX_RASTER_PIXELS = 8_000_000;
