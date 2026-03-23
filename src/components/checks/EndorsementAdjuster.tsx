@@ -204,13 +204,9 @@ export function EndorsementAdjuster({
           parsed = JSON.parse(err.context.body);
         } else if (err?.context?.body) {
           parsed = err.context.body;
-        } else if (typeof err?.details === "string") {
-          parsed = JSON.parse(err.details);
-        } else if (err?.error) {
-          parsed = err.error;
         }
-      } catch (parseErr) {
-        console.warn("[EndorsementAdjuster] failed to parse error body", parseErr);
+      } catch {
+        parsed = null;
       }
 
       if (parsed?.error) {
@@ -228,6 +224,8 @@ export function EndorsementAdjuster({
       } else if (parsed?.code === "ENDORSEMENT_CHECK_MISMATCH") {
         setServerError("The loaded endorsement signatures do not belong to this check.");
       } else if (parsed?.code === "MISSING_SIGNATURE_ASSET") {
+        setServerError(rawMessage);
+      } else if (parsed?.code === "COMPOSITE_FAILURE") {
         setServerError(rawMessage);
       } else {
         setServerError(rawMessage);

@@ -920,6 +920,29 @@ function CheckDetailPanel({
 
       if (error) {
         console.error("[CHECK-EXPORT] Edge function error:", error);
+
+        // Parse structured error from FunctionsHttpError
+        if (error instanceof FunctionsHttpError) {
+          let body: any = null;
+          try {
+            body = await error.context.json();
+          } catch {
+            try { body = await error.context.text(); } catch { body = null; }
+          }
+          const e = new Error(body?.error || "Edge function returned non-2xx response.");
+          (e as any).context = { body };
+          throw e;
+        }
+        if (error instanceof FunctionsRelayError) {
+          const e = new Error("Relay error while generating deposit image.");
+          (e as any).context = { body: { code: "FUNCTIONS_RELAY_ERROR" } };
+          throw e;
+        }
+        if (error instanceof FunctionsFetchError) {
+          const e = new Error("Network error while calling deposit image function.");
+          (e as any).context = { body: { code: "FUNCTIONS_FETCH_ERROR" } };
+          throw e;
+        }
         throw error;
       }
 
