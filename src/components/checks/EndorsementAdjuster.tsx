@@ -204,12 +204,14 @@ export function EndorsementAdjuster({
     }
   };
 
-  const containerWidth = wrapRef.current?.clientWidth ?? imageWidth;
-  const displayScale = containerWidth / imageWidth;
+  // Use actual rendered DOM rect for overlay positioning
+  const rect = wrapRef.current?.getBoundingClientRect();
+  const containerWidthPx = rect?.width ?? imageWidth;
+  const containerHeightPx = rect?.height ?? (imageWidth > 0 ? containerWidthPx * imageHeight / imageWidth : imageHeight);
 
-  // Center-origin overlay positioning
-  const overlayLeftPx = override.xPct * containerWidth;
-  const overlayTopPx = override.yPct * (containerWidth * imageHeight / imageWidth);
+  const overlayLeftPx = override.xPct * containerWidthPx;
+  const overlayTopPx = override.yPct * containerHeightPx;
+  const displayScale = containerWidthPx / imageWidth;
   const overlayWidthPx = layout.width * displayScale;
 
   return (
