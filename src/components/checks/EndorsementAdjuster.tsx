@@ -203,7 +203,7 @@ export function EndorsementAdjuster({
             width: layout.width * displayScale,
             color: "#111111",
             transform: `rotate(${layout.rotationDeg}deg)`,
-            transformOrigin: "top left",
+            transformOrigin: "center center",
             userSelect: "none",
             touchAction: "none",
             cursor: dragging ? "grabbing" : "grab",
