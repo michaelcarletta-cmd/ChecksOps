@@ -77,6 +77,7 @@ const DarwinClaimControlCenter = lazy(() => import("@/components/claim-detail/Da
 const RebuttalResponsePanel = lazy(() => import("@/components/claim-detail/RebuttalResponsePanel").then(m => ({ default: m.RebuttalResponsePanel })));
 const RegulatoryCompliancePanel = lazy(() => import("@/components/claim-detail/RegulatoryCompliancePanel").then(m => ({ default: m.RegulatoryCompliancePanel })));
 const EstimateWorkspacePanel = lazy(() => import("@/components/claim-detail/EstimateWorkspacePanel").then(m => ({ default: m.EstimateWorkspacePanel })));
+const PackageBuildingPanel = lazy(() => import("@/components/claim-detail/PackageBuildingPanel").then(m => ({ default: m.PackageBuildingPanel })));
 
 
 interface DarwinTabProps {
@@ -540,14 +541,7 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
       case "estimates":
         return <EstimateWorkspacePanel claimId={claimId} claim={claim} />;
       case "package-building":
-        return (
-          <>
-            <DarwinDemandPackage claimId={claimId} claim={claim} />
-            <RecoverableDepreciationInvoice claimId={claimId} claim={claim} />
-            <DarwinDocumentCompiler claimId={claimId} claim={claim} />
-            <DarwinCarrierEmailDrafter claimId={claimId} claim={claim} />
-          </>
-        );
+        return <PackageBuildingPanel claimId={claimId} claim={claim} />;
       case "regulatory-compliance":
         return <RegulatoryCompliancePanel claimId={claimId} claim={claim} />;
       case "contents-loss":
