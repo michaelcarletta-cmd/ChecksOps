@@ -389,7 +389,7 @@ Deno.serve(async (req) => {
 
       if (externalVendorId) {
         const existingVendorsResponse = (await rampRequest(token, "/developer/v1/vendors", {
-          query: { external_vendor_id: externalVendorId, page_size: 1 },
+          query: { external_vendor_id: externalVendorId, page_size: 2 },
         })) as JsonRecord;
 
         const existingVendor = asArray<JsonRecord>(existingVendorsResponse.data)[0];
