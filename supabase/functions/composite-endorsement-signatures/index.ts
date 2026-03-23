@@ -14,7 +14,9 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const BOTTOM_ZONE_LIMIT = 0.75;
+// Real bank endorsement zone (bottom area of check back)
+const ZONE_TOP_PCT = 0.55;
+const ZONE_BOTTOM_PCT = 0.92;
 const ENDORSEMENT_LEFT_PCT = 0.38;
 const ENDORSEMENT_WIDTH_PCT = 0.22;
 const MAX_RASTER_PIXELS = 8_000_000;
@@ -179,7 +181,7 @@ Deno.serve(async (req) => {
     const rawOverride = (check.endorsement_override ?? null) as Partial<OverrideShape> | null;
     const appliedOverride: OverrideShape = {
       xPct: rawOverride?.xPct ?? ENDORSEMENT_LEFT_PCT,
-      yPct: rawOverride?.yPct ?? 0.10,
+      yPct: rawOverride?.yPct ?? 0.5,
       scale: rawOverride?.scale ?? 1,
       rotationDeg: rawOverride?.rotationDeg ?? 0,
     };
@@ -225,15 +227,16 @@ Deno.serve(async (req) => {
     const clientEndorsements = resolvedEndorsements.filter((e) => !isFreedomOrCarletta(e.payee_name));
     const companyEndorsements = resolvedEndorsements.filter((e) => isFreedomOrCarletta(e.payee_name));
 
-    // ── Auto-fit layout ──
-    const zoneTop = 0;
-    const zoneBottom = Math.floor(imgHeight * BOTTOM_ZONE_LIMIT);
+    // ── Auto-fit layout — real bank endorsement zone ──
+    const zoneTop = Math.floor(imgHeight * ZONE_TOP_PCT);
+    const zoneBottom = Math.floor(imgHeight * ZONE_BOTTOM_PCT);
     const zoneHeight = zoneBottom - zoneTop;
 
     const measured = fitLayout(endorsements.length, zoneHeight, appliedOverride.scale);
 
     const blockHeight = measured.estimatedHeight;
-    const blockTop = Math.round(appliedOverride.yPct * imgHeight - blockHeight / 2);
+    const blockCenterY = zoneTop + (appliedOverride.yPct * zoneHeight);
+    const blockTop = Math.round(blockCenterY - blockHeight / 2);
     const blockBottom = blockTop + blockHeight;
 
     const rejectDetails = {

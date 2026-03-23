@@ -22,7 +22,7 @@ export interface EndorsementLayout {
 
 export const DEFAULT_ENDORSEMENT_OVERRIDE: EndorsementOverride = {
   xPct: 0.38,
-  yPct: 0.10,
+  yPct: 0.5,
   scale: 1,
   rotationDeg: 0,
 };
