@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RotateCcw, Save, AlertCircle } from "lucide-react";
+import { RotateCcw, Save, AlertCircle, ShieldCheck } from "lucide-react";
 import {
   clampEndorsementOverride,
   DEFAULT_ENDORSEMENT_OVERRIDE,
@@ -53,6 +53,7 @@ export function EndorsementAdjuster({
   const [resizing, setResizing] = useState(false);
   const [activePointerId, setActivePointerId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
   // Load real signed endorsement assets for this check
   const [signedEndorsements, setSignedEndorsements] = useState<SignedEndorsementAsset[]>([]);
@@ -110,7 +111,6 @@ export function EndorsementAdjuster({
     });
   };
 
-  // Center-origin drag: update xPct/yPct as the center of the overlay
   const beginDrag = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -139,32 +139,23 @@ export function EndorsementAdjuster({
 
       runNextFrame(() => {
         if (dragging) {
-          // Center-origin: pointer position becomes the center of the overlay
           const xPct = (e.clientX - rect.left) / rect.width;
           const yPct = (e.clientY - rect.top) / rect.height;
           setOverride((prev) =>
-            clampEndorsementOverride({
-              ...prev,
-              xPct,
-              yPct,
-            }),
+            clampEndorsementOverride({ ...prev, xPct, yPct }),
           );
         }
 
         if (resizing) {
-          const containerWidth = wrapRef.current!.clientWidth || imageWidth;
-          const displayScale = containerWidth / imageWidth;
           const overlayLeft = rect.left + override.xPct * rect.width;
           const deltaX = e.clientX - overlayLeft;
+          const displayScale = rect.width / imageWidth;
           const nextScale = Math.max(
             0.4,
             Math.min(2, deltaX / (imageWidth * 0.20 * displayScale)),
           );
           setOverride((prev) =>
-            clampEndorsementOverride({
-              ...prev,
-              scale: nextScale,
-            }),
+            clampEndorsementOverride({ ...prev, scale: nextScale }),
           );
         }
       });
@@ -193,15 +184,51 @@ export function EndorsementAdjuster({
 
   const handleReset = () => {
     setOverride(DEFAULT_ENDORSEMENT_OVERRIDE);
+    setServerError(null);
   };
 
   const handleSave = async () => {
     setSaving(true);
+    setServerError(null);
+
     try {
       await onSave(clampEndorsementOverride(override));
+    } catch (err: any) {
+      const raw = err?.message || "Could not generate final deposit image.";
+      let parsed: any = null;
+
+      try {
+        parsed = typeof err?.context?.body === "string"
+          ? JSON.parse(err.context.body)
+          : err?.context?.body;
+      } catch {
+        parsed = null;
+      }
+
+      if (parsed?.code === "ENDORSEMENT_ZONE_OVERFLOW" && parsed?.details) {
+        const d = parsed.details;
+        setServerError(
+          `Endorsement block extends to y=${d.blockBottom} which exceeds the bank zone limit at y=${d.zoneBottom}. ` +
+          `Layout: columns=${d.columns}, fontSize=${d.fontSize}, signatureHeight=${d.signatureHeight}, compactText=${d.compactText}. ` +
+          `Try "Fit to Safe Zone" or reduce scale.`
+        );
+      } else {
+        setServerError(raw);
+      }
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleFitToSafeZone = () => {
+    setOverride((prev) =>
+      clampEndorsementOverride({
+        ...prev,
+        scale: Math.max(0.4, (prev.scale ?? 1) - 0.08),
+        yPct: Math.min(prev.yPct, 0.62),
+      }),
+    );
+    setServerError(null);
   };
 
   // Use actual rendered DOM rect for overlay positioning
@@ -214,6 +241,18 @@ export function EndorsementAdjuster({
   const displayScale = containerWidthPx / imageWidth;
   const overlayWidthPx = layout.width * displayScale;
 
+  // Bank safe zone visualization
+  const safeZoneBottomPx = 0.75 * containerHeightPx;
+
+  if (!canGenerate && !endorsementsLoading) {
+    return (
+      <div className="flex items-center gap-2 p-4 rounded-lg bg-destructive/10 text-destructive font-medium">
+        <AlertCircle className="h-5 w-5 flex-shrink-0" />
+        No signed endorsements found for this check. Cannot generate deposit image.
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Endorsement source info */}
@@ -224,11 +263,6 @@ export function EndorsementAdjuster({
           <AlertCircle className="h-4 w-4" />
           Error loading endorsements: {endorsementsError}
         </div>
-      ) : !canGenerate ? (
-        <div className="flex items-center gap-2 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4" />
-          No completed endorsement signatures found for this check.
-        </div>
       ) : (
         <div className="space-y-1">
           <div className="text-sm text-muted-foreground">
@@ -237,6 +271,13 @@ export function EndorsementAdjuster({
           <div className="text-xs text-muted-foreground">
             Source check: {signedEndorsements[0]?.check_id}
           </div>
+        </div>
+      )}
+
+      {/* Server error display */}
+      {serverError && (
+        <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm font-mono whitespace-pre-wrap">
+          {serverError}
         </div>
       )}
 
@@ -252,6 +293,16 @@ export function EndorsementAdjuster({
           className="block h-auto w-full object-contain"
           draggable={false}
         />
+
+        {/* Bank safe zone indicator */}
+        <div
+          className="absolute left-0 right-0 border-t-2 border-dashed border-destructive/40 pointer-events-none"
+          style={{ top: safeZoneBottomPx }}
+        >
+          <span className="absolute right-1 -top-5 text-[10px] text-destructive/60 font-medium">
+            Bank Safe Zone Limit
+          </span>
+        </div>
 
         {/* draggable overlay – center-origin positioning */}
         <div
@@ -350,7 +401,6 @@ export function EndorsementAdjuster({
             </div>
           ))}
 
-          {/* Fallback if no client endorsements loaded yet but still rendering */}
           {clientEndorsements.length === 0 && !endorsementsLoading && (
             <div
               style={{
@@ -388,7 +438,6 @@ export function EndorsementAdjuster({
             By: {ownerName}
           </div>
 
-          {/* Company/owner signature from actual signed data */}
           {companyEndorsements.length > 0 && companyEndorsements[0].signature_image_url && !companyEndorsements[0].signature_image_url.startsWith("typed:") ? (
             <img
               src={companyEndorsements[0].signature_image_url}
@@ -583,10 +632,14 @@ export function EndorsementAdjuster({
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={handleReset}>
               <RotateCcw className="h-3 w-3 mr-1" />
               Reset
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleFitToSafeZone}>
+              <ShieldCheck className="h-3 w-3 mr-1" />
+              Fit to Safe Zone
             </Button>
             <Button size="sm" onClick={handleSave} disabled={saving || !canGenerate}>
               <Save className="h-3 w-3 mr-1" />
