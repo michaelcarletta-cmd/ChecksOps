@@ -478,16 +478,7 @@ async function uploadAndFinalize(
     pixel_count: pixelCount,
     db_path_update_committed: false,
   });
-
-  } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : "Unknown error";
-    console.error("[COMPOSITE] ERROR:", msg, error);
-    return jsonResp(
-      { success: false, error: msg, code: "COMPOSITE_FAILURE" },
-      400,
-    );
-  }
-});
+}
 
 function jsonResp(data: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(data), {
