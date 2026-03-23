@@ -181,7 +181,7 @@ Deno.serve(async (req) => {
     const rawOverride = (check.endorsement_override ?? null) as Partial<OverrideShape> | null;
     const appliedOverride: OverrideShape = {
       xPct: rawOverride?.xPct ?? ENDORSEMENT_LEFT_PCT,
-      yPct: rawOverride?.yPct ?? 0.10,
+      yPct: rawOverride?.yPct ?? 0.5,
       scale: rawOverride?.scale ?? 1,
       rotationDeg: rawOverride?.rotationDeg ?? 0,
     };
