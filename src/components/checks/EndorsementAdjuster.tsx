@@ -20,6 +20,7 @@ interface SignedEndorsementAsset {
   signed_at: string | null;
   signature_image_url: string | null;
   signature_method: string | null;
+  check_id: string;
 }
 
 type EndorsementAdjusterProps = {
