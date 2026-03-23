@@ -92,11 +92,13 @@ export function renderBackCheckEndorsementToCanvas(
   ctx.rect(0, 0, imgW, imgH);
   ctx.clip();
 
-  // Apply rotation if set
+  // Apply rotation around the center of the endorsement block
   if (L.rotationDeg !== 0) {
-    ctx.translate(L.x, L.y);
+    const centerX = L.x + L.width / 2;
+    const centerY = L.y + L.height / 2;
+    ctx.translate(centerX, centerY);
     ctx.rotate((L.rotationDeg * Math.PI) / 180);
-    ctx.translate(-L.x, -L.y);
+    ctx.translate(-centerX, -centerY);
   }
 
   ctx.fillStyle = "#111111";
