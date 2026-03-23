@@ -227,15 +227,16 @@ Deno.serve(async (req) => {
     const clientEndorsements = resolvedEndorsements.filter((e) => !isFreedomOrCarletta(e.payee_name));
     const companyEndorsements = resolvedEndorsements.filter((e) => isFreedomOrCarletta(e.payee_name));
 
-    // ── Auto-fit layout ──
-    const zoneTop = 0;
-    const zoneBottom = Math.floor(imgHeight * BOTTOM_ZONE_LIMIT);
+    // ── Auto-fit layout — real bank endorsement zone ──
+    const zoneTop = Math.floor(imgHeight * ZONE_TOP_PCT);
+    const zoneBottom = Math.floor(imgHeight * ZONE_BOTTOM_PCT);
     const zoneHeight = zoneBottom - zoneTop;
 
     const measured = fitLayout(endorsements.length, zoneHeight, appliedOverride.scale);
 
     const blockHeight = measured.estimatedHeight;
-    const blockTop = Math.round(appliedOverride.yPct * imgHeight - blockHeight / 2);
+    const blockCenterY = zoneTop + (appliedOverride.yPct * zoneHeight);
+    const blockTop = Math.round(blockCenterY - blockHeight / 2);
     const blockBottom = blockTop + blockHeight;
 
     const rejectDetails = {

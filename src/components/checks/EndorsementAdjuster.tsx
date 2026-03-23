@@ -295,13 +295,21 @@ export function EndorsementAdjuster({
           draggable={false}
         />
 
-        {/* Bank safe zone indicator */}
+        {/* Bank safe zone indicators — top and bottom */}
+        <div
+          className="absolute left-0 right-0 border-t-2 border-dashed border-green-500/40 pointer-events-none"
+          style={{ top: safeZoneTopPx }}
+        >
+          <span className="absolute right-1 top-1 text-[10px] text-green-600/60 font-medium">
+            Endorsement Zone Top
+          </span>
+        </div>
         <div
           className="absolute left-0 right-0 border-t-2 border-dashed border-destructive/40 pointer-events-none"
           style={{ top: safeZoneBottomPx }}
         >
           <span className="absolute right-1 -top-5 text-[10px] text-destructive/60 font-medium">
-            Bank Safe Zone Limit
+            Endorsement Zone Limit
           </span>
         </div>
 
