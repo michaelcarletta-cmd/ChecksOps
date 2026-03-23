@@ -1684,10 +1684,10 @@ function CheckDetailPanel({
 
                   {showEndorsementAdjuster && (
                     <EndorsementAdjuster
+                      checkId={checkId}
                       imageUrl={backImageUrl}
                       imageWidth={backImageDimensions.width}
                       imageHeight={backImageDimensions.height}
-                      clientName="ILDEFONSO ROSAS"
                       ownerName="Michael Carletta"
                       companyName="Freedom Adjustment"
                       initialOverride={
