@@ -271,11 +271,6 @@ export function EndorsementAdjuster({
           <div className="text-xs text-muted-foreground">
             Source check: {signedEndorsements[0]?.check_id}
           </div>
-          {signedEndorsements[0]?.request_id && (
-            <div className="text-xs text-muted-foreground">
-              Source request: {signedEndorsements[0]?.request_id}
-            </div>
-          )}
         </div>
       )}
 
