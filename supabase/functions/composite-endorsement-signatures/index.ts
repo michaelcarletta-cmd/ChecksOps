@@ -94,15 +94,22 @@ Deno.serve(async (req) => {
 
     const { data: endorsements, error: endErr } = await supabase
       .from("check_endorsements")
-      .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_payees!check_endorsements_payee_id_fkey(endorsement_image_path)")
+      .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_id, check_payees!check_endorsements_payee_id_fkey(endorsement_image_path)")
       .eq("check_id", checkId)
-      .in("status", ["signed", "waived"])
+      .eq("status", "signed")
+      .not("signature_image_url", "is", null)
       .order("created_at", { ascending: true });
 
     if (endErr) throw new Error(`Failed to load endorsements: ${endErr.message}`);
     if (!endorsements?.length) {
-      console.log("[COMPOSITE] No signed endorsements to composite");
-      return jsonResp({ success: true, skipped: true, reason: "no_endorsements" });
+      console.log("[COMPOSITE] No signed endorsements with signature assets to composite");
+      return jsonResp({ success: false, error: "No signed endorsement assets found for this check.", no_endorsements: true }, 400);
+    }
+
+    // Validate all endorsements belong to the requested check
+    const mismatch = endorsements.find((e: any) => e.check_id !== checkId);
+    if (mismatch) {
+      throw new Error(`Signer asset ${mismatch.id} does not belong to check ${checkId}`);
     }
 
     console.log("[COMPOSITE] loading back image");
