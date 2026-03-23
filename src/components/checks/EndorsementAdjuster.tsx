@@ -230,8 +230,13 @@ export function EndorsementAdjuster({
           No completed endorsement signatures found for this check.
         </div>
       ) : (
-        <div className="text-sm text-muted-foreground">
-          Loaded signatures: {signedEndorsements.map((s) => s.payee_name).join(", ")}
+        <div className="space-y-1">
+          <div className="text-sm text-muted-foreground">
+            Loaded signatures: {signedEndorsements.map((s) => s.payee_name).join(", ")}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Source check: {signedEndorsements[0]?.check_id}
+          </div>
         </div>
       )}
 
