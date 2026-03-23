@@ -395,8 +395,8 @@ Deno.serve(async (req) => {
     }
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
-    console.error(`[COMPOSITE] ERROR: ${msg}`);
-    return jsonResp({ success: false, error: msg }, 400);
+    console.error("[COMPOSITE] ERROR:", msg, error);
+    return jsonResp({ success: false, error: msg, code: "COMPOSITE_FAILURE" }, 400);
   }
 });
 

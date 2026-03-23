@@ -919,16 +919,14 @@ function CheckDetailPanel({
 
       if (error) {
         console.error("[CHECK-EXPORT] Edge function error:", error);
-        const detail = await getFunctionErrorMessage(
-          error,
-          "Final deposit image could not be generated",
-        );
-        throw new Error(detail);
+        throw error;
       }
 
       const payload = (data ?? {}) as {
         success?: boolean;
         error?: string;
+        code?: string;
+        details?: Record<string, unknown>;
         skipped?: boolean;
         reason?: string;
         composited_path?: string;
@@ -939,7 +937,9 @@ function CheckDetailPanel({
         db_path_update_committed?: boolean;
       };
       if (payload.success === false) {
-        throw new Error(payload.error ?? "Final deposit image could not be generated");
+        const e = new Error(payload.error ?? "Final deposit image could not be generated");
+        (e as any).context = { body: payload };
+        throw e;
       }
 
       let compositedPath =

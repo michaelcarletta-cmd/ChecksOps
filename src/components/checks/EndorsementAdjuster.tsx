@@ -294,7 +294,7 @@ export function EndorsementAdjuster({
 
       {/* Server error display */}
       {serverError && (
-        <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm font-mono whitespace-pre-wrap">
+        <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
           {serverError}
         </div>
       )}
