@@ -226,19 +226,14 @@ Deno.serve(async (req) => {
     const companyEndorsements = resolvedEndorsements.filter((e) => isFreedomOrCarletta(e.payee_name));
 
     // ── Auto-fit layout ──
-    // Bank endorsement zone = bottom portion of check back
-    const ZONE_TOP_PCT = 0.55;     // start at 55% height
-    const ZONE_BOTTOM_PCT = 0.92;  // stop before MICR line
-
-    const zoneTop = Math.floor(imgHeight * ZONE_TOP_PCT);
-    const zoneBottom = Math.floor(imgHeight * ZONE_BOTTOM_PCT);
+    const zoneTop = 0;
+    const zoneBottom = Math.floor(imgHeight * BOTTOM_ZONE_LIMIT);
     const zoneHeight = zoneBottom - zoneTop;
 
     const measured = fitLayout(endorsements.length, zoneHeight, appliedOverride.scale);
 
     const blockHeight = measured.estimatedHeight;
-    const blockCenterY = zoneTop + (appliedOverride.yPct * zoneHeight);
-    const blockTop = Math.round(blockCenterY - blockHeight / 2);
+    const blockTop = Math.round(appliedOverride.yPct * imgHeight - blockHeight / 2);
     const blockBottom = blockTop + blockHeight;
 
     const rejectDetails = {
