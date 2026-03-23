@@ -20,6 +20,7 @@ interface SignedEndorsementAsset {
   signed_at: string | null;
   signature_image_url: string | null;
   signature_method: string | null;
+  check_id: string;
 }
 
 type EndorsementAdjusterProps = {
@@ -67,9 +68,10 @@ export function EndorsementAdjuster({
       try {
         const { data, error } = await supabase
           .from("check_endorsements")
-          .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method")
+          .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_id")
           .eq("check_id", checkId)
-          .in("status", ["signed", "waived"])
+          .eq("status", "signed")
+          .not("signature_image_url", "is", null)
           .order("created_at", { ascending: true });
         if (error) throw error;
         if (!cancelled) setSignedEndorsements(data ?? []);
@@ -202,12 +204,14 @@ export function EndorsementAdjuster({
     }
   };
 
-  const containerWidth = wrapRef.current?.clientWidth ?? imageWidth;
-  const displayScale = containerWidth / imageWidth;
+  // Use actual rendered DOM rect for overlay positioning
+  const rect = wrapRef.current?.getBoundingClientRect();
+  const containerWidthPx = rect?.width ?? imageWidth;
+  const containerHeightPx = rect?.height ?? (imageWidth > 0 ? containerWidthPx * imageHeight / imageWidth : imageHeight);
 
-  // Center-origin overlay positioning
-  const overlayLeftPx = override.xPct * containerWidth;
-  const overlayTopPx = override.yPct * (containerWidth * imageHeight / imageWidth);
+  const overlayLeftPx = override.xPct * containerWidthPx;
+  const overlayTopPx = override.yPct * containerHeightPx;
+  const displayScale = containerWidthPx / imageWidth;
   const overlayWidthPx = layout.width * displayScale;
 
   return (
@@ -226,8 +230,13 @@ export function EndorsementAdjuster({
           No completed endorsement signatures found for this check.
         </div>
       ) : (
-        <div className="text-sm text-muted-foreground">
-          Loaded signatures: {signedEndorsements.map((s) => s.payee_name).join(", ")}
+        <div className="space-y-1">
+          <div className="text-sm text-muted-foreground">
+            Loaded signatures: {signedEndorsements.map((s) => s.payee_name).join(", ")}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Source check: {signedEndorsements[0]?.check_id}
+          </div>
         </div>
       )}
 
