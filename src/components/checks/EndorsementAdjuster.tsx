@@ -8,6 +8,7 @@ import {
   DEFAULT_ENDORSEMENT_OVERRIDE,
   EndorsementOverride,
   getEndorsementLayout,
+  normalizeRotation,
 } from "@/lib/endorsementLayout";
 
 type EndorsementAdjusterProps = {
