@@ -362,9 +362,11 @@ Deno.serve(async (req) => {
     // ── Center-origin rotation ──
     const endorsementCenterX = Math.round(appliedOverride.xPct * imgWidth);
     const endorsementCenterY = Math.round(appliedOverride.yPct * imgHeight);
-    const rotationTransform = appliedOverride.rotationDeg !== 0
-      ? `transform="translate(${endorsementCenterX} ${endorsementCenterY}) rotate(${appliedOverride.rotationDeg}) translate(${-endorsementCenterX} ${-endorsementCenterY})"`
-      : "";
+    const scaleVal = appliedOverride.scale ?? 1;
+    const rotDeg = appliedOverride.rotationDeg ?? 0;
+    const blockW = Math.round(imgWidth * 0.28 * scaleVal);
+    const blockH = curY - Math.round(endorsementCenterY - curY / 2);
+    const rotationTransform = `transform="translate(${endorsementCenterX} ${endorsementCenterY}) rotate(${rotDeg}) scale(${scaleVal}) translate(${-endorsementCenterX} ${-endorsementCenterY})"`;
 
     const compositeSvg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${imgWidth}" height="${imgHeight}" viewBox="0 0 ${imgWidth} ${imgHeight}">

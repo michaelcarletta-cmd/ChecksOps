@@ -336,7 +336,7 @@ export function EndorsementAdjuster({
             left: overlayLeftPx,
             top: overlayTopPx,
             width: overlayWidthPx,
-            transform: `translate(-50%, -50%) rotate(${layout.rotationDeg}deg)`,
+            transform: `translate(-50%, -50%) rotate(${override.rotationDeg || 0}deg) scale(${override.scale || 1})`,
             transformOrigin: "center center",
             color: "#111111",
             userSelect: "none",
