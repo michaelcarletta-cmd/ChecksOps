@@ -174,7 +174,10 @@ const getRampDefaults = async (token: string) => {
   const entities = asArray<JsonRecord>(entitiesResponse.data);
   const configuredEntityId = Deno.env.get("RAMP_ENTITY_ID");
   const configuredBankAccountId = Deno.env.get("RAMP_SOURCE_BANK_ACCOUNT_ID");
-  const configuredVendorOwnerId = Deno.env.get("RAMP_VENDOR_OWNER_ID");
+  const rawVendorOwnerId = Deno.env.get("RAMP_VENDOR_OWNER_ID") || "";
+  // Extract UUID if the value is a full Ramp URL (e.g. https://app.ramp.com/people/all#/d/user/<uuid>)
+  const uuidMatch = rawVendorOwnerId.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  const configuredVendorOwnerId = uuidMatch ? uuidMatch[0] : (rawVendorOwnerId || undefined);
 
   const selectedEntity =
     entities.find((entity) => entity.id === configuredEntityId) ||
@@ -274,7 +277,9 @@ Deno.serve(async (req) => {
       const hasClientSecret = Boolean(Deno.env.get("RAMP_CLIENT_SECRET"));
       const configuredEntityId = Deno.env.get("RAMP_ENTITY_ID") || null;
       const configuredSourceBankAccountId = Deno.env.get("RAMP_SOURCE_BANK_ACCOUNT_ID") || null;
-      const configuredVendorOwnerId = Deno.env.get("RAMP_VENDOR_OWNER_ID") || null;
+      const rawVOI = Deno.env.get("RAMP_VENDOR_OWNER_ID") || "";
+      const voiUuid = rawVOI.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+      const configuredVendorOwnerId = voiUuid ? voiUuid[0] : (rawVOI || null);
       const configuredScopes = Deno.env.get("RAMP_SCOPES") || null;
       const linkTemplate = getReceivablesTemplateMeta();
       const issues: string[] = [];
@@ -389,7 +394,7 @@ Deno.serve(async (req) => {
 
       if (externalVendorId) {
         const existingVendorsResponse = (await rampRequest(token, "/developer/v1/vendors", {
-          query: { external_vendor_id: externalVendorId, page_size: 1 },
+          query: { external_vendor_id: externalVendorId, page_size: 2 },
         })) as JsonRecord;
 
         const existingVendor = asArray<JsonRecord>(existingVendorsResponse.data)[0];
