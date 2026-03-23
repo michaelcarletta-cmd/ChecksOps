@@ -538,16 +538,7 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
       case "rebuttals":
         return <RebuttalResponsePanel claimId={claimId} claim={claim} />;
       case "estimates":
-        return (
-          <>
-            <DarwinRoofEstimate claimId={claimId} claim={claim} />
-            <DarwinEstimateComparison claimId={claimId} claim={claim} />
-            <DarwinEstimateGapAnalysis claimId={claimId} claim={claim} />
-            <DarwinSupplementGenerator claimId={claimId} claim={claim} />
-            <DarwinEstimateBuilder claimId={claimId} claim={claim} />
-            <DarwinScopeEngine claimId={claimId} claim={claim} />
-          </>
-        );
+        return <EstimateWorkspacePanel claimId={claimId} claim={claim} />;
       case "package-building":
         return (
           <>
