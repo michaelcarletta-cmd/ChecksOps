@@ -75,6 +75,8 @@ const DarwinEstimateBuilder = lazy(() => import("@/components/claim-detail/Darwi
 const DarwinScopeEngine = lazy(() => import("@/components/claim-detail/DarwinScopeEngine").then(m => ({ default: m.DarwinScopeEngine })));
 const DarwinClaimControlCenter = lazy(() => import("@/components/claim-detail/DarwinClaimControlCenter").then(m => ({ default: m.DarwinClaimControlCenter })));
 const RebuttalResponsePanel = lazy(() => import("@/components/claim-detail/RebuttalResponsePanel").then(m => ({ default: m.RebuttalResponsePanel })));
+const RegulatoryCompliancePanel = lazy(() => import("@/components/claim-detail/RegulatoryCompliancePanel").then(m => ({ default: m.RegulatoryCompliancePanel })));
+const EstimateWorkspacePanel = lazy(() => import("@/components/claim-detail/EstimateWorkspacePanel").then(m => ({ default: m.EstimateWorkspacePanel })));
 
 
 interface DarwinTabProps {
