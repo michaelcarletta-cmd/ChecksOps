@@ -37,7 +37,7 @@ interface EndorsementRecord {
   signature_image_url: string | null;
   signature_method: string | null;
   check_id: string;
-  request_id?: string | null;
+  
   check_payees?: { endorsement_image_path?: string | null } | { endorsement_image_path?: string | null }[] | null;
   resolvedSignatureImageUrl?: string | null;
   typedSignatureText?: string | null;
@@ -143,7 +143,7 @@ Deno.serve(async (req) => {
     // ── Strict endorsement fetch ──
     const { data: endorsements, error: endErr } = await supabase
       .from("check_endorsements")
-      .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_id, request_id, check_payees!check_endorsements_payee_id_fkey(endorsement_image_path)")
+      .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_id, check_payees!check_endorsements_payee_id_fkey(endorsement_image_path)")
       .eq("check_id", checkId)
       .eq("status", "signed")
       .not("signature_image_url", "is", null)
