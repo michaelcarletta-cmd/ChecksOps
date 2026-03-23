@@ -241,8 +241,9 @@ export function EndorsementAdjuster({
   const displayScale = containerWidthPx / imageWidth;
   const overlayWidthPx = layout.width * displayScale;
 
-  // Bank safe zone visualization
-  const safeZoneBottomPx = 0.75 * containerHeightPx;
+  // Bank safe zone visualization — real endorsement zone
+  const safeZoneTopPx = 0.55 * containerHeightPx;
+  const safeZoneBottomPx = 0.92 * containerHeightPx;
 
   if (!canGenerate && !endorsementsLoading) {
     return (
