@@ -37,7 +37,7 @@ interface EndorsementRecord {
   signature_image_url: string | null;
   signature_method: string | null;
   check_id: string;
-  request_id?: string | null;
+  
   check_payees?: { endorsement_image_path?: string | null } | { endorsement_image_path?: string | null }[] | null;
   resolvedSignatureImageUrl?: string | null;
   typedSignatureText?: string | null;
