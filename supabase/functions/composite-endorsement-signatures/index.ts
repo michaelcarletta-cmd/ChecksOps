@@ -143,7 +143,7 @@ Deno.serve(async (req) => {
     // ── Strict endorsement fetch ──
     const { data: endorsements, error: endErr } = await supabase
       .from("check_endorsements")
-      .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_id, request_id, check_payees!check_endorsements_payee_id_fkey(endorsement_image_path)")
+      .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_id, check_payees!check_endorsements_payee_id_fkey(endorsement_image_path)")
       .eq("check_id", checkId)
       .eq("status", "signed")
       .not("signature_image_url", "is", null)
