@@ -74,6 +74,7 @@ const DarwinRoofEstimate = lazy(() => import("@/components/claim-detail/DarwinRo
 const DarwinEstimateBuilder = lazy(() => import("@/components/claim-detail/DarwinEstimateBuilder").then(m => ({ default: m.DarwinEstimateBuilder })));
 const DarwinScopeEngine = lazy(() => import("@/components/claim-detail/DarwinScopeEngine").then(m => ({ default: m.DarwinScopeEngine })));
 const DarwinClaimControlCenter = lazy(() => import("@/components/claim-detail/DarwinClaimControlCenter").then(m => ({ default: m.DarwinClaimControlCenter })));
+const RebuttalResponsePanel = lazy(() => import("@/components/claim-detail/RebuttalResponsePanel").then(m => ({ default: m.RebuttalResponsePanel })));
 
 
 interface DarwinTabProps {
@@ -533,18 +534,7 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
           </>
         );
       case "rebuttals":
-        return (
-          <>
-            <DarwinDeclaredPosition claimId={claimId} claim={claim} />
-            <DarwinButForCausation claimId={claimId} claim={claim} />
-            <DarwinAutoDraftRebuttal claimId={claimId} claim={claim} />
-            <div className="grid gap-4 lg:grid-cols-2">
-              <DarwinDenialAnalyzer claimId={claimId} claim={claim} />
-              <DarwinEngineerReportAnalyzer claimId={claimId} claim={claim} />
-            </div>
-            <DarwinCorrespondenceAnalyzer claimId={claimId} claim={claim} />
-          </>
-        );
+        return <RebuttalResponsePanel claimId={claimId} claim={claim} />;
       case "estimates":
         return (
           <>
