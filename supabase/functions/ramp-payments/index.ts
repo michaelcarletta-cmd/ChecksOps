@@ -143,7 +143,7 @@ const getDefaultVendorOwnerId = async (token: string, entityId: string | null) =
         status: "USER_ACTIVE",
         role: "BUSINESS_ADMIN",
         entity_id: entityId || undefined,
-        page_size: 1,
+        page_size: 2,
       },
     })) as JsonRecord;
 
@@ -154,7 +154,7 @@ const getDefaultVendorOwnerId = async (token: string, entityId: string | null) =
       query: {
         status: "USER_ACTIVE",
         entity_id: entityId || undefined,
-        page_size: 1,
+        page_size: 2,
       },
     })) as JsonRecord;
 
