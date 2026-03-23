@@ -75,6 +75,8 @@ const DarwinEstimateBuilder = lazy(() => import("@/components/claim-detail/Darwi
 const DarwinScopeEngine = lazy(() => import("@/components/claim-detail/DarwinScopeEngine").then(m => ({ default: m.DarwinScopeEngine })));
 const DarwinClaimControlCenter = lazy(() => import("@/components/claim-detail/DarwinClaimControlCenter").then(m => ({ default: m.DarwinClaimControlCenter })));
 const RebuttalResponsePanel = lazy(() => import("@/components/claim-detail/RebuttalResponsePanel").then(m => ({ default: m.RebuttalResponsePanel })));
+const RegulatoryCompliancePanel = lazy(() => import("@/components/claim-detail/RegulatoryCompliancePanel").then(m => ({ default: m.RegulatoryCompliancePanel })));
+const EstimateWorkspacePanel = lazy(() => import("@/components/claim-detail/EstimateWorkspacePanel").then(m => ({ default: m.EstimateWorkspacePanel })));
 
 
 interface DarwinTabProps {
@@ -536,16 +538,7 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
       case "rebuttals":
         return <RebuttalResponsePanel claimId={claimId} claim={claim} />;
       case "estimates":
-        return (
-          <>
-            <DarwinRoofEstimate claimId={claimId} claim={claim} />
-            <DarwinEstimateComparison claimId={claimId} claim={claim} />
-            <DarwinEstimateGapAnalysis claimId={claimId} claim={claim} />
-            <DarwinSupplementGenerator claimId={claimId} claim={claim} />
-            <DarwinEstimateBuilder claimId={claimId} claim={claim} />
-            <DarwinScopeEngine claimId={claimId} claim={claim} />
-          </>
-        );
+        return <EstimateWorkspacePanel claimId={claimId} claim={claim} />;
       case "package-building":
         return (
           <>
@@ -556,17 +549,7 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
           </>
         );
       case "regulatory-compliance":
-        return (
-          <>
-            <DarwinStateLawAdvisor claimId={claimId} claim={claim} />
-            <DarwinCarrierDeadlineMonitor claimId={claimId} claim={claim} />
-            <DarwinDeadlineTracker claimId={claimId} claim={claim} />
-            <DarwinQualifyingLanguage claimId={claimId} claim={claim} />
-            <DarwinComplianceChecker claimId={claimId} claim={claim} />
-            <DarwinDOBILetterDrafter claimId={claimId} claim={claim} />
-            <DarwinBuildingCodes claimId={claimId} claim={claim} />
-          </>
-        );
+        return <RegulatoryCompliancePanel claimId={claimId} claim={claim} />;
       case "contents-loss":
         return (
           <>
