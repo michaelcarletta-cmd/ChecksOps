@@ -194,26 +194,43 @@ export function EndorsementAdjuster({
     try {
       await onSave(clampEndorsementOverride(override));
     } catch (err: any) {
-      const raw = err?.message || "Could not generate final deposit image.";
+      console.error("[EndorsementAdjuster] save error", err);
+
       let parsed: any = null;
+      let rawMessage = err?.message || "Could not generate final deposit image.";
 
       try {
-        parsed = typeof err?.context?.body === "string"
-          ? JSON.parse(err.context.body)
-          : err?.context?.body;
-      } catch {
-        parsed = null;
+        if (typeof err?.context?.body === "string") {
+          parsed = JSON.parse(err.context.body);
+        } else if (err?.context?.body) {
+          parsed = err.context.body;
+        } else if (typeof err?.details === "string") {
+          parsed = JSON.parse(err.details);
+        } else if (err?.error) {
+          parsed = err.error;
+        }
+      } catch (parseErr) {
+        console.warn("[EndorsementAdjuster] failed to parse error body", parseErr);
+      }
+
+      if (parsed?.error) {
+        rawMessage = parsed.error;
       }
 
       if (parsed?.code === "ENDORSEMENT_ZONE_OVERFLOW" && parsed?.details) {
         const d = parsed.details;
         setServerError(
           `Endorsement block extends to y=${d.blockBottom} which exceeds the bank zone limit at y=${d.zoneBottom}. ` +
-          `Layout: columns=${d.columns}, fontSize=${d.fontSize}, signatureHeight=${d.signatureHeight}, compactText=${d.compactText}. ` +
-          `Try "Fit to Safe Zone" or reduce scale.`
+          `Layout: columns=${d.columns}, fontSize=${d.fontSize}, signatureHeight=${d.signatureHeight}, compactText=${d.compactText}.`
         );
+      } else if (parsed?.code === "NO_SIGNED_ENDORSEMENTS") {
+        setServerError("No valid signed endorsement assets were found for this check.");
+      } else if (parsed?.code === "ENDORSEMENT_CHECK_MISMATCH") {
+        setServerError("The loaded endorsement signatures do not belong to this check.");
+      } else if (parsed?.code === "MISSING_SIGNATURE_ASSET") {
+        setServerError(rawMessage);
       } else {
-        setServerError(raw);
+        setServerError(rawMessage);
       }
     } finally {
       setSaving(false);
@@ -277,7 +294,7 @@ export function EndorsementAdjuster({
 
       {/* Server error display */}
       {serverError && (
-        <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm font-mono whitespace-pre-wrap">
+        <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
           {serverError}
         </div>
       )}
