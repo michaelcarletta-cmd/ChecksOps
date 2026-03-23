@@ -8,6 +8,7 @@ import {
   DEFAULT_ENDORSEMENT_OVERRIDE,
   EndorsementOverride,
   getEndorsementLayout,
+  normalizeRotation,
 } from "@/lib/endorsementLayout";
 
 type EndorsementAdjusterProps = {
@@ -202,7 +203,7 @@ export function EndorsementAdjuster({
             width: layout.width * displayScale,
             color: "#111111",
             transform: `rotate(${layout.rotationDeg}deg)`,
-            transformOrigin: "top left",
+            transformOrigin: "center center",
             userSelect: "none",
             touchAction: "none",
             cursor: dragging ? "grabbing" : "grab",
@@ -416,12 +417,36 @@ export function EndorsementAdjuster({
             />
           </div>
 
+          {/* Quick rotation buttons */}
           <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">Rotation</p>
+            <p className="text-xs text-muted-foreground">Quick Rotation</p>
+            <div className="flex flex-wrap gap-2">
+              {[0, 90, 180, 270].map((deg) => (
+                <Button
+                  key={deg}
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setOverride((prev) =>
+                      clampEndorsementOverride({ ...prev, rotationDeg: deg }),
+                    )
+                  }
+                >
+                  {deg}°
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {/* Fine rotation adjust */}
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">
+              Rotation: {Math.round(override.rotationDeg)}°
+            </p>
             <Slider
-              min={-10}
-              max={10}
-              step={0.5}
+              min={0}
+              max={360}
+              step={1}
               value={[override.rotationDeg]}
               onValueChange={([v]) =>
                 setOverride((prev) =>
@@ -429,6 +454,50 @@ export function EndorsementAdjuster({
                 )
               }
             />
+            <div className="flex gap-2 mt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setOverride((prev) =>
+                    clampEndorsementOverride({
+                      ...prev,
+                      rotationDeg: normalizeRotation(prev.rotationDeg - 5),
+                    }),
+                  )
+                }
+              >
+                -5°
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setOverride((prev) =>
+                    clampEndorsementOverride({
+                      ...prev,
+                      rotationDeg: normalizeRotation(prev.rotationDeg + 5),
+                    }),
+                  )
+                }
+              >
+                +5°
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setOverride((prev) =>
+                    clampEndorsementOverride({
+                      ...prev,
+                      rotationDeg: normalizeRotation(prev.rotationDeg + 180),
+                    }),
+                  )
+                }
+              >
+                Rotate 180°
+              </Button>
+            </div>
           </div>
 
           <div className="flex gap-2">
