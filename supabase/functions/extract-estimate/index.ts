@@ -362,15 +362,20 @@ Important guidelines:
     const parseStep = startStep("parse", "Parse AI extraction payload");
     let extractedData: ExtractedEstimate;
     try {
-      // Try to find JSON in the response
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        extractedData = JSON.parse(jsonMatch[0]);
+      // Strip markdown fences if present
+      let cleaned = content.trim();
+      cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
+      
+      // Find the outermost JSON object
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace > firstBrace) {
+        extractedData = JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
       } else {
         throw new Error("No JSON found in response");
       }
     } catch (parseError) {
-      console.error("JSON parse error:", parseError, "Content:", content);
+      console.error("JSON parse error:", parseError, "Content:", content.slice(0, 500));
       endStep(parseStep, "error", "Failed to parse JSON from model output");
       throw new Error("Failed to parse estimate data from AI response");
     }
