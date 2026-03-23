@@ -69,7 +69,7 @@ export function EndorsementAdjuster({
       try {
         const { data, error } = await supabase
           .from("check_endorsements")
-          .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_id, request_id")
+          .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_id")
           .eq("check_id", checkId)
           .eq("status", "signed")
           .not("signature_image_url", "is", null)
