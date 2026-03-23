@@ -68,9 +68,10 @@ export function EndorsementAdjuster({
       try {
         const { data, error } = await supabase
           .from("check_endorsements")
-          .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method")
+          .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_id")
           .eq("check_id", checkId)
-          .in("status", ["signed", "waived"])
+          .eq("status", "signed")
+          .not("signature_image_url", "is", null)
           .order("created_at", { ascending: true });
         if (error) throw error;
         if (!cancelled) setSignedEndorsements(data ?? []);
