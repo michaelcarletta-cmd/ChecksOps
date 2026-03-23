@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RotateCcw, Save } from "lucide-react";
+import { RotateCcw, Save, AlertCircle } from "lucide-react";
 import {
   clampEndorsementOverride,
   DEFAULT_ENDORSEMENT_OVERRIDE,
@@ -10,29 +10,36 @@ import {
   getEndorsementLayout,
   normalizeRotation,
 } from "@/lib/endorsementLayout";
+import { supabase } from "@/integrations/supabase/client";
+
+interface SignedEndorsementAsset {
+  id: string;
+  payee_name: string;
+  payee_type: string;
+  status: string;
+  signed_at: string | null;
+  signature_image_url: string | null;
+  signature_method: string | null;
+}
 
 type EndorsementAdjusterProps = {
+  checkId: string;
   imageUrl: string;
   imageWidth: number;
   imageHeight: number;
-  clientName: string;
-  ownerName: string;
   companyName: string;
-  clientSignatureUrl?: string | null;
-  ownerSignatureUrl?: string | null;
+  ownerName: string;
   initialOverride?: EndorsementOverride | null;
   onSave: (override: EndorsementOverride) => Promise<void> | void;
 };
 
 export function EndorsementAdjuster({
+  checkId,
   imageUrl,
   imageWidth,
   imageHeight,
-  clientName,
-  ownerName,
   companyName,
-  clientSignatureUrl,
-  ownerSignatureUrl,
+  ownerName,
   initialOverride,
   onSave,
 }: EndorsementAdjusterProps) {
@@ -46,12 +53,47 @@ export function EndorsementAdjuster({
   const [activePointerId, setActivePointerId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Load real signed endorsement assets for this check
+  const [signedEndorsements, setSignedEndorsements] = useState<SignedEndorsementAsset[]>([]);
+  const [endorsementsLoading, setEndorsementsLoading] = useState(true);
+  const [endorsementsError, setEndorsementsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!checkId) return;
+    let cancelled = false;
+    (async () => {
+      setEndorsementsLoading(true);
+      setEndorsementsError(null);
+      try {
+        const { data, error } = await supabase
+          .from("check_endorsements")
+          .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method")
+          .eq("check_id", checkId)
+          .in("status", ["signed", "waived"])
+          .order("created_at", { ascending: true });
+        if (error) throw error;
+        if (!cancelled) setSignedEndorsements(data ?? []);
+      } catch (e: any) {
+        if (!cancelled) setEndorsementsError(e.message || "Failed to load endorsements");
+      } finally {
+        if (!cancelled) setEndorsementsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [checkId]);
+
+  const isFreedomOrCarletta = (name: string) => {
+    const lc = name.toLowerCase();
+    return lc.includes("freedom") || lc.includes("carletta");
+  };
+
+  const clientEndorsements = signedEndorsements.filter((e) => !isFreedomOrCarletta(e.payee_name));
+  const companyEndorsements = signedEndorsements.filter((e) => isFreedomOrCarletta(e.payee_name));
+  const canGenerate = signedEndorsements.length > 0;
+
   useEffect(() => {
     setOverride(initialOverride ?? DEFAULT_ENDORSEMENT_OVERRIDE);
   }, [initialOverride]);
-
-  const containerWidth = wrapRef.current?.clientWidth ?? imageWidth;
-  const displayScale = containerWidth / imageWidth;
 
   const layout = useMemo(
     () => getEndorsementLayout(imageWidth, imageHeight, override),
@@ -66,6 +108,7 @@ export function EndorsementAdjuster({
     });
   };
 
+  // Center-origin drag: update xPct/yPct as the center of the overlay
   const beginDrag = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -91,31 +134,29 @@ export function EndorsementAdjuster({
       if (!dragging && !resizing) return;
 
       const rect = wrapRef.current.getBoundingClientRect();
-      const liveContainerWidth = wrapRef.current.clientWidth || imageWidth;
-      const liveDisplayScale = liveContainerWidth / imageWidth;
-      const liveLayout = getEndorsementLayout(imageWidth, imageHeight, override);
 
       runNextFrame(() => {
         if (dragging) {
-          setOverride(
+          // Center-origin: pointer position becomes the center of the overlay
+          const xPct = (e.clientX - rect.left) / rect.width;
+          const yPct = (e.clientY - rect.top) / rect.height;
+          setOverride((prev) =>
             clampEndorsementOverride({
-              ...override,
-              xPct:
-                (e.clientX - rect.left - (liveLayout.width * liveDisplayScale) / 2) /
-                rect.width,
-              yPct: (e.clientY - rect.top - 20) / rect.height,
-              scale: override.scale,
-              rotationDeg: override.rotationDeg,
+              ...prev,
+              xPct,
+              yPct,
             }),
           );
         }
 
         if (resizing) {
-          const overlayLeft = rect.left + liveLayout.x * liveDisplayScale;
+          const containerWidth = wrapRef.current!.clientWidth || imageWidth;
+          const displayScale = containerWidth / imageWidth;
+          const overlayLeft = rect.left + override.xPct * rect.width;
           const deltaX = e.clientX - overlayLeft;
           const nextScale = Math.max(
             0.4,
-            Math.min(2, deltaX / (imageWidth * 0.20 * liveDisplayScale)),
+            Math.min(2, deltaX / (imageWidth * 0.20 * displayScale)),
           );
           setOverride((prev) =>
             clampEndorsementOverride({
@@ -161,8 +202,35 @@ export function EndorsementAdjuster({
     }
   };
 
+  const containerWidth = wrapRef.current?.clientWidth ?? imageWidth;
+  const displayScale = containerWidth / imageWidth;
+
+  // Center-origin overlay positioning
+  const overlayLeftPx = override.xPct * containerWidth;
+  const overlayTopPx = override.yPct * (containerWidth * imageHeight / imageWidth);
+  const overlayWidthPx = layout.width * displayScale;
+
   return (
     <div className="space-y-4">
+      {/* Endorsement source info */}
+      {endorsementsLoading ? (
+        <div className="text-sm text-muted-foreground">Loading endorsement signatures...</div>
+      ) : endorsementsError ? (
+        <div className="flex items-center gap-2 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4" />
+          Error loading endorsements: {endorsementsError}
+        </div>
+      ) : !canGenerate ? (
+        <div className="flex items-center gap-2 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4" />
+          No completed endorsement signatures found for this check.
+        </div>
+      ) : (
+        <div className="text-sm text-muted-foreground">
+          Loaded signatures: {signedEndorsements.map((s) => s.payee_name).join(", ")}
+        </div>
+      )}
+
       {/* Image preview with draggable overlay */}
       <div
         ref={wrapRef}
@@ -174,36 +242,19 @@ export function EndorsementAdjuster({
           alt="Back of check"
           className="block h-auto w-full object-contain"
           draggable={false}
-          onLoad={(e) => {
-            console.log("loaded image", {
-              width: e.currentTarget.naturalWidth,
-              height: e.currentTarget.naturalHeight,
-            });
-          }}
         />
 
-        {/* endorsement zone guide (faint outline) */}
-        <div
-          className="absolute border border-dashed border-muted-foreground/30 pointer-events-none rounded"
-          style={{
-            left: `${(layout.x / imageWidth) * 100}%`,
-            top: `${(layout.y / imageHeight) * 100}%`,
-            width: `${(layout.width / imageWidth) * 100}%`,
-            height: "20%",
-          }}
-        />
-
-        {/* draggable overlay */}
+        {/* draggable overlay – center-origin positioning */}
         <div
           onPointerDown={beginDrag}
           className="absolute select-none"
           style={{
-            left: layout.x * displayScale,
-            top: layout.y * displayScale,
-            width: layout.width * displayScale,
-            color: "#111111",
-            transform: `rotate(${layout.rotationDeg}deg)`,
+            left: overlayLeftPx,
+            top: overlayTopPx,
+            width: overlayWidthPx,
+            transform: `translate(-50%, -50%) rotate(${layout.rotationDeg}deg)`,
             transformOrigin: "center center",
+            color: "#111111",
             userSelect: "none",
             touchAction: "none",
             cursor: dragging ? "grabbing" : "grab",
@@ -247,40 +298,60 @@ export function EndorsementAdjuster({
             For Mobile Deposit Only
           </div>
 
-          <div
-            style={{
-              fontSize: layout.payeeFont * displayScale,
-              fontWeight: 700,
-              lineHeight: 1.1,
-              marginBottom: layout.lineGap * displayScale,
-              color: "#111111",
-            }}
-          >
-            {clientName}
-          </div>
+          {/* Client endorsement names from actual signed data */}
+          {clientEndorsements.map((endorsement) => (
+            <div key={endorsement.id}>
+              <div
+                style={{
+                  fontSize: layout.payeeFont * displayScale,
+                  fontWeight: 700,
+                  lineHeight: 1.1,
+                  marginBottom: layout.lineGap * displayScale,
+                  color: "#111111",
+                }}
+              >
+                {endorsement.payee_name}
+              </div>
+              {endorsement.signature_image_url && !endorsement.signature_image_url.startsWith("typed:") ? (
+                <img
+                  src={endorsement.signature_image_url}
+                  alt={`${endorsement.payee_name} signature`}
+                  style={{
+                    height: layout.signatureHeight * displayScale,
+                    marginBottom: layout.sectionGap * displayScale,
+                  }}
+                  className="object-contain"
+                  draggable={false}
+                />
+              ) : (
+                <div
+                  style={{
+                    fontSize: layout.payeeFont * displayScale,
+                    fontStyle: "italic",
+                    fontFamily: '"Brush Script MT", cursive',
+                    marginBottom: layout.sectionGap * displayScale,
+                    color: "#111111",
+                  }}
+                >
+                  {endorsement.signature_image_url?.startsWith("typed:")
+                    ? endorsement.signature_image_url.slice(6)
+                    : endorsement.payee_name}
+                </div>
+              )}
+            </div>
+          ))}
 
-          {clientSignatureUrl ? (
-            <img
-              src={clientSignatureUrl}
-              alt="Client signature"
-              style={{
-                height: layout.signatureHeight * displayScale,
-                marginBottom: layout.sectionGap * displayScale,
-              }}
-              className="object-contain"
-              draggable={false}
-            />
-          ) : (
+          {/* Fallback if no client endorsements loaded yet but still rendering */}
+          {clientEndorsements.length === 0 && !endorsementsLoading && (
             <div
               style={{
                 fontSize: layout.payeeFont * displayScale,
                 fontStyle: "italic",
-                fontFamily: '"Brush Script MT", cursive',
+                color: "#999",
                 marginBottom: layout.sectionGap * displayScale,
-                color: "#111111",
               }}
             >
-              {clientName}
+              (No client endorsements)
             </div>
           )}
 
@@ -308,9 +379,10 @@ export function EndorsementAdjuster({
             By: {ownerName}
           </div>
 
-          {ownerSignatureUrl ? (
+          {/* Company/owner signature from actual signed data */}
+          {companyEndorsements.length > 0 && companyEndorsements[0].signature_image_url && !companyEndorsements[0].signature_image_url.startsWith("typed:") ? (
             <img
-              src={ownerSignatureUrl}
+              src={companyEndorsements[0].signature_image_url}
               alt="Owner signature"
               style={{ height: layout.signatureHeight * displayScale }}
               className="object-contain"
@@ -325,7 +397,9 @@ export function EndorsementAdjuster({
                 color: "#111111",
               }}
             >
-              {ownerName}
+              {companyEndorsements.length > 0 && companyEndorsements[0].signature_image_url?.startsWith("typed:")
+                ? companyEndorsements[0].signature_image_url.slice(6)
+                : ownerName}
             </div>
           )}
 
@@ -505,7 +579,7 @@ export function EndorsementAdjuster({
               <RotateCcw className="h-3 w-3 mr-1" />
               Reset
             </Button>
-            <Button size="sm" onClick={handleSave} disabled={saving}>
+            <Button size="sm" onClick={handleSave} disabled={saving || !canGenerate}>
               <Save className="h-3 w-3 mr-1" />
               {saving ? "Saving..." : "Save"}
             </Button>
