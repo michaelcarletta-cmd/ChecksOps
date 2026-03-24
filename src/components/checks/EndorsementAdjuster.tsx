@@ -98,6 +98,11 @@ export function EndorsementAdjuster({
     setOverride(initialOverride ?? DEFAULT_ENDORSEMENT_OVERRIDE);
   }, [initialOverride]);
 
+  // Shared zone constants — must match edge function exactly
+  const ZONE_TOP_PCT = 0.55;
+  const ZONE_BOTTOM_PCT = 0.92;
+  const ENDORSEMENT_WIDTH_PCT = 0.22;
+
   const layout = useMemo(
     () => getEndorsementLayout(imageWidth, imageHeight, override),
     [imageWidth, imageHeight, override],
