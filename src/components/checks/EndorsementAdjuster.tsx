@@ -98,6 +98,11 @@ export function EndorsementAdjuster({
     setOverride(initialOverride ?? DEFAULT_ENDORSEMENT_OVERRIDE);
   }, [initialOverride]);
 
+  // Shared zone constants — must match edge function exactly
+  const ZONE_TOP_PCT = 0.55;
+  const ZONE_BOTTOM_PCT = 0.92;
+  const ENDORSEMENT_WIDTH_PCT = 0.22;
+
   const layout = useMemo(
     () => getEndorsementLayout(imageWidth, imageHeight, override),
     [imageWidth, imageHeight, override],
@@ -137,10 +142,16 @@ export function EndorsementAdjuster({
 
       const rect = wrapRef.current.getBoundingClientRect();
 
+      const containerHeightPx = rect.height;
+      const safeZoneTopPx = ZONE_TOP_PCT * containerHeightPx;
+      const safeZoneBottomPx = ZONE_BOTTOM_PCT * containerHeightPx;
+      const safeZoneHeightPx = safeZoneBottomPx - safeZoneTopPx;
+
       runNextFrame(() => {
         if (dragging) {
           const xPct = (e.clientX - rect.left) / rect.width;
-          const yPct = (e.clientY - rect.top) / rect.height;
+          const yPxWithinZone = (e.clientY - rect.top) - safeZoneTopPx;
+          const yPct = yPxWithinZone / safeZoneHeightPx;
           setOverride((prev) =>
             clampEndorsementOverride({ ...prev, xPct, yPct }),
           );
@@ -149,11 +160,8 @@ export function EndorsementAdjuster({
         if (resizing) {
           const overlayLeft = rect.left + override.xPct * rect.width;
           const deltaX = e.clientX - overlayLeft;
-          const displayScale = rect.width / imageWidth;
-          const nextScale = Math.max(
-            0.4,
-            Math.min(2, deltaX / (imageWidth * 0.20 * displayScale)),
-          );
+          const baseWidth = rect.width * ENDORSEMENT_WIDTH_PCT;
+          const nextScale = Math.max(0.4, Math.min(2, deltaX / baseWidth));
           setOverride((prev) =>
             clampEndorsementOverride({ ...prev, scale: nextScale }),
           );
@@ -247,18 +255,20 @@ export function EndorsementAdjuster({
   };
 
   // Use actual rendered DOM rect for overlay positioning
-  const rect = wrapRef.current?.getBoundingClientRect();
-  const containerWidthPx = rect?.width ?? imageWidth;
-  const containerHeightPx = rect?.height ?? (imageWidth > 0 ? containerWidthPx * imageHeight / imageWidth : imageHeight);
-
-  const overlayLeftPx = override.xPct * containerWidthPx;
-  const overlayTopPx = override.yPct * containerHeightPx;
+  const domRect = wrapRef.current?.getBoundingClientRect();
+  const containerWidthPx = domRect?.width ?? imageWidth;
+  const containerHeightPx = domRect?.height ?? (imageWidth > 0 ? containerWidthPx * imageHeight / imageWidth : imageHeight);
   const displayScale = containerWidthPx / imageWidth;
-  const overlayWidthPx = layout.width * displayScale;
 
-  // Bank safe zone visualization — real endorsement zone
-  const safeZoneTopPx = 0.55 * containerHeightPx;
-  const safeZoneBottomPx = 0.92 * containerHeightPx;
+  // Zone-relative positioning — must match edge function exactly
+  const safeZoneTopPx = ZONE_TOP_PCT * containerHeightPx;
+  const safeZoneBottomPx = ZONE_BOTTOM_PCT * containerHeightPx;
+  const safeZoneHeightPx = safeZoneBottomPx - safeZoneTopPx;
+
+  // xPct = center X relative to full width; yPct = center Y relative to zone height
+  const overlayCenterXPx = override.xPct * containerWidthPx;
+  const overlayCenterYPx = safeZoneTopPx + (override.yPct * safeZoneHeightPx);
+  const overlayWidthPx = containerWidthPx * ENDORSEMENT_WIDTH_PCT * (override.scale || 1);
 
   if (!canGenerate && !endorsementsLoading) {
     return (
@@ -328,15 +338,20 @@ export function EndorsementAdjuster({
           </span>
         </div>
 
-        {/* draggable overlay – center-origin positioning */}
+        {/* Debug overlay */}
+        <div className="absolute left-2 top-2 z-30 rounded bg-black/70 px-2 py-1 text-[10px] text-white pointer-events-none">
+          xPct: {override.xPct.toFixed(3)} | yPct: {override.yPct.toFixed(3)} | rot: {override.rotationDeg} | scale: {override.scale?.toFixed(2)}
+        </div>
+
+        {/* draggable overlay – center-origin positioning, zone-relative Y */}
         <div
           onPointerDown={beginDrag}
           className="absolute select-none"
           style={{
-            left: overlayLeftPx,
-            top: overlayTopPx,
+            left: overlayCenterXPx,
+            top: overlayCenterYPx,
             width: overlayWidthPx,
-            transform: `translate(-50%, -50%) rotate(${override.rotationDeg || 0}deg) scale(${override.scale || 1})`,
+            transform: `translate(-50%, -50%) rotate(${override.rotationDeg || 0}deg)`,
             transformOrigin: "center center",
             color: "#111111",
             userSelect: "none",
