@@ -232,12 +232,44 @@ Deno.serve(async (req) => {
     const zoneBottom = Math.floor(imgHeight * ZONE_BOTTOM_PCT);
     const zoneHeight = zoneBottom - zoneTop;
 
-    const measured = fitLayout(endorsements.length, zoneHeight, appliedOverride.scale);
+    console.log("[COMPOSITE] appliedOverride", appliedOverride);
 
-    const blockHeight = measured.estimatedHeight;
-    const blockCenterY = zoneTop + (appliedOverride.yPct * zoneHeight);
-    const blockTop = Math.round(blockCenterY - blockHeight / 2);
-    const blockBottom = blockTop + blockHeight;
+    let measured = fitLayout(endorsements.length, zoneHeight, appliedOverride.scale);
+    let blockHeight = measured.estimatedHeight;
+    let blockCenterY = zoneTop + (appliedOverride.yPct * zoneHeight);
+    let blockTop = Math.round(blockCenterY - blockHeight / 2);
+    let blockBottom = blockTop + blockHeight;
+
+    // Nudge up if slightly overflowing
+    if (blockBottom > zoneBottom) {
+      const overflow = blockBottom - zoneBottom;
+      blockCenterY -= overflow;
+      blockTop = Math.round(blockCenterY - blockHeight / 2);
+      blockBottom = blockTop + blockHeight;
+    }
+
+    // Clamp inside zone
+    blockCenterY = Math.max(
+      zoneTop + blockHeight / 2,
+      Math.min(zoneBottom - blockHeight / 2, blockCenterY)
+    );
+    blockTop = Math.round(blockCenterY - blockHeight / 2);
+    blockBottom = blockTop + blockHeight;
+
+    // If still overflowing, reduce scale slightly and recalc once
+    if (blockBottom > zoneBottom) {
+      const adjustedScale = Math.max(0.72, (measured.scale ?? 1) - 0.05);
+      measured = fitLayout(endorsements.length, zoneHeight, adjustedScale);
+      blockHeight = measured.estimatedHeight;
+      blockCenterY = Math.max(
+        zoneTop + blockHeight / 2,
+        Math.min(zoneBottom - blockHeight / 2, blockCenterY)
+      );
+      blockTop = Math.round(blockCenterY - blockHeight / 2);
+      blockBottom = blockTop + blockHeight;
+    }
+
+    console.log("[COMPOSITE] blockTop/blockBottom/zoneBottom", { blockTop, blockBottom, zoneBottom });
 
     const rejectDetails = {
       imageHeight: imgHeight,
