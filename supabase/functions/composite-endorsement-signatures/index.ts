@@ -302,52 +302,51 @@ Deno.serve(async (req) => {
       }, 400);
     }
 
-    // ── Build SVG using fitted layout ──
+    // ── Build SVG using fitted layout (LOCAL coordinates) ──
     const pixelCount = imgWidth * imgHeight;
     const originalBase64 = uint8ToBase64(originalBytes);
     const mimeType = backImagePath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
 
-    const ezLeftPad = Math.round(imgWidth * appliedOverride.xPct);
-    const ezContentWidth = Math.round(imgWidth * ENDORSEMENT_WIDTH_PCT * measured.scale);
-
+    const blockWidth = Math.round(imgWidth * ENDORSEMENT_WIDTH_PCT * measured.scale);
     const { fontSize, lineGap: fitLineGap, rowGap: fitRowGap, signatureHeight: fitSigHeight, compactText } = measured;
     const companyFont = Math.max(9, Math.round(fontSize * 1.2));
     const byLineFont = fontSize;
     const sectionGap = Math.max(3, Math.round(fitLineGap * 2));
+    const localCenterX = Math.round(blockWidth / 2);
 
+    // Build endorsement block in LOCAL coordinates starting at 0,0
     let endorsementSvg = "";
-    const centerX = ezLeftPad + Math.round(ezContentWidth / 2);
-    let curY = Math.round(appliedOverride.yPct * imgHeight - blockHeight / 2);
+    let curY = 0;
 
     // Header
     if (compactText) {
-      endorsementSvg += svgText(centerX, curY + fontSize, fontSize, "#111111", "bold", "Pay to Freedom Adjustment");
+      endorsementSvg += svgText(localCenterX, curY + fontSize, fontSize, "#111111", "bold", "Pay to Freedom Adjustment");
       curY += fontSize + fitLineGap;
-      endorsementSvg += svgText(centerX, curY + fontSize, fontSize, "#111111", "bold", "Mobile Deposit Only");
+      endorsementSvg += svgText(localCenterX, curY + fontSize, fontSize, "#111111", "bold", "Mobile Deposit Only");
       curY += fontSize + fitLineGap;
     } else {
-      endorsementSvg += svgText(centerX, curY + fontSize, fontSize, "#111111", "bold", "Pay to the order of");
+      endorsementSvg += svgText(localCenterX, curY + fontSize, fontSize, "#111111", "bold", "Pay to the order of");
       curY += fontSize + fitLineGap;
-      endorsementSvg += svgText(centerX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
+      endorsementSvg += svgText(localCenterX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
       curY += companyFont + fitLineGap;
-      endorsementSvg += svgText(centerX, curY + fontSize, fontSize, "#111111", "bold", "For Mobile Deposit Only");
+      endorsementSvg += svgText(localCenterX, curY + fontSize, fontSize, "#111111", "bold", "For Mobile Deposit Only");
       curY += fontSize + fitLineGap;
     }
 
-    endorsementSvg += `<line x1="${ezLeftPad}" y1="${curY}" x2="${ezLeftPad + ezContentWidth}" y2="${curY}" stroke="#111111" stroke-width="2" opacity="0.3"/>`;
+    endorsementSvg += `<line x1="0" y1="${curY}" x2="${blockWidth}" y2="${curY}" stroke="#111111" stroke-width="2" opacity="0.3"/>`;
     curY += sectionGap;
 
     // Client endorsements (multi-column support)
     const signerRows = chunkRows(clientEndorsements, measured.columns);
-    const colWidth = measured.columns === 2 ? Math.round(ezContentWidth / 2) : ezContentWidth;
+    const colWidth = measured.columns === 2 ? Math.round(blockWidth / 2) : blockWidth;
 
     for (const row of signerRows) {
       let maxRowH = 0;
       for (let colIdx = 0; colIdx < row.length; colIdx++) {
         const endorsement = row[colIdx];
         const colCenterX = measured.columns === 2
-          ? ezLeftPad + colIdx * colWidth + Math.round(colWidth / 2)
-          : centerX;
+          ? colIdx * colWidth + Math.round(colWidth / 2)
+          : localCenterX;
 
         let localY = curY;
         endorsementSvg += svgText(colCenterX, localY + byLineFont, byLineFont, "#111111", "normal", endorsement.payee_name);
@@ -357,7 +356,7 @@ Deno.serve(async (req) => {
           const sigWidth = Math.min(colWidth - 20, Math.round(imgHeight * 0.10));
           const sigFilterId = `blackInk_${endorsement.id.replace(/[^a-zA-Z0-9]/g, "")}`;
           endorsementSvg += `<defs><filter id="${sigFilterId}"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></defs>`;
-          endorsementSvg += `<image href="${escHtml(endorsement.resolvedSignatureImageUrl)}" x="${colCenterX - sigWidth / 2}" y="${localY}" width="${sigWidth}" height="${fitSigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${sigFilterId})"/>`;
+          endorsementSvg += `<image href="${escHtml(endorsement.resolvedSignatureImageUrl)}" x="${Math.round(colCenterX - sigWidth / 2)}" y="${localY}" width="${sigWidth}" height="${fitSigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${sigFilterId})"/>`;
           localY += fitSigHeight + fitRowGap;
         } else if (endorsement.typedSignatureText) {
           endorsementSvg += `<text x="${colCenterX}" y="${localY + byLineFont}" font-family="serif" font-size="${byLineFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(endorsement.typedSignatureText)}</text>`;
@@ -374,31 +373,47 @@ Deno.serve(async (req) => {
     curY += sectionGap;
 
     // Footer: company + owner
-    endorsementSvg += svgText(centerX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
+    endorsementSvg += svgText(localCenterX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
     curY += companyFont + fitLineGap;
-    endorsementSvg += svgText(centerX, curY + byLineFont, byLineFont, "#111111", "normal", "By: Michael Carletta");
+    endorsementSvg += svgText(localCenterX, curY + byLineFont, byLineFont, "#111111", "normal", "By: Michael Carletta");
     curY += byLineFont + fitLineGap;
 
     const companySignature = companyEndorsements.find((e) => e.resolvedSignatureImageUrl || e.typedSignatureText);
     if (companySignature?.resolvedSignatureImageUrl) {
-      const sigWidth = Math.min(ezContentWidth - 20, Math.round(imgHeight * 0.10));
+      const sigWidth = Math.min(blockWidth - 20, Math.round(imgHeight * 0.10));
       const coSigFilterId = `blackInkCo_${companySignature.id.replace(/[^a-zA-Z0-9]/g, "")}`;
       endorsementSvg += `<defs><filter id="${coSigFilterId}"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></defs>`;
-      endorsementSvg += `<image href="${escHtml(companySignature.resolvedSignatureImageUrl)}" x="${centerX - sigWidth / 2}" y="${curY}" width="${sigWidth}" height="${fitSigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${coSigFilterId})"/>`;
+      endorsementSvg += `<image href="${escHtml(companySignature.resolvedSignatureImageUrl)}" x="${Math.round(localCenterX - sigWidth / 2)}" y="${curY}" width="${sigWidth}" height="${fitSigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${coSigFilterId})"/>`;
       curY += fitSigHeight + fitLineGap;
     } else if (companySignature?.typedSignatureText) {
-      endorsementSvg += `<text x="${centerX}" y="${curY + byLineFont}" font-family="serif" font-size="${byLineFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(companySignature.typedSignatureText)}</text>`;
+      endorsementSvg += `<text x="${localCenterX}" y="${curY + byLineFont}" font-family="serif" font-size="${byLineFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(companySignature.typedSignatureText)}</text>`;
       curY += byLineFont + fitLineGap;
     }
 
-    // ── Center-origin rotation ──
-    const endorsementCenterX = Math.round(appliedOverride.xPct * imgWidth);
-    const endorsementCenterY = Math.round(appliedOverride.yPct * imgHeight);
-    const scaleVal = appliedOverride.scale ?? 1;
-    const rotDeg = appliedOverride.rotationDeg ?? 0;
-    const blockW = Math.round(imgWidth * 0.28 * scaleVal);
-    const blockH = curY - Math.round(endorsementCenterY - curY / 2);
-    const rotationTransform = `transform="translate(${endorsementCenterX} ${endorsementCenterY}) rotate(${rotDeg}) scale(${scaleVal}) translate(${-endorsementCenterX} ${-endorsementCenterY})"`;
+    // ── Single placement transform: center-origin with rotation + scale ──
+    const blockCenterX = Math.round(appliedOverride.xPct * imgWidth);
+    const finalBlockWidth = blockWidth;
+    const finalBlockHeight = Math.max(blockHeight, Math.ceil(curY));
+    const scaleVal = measured.scale || 1;
+    const rotDeg = appliedOverride.rotationDeg || 0;
+
+    const endorsementTransform = [
+      `translate(${blockCenterX} ${blockCenterY})`,
+      `rotate(${rotDeg})`,
+      `scale(${scaleVal})`,
+      `translate(${-Math.round(finalBlockWidth / 2)} ${-Math.round(finalBlockHeight / 2)})`,
+    ].join(" ");
+
+    console.log("[COMPOSITE] final placement", {
+      blockCenterX,
+      blockCenterY,
+      finalBlockWidth,
+      finalBlockHeight,
+      rotationDeg: rotDeg,
+      scale: scaleVal,
+      xPct: appliedOverride.xPct,
+      yPct: appliedOverride.yPct,
+    });
 
     const compositeSvg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${imgWidth}" height="${imgHeight}" viewBox="0 0 ${imgWidth} ${imgHeight}">
@@ -408,11 +423,12 @@ Deno.serve(async (req) => {
     </clipPath>
   </defs>
   <image href="data:${mimeType};base64,${originalBase64}" x="0" y="0" width="${imgWidth}" height="${imgHeight}" preserveAspectRatio="none"/>
-  <g clip-path="url(#checkBounds)" ${rotationTransform}>
-    ${endorsementSvg}
+  <g clip-path="url(#checkBounds)">
+    <g transform="${endorsementTransform}">
+      ${endorsementSvg}
+    </g>
   </g>
 </svg>`;
-
     if (pixelCount > MAX_RASTER_PIXELS || !render) {
       const reason = !render ? "resvg_unavailable" : `oversized (${pixelCount} px > ${MAX_RASTER_PIXELS})`;
       console.log(`[COMPOSITE] compositor/export succeeded via svg_fallback (${reason})`);
