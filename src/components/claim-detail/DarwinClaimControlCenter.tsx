@@ -6,7 +6,15 @@ import { ClaimAssigned } from "@/components/claim-detail/ClaimAssigned";
 import { ClaimActivity } from "@/components/claim-detail/ClaimActivity";
 import { ClaimTasks } from "@/components/claim-detail/ClaimTasks";
 import { ClaimInspections } from "@/components/claim-detail/ClaimInspections";
-import { Loader2 } from "lucide-react";
+import { ChevronDown, Loader2 } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 
 const ClaimExternalSync = lazy(() => import("@/components/claim-detail/ClaimExternalSync").then(m => ({ default: m.ClaimExternalSync })));
 const ClaimAccessManagement = lazy(() => import("@/components/claim-detail/ClaimAccessManagement").then(m => ({ default: m.ClaimAccessManagement })));
