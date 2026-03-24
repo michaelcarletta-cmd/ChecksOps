@@ -1142,6 +1142,7 @@ function CheckDetailPanel({
   console.log("[CHECK-RENDER] final export mode:", isFinalDepositImage ? "deposit-ready" : "preview");
 
   return (
+    <>
     <Card className="overflow-hidden">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
