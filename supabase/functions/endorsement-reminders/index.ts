@@ -26,10 +26,12 @@ Deno.serve(async (req) => {
     const reminderBody = brandingRow?.endorsement_reminder_body || "This is a reminder that your endorsement is still needed for the check below. Please take a moment to review and endorse.";
 
     // Fetch stale unsigned endorsements (> 48 hours since last contact, max 5 reminders)
+    // CRITICAL: Only include endorsements that are NOT signed, waived, rejected, or expired
     const { data: stale, error: staleErr } = await supabase
       .from("check_endorsements")
-      .select("id, check_id, payee_name, payee_type, status, contact_email, contact_phone, reminder_count, last_reminder_at, request_sent_at, created_at, token, check_intake_items(check_number, carrier_name, amount)")
+      .select("id, check_id, payee_name, payee_type, status, contact_email, contact_phone, reminder_count, last_reminder_at, request_sent_at, created_at, token, signed_at, check_intake_items(check_number, carrier_name, amount)")
       .in("status", ["pending", "sent"])
+      .is("signed_at", null)
       .neq("payee_type", "mortgage_company")
       .lt("reminder_count", 5);
 
