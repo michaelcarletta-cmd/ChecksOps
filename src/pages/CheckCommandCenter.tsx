@@ -1578,6 +1578,16 @@ function CheckDetailPanel({
         </Tabs>
       </CardContent>
     </Card>
+
+    <DepositImageViewer
+      open={depositViewerOpen}
+      imageUrl={depositViewerUrl}
+      title={`Mobile Deposit — Check #${check?.check_number ?? checkId.slice(0, 8)}`}
+      onClose={() => {
+        setDepositViewerOpen(false);
+        setDepositViewerUrl(null);
+      }}
+    />
   );
 }
 
