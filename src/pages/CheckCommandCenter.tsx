@@ -756,6 +756,9 @@ function CheckDetailPanel({
   const [undoing, setUndoing] = useState(false);
   const [preparingDepositPrint, setPreparingDepositPrint] = useState(false);
   const [showEndorsementAdjuster, setShowEndorsementAdjuster] = useState(false);
+  const [depositViewerOpen, setDepositViewerOpen] = useState(false);
+  const [depositViewerUrl, setDepositViewerUrl] = useState<string | null>(null);
+  const [openingDepositView, setOpeningDepositView] = useState(false);
   const [frontImageDimensions, setFrontImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [backImageDimensions, setBackImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const { user } = useAuth();
