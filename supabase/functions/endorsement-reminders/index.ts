@@ -26,10 +26,12 @@ Deno.serve(async (req) => {
     const reminderBody = brandingRow?.endorsement_reminder_body || "This is a reminder that your endorsement is still needed for the check below. Please take a moment to review and endorse.";
 
     // Fetch stale unsigned endorsements (> 48 hours since last contact, max 5 reminders)
+    // CRITICAL: Only include endorsements that are NOT signed, waived, rejected, or expired
     const { data: stale, error: staleErr } = await supabase
       .from("check_endorsements")
-      .select("id, check_id, payee_name, payee_type, status, contact_email, contact_phone, reminder_count, last_reminder_at, request_sent_at, created_at, token, check_intake_items(check_number, carrier_name, amount)")
+      .select("id, check_id, payee_name, payee_type, status, contact_email, contact_phone, reminder_count, last_reminder_at, request_sent_at, created_at, token, signed_at, check_intake_items(check_number, carrier_name, amount)")
       .in("status", ["pending", "sent"])
+      .is("signed_at", null)
       .neq("payee_type", "mortgage_company")
       .lt("reminder_count", 5);
 
@@ -41,6 +43,12 @@ Deno.serve(async (req) => {
     let flaggedCount = 0;
 
     for (const endorsement of stale ?? []) {
+      // Double-check: skip any endorsement that's somehow already signed
+      if (endorsement.signed_at || endorsement.status === "signed" || endorsement.status === "waived" || endorsement.status === "rejected" || endorsement.status === "expired") {
+        console.log(`[endorsement-reminders] Skipping ${endorsement.payee_name} — status: ${endorsement.status}, signed_at: ${endorsement.signed_at}`);
+        continue;
+      }
+
       const lastContact = endorsement.last_reminder_at || endorsement.request_sent_at || endorsement.created_at;
       const elapsed = now - new Date(lastContact).getTime();
 
