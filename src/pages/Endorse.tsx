@@ -142,10 +142,11 @@ export default function Endorse() {
       if (!resp.ok) throw new Error(json.error || "Request failed");
 
       setMessage({
-        text: type === "approve" ? "Endorsement submitted successfully." : "Endorsement rejected.",
+        text: type === "approve" ? "Thank you! Your endorsement has been recorded successfully." : "Endorsement rejected.",
         type: type === "approve" ? "success" : "error",
       });
-      setTimeout(() => window.location.reload(), 1500);
+      // Refresh to show the thank-you state
+      setTimeout(() => fetchData(), 1500);
     } catch (e: unknown) {
       setMessage({ text: `Error: ${e instanceof Error ? e.message : "Unknown error"}`, type: "error" });
     } finally {
