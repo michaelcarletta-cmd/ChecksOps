@@ -273,10 +273,15 @@ export function EndorsementAdjuster({
   const safeZoneBottomPx = ZONE_BOTTOM_PCT * containerHeightPx;
   const safeZoneHeightPx = safeZoneBottomPx - safeZoneTopPx;
 
-  // xPct = center X relative to full width; yPct = center Y relative to zone height
-  const overlayCenterXPx = override.xPct * containerWidthPx;
-  const overlayCenterYPx = safeZoneTopPx + (override.yPct * safeZoneHeightPx);
-  const overlayWidthPx = containerWidthPx * ENDORSEMENT_WIDTH_PCT * (override.scale || 1);
+  // Derive font/spacing values from fitted layout, scaled to display size
+  // Server uses these pixel values at full image resolution; we scale to container
+  const { fontSize, lineGap, rowGap, signatureHeight, compactText, columns } = previewLayout;
+  const companyFontPx = Math.max(9, Math.round(fontSize * 1.2)) * displayScale;
+  const byLineFontPx = fontSize * displayScale;
+  const payToFontPx = fontSize * displayScale;
+  const sectionGapPx = Math.max(3, Math.round(lineGap * 2)) * displayScale;
+  const lineGapPx = lineGap * displayScale;
+  const sigHeightPx = signatureHeight * displayScale;
 
   if (!canGenerate && !endorsementsLoading) {
     return (
