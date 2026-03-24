@@ -574,7 +574,7 @@ Deno.serve(async (req) => {
 
         const { data: endorsement, error: eErr } = await supabase
           .from("check_endorsements")
-          .select("id, payee_name, status, token, token_expires_at, check_intake_items(carrier_name, check_number, amount)")
+          .select("id, payee_name, payee_type, status, token, token_expires_at, check_id, check_intake_items(carrier_name, check_number, amount, claim_id)")
           .eq("token", eToken)
           .single();
 
@@ -587,6 +587,36 @@ Deno.serve(async (req) => {
         }
 
         const ci = endorsement.check_intake_items as any;
+
+        // Determine if this endorsement needs a payment direction answer.
+        // Only show for non-mortgage payees on checks linked to a claim.
+        let requiresPaymentDirection = false;
+        if (
+          endorsement.payee_type !== "mortgage_company" &&
+          endorsement.status !== "signed" &&
+          endorsement.status !== "waived" &&
+          ci?.claim_id
+        ) {
+          // Check if a payment direction already exists for this check's claim_checks record
+          const { data: linkedCheck } = await supabase
+            .from("claim_checks")
+            .select("id")
+            .eq("check_intake_item_id", endorsement.check_id)
+            .maybeSingle();
+
+          if (linkedCheck) {
+            const { data: existingPD } = await supabase
+              .from("check_payment_directions")
+              .select("id")
+              .eq("check_id", linkedCheck.id)
+              .in("request_status", ["pending", "answered"])
+              .maybeSingle();
+
+            // Only require payment direction if none exists yet
+            requiresPaymentDirection = !existingPD;
+          }
+        }
+
         return json({
           id: endorsement.id,
           payee_name: endorsement.payee_name,
@@ -595,6 +625,7 @@ Deno.serve(async (req) => {
           check_number: ci?.check_number ?? "N/A",
           amount: ci?.amount ?? null,
           token: endorsement.token,
+          requires_payment_direction: requiresPaymentDirection,
         });
       }
       /* ------------------------------------------------------------ */
