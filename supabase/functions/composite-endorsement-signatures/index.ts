@@ -307,7 +307,7 @@ Deno.serve(async (req) => {
     const originalBase64 = uint8ToBase64(originalBytes);
     const mimeType = backImagePath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
 
-    const blockWidth = Math.round(imgWidth * ENDORSEMENT_WIDTH_PCT * measured.scale);
+    const blockWidth = Math.round(imgWidth * ENDORSEMENT_WIDTH_PCT);
     const { fontSize, lineGap: fitLineGap, rowGap: fitRowGap, signatureHeight: fitSigHeight, compactText } = measured;
     const companyFont = Math.max(9, Math.round(fontSize * 1.2));
     const byLineFont = fontSize;
