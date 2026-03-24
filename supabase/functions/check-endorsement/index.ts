@@ -184,12 +184,12 @@ async function reEvaluateAfterEndorsement(
           .update({ endorsement_status: "signed" })
           .eq("id", linkedCheck.id);
 
-        // Check if a payment direction request already exists
+        // Check if a payment direction request already exists (pending OR already answered during signing)
         const { data: existingPD } = await supabase
           .from("check_payment_directions")
           .select("id")
           .eq("check_id", linkedCheck.id)
-          .eq("request_status", "pending")
+          .in("request_status", ["pending", "answered"])
           .maybeSingle();
 
         if (!existingPD) {
