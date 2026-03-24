@@ -361,10 +361,10 @@ export function EndorsementAdjuster({
           onPointerDown={beginDrag}
           className="absolute select-none"
           style={{
-            left: overlayCenterXPx,
-            top: overlayCenterYPx,
-            width: overlayWidthPx,
-            transform: `translate(-50%, -50%) rotate(${override.rotationDeg || 0}deg)`,
+            left: override.xPct * containerWidthPx,
+            top: safeZoneTopPx + (override.yPct * safeZoneHeightPx),
+            width: containerWidthPx * ENDORSEMENT_WIDTH_PCT * displayScale,
+            transform: `translate(-50%, -50%) rotate(${override.rotationDeg || 0}deg) scale(${override.scale || 1})`,
             transformOrigin: "center center",
             color: "#111111",
             userSelect: "none",
@@ -374,77 +374,45 @@ export function EndorsementAdjuster({
             zIndex: 20,
           }}
         >
-          <div
-            style={{
-              fontSize: layout.payToFont * displayScale,
-              fontWeight: 600,
-              lineHeight: 1.1,
-              marginBottom: layout.lineGap * displayScale,
-              color: "#111111",
-            }}
-          >
-            Pay to the order of
-          </div>
-
-          <div
-            style={{
-              fontSize: layout.companyFont * displayScale,
-              fontWeight: 700,
-              lineHeight: 1.05,
-              marginBottom: layout.lineGap * displayScale,
-              color: "#111111",
-            }}
-          >
-            {companyName}
-          </div>
-
-          <div
-            style={{
-              fontSize: layout.mobileOnlyFont * displayScale,
-              fontWeight: 700,
-              lineHeight: 1.1,
-              marginBottom: layout.sectionGap * displayScale,
-              color: "#111111",
-            }}
-          >
-            For Mobile Deposit Only
-          </div>
+          {compactText ? (
+            <>
+              <div style={{ fontSize: payToFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
+                Pay to Freedom Adjustment
+              </div>
+              <div style={{ fontSize: payToFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
+                Mobile Deposit Only
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: payToFontPx, fontWeight: 600, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
+                Pay to the order of
+              </div>
+              <div style={{ fontSize: companyFontPx, fontWeight: 700, lineHeight: 1.05, marginBottom: lineGapPx, color: "#111111" }}>
+                {companyName}
+              </div>
+              <div style={{ fontSize: payToFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: sectionGapPx, color: "#111111" }}>
+                For Mobile Deposit Only
+              </div>
+            </>
+          )}
 
           {/* Client endorsement names from actual signed data */}
           {clientEndorsements.map((endorsement) => (
             <div key={endorsement.id}>
-              <div
-                style={{
-                  fontSize: layout.payeeFont * displayScale,
-                  fontWeight: 700,
-                  lineHeight: 1.1,
-                  marginBottom: layout.lineGap * displayScale,
-                  color: "#111111",
-                }}
-              >
+              <div style={{ fontSize: byLineFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
                 {endorsement.payee_name}
               </div>
               {endorsement.signature_image_url && !endorsement.signature_image_url.startsWith("typed:") ? (
                 <img
                   src={endorsement.signature_image_url}
                   alt={`${endorsement.payee_name} signature`}
-                  style={{
-                    height: layout.signatureHeight * displayScale,
-                    marginBottom: layout.sectionGap * displayScale,
-                  }}
+                  style={{ height: sigHeightPx, marginBottom: rowGap * displayScale }}
                   className="object-contain"
                   draggable={false}
                 />
               ) : (
-                <div
-                  style={{
-                    fontSize: layout.payeeFont * displayScale,
-                    fontStyle: "italic",
-                    fontFamily: '"Brush Script MT", cursive',
-                    marginBottom: layout.sectionGap * displayScale,
-                    color: "#111111",
-                  }}
-                >
+                <div style={{ fontSize: byLineFontPx, fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', marginBottom: rowGap * displayScale, color: "#111111" }}>
                   {endorsement.signature_image_url?.startsWith("typed:")
                     ? endorsement.signature_image_url.slice(6)
                     : endorsement.payee_name}
@@ -454,39 +422,16 @@ export function EndorsementAdjuster({
           ))}
 
           {clientEndorsements.length === 0 && !endorsementsLoading && (
-            <div
-              style={{
-                fontSize: layout.payeeFont * displayScale,
-                fontStyle: "italic",
-                color: "#999",
-                marginBottom: layout.sectionGap * displayScale,
-              }}
-            >
+            <div style={{ fontSize: byLineFontPx, fontStyle: "italic", color: "#999", marginBottom: sectionGapPx }}>
               (No client endorsements)
             </div>
           )}
 
-          <div
-            style={{
-              fontSize: layout.companyFont * displayScale,
-              fontWeight: 700,
-              lineHeight: 1.05,
-              marginBottom: layout.lineGap * displayScale,
-              color: "#111111",
-            }}
-          >
+          <div style={{ fontSize: companyFontPx, fontWeight: 700, lineHeight: 1.05, marginBottom: lineGapPx, color: "#111111" }}>
             {companyName}
           </div>
 
-          <div
-            style={{
-              fontSize: layout.byLineFont * displayScale,
-              fontWeight: 600,
-              lineHeight: 1.1,
-              marginBottom: layout.lineGap * displayScale,
-              color: "#111111",
-            }}
-          >
+          <div style={{ fontSize: byLineFontPx, fontWeight: 600, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
             By: {ownerName}
           </div>
 
@@ -494,19 +439,12 @@ export function EndorsementAdjuster({
             <img
               src={companyEndorsements[0].signature_image_url}
               alt="Owner signature"
-              style={{ height: layout.signatureHeight * displayScale }}
+              style={{ height: sigHeightPx }}
               className="object-contain"
               draggable={false}
             />
           ) : (
-            <div
-              style={{
-                fontSize: layout.byLineFont * displayScale,
-                fontStyle: "italic",
-                fontFamily: '"Brush Script MT", cursive',
-                color: "#111111",
-              }}
-            >
+            <div style={{ fontSize: byLineFontPx, fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>
               {companyEndorsements.length > 0 && companyEndorsements[0].signature_image_url?.startsWith("typed:")
                 ? companyEndorsements[0].signature_image_url.slice(6)
                 : ownerName}
