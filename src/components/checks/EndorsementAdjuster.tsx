@@ -255,18 +255,20 @@ export function EndorsementAdjuster({
   };
 
   // Use actual rendered DOM rect for overlay positioning
-  const rect = wrapRef.current?.getBoundingClientRect();
-  const containerWidthPx = rect?.width ?? imageWidth;
-  const containerHeightPx = rect?.height ?? (imageWidth > 0 ? containerWidthPx * imageHeight / imageWidth : imageHeight);
-
-  const overlayLeftPx = override.xPct * containerWidthPx;
-  const overlayTopPx = override.yPct * containerHeightPx;
+  const domRect = wrapRef.current?.getBoundingClientRect();
+  const containerWidthPx = domRect?.width ?? imageWidth;
+  const containerHeightPx = domRect?.height ?? (imageWidth > 0 ? containerWidthPx * imageHeight / imageWidth : imageHeight);
   const displayScale = containerWidthPx / imageWidth;
-  const overlayWidthPx = layout.width * displayScale;
 
-  // Bank safe zone visualization — real endorsement zone
-  const safeZoneTopPx = 0.55 * containerHeightPx;
-  const safeZoneBottomPx = 0.92 * containerHeightPx;
+  // Zone-relative positioning — must match edge function exactly
+  const safeZoneTopPx = ZONE_TOP_PCT * containerHeightPx;
+  const safeZoneBottomPx = ZONE_BOTTOM_PCT * containerHeightPx;
+  const safeZoneHeightPx = safeZoneBottomPx - safeZoneTopPx;
+
+  // xPct = center X relative to full width; yPct = center Y relative to zone height
+  const overlayCenterXPx = override.xPct * containerWidthPx;
+  const overlayCenterYPx = safeZoneTopPx + (override.yPct * safeZoneHeightPx);
+  const overlayWidthPx = containerWidthPx * ENDORSEMENT_WIDTH_PCT * (override.scale || 1);
 
   if (!canGenerate && !endorsementsLoading) {
     return (
