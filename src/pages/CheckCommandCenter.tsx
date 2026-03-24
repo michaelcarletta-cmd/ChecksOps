@@ -1589,6 +1589,7 @@ function CheckDetailPanel({
         setDepositViewerUrl(null);
       }}
     />
+    </>
   );
 }
 
