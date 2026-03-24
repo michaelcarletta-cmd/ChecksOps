@@ -30,6 +30,7 @@ import { DepositPacketGenerator } from "@/components/check-review/DepositPacketG
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards";
 import { LossDraftDashboard } from "@/components/loss-draft/LossDraftDashboard";
 import { EndorsementAdjuster } from "@/components/checks/EndorsementAdjuster";
+import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { EndorsementOverride } from "@/lib/endorsementLayout";
 import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
 import { DepositOperationsConsole, BranchDepositManifest } from "@/components/deposit-ops/DepositOperationsConsole";
@@ -755,6 +756,9 @@ function CheckDetailPanel({
   const [undoing, setUndoing] = useState(false);
   const [preparingDepositPrint, setPreparingDepositPrint] = useState(false);
   const [showEndorsementAdjuster, setShowEndorsementAdjuster] = useState(false);
+  const [depositViewerOpen, setDepositViewerOpen] = useState(false);
+  const [depositViewerUrl, setDepositViewerUrl] = useState<string | null>(null);
+  const [openingDepositView, setOpeningDepositView] = useState(false);
   const [frontImageDimensions, setFrontImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [backImageDimensions, setBackImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const { user } = useAuth();
@@ -1138,6 +1142,7 @@ function CheckDetailPanel({
   console.log("[CHECK-RENDER] final export mode:", isFinalDepositImage ? "deposit-ready" : "preview");
 
   return (
+    <>
     <Card className="overflow-hidden">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
@@ -1393,265 +1398,40 @@ function CheckDetailPanel({
                       </div>
                     </div>
                   )}
-                  {/* Print for Deposit — only visible when all endorsements complete */}
+                  {/* Open for Mobile Deposit — only visible when all endorsements complete */}
                   {allEndorsementsComplete && !isDepositBlocked && (
                     <Button
                       size="sm"
                       className="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                      disabled={preparingDepositPrint}
+                      disabled={openingDepositView}
                       onClick={async () => {
-                        if (!frontImageUrl || !backImageUrl) {
-                          toast({
-                            title: "Images not loaded",
-                            description: "Front and back check images must be loaded first.",
-                            variant: "destructive",
-                          });
-                          return;
-                        }
-
-                        setPreparingDepositPrint(true);
-
+                        setOpeningDepositView(true);
                         try {
-                          let printableBackImageUrl = backImageUrl;
-                          if (check.back_image_path) {
-                            printableBackImageUrl = await ensureDepositReadyBackImage();
-                          }
-                          if (!printableBackImageUrl) return;
-
-                          const [resolvedFrontDims, resolvedBackDims, compositedBackDims] = await Promise.all([
-                            loadImageDimensions(frontImageUrl).catch(() => frontImageDimensions),
-                            loadImageDimensions(backImageUrl).catch(() => backImageDimensions),
-                            loadImageDimensions(printableBackImageUrl).catch(() => null),
-                          ]);
-
-                          if (!resolvedFrontDims || !resolvedBackDims) {
+                          const finalUrl = await ensureDepositReadyBackImage();
+                          if (finalUrl) {
+                            setDepositViewerUrl(finalUrl);
+                            setDepositViewerOpen(true);
+                          } else {
                             toast({
-                              title: "Unable to prepare print dimensions",
-                              description: "Could not determine front/back image dimensions.",
+                              title: "No deposit image",
+                              description: "Could not generate or find the final endorsed back image.",
                               variant: "destructive",
                             });
-                            return;
                           }
-
-                          const originalFrontImageWidth = resolvedFrontDims.width;
-                          const originalFrontImageHeight = resolvedFrontDims.height;
-                          const originalBackImageWidth = resolvedBackDims.width;
-                          const originalBackImageHeight = resolvedBackDims.height;
-
-                          const finalFrontWidth = originalFrontImageWidth;
-                          const finalFrontHeight = originalFrontImageHeight;
-                          const finalBackWidth = originalBackImageWidth;
-                          const finalBackHeight = originalBackImageHeight;
-                          const normalizedRenderWidth = Math.max(finalFrontWidth, finalBackWidth);
-                          const backAr = finalBackHeight / finalBackWidth;
-
-                          const dimensionDebugPayload = {
-                            originalFrontImageWidth,
-                            originalFrontImageHeight,
-                            originalBackImageWidth,
-                            originalBackImageHeight,
-                            finalFrontWidth,
-                            finalFrontHeight,
-                            finalBackWidth,
-                            finalBackHeight,
-                            normalizedRenderWidth,
-                            compositedBackImageWidth: compositedBackDims?.width ?? null,
-                            compositedBackImageHeight: compositedBackDims?.height ?? null,
-                          };
-
-                          console.log("[CHECK-EXPORT-DIMENSIONS]", dimensionDebugPayload);
-
-                          const clientEndorsements = endorsementRows.filter((e) => {
-                            const nameLC = e.payee_name.toLowerCase();
-                            return !nameLC.includes("freedom") && !nameLC.includes("carletta");
-                          });
-
-                          const companySignature = endorsementRows.find((e) => {
-                            const nameLC = e.payee_name.toLowerCase();
-                            return (nameLC.includes("freedom") || nameLC.includes("carletta")) && !!e.signature_image_url;
-                          });
-
-                          const clientEndorsementsHtml = clientEndorsements
-                            .map((e) => {
-                              if (e.signature_image_url?.startsWith("data:image/")) {
-                                return `<div class="sig-block"><p class="sig-name">${escPrint(e.payee_name)}</p><img class="sig-img" src="${e.signature_image_url}" alt="${escPrint(e.payee_name)} signature" /></div>`;
-                              }
-                              if (e.signature_image_url?.startsWith("typed:")) {
-                                return `<div class="sig-block"><p class="sig-typed">${escPrint(e.signature_image_url.slice(6))}</p></div>`;
-                              }
-                              if (e.status === "waived") {
-                                return `<div class="sig-block"><p class="sig-waived">${escPrint(e.payee_name)} — Waived</p></div>`;
-                              }
-                              return `<div class="sig-block"><p class="sig-name">${escPrint(e.payee_name)}</p></div>`;
-                            })
-                            .join("");
-
-                          const companySignatureHtml = companySignature?.signature_image_url?.startsWith("data:image/")
-                            ? `<img class="sig-img" src="${companySignature.signature_image_url}" alt="Company signature" />`
-                            : companySignature?.signature_image_url?.startsWith("typed:")
-                              ? `<p class="sig-typed">${escPrint(companySignature.signature_image_url.slice(6))}</p>`
-                              : "";
-
-                          const endorsementOverlayHtml = hasEndorsement
-                            ? `<div class="endorsement-overlay">
-                                <div class="overlay-body">
-                                  <p class="overlay-header">Pay to the order of</p>
-                                  <p class="overlay-company">Freedom Adjustment</p>
-                                  <p class="overlay-header">For Mobile Deposit Only</p>
-                                  <div class="overlay-separator"></div>
-                                  ${clientEndorsementsHtml}
-                                  <div class="sig-block company-block">
-                                    <p class="overlay-company">Freedom Adjustment</p>
-                                    <p class="overlay-by">By: Michael Carletta</p>
-                                    ${companySignatureHtml}
-                                  </div>
-                                </div>
-                              </div>`
-                            : "";
-
-                          const htmlContent = `
-                            <!DOCTYPE html>
-                            <html>
-                            <head>
-                              <title>Print Check #${escPrint(check.check_number ?? check.id)} for Deposit</title>
-                              <style>
-                                :root { --render-width: ${normalizedRenderWidth}px; }
-                                body { margin: 0; padding: 20px; font-family: sans-serif; background: white; }
-                                .header { text-align: center; margin-bottom: 20px; }
-                                .header h1 { font-size: 18px; margin: 0; }
-                                .header p { font-size: 12px; color: #666; margin: 4px 0; }
-                                .check-section { margin-bottom: 16px; }
-                                .check-section p.label { font-size: 12px; color: #666; margin: 0 0 4px 0; }
-                                .check-print-wrap { position: relative; display: inline-block; width: min(100%, var(--render-width)); container-type: inline-size; }
-                                .check-front-image, .check-back-image { display: block; width: 100%; height: auto; border: 1px solid #ddd; }
-                                .endorsement-overlay {
-                                  position: absolute;
-                                  top: ${overlayCoordinates.topPercent}%;
-                                  left: ${overlayCoordinates.leftPercent}%;
-                                  width: ${overlayCoordinates.widthPercent}%;
-                                  z-index: 5;
-                                  pointer-events: none;
-                                  color: #111111;
-                                }
-                                .overlay-body { font-weight: 600; line-height: 1.15; }
-                                .overlay-header { margin: 0 0 ${(0.006 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.018 * backAr * 100).toFixed(2)}cqw; font-weight: 700; }
-                                .overlay-company { margin: 0 0 ${(0.006 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.028 * backAr * 100).toFixed(2)}cqw; font-weight: 700; }
-                                .overlay-by { margin: 0 0 ${(0.006 * backAr * 100).toFixed(2)}cqw; font-size: ${(0.022 * backAr * 100).toFixed(2)}cqw; }
-                                .overlay-separator { margin: ${(0.004 * backAr * 100).toFixed(2)}cqw 0; border-top: 1px solid #111111; opacity: 0.3; }
-                                .sig-block { margin-top: ${(0.006 * backAr * 100).toFixed(2)}cqw; }
-                                .sig-name { margin: 0; font-size: ${(0.022 * backAr * 100).toFixed(2)}cqw; }
-                                .sig-typed { margin: 0; font-size: ${(0.035 * backAr * 100).toFixed(2)}cqw; font-style: italic; font-family: "Brush Script MT", cursive; }
-                                .sig-waived { margin: 0; font-size: ${(0.020 * backAr * 100).toFixed(2)}cqw; font-style: italic; }
-                                .sig-img { display: block; margin: ${(0.003 * backAr * 100).toFixed(2)}cqw auto 0; max-width: 50%; height: ${(0.050 * backAr * 100).toFixed(2)}cqw; filter: brightness(0); object-fit: contain; }
-                                @media print {
-                                  body { padding: 8px; margin: 0; }
-                                  .check-front-page, .check-back-page {
-                                    page-break-after: always;
-                                    break-after: page;
-                                    page-break-inside: avoid;
-                                    break-inside: avoid;
-                                  }
-                                  .check-front-page:last-child, .check-back-page:last-child {
-                                    page-break-after: auto;
-                                    break-after: auto;
-                                  }
-                                  .check-print-wrap, .check-front-image, .check-back-image {
-                                    page-break-inside: avoid;
-                                    break-inside: avoid;
-                                  }
-                                  .check-back-image {
-                                    max-height: 85vh;
-                                    width: auto;
-                                    max-width: 100%;
-                                  }
-                                }
-                              </style>
-                            </head>
-                            <body>
-                              <div class="header">
-                                <h1>Check #${escPrint(check.check_number ?? "N/A")} — ${escPrint(check.carrier_name ?? "")}</h1>
-                                <p>Amount: $${check.amount?.toLocaleString("en-US", { minimumFractionDigits: 2 }) ?? "N/A"} · Printed: ${new Date().toLocaleDateString()}</p>
-                                <p>All endorsements verified ✓</p>
-                              </div>
-                              <div class="check-front-page">
-                                <div class="check-section">
-                                  <p class="label">Front</p>
-                                  <div class="check-print-wrap">
-                                    <img class="check-front-image" src="${frontImageUrl}" width="${finalFrontWidth}" height="${finalFrontHeight}" alt="Check front" />
-                                  </div>
-                                </div>
-                              </div>
-                              <div class="check-back-page">
-                                <div class="check-section">
-                                  <p class="label">Back (Endorsed)</p>
-                                  <div class="check-print-wrap">
-                                    <img class="check-back-image" src="${backImageUrl}" width="${finalBackWidth}" height="${finalBackHeight}" alt="Check back" />
-                                    ${endorsementOverlayHtml}
-                                  </div>
-                                </div>
-                              </div>
-                            </body>
-                            </html>
-                          `;
-
-                          // Use hidden iframe to trigger print (works inside iframe sandboxes)
-                          const printIframe = document.createElement("iframe");
-                          printIframe.style.position = "fixed";
-                          printIframe.style.top = "-10000px";
-                          printIframe.style.left = "-10000px";
-                          printIframe.style.width = "1200px";
-                          printIframe.style.height = "900px";
-                          printIframe.style.border = "none";
-                          document.body.appendChild(printIframe);
-
-                          const iframeDoc = printIframe.contentDocument || printIframe.contentWindow?.document;
-                          if (!iframeDoc) {
-                            toast({ title: "Print failed", description: "Could not create print frame.", variant: "destructive" });
-                            document.body.removeChild(printIframe);
-                            return;
-                          }
-
-                          iframeDoc.open();
-                          iframeDoc.write(htmlContent);
-                          iframeDoc.close();
-
-                          // Wait for images to load before printing
-                          const images = iframeDoc.querySelectorAll("img");
-                          await Promise.all(
-                            Array.from(images).map(
-                              (img) =>
-                                new Promise<void>((resolve) => {
-                                  if (img.complete) return resolve();
-                                  img.onload = () => resolve();
-                                  img.onerror = () => resolve();
-                                })
-                            )
-                          );
-
-                          // Small delay to ensure rendering
-                          await new Promise((r) => setTimeout(r, 300));
-
-                          printIframe.contentWindow?.print();
-
-                          // Clean up after a delay
-                          setTimeout(() => {
-                            document.body.removeChild(printIframe);
-                          }, 2000);
-
                         } catch (err: any) {
-                          console.error("[CHECK-PRINT-ERROR]", err);
+                          console.error("[OPEN-DEPOSIT-VIEW]", err);
                           toast({
-                            title: "Print failed",
-                            description: err?.message ?? "An error occurred preparing the print.",
+                            title: "Deposit image failed",
+                            description: err?.message ?? "An error occurred generating the deposit image.",
                             variant: "destructive",
                           });
                         } finally {
-                          setPreparingDepositPrint(false);
+                          setOpeningDepositView(false);
                         }
                       }}
                     >
-                      <Printer className="h-4 w-4 mr-2" />
-                      {preparingDepositPrint ? "Preparing deposit print..." : "Print for Deposit"}
+                      <FileImage className="h-4 w-4 mr-2" />
+                      {openingDepositView ? "Preparing..." : "Open for Mobile Deposit"}
                     </Button>
                   )}
                 </div>
@@ -1799,6 +1579,17 @@ function CheckDetailPanel({
         </Tabs>
       </CardContent>
     </Card>
+
+    <DepositImageViewer
+      open={depositViewerOpen}
+      imageUrl={depositViewerUrl}
+      title={`Mobile Deposit — Check #${check?.check_number ?? checkId.slice(0, 8)}`}
+      onClose={() => {
+        setDepositViewerOpen(false);
+        setDepositViewerUrl(null);
+      }}
+    />
+    </>
   );
 }
 
