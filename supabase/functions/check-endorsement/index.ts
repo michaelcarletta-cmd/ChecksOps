@@ -872,6 +872,8 @@ Deno.serve(async (req) => {
       case "submit_endorsement": {
         const eToken = body.token as string;
         const signatureData = body.signatureData as string | undefined;
+        const paymentDirection = body.paymentDirection as string | undefined; // "pay_contractor" or "pay_insured"
+        const contractorName = body.contractorName as string | undefined;
         if (!eToken) return json({ error: "Token required" }, 400);
 
         const { data: endorsement, error: eErr } = await supabase
