@@ -15,7 +15,7 @@ const corsHeaders = {
 };
 
 // Real bank endorsement zone (bottom area of check back)
-const ZONE_TOP_PCT = 0.55;
+const ZONE_TOP_PCT = 0.15;
 const ZONE_BOTTOM_PCT = 0.92;
 const ENDORSEMENT_LEFT_PCT = 0.38;
 const ENDORSEMENT_WIDTH_PCT = 0.22;
