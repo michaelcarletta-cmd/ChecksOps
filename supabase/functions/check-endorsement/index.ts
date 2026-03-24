@@ -1005,6 +1005,60 @@ Deno.serve(async (req) => {
                 });
 
                 console.log(`[ENDORSEMENT] Payment direction "${paymentDirection}" saved inline for check ${endorsement.check_id}`);
+
+                // Send email notification to team about payment direction
+                try {
+                  const { data: brandingForNotif } = await supabase
+                    .from("company_branding")
+                    .select("company_name, company_email")
+                    .limit(1)
+                    .maybeSingle();
+
+                  const notifEmail = brandingForNotif?.company_email;
+                  if (notifEmail) {
+                    const decisionLabel = paymentDirection === "pay_contractor"
+                      ? "Pay Contractor" + (contractorName ? ` (${contractorName})` : "")
+                      : "Send Funds to Insured";
+
+                    // Fetch claim number for context
+                    const { data: claimInfo } = await supabase
+                      .from("claims")
+                      .select("claim_number, insured_name")
+                      .eq("id", linkedCheck.claim_id)
+                      .maybeSingle();
+
+                    const claimLabel = claimInfo?.claim_number || linkedCheck.claim_id;
+                    const insuredName = claimInfo?.insured_name || "the insured";
+                    const companyName = brandingForNotif?.company_name || "Freedom Claims";
+
+                    await supabase.functions.invoke("send-email", {
+                      body: {
+                        to: notifEmail,
+                        subject: `Payment Direction Received — Claim ${claimLabel}`,
+                        body: `
+                          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                            <h2 style="color: #1a1a2e; margin-bottom: 16px;">Payment Direction Received</h2>
+                            <p style="color: #333; font-size: 15px; line-height: 1.6;">
+                              <strong>${endorsement.payee_name}</strong> has submitted their payment direction during endorsement signing.
+                            </p>
+                            <div style="background: #f4f6f9; border-radius: 8px; padding: 16px; margin: 16px 0;">
+                              <p style="margin: 4px 0; font-size: 14px;"><strong>Claim:</strong> ${claimLabel}</p>
+                              <p style="margin: 4px 0; font-size: 14px;"><strong>Insured:</strong> ${insuredName}</p>
+                              <p style="margin: 4px 0; font-size: 14px;"><strong>Signer:</strong> ${endorsement.payee_name}</p>
+                              <p style="margin: 4px 0; font-size: 14px;"><strong>Decision:</strong> ${decisionLabel}</p>
+                            </div>
+                            <p style="color: #666; font-size: 13px;">
+                              You can view the full check details in the ${companyName} dashboard.
+                            </p>
+                          </div>
+                        `,
+                      },
+                    });
+                    console.log(`[ENDORSEMENT] Payment direction notification sent to ${notifEmail}`);
+                  }
+                } catch (notifErr) {
+                  console.error("[ENDORSEMENT] Payment direction notification email failed (non-blocking):", notifErr);
+                }
               }
             }
           } catch (pdErr) {
