@@ -9,6 +9,7 @@ interface EndorsementData {
   check_number: string;
   amount: number | null;
   token: string;
+  requires_payment_direction?: boolean;
 }
 
 export default function Endorse() {
@@ -22,6 +23,10 @@ export default function Endorse() {
   const [typedName, setTypedName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
+
+  // Payment direction state
+  const [paymentDirection, setPaymentDirection] = useState<"pay_contractor" | "pay_insured" | null>(null);
+  const [contractorName, setContractorName] = useState("");
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
@@ -124,13 +129,26 @@ export default function Endorse() {
         setMessage({ text: "Please provide your signature before endorsing.", type: "error" });
         return;
       }
+      // Validate payment direction is selected if required
+      if (data?.requires_payment_direction && !paymentDirection) {
+        setMessage({ text: "Please select a payment direction before endorsing.", type: "error" });
+        return;
+      }
     }
     setSubmitting(true);
     setMessage(null);
     try {
       const action = type === "approve" ? "submit_endorsement" : "reject_endorsement";
       const payload: Record<string, unknown> = { action, token };
-      if (type === "approve") payload.signatureData = getSignatureData();
+      if (type === "approve") {
+        payload.signatureData = getSignatureData();
+        if (paymentDirection) {
+          payload.paymentDirection = paymentDirection;
+          if (paymentDirection === "pay_contractor" && contractorName.trim()) {
+            payload.contractorName = contractorName.trim();
+          }
+        }
+      }
       if (type === "reject") payload.reason = "Payee declined";
 
       const resp = await fetch(fnUrl, {
@@ -287,6 +305,80 @@ export default function Endorse() {
               )}
             </div>
 
+            {/* Payment Direction Section */}
+            {data.requires_payment_direction && (
+              <div style={styles.pdSection}>
+                <div style={styles.pdHeader}>
+                  <span style={styles.pdIcon}>💰</span>
+                  <div>
+                    <p style={styles.pdTitle}>Payment Direction <span style={styles.pdRequired}>Required</span></p>
+                    <p style={styles.pdSubtitle}>How would you like the funds from this check handled?</p>
+                  </div>
+                </div>
+
+                <div style={styles.pdOptions}>
+                  <label
+                    style={{
+                      ...styles.pdOption,
+                      ...(paymentDirection === "pay_contractor" ? styles.pdOptionSelected : {}),
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="payment_direction"
+                      value="pay_contractor"
+                      checked={paymentDirection === "pay_contractor"}
+                      onChange={() => setPaymentDirection("pay_contractor")}
+                      style={{ display: "none" }}
+                    />
+                    <div style={styles.pdRadio}>
+                      {paymentDirection === "pay_contractor" && <div style={styles.pdRadioDot} />}
+                    </div>
+                    <div>
+                      <p style={styles.pdOptionTitle}>Pay my contractor directly</p>
+                      <p style={styles.pdOptionDesc}>Authorize payment to your contractor for work to begin</p>
+                    </div>
+                  </label>
+
+                  <label
+                    style={{
+                      ...styles.pdOption,
+                      ...(paymentDirection === "pay_insured" ? styles.pdOptionSelected : {}),
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="payment_direction"
+                      value="pay_insured"
+                      checked={paymentDirection === "pay_insured"}
+                      onChange={() => setPaymentDirection("pay_insured")}
+                      style={{ display: "none" }}
+                    />
+                    <div style={styles.pdRadio}>
+                      {paymentDirection === "pay_insured" && <div style={styles.pdRadioDot} />}
+                    </div>
+                    <div>
+                      <p style={styles.pdOptionTitle}>Send funds to me</p>
+                      <p style={styles.pdOptionDesc}>Have the check funds issued directly to you</p>
+                    </div>
+                  </label>
+                </div>
+
+                {paymentDirection === "pay_contractor" && (
+                  <div style={{ marginTop: 12 }}>
+                    <p style={{ fontSize: 12, color: "#94a3b8", marginBottom: 6 }}>Contractor name (optional)</p>
+                    <input
+                      type="text"
+                      style={styles.contractorInput}
+                      placeholder="Enter contractor name..."
+                      value={contractorName}
+                      onChange={(e) => setContractorName(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={styles.actions}>
               <button
                 style={{ ...styles.btn, ...styles.btnApprove, ...(submitting ? { opacity: 0.5 } : {}) }}
@@ -398,7 +490,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#e2e8f0",
     fontSize: 24,
     fontFamily: "'Dancing Script',cursive,'Brush Script MT',cursive",
-    boxSizing: "border-box",
+    boxSizing: "border-box" as const,
   },
   typedPreview: {
     textAlign: "center",
@@ -428,4 +520,99 @@ const styles: Record<string, React.CSSProperties> = {
   btnApprove: { background: "#22c55e", color: "#0f172a" },
   btnReject: { background: "#334155", color: "#e2e8f0" },
   consent: { fontSize: 11, color: "#64748b", marginTop: 16, textAlign: "center", lineHeight: 1.5 },
+
+  // Payment Direction styles
+  pdSection: {
+    marginTop: 24,
+    padding: 16,
+    background: "#0f172a",
+    borderRadius: 10,
+    border: "1px solid #334155",
+  },
+  pdHeader: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 16,
+  },
+  pdIcon: { fontSize: 24 },
+  pdTitle: {
+    fontSize: 15,
+    fontWeight: 700,
+    color: "#e2e8f0",
+    margin: 0,
+  },
+  pdRequired: {
+    fontSize: 10,
+    fontWeight: 700,
+    color: "#f59e0b",
+    background: "#78350f",
+    padding: "2px 6px",
+    borderRadius: 4,
+    marginLeft: 8,
+    verticalAlign: "middle",
+  },
+  pdSubtitle: {
+    fontSize: 12,
+    color: "#94a3b8",
+    margin: "4px 0 0",
+  },
+  pdOptions: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: 10,
+  },
+  pdOption: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 12,
+    padding: "14px 16px",
+    borderRadius: 8,
+    border: "2px solid #334155",
+    background: "#1e293b",
+    cursor: "pointer",
+    transition: "border-color 0.15s",
+  },
+  pdOptionSelected: {
+    borderColor: "#22c55e",
+    background: "#14532d20",
+  },
+  pdRadio: {
+    width: 20,
+    height: 20,
+    borderRadius: "50%",
+    border: "2px solid #475569",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    marginTop: 2,
+  },
+  pdRadioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: "50%",
+    background: "#22c55e",
+  },
+  pdOptionTitle: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: "#e2e8f0",
+    margin: 0,
+  },
+  pdOptionDesc: {
+    fontSize: 12,
+    color: "#94a3b8",
+    margin: "2px 0 0",
+  },
+  contractorInput: {
+    width: "100%",
+    padding: 10,
+    border: "1px solid #334155",
+    borderRadius: 6,
+    background: "#1e293b",
+    color: "#e2e8f0",
+    fontSize: 14,
+    boxSizing: "border-box" as const,
+  },
 };
