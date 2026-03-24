@@ -28,7 +28,8 @@ async function sendResendEmail(
   subject: string,
   htmlContent: string,
   attachments?: ResendAttachment[],
-  ccEmails?: string[]
+  ccEmails?: string[],
+  replyTo?: string
 ) {
 const payload: any = {
     from: "Freedom Claims <claims@freedomclaims.work>",
@@ -36,6 +37,10 @@ const payload: any = {
     subject: subject,
     html: htmlContent,
   };
+
+  if (replyTo) {
+    payload.reply_to = replyTo;
+  }
 
   if (ccEmails && ccEmails.length > 0) {
     payload.cc = ccEmails;
@@ -294,7 +299,28 @@ Deno.serve(async (req) => {
       ccList.push(claimEmailCc);
     }
 
-    console.log(`Sending email via Resend to ${toEmails.join(', ')}${ccList.length > 0 ? ` (CC: ${ccList.join(', ')})` : ''} with ${emailAttachments.length} attachments`);
+    // Build Reply-To address from claim's email so replies come back to the CRM
+    let replyToAddress: string | undefined;
+    if (claimId) {
+      const { data: claimForReply } = await supabaseAdmin
+        .from('claims')
+        .select('claim_email_id, policy_number')
+        .eq('id', claimId)
+        .single();
+      
+      if (claimForReply) {
+        const emailId = claimForReply.claim_email_id || 
+          (claimForReply.policy_number 
+            ? claimForReply.policy_number.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+            : null);
+        if (emailId) {
+          replyToAddress = `claim-${emailId}@claims.freedomclaims.work`;
+          console.log(`Setting Reply-To: ${replyToAddress}`);
+        }
+      }
+    }
+
+    console.log(`Sending email via Resend to ${toEmails.join(', ')}${ccList.length > 0 ? ` (CC: ${ccList.join(', ')})` : ''}${replyToAddress ? ` (Reply-To: ${replyToAddress})` : ''} with ${emailAttachments.length} attachments`);
 
     // Send via Resend
     const emailResponse = await sendResendEmail(
@@ -303,7 +329,8 @@ Deno.serve(async (req) => {
       subject,
       htmlContent,
       emailAttachments.length > 0 ? emailAttachments : undefined,
-      ccList.length > 0 ? ccList : undefined
+      ccList.length > 0 ? ccList : undefined,
+      replyToAddress
     );
 
     console.log(`Email sent via Resend:`, emailResponse);
