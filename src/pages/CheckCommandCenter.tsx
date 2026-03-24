@@ -30,6 +30,7 @@ import { DepositPacketGenerator } from "@/components/check-review/DepositPacketG
 import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards";
 import { LossDraftDashboard } from "@/components/loss-draft/LossDraftDashboard";
 import { EndorsementAdjuster } from "@/components/checks/EndorsementAdjuster";
+import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
 import { EndorsementOverride } from "@/lib/endorsementLayout";
 import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
 import { DepositOperationsConsole, BranchDepositManifest } from "@/components/deposit-ops/DepositOperationsConsole";
