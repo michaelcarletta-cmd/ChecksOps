@@ -955,6 +955,63 @@ Deno.serve(async (req) => {
           event_data: { endorsement_id: endorsement.id, ...forensics },
         });
 
+        // Save payment direction if provided during endorsement signing
+        if (paymentDirection && (paymentDirection === "pay_contractor" || paymentDirection === "pay_insured")) {
+          try {
+            const { data: linkedCheck } = await supabase
+              .from("claim_checks")
+              .select("id, claim_id")
+              .eq("check_intake_item_id", endorsement.check_id)
+              .maybeSingle();
+
+            if (linkedCheck) {
+              // Check if a payment direction already exists
+              const { data: existingPD } = await supabase
+                .from("check_payment_directions")
+                .select("id")
+                .eq("check_id", linkedCheck.id)
+                .in("request_status", ["pending", "answered"])
+                .maybeSingle();
+
+              if (!existingPD) {
+                // Create and immediately answer the payment direction
+                await supabase
+                  .from("check_payment_directions")
+                  .insert({
+                    claim_id: linkedCheck.claim_id,
+                    check_id: linkedCheck.id,
+                    request_status: "answered",
+                    decision: paymentDirection,
+                    contractor_name: contractorName || null,
+                    answered_at: new Date().toISOString(),
+                    answer_source: "endorsement_signing",
+                    answer_notes: `Client selected "${paymentDirection}" during endorsement signing`,
+                    expires_at: new Date(Date.now() + 21 * 86400000).toISOString(),
+                  });
+
+                await supabase
+                  .from("claim_checks")
+                  .update({
+                    endorsement_status: "signed",
+                    payment_direction_status: "answered",
+                  })
+                  .eq("id", linkedCheck.id);
+
+                await supabase.from("check_audit_log").insert({
+                  check_id: endorsement.check_id,
+                  event_type: "payment_direction_answered_during_endorsement",
+                  event_description: `${endorsement.payee_name} chose "${paymentDirection}" during endorsement signing`,
+                  event_data: { decision: paymentDirection, contractor_name: contractorName, ...forensics },
+                });
+
+                console.log(`[ENDORSEMENT] Payment direction "${paymentDirection}" saved inline for check ${endorsement.check_id}`);
+              }
+            }
+          } catch (pdErr) {
+            console.error("[ENDORSEMENT] Inline payment direction save failed (non-blocking):", pdErr);
+          }
+        }
+
         const result = await reEvaluateAfterEndorsement(supabase, endorsement.check_id);
         return json({ success: true, ...result });
       }
