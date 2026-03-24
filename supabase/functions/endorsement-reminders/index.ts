@@ -43,6 +43,12 @@ Deno.serve(async (req) => {
     let flaggedCount = 0;
 
     for (const endorsement of stale ?? []) {
+      // Double-check: skip any endorsement that's somehow already signed
+      if (endorsement.signed_at || endorsement.status === "signed" || endorsement.status === "waived" || endorsement.status === "rejected" || endorsement.status === "expired") {
+        console.log(`[endorsement-reminders] Skipping ${endorsement.payee_name} — status: ${endorsement.status}, signed_at: ${endorsement.signed_at}`);
+        continue;
+      }
+
       const lastContact = endorsement.last_reminder_at || endorsement.request_sent_at || endorsement.created_at;
       const elapsed = now - new Date(lastContact).getTime();
 

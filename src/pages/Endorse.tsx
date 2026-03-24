@@ -205,7 +205,18 @@ export default function Endorse() {
         <div style={styles.amount}>{formatAmount(data.amount)}</div>
 
         {alreadySigned && (
-          <div style={{ ...styles.status, color: "#22c55e" }}>✓ You have already endorsed this check.</div>
+          <div style={{ textAlign: "center", padding: "24px 0" }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "#22c55e", marginBottom: 8 }}>
+              Thank You for Your Signature!
+            </div>
+            <p style={{ color: "#94a3b8", fontSize: 14, lineHeight: 1.6, maxWidth: 360, margin: "0 auto" }}>
+              Your endorsement for this check has been received and recorded. No further action is needed from you.
+            </p>
+            <p style={{ color: "#64748b", fontSize: 12, marginTop: 16 }}>
+              If you have questions about this check, please contact your adjuster.
+            </p>
+          </div>
         )}
         {isRejected && (
           <div style={{ ...styles.status, color: "#ef4444" }}>✗ You have rejected this endorsement.</div>
