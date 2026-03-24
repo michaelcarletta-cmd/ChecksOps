@@ -1314,8 +1314,19 @@ async function extractStructuredIntelligence(
     });
 
     if (!response.ok) {
+      const errBody = await response.text().catch(() => '');
+      if (response.status === 402) {
+        const errMsg = 'AI credits exhausted. Please add credits at Settings > Workspace > Usage.';
+        console.error(`[DocIntel] 402 Payment Required: ${errBody}`);
+        return { success: false, written: false, error: errMsg };
+      }
+      if (response.status === 429) {
+        const errMsg = 'AI rate limit reached. File will be retried automatically.';
+        console.error(`[DocIntel] 429 Rate Limited: ${errBody}`);
+        return { success: false, written: false, error: errMsg };
+      }
       const errMsg = `AI error: ${response.status}`;
-      console.error(`[DocIntel] ${errMsg}`);
+      console.error(`[DocIntel] ${errMsg} ${errBody}`);
       return { success: false, written: false, error: errMsg };
     }
 

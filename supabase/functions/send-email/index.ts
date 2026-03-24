@@ -28,7 +28,8 @@ async function sendResendEmail(
   subject: string,
   htmlContent: string,
   attachments?: ResendAttachment[],
-  ccEmails?: string[]
+  ccEmails?: string[],
+  replyTo?: string
 ) {
 const payload: any = {
     from: "Freedom Claims <claims@freedomclaims.work>",
@@ -36,6 +37,10 @@ const payload: any = {
     subject: subject,
     html: htmlContent,
   };
+
+  if (replyTo) {
+    payload.reply_to = replyTo;
+  }
 
   if (ccEmails && ccEmails.length > 0) {
     payload.cc = ccEmails;
