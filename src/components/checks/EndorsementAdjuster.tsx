@@ -103,10 +103,18 @@ export function EndorsementAdjuster({
   const ZONE_BOTTOM_PCT = 0.92;
   const ENDORSEMENT_WIDTH_PCT = 0.22;
 
-  const layout = useMemo(
-    () => getEndorsementLayout(imageWidth, imageHeight, override),
-    [imageWidth, imageHeight, override],
-  );
+  // Use fitEndorsementLayout to match server compositor exactly
+  const previewLayout = useMemo(() => {
+    const rect = wrapRef.current?.getBoundingClientRect();
+    const containerWidthPx = rect?.width ?? 900;
+    const containerHeightPx = rect?.height ?? (containerWidthPx * imageHeight / imageWidth);
+    const safeZoneHeightPx = (ZONE_BOTTOM_PCT - ZONE_TOP_PCT) * containerHeightPx;
+    return fitEndorsementLayout({
+      signerCount: signedEndorsements.length || 1,
+      zoneHeightPx: safeZoneHeightPx,
+      requestedScale: override.scale || 1,
+    });
+  }, [imageWidth, imageHeight, override.scale, signedEndorsements.length]);
 
   const runNextFrame = (fn: () => void) => {
     if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
