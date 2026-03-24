@@ -66,20 +66,45 @@ export function DarwinClaimControlCenter({
     }
   }, [visibleTabs, activeControlTab]);
 
+  const isMobile = useIsMobile();
+  const activeTabLabel = visibleTabs.find(t => t.value === activeControlTab)?.label || "Overview";
+
   return (
     <div className="space-y-4">
       <Tabs value={activeControlTab} onValueChange={setActiveControlTab} className="w-full">
-        <TabsList className="flex flex-row w-full bg-muted p-2 gap-1 h-auto rounded-md overflow-x-auto">
-          {visibleTabs.map((tab) => (
-            <TabsTrigger
-              key={tab.value}
-              value={tab.value}
-              className="w-auto justify-start text-sm font-medium px-3 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm whitespace-nowrap"
-            >
-              {tab.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        {isMobile ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="w-full justify-between bg-muted border-border text-foreground font-medium">
+                <span>{activeTabLabel}</span>
+                <ChevronDown className="h-4 w-4 ml-2 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-[var(--radix-dropdown-menu-trigger-width)] bg-popover border-border" align="start">
+              {visibleTabs.map((tab) => (
+                <DropdownMenuItem
+                  key={tab.value}
+                  onClick={() => setActiveControlTab(tab.value)}
+                  className={`cursor-pointer ${activeControlTab === tab.value ? 'bg-accent text-accent-foreground' : ''}`}
+                >
+                  {tab.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <TabsList className="flex flex-row w-full bg-muted p-2 gap-1 h-auto rounded-md overflow-x-auto">
+            {visibleTabs.map((tab) => (
+              <TabsTrigger
+                key={tab.value}
+                value={tab.value}
+                className="w-auto justify-start text-sm font-medium px-3 py-2 text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground rounded-sm whitespace-nowrap"
+              >
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        )}
 
         <TabsContent value="overview" className="mt-6 space-y-6">
           <ClaimOverview claim={claim} isPortalUser={false} onClaimUpdated={onClaimUpdated} />
