@@ -142,10 +142,16 @@ export function EndorsementAdjuster({
 
       const rect = wrapRef.current.getBoundingClientRect();
 
+      const containerHeightPx = rect.height;
+      const safeZoneTopPx = ZONE_TOP_PCT * containerHeightPx;
+      const safeZoneBottomPx = ZONE_BOTTOM_PCT * containerHeightPx;
+      const safeZoneHeightPx = safeZoneBottomPx - safeZoneTopPx;
+
       runNextFrame(() => {
         if (dragging) {
           const xPct = (e.clientX - rect.left) / rect.width;
-          const yPct = (e.clientY - rect.top) / rect.height;
+          const yPxWithinZone = (e.clientY - rect.top) - safeZoneTopPx;
+          const yPct = yPxWithinZone / safeZoneHeightPx;
           setOverride((prev) =>
             clampEndorsementOverride({ ...prev, xPct, yPct }),
           );
@@ -154,11 +160,8 @@ export function EndorsementAdjuster({
         if (resizing) {
           const overlayLeft = rect.left + override.xPct * rect.width;
           const deltaX = e.clientX - overlayLeft;
-          const displayScale = rect.width / imageWidth;
-          const nextScale = Math.max(
-            0.4,
-            Math.min(2, deltaX / (imageWidth * 0.20 * displayScale)),
-          );
+          const baseWidth = rect.width * ENDORSEMENT_WIDTH_PCT;
+          const nextScale = Math.max(0.4, Math.min(2, deltaX / baseWidth));
           setOverride((prev) =>
             clampEndorsementOverride({ ...prev, scale: nextScale }),
           );
