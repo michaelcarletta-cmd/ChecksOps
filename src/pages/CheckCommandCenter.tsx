@@ -1718,15 +1718,19 @@ function CheckDetailPanel({
                         (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null
                       }
                       onSave={async (ov) => {
-                        const { error } = await supabase
+                        console.log("[print-for-deposit] using override", ov);
+                        // 1) Save override to DB first
+                        const { error: saveErr } = await supabase
                           .from("check_intake_items")
                           .update({
                             endorsement_override: ov as any,
                             updated_at: new Date().toISOString(),
                           })
                           .eq("id", checkId);
-                        if (error) throw error;
-                        toast({ title: "Endorsement override saved" });
+                        if (saveErr) throw saveErr;
+                        // 2) Then generate final deposit image
+                        await ensureDepositReadyBackImage();
+                        toast({ title: "Endorsement saved & deposit image generated" });
                         setShowEndorsementAdjuster(false);
                         qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
                       }}
