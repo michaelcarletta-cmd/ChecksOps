@@ -338,15 +338,20 @@ export function EndorsementAdjuster({
           </span>
         </div>
 
-        {/* draggable overlay – center-origin positioning */}
+        {/* Debug overlay */}
+        <div className="absolute left-2 top-2 z-30 rounded bg-black/70 px-2 py-1 text-[10px] text-white pointer-events-none">
+          xPct: {override.xPct.toFixed(3)} | yPct: {override.yPct.toFixed(3)} | rot: {override.rotationDeg} | scale: {override.scale?.toFixed(2)}
+        </div>
+
+        {/* draggable overlay – center-origin positioning, zone-relative Y */}
         <div
           onPointerDown={beginDrag}
           className="absolute select-none"
           style={{
-            left: overlayLeftPx,
-            top: overlayTopPx,
+            left: overlayCenterXPx,
+            top: overlayCenterYPx,
             width: overlayWidthPx,
-            transform: `translate(-50%, -50%) rotate(${override.rotationDeg || 0}deg) scale(${override.scale || 1})`,
+            transform: `translate(-50%, -50%) rotate(${override.rotationDeg || 0}deg)`,
             transformOrigin: "center center",
             color: "#111111",
             userSelect: "none",
