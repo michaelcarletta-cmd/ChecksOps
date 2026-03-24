@@ -7,9 +7,9 @@ import {
   clampEndorsementOverride,
   DEFAULT_ENDORSEMENT_OVERRIDE,
   EndorsementOverride,
-  getEndorsementLayout,
   normalizeRotation,
 } from "@/lib/endorsementLayout";
+import { fitEndorsementLayout } from "@/lib/endorsementFit";
 import { supabase } from "@/integrations/supabase/client";
 
 interface SignedEndorsementAsset {
