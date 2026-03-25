@@ -424,6 +424,20 @@ Deno.serve(async (req) => {
       })),
     };
 
+    // Build claim updates and email history digest
+    const claimUpdates = (claimUpdatesRes.data || []).map((u: any) => ({
+      type: u.update_type,
+      content: (u.content || '').slice(0, 300),
+      date: u.created_at ? new Date(u.created_at).toLocaleDateString() : 'Unknown',
+    }));
+    const emailHistory = (emailsRes.data || []).map((e: any) => ({
+      subject: e.subject,
+      recipient: e.recipient_name,
+      recipient_type: e.recipient_type,
+      date: e.sent_at ? new Date(e.sent_at).toLocaleDateString() : 'Unknown',
+      body_preview: (e.body || '').slice(0, 200),
+    }));
+
     const claimIntel = {
       claim,
       orchestrator_summary: intelSummary ? {
@@ -449,9 +463,12 @@ Deno.serve(async (req) => {
       carrier_outcomes: carrierOutcomes,
       argument_patterns_library: argPatterns.slice(0, 8),
       feedback_patterns: feedbackPatterns,
-      // NEW: cross-surface intelligence
+      // Cross-surface intelligence
       timeline_intelligence: timelineIntel,
       estimate_builder_intelligence: estimateIntel,
+      // Communication history for client updates
+      recent_updates: claimUpdates,
+      recent_emails: emailHistory,
     };
 
     (photoRes.data || []).forEach((f: any) => {
