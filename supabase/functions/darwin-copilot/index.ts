@@ -55,7 +55,8 @@ Deno.serve(async (req) => {
     const [
       claimRes, filesRes, estimateRes, photoRes, strategyRes, argsRes, 
       rebuttalsRes, deadlinesRes, intelSummaryRes,
-      timelineEventsRes, estimateLinesRes, feedbackRes, regulationsRes
+      timelineEventsRes, estimateLinesRes, feedbackRes, regulationsRes,
+      claimUpdatesRes, emailsRes
     ] = await Promise.all([
       supabase.from('claims').select('*').eq('id', claimId).single(),
       supabase.from('claim_files').select('id, file_name, document_type, folder_key, created_at').eq('claim_id', claimId),
@@ -74,6 +75,11 @@ Deno.serve(async (req) => {
         .eq('claim_id', claimId).order('created_at', { ascending: false }).limit(20),
       // Fetch state regulations for violation detection (state resolved after claim loads)
       supabase.from('state_insurance_regulations').select('*').order('regulation_type'),
+      // Fetch claim updates and emails for client communication drafting
+      supabase.from('claim_updates').select('update_type, content, created_at')
+        .eq('claim_id', claimId).order('created_at', { ascending: false }).limit(20),
+      supabase.from('emails').select('subject, body, recipient_name, recipient_type, sent_at')
+        .eq('claim_id', claimId).order('sent_at', { ascending: false }).limit(15),
     ]);
 
     const claim = claimRes.data;
@@ -418,6 +424,20 @@ Deno.serve(async (req) => {
       })),
     };
 
+    // Build claim updates and email history digest
+    const claimUpdates = (claimUpdatesRes.data || []).map((u: any) => ({
+      type: u.update_type,
+      content: (u.content || '').slice(0, 300),
+      date: u.created_at ? new Date(u.created_at).toLocaleDateString() : 'Unknown',
+    }));
+    const emailHistory = (emailsRes.data || []).map((e: any) => ({
+      subject: e.subject,
+      recipient: e.recipient_name,
+      recipient_type: e.recipient_type,
+      date: e.sent_at ? new Date(e.sent_at).toLocaleDateString() : 'Unknown',
+      body_preview: (e.body || '').slice(0, 200),
+    }));
+
     const claimIntel = {
       claim,
       orchestrator_summary: intelSummary ? {
@@ -443,9 +463,12 @@ Deno.serve(async (req) => {
       carrier_outcomes: carrierOutcomes,
       argument_patterns_library: argPatterns.slice(0, 8),
       feedback_patterns: feedbackPatterns,
-      // NEW: cross-surface intelligence
+      // Cross-surface intelligence
       timeline_intelligence: timelineIntel,
       estimate_builder_intelligence: estimateIntel,
+      // Communication history for client updates
+      recent_updates: claimUpdates,
+      recent_emails: emailHistory,
     };
 
     (photoRes.data || []).forEach((f: any) => {
@@ -613,6 +636,13 @@ ${regulatoryViolationBrief}
 
 CLAIM INTELLIGENCE:
 ${JSON.stringify(claimIntel, null, 2).slice(0, 8000)}
+
+COMMUNICATION HISTORY (use when drafting client updates, emails, or summarizing recent activity):
+${claimUpdates.length > 0 ? `RECENT CLAIM UPDATES (${claimUpdates.length}):\n${claimUpdates.map((u: any) => `[${u.type}] ${u.date}: ${u.content}`).join('\n')}` : 'No claim updates recorded yet.'}
+${emailHistory.length > 0 ? `\nRECENT EMAILS SENT (${emailHistory.length}):\n${emailHistory.map((e: any) => `${e.date} → ${e.recipient} (${e.recipient_type}): "${e.subject}" — ${e.body_preview}`).join('\n')}` : '\nNo emails sent yet.'}
+${timelineEvents.length > 0 ? `\nTIMELINE ACTIVITY (${timelineEvents.length} events): Use these as the basis for client status updates even if no formal claim_updates exist.` : ''}
+
+When asked to draft a client update email, use ALL available context: claim status, timeline events, recent emails, claim updates, deadlines, and any recent activity. Do NOT say there is "no update" unless the claim truly has zero data. Synthesize the claim's current position into a clear, reassuring update for the policyholder.
 
 KNOWLEDGE BASE (contextually retrieved — prioritized by relevance to this claim):
 ${trainingKb}
