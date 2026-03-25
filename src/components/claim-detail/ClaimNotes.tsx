@@ -505,6 +505,47 @@ ${timeline}`;
                 )}
               </div>
 
+              {/* Create Task Toggle */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox
+                    id="create-task"
+                    checked={createTask}
+                    onCheckedChange={(checked) => setCreateTask(checked as boolean)}
+                  />
+                  <ListTodo className="h-4 w-4" />
+                  Also create a task
+                </Label>
+                {createTask && (
+                  <div className="flex flex-col gap-2 pl-6">
+                    <Input
+                      placeholder="Task title *"
+                      value={taskTitle}
+                      onChange={(e) => setTaskTitle(e.target.value)}
+                    />
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input
+                        type="date"
+                        placeholder="Due date"
+                        value={taskDueDate}
+                        onChange={(e) => setTaskDueDate(e.target.value)}
+                      />
+                      <Select value={taskPriority} onValueChange={setTaskPriority}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Priority" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="low">Low</SelectItem>
+                          <SelectItem value="medium">Medium</SelectItem>
+                          <SelectItem value="high">High</SelectItem>
+                          <SelectItem value="urgent">Urgent</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <Button
                 onClick={handleAddUpdate}
                 disabled={loading || !newUpdate.trim()}
