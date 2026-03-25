@@ -548,7 +548,7 @@ ${timeline}`;
 
               <Button
                 onClick={handleAddUpdate}
-                disabled={loading || !newUpdate.trim()}
+                disabled={loading || !newUpdate.trim() || (createTask && !taskTitle.trim())}
                 className="w-full sm:w-auto bg-primary hover:bg-primary/90 justify-center"
               >
                 <Send className="h-4 w-4 mr-2" />
