@@ -82,6 +82,10 @@ export const ClaimNotes = ({ claimId, claim: claimProp, isPortalUser = false }: 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Update | null>(null);
+  const [createTask, setCreateTask] = useState(false);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDueDate, setTaskDueDate] = useState("");
+  const [taskPriority, setTaskPriority] = useState("medium");
   const { user, userRole } = useAuth();
   const isStaff = userRole === "admin" || userRole === "staff";
 
