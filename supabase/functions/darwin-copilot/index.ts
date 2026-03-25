@@ -55,7 +55,8 @@ Deno.serve(async (req) => {
     const [
       claimRes, filesRes, estimateRes, photoRes, strategyRes, argsRes, 
       rebuttalsRes, deadlinesRes, intelSummaryRes,
-      timelineEventsRes, estimateLinesRes, feedbackRes, regulationsRes
+      timelineEventsRes, estimateLinesRes, feedbackRes, regulationsRes,
+      claimUpdatesRes, emailsRes
     ] = await Promise.all([
       supabase.from('claims').select('*').eq('id', claimId).single(),
       supabase.from('claim_files').select('id, file_name, document_type, folder_key, created_at').eq('claim_id', claimId),
@@ -74,6 +75,11 @@ Deno.serve(async (req) => {
         .eq('claim_id', claimId).order('created_at', { ascending: false }).limit(20),
       // Fetch state regulations for violation detection (state resolved after claim loads)
       supabase.from('state_insurance_regulations').select('*').order('regulation_type'),
+      // Fetch claim updates and emails for client communication drafting
+      supabase.from('claim_updates').select('update_type, content, created_at')
+        .eq('claim_id', claimId).order('created_at', { ascending: false }).limit(20),
+      supabase.from('emails').select('subject, body, recipient_name, recipient_type, sent_at')
+        .eq('claim_id', claimId).order('sent_at', { ascending: false }).limit(15),
     ]);
 
     const claim = claimRes.data;
