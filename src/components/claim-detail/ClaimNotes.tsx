@@ -356,6 +356,27 @@ ${timeline}`;
       await supabase.from("notifications").insert(notifications);
     }
 
+    // Create task if toggled
+    if (createTask && taskTitle.trim()) {
+      const { error: taskError } = await supabase.from("tasks").insert({
+        claim_id: claimId,
+        title: taskTitle.trim(),
+        description: newUpdate.trim(),
+        due_date: taskDueDate || null,
+        priority: taskPriority,
+        created_by: user.id,
+      });
+
+      if (taskError) {
+        console.error("Error creating task:", taskError);
+        toast.error("Note added but failed to create task");
+      } else {
+        toast.success("Note added & task created");
+      }
+    } else {
+      toast.success("Update added successfully");
+    }
+
     setNewUpdate("");
     setUseCustomTimestamp(false);
     setCustomDate("");
@@ -364,8 +385,11 @@ ${timeline}`;
     setNotifyReferrer(false);
     setNotifyContractors(false);
     setNotifyTeamMembers([]);
+    setCreateTask(false);
+    setTaskTitle("");
+    setTaskDueDate("");
+    setTaskPriority("medium");
     setLoading(false);
-    toast.success("Update added successfully");
     fetchUpdates();
   };
 
