@@ -637,6 +637,13 @@ ${regulatoryViolationBrief}
 CLAIM INTELLIGENCE:
 ${JSON.stringify(claimIntel, null, 2).slice(0, 8000)}
 
+COMMUNICATION HISTORY (use when drafting client updates, emails, or summarizing recent activity):
+${claimUpdates.length > 0 ? `RECENT CLAIM UPDATES (${claimUpdates.length}):\n${claimUpdates.map((u: any) => `[${u.type}] ${u.date}: ${u.content}`).join('\n')}` : 'No claim updates recorded yet.'}
+${emailHistory.length > 0 ? `\nRECENT EMAILS SENT (${emailHistory.length}):\n${emailHistory.map((e: any) => `${e.date} → ${e.recipient} (${e.recipient_type}): "${e.subject}" — ${e.body_preview}`).join('\n')}` : '\nNo emails sent yet.'}
+${timelineEvents.length > 0 ? `\nTIMELINE ACTIVITY (${timelineEvents.length} events): Use these as the basis for client status updates even if no formal claim_updates exist.` : ''}
+
+When asked to draft a client update email, use ALL available context: claim status, timeline events, recent emails, claim updates, deadlines, and any recent activity. Do NOT say there is "no update" unless the claim truly has zero data. Synthesize the claim's current position into a clear, reassuring update for the policyholder.
+
 KNOWLEDGE BASE (contextually retrieved — prioritized by relevance to this claim):
 ${trainingKb}
 
