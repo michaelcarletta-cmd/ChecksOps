@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
-import { Plus, Send, MessageSquare, Loader2, Edit, Trash2, FileText, Phone, Mail, Users, ArrowUpRight, ArrowDownLeft, Copy } from "lucide-react";
+import { Plus, Send, MessageSquare, Loader2, Edit, Trash2, FileText, Phone, Mail, Users, ArrowUpRight, ArrowDownLeft, Copy, ListTodo } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -82,6 +82,10 @@ export const ClaimNotes = ({ claimId, claim: claimProp, isPortalUser = false }: 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Update | null>(null);
+  const [createTask, setCreateTask] = useState(false);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDueDate, setTaskDueDate] = useState("");
+  const [taskPriority, setTaskPriority] = useState("medium");
   const { user, userRole } = useAuth();
   const isStaff = userRole === "admin" || userRole === "staff";
 
@@ -352,6 +356,27 @@ ${timeline}`;
       await supabase.from("notifications").insert(notifications);
     }
 
+    // Create task if toggled
+    if (createTask && taskTitle.trim()) {
+      const { error: taskError } = await supabase.from("tasks").insert({
+        claim_id: claimId,
+        title: taskTitle.trim(),
+        description: newUpdate.trim(),
+        due_date: taskDueDate || null,
+        priority: taskPriority,
+        created_by: user.id,
+      });
+
+      if (taskError) {
+        console.error("Error creating task:", taskError);
+        toast.error("Note added but failed to create task");
+      } else {
+        toast.success("Note added & task created");
+      }
+    } else {
+      toast.success("Update added successfully");
+    }
+
     setNewUpdate("");
     setUseCustomTimestamp(false);
     setCustomDate("");
@@ -360,8 +385,11 @@ ${timeline}`;
     setNotifyReferrer(false);
     setNotifyContractors(false);
     setNotifyTeamMembers([]);
+    setCreateTask(false);
+    setTaskTitle("");
+    setTaskDueDate("");
+    setTaskPriority("medium");
     setLoading(false);
-    toast.success("Update added successfully");
     fetchUpdates();
   };
 
@@ -477,9 +505,50 @@ ${timeline}`;
                 )}
               </div>
 
+              {/* Create Task Toggle */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox
+                    id="create-task"
+                    checked={createTask}
+                    onCheckedChange={(checked) => setCreateTask(checked as boolean)}
+                  />
+                  <ListTodo className="h-4 w-4" />
+                  Also create a task
+                </Label>
+                {createTask && (
+                  <div className="flex flex-col gap-2 pl-6">
+                    <Input
+                      placeholder="Task title *"
+                      value={taskTitle}
+                      onChange={(e) => setTaskTitle(e.target.value)}
+                    />
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input
+                        type="date"
+                        placeholder="Due date"
+                        value={taskDueDate}
+                        onChange={(e) => setTaskDueDate(e.target.value)}
+                      />
+                      <Select value={taskPriority} onValueChange={setTaskPriority}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Priority" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="low">Low</SelectItem>
+                          <SelectItem value="medium">Medium</SelectItem>
+                          <SelectItem value="high">High</SelectItem>
+                          <SelectItem value="urgent">Urgent</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <Button
                 onClick={handleAddUpdate}
-                disabled={loading || !newUpdate.trim()}
+                disabled={loading || !newUpdate.trim() || (createTask && !taskTitle.trim())}
                 className="w-full sm:w-auto bg-primary hover:bg-primary/90 justify-center"
               >
                 <Send className="h-4 w-4 mr-2" />
