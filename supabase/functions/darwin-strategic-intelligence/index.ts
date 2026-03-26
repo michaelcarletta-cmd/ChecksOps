@@ -1282,16 +1282,14 @@ Rules:
 - missingDocs must include specific items that would move "unknown" → confident (e.g., "Declarations page", "Denial letter", "Carrier estimate", "Photos of damage", "Engineer report").
 `.trim();
 
-      const { content } = await callLovableChatWithFallback({
-        lovableApiKey,
-        models: ['openai/gpt-5.2', 'openai/gpt-4.1'],
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: task },
-        ],
+      const coverageResult = await callOpenAIText({
+        system,
+        user: task,
+        reasoningEffort: 'high',
         temperature: 0.2,
-        max_tokens: 1500,
+        maxOutputTokens: 1500,
       });
+      const content = coverageResult.text;
 
       let parsed: any;
       try {
