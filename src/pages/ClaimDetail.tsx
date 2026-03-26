@@ -297,7 +297,7 @@ const ClaimDetail = () => {
           </div>
         </div>
         {isStaffOrAdmin && (
-          <div className="inline-flex flex-col md:flex-row items-stretch md:items-center gap-2 md:ml-auto">
+          <div className="flex flex-wrap md:flex-row items-stretch md:items-center gap-1.5 md:gap-2 md:ml-auto">
             <Button
               variant="outline"
               size="sm"
