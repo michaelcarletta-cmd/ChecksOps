@@ -279,12 +279,14 @@ const ClaimDetail = () => {
             </div>
             <p className="text-muted-foreground mt-1 font-medium">{claim.policyholder_name}</p>
             {isStaffOrAdmin && (claim.policy_number || claim.claim_email_id) && (
-              <p className="text-xs text-muted-foreground mt-1 font-mono break-all">
-                Claim Email: {getClaimEmail(claim)}
+              <p className="text-[10px] md:text-xs text-muted-foreground mt-1 font-mono break-all leading-relaxed">
+                <span className="hidden sm:inline">Claim Email: </span>
+                <span className="sm:hidden">📧 </span>
+                {getClaimEmail(claim)}
                 <Button 
                   variant="ghost" 
                   size="sm" 
-                  className="ml-2 h-6 px-2 text-xs"
+                  className="ml-1 h-5 px-1.5 text-[10px] md:text-xs"
                   onClick={() => {
                     navigator.clipboard.writeText(getClaimEmail(claim));
                     toast({ title: "Copied", description: "Claim email copied to clipboard" });
