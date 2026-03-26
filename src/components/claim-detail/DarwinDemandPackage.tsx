@@ -10,8 +10,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { FileText, Loader2, Download, Copy, FolderOpen, File, CheckSquare, AlertCircle, Briefcase, Camera, Shield } from "lucide-react";
+import { FileText, Loader2, Download, Copy, FolderOpen, File, CheckSquare, AlertCircle, Briefcase, Camera, Shield, Flame, Scale } from "lucide-react";
 import { format } from "date-fns";
+import { useDeclaredPosition } from "@/hooks/useDeclaredPosition";
 
 interface DarwinDemandPackageProps {
   claimId: string;
