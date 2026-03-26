@@ -860,33 +860,34 @@ ${research.text}`;
       });
     }
 
-    const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: aiMessages,
-        stream: true,
+    // Build the combined user prompt from conversation history
+    const historyText = aiMessages
+      .filter(m => m.role !== 'system')
+      .map(m => `${m.role.toUpperCase()}: ${m.content}`)
+      .join('\n\n');
+
+    const taskType = copilotMode === 'strategy' || copilotMode === 'war_room' || copilotMode === 'rebuttal'
+      ? 'copilot_reasoning'
+      : 'copilot_drafting';
+
+    const ai = await runDarwinTask(
+      taskType as any,
+      finalSystemPrompt,
+      historyText,
+    );
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        response: ai.text,
+        model: ai.model,
+        strategyMode: copilotMode === 'strategy',
       }),
-    });
-
-    if (!aiResp.ok) {
-      if (aiResp.status === 429) {
-        return new Response(JSON.stringify({ error: 'Rate limit exceeded, please try again shortly.' }), {
-          status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      if (aiResp.status === 402) {
-        return new Response(JSON.stringify({ error: 'Credits required. Add funds in Settings → Workspace → Usage.' }), {
-          status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      throw new Error(`AI gateway error ${aiResp.status}`);
-    }
-
-    return new Response(aiResp.body, {
-      headers: { ...corsHeaders, 'Content-Type': 'text/event-stream' },
-    });
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      },
+    );
   } catch (err: any) {
     console.error('darwin-copilot error:', err);
     return new Response(JSON.stringify({ error: err.message }), {
