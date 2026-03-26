@@ -252,7 +252,7 @@ const ClaimDetail = () => {
   }
 
   return (
-    <div className="space-y-4 md:space-y-6 p-4 md:p-6 bg-background min-h-screen">
+    <div className="space-y-3 md:space-y-6 p-3 md:p-6 bg-background min-h-screen">
       <div className="flex flex-col md:flex-row md:items-center gap-4">
         <div className="flex items-center gap-4">
           <Link to={getBackLink()}>
