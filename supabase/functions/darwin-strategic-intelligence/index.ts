@@ -338,11 +338,7 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
-
-    if (!lovableApiKey) {
-      throw new Error('LOVABLE_API_KEY not configured');
-    }
+    // AI routing handled by _shared/ai-router.ts (OPENAI_API_KEY required)
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
