@@ -699,21 +699,21 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
         </div>
       )}
 
-      {/* Top context pills */}
-      <div className="flex flex-wrap gap-2 pb-1">
+      {/* Top context pills - scrollable on mobile */}
+      <div className="flex flex-nowrap md:flex-wrap gap-1.5 md:gap-2 pb-1 overflow-x-auto scrollbar-hide">
         {claim?.insurance_company && (
-          <span className="px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs flex items-center gap-1">
+          <span className="px-2 py-0.5 md:px-2.5 md:py-1 rounded-full bg-primary/10 text-primary text-[11px] md:text-xs flex items-center gap-1 whitespace-nowrap">
             <Building2 className="h-3 w-3" />
             {claim.insurance_company}
           </span>
         )}
         {(claim?.policyholder_state || claim?.property_state) && (
-          <span className="px-2.5 py-1 rounded-full bg-muted text-muted-foreground text-xs">
+          <span className="px-2 py-0.5 md:px-2.5 md:py-1 rounded-full bg-muted text-muted-foreground text-[11px] md:text-xs whitespace-nowrap">
             State: {claim.policyholder_state || claim.property_state}
           </span>
         )}
         {claim?.loss_type && (
-          <span className="px-2.5 py-1 rounded-full bg-muted text-muted-foreground text-xs">
+          <span className="px-2 py-0.5 md:px-2.5 md:py-1 rounded-full bg-muted text-muted-foreground text-[11px] md:text-xs whitespace-nowrap">
             Loss: {claim.loss_type}
           </span>
         )}
