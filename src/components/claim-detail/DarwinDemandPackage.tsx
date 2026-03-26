@@ -48,6 +48,12 @@ const STRATEGY_PRESETS: { value: string; label: string; description: string }[] 
   { value: "coverage_trigger_dispute", label: "Coverage Trigger Dispute", description: "Focuses on direct physical loss, ensuing loss, storm-created opening, and carrier burden." },
 ];
 
+const TONE_OPTIONS: { value: string; label: string; description: string; icon: string }[] = [
+  { value: "standard", label: "Standard", description: "Professional, evidence-driven demand", icon: "📋" },
+  { value: "aggressive", label: "Aggressive", description: "Forceful, emphasizes carrier failures and obligations", icon: "🔥" },
+  { value: "litigation", label: "Litigation Ready", description: "Final step before formal dispute — maximum pressure", icon: "⚖️" },
+];
+
 const REQUIRED_SECTIONS = [
   'Table of Contents',
   'Claim Overview',
