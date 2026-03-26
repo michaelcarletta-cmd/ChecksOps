@@ -313,45 +313,7 @@ function extractPolicyFromClaimFiles(files: any[], stateCode: string): { extract
   return { extractedPolicy, missingDocs: Array.from(new Set(missingDocs)) };
 }
 
-async function callLovableChatWithFallback(args: {
-  lovableApiKey: string;
-  models: string[];
-  messages: Array<{ role: string; content: string }>;
-  temperature: number;
-  max_tokens: number;
-}) {
-  const { lovableApiKey, models, messages, temperature, max_tokens } = args;
-
-  let lastErr: any = null;
-  for (const model of models) {
-    const resp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${lovableApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature,
-        max_tokens,
-      }),
-    });
-
-    if (resp.ok) {
-      const aiData = await resp.json();
-      const content = aiData.choices?.[0]?.message?.content;
-      if (content) return { model, content };
-      lastErr = new Error(`No content returned by model ${model}`);
-      continue;
-    }
-
-    const errText = await resp.text().catch(() => '');
-    lastErr = new Error(`AI API error model=${model} status=${resp.status} body=${errText}`);
-  }
-
-  throw lastErr || new Error('AI call failed');
-}
+// AI calls now routed through _shared/ai-router.ts
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
