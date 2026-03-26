@@ -346,59 +346,48 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
 
       console.log(`Generating demand package with ${fileContents.length} documents and ${photoContents.length} photos (~${(estimatedPayloadBytes / 1024 / 1024).toFixed(1)}MB encoded)`);
 
-      const { data, error } = await supabase.functions.invoke('darwin-ai-analysis', {
+      // Build declared position text from position hook
+      const declaredPositionText = position ? [
+        position.observed_damage_condition ? `Observed Damage: ${position.observed_damage_condition}` : '',
+        position.primary_loss_mechanism ? `Loss Mechanism: ${position.primary_loss_mechanism}` : '',
+        position.coverage_trigger_theory ? `Coverage Trigger: ${position.coverage_trigger_theory}` : '',
+        position.specific_carrier_failure ? `Carrier Failure: ${position.specific_carrier_failure}` : '',
+        position.decisive_contradiction ? `Decisive Contradiction: ${position.decisive_contradiction}` : '',
+        position.requested_remedy ? `Requested Remedy: ${position.requested_remedy}` : '',
+        position.master_position_statement ? `Position Statement: ${position.master_position_statement}` : '',
+      ].filter(Boolean).join('\n') : '';
+
+      const { data, error } = await supabase.functions.invoke('generate-demand-package', {
         body: {
           claimId,
-          analysisType: 'demand_package',
-          additionalContext: {
-            additionalInstructions,
-            assignedUserName,
-            claimFacts,
-            evidenceSummary: {
-              documentCount: fileContents.length,
-              documents: fileContents.map((f, index) => ({
-                exhibit: `Exhibit ${String.fromCharCode(65 + index)}`,
-                name: f.name,
-                folder: f.folder,
-              })),
-              photoCount: photoInfo.length,
-              photos: photoInfo,
-            },
-          },
-          generationConfig: {
-            format: 'formal_demand_package',
-            audience: 'insurance_carrier_adjuster_engineer_supervisor',
-            tone: 'formal_assertive_evidence_driven',
-            objective: 'prove covered loss, prove causation, prove scope, preempt defenses, demand payment',
-            requiredSections: REQUIRED_SECTIONS,
-            rules: GENERATION_RULES,
-          },
-          strategyPreset,
-          pdfContents: fileContents,
-          photoContents,
-        }
+          tone,
+          carrierPositionText: declaredPositionText,
+          declaredPositionText,
+          userNotes: additionalInstructions || 'Prepare a carrier-facing demand package that expands the inspection report and estimate into a payment-forcing document.',
+          saveToMasterState: true,
+        },
       });
 
       if (error) throw error;
 
-      // Robust result extraction — handles string or structured JSON
-      const resultText =
-        typeof data?.result === 'string'
-          ? data.result
-          : typeof data?.packageText === 'string'
-            ? data.packageText
-            : JSON.stringify(data, null, 2);
+      const demandPackage = data?.demandPackage;
+      const demandText = demandPackage?.full_demand_package || '';
+      const returnedDocxHtml = data?.docxHtml || '';
 
-      setGeneratedPackage(resultText);
+      setGeneratedPackage(demandText);
+      setDocxHtml(returnedDocxHtml);
       setLastPackageDate(new Date().toISOString());
 
       await supabase.from('darwin_analysis_results').insert({
         claim_id: claimId,
         analysis_type: 'demand_package',
-        result: resultText,
-        input_summary: `Documents: ${fileContents.length}, Photos: ${photoContents.length}, Strategy: ${strategyPreset}`,
+        result: demandText,
+        input_summary: `Tone: ${tone}, Strategy: ${strategyPreset}, Documents: ${fileContents.length}, Photos: ${photoContents.length}`,
         metadata: {
+          tone,
           strategyPreset,
+          demandAmount: demandPackage?.demand_amount || '',
+          confidenceScore: demandPackage?.confidence_score || 0,
           documentNames: fileContents.map(f => f.name),
           photoNames: photoContents.map(p => p.name),
           claimFacts,
