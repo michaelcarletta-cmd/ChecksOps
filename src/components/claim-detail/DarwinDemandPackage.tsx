@@ -103,10 +103,14 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
   const [additionalInstructions, setAdditionalInstructions] = useState('');
   const [strategyPreset, setStrategyPreset] = useState<string>('roof_wind_hail');
+  const [tone, setTone] = useState<string>('standard');
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [generatedPackage, setGeneratedPackage] = useState<string | null>(null);
+  const [docxHtml, setDocxHtml] = useState<string | null>(null);
   const [lastPackageDate, setLastPackageDate] = useState<string | null>(null);
+
+  const { position } = useDeclaredPosition(claimId);
 
   const [assignedUserName, setAssignedUserName] = useState<string>('Public Adjuster');
   const [companyBranding, setCompanyBranding] = useState<any>(null);
