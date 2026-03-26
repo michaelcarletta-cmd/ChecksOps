@@ -1349,38 +1349,15 @@ Give me:
 
     console.log(`Strategic analysis type: ${analysisType} for claim ${claimId}`);
 
-    // Call AI
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${lovableApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-pro',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.3,
-        max_tokens: 8000
-      }),
+    const aiResult = await callOpenAIText({
+      system: systemPrompt,
+      user: userPrompt,
+      reasoningEffort: 'high',
+      temperature: 0.3,
+      maxOutputTokens: 8000,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI API error:', response.status, errorText);
-      throw new Error(`AI API error: ${response.status}`);
-    }
-
-    let aiData: any;
-    try {
-      aiData = await response.json();
-    } catch (_jsonErr) {
-      console.error('Failed to parse AI response as JSON');
-      throw new Error('AI returned an unparseable response');
-    }
-    const result = aiData.choices?.[0]?.message?.content;
+    const result = aiResult.text;
 
     if (!result) {
       throw new Error('No response from AI');
