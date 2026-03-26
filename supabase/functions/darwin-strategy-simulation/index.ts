@@ -96,22 +96,15 @@ OUTPUT (JSON array — one object per strategy):
 
 Mark the BEST strategy as is_recommended: true. Return ONLY valid JSON array.`;
 
-    const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: 'Score all strategy options and return the ranked results.' },
-        ],
-      }),
+    const aiResult = await callOpenAIText({
+      system: systemPrompt,
+      user: 'Score all strategy options and return the ranked results.',
+      reasoningEffort: 'high',
+      temperature: 0.2,
+      maxOutputTokens: 3500,
     });
 
-    if (!aiResp.ok) throw new Error(`AI gateway error ${aiResp.status}`);
-
-    const aiData = await aiResp.json();
-    const rawContent = aiData.choices?.[0]?.message?.content || '';
+    const rawContent = aiResult.text || '';
     
     let strategies: any[] = [];
     try {

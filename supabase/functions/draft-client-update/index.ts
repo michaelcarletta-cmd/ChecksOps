@@ -1,4 +1,5 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { createClient } from "npm:@supabase/supabase-js@2.39.3";
+import { runDarwinTask } from "../_shared/ai-router.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,14 +14,6 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
-
-    if (!openaiApiKey) {
-      return new Response(
-        JSON.stringify({ error: "OPENAI_API_KEY not configured" }),
-        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
     const body = await req.json().catch(() => ({}));
     const { claimId } = body as { claimId?: string };
@@ -57,7 +50,10 @@ Deno.serve(async (req) => {
       .map((u: any) => `[${u.update_type}] ${new Date(u.created_at).toLocaleDateString()}: ${(u.content || "").slice(0, 200)}`)
       .join("\n");
 
-    const systemPrompt = `You are drafting a brief, professional claim update email for the policyholder. Use ONLY the claim context below. Write in plain language; no internal jargon (no "RCV", "supplement", "carrier dismantler", etc.). Be reassuring and clear.
+    const system = `You draft client updates for a public adjusting firm.
+Write clearly, professionally, and in plain English.
+Be reassuring without overpromising.
+Do not use legalese unless necessary.
 
 EXTERNAL CONTENT WRITING RULES:
 1. AUTHORSHIP: Never refer to Darwin, AI, or any automated system. Write as if authored by the claims team.
@@ -73,41 +69,22 @@ CLAIM CONTEXT:
 - Loss Date: ${claim.loss_date || "N/A"}
 
 RECENT ACTIVITY (most recent first):
-${updatesText || "No recent activity logged."}
+${updatesText || "No recent activity logged."}`;
 
-GUIDELINES:
-1. Summarize where things stand and what has been done recently.
-2. Mention next steps we are taking (e.g. following up with carrier, gathering documents).
-3. Keep it to 2–4 short sentences; under 100 words.
-4. End with a warm closing such as "Regards," or "Sincerely," — do NOT include any team name or signature line, that will be added automatically.
-5. Do NOT include a subject line — output only the email body.`;
+    const user = `Generate the client update email body.
 
-    const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${openaiApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: "Generate the client update email body." },
-        ],
-        temperature: 0.6,
-      }),
-    });
+Requirements:
+- Keep it concise (2-4 short sentences, under 100 words)
+- Summarize where things stand and what has been done recently
+- Mention next steps we are taking
+- End with a warm closing such as "Regards," or "Sincerely,"
+- Do NOT include any team name or signature line
+- Do NOT include a subject line — output only the email body
+- No markdown`;
 
-    const aiData = await aiResponse.json();
-    if (!aiResponse.ok || aiData.error) {
-      console.error("draft-client-update OpenAI error:", aiData);
-      return new Response(
-        JSON.stringify({ error: aiData.error?.message || "Failed to generate draft" }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const result = await runDarwinTask("client_update", system, user);
 
-    const emailBody = (aiData.choices?.[0]?.message?.content ?? "").trim();
+    const emailBody = (result.text || "").trim();
     if (!emailBody) {
       return new Response(
         JSON.stringify({ error: "Empty draft returned" }),
