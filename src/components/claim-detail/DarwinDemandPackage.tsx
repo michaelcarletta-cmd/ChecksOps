@@ -515,6 +515,42 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
           </p>
         </div>
 
+        {/* Demand Tone */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2">
+            <Flame className="h-4 w-4 text-destructive" />
+            Demand Tone
+          </Label>
+          <Select value={tone} onValueChange={setTone}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select tone" />
+            </SelectTrigger>
+            <SelectContent>
+              {TONE_OPTIONS.map(opt => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  <div className="flex flex-col">
+                    <span>{opt.icon} {opt.label}</span>
+                    <span className="text-xs text-muted-foreground">{opt.description}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Controls assertiveness level. Litigation Ready is for final-step demands before formal dispute.
+          </p>
+        </div>
+
+        {/* Declared Position Status */}
+        {position && (position.lock_status === 'strategic_lock' || position.lock_status === 'litigation_grade') && (
+          <Alert className="border-primary/30 bg-primary/5">
+            <Scale className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Declared Position Locked</strong> — demand will align with: {position.primary_loss_mechanism || 'loss mechanism'} → {position.requested_remedy || 'requested remedy'}
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Selection Tabs */}
         <Tabs defaultValue="documents" className="w-full">
           <TabsList className="flex flex-col sm:flex-row w-full h-auto gap-1 p-1">
