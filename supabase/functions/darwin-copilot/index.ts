@@ -711,7 +711,7 @@ Format with clear headers and bullet points.
 
 FORMATTING RULE: NEVER output icon placeholder tokens like [Scales Icon], [Document Icon], [Warning Icon], [Evidence Icon], [Clock Icon], or any bracket-wrapped icon references. These do not render in the UI. Use plain text headings instead (e.g. "Coverage Impact" not "[Scales Icon] COVERAGE IMPACT"). Emoji are acceptable for source labels (📋, 🔁, 🌐, 🎯) but bracketed icon tokens are strictly forbidden.`;
 
-    // --- External research via Perplexity for strategy mode ---
+    // --- External research via Perplexity for strategy mode (using shared router) ---
     let externalResearch = '';
     if (copilotMode === 'strategy') {
       const lastUserMsg = conversationHistory?.length
@@ -719,37 +719,25 @@ FORMATTING RULE: NEVER output icon placeholder tokens like [Scales Icon], [Docum
         : userQuestion;
 
       if (lastUserMsg) {
-        const PERPLEXITY_KEY = Deno.env.get('PERPLEXITY_API_KEY') || Deno.env.get('PERPLEXITY_API_KEY_1');
-        if (PERPLEXITY_KEY) {
-          try {
-            // Build a rich, context-aware research query
-            const trade = claim?.construction_trade || claim?.trade || '';
-            const materialType = claim?.roof_material || claim?.material_type || '';
-            const disputeTopic = intelSummary?.most_important_issue || '';
+        try {
+          const trade = claim?.construction_trade || claim?.trade || '';
+          const materialType = claim?.roof_material || claim?.material_type || '';
+          const disputeTopic = intelSummary?.most_important_issue || '';
 
-            // Compose structured query terms from claim context
-            const queryTerms = [
-              lastUserMsg,
-              lossType && `${lossType} loss`,
-              stateCode && `${stateCode} state`,
-              carrier !== 'Unknown' && `carrier: ${carrier}`,
-              trade && `trade: ${trade}`,
-              materialType && `material: ${materialType}`,
-              disputeTopic && `dispute: ${disputeTopic}`,
-            ].filter(Boolean).join('. ');
+          const queryTerms = [
+            lastUserMsg,
+            lossType && `${lossType} loss`,
+            stateCode && `${stateCode} state`,
+            carrier !== 'Unknown' && `carrier: ${carrier}`,
+            trade && `trade: ${trade}`,
+            materialType && `material: ${materialType}`,
+            disputeTopic && `dispute: ${disputeTopic}`,
+          ].filter(Boolean).join('. ');
 
-            const researchQuery = `Insurance claim dispute research: ${queryTerms}. Focus on manufacturer installation standards, building codes, state insurance regulations, technical industry standards, and case law that apply.`;
+          const researchQuery = `Insurance claim dispute research: ${queryTerms}. Focus on manufacturer installation standards, building codes, state insurance regulations, technical industry standards, and case law that apply.`;
 
-            const perplexityResp = await fetch('https://api.perplexity.ai/chat/completions', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${PERPLEXITY_KEY}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                model: 'sonar',
-                messages: [
-                  { role: 'system', content: `You are a research assistant for insurance claim disputes and property restoration.
+          const research = await callPerplexityResearch({
+            system: `You are a research assistant for insurance claim disputes and property restoration.
 
 SOURCE TIER PRIORITIES — organize and weight your findings by these tiers:
 
@@ -775,18 +763,14 @@ RULES:
 - Label each finding with its tier: [T1], [T2], or [T3]
 - Cite specific document names, section numbers, or statute references
 - If only Tier 3 sources exist, explicitly note "No authoritative (Tier 1/2) sources found"
-- Be concise and factual. Always cite sources.` },
-                  { role: 'user', content: researchQuery },
-                ],
-              }),
-            });
+- Be concise and factual. Always cite sources.`,
+            user: researchQuery,
+            temperature: 0.1,
+            maxTokens: 2000,
+          });
 
-            if (perplexityResp.ok) {
-              const perplexityData = await perplexityResp.json();
-              const researchContent = perplexityData.choices?.[0]?.message?.content;
-              const citations = perplexityData.citations || [];
-              if (researchContent) {
-                externalResearch = `\n\nEXTERNAL RESEARCH (from verified sources — cite with 🌐 label):
+          if (research.text) {
+            externalResearch = `\n\nEXTERNAL RESEARCH (from verified sources — cite with 🌐 label):
 SOURCE TIER KEY: [T1] = Manufacturer docs, building codes, statutes, case law, technical standards (HIGHEST). [T2] = Industry publications, trade references, training materials. [T3] = Blogs, forums, general articles (LOWEST).
 AUTHORITY RULES FOR SYNTHESIS:
 1. PRESERVE [T1]/[T2]/[T3] tags in your response so the user can see the authority level of each finding.
@@ -801,63 +785,55 @@ AUTHORITY RULES FOR SYNTHESIS:
    - T3-only evidence → reduce confidence by ~25-30%
 6. Clearly distinguish external research from internal claim evidence using the 📋/🌐 labels.
 
-${researchContent}`;
-                if (citations.length > 0) {
-                  externalResearch += `\n\nSOURCES:\n${citations.map((c: string, i: number) => `[${i + 1}] ${c}`).join('\n')}`;
-                }
+${research.text}`;
+            if (research.citations.length > 0) {
+              externalResearch += `\n\nSOURCES:\n${research.citations.map((c: string, i: number) => `[${i + 1}] ${c}`).join('\n')}`;
+            }
 
-                // ── Research Memory: Store high-confidence T1 findings for future reuse ──
-                // Check if content contains T1 sources worth persisting
-                const hasT1Content = researchContent.includes('[T1]');
-                if (hasT1Content) {
-                  try {
-                    // Extract T1 paragraphs for storage
-                    const t1Sections = researchContent.split('\n').filter((line: string) => line.includes('[T1]')).join('\n');
-                    if (t1Sections.length > 50) {
-                      const researchTitle = `Research: ${carrier} - ${lossType || 'General'} - ${state || 'National'}`;
-                      // Create a knowledge document record
-                      const { data: researchDoc } = await supabase.from('ai_knowledge_documents').insert({
-                        file_name: researchTitle,
-                        file_path: `research-memory/${claimId}/${Date.now()}`,
-                        file_type: 'text/plain',
-                        category: 'research_memory',
-                        status: 'completed',
-                        description: `Auto-stored T1 research findings from strategy session. Carrier: ${carrier}, Loss: ${lossType}, State: ${state}. Sources: ${citations.slice(0, 3).join(', ')}`,
-                      }).select('id').single();
+            // ── Research Memory: Store high-confidence T1 findings for future reuse ──
+            const hasT1Content = research.text.includes('[T1]');
+            if (hasT1Content) {
+              try {
+                const t1Sections = research.text.split('\n').filter((line: string) => line.includes('[T1]')).join('\n');
+                if (t1Sections.length > 50) {
+                  const researchTitle = `Research: ${carrier} - ${lossType || 'General'} - ${stateCode || 'National'}`;
+                  const { data: researchDoc } = await supabase.from('ai_knowledge_documents').insert({
+                    file_name: researchTitle,
+                    file_path: `research-memory/${claimId}/${Date.now()}`,
+                    file_type: 'text/plain',
+                    category: 'research_memory',
+                    status: 'completed',
+                    description: `Auto-stored T1 research findings from strategy session. Carrier: ${carrier}, Loss: ${lossType}, State: ${stateCode}. Sources: ${research.citations.slice(0, 3).join(', ')}`,
+                  }).select('id').single();
 
-                      if (researchDoc?.id) {
-                        // Store as searchable chunks
-                        const researchChunks = t1Sections.match(/.{1,600}/gs) || [t1Sections];
-                        await supabase.from('ai_knowledge_chunks').insert(
-                          researchChunks.map((chunk: string, idx: number) => ({
-                            document_id: researchDoc.id,
-                            content: `[Research Memory] ${researchTitle}\n${chunk}`,
-                            chunk_index: idx,
-                            metadata: {
-                              category: 'research_memory',
-                              carrier,
-                              loss_type: lossType,
-                              state: state,
-                              source_type: 'perplexity_t1',
-                              citations: citations.slice(0, 5),
-                              claim_id: claimId,
-                            },
-                          }))
-                        );
-                        console.log(`Stored ${researchChunks.length} T1 research chunks for future reuse`);
-                      }
-                    }
-                  } catch (memErr) {
-                    console.warn('Research memory storage error (non-fatal):', memErr);
+                  if (researchDoc?.id) {
+                    const researchChunks = t1Sections.match(/.{1,600}/gs) || [t1Sections];
+                    await supabase.from('ai_knowledge_chunks').insert(
+                      researchChunks.map((chunk: string, idx: number) => ({
+                        document_id: researchDoc.id,
+                        content: `[Research Memory] ${researchTitle}\n${chunk}`,
+                        chunk_index: idx,
+                        metadata: {
+                          category: 'research_memory',
+                          carrier,
+                          loss_type: lossType,
+                          state: stateCode,
+                          source_type: 'perplexity_t1',
+                          citations: research.citations.slice(0, 5),
+                          claim_id: claimId,
+                        },
+                      }))
+                    );
+                    console.log(`Stored ${researchChunks.length} T1 research chunks for future reuse`);
                   }
                 }
+              } catch (memErr) {
+                console.warn('Research memory storage error (non-fatal):', memErr);
               }
-            } else {
-              console.warn('Perplexity research failed:', perplexityResp.status);
             }
-          } catch (researchErr) {
-            console.warn('External research error (non-fatal):', researchErr);
           }
+        } catch (researchErr) {
+          console.warn('External research error (non-fatal):', researchErr);
         }
       }
     }
