@@ -298,32 +298,25 @@ const ClaimDetail = () => {
         </div>
         {isStaffOrAdmin && (
           <div className="flex flex-wrap md:flex-row items-stretch md:items-center gap-1.5 md:gap-2 md:ml-auto">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShareDialogOpen(true)}
-            >
-              <Share2 className="h-4 w-4 mr-2" />
+            <Button variant="outline" size="sm" className="h-8 text-xs md:text-sm" onClick={() => setShareDialogOpen(true)}>
+              <Share2 className="h-3.5 w-3.5 mr-1.5" />
               Share
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setNotifyDialogOpen(true)}
-            >
-              <Bell className="h-4 w-4 mr-2" />
-              Notify Portal
+            <Button variant="outline" size="sm" className="h-8 text-xs md:text-sm" onClick={() => setNotifyDialogOpen(true)}>
+              <Bell className="h-3.5 w-3.5 mr-1.5" />
+              Notify
             </Button>
             <Button
               variant={claim.is_closed ? "outline" : "secondary"}
               size="sm"
+              className="h-8 text-xs md:text-sm"
               onClick={toggleClosedStatus}
             >
-              {claim.is_closed ? "Reopen Claim" : "Close Claim"}
+              {claim.is_closed ? "Reopen" : "Close"}
             </Button>
-            <Button size="sm" className="bg-primary hover:bg-primary/90" onClick={() => setEditDialogOpen(true)}>
-              <Edit className="h-4 w-4 mr-2" />
-              Edit Claim
+            <Button size="sm" className="h-8 text-xs md:text-sm bg-primary hover:bg-primary/90" onClick={() => setEditDialogOpen(true)}>
+              <Edit className="h-3.5 w-3.5 mr-1.5" />
+              Edit
             </Button>
           </div>
         )}
