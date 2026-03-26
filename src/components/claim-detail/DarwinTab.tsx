@@ -575,26 +575,27 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
   }
 
   return (
-    <div className="space-y-4">
-      {/* Darwin Header */}
+    <div className="space-y-3 md:space-y-4">
+      {/* Darwin Header - compact on mobile */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Brain className="h-6 w-6 text-primary" />
+        <div className="flex items-center gap-2 md:gap-3">
+          <div className="p-1.5 md:p-2 rounded-lg bg-primary/10">
+            <Brain className="h-5 w-5 md:h-6 md:w-6 text-primary" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold">Darwin AI</h2>
-            <p className="text-sm text-muted-foreground">Your intelligent claims copilot</p>
+            <h2 className="text-lg md:text-xl font-semibold">Darwin AI</h2>
+            <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">Your intelligent claims copilot</p>
           </div>
         </div>
         <Button
           variant={showCopilot ? "default" : "outline"}
           size="sm"
           onClick={() => setShowCopilot(!showCopilot)}
-          className="gap-2"
+          className="gap-1.5 text-xs md:text-sm"
         >
-          <MessageSquare className="h-4 w-4" />
-          {showCopilot ? "Hide Assistant Panel" : "Show Assistant Panel"}
+          <MessageSquare className="h-3.5 w-3.5 md:h-4 md:w-4" />
+          <span className="hidden sm:inline">{showCopilot ? "Hide Assistant Panel" : "Show Assistant Panel"}</span>
+          <span className="sm:hidden">{showCopilot ? "Hide" : "Show"}</span>
         </Button>
       </div>
 
