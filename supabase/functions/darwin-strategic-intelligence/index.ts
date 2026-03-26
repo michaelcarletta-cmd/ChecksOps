@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { callOpenAIText } from "../_shared/ai-router.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -312,45 +313,7 @@ function extractPolicyFromClaimFiles(files: any[], stateCode: string): { extract
   return { extractedPolicy, missingDocs: Array.from(new Set(missingDocs)) };
 }
 
-async function callLovableChatWithFallback(args: {
-  lovableApiKey: string;
-  models: string[];
-  messages: Array<{ role: string; content: string }>;
-  temperature: number;
-  max_tokens: number;
-}) {
-  const { lovableApiKey, models, messages, temperature, max_tokens } = args;
-
-  let lastErr: any = null;
-  for (const model of models) {
-    const resp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${lovableApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature,
-        max_tokens,
-      }),
-    });
-
-    if (resp.ok) {
-      const aiData = await resp.json();
-      const content = aiData.choices?.[0]?.message?.content;
-      if (content) return { model, content };
-      lastErr = new Error(`No content returned by model ${model}`);
-      continue;
-    }
-
-    const errText = await resp.text().catch(() => '');
-    lastErr = new Error(`AI API error model=${model} status=${resp.status} body=${errText}`);
-  }
-
-  throw lastErr || new Error('AI call failed');
-}
+// AI calls now routed through _shared/ai-router.ts
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -375,11 +338,7 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
-
-    if (!lovableApiKey) {
-      throw new Error('LOVABLE_API_KEY not configured');
-    }
+    // AI routing handled by _shared/ai-router.ts (OPENAI_API_KEY required)
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -1323,16 +1282,14 @@ Rules:
 - missingDocs must include specific items that would move "unknown" → confident (e.g., "Declarations page", "Denial letter", "Carrier estimate", "Photos of damage", "Engineer report").
 `.trim();
 
-      const { content } = await callLovableChatWithFallback({
-        lovableApiKey,
-        models: ['openai/gpt-5.2', 'openai/gpt-4.1'],
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: task },
-        ],
+      const coverageResult = await callOpenAIText({
+        system,
+        user: task,
+        reasoningEffort: 'high',
         temperature: 0.2,
-        max_tokens: 1500,
+        maxOutputTokens: 1500,
       });
+      const content = coverageResult.text;
 
       let parsed: any;
       try {
@@ -1392,38 +1349,15 @@ Give me:
 
     console.log(`Strategic analysis type: ${analysisType} for claim ${claimId}`);
 
-    // Call AI
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${lovableApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-pro',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.3,
-        max_tokens: 8000
-      }),
+    const aiResult = await callOpenAIText({
+      system: systemPrompt,
+      user: userPrompt,
+      reasoningEffort: 'high',
+      temperature: 0.3,
+      maxOutputTokens: 8000,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI API error:', response.status, errorText);
-      throw new Error(`AI API error: ${response.status}`);
-    }
-
-    let aiData: any;
-    try {
-      aiData = await response.json();
-    } catch (_jsonErr) {
-      console.error('Failed to parse AI response as JSON');
-      throw new Error('AI returned an unparseable response');
-    }
-    const result = aiData.choices?.[0]?.message?.content;
+    const result = aiResult.text;
 
     if (!result) {
       throw new Error('No response from AI');

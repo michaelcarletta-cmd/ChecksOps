@@ -48,47 +48,23 @@ export function useDarwinCopilot(claimId: string) {
         signal: abortRef.current.signal,
       });
 
-      if (!resp.ok || !resp.body) {
+      if (!resp.ok) {
         const errText = await resp.text();
         throw new Error(errText || `Copilot error ${resp.status}`);
       }
 
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let accumulated = "";
+      const data = await resp.json();
 
-      // Add empty assistant message
-      const assistantMsg: CopilotMessage = { role: 'assistant', content: '', timestamp: Date.now() };
-      setMessages(prev => [...prev, assistantMsg]);
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        let newlineIndex: number;
-        while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
-          let line = buffer.slice(0, newlineIndex);
-          buffer = buffer.slice(newlineIndex + 1);
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (!line.startsWith("data: ")) continue;
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              accumulated += content;
-              setMessages(prev => {
-                const updated = [...prev];
-                updated[updated.length - 1] = { ...updated[updated.length - 1], content: accumulated };
-                return updated;
-              });
-            }
-          } catch { /* partial chunk */ }
-        }
+      if (!data.ok || !data.response) {
+        throw new Error(data.error || 'Empty response from Copilot');
       }
+
+      const assistantMsg: CopilotMessage = {
+        role: 'assistant',
+        content: data.response,
+        timestamp: Date.now(),
+      };
+      setMessages(prev => [...prev, assistantMsg]);
     } catch (err: any) {
       if (err.name === 'AbortError') return;
       const errorMsg: CopilotMessage = { role: 'assistant', content: `Error: ${err.message}`, timestamp: Date.now() };
