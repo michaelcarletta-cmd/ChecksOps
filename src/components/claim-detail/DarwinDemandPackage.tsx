@@ -10,8 +10,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { FileText, Loader2, Download, Copy, FolderOpen, File, CheckSquare, AlertCircle, Briefcase, Camera, Shield } from "lucide-react";
+import { FileText, Loader2, Download, Copy, FolderOpen, File, CheckSquare, AlertCircle, Briefcase, Camera, Shield, Flame, Scale } from "lucide-react";
 import { format } from "date-fns";
+import { useDeclaredPosition } from "@/hooks/useDeclaredPosition";
 
 interface DarwinDemandPackageProps {
   claimId: string;
@@ -45,6 +46,12 @@ const STRATEGY_PRESETS: { value: string; label: string; description: string }[] 
   { value: "code_upgrade", label: "Code Upgrade", description: "Emphasizes building code triggers, local amendments, and required upgrades." },
   { value: "partial_denial_rebuttal", label: "Partial Denial Rebuttal", description: "Rebut denied line items and prove covered scope item-by-item." },
   { value: "coverage_trigger_dispute", label: "Coverage Trigger Dispute", description: "Focuses on direct physical loss, ensuing loss, storm-created opening, and carrier burden." },
+];
+
+const TONE_OPTIONS: { value: string; label: string; description: string; icon: string }[] = [
+  { value: "standard", label: "Standard", description: "Professional, evidence-driven demand", icon: "📋" },
+  { value: "aggressive", label: "Aggressive", description: "Forceful, emphasizes carrier failures and obligations", icon: "🔥" },
+  { value: "litigation", label: "Litigation Ready", description: "Final step before formal dispute — maximum pressure", icon: "⚖️" },
 ];
 
 const REQUIRED_SECTIONS = [
@@ -96,10 +103,14 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
   const [selectedPhotos, setSelectedPhotos] = useState<Set<string>>(new Set());
   const [additionalInstructions, setAdditionalInstructions] = useState('');
   const [strategyPreset, setStrategyPreset] = useState<string>('roof_wind_hail');
+  const [tone, setTone] = useState<string>('standard');
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [generatedPackage, setGeneratedPackage] = useState<string | null>(null);
+  const [docxHtml, setDocxHtml] = useState<string | null>(null);
   const [lastPackageDate, setLastPackageDate] = useState<string | null>(null);
+
+  const { position } = useDeclaredPosition(claimId);
 
   const [assignedUserName, setAssignedUserName] = useState<string>('Public Adjuster');
   const [companyBranding, setCompanyBranding] = useState<any>(null);
@@ -335,59 +346,48 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
 
       console.log(`Generating demand package with ${fileContents.length} documents and ${photoContents.length} photos (~${(estimatedPayloadBytes / 1024 / 1024).toFixed(1)}MB encoded)`);
 
-      const { data, error } = await supabase.functions.invoke('darwin-ai-analysis', {
+      // Build declared position text from position hook
+      const declaredPositionText = position ? [
+        position.observed_damage_condition ? `Observed Damage: ${position.observed_damage_condition}` : '',
+        position.primary_loss_mechanism ? `Loss Mechanism: ${position.primary_loss_mechanism}` : '',
+        position.coverage_trigger_theory ? `Coverage Trigger: ${position.coverage_trigger_theory}` : '',
+        position.specific_carrier_failure ? `Carrier Failure: ${position.specific_carrier_failure}` : '',
+        position.decisive_contradiction ? `Decisive Contradiction: ${position.decisive_contradiction}` : '',
+        position.requested_remedy ? `Requested Remedy: ${position.requested_remedy}` : '',
+        position.master_position_statement ? `Position Statement: ${position.master_position_statement}` : '',
+      ].filter(Boolean).join('\n') : '';
+
+      const { data, error } = await supabase.functions.invoke('generate-demand-package', {
         body: {
           claimId,
-          analysisType: 'demand_package',
-          additionalContext: {
-            additionalInstructions,
-            assignedUserName,
-            claimFacts,
-            evidenceSummary: {
-              documentCount: fileContents.length,
-              documents: fileContents.map((f, index) => ({
-                exhibit: `Exhibit ${String.fromCharCode(65 + index)}`,
-                name: f.name,
-                folder: f.folder,
-              })),
-              photoCount: photoInfo.length,
-              photos: photoInfo,
-            },
-          },
-          generationConfig: {
-            format: 'formal_demand_package',
-            audience: 'insurance_carrier_adjuster_engineer_supervisor',
-            tone: 'formal_assertive_evidence_driven',
-            objective: 'prove covered loss, prove causation, prove scope, preempt defenses, demand payment',
-            requiredSections: REQUIRED_SECTIONS,
-            rules: GENERATION_RULES,
-          },
-          strategyPreset,
-          pdfContents: fileContents,
-          photoContents,
-        }
+          tone,
+          carrierPositionText: declaredPositionText,
+          declaredPositionText,
+          userNotes: additionalInstructions || 'Prepare a carrier-facing demand package that expands the inspection report and estimate into a payment-forcing document.',
+          saveToMasterState: true,
+        },
       });
 
       if (error) throw error;
 
-      // Robust result extraction — handles string or structured JSON
-      const resultText =
-        typeof data?.result === 'string'
-          ? data.result
-          : typeof data?.packageText === 'string'
-            ? data.packageText
-            : JSON.stringify(data, null, 2);
+      const demandPackage = data?.demandPackage;
+      const demandText = demandPackage?.full_demand_package || '';
+      const returnedDocxHtml = data?.docxHtml || '';
 
-      setGeneratedPackage(resultText);
+      setGeneratedPackage(demandText);
+      setDocxHtml(returnedDocxHtml);
       setLastPackageDate(new Date().toISOString());
 
       await supabase.from('darwin_analysis_results').insert({
         claim_id: claimId,
         analysis_type: 'demand_package',
-        result: resultText,
-        input_summary: `Documents: ${fileContents.length}, Photos: ${photoContents.length}, Strategy: ${strategyPreset}`,
+        result: demandText,
+        input_summary: `Tone: ${tone}, Strategy: ${strategyPreset}, Documents: ${fileContents.length}, Photos: ${photoContents.length}`,
         metadata: {
+          tone,
           strategyPreset,
+          demandAmount: demandPackage?.demand_amount || '',
+          confidenceScore: demandPackage?.confidence_score || 0,
           documentNames: fileContents.map(f => f.name),
           photoNames: photoContents.map(p => p.name),
           claimFacts,
@@ -514,6 +514,42 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
             Strategy presets adjust Darwin's emphasis and section weighting based on claim type.
           </p>
         </div>
+
+        {/* Demand Tone */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2">
+            <Flame className="h-4 w-4 text-destructive" />
+            Demand Tone
+          </Label>
+          <Select value={tone} onValueChange={setTone}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select tone" />
+            </SelectTrigger>
+            <SelectContent>
+              {TONE_OPTIONS.map(opt => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  <div className="flex flex-col">
+                    <span>{opt.icon} {opt.label}</span>
+                    <span className="text-xs text-muted-foreground">{opt.description}</span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Controls assertiveness level. Litigation Ready is for final-step demands before formal dispute.
+          </p>
+        </div>
+
+        {/* Declared Position Status */}
+        {position && (position.lock_status === 'strategic_lock' || position.lock_status === 'litigation_grade') && (
+          <Alert className="border-primary/30 bg-primary/5">
+            <Scale className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Declared Position Locked</strong> — demand will align with: {position.primary_loss_mechanism || 'loss mechanism'} → {position.requested_remedy || 'requested remedy'}
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Selection Tabs */}
         <Tabs defaultValue="documents" className="w-full">
