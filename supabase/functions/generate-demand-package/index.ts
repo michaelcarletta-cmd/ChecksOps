@@ -99,6 +99,29 @@ function estimateLinesToText(lines: Record<string, any>[]) {
   return [`ESTIMATE GRAND TOTAL: ${money(summary.grandTotal)}`, "", "TRADE SUMMARY:", summary.tradeSummary || "None", "", "ROOM / TRADE SUMMARY:", summary.roomTradeSummary || "None", "", "DETAILED LINE ITEMS:", detailLines].join("\n");
 }
 
+function getToneInstructions(tone: string): string {
+  switch (tone) {
+    case "aggressive":
+      return `
+TONE OVERRIDE — AGGRESSIVE:
+- Increase assertiveness in every section.
+- Emphasize carrier failures, under-scoping, and inadequate investigation more forcefully.
+- Frame every disputed item as an obligation the carrier has failed to meet.
+- Use stronger causation language and leave no room for partial payment justification.`;
+    case "litigation":
+      return `
+TONE OVERRIDE — LITIGATION READY:
+- Write as if this demand is the final step before formal dispute resolution or litigation.
+- Increase firmness dramatically. Reduce flexibility. Emphasize carrier exposure.
+- Frame every unresolved item as potential bad faith conduct.
+- Reference the carrier's duty of good faith and fair dealing prominently.
+- Make clear that failure to respond adequately will result in escalation.
+- Every section should read as if it will be exhibit-ready in a proceeding.`;
+    default:
+      return "";
+  }
+}
+
 function buildDemandPrompt(args: {
   claim: Record<string, any> | null;
   masterState: Record<string, any> | null;
@@ -109,6 +132,8 @@ function buildDemandPrompt(args: {
   priorPaymentsText: string;
   userNotes: string;
   carrierPositionText: string;
+  declaredPositionText: string;
+  tone: string;
 }) {
   const claim = args.claim || {};
   const insuredName = pick(claim, ["insured_name", "insured", "policyholder_name"], "Insured");
@@ -120,6 +145,7 @@ function buildDemandPrompt(args: {
 
   const masterStateText = args.masterState ? JSON.stringify(args.masterState, null, 2) : "No master state available.";
   const intelligenceText = args.intelligence ? JSON.stringify(args.intelligence, null, 2) : "No intelligence summary available.";
+  const toneBlock = getToneInstructions(args.tone);
 
   return `
 You are Darwin, an elite public adjuster demand-package engine.
@@ -149,6 +175,31 @@ IMPORTANT WRITING RULES:
 - Use the estimate total as the demand amount unless the materials support another specific figure.
 - If the inspection report identifies room/component-specific damage, fold that into the narrative so the estimate reads inevitable and justified.
 - If there are weak points or missing proof, identify them in the "strategic_notes" field only, not in the demand body.
+
+FORCE EXPANSION RULES (CRITICAL):
+- You MUST expand every section beyond what is explicitly stated in the documents by applying professional construction, insurance, and claim-handling knowledge.
+- If the estimate includes a scope item, you must explain WHY it is required, not just restate it.
+- If the inspection identifies damage, you must connect it to:
+  (a) repair necessity
+  (b) replacement implications
+  (c) system disturbance and access requirements
+- Assume the carrier is looking for reasons to underpay — your job is to remove that ability.
+- Every line item in the estimate should feel inevitable and technically justified when read in context of the demand.
+
+REGULATORY PRESSURE RULES:
+- Where applicable, identify claim handling concerns such as:
+  - delay in investigation
+  - incomplete scope evaluation
+  - failure to account for full damage
+  - under-scoping or cosmetic-only repair recommendations
+- Frame these as risks to the carrier without citing specific statutes unless provided.
+- Reference the carrier's obligations under standards of good-faith claim handling.
+${toneBlock}
+
+DECLARED POSITION ALIGNMENT:
+${args.declaredPositionText || "No declared position provided."}
+- If a declared position is provided, align the entire demand with it and do not deviate.
+- The demand must reinforce the declared loss mechanism, coverage trigger, and requested remedy.
 
 RETURN STRICT JSON with this exact shape:
 {
@@ -218,6 +269,25 @@ The document should read like something a serious public adjuster would actually
 `.trim();
 }
 
+function buildDocxHtml(demandPackage: Record<string, any>): string {
+  const escHtml = (s: string) => (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const fullText = String(demandPackage.full_demand_package || "");
+  const bodyHtml = fullText
+    .split("\n")
+    .map((line: string) => {
+      const trimmed = line.trim();
+      if (!trimmed) return "<br/>";
+      return `<p>${escHtml(trimmed)}</p>`;
+    })
+    .join("\n");
+
+  return `<h1>${escHtml(String(demandPackage.title || "Demand Package"))}</h1>
+<p><strong>Subject:</strong> ${escHtml(String(demandPackage.subject_line || ""))}</p>
+<p><strong>Demand Amount:</strong> ${escHtml(String(demandPackage.demand_amount || ""))}</p>
+<br/>
+${bodyHtml}`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -255,7 +325,9 @@ Deno.serve(async (req) => {
     const inspectionReportTextOverride = safeString(body.inspectionReportText);
     const estimateTextOverride = safeString(body.estimateText);
     const carrierPositionText = safeString(body.carrierPositionText);
+    const declaredPositionText = safeString(body.declaredPositionText);
     const userNotes = safeString(body.userNotes);
+    const tone = safeString(body.tone) || "standard"; // "standard" | "aggressive" | "litigation"
     const saveToMasterState = Boolean(body.saveToMasterState ?? true);
 
     if (!claimId) {
@@ -279,6 +351,24 @@ Deno.serve(async (req) => {
     const intelligence = intelligenceRes.data || null;
     const events = eventsRes.data || [];
     const payments = paymentsRes.data || [];
+
+    // Also pull declared position from master state if not explicitly provided
+    let resolvedDeclaredPosition = declaredPositionText;
+    if (!resolvedDeclaredPosition && masterState?.state_json) {
+      const stateJson = masterState.state_json as Record<string, any>;
+      const dp = stateJson?.declared_position;
+      if (dp) {
+        resolvedDeclaredPosition = [
+          dp.observed_damage_condition ? `Observed Damage: ${dp.observed_damage_condition}` : "",
+          dp.primary_loss_mechanism ? `Loss Mechanism: ${dp.primary_loss_mechanism}` : "",
+          dp.coverage_trigger_theory ? `Coverage Trigger: ${dp.coverage_trigger_theory}` : "",
+          dp.specific_carrier_failure ? `Carrier Failure: ${dp.specific_carrier_failure}` : "",
+          dp.decisive_contradiction ? `Decisive Contradiction: ${dp.decisive_contradiction}` : "",
+          dp.requested_remedy ? `Requested Remedy: ${dp.requested_remedy}` : "",
+          dp.master_position_statement ? `Position Statement: ${dp.master_position_statement}` : "",
+        ].filter(Boolean).join("\n");
+      }
+    }
 
     const inspectionFiles = files.filter((f: Record<string, any>) => looksLikeInspectionFile(f));
     const estimateFiles = files.filter((f: Record<string, any>) => looksLikeEstimateFile(f));
@@ -335,34 +425,42 @@ Deno.serve(async (req) => {
       priorPaymentsText,
       userNotes,
       carrierPositionText,
+      declaredPositionText: resolvedDeclaredPosition,
+      tone,
     });
 
-    // Use centralized AI router with reasoning model for demand packages
+    // Use centralized AI router with reasoning model — higher tokens for complete demands
     const aiResult = await callOpenAIText({
-      system: "You generate carrier-ready insurance demand packages and return only valid JSON.",
+      system: "You generate carrier-ready insurance demand packages and return only valid JSON. Every section must be thorough, expanded, and litigation-aware.",
       user: prompt,
       reasoningEffort: "high",
-      temperature: 0.25,
-      maxOutputTokens: 4000,
+      temperature: 0.15,
+      maxOutputTokens: 8000,
     });
 
     const rawContent = aiResult.text || "";
 
+    // Robust JSON extraction: try direct parse first, then regex fallback
     let demandPackage: Record<string, unknown>;
     try {
-      const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        demandPackage = JSON.parse(jsonMatch[0]);
-      } else {
-        throw new Error("No JSON object found in AI response");
-      }
+      demandPackage = JSON.parse(rawContent);
     } catch {
-      throw new Error("Model returned invalid JSON");
+      const match = rawContent.match(/\{[\s\S]*\}/);
+      if (!match) throw new Error("No JSON found in AI response");
+      try {
+        demandPackage = JSON.parse(match[0]);
+      } catch {
+        throw new Error("Model returned invalid JSON");
+      }
     }
+
+    // Generate DOCX-ready HTML for export
+    const docxHtml = buildDocxHtml(demandPackage);
 
     const responsePayload = {
       success: true,
       claimId,
+      tone,
       generatedAt: new Date().toISOString(),
       inputSummary: {
         inspectionChars: inspectionText.length,
@@ -370,8 +468,10 @@ Deno.serve(async (req) => {
         estimateLineCount: estimateLines.length,
         inspectionFileCount: inspectionFiles.length,
         estimateFileCount: estimateFiles.length,
+        hasDeclaredPosition: !!resolvedDeclaredPosition,
       },
       demandPackage,
+      docxHtml,
     };
 
     if (saveToMasterState && masterState?.id) {
@@ -381,6 +481,7 @@ Deno.serve(async (req) => {
           ...currentState,
           demand_package: {
             generated_at: new Date().toISOString(),
+            tone,
             title: demandPackage?.title || "",
             subject_line: demandPackage?.subject_line || "",
             demand_amount: demandPackage?.demand_amount || "",
