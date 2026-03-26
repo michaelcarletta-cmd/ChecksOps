@@ -575,26 +575,27 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
   }
 
   return (
-    <div className="space-y-4">
-      {/* Darwin Header */}
+    <div className="space-y-3 md:space-y-4">
+      {/* Darwin Header - compact on mobile */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Brain className="h-6 w-6 text-primary" />
+        <div className="flex items-center gap-2 md:gap-3">
+          <div className="p-1.5 md:p-2 rounded-lg bg-primary/10">
+            <Brain className="h-5 w-5 md:h-6 md:w-6 text-primary" />
           </div>
           <div>
-            <h2 className="text-xl font-semibold">Darwin AI</h2>
-            <p className="text-sm text-muted-foreground">Your intelligent claims copilot</p>
+            <h2 className="text-lg md:text-xl font-semibold">Darwin AI</h2>
+            <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">Your intelligent claims copilot</p>
           </div>
         </div>
         <Button
           variant={showCopilot ? "default" : "outline"}
           size="sm"
           onClick={() => setShowCopilot(!showCopilot)}
-          className="gap-2"
+          className="gap-1.5 text-xs md:text-sm"
         >
-          <MessageSquare className="h-4 w-4" />
-          {showCopilot ? "Hide Assistant Panel" : "Show Assistant Panel"}
+          <MessageSquare className="h-3.5 w-3.5 md:h-4 md:w-4" />
+          <span className="hidden sm:inline">{showCopilot ? "Hide Assistant Panel" : "Show Assistant Panel"}</span>
+          <span className="sm:hidden">{showCopilot ? "Hide" : "Show"}</span>
         </Button>
       </div>
 
@@ -698,21 +699,21 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
         </div>
       )}
 
-      {/* Top context pills */}
-      <div className="flex flex-wrap gap-2 pb-1">
+      {/* Top context pills - scrollable on mobile */}
+      <div className="flex flex-nowrap md:flex-wrap gap-1.5 md:gap-2 pb-1 overflow-x-auto scrollbar-hide">
         {claim?.insurance_company && (
-          <span className="px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs flex items-center gap-1">
+          <span className="px-2 py-0.5 md:px-2.5 md:py-1 rounded-full bg-primary/10 text-primary text-[11px] md:text-xs flex items-center gap-1 whitespace-nowrap">
             <Building2 className="h-3 w-3" />
             {claim.insurance_company}
           </span>
         )}
         {(claim?.policyholder_state || claim?.property_state) && (
-          <span className="px-2.5 py-1 rounded-full bg-muted text-muted-foreground text-xs">
+          <span className="px-2 py-0.5 md:px-2.5 md:py-1 rounded-full bg-muted text-muted-foreground text-[11px] md:text-xs whitespace-nowrap">
             State: {claim.policyholder_state || claim.property_state}
           </span>
         )}
         {claim?.loss_type && (
-          <span className="px-2.5 py-1 rounded-full bg-muted text-muted-foreground text-xs">
+          <span className="px-2 py-0.5 md:px-2.5 md:py-1 rounded-full bg-muted text-muted-foreground text-[11px] md:text-xs whitespace-nowrap">
             Loss: {claim.loss_type}
           </span>
         )}

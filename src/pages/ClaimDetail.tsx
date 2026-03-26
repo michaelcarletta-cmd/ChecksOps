@@ -252,7 +252,7 @@ const ClaimDetail = () => {
   }
 
   return (
-    <div className="space-y-4 md:space-y-6 p-4 md:p-6 bg-background min-h-screen">
+    <div className="space-y-3 md:space-y-6 p-3 md:p-6 bg-background min-h-screen">
       <div className="flex flex-col md:flex-row md:items-center gap-4">
         <div className="flex items-center gap-4">
           <Link to={getBackLink()}>
@@ -262,7 +262,7 @@ const ClaimDetail = () => {
           </Link>
           <div className="flex-1">
             <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground">{claim.claim_number}</h1>
+              <h1 className="text-xl md:text-3xl font-bold text-foreground">{claim.claim_number}</h1>
               {isStaffOrAdmin && (
                 <ClaimStatusSelect 
                   claimId={claim.id} 
@@ -279,12 +279,14 @@ const ClaimDetail = () => {
             </div>
             <p className="text-muted-foreground mt-1 font-medium">{claim.policyholder_name}</p>
             {isStaffOrAdmin && (claim.policy_number || claim.claim_email_id) && (
-              <p className="text-xs text-muted-foreground mt-1 font-mono break-all">
-                Claim Email: {getClaimEmail(claim)}
+              <p className="text-[10px] md:text-xs text-muted-foreground mt-1 font-mono break-all leading-relaxed">
+                <span className="hidden sm:inline">Claim Email: </span>
+                <span className="sm:hidden">📧 </span>
+                {getClaimEmail(claim)}
                 <Button 
                   variant="ghost" 
                   size="sm" 
-                  className="ml-2 h-6 px-2 text-xs"
+                  className="ml-1 h-5 px-1.5 text-[10px] md:text-xs"
                   onClick={() => {
                     navigator.clipboard.writeText(getClaimEmail(claim));
                     toast({ title: "Copied", description: "Claim email copied to clipboard" });
@@ -297,33 +299,26 @@ const ClaimDetail = () => {
           </div>
         </div>
         {isStaffOrAdmin && (
-          <div className="inline-flex flex-col md:flex-row items-stretch md:items-center gap-2 md:ml-auto">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShareDialogOpen(true)}
-            >
-              <Share2 className="h-4 w-4 mr-2" />
+          <div className="flex flex-wrap md:flex-row items-stretch md:items-center gap-1.5 md:gap-2 md:ml-auto">
+            <Button variant="outline" size="sm" className="h-8 text-xs md:text-sm" onClick={() => setShareDialogOpen(true)}>
+              <Share2 className="h-3.5 w-3.5 mr-1.5" />
               Share
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setNotifyDialogOpen(true)}
-            >
-              <Bell className="h-4 w-4 mr-2" />
-              Notify Portal
+            <Button variant="outline" size="sm" className="h-8 text-xs md:text-sm" onClick={() => setNotifyDialogOpen(true)}>
+              <Bell className="h-3.5 w-3.5 mr-1.5" />
+              Notify
             </Button>
             <Button
               variant={claim.is_closed ? "outline" : "secondary"}
               size="sm"
+              className="h-8 text-xs md:text-sm"
               onClick={toggleClosedStatus}
             >
-              {claim.is_closed ? "Reopen Claim" : "Close Claim"}
+              {claim.is_closed ? "Reopen" : "Close"}
             </Button>
-            <Button size="sm" className="bg-primary hover:bg-primary/90" onClick={() => setEditDialogOpen(true)}>
-              <Edit className="h-4 w-4 mr-2" />
-              Edit Claim
+            <Button size="sm" className="h-8 text-xs md:text-sm bg-primary hover:bg-primary/90" onClick={() => setEditDialogOpen(true)}>
+              <Edit className="h-3.5 w-3.5 mr-1.5" />
+              Edit
             </Button>
           </div>
         )}
