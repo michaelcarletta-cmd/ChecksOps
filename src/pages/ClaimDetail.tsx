@@ -262,7 +262,7 @@ const ClaimDetail = () => {
           </Link>
           <div className="flex-1">
             <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground">{claim.claim_number}</h1>
+              <h1 className="text-xl md:text-3xl font-bold text-foreground">{claim.claim_number}</h1>
               {isStaffOrAdmin && (
                 <ClaimStatusSelect 
                   claimId={claim.id} 
