@@ -610,7 +610,21 @@ Deno.serve(async (req) => {
       return json({ error: "Not enough claim context was found to build a demand package yet. Add claim facts, document text, or estimate lines and try again." }, 400);
     }
 
-    console.log(`Demand package context: inspection=${inspectionText.length} chars, estimate=${estimateText.length} chars, timeline=${timelineText.length} chars, files=${files.length}, fallback=${claimContextFallback.length}`);
+    // Build carrier estimate context
+    const carrierEstimateTextFromFiles = carrierEstimateFiles
+      .map((f: Record<string, any>) =>
+        [`FILE: ${pick(f, ["file_name", "name"], "Unknown file")}`, safeString(f.extracted_text)]
+          .filter(Boolean)
+          .join("\n")
+      )
+      .filter(Boolean)
+      .join("\n\n");
+
+    const carrierEstimateBlock = carrierEstimateTextFromFiles
+      ? `CARRIER ESTIMATE:\n${carrierEstimateTextFromFiles}`
+      : "CARRIER ESTIMATE:\nNone provided.";
+
+    console.log(`Demand package context: inspection=${inspectionText.length} chars, estimate=${estimateText.length} chars, timeline=${timelineText.length} chars, files=${files.length}, carrierEstimateFiles=${carrierEstimateFiles.length}, fallback=${claimContextFallback.length}`);
 
 
     const prompt = buildDemandPrompt({
@@ -625,6 +639,7 @@ Deno.serve(async (req) => {
       carrierPositionText,
       declaredPositionText: resolvedDeclaredPosition,
       tone,
+      carrierEstimateText: carrierEstimateBlock,
     });
 
     // Use centralized AI router with reasoning model — higher tokens for complete demands
