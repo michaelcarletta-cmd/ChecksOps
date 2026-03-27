@@ -105,6 +105,22 @@ function estimateLinesToText(lines: Record<string, any>[]) {
   return [`ESTIMATE GRAND TOTAL: ${money(summary.grandTotal)}`, "", "TRADE SUMMARY:", summary.tradeSummary || "None", "", "ROOM / TRADE SUMMARY:", summary.roomTradeSummary || "None", "", "DETAILED LINE ITEMS:", detailLines].join("\n");
 }
 
+function extractExplicitEstimateTotal(lines: Record<string, any>[]): number {
+  if (!lines.length) return 0;
+  const candidates = [
+    ...lines.map((x) => Number(x.total)).filter((n) => Number.isFinite(n) && n > 0),
+    ...lines.map((x) => Number(x.rcv_total)).filter((n) => Number.isFinite(n) && n > 0),
+  ];
+  const summed = lines.reduce((sum, line) => {
+    const total =
+      Number(line.total) ||
+      Number(line.rcv_total) ||
+      ((Number(line.quantity) || 0) * (Number(line.unit_price) || 0));
+    return sum + (Number.isFinite(total) ? total : 0);
+  }, 0) || 0;
+  return summed > 0 ? summed : (candidates[0] || 0);
+}
+
 function getToneInstructions(tone: string): string {
   switch (tone) {
     case "aggressive":
@@ -178,6 +194,9 @@ IMPORTANT WRITING RULES:
 - If timeline facts support it, highlight claim-handling delay, inadequate investigation, under-scoping, or failure to account for the full loss.
 - Keep it assertive, evidence-driven, and carrier-facing.
 - Do not invent code citations or policy language. If not provided, refer generally to applicable policy obligations and standards of good-faith claim handling.
+- You MUST use the authoritative estimate total if one is provided.
+- Do not infer the demand amount from stray dollar values inside narrative text when an authoritative estimate total is present.
+- If multiple dollar values appear in the estimate materials, treat the authoritative estimate total as controlling.
 - Use the estimate total as the demand amount unless the materials support another specific figure.
 - If the inspection report identifies room/component-specific damage, fold that into the narrative so the estimate reads inevitable and justified.
 - If there are weak points or missing proof, identify them in the "strategic_notes" field only, not in the demand body.
@@ -433,6 +452,10 @@ Deno.serve(async (req) => {
       ).join("\n\n");
 
     const estimateLinesText = estimateLinesToText(estimateLines);
+    const explicitEstimateTotal = extractExplicitEstimateTotal(estimateLines);
+    const estimateAuthorityBlock = explicitEstimateTotal > 0
+      ? `AUTHORITATIVE ESTIMATE TOTAL: ${money(explicitEstimateTotal)}`
+      : "AUTHORITATIVE ESTIMATE TOTAL: Not available from structured estimate lines.";
 
     const timelineText = truncate(
       events.map((e: Record<string, any>) => {
@@ -471,8 +494,13 @@ Deno.serve(async (req) => {
       30000
     );
     const estimateText = truncate(
-      estimateTextOverride || [estimateLinesText, estimateTextFromFiles].filter(Boolean).join("\n\n") || allFileText || claimContextFallback,
-      30000
+      [
+        estimateAuthorityBlock,
+        estimateTextOverride || "",
+        estimateLinesText,
+        estimateTextFromFiles,
+      ].filter(Boolean).join("\n\n") || allFileText || claimContextFallback,
+      70000
     );
 
     if (!inspectionText && !estimateText && !claimContextFallback) {
@@ -538,6 +566,19 @@ Deno.serve(async (req) => {
         demandPackage = JSON.parse(match[0]);
       } catch {
         throw new Error("Model returned invalid JSON");
+      }
+    }
+
+    // Enforce authoritative estimate total over any AI-hallucinated amount
+    if (explicitEstimateTotal > 0) {
+      demandPackage.demand_amount = money(explicitEstimateTotal);
+      if (typeof demandPackage.full_demand_package === "string") {
+        demandPackage.full_demand_package =
+          `Demand Amount: ${money(explicitEstimateTotal)}\n\n` +
+          (demandPackage.full_demand_package as string).replace(
+            /Demand Amount:\s*\$[\d,]+\.\d{2}/i,
+            `Demand Amount: ${money(explicitEstimateTotal)}`
+          );
       }
     }
 
