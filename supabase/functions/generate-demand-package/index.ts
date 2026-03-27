@@ -452,6 +452,10 @@ Deno.serve(async (req) => {
       ).join("\n\n");
 
     const estimateLinesText = estimateLinesToText(estimateLines);
+    const explicitEstimateTotal = extractExplicitEstimateTotal(estimateLines);
+    const estimateAuthorityBlock = explicitEstimateTotal > 0
+      ? `AUTHORITATIVE ESTIMATE TOTAL: ${money(explicitEstimateTotal)}`
+      : "AUTHORITATIVE ESTIMATE TOTAL: Not available from structured estimate lines.";
 
     const timelineText = truncate(
       events.map((e: Record<string, any>) => {
@@ -490,8 +494,13 @@ Deno.serve(async (req) => {
       30000
     );
     const estimateText = truncate(
-      estimateTextOverride || [estimateLinesText, estimateTextFromFiles].filter(Boolean).join("\n\n") || allFileText || claimContextFallback,
-      30000
+      [
+        estimateAuthorityBlock,
+        estimateTextOverride || "",
+        estimateLinesText,
+        estimateTextFromFiles,
+      ].filter(Boolean).join("\n\n") || allFileText || claimContextFallback,
+      70000
     );
 
     if (!inspectionText && !estimateText && !claimContextFallback) {
