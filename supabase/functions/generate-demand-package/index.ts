@@ -373,18 +373,33 @@ Deno.serve(async (req) => {
     const inspectionFiles = files.filter((f: Record<string, any>) => looksLikeInspectionFile(f));
     const estimateFiles = files.filter((f: Record<string, any>) => looksLikeEstimateFile(f));
 
+    // Gather extracted text from matched files
     const inspectionTextFromFiles = inspectionFiles.map((f: Record<string, any>) =>
       [`FILE: ${pick(f, ["file_name", "name"], "Unknown file")}`, safeString(f.extracted_text)].filter(Boolean).join("\n")
-    ).filter(Boolean).join("\n\n");
+    ).filter((t: string) => t.length > 20).join("\n\n");
 
     const estimateTextFromFiles = estimateFiles.map((f: Record<string, any>) =>
       [`FILE: ${pick(f, ["file_name", "name"], "Unknown file")}`, safeString(f.extracted_text)].filter(Boolean).join("\n")
-    ).filter(Boolean).join("\n\n");
+    ).filter((t: string) => t.length > 20).join("\n\n");
+
+    // Fallback: if no inspection/estimate-specific files matched, use ALL files with extracted_text
+    const allFileText = files
+      .filter((f: Record<string, any>) => safeString(f.extracted_text).length > 20)
+      .map((f: Record<string, any>) =>
+        [`FILE: ${pick(f, ["file_name", "name"], "Unknown file")}`, safeString(f.extracted_text)].filter(Boolean).join("\n")
+      ).join("\n\n");
 
     const estimateLinesText = estimateLinesToText(estimateLines);
 
-    const inspectionText = truncate(inspectionReportTextOverride || inspectionTextFromFiles, 70000);
-    const estimateText = truncate(estimateTextOverride || [estimateLinesText, estimateTextFromFiles].filter(Boolean).join("\n\n"), 70000);
+    // Use matched text first, fall back to all file text, then overrides
+    const inspectionText = truncate(
+      inspectionReportTextOverride || inspectionTextFromFiles || allFileText,
+      70000
+    );
+    const estimateText = truncate(
+      estimateTextOverride || [estimateLinesText, estimateTextFromFiles].filter(Boolean).join("\n\n") || allFileText,
+      70000
+    );
 
     const timelineText = truncate(
       events.map((e: Record<string, any>) => {
