@@ -422,13 +422,12 @@ Deno.serve(async (req) => {
       8000
     );
 
-    if (!inspectionText) {
-      return json({ error: "No inspection report text found. Provide inspectionReportText directly or make sure claim_files.extracted_text exists for the inspection report." }, 400);
+    if (!inspectionText && !estimateText) {
+      return json({ error: "No document text found. Make sure claim_files have extracted_text or darwin_estimate_lines exist for this claim." }, 400);
     }
 
-    if (!estimateText) {
-      return json({ error: "No estimate text found. Provide estimateText directly or make sure darwin_estimate_lines / claim_files estimate text exists." }, 400);
-    }
+    console.log(`Demand package context: inspection=${inspectionText.length} chars, estimate=${estimateText.length} chars, timeline=${timelineText.length} chars, files=${files.length}`);
+
 
     const prompt = buildDemandPrompt({
       claim,
