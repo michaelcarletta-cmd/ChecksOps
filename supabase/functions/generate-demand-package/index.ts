@@ -481,8 +481,17 @@ Deno.serve(async (req) => {
       }
     }
 
-    const inspectionFiles = files.filter((f: Record<string, any>) => looksLikeInspectionFile(f));
-    const estimateFiles = files.filter((f: Record<string, any>) => looksLikeEstimateFile(f));
+    // Filter files to user-selected files if provided
+    const selectedFileIds = Array.isArray(body.selectedFileIds)
+      ? body.selectedFileIds.map((x) => String(x))
+      : [];
+    const effectiveFiles =
+      selectedFileIds.length > 0
+        ? files.filter((f: Record<string, any>) => selectedFileIds.includes(String(f.id)))
+        : files;
+
+    const inspectionFiles = effectiveFiles.filter((f: Record<string, any>) => looksLikeInspectionFile(f));
+    const estimateFiles = effectiveFiles.filter((f: Record<string, any>) => looksLikeEstimateFile(f));
 
     // Gather extracted text from matched files
     const inspectionTextFromFiles = inspectionFiles.map((f: Record<string, any>) =>
