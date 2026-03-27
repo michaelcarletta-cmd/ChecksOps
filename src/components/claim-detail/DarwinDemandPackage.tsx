@@ -295,7 +295,6 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
           demandAmount: demandPackage?.demand_amount || '',
           confidenceScore: demandPackage?.confidence_score || 0,
           claimFacts,
-          claimFacts,
         } as any
       });
 
