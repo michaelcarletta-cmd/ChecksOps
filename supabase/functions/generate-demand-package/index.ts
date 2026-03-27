@@ -468,11 +468,11 @@ Deno.serve(async (req) => {
 
     const inspectionText = truncate(
       inspectionReportTextOverride || inspectionTextFromFiles || allFileText || claimContextFallback,
-      70000
+      30000
     );
     const estimateText = truncate(
       estimateTextOverride || [estimateLinesText, estimateTextFromFiles].filter(Boolean).join("\n\n") || allFileText || claimContextFallback,
-      70000
+      30000
     );
 
     if (!inspectionText && !estimateText && !claimContextFallback) {
