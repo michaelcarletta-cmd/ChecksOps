@@ -253,6 +253,9 @@ IMPORTANT WRITING RULES:
 - Emphasize repairability limits, interdependency, matching, access, disturbance, code, manufacturer requirements, and restoration sequencing where supported.
 - If timeline facts support it, highlight claim-handling delay, inadequate investigation, under-scoping, or failure to account for the full loss.
 - Keep it assertive, evidence-driven, and carrier-facing.
+- Only analyze the selected insured-side documents provided for this demand package.
+- Do not reference carrier estimates, carrier reports, or competing scopes unless they were explicitly provided.
+- If no carrier estimate is provided, do not mention one.
 - Do not invent code citations or policy language. If not provided, refer generally to applicable policy obligations and standards of good-faith claim handling.
 - You MUST use the authoritative estimate total if one is provided.
 - Do not infer the demand amount from stray dollar values inside narrative text when an authoritative estimate total is present.
@@ -505,9 +508,8 @@ Deno.serve(async (req) => {
         : files;
 
     const inspectionFiles = effectiveFiles.filter((f: Record<string, any>) => looksLikeInspectionFile(f));
-    const carrierEstimateFiles = effectiveFiles.filter((f: Record<string, any>) =>
-      looksLikeCarrierEstimateFile(f)
-    );
+    const estimateFiles = effectiveFiles.filter((f: Record<string, any>) => looksLikeEstimateFile(f));
+    const carrierEstimateFiles: Record<string, any>[] = [];
 
     // Gather extracted text from matched files
     const inspectionTextFromFiles = inspectionFiles.map((f: Record<string, any>) =>

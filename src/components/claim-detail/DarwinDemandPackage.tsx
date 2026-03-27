@@ -278,12 +278,11 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
         body: {
           claimId,
           tone,
-          declaredPositionText: position?.master_position_statement || position?.primary_loss_mechanism || '',
-          carrierPositionText: additionalInstructions || '',
-          userNotes: additionalInstructions || 'Prepare a carrier-facing demand package that expands the inspection report and estimate into a payment-forcing document.',
           selectedFileIds: selectedFileIdsArray,
           selectedEstimateId: selectedEstimateFile?.id || null,
           estimateTotal: null,
+          declaredPositionText,
+          userNotes: additionalInstructions || '',
           saveToMasterState: true,
         },
       });
