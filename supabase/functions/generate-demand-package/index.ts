@@ -569,6 +569,19 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Enforce authoritative estimate total over any AI-hallucinated amount
+    if (explicitEstimateTotal > 0) {
+      demandPackage.demand_amount = money(explicitEstimateTotal);
+      if (typeof demandPackage.full_demand_package === "string") {
+        demandPackage.full_demand_package =
+          `Demand Amount: ${money(explicitEstimateTotal)}\n\n` +
+          (demandPackage.full_demand_package as string).replace(
+            /Demand Amount:\s*\$[\d,]+\.\d{2}/i,
+            `Demand Amount: ${money(explicitEstimateTotal)}`
+          );
+      }
+    }
+
     // Generate DOCX-ready HTML for export
     const docxHtml = buildDocxHtml(demandPackage);
 
