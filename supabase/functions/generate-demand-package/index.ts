@@ -105,20 +105,65 @@ function estimateLinesToText(lines: Record<string, any>[]) {
   return [`ESTIMATE GRAND TOTAL: ${money(summary.grandTotal)}`, "", "TRADE SUMMARY:", summary.tradeSummary || "None", "", "ROOM / TRADE SUMMARY:", summary.roomTradeSummary || "None", "", "DETAILED LINE ITEMS:", detailLines].join("\n");
 }
 
-function extractExplicitEstimateTotal(lines: Record<string, any>[]): number {
-  if (!lines.length) return 0;
-  const candidates = [
-    ...lines.map((x) => Number(x.total)).filter((n) => Number.isFinite(n) && n > 0),
-    ...lines.map((x) => Number(x.rcv_total)).filter((n) => Number.isFinite(n) && n > 0),
-  ];
-  const summed = lines.reduce((sum, line) => {
-    const total =
-      Number(line.total) ||
-      Number(line.rcv_total) ||
-      ((Number(line.quantity) || 0) * (Number(line.unit_price) || 0));
-    return sum + (Number.isFinite(total) ? total : 0);
-  }, 0) || 0;
-  return summed > 0 ? summed : (candidates[0] || 0);
+function extractAuthoritativeEstimateTotal(args: {
+  explicitTotal?: unknown;
+  estimateLines: Record<string, any>[];
+  estimateFiles?: Record<string, any>[];
+}): number {
+  // 1. Explicit total passed from client (e.g. selectedEstimate.grandTotal)
+  const explicit = Number(args.explicitTotal);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+
+  // 2. Check estimate file-level totals
+  for (const file of args.estimateFiles || []) {
+    const candidates = [
+      Number(file.estimate_total),
+      Number(file.grand_total),
+      Number(file.total_amount),
+      Number(file.rcv_total),
+    ].filter((n) => Number.isFinite(n) && n > 0);
+    if (candidates.length) return candidates[0];
+  }
+
+  // 3. Sum from line items, filtering out void/deleted/summary rows
+  const currentLines = (args.estimateLines || []).filter((line) => {
+    if (line.is_void === true) return false;
+    if (line.is_deleted === true) return false;
+    if (line.include_in_total === false) return false;
+    if (String(line.line_type || "").toLowerCase() === "summary") return false;
+    if (String(line.line_type || "").toLowerCase() === "subtotal") return false;
+    if (String(line.line_type || "").toLowerCase() === "tax") return false;
+    return true;
+  });
+
+  // Group by version and pick the most recent version with a positive total
+  const versionGroups = new Map<string, Record<string, any>[]>();
+  for (const line of currentLines) {
+    const versionKey = String(
+      line.estimate_version_id ?? line.version_id ?? line.estimate_id ?? "default"
+    );
+    versionGroups.set(versionKey, [...(versionGroups.get(versionKey) || []), line]);
+  }
+
+  const versionTotals = [...versionGroups.entries()].map(([versionKey, lines]) => {
+    const total = lines.reduce((sum, line) => {
+      const qty = Number(line.quantity ?? line.qty ?? 0);
+      const unitPrice = Number(line.unit_price ?? line.price ?? 0);
+      const lineTotal =
+        Number(line.total) ||
+        Number(line.rcv_total) ||
+        (Number.isFinite(qty) && Number.isFinite(unitPrice) ? qty * unitPrice : 0);
+      return sum + (Number.isFinite(lineTotal) ? lineTotal : 0);
+    }, 0);
+    const latestTs = Math.max(
+      ...lines.map((l) => new Date(l.updated_at || l.created_at || 0).getTime())
+    );
+    return { versionKey, total, latestTs, count: lines.length };
+  });
+
+  versionTotals.sort((a, b) => b.latestTs - a.latestTs);
+  const best = versionTotals.find((v) => v.total > 0);
+  return best ? best.total : 0;
 }
 
 function getToneInstructions(tone: string): string {
