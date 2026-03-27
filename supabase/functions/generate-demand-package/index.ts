@@ -194,6 +194,9 @@ IMPORTANT WRITING RULES:
 - If timeline facts support it, highlight claim-handling delay, inadequate investigation, under-scoping, or failure to account for the full loss.
 - Keep it assertive, evidence-driven, and carrier-facing.
 - Do not invent code citations or policy language. If not provided, refer generally to applicable policy obligations and standards of good-faith claim handling.
+- You MUST use the authoritative estimate total if one is provided.
+- Do not infer the demand amount from stray dollar values inside narrative text when an authoritative estimate total is present.
+- If multiple dollar values appear in the estimate materials, treat the authoritative estimate total as controlling.
 - Use the estimate total as the demand amount unless the materials support another specific figure.
 - If the inspection report identifies room/component-specific damage, fold that into the narrative so the estimate reads inevitable and justified.
 - If there are weak points or missing proof, identify them in the "strategic_notes" field only, not in the demand body.
