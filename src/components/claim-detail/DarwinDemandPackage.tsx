@@ -288,14 +288,13 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
         claim_id: claimId,
         analysis_type: 'demand_package',
         result: demandText,
-        input_summary: `Tone: ${tone}, Strategy: ${strategyPreset}, Documents: ${fileContents.length}, Photos: ${photoContents.length}`,
+        input_summary: `Tone: ${tone}, Strategy: ${strategyPreset}`,
         metadata: {
           tone,
           strategyPreset,
           demandAmount: demandPackage?.demand_amount || '',
           confidenceScore: demandPackage?.confidence_score || 0,
-          documentNames: fileContents.map(f => f.name),
-          photoNames: photoContents.map(p => p.name),
+          claimFacts,
           claimFacts,
         } as any
       });
