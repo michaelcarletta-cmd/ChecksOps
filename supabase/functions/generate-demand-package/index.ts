@@ -63,6 +63,20 @@ function looksLikeEstimateFile(file: Record<string, any>): boolean {
   return ["estimate", "xactimate", "scope", "repair estimate", "rebuild", "loss estimate"].some((term) => name.includes(term));
 }
 
+function looksLikeCarrierEstimateFile(file: Record<string, any>): boolean {
+  const name = `${normalizeLower(file.file_name)} ${normalizeLower(file.name)} ${normalizeLower(file.doc_type)} ${normalizeLower(file.category)} ${normalizeLower(file.analysis_type)}`;
+  return [
+    "carrier estimate",
+    "insurance estimate",
+    "adjuster estimate",
+    "state farm",
+    "allstate",
+    "travelers",
+    "farmers",
+    "liberty mutual",
+  ].some((term) => name.includes(term));
+}
+
 function summarizeEstimateLines(lines: Record<string, any>[]) {
   const roomTradeTotals = new Map<string, number>();
   const tradeTotals = new Map<string, number>();
@@ -201,6 +215,7 @@ function buildDemandPrompt(args: {
   carrierPositionText: string;
   declaredPositionText: string;
   tone: string;
+  carrierEstimateText: string;
 }) {
   const claim = args.claim || {};
   const insuredName = pick(claim, ["insured_name", "insured", "policyholder_name"], "Insured");
@@ -322,6 +337,9 @@ ${args.inspectionText || "No inspection report text available."}
 
 REPAIR ESTIMATE:
 ${args.estimateText || "No estimate text available."}
+
+CARRIER ESTIMATE:
+${args.carrierEstimateText || "None provided."}
 
 FINAL REQUIREMENT:
 The "full_demand_package" field must be a polished, carrier-ready demand document with clear section headings:
@@ -477,8 +495,19 @@ Deno.serve(async (req) => {
       }
     }
 
-    const inspectionFiles = files.filter((f: Record<string, any>) => looksLikeInspectionFile(f));
-    const estimateFiles = files.filter((f: Record<string, any>) => looksLikeEstimateFile(f));
+    // Filter files to user-selected files if provided
+    const selectedFileIds = Array.isArray(body.selectedFileIds)
+      ? body.selectedFileIds.map((x) => String(x))
+      : [];
+    const effectiveFiles =
+      selectedFileIds.length > 0
+        ? files.filter((f: Record<string, any>) => selectedFileIds.includes(String(f.id)))
+        : files;
+
+    const inspectionFiles = effectiveFiles.filter((f: Record<string, any>) => looksLikeInspectionFile(f));
+    const carrierEstimateFiles = effectiveFiles.filter((f: Record<string, any>) =>
+      looksLikeCarrierEstimateFile(f)
+    );
 
     // Gather extracted text from matched files
     const inspectionTextFromFiles = inspectionFiles.map((f: Record<string, any>) =>
@@ -581,7 +610,21 @@ Deno.serve(async (req) => {
       return json({ error: "Not enough claim context was found to build a demand package yet. Add claim facts, document text, or estimate lines and try again." }, 400);
     }
 
-    console.log(`Demand package context: inspection=${inspectionText.length} chars, estimate=${estimateText.length} chars, timeline=${timelineText.length} chars, files=${files.length}, fallback=${claimContextFallback.length}`);
+    // Build carrier estimate context
+    const carrierEstimateTextFromFiles = carrierEstimateFiles
+      .map((f: Record<string, any>) =>
+        [`FILE: ${pick(f, ["file_name", "name"], "Unknown file")}`, safeString(f.extracted_text)]
+          .filter(Boolean)
+          .join("\n")
+      )
+      .filter(Boolean)
+      .join("\n\n");
+
+    const carrierEstimateBlock = carrierEstimateTextFromFiles
+      ? `CARRIER ESTIMATE:\n${carrierEstimateTextFromFiles}`
+      : "CARRIER ESTIMATE:\nNone provided.";
+
+    console.log(`Demand package context: inspection=${inspectionText.length} chars, estimate=${estimateText.length} chars, timeline=${timelineText.length} chars, files=${files.length}, carrierEstimateFiles=${carrierEstimateFiles.length}, fallback=${claimContextFallback.length}`);
 
 
     const prompt = buildDemandPrompt({
@@ -596,6 +639,7 @@ Deno.serve(async (req) => {
       carrierPositionText,
       declaredPositionText: resolvedDeclaredPosition,
       tone,
+      carrierEstimateText: carrierEstimateBlock,
     });
 
     // Use centralized AI router with reasoning model — higher tokens for complete demands

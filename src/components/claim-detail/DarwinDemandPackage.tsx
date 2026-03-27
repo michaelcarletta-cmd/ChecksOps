@@ -264,13 +264,26 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
         position.master_position_statement ? `Position Statement: ${position.master_position_statement}` : '',
       ].filter(Boolean).join('\n') : '';
 
+      const selectedFileIdsArray = Array.from(selectedFiles);
+
+      const selectedEstimateFile = files.find(
+        (f) =>
+          selectedFileIdsArray.includes(f.id) &&
+          /estimate|xactimate|scope|repair estimate|rebuild/i.test(
+            `${f.file_name || ""}`
+          )
+      );
+
       const { data, error } = await supabase.functions.invoke('generate-demand-package', {
         body: {
           claimId,
           tone,
-          carrierPositionText: declaredPositionText,
-          declaredPositionText,
+          declaredPositionText: position?.master_position_statement || position?.primary_loss_mechanism || '',
+          carrierPositionText: additionalInstructions || '',
           userNotes: additionalInstructions || 'Prepare a carrier-facing demand package that expands the inspection report and estimate into a payment-forcing document.',
+          selectedFileIds: selectedFileIdsArray,
+          selectedEstimateId: selectedEstimateFile?.id || null,
+          estimateTotal: null,
           saveToMasterState: true,
         },
       });
