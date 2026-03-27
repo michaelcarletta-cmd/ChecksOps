@@ -324,6 +324,9 @@ ${args.inspectionText || "No inspection report text available."}
 REPAIR ESTIMATE:
 ${args.estimateText || "No estimate text available."}
 
+CARRIER ESTIMATE:
+${args.carrierEstimateText || "None provided."}
+
 FINAL REQUIREMENT:
 The "full_demand_package" field must be a polished, carrier-ready demand document with clear section headings:
 1. Executive Summary
