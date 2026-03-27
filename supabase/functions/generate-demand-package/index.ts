@@ -496,8 +496,37 @@ Deno.serve(async (req) => {
         [`FILE: ${pick(f, ["file_name", "name"], "Unknown file")}`, getBestDocumentText(f)].filter(Boolean).join("\n")
       ).join("\n\n");
 
-    const estimateLinesText = estimateLinesToText(estimateLines);
-    const explicitEstimateTotal = extractExplicitEstimateTotal(estimateLines);
+    // Filter estimate lines to selected estimate if provided
+    const selectedEstimateId = safeString(body.selectedEstimateId);
+    const filteredEstimateLines = selectedEstimateId
+      ? estimateLines.filter((line) =>
+          String(line.estimate_version_id ?? line.version_id ?? line.estimate_id) === selectedEstimateId
+        )
+      : estimateLines;
+
+    const estimateLinesText = estimateLinesToText(filteredEstimateLines);
+    const explicitEstimateTotal = extractAuthoritativeEstimateTotal({
+      explicitTotal: body.estimateTotal,
+      estimateLines: filteredEstimateLines,
+      estimateFiles: estimateFiles,
+    });
+
+    // Sanity check: reject wildly inflated totals
+    if (explicitEstimateTotal > 0) {
+      const largestSingleLine = Math.max(
+        0,
+        ...filteredEstimateLines.map((line) =>
+          Number(line.total) ||
+          Number(line.rcv_total) ||
+          (Number(line.quantity ?? 0) * Number(line.unit_price ?? 0))
+        )
+      );
+      if (largestSingleLine > 0 && explicitEstimateTotal > largestSingleLine * 200) {
+        console.error(`Estimate total sanity check failed: ${money(explicitEstimateTotal)} vs largest line ${money(largestSingleLine)}`);
+        return json({ error: `Estimate total sanity check failed. Computed total ${money(explicitEstimateTotal)} looks inflated.` }, 400);
+      }
+    }
+
     const estimateAuthorityBlock = explicitEstimateTotal > 0
       ? `AUTHORITATIVE ESTIMATE TOTAL: ${money(explicitEstimateTotal)}`
       : "AUTHORITATIVE ESTIMATE TOTAL: Not available from structured estimate lines.";
