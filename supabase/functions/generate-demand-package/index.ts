@@ -201,6 +201,7 @@ function buildDemandPrompt(args: {
   carrierPositionText: string;
   declaredPositionText: string;
   tone: string;
+  carrierEstimateText: string;
 }) {
   const claim = args.claim || {};
   const insuredName = pick(claim, ["insured_name", "insured", "policyholder_name"], "Insured");
