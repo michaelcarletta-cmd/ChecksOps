@@ -497,21 +497,42 @@ Deno.serve(async (req) => {
     });
 
     // Use centralized AI router with reasoning model — higher tokens for complete demands
-    const aiResult = await callOpenAIText({
-      system: "You generate carrier-ready insurance demand packages and return only valid JSON. Every section must be thorough, expanded, and litigation-aware.",
-      user: prompt,
-      reasoningEffort: "medium",
-      maxOutputTokens: 5000,
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+
+    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: "You generate carrier-ready insurance demand packages. Return ONLY valid JSON — no markdown, no code fences, no commentary. Every section must be thorough, expanded, and litigation-aware." },
+          { role: "user", content: prompt },
+        ],
+      }),
     });
 
-    const rawContent = aiResult.text || "";
+    if (!aiResp.ok) {
+      const errBody = await aiResp.text();
+      console.error("AI gateway error:", aiResp.status, errBody);
+      throw new Error(`AI generation failed (${aiResp.status})`);
+    }
+
+    const aiData = await aiResp.json();
+    const rawContent = aiData.choices?.[0]?.message?.content || "";
+    console.log("AI response length:", rawContent.length, "chars");
 
     // Robust JSON extraction: try direct parse first, then regex fallback
     let demandPackage: Record<string, unknown>;
     try {
       demandPackage = JSON.parse(rawContent);
     } catch {
-      const match = rawContent.match(/\{[\s\S]*\}/);
+      // Strip markdown code fences if present
+      const cleaned = rawContent.replace(/```json\s*/gi, "").replace(/```\s*/g, "");
+      const match = cleaned.match(/\{[\s\S]*\}/);
       if (!match) throw new Error("No JSON found in AI response");
       try {
         demandPackage = JSON.parse(match[0]);
