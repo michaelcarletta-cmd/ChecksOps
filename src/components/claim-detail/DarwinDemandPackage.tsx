@@ -248,104 +248,10 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
   const MAX_TOTAL_PAYLOAD_BYTES = 45 * 1024 * 1024;
 
   const handleGenerate = async () => {
-    if (selectedFiles.size === 0) {
-      toast.error('Please select at least one evidence document');
-      return;
-    }
-
-    if (selectedFiles.size > MAX_PDFS) {
-      toast.error(`Please select at most ${MAX_PDFS} PDF documents to avoid payload size issues. You selected ${selectedFiles.size}.`);
-      return;
-    }
-
-    if (selectedPhotos.size > MAX_PHOTOS) {
-      toast.error(`Please select at most ${MAX_PHOTOS} photos. You selected ${selectedPhotos.size}.`);
-      return;
-    }
-
     setLoading(true);
     toast.info('Darwin is analyzing evidence, testing causation, and assembling the demand package.');
 
     try {
-      let estimatedPayloadBytes = 0;
-
-      // Download PDFs as base64
-      const selectedFileData = files.filter(f => selectedFiles.has(f.id));
-      const fileContents: { name: string; content: string; folder: string }[] = [];
-
-      for (const file of selectedFileData) {
-        const { data, error } = await supabase.storage
-          .from('claim-files')
-          .download(file.file_path);
-
-        if (data && !error) {
-          if (data.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-            console.warn(`Skipping ${file.file_name} — exceeds ${MAX_FILE_SIZE_MB}MB limit (${(data.size / 1024 / 1024).toFixed(1)}MB)`);
-            toast.warning(`Skipped ${file.file_name} — too large (${(data.size / 1024 / 1024).toFixed(1)}MB)`);
-            continue;
-          }
-          const encodedSize = Math.ceil(data.size * 1.37);
-          if (estimatedPayloadBytes + encodedSize > MAX_TOTAL_PAYLOAD_BYTES) {
-            console.warn(`Skipping ${file.file_name} — would exceed ${MAX_TOTAL_PAYLOAD_BYTES / 1024 / 1024}MB total payload budget`);
-            toast.warning(`Skipped ${file.file_name} — total payload budget reached`);
-            continue;
-          }
-          estimatedPayloadBytes += encodedSize;
-          const base64 = await blobToBase64(data);
-          fileContents.push({
-            name: file.file_name,
-            content: base64,
-            folder: file.folder_name || 'Uncategorized'
-          });
-        }
-      }
-
-      // Guard: all selected PDFs may have been skipped
-      if (fileContents.length === 0) {
-        toast.error('None of the selected PDF documents could be included. Reduce file sizes or select fewer documents.');
-        return;
-      }
-
-      // Download selected photos as base64 — build photoInfo in lockstep
-      const selectedPhotoData = photos.filter(p => selectedPhotos.has(p.id));
-      const photoContents: { name: string; content: string; category: string; description: string }[] = [];
-      const photoInfo: { number: number; name: string; category: string; description: string }[] = [];
-
-      for (const photo of selectedPhotoData) {
-        const { data, error } = await supabase.storage
-          .from('claim-photos')
-          .download(photo.file_path);
-
-        if (data && !error) {
-          if (data.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-            console.warn(`Skipping photo ${photo.file_name} — exceeds ${MAX_FILE_SIZE_MB}MB`);
-            continue;
-          }
-          const encodedSize = Math.ceil(data.size * 1.37);
-          if (estimatedPayloadBytes + encodedSize > MAX_TOTAL_PAYLOAD_BYTES) {
-            console.warn(`Skipping photo ${photo.file_name} — total payload budget reached`);
-            toast.warning(`Skipped photo ${photo.file_name} — total payload budget reached`);
-            continue;
-          }
-          estimatedPayloadBytes += encodedSize;
-          const base64 = await blobToBase64(data);
-          photoContents.push({
-            name: photo.file_name,
-            content: base64,
-            category: photo.category || 'General',
-            description: photo.description || ''
-          });
-          photoInfo.push({
-            number: photoInfo.length + 1,
-            name: photo.file_name,
-            category: photo.category || 'General',
-            description: photo.description || ''
-          });
-        }
-      }
-
-      console.log(`Generating demand package with ${fileContents.length} documents and ${photoContents.length} photos (~${(estimatedPayloadBytes / 1024 / 1024).toFixed(1)}MB encoded)`);
-
       // Build declared position text from position hook
       const declaredPositionText = position ? [
         position.observed_damage_condition ? `Observed Damage: ${position.observed_damage_condition}` : '',
