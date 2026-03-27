@@ -93,9 +93,8 @@ export async function callOpenAIText(opts: OpenAITextOptions) {
     max_output_tokens: opts.maxOutputTokens || 2000,
   };
 
-  if (typeof opts.temperature === "number") {
-    body.temperature = opts.temperature;
-  }
+  // Note: temperature is not supported with reasoning models on the Responses API
+  // Reasoning effort controls output quality instead
 
   if (opts.jsonSchema) {
     body.text = {
