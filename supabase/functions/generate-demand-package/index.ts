@@ -63,6 +63,20 @@ function looksLikeEstimateFile(file: Record<string, any>): boolean {
   return ["estimate", "xactimate", "scope", "repair estimate", "rebuild", "loss estimate"].some((term) => name.includes(term));
 }
 
+function looksLikeCarrierEstimateFile(file: Record<string, any>): boolean {
+  const name = `${normalizeLower(file.file_name)} ${normalizeLower(file.name)} ${normalizeLower(file.doc_type)} ${normalizeLower(file.category)} ${normalizeLower(file.analysis_type)}`;
+  return [
+    "carrier estimate",
+    "insurance estimate",
+    "adjuster estimate",
+    "state farm",
+    "allstate",
+    "travelers",
+    "farmers",
+    "liberty mutual",
+  ].some((term) => name.includes(term));
+}
+
 function summarizeEstimateLines(lines: Record<string, any>[]) {
   const roomTradeTotals = new Map<string, number>();
   const tradeTotals = new Map<string, number>();
