@@ -105,6 +105,22 @@ function estimateLinesToText(lines: Record<string, any>[]) {
   return [`ESTIMATE GRAND TOTAL: ${money(summary.grandTotal)}`, "", "TRADE SUMMARY:", summary.tradeSummary || "None", "", "ROOM / TRADE SUMMARY:", summary.roomTradeSummary || "None", "", "DETAILED LINE ITEMS:", detailLines].join("\n");
 }
 
+function extractExplicitEstimateTotal(lines: Record<string, any>[]): number {
+  if (!lines.length) return 0;
+  const candidates = [
+    ...lines.map((x) => Number(x.total)).filter((n) => Number.isFinite(n) && n > 0),
+    ...lines.map((x) => Number(x.rcv_total)).filter((n) => Number.isFinite(n) && n > 0),
+  ];
+  const summed = lines.reduce((sum, line) => {
+    const total =
+      Number(line.total) ||
+      Number(line.rcv_total) ||
+      ((Number(line.quantity) || 0) * (Number(line.unit_price) || 0));
+    return sum + (Number.isFinite(total) ? total : 0);
+  }, 0) || 0;
+  return summed > 0 ? summed : (candidates[0] || 0);
+}
+
 function getToneInstructions(tone: string): string {
   switch (tone) {
     case "aggressive":
