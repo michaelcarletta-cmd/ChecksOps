@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
-import { callOpenAIText } from "../_shared/ai-router.ts";
+// Using Lovable AI gateway instead of OpenAI Responses API for reliability
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
