@@ -47,6 +47,12 @@ function normalizeLower(value: unknown): string {
   return safeString(value).toLowerCase();
 }
 
+function getBestDocumentText(file: Record<string, any>): string {
+  const cleanText = safeString(file.clean_text);
+  const extractedText = safeString(file.extracted_text);
+  return cleanText.length >= extractedText.length ? cleanText : extractedText;
+}
+
 function looksLikeInspectionFile(file: Record<string, any>): boolean {
   const name = `${normalizeLower(file.file_name)} ${normalizeLower(file.name)} ${normalizeLower(file.doc_type)} ${normalizeLower(file.category)} ${normalizeLower(file.analysis_type)}`;
   return ["inspection", "photo packet", "damage assessment", "field report", "site report", "scope report", "engineer", "photos", "inspection report"].some((term) => name.includes(term));
@@ -288,6 +294,39 @@ function buildDocxHtml(demandPackage: Record<string, any>): string {
 ${bodyHtml}`;
 }
 
+function buildClaimContextFallback(args: {
+  claim: Record<string, any> | null;
+  masterState: Record<string, any> | null;
+  intelligence: Record<string, any> | null;
+  timelineText: string;
+  priorPaymentsText: string;
+  userNotes: string;
+  carrierPositionText: string;
+  declaredPositionText: string;
+}) {
+  const claim = args.claim || {};
+
+  const claimFacts = [
+    pick(claim, ["insured_name", "insured", "policyholder_name"]) && `Insured: ${pick(claim, ["insured_name", "insured", "policyholder_name"])}`,
+    pick(claim, ["property_address", "loss_address", "address", "propertyLocation"]) && `Property: ${pick(claim, ["property_address", "loss_address", "address", "propertyLocation"])}`,
+    pick(claim, ["date_of_loss", "loss_date", "dol"]) && `Date of Loss: ${pick(claim, ["date_of_loss", "loss_date", "dol"])}`,
+    pick(claim, ["claim_number", "claim_no", "number"]) && `Claim Number: ${pick(claim, ["claim_number", "claim_no", "number"])}`,
+    pick(claim, ["carrier", "carrier_name", "insurance_company"]) && `Carrier: ${pick(claim, ["carrier", "carrier_name", "insurance_company"])}`,
+    pick(claim, ["policy_number", "policy_no"]) && `Policy Number: ${pick(claim, ["policy_number", "policy_no"])}`,
+  ].filter(Boolean).join("\n");
+
+  return truncate([
+    claimFacts ? `CLAIM FACTS\n${claimFacts}` : "",
+    args.declaredPositionText ? `DECLARED POSITION\n${args.declaredPositionText}` : "",
+    args.carrierPositionText ? `KNOWN CARRIER POSITION\n${args.carrierPositionText}` : "",
+    args.timelineText ? `CLAIM TIMELINE\n${args.timelineText}` : "",
+    args.priorPaymentsText ? `PRIOR PAYMENTS\n${args.priorPaymentsText}` : "",
+    args.userNotes ? `USER NOTES\n${args.userNotes}` : "",
+    args.intelligence ? `CLAIM INTELLIGENCE\n${JSON.stringify(args.intelligence, null, 2)}` : "",
+    args.masterState ? `CLAIM MASTER STATE\n${JSON.stringify(args.masterState, null, 2)}` : "",
+  ].filter(Boolean).join("\n\n"), 30000);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -352,6 +391,10 @@ Deno.serve(async (req) => {
     const events = eventsRes.data || [];
     const payments = paymentsRes.data || [];
 
+    if (!claim) {
+      return json({ error: "Claim not found" }, 404);
+    }
+
     // Also pull declared position from master state if not explicitly provided
     let resolvedDeclaredPosition = declaredPositionText;
     if (!resolvedDeclaredPosition && masterState?.state_json) {
@@ -375,18 +418,18 @@ Deno.serve(async (req) => {
 
     // Gather extracted text from matched files
     const inspectionTextFromFiles = inspectionFiles.map((f: Record<string, any>) =>
-      [`FILE: ${pick(f, ["file_name", "name"], "Unknown file")}`, safeString(f.extracted_text)].filter(Boolean).join("\n")
+      [`FILE: ${pick(f, ["file_name", "name"], "Unknown file")}`, getBestDocumentText(f)].filter(Boolean).join("\n")
     ).filter((t: string) => t.length > 20).join("\n\n");
 
     const estimateTextFromFiles = estimateFiles.map((f: Record<string, any>) =>
-      [`FILE: ${pick(f, ["file_name", "name"], "Unknown file")}`, safeString(f.extracted_text)].filter(Boolean).join("\n")
+      [`FILE: ${pick(f, ["file_name", "name"], "Unknown file")}`, getBestDocumentText(f)].filter(Boolean).join("\n")
     ).filter((t: string) => t.length > 20).join("\n\n");
 
     // Fallback: if no inspection/estimate-specific files matched, use ALL files with extracted_text
     const allFileText = files
-      .filter((f: Record<string, any>) => safeString(f.extracted_text).length > 20)
+      .filter((f: Record<string, any>) => getBestDocumentText(f).length > 20)
       .map((f: Record<string, any>) =>
-        [`FILE: ${pick(f, ["file_name", "name"], "Unknown file")}`, safeString(f.extracted_text)].filter(Boolean).join("\n")
+        [`FILE: ${pick(f, ["file_name", "name"], "Unknown file")}`, getBestDocumentText(f)].filter(Boolean).join("\n")
       ).join("\n\n");
 
     const estimateLinesText = estimateLinesToText(estimateLines);
@@ -422,11 +465,31 @@ Deno.serve(async (req) => {
       8000
     );
 
-    if (!inspectionText && !estimateText) {
-      return json({ error: "No document text found. Make sure claim_files have extracted_text or darwin_estimate_lines exist for this claim." }, 400);
+    const claimContextFallback = buildClaimContextFallback({
+      claim,
+      masterState,
+      intelligence,
+      timelineText,
+      priorPaymentsText,
+      userNotes,
+      carrierPositionText,
+      declaredPositionText: resolvedDeclaredPosition,
+    });
+
+    const inspectionText = truncate(
+      inspectionReportTextOverride || inspectionTextFromFiles || allFileText || claimContextFallback,
+      70000
+    );
+    const estimateText = truncate(
+      estimateTextOverride || [estimateLinesText, estimateTextFromFiles].filter(Boolean).join("\n\n") || allFileText || claimContextFallback,
+      70000
+    );
+
+    if (!inspectionText && !estimateText && !claimContextFallback) {
+      return json({ error: "Not enough claim context was found to build a demand package yet. Add claim facts, document text, or estimate lines and try again." }, 400);
     }
 
-    console.log(`Demand package context: inspection=${inspectionText.length} chars, estimate=${estimateText.length} chars, timeline=${timelineText.length} chars, files=${files.length}`);
+    console.log(`Demand package context: inspection=${inspectionText.length} chars, estimate=${estimateText.length} chars, timeline=${timelineText.length} chars, files=${files.length}, fallback=${claimContextFallback.length}`);
 
 
     const prompt = buildDemandPrompt({
@@ -483,6 +546,7 @@ Deno.serve(async (req) => {
         inspectionFileCount: inspectionFiles.length,
         estimateFileCount: estimateFiles.length,
         hasDeclaredPosition: !!resolvedDeclaredPosition,
+        usedContextFallback: !inspectionReportTextOverride && !inspectionTextFromFiles && !allFileText,
       },
       demandPackage,
       docxHtml,

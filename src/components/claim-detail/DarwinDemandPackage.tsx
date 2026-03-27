@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { toast } from "sonner";
 import { FileText, Loader2, Download, Copy, FolderOpen, File, CheckSquare, AlertCircle, Briefcase, Camera, Shield, Flame, Scale } from "lucide-react";
 import { format } from "date-fns";
@@ -301,7 +302,8 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
       toast.success('Demand package generated successfully');
     } catch (error: any) {
       console.error('Error generating demand package:', error);
-      toast.error(error.message || 'Failed to generate demand package');
+      const message = await getFunctionErrorMessage(error, 'Failed to generate demand package');
+      toast.error(message);
     } finally {
       setLoading(false);
     }
