@@ -505,9 +505,8 @@ Deno.serve(async (req) => {
         : files;
 
     const inspectionFiles = effectiveFiles.filter((f: Record<string, any>) => looksLikeInspectionFile(f));
-    const carrierEstimateFiles = effectiveFiles.filter((f: Record<string, any>) =>
-      looksLikeCarrierEstimateFile(f)
-    );
+    const estimateFiles = effectiveFiles.filter((f: Record<string, any>) => looksLikeEstimateFile(f));
+    const carrierEstimateFiles: Record<string, any>[] = [];
 
     // Gather extracted text from matched files
     const inspectionTextFromFiles = inspectionFiles.map((f: Record<string, any>) =>
