@@ -434,16 +434,6 @@ Deno.serve(async (req) => {
 
     const estimateLinesText = estimateLinesToText(estimateLines);
 
-    // Use matched text first, fall back to all file text, then overrides
-    const inspectionText = truncate(
-      inspectionReportTextOverride || inspectionTextFromFiles || allFileText,
-      70000
-    );
-    const estimateText = truncate(
-      estimateTextOverride || [estimateLinesText, estimateTextFromFiles].filter(Boolean).join("\n\n") || allFileText,
-      70000
-    );
-
     const timelineText = truncate(
       events.map((e: Record<string, any>) => {
         const occurredAt = pick(e, ["occurred_at", "created_at"], "");
