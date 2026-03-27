@@ -468,11 +468,11 @@ Deno.serve(async (req) => {
 
     const inspectionText = truncate(
       inspectionReportTextOverride || inspectionTextFromFiles || allFileText || claimContextFallback,
-      70000
+      30000
     );
     const estimateText = truncate(
       estimateTextOverride || [estimateLinesText, estimateTextFromFiles].filter(Boolean).join("\n\n") || allFileText || claimContextFallback,
-      70000
+      30000
     );
 
     if (!inspectionText && !estimateText && !claimContextFallback) {
@@ -500,9 +500,8 @@ Deno.serve(async (req) => {
     const aiResult = await callOpenAIText({
       system: "You generate carrier-ready insurance demand packages and return only valid JSON. Every section must be thorough, expanded, and litigation-aware.",
       user: prompt,
-      reasoningEffort: "high",
-      temperature: 0.15,
-      maxOutputTokens: 8000,
+      reasoningEffort: "medium",
+      maxOutputTokens: 5000,
     });
 
     const rawContent = aiResult.text || "";
