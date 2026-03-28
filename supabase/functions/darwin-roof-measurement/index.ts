@@ -3748,13 +3748,36 @@ Deno.serve(async (req) => {
       fetchAllCandidateFootprints(geo.lat, geo.lng, supabase),
     ]);
 
-    // Select candidate
+    // Select candidate with AI Vision guardrail
     let selectedCandidate: CandidateFootprint | null = null;
     if (candidates.length > 0) {
-      const idx = typeof selected_candidate_index === "number" && selected_candidate_index >= 0 && selected_candidate_index < candidates.length
+      let idx = typeof selected_candidate_index === "number" && selected_candidate_index >= 0 && selected_candidate_index < candidates.length
         ? selected_candidate_index
         : 0;
       selectedCandidate = candidates[idx];
+
+      // ── HARD GUARDRAIL: AI Vision cannot remain selected when authoritative sources exist ──
+      // If the selected candidate is AI Vision, check if any MS DB or NJGIN candidate
+      // has a materially better score. If so, force-swap to the better candidate.
+      const isAIVision = selectedCandidate.source.includes("AI Vision") || selectedCandidate.source.includes("Default Residential");
+      if (isAIVision && candidates.length > 1) {
+        const authoritativeSources = ["Microsoft Building Footprints", "NJGIN Building Footprints", "Local DB"];
+        const betterCandidate = candidates.find(c => {
+          if (c === selectedCandidate) return false;
+          const isAuthoritative = authoritativeSources.some(s => c.source.includes(s));
+          if (!isAuthoritative) return false;
+          // "Materially better" = quality score at least 10 points higher, OR the authoritative
+          // candidate has quality >= 40 (reasonable quality)
+          return c.geometry_quality_score >= 40 || c.geometry_quality_score > selectedCandidate!.geometry_quality_score + 10;
+        });
+        if (betterCandidate) {
+          const oldSource = selectedCandidate.source;
+          const oldScore = selectedCandidate.geometry_quality_score;
+          selectedCandidate = betterCandidate;
+          idx = candidates.indexOf(betterCandidate);
+          console.log(`[Darwin Roof] GUARDRAIL: AI Vision source "${oldSource}" (quality=${oldScore}) overridden by authoritative "${betterCandidate.source}" (quality=${betterCandidate.geometry_quality_score})`);
+        }
+      }
     }
 
     // Phase 2C: Infer roof form from selected footprint
