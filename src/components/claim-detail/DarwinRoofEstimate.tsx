@@ -272,6 +272,13 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       setFetchingExisting(false);
     };
     load();
+
+    // Check if building_footprints table has data
+    const checkFootprints = async () => {
+      const { count } = await supabase.from("building_footprints").select("*", { count: "exact", head: true });
+      setFootprintTableEmpty(count === 0 || count === null);
+    };
+    checkFootprints();
   }, [claimId]);
 
   useEffect(() => {
