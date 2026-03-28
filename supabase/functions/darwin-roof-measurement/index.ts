@@ -3745,7 +3745,7 @@ Deno.serve(async (req) => {
     const [parcel, elevation, candidates] = await Promise.all([
       fetchParcelContext(geo.lat, geo.lng),
       getElevation(geo.lat, geo.lng),
-      fetchAllCandidateFootprints(geo.lat, geo.lng),
+      fetchAllCandidateFootprints(geo.lat, geo.lng, supabase),
     ]);
 
     // Select candidate
