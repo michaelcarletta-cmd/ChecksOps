@@ -2960,7 +2960,8 @@ function deriveRoofEstimate(
     analysis: imageryAnalysis,
   });
 
-  const calibrationAdjustmentFactor = getCalibrationAdjustmentFactor({
+  // For authoritative sources, skip calibration adjustment — the footprint area is the source of truth
+  const calibrationAdjustmentFactor = isAuthoritativeSource ? 1.0 : getCalibrationAdjustmentFactor({
     inferredRoofForm: roofFormInference?.inferred_roof_form ?? null,
     complexity: imageryAnalysis.complexity,
     geometryQualityScore: selectedCandidate?.geometry_quality_score ?? null,
