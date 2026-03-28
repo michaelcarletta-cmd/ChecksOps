@@ -1174,7 +1174,7 @@ async function fetchMSBuildingFootprintFromDB(
 
     if (error) {
       // Fallback: simple centroid proximity query
-      console.log(`[Darwin Roof] PostGIS RPC unavailable, using centroid fallback: ${error.message}`);
+      console.log(`[Darwin Roof] PostGIS RPC unavailable, using centroid fallback path: ${error.message}`);
       const latBuf = 0.001;
       const lngBuf = 0.001 / Math.cos(toRad(lat));
       const { data: fallbackData, error: fallbackErr } = await supabase
@@ -1187,8 +1187,11 @@ async function fetchMSBuildingFootprintFromDB(
         .order("area_sqft", { ascending: false })
         .limit(5);
 
+      const rowCount = fallbackData?.length ?? 0;
+      console.log(`[Darwin Roof] MS DB centroid fallback: ${rowCount} rows returned from building_footprints query`);
+
       if (fallbackErr || !fallbackData?.length) {
-        console.log("[Darwin Roof] MS Building Footprints (DB): no results found");
+        console.log("[Darwin Roof] MS Building Footprints (DB): no results found via centroid fallback");
         return null;
       }
 
@@ -1199,18 +1202,23 @@ async function fetchMSBuildingFootprintFromDB(
         const dist = haversineDistFt([lng, lat], [row.centroid_lng, row.centroid_lat]);
         if (dist < nearestDist) { nearestDist = dist; nearest = row; }
       }
+      console.log(`[Darwin Roof] MS DB centroid fallback: nearest centroid distance = ${roundTo(nearestDist, 1)}ft`);
 
       return buildCandidateFromDBRow(nearest, lat, lng, nearestDist);
     }
 
+    const rowCount = data?.length ?? 0;
+    console.log(`[Darwin Roof] MS DB PostGIS RPC path: ${rowCount} rows returned from building_footprints query`);
+
     if (!data || data.length === 0) {
-      console.log("[Darwin Roof] MS Building Footprints (DB): no results within search radius");
+      console.log("[Darwin Roof] MS Building Footprints (DB): no results within search radius via PostGIS RPC");
       return null;
     }
 
     // data[0] should be the nearest with geometry as GeoJSON
     const row = data[0];
     const dist = haversineDistFt([lng, lat], [row.centroid_lng, row.centroid_lat]);
+    console.log(`[Darwin Roof] MS DB PostGIS RPC: nearest centroid distance = ${roundTo(dist, 1)}ft`);
     return buildCandidateFromDBRow(row, lat, lng, dist);
   } catch (e) {
     console.log("[Darwin Roof] MS Building Footprints (DB) query failed:", e instanceof Error ? e.message : e);
