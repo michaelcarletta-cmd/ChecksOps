@@ -255,6 +255,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const [showEdgeDetail, setShowEdgeDetail] = useState(false);
   const [showRidgeCandidates, setShowRidgeCandidates] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [footprintTableEmpty, setFootprintTableEmpty] = useState(false);
 
   useEffect(() => {
     const load = async () => {
