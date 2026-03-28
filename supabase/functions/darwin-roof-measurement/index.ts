@@ -3083,7 +3083,7 @@ function decomposeFacetsFromFootprint(
     const valleyLen = roundTo(Math.min(halfMainDepth, halfWingDepth) * Math.SQRT2 * slopeFactor, 0);
 
     // ── FACETS (6 total) ──
-    // Facet 1: Main Front Slope (interrupted eave, 2 rakes, valley)
+    // Facet 1: Main Front Slope (interrupted eave, 2 rakes, 2 valleys where wings intersect)
     facets.push({
       id: "facet_1", label: "Main Front Slope",
       area_sqft: mainFacetPlanar, slope_area_sqft: mainFacetSlope,
@@ -3093,10 +3093,11 @@ function decomposeFacetsFromFootprint(
         { type: "ridge", length_ft: mainRidgeLen, bearing_deg: roundTo(dominantBearing, 1) },
         { type: "rake", length_ft: mainRake, bearing_deg: roundTo((dominantBearing + 270) % 360, 1) },
         { type: "valley", length_ft: valleyLen, bearing_deg: roundTo((dominantBearing + 45) % 360, 1) },
+        { type: "valley", length_ft: valleyLen, bearing_deg: roundTo((dominantBearing + 315) % 360, 1) },
       ],
       pitch: pitchLabel, slope_factor: slopeFactor,
     });
-    // Facet 2: Main Rear Slope (full eave, 2 rakes, valley)
+    // Facet 2: Main Rear Slope (interrupted eave, 2 rakes, 2 valleys)
     facets.push({
       id: "facet_2", label: "Main Rear Slope",
       area_sqft: mainFacetPlanar, slope_area_sqft: mainFacetSlope,
@@ -3105,11 +3106,13 @@ function decomposeFacetsFromFootprint(
         { type: "rake", length_ft: mainRake, bearing_deg: roundTo((dominantBearing + 90) % 360, 1) },
         { type: "ridge", length_ft: mainRidgeLen, bearing_deg: roundTo(dominantBearing, 1) },
         { type: "rake", length_ft: mainRake, bearing_deg: roundTo((dominantBearing + 270) % 360, 1) },
+        { type: "valley", length_ft: valleyLen, bearing_deg: roundTo((dominantBearing + 135) % 360, 1) },
         { type: "valley", length_ft: valleyLen, bearing_deg: roundTo((dominantBearing + 225) % 360, 1) },
       ],
       pitch: pitchLabel, slope_factor: slopeFactor,
     });
     // Facets 3-6: Wing extension slopes (front+rear on each side)
+    // Wing extensions are gable ends — NO eave edges, only rakes
     for (let side = 0; side < 2; side++) {
       const sideLabel = side === 0 ? "Left" : "Right";
       const sideBearing = side === 0 ? 90 : 270;
@@ -3117,7 +3120,6 @@ function decomposeFacetsFromFootprint(
         id: `facet_${3 + side * 2}`, label: `Wing ${sideLabel} Front`,
         area_sqft: wingFacetPlanar, slope_area_sqft: wingFacetSlope,
         edges: [
-          { type: "eave", length_ft: wingEaveLen, bearing_deg: roundTo((dominantBearing + sideBearing) % 360, 1) },
           { type: "rake", length_ft: wingRake, bearing_deg: roundTo(dominantBearing, 1) },
           { type: "ridge", length_ft: wingRidgePerSide, bearing_deg: roundTo((dominantBearing + sideBearing) % 360, 1) },
           { type: "rake", length_ft: wingRake, bearing_deg: roundTo((dominantBearing + 180) % 360, 1) },
@@ -3128,7 +3130,6 @@ function decomposeFacetsFromFootprint(
         id: `facet_${4 + side * 2}`, label: `Wing ${sideLabel} Rear`,
         area_sqft: wingFacetPlanar, slope_area_sqft: wingFacetSlope,
         edges: [
-          { type: "eave", length_ft: wingEaveLen, bearing_deg: roundTo((dominantBearing + sideBearing) % 360, 1) },
           { type: "rake", length_ft: wingRake, bearing_deg: roundTo(dominantBearing, 1) },
           { type: "ridge", length_ft: wingRidgePerSide, bearing_deg: roundTo((dominantBearing + sideBearing) % 360, 1) },
           { type: "rake", length_ft: wingRake, bearing_deg: roundTo((dominantBearing + 180) % 360, 1) },
@@ -3138,9 +3139,9 @@ function decomposeFacetsFromFootprint(
     }
 
     notes.push(`Cross-gable: 6 facets (2 main @${mainFacetSlope}sqft, 4 wing @${wingFacetSlope}sqft).`);
-    notes.push(`Main eave: front=${mainEaveFront}ft, rear=${mainEaveRear}ft. Wing eave: 4×${wingEaveLen}ft.`);
+    notes.push(`Main eave: front=${mainEaveFront}ft, rear=${mainEaveRear}ft (both interrupted by wing). No wing eave (gable ends).`);
     notes.push(`Main ridge: ${mainRidgeLen}ft, Wing ridge: 4×${wingRidgePerSide}ft.`);
-    notes.push(`Valleys: 2×${valleyLen}ft. Main rake: 4×${mainRake}ft, Wing rake: 8×${wingRake}ft.`);
+    notes.push(`Valleys: 4×${valleyLen}ft. Main rake: 4×${mainRake}ft, Wing rake: 8×${wingRake}ft.`);
   } else {
     notes.push(`Roof type '${resolvedType}' not supported for facet decomposition.`);
     return null;
