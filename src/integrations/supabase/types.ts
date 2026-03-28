@@ -5152,6 +5152,7 @@ export type Database = {
           edge_classifications: Json | null
           estimated_roof_area_sqft: number | null
           facet_count: number | null
+          facet_decomposition: Json | null
           field_authority: Json | null
           field_confidence: Json | null
           field_sources: Json | null
@@ -5239,6 +5240,7 @@ export type Database = {
           edge_classifications?: Json | null
           estimated_roof_area_sqft?: number | null
           facet_count?: number | null
+          facet_decomposition?: Json | null
           field_authority?: Json | null
           field_confidence?: Json | null
           field_sources?: Json | null
@@ -5326,6 +5328,7 @@ export type Database = {
           edge_classifications?: Json | null
           estimated_roof_area_sqft?: number | null
           facet_count?: number | null
+          facet_decomposition?: Json | null
           field_authority?: Json | null
           field_confidence?: Json | null
           field_sources?: Json | null
