@@ -2852,33 +2852,51 @@ function deriveRoofEstimate(
   roofFormInference: RoofFormInference | null,
   visionResult: SatelliteVisionResult | null,
   suppressions: SuppressionRecord[],
+  exactPitchRise: number | null = null,
 ): RoofEstimateResult {
   const hasGeometry = !!selectedCandidate;
   const footprintArea = selectedCandidate?.area_sqft ?? 0;
   const overhang: OverhangConfig = DEFAULT_OVERHANG;
 
-  // ── Pitch band ──
+  // ── Pitch — prefer exact pitch when provided ──
   let pitchBand: PitchBand = "unknown";
   let pitchType: PitchType = "band";
   let slopeFactor = PITCH_BAND_META.unknown.slope_factor_mid;
   let pitchIsDefaultFallback = false;
-  if (visionResult && !visionResult.pitch_band.abstain && visionResult.pitch_band.confidence >= 20) {
+  let exactPitchUsed: string | null = null;
+
+  if (exactPitchRise != null && exactPitchRise >= 0 && exactPitchRise <= 24) {
+    // EXACT PITCH: compute precise slope factor = sqrt(1 + (rise/12)²)
+    slopeFactor = Math.sqrt(1 + (exactPitchRise / 12) ** 2);
+    pitchBand = exactPitchToBand(`${exactPitchRise}/12`);
+    pitchType = "exact";
+    exactPitchUsed = `${exactPitchRise}/12`;
+    console.log(`[Darwin Roof] Exact pitch: ${exactPitchUsed}, slope_factor=${roundTo(slopeFactor, 5)}`);
+  } else if (visionResult && !visionResult.pitch_band.abstain && visionResult.pitch_band.confidence >= 20) {
     pitchBand = visionResult.pitch_band.value;
     slopeFactor = PITCH_BAND_META[pitchBand].slope_factor_mid;
   } else if (hasGeometry) {
     // Fallback: use moderate pitch when vision is unavailable/abstained
-    // This ensures area and linear calculations proceed rather than returning zero
     pitchBand = "moderate";
     slopeFactor = PITCH_BAND_META.moderate.slope_factor_mid;
     pitchIsDefaultFallback = true;
   }
 
-  // ── Area (with roof polygon expansion) ──
+  // ── Area calculation ──
+  // For authoritative sources (Microsoft, NJGIN, Local DB), the footprint polygon
+  // already represents the building outline including overhangs as captured by aerial
+  // imagery. We use the RAW footprint area × slope factor — no overhang expansion,
+  // no artificial correction factors. This produces the most accurate results when
+  // compared to professional measurement reports (e.g., GAF QuickMeasure).
   let roofArea = 0, squares = 0;
   let roofPolyResult: RoofPolygonResult | null = null;
   let roofPolygonGeoJson: any = null;
   let planarRoofAreaSqft = 0;
   let correctionFactorUsed: number | null = null;
+
+  const isAuthoritativeSource = (selectedCandidate?.source ?? "").includes("Microsoft") ||
+    (selectedCandidate?.source ?? "").includes("NJGIN") ||
+    (selectedCandidate?.source ?? "").includes("Local DB");
 
   if (hasGeometry && selectedCandidate) {
     const [cLng, cLat] = polygonCentroid(selectedCandidate.polygon);
@@ -2890,18 +2908,25 @@ function deriveRoofEstimate(
     }));
 
     roofPolyResult = buildRoofPolygonFromFootprint(localXY, edgeClsForExpansion, overhang);
-    planarRoofAreaSqft = roofPolyResult.expanded_planar_area_sqft;
 
-    // Build GeoJSON for the expanded roof polygon
+    if (isAuthoritativeSource) {
+      // AUTHORITATIVE: use raw footprint area directly — no overhang expansion, no correction
+      planarRoofAreaSqft = selectedCandidate.area_sqft;
+      correctionFactorUsed = 1.0;
+      console.log(`[Darwin Roof] Authoritative source: using raw footprint area ${planarRoofAreaSqft} sqft (no expansion/correction)`);
+    } else {
+      // Non-authoritative (AI Vision, etc.): use expanded area + corrections
+      planarRoofAreaSqft = roofPolyResult.expanded_planar_area_sqft;
+      correctionFactorUsed = getValidationDerivedAreaCorrection({
+        inferredRoofForm: roofFormInference?.inferred_roof_form ?? null,
+        geometrySource: selectedCandidate.geometry_metadata?.source_name ?? null,
+        geometryQualityScore: selectedCandidate.geometry_quality_score,
+        pitchBand: pitchBand,
+      });
+    }
+
+    // Build GeoJSON for the expanded roof polygon (still useful for visualization)
     roofPolygonGeoJson = buildPolygonGeoJson(roofPolyResult.roof_polygon, { lng: cLng, lat: cLat });
-
-    // Apply validation-derived correction factor
-    correctionFactorUsed = getValidationDerivedAreaCorrection({
-      inferredRoofForm: roofFormInference?.inferred_roof_form ?? null,
-      geometrySource: selectedCandidate.geometry_metadata?.source_name ?? null,
-      geometryQualityScore: selectedCandidate.geometry_quality_score,
-      pitchBand: pitchBand,
-    });
 
     roofArea = roundTo(planarRoofAreaSqft * slopeFactor * correctionFactorUsed, 0);
     squares = roundTo(roofArea / 100, 1);
@@ -2935,7 +2960,8 @@ function deriveRoofEstimate(
     analysis: imageryAnalysis,
   });
 
-  const calibrationAdjustmentFactor = getCalibrationAdjustmentFactor({
+  // For authoritative sources, skip calibration adjustment — the footprint area is the source of truth
+  const calibrationAdjustmentFactor = isAuthoritativeSource ? 1.0 : getCalibrationAdjustmentFactor({
     inferredRoofForm: roofFormInference?.inferred_roof_form ?? null,
     complexity: imageryAnalysis.complexity,
     geometryQualityScore: selectedCandidate?.geometry_quality_score ?? null,
@@ -3734,8 +3760,11 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { claim_id, address, selected_candidate_index, force_fresh_candidates } = body;
+    const { claim_id, address, selected_candidate_index, force_fresh_candidates, exact_pitch } = body;
     const forceFreshCandidates = force_fresh_candidates === true;
+    // exact_pitch: e.g. "7/12" — enables precise slope factor calculation
+    const parsedExactPitch = typeof exact_pitch === "string" ? exact_pitch.match(/^(\d+)\/12$/) : null;
+    const exactPitchRise = parsedExactPitch ? parseInt(parsedExactPitch[1]) : null;
 
     if (!claim_id || !address) {
       return new Response(JSON.stringify({ error: "claim_id and address are required" }), {
@@ -4238,7 +4267,7 @@ Deno.serve(async (req) => {
       }).then(({ error }) => { if (error) console.error("Audit log error:", error); });
     }
 
-    const rawEstimate = deriveRoofEstimate(address, geo.lat, geo.lng, parcel, elevation, selectedCandidate, candidates, roofFormInference, visionResult, visionSuppressions);
+    const rawEstimate = deriveRoofEstimate(address, geo.lat, geo.lng, parcel, elevation, selectedCandidate, candidates, roofFormInference, visionResult, visionSuppressions, exactPitchRise);
 
     // Phase 2D: Apply tuning heuristics
     let estimate = rawEstimate;
