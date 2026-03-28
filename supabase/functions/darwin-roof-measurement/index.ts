@@ -2632,7 +2632,7 @@ function deriveLinearForMass(
     notes.push("Facets: 4 (hip).");
   } else if (resolvedForm === "cross_gable") {
     const valCount = roofFormInference?.hip_valley_candidates.filter(c => c.type === "valley").length ?? 0;
-    facetCount = Math.max(4, 4 + valCount * 2);
+    facetCount = Math.max(6, 6 + valCount * 2);
     linear_confidence.facet_count = 30;
     notes.push(`Facets: ${facetCount} (cross-gable, ${valCount} valley(s)).`);
   } else {
@@ -3030,49 +3030,62 @@ function decomposeFacetsFromFootprint(
     notes.push(`Ridge: ${ridgeLen}ft, Hip lines: 4×${hipLineLen}ft, Eave: 2×${roundTo(roofLength)}+2×${roundTo(roofWidth)}ft.`);
 
   } else if (resolvedType === "cross_gable") {
-    // CROSS-GABLE: main body runs the full dominant axis + perpendicular wing
-    // Key insight: main ridge = full dominant axis length (not partial).
-    // Wing shares the main ridge at intersection — wing "ridge" only counts
-    // the portion extending beyond the main body envelope.
-    const wingWidthRatio = 0.3; // wing occupies ~30% of dominant axis
-    const wingWidth = roofLength * wingWidthRatio;
-    const halfMainWidth = roofWidth / 2;
-    const halfWingWidth = wingWidth / 2;
+    // CROSS-GABLE: T/L/+ shape — main body + perpendicular wing
+    // The bounding box (roofLength × roofWidth) encompasses both sections.
+    // Key geometry: wing extends PERPENDICULAR to main body beyond its depth.
 
-    // Main ridge = full dominant axis (GAF-validated: matches dominant length)
-    const mainRidgeLen = roundTo(roofLength, 0);
+    const wingDepthRatio = 0.35;  // wing occupies ~35% of dominant axis
+    const mainBodyRatio = 0.65;   // main body is ~65% of perpendicular extent
 
-    // Wing ridge = only the extension beyond the main body envelope per side
-    // If the wing (perpendicular) is same width as main body, extension = 0
-    const wingExtension = Math.max(0, roofWidth - roofWidth); // same-width → 0
-    const wingRidgePerSide = roundTo(wingExtension / 2, 0);
+    const wingDepth = roofLength * wingDepthRatio;       // wing dimension along dominant axis
+    const mainDepth = roofWidth * mainBodyRatio;          // main body perpendicular depth
+    const wingExtPerSide = (roofWidth - mainDepth) / 2;  // how far wing extends beyond main body
+    const halfMainDepth = mainDepth / 2;
+    const halfWingDepth = wingDepth / 2;
 
-    // AREAS
-    const mainFacetPlanar = roofLength * halfMainWidth; // per slope
+    // ── RIDGES ──
+    // Main ridge runs along dominant axis but NOT the full bounding box length.
+    // It spans the main body section, shortened where the wing creates valley intersections.
+    const mainRidgeLen = roundTo(roofLength - wingDepth * 0.5, 0);
+    // Wing ridge: perpendicular extension beyond main body per side
+    const wingRidgePerSide = roundTo(Math.max(wingExtPerSide, roofWidth * 0.05), 0);
+
+    // ── AREAS ──
+    // Use actual footprint area (not L×W which overcounts for T-shapes)
+    const overhangScale = (dominantLen > 0 && perpLen > 0)
+      ? (roofLength * roofWidth) / (dominantLen * perpLen)
+      : 1;
+    const effectiveFootprint = (candidate.area_sqft || dominantLen * perpLen) * overhangScale;
+
+    // Main body takes ~70% of area, wing extensions take ~30%
+    const mainFacetPlanar = roundTo(effectiveFootprint * 0.35, 0); // per slope (2 slopes)
+    const wingFacetPlanar = roundTo(effectiveFootprint * 0.075, 0); // per extension facet (4 facets)
     const mainFacetSlope = roundTo(mainFacetPlanar * slopeFactor, 0);
-    const wingFacetPlanar = roofWidth * halfWingWidth; // per slope
     const wingFacetSlope = roundTo(wingFacetPlanar * slopeFactor, 0);
 
-    // EAVE: main eave interrupted where wing meets it
-    const mainEaveInterrupted = roundTo(Math.max(0, roofLength - wingWidth), 0);
-    // Wing eaves: the portions extending beyond the main body
-    const wingEavePerSide = wingExtension > 0
-      ? roundTo(wingExtension / 2, 0)
-      : roundTo(roofWidth * 0.4, 0);
+    // ── EAVE ──
+    // Main eave: interrupted where wing sits on top (T-shape: only front interrupted)
+    const mainEaveFront = roundTo(Math.max(0, roofLength - wingDepth), 0);
+    const mainEaveRear = roundTo(roofLength, 0);
+    // Wing eave: extension portions beyond main body
+    const wingEaveLen = roundTo(Math.max(wingExtPerSide, roofWidth * 0.05), 0);
 
-    // RAKE: slope-adjusted gable-end height (each facet has 2 rake edges)
-    const mainRake = roundTo(halfMainWidth * slopeFactor, 0);
-    const wingRake = roundTo(halfWingWidth * slopeFactor, 0);
+    // ── RAKE (sloped gable-end edges from eave to ridge) ──
+    // Main gable ends: 2 ends × 2 rakes each = 4 mainRake edges
+    const mainRake = roundTo(halfMainDepth * slopeFactor, 0);
+    // Wing gable ends: 2 ends × 2 rakes each × 2 sides = 8 wingRake edges
+    const wingRake = roundTo(halfWingDepth * slopeFactor, 0);
 
-    // VALLEY: where wing meets main body
-    const valleyLen = roundTo(Math.min(halfMainWidth, halfWingWidth) * Math.SQRT2 * slopeFactor, 0);
+    // ── VALLEY ──
+    const valleyLen = roundTo(Math.min(halfMainDepth, halfWingDepth) * Math.SQRT2 * slopeFactor, 0);
 
-    // Main front slope — 2 rakes (left and right gable ends) + interrupted eave + valley
+    // ── FACETS (6 total) ──
+    // Facet 1: Main Front Slope (interrupted eave, 2 rakes, valley)
     facets.push({
       id: "facet_1", label: "Main Front Slope",
-      area_sqft: roundTo(mainFacetPlanar, 0), slope_area_sqft: mainFacetSlope,
+      area_sqft: mainFacetPlanar, slope_area_sqft: mainFacetSlope,
       edges: [
-        { type: "eave", length_ft: mainEaveInterrupted, bearing_deg: roundTo(dominantBearing, 1) },
+        { type: "eave", length_ft: mainEaveFront, bearing_deg: roundTo(dominantBearing, 1) },
         { type: "rake", length_ft: mainRake, bearing_deg: roundTo((dominantBearing + 90) % 360, 1) },
         { type: "ridge", length_ft: mainRidgeLen, bearing_deg: roundTo(dominantBearing, 1) },
         { type: "rake", length_ft: mainRake, bearing_deg: roundTo((dominantBearing + 270) % 360, 1) },
@@ -3080,12 +3093,12 @@ function decomposeFacetsFromFootprint(
       ],
       pitch: pitchLabel, slope_factor: slopeFactor,
     });
-    // Main rear slope — same structure
+    // Facet 2: Main Rear Slope (full eave, 2 rakes, valley)
     facets.push({
       id: "facet_2", label: "Main Rear Slope",
-      area_sqft: roundTo(mainFacetPlanar, 0), slope_area_sqft: mainFacetSlope,
+      area_sqft: mainFacetPlanar, slope_area_sqft: mainFacetSlope,
       edges: [
-        { type: "eave", length_ft: mainEaveInterrupted, bearing_deg: roundTo((dominantBearing + 180) % 360, 1) },
+        { type: "eave", length_ft: mainEaveRear, bearing_deg: roundTo((dominantBearing + 180) % 360, 1) },
         { type: "rake", length_ft: mainRake, bearing_deg: roundTo((dominantBearing + 90) % 360, 1) },
         { type: "ridge", length_ft: mainRidgeLen, bearing_deg: roundTo(dominantBearing, 1) },
         { type: "rake", length_ft: mainRake, bearing_deg: roundTo((dominantBearing + 270) % 360, 1) },
@@ -3093,38 +3106,38 @@ function decomposeFacetsFromFootprint(
       ],
       pitch: pitchLabel, slope_factor: slopeFactor,
     });
-    // Wing front slope — 2 rakes (each gable end of wing)
-    facets.push({
-      id: "facet_3", label: "Wing Front Slope",
-      area_sqft: roundTo(wingFacetPlanar, 0), slope_area_sqft: wingFacetSlope,
-      edges: [
-        { type: "eave", length_ft: wingEavePerSide, bearing_deg: roundTo((dominantBearing + 90) % 360, 1) },
-        { type: "rake", length_ft: wingRake, bearing_deg: roundTo(dominantBearing, 1) },
-        { type: "ridge", length_ft: wingRidgePerSide, bearing_deg: roundTo((dominantBearing + 90) % 360, 1) },
-        { type: "rake", length_ft: wingRake, bearing_deg: roundTo((dominantBearing + 180) % 360, 1) },
-        { type: "valley", length_ft: valleyLen, bearing_deg: roundTo((dominantBearing + 135) % 360, 1) },
-      ],
-      pitch: pitchLabel, slope_factor: slopeFactor,
-    });
-    // Wing rear slope
-    facets.push({
-      id: "facet_4", label: "Wing Rear Slope",
-      area_sqft: roundTo(wingFacetPlanar, 0), slope_area_sqft: wingFacetSlope,
-      edges: [
-        { type: "eave", length_ft: wingEavePerSide, bearing_deg: roundTo((dominantBearing + 270) % 360, 1) },
-        { type: "rake", length_ft: wingRake, bearing_deg: roundTo(dominantBearing, 1) },
-        { type: "ridge", length_ft: wingRidgePerSide, bearing_deg: roundTo((dominantBearing + 90) % 360, 1) },
-        { type: "rake", length_ft: wingRake, bearing_deg: roundTo((dominantBearing + 180) % 360, 1) },
-        { type: "valley", length_ft: valleyLen, bearing_deg: roundTo((dominantBearing + 315) % 360, 1) },
-      ],
-      pitch: pitchLabel, slope_factor: slopeFactor,
-    });
+    // Facets 3-6: Wing extension slopes (front+rear on each side)
+    for (let side = 0; side < 2; side++) {
+      const sideLabel = side === 0 ? "Left" : "Right";
+      const sideBearing = side === 0 ? 90 : 270;
+      facets.push({
+        id: `facet_${3 + side * 2}`, label: `Wing ${sideLabel} Front`,
+        area_sqft: wingFacetPlanar, slope_area_sqft: wingFacetSlope,
+        edges: [
+          { type: "eave", length_ft: wingEaveLen, bearing_deg: roundTo((dominantBearing + sideBearing) % 360, 1) },
+          { type: "rake", length_ft: wingRake, bearing_deg: roundTo(dominantBearing, 1) },
+          { type: "ridge", length_ft: wingRidgePerSide, bearing_deg: roundTo((dominantBearing + sideBearing) % 360, 1) },
+          { type: "rake", length_ft: wingRake, bearing_deg: roundTo((dominantBearing + 180) % 360, 1) },
+        ],
+        pitch: pitchLabel, slope_factor: slopeFactor,
+      });
+      facets.push({
+        id: `facet_${4 + side * 2}`, label: `Wing ${sideLabel} Rear`,
+        area_sqft: wingFacetPlanar, slope_area_sqft: wingFacetSlope,
+        edges: [
+          { type: "eave", length_ft: wingEaveLen, bearing_deg: roundTo((dominantBearing + sideBearing) % 360, 1) },
+          { type: "rake", length_ft: wingRake, bearing_deg: roundTo(dominantBearing, 1) },
+          { type: "ridge", length_ft: wingRidgePerSide, bearing_deg: roundTo((dominantBearing + sideBearing) % 360, 1) },
+          { type: "rake", length_ft: wingRake, bearing_deg: roundTo((dominantBearing + 180) % 360, 1) },
+        ],
+        pitch: pitchLabel, slope_factor: slopeFactor,
+      });
+    }
 
-    notes.push(`Cross-gable: 4 facets (2 main @${mainFacetSlope}sqft, 2 wing @${wingFacetSlope}sqft).`);
-    notes.push(`Main eave (interrupted): ${mainEaveInterrupted}ft/side, Wing eave: ${wingEavePerSide}ft/side.`);
-    notes.push(`Main ridge: ${mainRidgeLen}ft (full dominant), Wing ridge: ${wingRidgePerSide}ft/side.`);
-    notes.push(`Valleys: 2×${valleyLen}ft.`);
-    notes.push(`Rakes: main 4×${mainRake}ft, wing 4×${wingRake}ft.`);
+    notes.push(`Cross-gable: 6 facets (2 main @${mainFacetSlope}sqft, 4 wing @${wingFacetSlope}sqft).`);
+    notes.push(`Main eave: front=${mainEaveFront}ft, rear=${mainEaveRear}ft. Wing eave: 4×${wingEaveLen}ft.`);
+    notes.push(`Main ridge: ${mainRidgeLen}ft, Wing ridge: 4×${wingRidgePerSide}ft.`);
+    notes.push(`Valleys: 2×${valleyLen}ft. Main rake: 4×${mainRake}ft, Wing rake: 8×${wingRake}ft.`);
   } else {
     notes.push(`Roof type '${resolvedType}' not supported for facet decomposition.`);
     return null;
