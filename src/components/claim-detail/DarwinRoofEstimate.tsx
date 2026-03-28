@@ -926,18 +926,18 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
               <SelectValue placeholder="Roof Type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Auto-detect</SelectItem>
+              <SelectItem value="auto">Auto-detect</SelectItem>
               <SelectItem value="gable">⛺ Gable</SelectItem>
               <SelectItem value="hip">🏠 Hip</SelectItem>
               <SelectItem value="cross_gable">✝️ Cross-Gable</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={exactPitch} onValueChange={setExactPitch}>
+          <Select value={exactPitch || "auto"} onValueChange={(v) => setExactPitch(v === "auto" ? "" : v)}>
             <SelectTrigger className="w-[120px]">
               <SelectValue placeholder="Pitch" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Auto-detect</SelectItem>
+              <SelectItem value="auto">Auto-detect</SelectItem>
               {PITCH_OPTIONS.map((p) => (
                 <SelectItem key={p} value={p}>{p}</SelectItem>
               ))}
