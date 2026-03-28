@@ -76,6 +76,8 @@ interface CandidateFetchSummary {
   hard_source_filter_triggered?: boolean;
   nearest_authoritative_distance_ft?: number | null;
   coordinate_source?: string | null;
+  analysis_mode?: string | null;
+  is_override?: boolean;
 }
 
 interface Props {
@@ -259,6 +261,7 @@ function CandidateDebugPanel({ candidates, summary }: { candidates: CandidateDeb
       )}
 
       <div className="border-b border-border/50">
+        <DebugRow label="Analysis Mode" value={effectiveSummary.analysis_mode ?? "unknown"} warn={effectiveSummary.is_override === true} />
         <DebugRow label="Coordinate Source" value={effectiveSummary.coordinate_source ?? "unknown"} />
         <DebugRow label="Raw Candidates" value={effectiveSummary.raw_candidate_count ?? candidates.length} />
         <DebugRow label="Effective Candidates" value={effectiveSummary.effective_candidate_count ?? candidates.length} warn={(effectiveSummary.effective_candidate_count ?? candidates.length) === 0} />

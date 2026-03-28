@@ -3731,7 +3731,7 @@ Deno.serve(async (req) => {
 
     const { data: claimRecord, error: claimLookupErr } = await supabase
       .from("claims")
-      .select("policyholder_address, latitude, longitude")
+      .select("policyholder_address, property_address, property_city, property_state, property_zip, latitude, longitude")
       .eq("id", claim_id)
       .maybeSingle();
 
@@ -3739,38 +3739,102 @@ Deno.serve(async (req) => {
       console.error("Claim lookup error:", claimLookupErr);
     }
 
-    // COORDINATE CONSISTENCY: Prefer claim.latitude/longitude (same coords used by ingestion)
-    // over geocoded coords to avoid coordinate mismatch with building_footprints table.
-    let geo: { lat: number; lng: number; matchedAddress: string } | null = null;
-    let coordinateSource = "none";
+    // ── ADDRESS OVERRIDE DETECTION ────────────────────────────────────────
+    // Build the full claim address from components for comparison
+    const normalizeAddr = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+    const claimAddressParts = [
+      claimRecord?.property_address,
+      claimRecord?.property_city,
+      claimRecord?.property_state,
+      claimRecord?.property_zip,
+    ].filter(Boolean);
+    const claimFullAddress = claimAddressParts.join(", ");
+    const normalizedInput = normalizeAddr(address);
+    const normalizedClaim = normalizeAddr(claimFullAddress);
+    const normalizedClaimAlt = normalizeAddr(claimRecord?.policyholder_address || "");
 
-    if (claimRecord?.latitude != null && claimRecord?.longitude != null) {
-      const lat = Number(claimRecord.latitude);
-      const lng = Number(claimRecord.longitude);
-      if (Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0) {
-        geo = { lat, lng, matchedAddress: claimRecord.policyholder_address || address };
-        coordinateSource = "claim_record";
-        console.log(`[Darwin Roof] Using claim record coordinates: ${lat},${lng}`);
+    const isOverride = normalizedInput.length > 0 &&
+      normalizedClaim.length > 0 &&
+      normalizedInput !== normalizedClaim &&
+      normalizedInput !== normalizedClaimAlt;
+
+    // ── TWO EXPLICIT MODES ────────────────────────────────────────────────
+    // Mode A: CLAIM_LOCKED — use claim.latitude/longitude ONLY
+    // Mode B: EXTERNAL_PROPERTY — use geocoded coordinates from input address ONLY
+    let resolvedLat: number;
+    let resolvedLng: number;
+    let resolvedAddress: string;
+    let coordinateSource: string;
+    let analysisMode: "CLAIM_LOCKED" | "EXTERNAL_PROPERTY";
+
+    if (isOverride) {
+      // EXTERNAL_PROPERTY mode: geocode the input address, ignore claim coords entirely
+      analysisMode = "EXTERNAL_PROPERTY";
+      const geocoded = await geocodeAddress(address);
+      if (!geocoded) {
+        return new Response(
+          JSON.stringify({ error: "Could not geocode the external address. Please verify and try again." }),
+          { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      resolvedLat = geocoded.lat;
+      resolvedLng = geocoded.lng;
+      resolvedAddress = geocoded.matchedAddress || address;
+      coordinateSource = "geocoded_external";
+    } else {
+      // CLAIM_LOCKED mode: use claim coordinates, fall back to geocoding claim address
+      analysisMode = "CLAIM_LOCKED";
+      if (claimRecord?.latitude != null && claimRecord?.longitude != null) {
+        const lat = Number(claimRecord.latitude);
+        const lng = Number(claimRecord.longitude);
+        if (Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0) {
+          resolvedLat = lat;
+          resolvedLng = lng;
+          resolvedAddress = claimFullAddress || address;
+          coordinateSource = "claim_record";
+        } else {
+          const geocoded = await geocodeAddress(claimFullAddress || address);
+          if (!geocoded) {
+            return new Response(
+              JSON.stringify({ error: "Could not geocode address. Please verify the address and try again." }),
+              { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+          resolvedLat = geocoded.lat;
+          resolvedLng = geocoded.lng;
+          resolvedAddress = geocoded.matchedAddress || address;
+          coordinateSource = "geocoded_claim";
+        }
+      } else {
+        const geocoded = await geocodeAddress(claimFullAddress || address);
+        if (!geocoded) {
+          return new Response(
+            JSON.stringify({ error: "Could not geocode address. Please verify the address and try again." }),
+            { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        resolvedLat = geocoded.lat;
+        resolvedLng = geocoded.lng;
+        resolvedAddress = geocoded.matchedAddress || address;
+        coordinateSource = "geocoded_claim";
       }
     }
 
-    if (!geo) {
-      geo = await geocodeAddress(address);
-      if (geo) coordinateSource = "geocoded_primary";
-    }
+    // ── DEBUG LOGGING ─────────────────────────────────────────────────────
+    console.log(`[Darwin Roof] Mode: ${analysisMode}`);
+    console.log(`[Darwin Roof] Coordinates used:`, JSON.stringify({
+      resolvedLat,
+      resolvedLng,
+      claimLat: claimRecord?.latitude ?? null,
+      claimLng: claimRecord?.longitude ?? null,
+      inputAddress: address,
+      claimAddress: claimFullAddress,
+      isOverride,
+      coordinateSource,
+    }));
 
-    if (!geo && claimRecord?.policyholder_address && claimRecord.policyholder_address !== address) {
-      console.log("[Darwin Roof] Primary geocode failed, retrying with claim address on file");
-      geo = await geocodeAddress(claimRecord.policyholder_address);
-      if (geo) coordinateSource = "geocoded_claim_address";
-    }
-
-    if (!geo) {
-      return new Response(
-        JSON.stringify({ error: "Could not geocode address. Please verify the address and try again." }),
-        { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
+    // Create a geo object for downstream compatibility (ALL downstream uses resolvedLat/resolvedLng)
+    const geo = { lat: resolvedLat, lng: resolvedLng, matchedAddress: resolvedAddress };
 
     const [parcel, elevation, candidates] = await Promise.all([
       fetchParcelContext(geo.lat, geo.lng),
@@ -3964,6 +4028,9 @@ Deno.serve(async (req) => {
       hard_source_filter_triggered: allPassingAuthoritative.length > 0,
       nearest_authoritative_distance_ft: nearestAuthoritativeDistFt,
       coordinate_source: coordinateSource,
+      // Address override / analysis mode
+      analysis_mode: analysisMode,
+      is_override: isOverride,
     };
 
     console.log(`[Darwin Roof] Candidate fetch summary: coords=${coordinateSource} MS=${candidateFetchSummary.microsoft_count} NJGIN=${candidateFetchSummary.njgin_count} Esri=${candidateFetchSummary.esri_count} OSM=${candidateFetchSummary.osm_count} AI=${candidateFetchSummary.ai_count} raw=${candidateFetchSummary.raw_candidate_count} effective=${candidateFetchSummary.effective_candidate_count} auth=${candidateFetchSummary.authoritative_candidate_count} weak_auth=${candidateFetchSummary.weak_authoritative_count} nearest_auth_dist=${candidateFetchSummary.nearest_authoritative_distance_ft ?? "n/a"}ft ai_removed=${candidateFetchSummary.ai_candidates_removed} hard_filter=${candidateFetchSummary.hard_source_filter_triggered} → selected="${candidateFetchSummary.selected_source}"`);
@@ -4324,6 +4391,8 @@ Deno.serve(async (req) => {
         candidate_debug: candidateDebug,
         candidate_fetch_summary: candidateFetchSummary,
         force_fresh_candidates: forceFreshCandidates,
+        analysis_mode: analysisMode,
+        is_override: isOverride,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

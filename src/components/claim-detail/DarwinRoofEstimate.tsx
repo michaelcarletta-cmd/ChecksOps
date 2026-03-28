@@ -270,6 +270,19 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const [checkingNearbyFootprints, setCheckingNearbyFootprints] = useState(false);
   const [nearbyDebugRows, setNearbyDebugRows] = useState<NearbyFootprintRow[]>([]);
   const [nearbyDebugError, setNearbyDebugError] = useState<string | null>(null);
+  const [lockToClaim, setLockToClaim] = useState(true);
+  const [lastAnalysisMode, setLastAnalysisMode] = useState<string | null>(null);
+
+  // Derive claim address for override detection
+  const claimAddress = (() => {
+    if (!claim) return "";
+    return [claim.property_address, claim.property_city, claim.property_state, claim.property_zip]
+      .filter(Boolean).join(", ");
+  })();
+
+  // Detect if current address differs from claim address
+  const normalizeAddr = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+  const isAddressOverride = !lockToClaim && normalizeAddr(address) !== normalizeAddr(claimAddress) && normalizeAddr(address).length > 0;
 
   useEffect(() => {
     const load = async () => {
@@ -310,7 +323,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   }, [claimId]);
 
   useEffect(() => {
-    if (claim) {
+    if (claim && lockToClaim) {
       const parts = [
         claim.property_address,
         claim.property_city,
@@ -319,7 +332,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       ].filter(Boolean);
       if (parts.length > 0) setAddress(parts.join(", "));
     }
-  }, [claim]);
+  }, [claim, lockToClaim]);
 
   const runEstimate = useCallback(async (candidateIndex?: number, options?: { forceFreshCandidates?: boolean }) => {
     if (!address.trim()) {
@@ -352,7 +365,9 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
         candidate_debug: data.candidate_debug ?? [],
         candidate_fetch_summary: data.candidate_fetch_summary ?? null,
       });
+      setLastAnalysisMode(data.analysis_mode ?? null);
       const candidateCount = data.candidateCount || 0;
+      const modeLabel = data.is_override ? " [EXTERNAL PROPERTY]" : "";
       const roofForm = data.roofFormInferred ? ` — roof form inferred` : "";
       const visionInfo = data.visionClassified
         ? ` — 🛰️ vision classified (pitch band: ${data.visionPitchBand ?? "?"}, ${data.suppressionCount || 0} suppression${data.suppressionCount !== 1 ? "s" : ""})`
@@ -361,7 +376,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       const fpMsg = data.footprintExtracted
         ? ` — footprint extracted (${candidateCount} candidate${candidateCount > 1 ? "s" : ""})${roofForm}${visionInfo}${abstentions}`
         : ` — no footprint geometry found${visionInfo}`;
-      toast.success("Roof estimate generated" + fpMsg);
+      toast.success("Roof estimate generated" + modeLabel + fpMsg);
     } catch (err: any) {
       setError(err.message || "Estimate failed");
       toast.error(err.message || "Estimate failed");
@@ -824,16 +839,61 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
             <AlertDescription>Authoritative footprint data is still not available for this property.</AlertDescription>
           </Alert>
         )}
+        {/* Analysis Mode Toggle */}
+        <div className="flex items-center gap-3 text-sm">
+          <button
+            type="button"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border transition-colors ${lockToClaim
+              ? "bg-primary/10 border-primary/30 text-primary font-medium"
+              : "bg-muted border-border text-muted-foreground hover:bg-accent"
+            }`}
+            onClick={() => {
+              setLockToClaim(true);
+              // Reset address to claim address
+              if (claimAddress) setAddress(claimAddress);
+            }}
+          >
+            <Lock className="h-3.5 w-3.5" />
+            Lock to Claim Property
+          </button>
+          <button
+            type="button"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border transition-colors ${!lockToClaim
+              ? "bg-primary/10 border-primary/30 text-primary font-medium"
+              : "bg-muted border-border text-muted-foreground hover:bg-accent"
+            }`}
+            onClick={() => setLockToClaim(false)}
+          >
+            <Unlock className="h-3.5 w-3.5" />
+            Analyze Different Property
+          </button>
+          {lastAnalysisMode && (
+            <Badge variant={lastAnalysisMode === "EXTERNAL_PROPERTY" ? "destructive" : "secondary"} className="text-xs">
+              {lastAnalysisMode === "EXTERNAL_PROPERTY" ? "External" : "Claim-Locked"}
+            </Badge>
+          )}
+        </div>
+
+        {/* Override Warning */}
+        {isAddressOverride && (
+          <Alert className="border-amber-500/50 bg-amber-500/10">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-700 dark:text-amber-400">
+              You are analyzing a different property than the claim. This will not affect the claim unless confirmed.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Address Input */}
         <div className="flex gap-2">
           <div className="flex-1 relative">
             <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Enter property address..."
+              placeholder={lockToClaim ? "Claim property address" : "Enter external property address..."}
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               className="pl-9"
-              disabled={loading}
+              disabled={loading || lockToClaim}
             />
           </div>
           <Button onClick={() => runEstimate()} disabled={loading || !address.trim()}>
