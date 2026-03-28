@@ -3700,7 +3700,8 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { claim_id, address, selected_candidate_index } = body;
+    const { claim_id, address, selected_candidate_index, force_fresh_candidates } = body;
+    const forceFreshCandidates = force_fresh_candidates === true;
 
     if (!claim_id || !address) {
       return new Response(JSON.stringify({ error: "claim_id and address are required" }), {
@@ -3782,7 +3783,7 @@ Deno.serve(async (req) => {
     let guardrailTriggered = false;
     let guardrailReason: string | null = null;
     if (candidates.length > 0) {
-      let idx = typeof selected_candidate_index === "number" && selected_candidate_index >= 0 && selected_candidate_index < candidates.length
+      let idx = !forceFreshCandidates && typeof selected_candidate_index === "number" && selected_candidate_index >= 0 && selected_candidate_index < candidates.length
         ? selected_candidate_index
         : 0;
       selectedCandidate = candidates[idx];
@@ -4184,6 +4185,7 @@ Deno.serve(async (req) => {
         shadowMatches,
         candidate_debug: candidateDebug,
         candidate_fetch_summary: candidateFetchSummary,
+        force_fresh_candidates: forceFreshCandidates,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

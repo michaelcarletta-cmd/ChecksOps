@@ -13,6 +13,8 @@ const STATE_BBOX_3857: Record<string, string> = {
   NewJersey: "-8393948,4579616,-8218656,5052338",
 };
 
+const FEET_PER_DEGREE_LAT = 364000;
+
 function computeAreaSqft(ring: number[][]): number {
   if (ring.length < 3) return 0;
   const R_FT = 20902231;
@@ -40,6 +42,58 @@ function computeBbox(ring: number[][]) {
   const lngs = ring.map((p) => p[0]);
   const lats = ring.map((p) => p[1]);
   return { minLng: Math.min(...lngs), minLat: Math.min(...lats), maxLng: Math.max(...lngs), maxLat: Math.max(...lats) };
+}
+
+function buildTargetBboxWgs84(lng: number, lat: number, radiusFeet: number): [number, number, number, number] {
+  const safeRadius = Math.max(25, radiusFeet);
+  const latDelta = safeRadius / FEET_PER_DEGREE_LAT;
+  const lngDelta = safeRadius / (FEET_PER_DEGREE_LAT * Math.max(Math.abs(Math.cos((lat * Math.PI) / 180)), 0.000001));
+  return [lng - lngDelta, lat - latDelta, lng + lngDelta, lat + latDelta];
+}
+
+function haversineDistanceFt(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (degrees: number) => (degrees * Math.PI) / 180;
+  const earthRadiusFeet = 20902231;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * earthRadiusFeet * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function queryNearbyFootprints(supabase: any, lat: number, lng: number, radiusFeet: number) {
+  const [minLng, minLat, maxLng, maxLat] = buildTargetBboxWgs84(lng, lat, radiusFeet);
+  const { data, error } = await supabase
+    .from("building_footprints")
+    .select("source, source_id, centroid_lat, centroid_lng, area_sqft, vertex_count")
+    .gte("centroid_lat", minLat)
+    .lte("centroid_lat", maxLat)
+    .gte("centroid_lng", minLng)
+    .lte("centroid_lng", maxLng)
+    .order("area_sqft", { ascending: false })
+    .limit(25);
+
+  if (error) throw error;
+
+  const nearbyRows = ((data ?? []) as any[])
+    .map((row) => ({
+      ...row,
+      distance_ft: Math.round(haversineDistanceFt(lat, lng, Number(row.centroid_lat), Number(row.centroid_lng))),
+    }))
+    .sort((a, b) => a.distance_ft - b.distance_ft);
+
+  return {
+    nearby_footprint_count: nearbyRows.length,
+    nearest_centroid_distance_ft: nearbyRows[0]?.distance_ft ?? null,
+    nearest_candidate: nearbyRows[0]
+      ? {
+          source: nearbyRows[0].source,
+          source_id: nearbyRows[0].source_id,
+          area_sqft: nearbyRows[0].area_sqft,
+          vertex_count: nearbyRows[0].vertex_count,
+        }
+      : null,
+    nearby_rows: nearbyRows,
+  };
 }
 
 // Convert WGS84 to Web Mercator
@@ -118,7 +172,16 @@ Deno.serve(async (req) => {
     const state = body.state || "NewJersey";
     const stateCode = STATE_CODES[state] || state.substring(0, 2).toUpperCase();
     const testMode = body.test_mode === true;
-    const maxFeatures = testMode ? (body.test_limit || 50) : (body.limit || 5000);
+    const targetLat = Number(body.target_lat);
+    const targetLng = Number(body.target_lng);
+    const targetRadiusFeet = Math.max(25, Number(body.bbox_radius_ft) || 250);
+    const targetedAddress = typeof body.address === "string" ? body.address.trim() : null;
+    const isTargeted = Number.isFinite(targetLat) && Number.isFinite(targetLng);
+    const maxFeatures = isTargeted
+      ? (body.target_limit || 250)
+      : testMode
+        ? (body.test_limit || 50)
+        : (body.limit || 5000);
     const idBatchSize = body.id_batch_size || 200;
 
     // For test mode, default to a small bbox around Toms River / Lakewood area
@@ -126,7 +189,13 @@ Deno.serve(async (req) => {
     const TEST_BBOX_WGS84 = [-74.35, 40.10, -74.30, 40.12]; // ~3km x ~2km
 
     let bbox3857 = STATE_BBOX_3857[state];
-    if (body.bbox_wgs84) {
+    if (isTargeted) {
+      const [minLng, minLat, maxLng, maxLat] = buildTargetBboxWgs84(targetLng, targetLat, targetRadiusFeet);
+      const [xmin, ymin] = toWebMercator(minLng, minLat);
+      const [xmax, ymax] = toWebMercator(maxLng, maxLat);
+      bbox3857 = `${xmin},${ymin},${xmax},${ymax}`;
+      console.log(`[Ingest] Targeted mode: address=${targetedAddress ?? "n/a"}, lat=${targetLat}, lng=${targetLng}, radiusFt=${targetRadiusFeet}`);
+    } else if (body.bbox_wgs84) {
       const [minLng, minLat, maxLng, maxLat] = body.bbox_wgs84;
       const [xmin, ymin] = toWebMercator(minLng, minLat);
       const [xmax, ymax] = toWebMercator(maxLng, maxLat);
@@ -149,7 +218,18 @@ Deno.serve(async (req) => {
     const { data: logRow } = await supabase.from("building_footprint_ingestion_logs").insert({
       state: stateCode,
       source: "microsoft",
-      config: { state, testMode, maxFeatures, bbox3857, idBatchSize },
+      config: {
+        state,
+        testMode,
+        maxFeatures,
+        bbox3857,
+        idBatchSize,
+        isTargeted,
+        target_address: targetedAddress,
+        target_lat: Number.isFinite(targetLat) ? targetLat : null,
+        target_lng: Number.isFinite(targetLng) ? targetLng : null,
+        bbox_radius_ft: isTargeted ? targetRadiusFeet : null,
+      },
       created_by: user.id,
     }).select("id").single();
     const logId = logRow?.id;
@@ -297,12 +377,23 @@ Deno.serve(async (req) => {
       }).eq("id", logId);
     }
 
+    const targetedDiagnostics = isTargeted
+      ? {
+          address: targetedAddress,
+          lat: targetLat,
+          lng: targetLng,
+          search_radius_ft: targetRadiusFeet,
+          ...(await queryNearbyFootprints(supabase, targetLat, targetLng, targetRadiusFeet)),
+        }
+      : null;
+
     const summary = {
       success: true, state, state_code: stateCode, test_mode: testMode,
       total_ids_in_bbox: allIds.length,
       fetched_count: totalFetched, parsed_count: totalParsed,
       inserted_count: totalInserted, skipped_count: totalSkipped,
       error_count: totalErrors, errors: errors.slice(0, 20), log_id: logId,
+      targeted_diagnostics: targetedDiagnostics,
     };
     console.log(`[Ingest] DONE: ${JSON.stringify(summary)}`);
 
