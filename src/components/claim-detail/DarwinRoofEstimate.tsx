@@ -875,10 +875,12 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
               : "bg-muted border-border text-muted-foreground hover:bg-accent"
             }`}
             onClick={() => {
+              if (!claimHasAddress) return;
               setLockToClaim(true);
               // Reset address to claim address
               if (claimAddress) setAddress(claimAddress);
             }}
+            disabled={!claimHasAddress}
           >
             <Lock className="h-3.5 w-3.5" />
             Lock to Claim Property
