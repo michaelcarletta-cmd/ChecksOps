@@ -67,6 +67,12 @@ interface CandidateFetchSummary {
   selected_score: number | null;
   guardrail_triggered: boolean;
   guardrail_reason: string | null;
+  // Hard source filter fields
+  raw_candidate_count?: number;
+  effective_candidate_count?: number;
+  authoritative_candidate_count?: number;
+  ai_candidates_removed?: number;
+  hard_source_filter_triggered?: boolean;
 }
 
 interface Props {
@@ -192,15 +198,25 @@ function CandidateDebugPanel({ candidates, summary }: { candidates: CandidateDeb
     return "text-muted-foreground";
   };
 
+  const hardFilterTriggered = effectiveSummary.hard_source_filter_triggered === true;
+  const authCount = effectiveSummary.authoritative_candidate_count ?? 0;
+  const aiRemoved = effectiveSummary.ai_candidates_removed ?? 0;
+  const selectedIsAiVision = (effectiveSummary.selected_source ?? "").includes("AI Vision") || (effectiveSummary.selected_source ?? "").includes("Default Residential");
+  const bugDetected = authCount > 0 && selectedIsAiVision;
+
   const warnings: string[] = [];
   if (effectiveSummary.microsoft_count === 0) warnings.push("No Microsoft footprint found");
   if (effectiveSummary.njgin_count === 0) warnings.push("No NJGIN footprint found");
   if (effectiveSummary.osm_count === 0) warnings.push("No OSM footprint found");
-  if (effectiveSummary.selected_source?.includes("AI Vision") && effectiveSummary.ai_count > 0) {
-    warnings.push("AI Vision remained selected — no authoritative candidate was available or scored high enough");
+  if (selectedIsAiVision && authCount === 0 && effectiveSummary.ai_count > 0) {
+    warnings.push("AI Vision remained selected — no authoritative candidate was available or passed sanity checks");
   }
   if (!summary && candidates.length === 0) {
     warnings.push("No candidate debug payload is available for this run yet");
+  }
+  // If the building_footprints table has data globally but no authoritative candidate was nearby
+  if ((effectiveSummary.raw_candidate_count ?? 0) > 0 && authCount === 0 && effectiveSummary.microsoft_count === 0 && effectiveSummary.njgin_count === 0) {
+    warnings.push("Microsoft footprint dataset is populated, but no nearby authoritative footprint was found for this property.");
   }
 
   return (
@@ -209,7 +225,41 @@ function CandidateDebugPanel({ candidates, summary }: { candidates: CandidateDeb
         Footprint Candidate Debug
       </div>
 
+      {/* Hard source filter badges */}
+      {hardFilterTriggered && (
+        <div className="px-2 py-1.5 bg-green-500/10 border-b border-green-500/30">
+          <div className="flex items-start gap-1.5 text-[10px]">
+            <span className="text-green-700 font-semibold">✓ HARD SOURCE FILTER ACTIVE</span>
+          </div>
+          <div className="text-[9px] text-green-600 mt-0.5">
+            AI Vision candidates were removed because {authCount} authoritative footprint{authCount !== 1 ? "s" : ""} {authCount !== 1 ? "were" : "was"} available. ({aiRemoved} AI candidate{aiRemoved !== 1 ? "s" : ""} removed)
+          </div>
+        </div>
+      )}
+
+      {bugDetected && (
+        <div className="px-2 py-1.5 bg-destructive/10 border-b border-destructive/30">
+          <div className="flex items-start gap-1.5 text-[10px]">
+            <AlertTriangle className="h-3 w-3 text-destructive mt-0.5 shrink-0" />
+            <span className="text-destructive font-semibold">BUG: AI Vision selected even though authoritative candidates existed.</span>
+          </div>
+        </div>
+      )}
+
+      {selectedIsAiVision && !bugDetected && authCount === 0 && (
+        <div className="px-2 py-1.5 bg-amber-500/10 border-b border-amber-500/30">
+          <div className="flex items-start gap-1.5 text-[10px]">
+            <AlertTriangle className="h-3 w-3 text-amber-500 mt-0.5 shrink-0" />
+            <span className="text-amber-700 font-medium">Authoritative footprint data is still not available for this property.</span>
+          </div>
+        </div>
+      )}
+
       <div className="border-b border-border/50">
+        <DebugRow label="Raw Candidates" value={effectiveSummary.raw_candidate_count ?? candidates.length} />
+        <DebugRow label="Effective Candidates" value={effectiveSummary.effective_candidate_count ?? candidates.length} warn={(effectiveSummary.effective_candidate_count ?? candidates.length) === 0} />
+        <DebugRow label="Authoritative Candidates" value={authCount} warn={authCount === 0} />
+        <DebugRow label="AI Candidates Removed" value={aiRemoved} />
         <DebugRow label="Microsoft (DB)" value={effectiveSummary.microsoft_count} warn={effectiveSummary.microsoft_count === 0} />
         <DebugRow label="NJGIN" value={effectiveSummary.njgin_count} warn={effectiveSummary.njgin_count === 0} />
         <DebugRow label="Esri/MS" value={effectiveSummary.esri_count} />
@@ -218,9 +268,10 @@ function CandidateDebugPanel({ candidates, summary }: { candidates: CandidateDeb
         <DebugRow
           label="Selected Source"
           value={<span className={sourceColor(effectiveSummary.selected_source ?? "")}>{effectiveSummary.selected_source ?? "none"}</span>}
-          warn={effectiveSummary.selected_source?.includes("AI Vision")}
+          warn={selectedIsAiVision}
         />
         <DebugRow label="Selected Score" value={effectiveSummary.selected_score ?? "—"} />
+        <DebugRow label="Hard Filter" value={hardFilterTriggered ? "YES ✓" : "No"} />
         <DebugRow label="Guardrail Triggered" value={effectiveSummary.guardrail_triggered ? "YES ✓" : "No"} />
         {effectiveSummary.guardrail_triggered && effectiveSummary.guardrail_reason && (
           <DebugRow label="Guardrail Reason" value={effectiveSummary.guardrail_reason} />
