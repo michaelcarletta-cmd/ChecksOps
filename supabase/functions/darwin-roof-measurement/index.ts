@@ -2869,6 +2869,280 @@ function applyVisionLinearValidation(
   return { validated: v, validationNotes };
 }
 
+// ── Per-Facet Decomposition from Footprint + Roof Type ──────────────
+// Decomposes a building footprint into individual roof facets based on
+// the specified roof type, pitch, and building geometry.
+
+function decomposeFacetsFromFootprint(
+  candidate: CandidateFootprint | null,
+  roofFormInference: RoofFormInference | null,
+  roofType: string | null, // user-specified: "hip", "gable", "cross_gable"
+  slopeFactor: number,
+  pitchLabel: string,
+  overhang: OverhangConfig,
+): FacetDecomposition | null {
+  if (!candidate || !roofFormInference) return null;
+
+  const resolvedType = roofType || roofFormInference.inferred_roof_form || "gable";
+  const notes: string[] = [];
+  const facets: RoofFacet[] = [];
+
+  const edges = candidate.edge_classifications;
+  const dominantLen = roofFormInference.dominant_axis_length_ft;
+  const perpLen = roofFormInference.perpendicular_axis_length_ft;
+  const dominantBearing = roofFormInference.dominant_axis_bearing;
+
+  // Add overhang to building dimensions to get roof dimensions
+  const roofLength = dominantLen + 2 * overhang.eave_overhang_ft;
+  const roofWidth = perpLen + 2 * overhang.rake_overhang_ft;
+
+  notes.push(`Building: ${roundTo(dominantLen)}×${roundTo(perpLen)}ft → Roof: ${roundTo(roofLength, 1)}×${roundTo(roofWidth, 1)}ft (with overhang).`);
+  notes.push(`Roof type: ${resolvedType} (${roofType ? "user-specified" : "auto-inferred"}).`);
+
+  if (resolvedType === "gable") {
+    // GABLE: 2 rectangular slopes, eave at bottom of each, rake on sides, ridge at top
+    const halfWidth = roofWidth / 2;
+    // Sloped length of each facet = halfWidth / cos(pitch) = halfWidth * slopeFactor
+    // But slope factor already accounts for this: area = planar_area * slope_factor
+    const facetPlanarArea = roofLength * halfWidth;
+    const facetSlopeArea = roundTo(facetPlanarArea * slopeFactor, 0);
+
+    // Ridge runs along dominant axis
+    const ridgeLen = roundTo(roofLength, 0);
+    // Each eave = roofLength
+    const eaveLen = roundTo(roofLength, 0);
+    // Each rake = halfWidth * slope_factor (the sloped edge from eave to ridge)
+    const rakeLen = roundTo(halfWidth * slopeFactor, 0);
+
+    facets.push({
+      id: "facet_1",
+      label: "Front Slope",
+      area_sqft: facetPlanarArea,
+      slope_area_sqft: facetSlopeArea,
+      edges: [
+        { type: "eave", length_ft: eaveLen, bearing_deg: roundTo(dominantBearing, 1) },
+        { type: "rake", length_ft: rakeLen, bearing_deg: roundTo((dominantBearing + 90) % 360, 1) },
+        { type: "ridge", length_ft: ridgeLen, bearing_deg: roundTo(dominantBearing, 1) },
+        { type: "rake", length_ft: rakeLen, bearing_deg: roundTo((dominantBearing + 270) % 360, 1) },
+      ],
+      pitch: pitchLabel,
+      slope_factor: slopeFactor,
+    });
+
+    facets.push({
+      id: "facet_2",
+      label: "Rear Slope",
+      area_sqft: facetPlanarArea,
+      slope_area_sqft: facetSlopeArea,
+      edges: [
+        { type: "eave", length_ft: eaveLen, bearing_deg: roundTo((dominantBearing + 180) % 360, 1) },
+        { type: "rake", length_ft: rakeLen, bearing_deg: roundTo((dominantBearing + 90) % 360, 1) },
+        { type: "ridge", length_ft: ridgeLen, bearing_deg: roundTo(dominantBearing, 1) },
+        { type: "rake", length_ft: rakeLen, bearing_deg: roundTo((dominantBearing + 270) % 360, 1) },
+      ],
+      pitch: pitchLabel,
+      slope_factor: slopeFactor,
+    });
+
+    notes.push(`Gable: 2 facets, each ${roundTo(facetPlanarArea)}sqft planar → ${facetSlopeArea}sqft slope.`);
+    notes.push(`Ridge: ${ridgeLen}ft, Eave: 2×${eaveLen}ft, Rake: 4×${rakeLen}ft.`);
+
+  } else if (resolvedType === "hip") {
+    // HIP: 4 facets — 2 trapezoidal (front/rear), 2 triangular (sides/hips)
+    // Ridge length = dominantLen - perpLen (when building is longer than wide)
+    const ridgeLen = Math.max(0, roundTo(roofLength - roofWidth, 0));
+    const halfPerp = roofWidth / 2;
+
+    // Front and rear slopes (trapezoidal): area = (ridge + eave) / 2 * halfPerp
+    const trapPlanarArea = (ridgeLen + roofLength) / 2 * halfPerp;
+    const trapSlopeArea = roundTo(trapPlanarArea * slopeFactor, 0);
+
+    // Side hip triangles: area = roofWidth / 2 * halfPerp (triangle)
+    const triPlanarArea = (roofWidth * halfPerp) / 2;
+    const triSlopeArea = roundTo(triPlanarArea * slopeFactor, 0);
+
+    // Hip line length: diagonal from corner to ridge endpoint
+    const hipLineLen = roundTo(Math.sqrt(halfPerp ** 2 + halfPerp ** 2) * slopeFactor, 0);
+
+    // Front slope (trapezoid)
+    facets.push({
+      id: "facet_1",
+      label: "Front Slope",
+      area_sqft: roundTo(trapPlanarArea, 0),
+      slope_area_sqft: trapSlopeArea,
+      edges: [
+        { type: "eave", length_ft: roundTo(roofLength, 0), bearing_deg: roundTo(dominantBearing, 1) },
+        { type: "hip", length_ft: hipLineLen, bearing_deg: roundTo((dominantBearing + 45) % 360, 1) },
+        { type: "ridge", length_ft: ridgeLen, bearing_deg: roundTo(dominantBearing, 1) },
+        { type: "hip", length_ft: hipLineLen, bearing_deg: roundTo((dominantBearing + 315) % 360, 1) },
+      ],
+      pitch: pitchLabel,
+      slope_factor: slopeFactor,
+    });
+
+    // Rear slope (trapezoid)
+    facets.push({
+      id: "facet_2",
+      label: "Rear Slope",
+      area_sqft: roundTo(trapPlanarArea, 0),
+      slope_area_sqft: trapSlopeArea,
+      edges: [
+        { type: "eave", length_ft: roundTo(roofLength, 0), bearing_deg: roundTo((dominantBearing + 180) % 360, 1) },
+        { type: "hip", length_ft: hipLineLen, bearing_deg: roundTo((dominantBearing + 135) % 360, 1) },
+        { type: "ridge", length_ft: ridgeLen, bearing_deg: roundTo(dominantBearing, 1) },
+        { type: "hip", length_ft: hipLineLen, bearing_deg: roundTo((dominantBearing + 225) % 360, 1) },
+      ],
+      pitch: pitchLabel,
+      slope_factor: slopeFactor,
+    });
+
+    // Left hip (triangle)
+    facets.push({
+      id: "facet_3",
+      label: "Left Hip",
+      area_sqft: roundTo(triPlanarArea, 0),
+      slope_area_sqft: triSlopeArea,
+      edges: [
+        { type: "eave", length_ft: roundTo(roofWidth, 0), bearing_deg: roundTo((dominantBearing + 90) % 360, 1) },
+        { type: "hip", length_ft: hipLineLen, bearing_deg: roundTo((dominantBearing + 315) % 360, 1) },
+        { type: "hip", length_ft: hipLineLen, bearing_deg: roundTo((dominantBearing + 225) % 360, 1) },
+      ],
+      pitch: pitchLabel,
+      slope_factor: slopeFactor,
+    });
+
+    // Right hip (triangle)
+    facets.push({
+      id: "facet_4",
+      label: "Right Hip",
+      area_sqft: roundTo(triPlanarArea, 0),
+      slope_area_sqft: triSlopeArea,
+      edges: [
+        { type: "eave", length_ft: roundTo(roofWidth, 0), bearing_deg: roundTo((dominantBearing + 270) % 360, 1) },
+        { type: "hip", length_ft: hipLineLen, bearing_deg: roundTo((dominantBearing + 45) % 360, 1) },
+        { type: "hip", length_ft: hipLineLen, bearing_deg: roundTo((dominantBearing + 135) % 360, 1) },
+      ],
+      pitch: pitchLabel,
+      slope_factor: slopeFactor,
+    });
+
+    notes.push(`Hip: 4 facets (2 trapezoid @${trapSlopeArea}sqft, 2 triangle @${triSlopeArea}sqft).`);
+    notes.push(`Ridge: ${ridgeLen}ft, Hip lines: 4×${hipLineLen}ft, Eave: 2×${roundTo(roofLength)}+2×${roundTo(roofWidth)}ft.`);
+
+  } else if (resolvedType === "cross_gable") {
+    // CROSS-GABLE: approximate as main gable + perpendicular wing gable
+    // Main section: use 70% of dominant axis
+    const mainLength = roofLength * 0.7;
+    const wingLength = roofWidth;
+    const mainWidth = roofWidth;
+    const wingWidth = roofLength * 0.3;
+
+    const halfMainWidth = mainWidth / 2;
+    const halfWingWidth = wingWidth / 2;
+
+    const mainFacetPlanar = mainLength * halfMainWidth;
+    const mainFacetSlope = roundTo(mainFacetPlanar * slopeFactor, 0);
+
+    const wingFacetPlanar = wingLength * halfWingWidth;
+    const wingFacetSlope = roundTo(wingFacetPlanar * slopeFactor, 0);
+
+    const mainRidge = roundTo(mainLength, 0);
+    const wingRidge = roundTo(wingLength, 0);
+    const mainEave = roundTo(mainLength, 0);
+    const wingEave = roundTo(wingLength, 0);
+    const mainRake = roundTo(halfMainWidth * slopeFactor, 0);
+    const wingRake = roundTo(halfWingWidth * slopeFactor, 0);
+    const valleyLen = roundTo(Math.min(halfMainWidth, halfWingWidth) * Math.SQRT2 * slopeFactor, 0);
+
+    // Main front
+    facets.push({
+      id: "facet_1", label: "Main Front Slope",
+      area_sqft: roundTo(mainFacetPlanar, 0), slope_area_sqft: mainFacetSlope,
+      edges: [
+        { type: "eave", length_ft: mainEave, bearing_deg: roundTo(dominantBearing, 1) },
+        { type: "rake", length_ft: mainRake, bearing_deg: roundTo((dominantBearing + 90) % 360, 1) },
+        { type: "ridge", length_ft: mainRidge, bearing_deg: roundTo(dominantBearing, 1) },
+        { type: "valley", length_ft: valleyLen, bearing_deg: roundTo((dominantBearing + 45) % 360, 1) },
+      ],
+      pitch: pitchLabel, slope_factor: slopeFactor,
+    });
+    // Main rear
+    facets.push({
+      id: "facet_2", label: "Main Rear Slope",
+      area_sqft: roundTo(mainFacetPlanar, 0), slope_area_sqft: mainFacetSlope,
+      edges: [
+        { type: "eave", length_ft: mainEave, bearing_deg: roundTo((dominantBearing + 180) % 360, 1) },
+        { type: "rake", length_ft: mainRake, bearing_deg: roundTo((dominantBearing + 270) % 360, 1) },
+        { type: "ridge", length_ft: mainRidge, bearing_deg: roundTo(dominantBearing, 1) },
+        { type: "valley", length_ft: valleyLen, bearing_deg: roundTo((dominantBearing + 225) % 360, 1) },
+      ],
+      pitch: pitchLabel, slope_factor: slopeFactor,
+    });
+    // Wing front
+    facets.push({
+      id: "facet_3", label: "Wing Front Slope",
+      area_sqft: roundTo(wingFacetPlanar, 0), slope_area_sqft: wingFacetSlope,
+      edges: [
+        { type: "eave", length_ft: wingEave, bearing_deg: roundTo((dominantBearing + 90) % 360, 1) },
+        { type: "rake", length_ft: wingRake, bearing_deg: roundTo(dominantBearing, 1) },
+        { type: "ridge", length_ft: wingRidge, bearing_deg: roundTo((dominantBearing + 90) % 360, 1) },
+        { type: "valley", length_ft: valleyLen, bearing_deg: roundTo((dominantBearing + 135) % 360, 1) },
+      ],
+      pitch: pitchLabel, slope_factor: slopeFactor,
+    });
+    // Wing rear
+    facets.push({
+      id: "facet_4", label: "Wing Rear Slope",
+      area_sqft: roundTo(wingFacetPlanar, 0), slope_area_sqft: wingFacetSlope,
+      edges: [
+        { type: "eave", length_ft: wingEave, bearing_deg: roundTo((dominantBearing + 270) % 360, 1) },
+        { type: "rake", length_ft: wingRake, bearing_deg: roundTo((dominantBearing + 180) % 360, 1) },
+        { type: "ridge", length_ft: wingRidge, bearing_deg: roundTo((dominantBearing + 90) % 360, 1) },
+        { type: "valley", length_ft: valleyLen, bearing_deg: roundTo((dominantBearing + 315) % 360, 1) },
+      ],
+      pitch: pitchLabel, slope_factor: slopeFactor,
+    });
+
+    notes.push(`Cross-gable: 4 facets (2 main @${mainFacetSlope}sqft, 2 wing @${wingFacetSlope}sqft).`);
+    notes.push(`Main ridge: ${mainRidge}ft, Wing ridge: ${wingRidge}ft, Valleys: 2×${valleyLen}ft.`);
+  } else {
+    notes.push(`Roof type '${resolvedType}' not supported for facet decomposition.`);
+    return null;
+  }
+
+  // Aggregate edge totals
+  let totalEave = 0, totalRake = 0, totalRidge = 0, totalHip = 0, totalValley = 0;
+  let totalSlopeArea = 0;
+  for (const f of facets) {
+    totalSlopeArea += f.slope_area_sqft;
+    for (const e of f.edges) {
+      if (e.type === "eave") totalEave += e.length_ft;
+      else if (e.type === "rake") totalRake += e.length_ft;
+      else if (e.type === "ridge") totalRidge += e.length_ft;
+      else if (e.type === "hip") totalHip += e.length_ft;
+      else if (e.type === "valley") totalValley += e.length_ft;
+    }
+  }
+  // Deduplicate shared edges (ridge counted from each side)
+  totalRidge = roundTo(totalRidge / 2, 0);
+
+  notes.push(`Totals: eave=${roundTo(totalEave)}ft, rake=${roundTo(totalRake)}ft, ridge=${totalRidge}ft, hip=${roundTo(totalHip)}ft, valley=${roundTo(totalValley)}ft.`);
+  notes.push(`Total slope area: ${roundTo(totalSlopeArea)}sqft (${roundTo(totalSlopeArea / 100, 1)} squares).`);
+
+  return {
+    facets,
+    total_eave_lf: roundTo(totalEave, 0),
+    total_rake_lf: roundTo(totalRake, 0),
+    total_ridge_lf: totalRidge,
+    total_hip_lf: roundTo(totalHip, 0),
+    total_valley_lf: roundTo(totalValley, 0),
+    total_slope_area_sqft: roundTo(totalSlopeArea, 0),
+    total_squares: roundTo(totalSlopeArea / 100, 1),
+    roof_type_used: resolvedType,
+    decomposition_notes: notes,
+  };
+}
+
 // ── Roof estimate assembly (deterministic — no AI for measurements) ──
 
 function deriveRoofEstimate(
@@ -2883,6 +3157,7 @@ function deriveRoofEstimate(
   visionResult: SatelliteVisionResult | null,
   suppressions: SuppressionRecord[],
   exactPitchRise: number | null = null,
+  userRoofType: string | null = null,
 ): RoofEstimateResult {
   const hasGeometry = !!selectedCandidate;
   const footprintArea = selectedCandidate?.area_sqft ?? 0;
