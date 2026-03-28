@@ -362,6 +362,9 @@ export const DarwinRoofValidation = ({ claimId, estimate }: Props) => {
         source_type: form.source_type,
         source_name: form.source_name || null,
         source_date: form.source_date || null,
+        geometry_source: estimate.imagery_source || null,
+        geometry_source_score: estimate.geometry_quality_score || null,
+        candidate_count: estimate.candidate_footprints?.length ?? null,
         ...actual,
         ...darwin,
         delta_footprint_area: d_foot.abs,
@@ -391,7 +394,7 @@ export const DarwinRoofValidation = ({ claimId, estimate }: Props) => {
 
       const { error } = await supabase
         .from("claim_roof_validations")
-        .insert(row);
+        .insert(row as any);
 
       if (error) throw error;
 
