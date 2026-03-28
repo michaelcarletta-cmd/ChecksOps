@@ -522,6 +522,7 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
                     >
                       <Checkbox
                         checked={selectedFiles.has(file.id)}
+                        onClick={(e) => e.stopPropagation()}
                         onCheckedChange={() => toggleFile(file.id)}
                       />
                       <FolderOpen className="h-5 w-5 text-muted-foreground flex-shrink-0" />
@@ -578,6 +579,7 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
                     >
                       <Checkbox
                         checked={selectedPhotos.has(photo.id)}
+                        onClick={(e) => e.stopPropagation()}
                         onCheckedChange={() => togglePhoto(photo.id)}
                       />
                       <Camera className="h-4 w-4 text-muted-foreground flex-shrink-0" />
