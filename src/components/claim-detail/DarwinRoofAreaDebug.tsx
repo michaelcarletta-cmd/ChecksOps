@@ -259,9 +259,16 @@ function CandidateDebugPanel({ candidates, summary }: { candidates: CandidateDeb
       )}
 
       <div className="border-b border-border/50">
+        <DebugRow label="Coordinate Source" value={effectiveSummary.coordinate_source ?? "unknown"} />
         <DebugRow label="Raw Candidates" value={effectiveSummary.raw_candidate_count ?? candidates.length} />
         <DebugRow label="Effective Candidates" value={effectiveSummary.effective_candidate_count ?? candidates.length} warn={(effectiveSummary.effective_candidate_count ?? candidates.length) === 0} />
         <DebugRow label="Authoritative Candidates" value={authCount} warn={authCount === 0} />
+        <DebugRow label="Weak Authoritative" value={effectiveSummary.weak_authoritative_count ?? 0} />
+        <DebugRow
+          label="Nearest Auth Distance"
+          value={effectiveSummary.nearest_authoritative_distance_ft != null ? `${Math.round(effectiveSummary.nearest_authoritative_distance_ft)}ft` : "—"}
+          warn={effectiveSummary.nearest_authoritative_distance_ft != null && effectiveSummary.nearest_authoritative_distance_ft > 200}
+        />
         <DebugRow label="AI Candidates Removed" value={aiRemoved} />
         <DebugRow label="Microsoft (DB)" value={effectiveSummary.microsoft_count} warn={effectiveSummary.microsoft_count === 0} />
         <DebugRow label="NJGIN" value={effectiveSummary.njgin_count} warn={effectiveSummary.njgin_count === 0} />
