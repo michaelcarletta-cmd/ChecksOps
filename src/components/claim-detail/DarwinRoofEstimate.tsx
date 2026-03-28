@@ -354,6 +354,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
         address: address.trim(),
         force_fresh_candidates: forceFreshCandidates,
       };
+      if (exactPitch && PITCH_SLOPE_FACTORS[exactPitch]) body.exact_pitch = exactPitch;
       if (candidateIndex !== undefined && !forceFreshCandidates) body.selected_candidate_index = candidateIndex;
 
       const { data, error: fnErr } = await supabase.functions.invoke("darwin-roof-measurement", { body });
