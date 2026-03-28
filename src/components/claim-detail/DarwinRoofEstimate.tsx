@@ -293,7 +293,9 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const [checkingNearbyFootprints, setCheckingNearbyFootprints] = useState(false);
   const [nearbyDebugRows, setNearbyDebugRows] = useState<NearbyFootprintRow[]>([]);
   const [nearbyDebugError, setNearbyDebugError] = useState<string | null>(null);
-  const [lockToClaim, setLockToClaim] = useState(true);
+  // Auto-unlock if claim has no property address
+  const claimHasAddress = !!(claim?.property_address);
+  const [lockToClaim, setLockToClaim] = useState(claimHasAddress);
   const [lastAnalysisMode, setLastAnalysisMode] = useState<string | null>(null);
 
   // Derive claim address for override detection
