@@ -3077,6 +3077,9 @@ function decomposeFacetsFromFootprint(
     const wingRake = roundTo(halfWingDepth * slopeFactor, 0);
 
     // ── VALLEY ──
+    // Cross-gable has 4 valley lines: 2 on each side where wing meets main body
+    const valleyLen = roundTo(Math.min(halfMainDepth, halfWingDepth) * Math.SQRT2 * slopeFactor, 0);
+    // Each main facet gets 2 valleys (one per wing side), for 4 total
     const valleyLen = roundTo(Math.min(halfMainDepth, halfWingDepth) * Math.SQRT2 * slopeFactor, 0);
 
     // ── FACETS (6 total) ──
