@@ -3966,7 +3966,7 @@ Deno.serve(async (req) => {
       coordinate_source: coordinateSource,
     };
 
-    console.log(`[Darwin Roof] Candidate fetch summary: MS=${candidateFetchSummary.microsoft_count} NJGIN=${candidateFetchSummary.njgin_count} Esri=${candidateFetchSummary.esri_count} OSM=${candidateFetchSummary.osm_count} AI=${candidateFetchSummary.ai_count} raw=${candidateFetchSummary.raw_candidate_count} effective=${candidateFetchSummary.effective_candidate_count} auth=${candidateFetchSummary.authoritative_candidate_count} ai_removed=${candidateFetchSummary.ai_candidates_removed} hard_filter=${candidateFetchSummary.hard_source_filter_triggered} → selected="${candidateFetchSummary.selected_source}"`);
+    console.log(`[Darwin Roof] Candidate fetch summary: coords=${coordinateSource} MS=${candidateFetchSummary.microsoft_count} NJGIN=${candidateFetchSummary.njgin_count} Esri=${candidateFetchSummary.esri_count} OSM=${candidateFetchSummary.osm_count} AI=${candidateFetchSummary.ai_count} raw=${candidateFetchSummary.raw_candidate_count} effective=${candidateFetchSummary.effective_candidate_count} auth=${candidateFetchSummary.authoritative_candidate_count} weak_auth=${candidateFetchSummary.weak_authoritative_count} nearest_auth_dist=${candidateFetchSummary.nearest_authoritative_distance_ft ?? "n/a"}ft ai_removed=${candidateFetchSummary.ai_candidates_removed} hard_filter=${candidateFetchSummary.hard_source_filter_triggered} → selected="${candidateFetchSummary.selected_source}"`);
 
     // Phase 2C: Infer roof form from selected footprint
     let roofFormInference: RoofFormInference | null = null;
