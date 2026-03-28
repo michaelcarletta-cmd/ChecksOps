@@ -76,6 +76,8 @@ interface CandidateFetchSummary {
   hard_source_filter_triggered?: boolean;
   nearest_authoritative_distance_ft?: number | null;
   coordinate_source?: string | null;
+  analysis_mode?: string | null;
+  is_override?: boolean;
 }
 
 interface Props {
