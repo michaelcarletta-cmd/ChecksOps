@@ -6,40 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-/**
- * Ingest Microsoft Building Footprints for a given state (default: New Jersey).
- *
- * Microsoft publishes their building footprints as GeoJSON files partitioned by state.
- * Source: https://github.com/microsoft/USBuildingFootprints
- *
- * This function:
- * 1. Downloads the state GeoJSON from Microsoft's GitHub release
- * 2. Parses features in streaming batches
- * 3. Inserts into building_footprints with PostGIS geometry
- *
- * Can be called with:
- *   { "state": "NewJersey", "batch_size": 5000, "offset": 0, "limit": 50000 }
- */
-
-// Microsoft Building Footprints download URLs by state
-const STATE_URLS: Record<string, string> = {
-  NewJersey:
-    "https://usbuildingdata.blob.core.windows.net/usbuildings-v2/NewJersey.geojson.zip",
-};
-
-// State code mapping
-const STATE_CODES: Record<string, string> = {
-  NewJersey: "NJ",
-};
-
-interface FootprintFeature {
-  type: "Feature";
-  properties: Record<string, unknown>;
-  geometry: {
-    type: "Polygon";
-    coordinates: number[][][];
-  };
-}
+const STATE_CODES: Record<string, string> = { NewJersey: "NJ" };
 
 function computeAreaSqft(ring: number[][]): number {
   if (ring.length < 3) return 0;
@@ -57,27 +24,18 @@ function computeAreaSqft(ring: number[][]): number {
 
 function computeCentroid(ring: number[][]): [number, number] {
   const pts =
-    ring.length > 0 &&
-    ring[ring.length - 1][0] === ring[0][0] &&
-    ring[ring.length - 1][1] === ring[0][1]
+    ring.length > 0 && ring[ring.length - 1][0] === ring[0][0] && ring[ring.length - 1][1] === ring[0][1]
       ? ring.slice(0, -1)
       : ring;
   const n = pts.length;
   if (n === 0) return [0, 0];
-  const lng = pts.reduce((s, p) => s + p[0], 0) / n;
-  const lat = pts.reduce((s, p) => s + p[1], 0) / n;
-  return [lng, lat];
+  return [pts.reduce((s, p) => s + p[0], 0) / n, pts.reduce((s, p) => s + p[1], 0) / n];
 }
 
-function computeBbox(ring: number[][]): { minLng: number; minLat: number; maxLng: number; maxLat: number } {
+function computeBbox(ring: number[][]) {
   const lngs = ring.map((p) => p[0]);
   const lats = ring.map((p) => p[1]);
-  return {
-    minLng: Math.min(...lngs),
-    minLat: Math.min(...lats),
-    maxLng: Math.max(...lngs),
-    maxLat: Math.max(...lats),
-  };
+  return { minLng: Math.min(...lngs), minLat: Math.min(...lats), maxLng: Math.max(...lngs), maxLat: Math.max(...lats) };
 }
 
 Deno.serve(async (req) => {
@@ -85,181 +43,259 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
   try {
+    // Auth check
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Missing authorization" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Verify user is admin
     const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
     });
     const { data: { user }, error: userErr } = await userClient.auth.getUser();
     if (userErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const { data: roleData } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("role", "admin");
+    const { data: roleData } = await supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin");
     if (!roleData || roleData.length === 0) {
       return new Response(JSON.stringify({ error: "Admin access required" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const body = await req.json();
     const state = body.state || "NewJersey";
-    const batchSize = Math.min(body.batch_size || 5000, 10000);
-    const offset = body.offset || 0;
-    const limit = body.limit || 50000;
     const stateCode = STATE_CODES[state] || state.substring(0, 2).toUpperCase();
+    const batchSize = Math.min(body.batch_size || 500, 2000);
+    const maxFeatures = body.limit || 5000;
+    const testMode = body.test_mode === true;
+    const testLimit = body.test_limit || 50;
+    const effectiveLimit = testMode ? testLimit : maxFeatures;
 
-    // Instead of downloading the massive GeoJSON file directly,
-    // use the Esri-hosted Microsoft Building Footprints service for NJ
-    // which supports pagination and spatial queries
-    const esriUrl = `https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/MSBFP2/FeatureServer/0/query`;
+    // Create ingestion log
+    const { data: logRow, error: logErr } = await supabase.from("building_footprint_ingestion_logs").insert({
+      state: stateCode,
+      source: "microsoft",
+      config: { state, batchSize, effectiveLimit, testMode },
+      created_by: user.id,
+    }).select("id").single();
 
+    const logId = logRow?.id;
+    if (logErr) console.error("[Ingest] Failed to create log:", logErr.message);
+
+    // Esri-hosted Microsoft Building Footprints
+    const esriUrl = "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/MSBFP2/FeatureServer/0/query";
+
+    // NJ bounding box
+    const njBbox = "-75.56,38.93,-73.89,41.36";
+
+    let totalFetched = 0;
+    let totalParsed = 0;
     let totalInserted = 0;
-    let currentOffset = offset;
+    let totalSkipped = 0;
+    let totalErrors = 0;
     const errors: string[] = [];
+    let currentOffset = body.offset || 0;
 
-    while (totalInserted < limit) {
-      const queryUrl = `${esriUrl}?where=1%3D1&outFields=*&returnGeometry=true&outSR=4326&f=json&resultRecordCount=${batchSize}&resultOffset=${currentOffset}`;
+    while (totalInserted < effectiveLimit) {
+      const remaining = effectiveLimit - totalInserted;
+      const thisBatch = Math.min(batchSize, remaining);
 
-      // For NJ, filter by state bounding box
-      const njBbox = "-75.56,38.93,-73.89,41.36";
-      const spatialUrl = `${esriUrl}?geometry=${njBbox}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json&resultRecordCount=${batchSize}&resultOffset=${currentOffset}`;
+      const queryParams = new URLSearchParams({
+        geometry: njBbox,
+        geometryType: "esriGeometryEnvelope",
+        spatialRel: "esriSpatialRelIntersects",
+        outFields: "*",
+        returnGeometry: "true",
+        outSR: "4326",
+        f: "json",
+        resultRecordCount: String(thisBatch),
+        resultOffset: String(currentOffset),
+      });
 
-      console.log(`[Ingest] Fetching batch at offset ${currentOffset}, batch_size=${batchSize}...`);
+      const url = `${esriUrl}?${queryParams.toString()}`;
+      console.log(`[Ingest] Fetching offset=${currentOffset}, batchSize=${thisBatch}...`);
 
-      const res = await fetch(spatialUrl, { signal: AbortSignal.timeout(60000) });
+      let res: Response;
+      try {
+        res = await fetch(url, { signal: AbortSignal.timeout(60000) });
+      } catch (fetchErr) {
+        const msg = `Fetch timeout/error at offset ${currentOffset}: ${fetchErr}`;
+        console.error(`[Ingest] ${msg}`);
+        errors.push(msg);
+        break;
+      }
+
       if (!res.ok) {
-        errors.push(`Fetch failed at offset ${currentOffset}: ${res.status}`);
+        const msg = `Esri API returned ${res.status} at offset ${currentOffset}`;
+        console.error(`[Ingest] ${msg}`);
+        errors.push(msg);
+        await res.text(); // consume body
         break;
       }
 
       const data = await res.json();
+
+      if (data.error) {
+        const msg = `Esri API error: ${JSON.stringify(data.error).substring(0, 200)}`;
+        console.error(`[Ingest] ${msg}`);
+        errors.push(msg);
+        break;
+      }
+
       const features = data.features || [];
+      totalFetched += features.length;
+      console.log(`[Ingest] Fetched ${features.length} features (total fetched: ${totalFetched})`);
 
       if (features.length === 0) {
         console.log(`[Ingest] No more features at offset ${currentOffset}`);
         break;
       }
 
-      // Process features into insert rows
-      const rows: any[] = [];
+      // Parse features into arrays for batch RPC
+      const sources: string[] = [];
+      const sourceIds: string[] = [];
+      const states: string[] = [];
+      const wkts: string[] = [];
+      const centroidLats: number[] = [];
+      const centroidLngs: number[] = [];
+      const bboxes: any[] = [];
+      const areasSqft: number[] = [];
+      const vertexCounts: number[] = [];
+      let batchSkipped = 0;
+
       for (const feat of features) {
         try {
-          if (!feat.geometry?.rings?.[0]) continue;
+          if (!feat.geometry?.rings?.[0]) {
+            batchSkipped++;
+            continue;
+          }
           const ring = feat.geometry.rings[0] as number[][];
-          if (ring.length < 4) continue;
+          if (ring.length < 4) {
+            batchSkipped++;
+            continue;
+          }
 
           const areaSqft = computeAreaSqft(ring);
-          if (areaSqft < 50 || areaSqft > 100000) continue;
+          if (areaSqft < 50 || areaSqft > 100000) {
+            batchSkipped++;
+            continue;
+          }
 
           const [cLng, cLat] = computeCentroid(ring);
           const bbox = computeBbox(ring);
-          const vertexCount =
-            ring[ring.length - 1][0] === ring[0][0] && ring[ring.length - 1][1] === ring[0][1]
-              ? ring.length - 1
-              : ring.length;
+          const vertexCount = ring[ring.length - 1][0] === ring[0][0] && ring[ring.length - 1][1] === ring[0][1]
+            ? ring.length - 1 : ring.length;
 
-          // Build WKT for PostGIS
-          const wktRing = ring.map((p) => `${p[0]} ${p[1]}`).join(", ");
-          // Ensure closed
-          const closed =
-            ring[ring.length - 1][0] === ring[0][0] && ring[ring.length - 1][1] === ring[0][1]
-              ? wktRing
-              : `${wktRing}, ${ring[0][0]} ${ring[0][1]}`;
+          // Build WKT
+          const wktRing = ring.map((p: number[]) => `${p[0]} ${p[1]}`).join(", ");
+          const closed = ring[ring.length - 1][0] === ring[0][0] && ring[ring.length - 1][1] === ring[0][1]
+            ? wktRing : `${wktRing}, ${ring[0][0]} ${ring[0][1]}`;
 
-          rows.push({
-            source: "microsoft",
-            source_id: feat.attributes?.OBJECTID
-              ? String(feat.attributes.OBJECTID)
-              : feat.attributes?.GlobalID || null,
-            state: stateCode,
-            centroid_lat: Math.round(cLat * 1e7) / 1e7,
-            centroid_lng: Math.round(cLng * 1e7) / 1e7,
-            bbox: bbox,
-            area_sqft: Math.round(areaSqft),
-            vertex_count: vertexCount,
-            // We'll use raw SQL for geometry insertion
-            _wkt: `SRID=4326;POLYGON((${closed}))`,
-            _ring: ring,
-          });
+          sources.push("microsoft");
+          sourceIds.push(feat.attributes?.OBJECTID ? String(feat.attributes.OBJECTID) : feat.attributes?.GlobalID || "");
+          states.push(stateCode);
+          wkts.push(`POLYGON((${closed}))`);
+          centroidLats.push(Math.round(cLat * 1e7) / 1e7);
+          centroidLngs.push(Math.round(cLng * 1e7) / 1e7);
+          bboxes.push(bbox);
+          areasSqft.push(Math.round(areaSqft));
+          vertexCounts.push(vertexCount);
+          totalParsed++;
         } catch (e) {
-          errors.push(`Feature parse error: ${e instanceof Error ? e.message : String(e)}`);
+          const msg = `Parse error: ${e instanceof Error ? e.message : String(e)}`;
+          errors.push(msg);
+          totalErrors++;
         }
       }
 
-      // Insert batch using raw SQL for PostGIS geometry
-      if (rows.length > 0) {
-        // Build VALUES clause with ST_GeomFromText
-        const valuesClauses: string[] = [];
-        for (const row of rows) {
-          const escapedWkt = row._wkt.replace(/'/g, "''");
-          valuesClauses.push(
-            `(gen_random_uuid(), '${row.source}', ${row.source_id ? `'${row.source_id}'` : "NULL"}, '${row.state}', ST_GeomFromText('${escapedWkt.replace("SRID=4326;", "")}', 4326), ${row.centroid_lat}, ${row.centroid_lng}, '${JSON.stringify(row.bbox)}'::jsonb, ${row.area_sqft}, ${row.vertex_count}, now(), now())`
-          );
-        }
+      totalSkipped += batchSkipped;
 
-        const insertSql = `INSERT INTO public.building_footprints (id, source, source_id, state, geometry, centroid_lat, centroid_lng, bbox, area_sqft, vertex_count, created_at, updated_at) VALUES ${valuesClauses.join(", ")} ON CONFLICT DO NOTHING`;
+      // Insert batch via RPC
+      if (sources.length > 0) {
+        console.log(`[Ingest] Inserting batch of ${sources.length} rows via RPC...`);
+        const { data: rpcResult, error: rpcErr } = await supabase.rpc("insert_building_footprints_batch", {
+          p_sources: sources,
+          p_source_ids: sourceIds,
+          p_states: states,
+          p_wkts: wkts,
+          p_centroid_lats: centroidLats,
+          p_centroid_lngs: centroidLngs,
+          p_bboxes: bboxes,
+          p_areas_sqft: areasSqft,
+          p_vertex_counts: vertexCounts,
+        });
 
-        const { error: insertErr } = await supabase.rpc("exec_sql", { sql: insertSql }).maybeSingle();
-
-        // Fallback: insert individually if batch fails
-        if (insertErr) {
-          console.log(`[Ingest] Batch insert failed, trying individual inserts: ${insertErr.message}`);
-          let individualInserted = 0;
-          for (const row of rows) {
-            const escapedWkt = row._wkt.replace(/'/g, "''").replace("SRID=4326;", "");
-            const singleSql = `INSERT INTO public.building_footprints (source, source_id, state, geometry, centroid_lat, centroid_lng, bbox, area_sqft, vertex_count) VALUES ('${row.source}', ${row.source_id ? `'${row.source_id}'` : "NULL"}, '${row.state}', ST_GeomFromText('${escapedWkt}', 4326), ${row.centroid_lat}, ${row.centroid_lng}, '${JSON.stringify(row.bbox)}'::jsonb, ${row.area_sqft}, ${row.vertex_count})`;
-            const { error: singleErr } = await supabase.rpc("exec_sql", { sql: singleSql }).maybeSingle();
-            if (!singleErr) individualInserted++;
-          }
-          totalInserted += individualInserted;
+        if (rpcErr) {
+          const msg = `RPC insert error: ${rpcErr.message}`;
+          console.error(`[Ingest] ${msg}`);
+          errors.push(msg);
+          totalErrors += sources.length;
         } else {
-          totalInserted += rows.length;
+          const result = rpcResult as any;
+          console.log(`[Ingest] RPC result: inserted=${result.inserted}, skipped=${result.skipped}, errors=${result.errors}`);
+          totalInserted += result.inserted || 0;
+          totalSkipped += result.skipped || 0;
+          totalErrors += result.errors || 0;
+          if (result.error_messages?.length > 0) {
+            errors.push(...result.error_messages.filter(Boolean));
+          }
         }
-        console.log(`[Ingest] Inserted ${rows.length} footprints (total: ${totalInserted})`);
       }
 
       currentOffset += features.length;
 
-      // Respect Esri pagination
-      if (!data.exceededTransferLimit && features.length < batchSize) {
+      // Check if more pages
+      if (!data.exceededTransferLimit && features.length < thisBatch) {
+        console.log(`[Ingest] Reached end of data`);
         break;
       }
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        state,
-        state_code: stateCode,
-        total_inserted: totalInserted,
-        final_offset: currentOffset,
-        errors: errors.slice(0, 20),
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    // Update ingestion log
+    if (logId) {
+      await supabase.from("building_footprint_ingestion_logs").update({
+        completed_at: new Date().toISOString(),
+        status: errors.length > 0 && totalInserted === 0 ? "failed" : totalInserted > 0 ? "completed" : "empty",
+        fetched_count: totalFetched,
+        parsed_count: totalParsed,
+        inserted_count: totalInserted,
+        skipped_count: totalSkipped,
+        error_count: totalErrors,
+        errors: errors.slice(0, 50),
+      }).eq("id", logId);
+    }
+
+    const summary = {
+      success: true,
+      state,
+      state_code: stateCode,
+      test_mode: testMode,
+      fetched_count: totalFetched,
+      parsed_count: totalParsed,
+      inserted_count: totalInserted,
+      skipped_count: totalSkipped,
+      error_count: totalErrors,
+      final_offset: currentOffset,
+      errors: errors.slice(0, 20),
+      log_id: logId,
+    };
+
+    console.log(`[Ingest] DONE: ${JSON.stringify(summary)}`);
+
+    return new Response(JSON.stringify(summary), {
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (err) {
-    console.error("[Ingest] Error:", err);
+    console.error("[Ingest] Fatal error:", err);
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : "Internal error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

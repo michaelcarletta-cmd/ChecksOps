@@ -36,6 +36,7 @@ const WorkspaceDetailPage = lazy(() => import("./pages/WorkspaceDetailPage"));
 
 const DarwinOperations = lazy(() => import("./pages/DarwinOperations"));
 const CheckCommandCenter = lazy(() => import("./pages/CheckCommandCenter"));
+const BuildingFootprintIngestion = lazy(() => import("./pages/admin/BuildingFootprintIngestion"));
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -173,6 +174,7 @@ function AppRoutes() {
       
       <Route path="/darwin-operations" element={<ProtectedRoute allowedRoles={["admin", "staff", "read_only"]}><AppLayout><Suspense fallback={<PageLoader />}><DarwinOperations /></Suspense></AppLayout></ProtectedRoute>} />
       <Route path="/check-command-center" element={<ProtectedRoute allowedRoles={["admin", "staff"]}><AppLayout><Suspense fallback={<PageLoader />}><CheckCommandCenter /></Suspense></AppLayout></ProtectedRoute>} />
+      <Route path="/admin/building-footprints" element={<ProtectedRoute allowedRoles={["admin"]}><AppLayout><Suspense fallback={<PageLoader />}><BuildingFootprintIngestion /></Suspense></AppLayout></ProtectedRoute>} />
       <Route path="*" element={<Suspense fallback={<PageLoader />}><NotFound /></Suspense>} />
     </Routes>
   );

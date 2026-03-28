@@ -516,6 +516,57 @@ export type Database = {
         }
         Relationships: []
       }
+      building_footprint_ingestion_logs: {
+        Row: {
+          completed_at: string | null
+          config: Json | null
+          created_by: string | null
+          error_count: number | null
+          errors: Json | null
+          fetched_count: number | null
+          id: string
+          inserted_count: number | null
+          parsed_count: number | null
+          skipped_count: number | null
+          source: string
+          started_at: string
+          state: string
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          config?: Json | null
+          created_by?: string | null
+          error_count?: number | null
+          errors?: Json | null
+          fetched_count?: number | null
+          id?: string
+          inserted_count?: number | null
+          parsed_count?: number | null
+          skipped_count?: number | null
+          source?: string
+          started_at?: string
+          state: string
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          config?: Json | null
+          created_by?: string | null
+          error_count?: number | null
+          errors?: Json | null
+          fetched_count?: number | null
+          id?: string
+          inserted_count?: number | null
+          parsed_count?: number | null
+          skipped_count?: number | null
+          source?: string
+          started_at?: string
+          state?: string
+          status?: string
+        }
+        Relationships: []
+      }
       building_footprints: {
         Row: {
           area_sqft: number
@@ -13893,6 +13944,20 @@ export type Database = {
       init_loss_draft_documents: {
         Args: { p_loss_draft_id: string }
         Returns: undefined
+      }
+      insert_building_footprints_batch: {
+        Args: {
+          p_areas_sqft: number[]
+          p_bboxes: Json[]
+          p_centroid_lats: number[]
+          p_centroid_lngs: number[]
+          p_source_ids: string[]
+          p_sources: string[]
+          p_states: string[]
+          p_vertex_counts: number[]
+          p_wkts: string[]
+        }
+        Returns: Json
       }
       invalidate_all_sessions: { Args: { p_user_id?: string }; Returns: number }
       invalidate_session: {
