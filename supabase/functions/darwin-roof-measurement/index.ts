@@ -3739,24 +3739,30 @@ Deno.serve(async (req) => {
       console.error("Claim lookup error:", claimLookupErr);
     }
 
-    let geo = await geocodeAddress(address);
+    // COORDINATE CONSISTENCY: Prefer claim.latitude/longitude (same coords used by ingestion)
+    // over geocoded coords to avoid coordinate mismatch with building_footprints table.
+    let geo: { lat: number; lng: number; matchedAddress: string } | null = null;
+    let coordinateSource = "none";
+
+    if (claimRecord?.latitude != null && claimRecord?.longitude != null) {
+      const lat = Number(claimRecord.latitude);
+      const lng = Number(claimRecord.longitude);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0) {
+        geo = { lat, lng, matchedAddress: claimRecord.policyholder_address || address };
+        coordinateSource = "claim_record";
+        console.log(`[Darwin Roof] Using claim record coordinates: ${lat},${lng}`);
+      }
+    }
+
+    if (!geo) {
+      geo = await geocodeAddress(address);
+      if (geo) coordinateSource = "geocoded_primary";
+    }
 
     if (!geo && claimRecord?.policyholder_address && claimRecord.policyholder_address !== address) {
       console.log("[Darwin Roof] Primary geocode failed, retrying with claim address on file");
       geo = await geocodeAddress(claimRecord.policyholder_address);
-    }
-
-    if (!geo && claimRecord?.latitude != null && claimRecord?.longitude != null) {
-      const lat = Number(claimRecord.latitude);
-      const lng = Number(claimRecord.longitude);
-      if (Number.isFinite(lat) && Number.isFinite(lng)) {
-        console.log("[Darwin Roof] Geocode failed, falling back to saved claim coordinates");
-        geo = {
-          lat,
-          lng,
-          matchedAddress: claimRecord.policyholder_address || address,
-        };
-      }
+      if (geo) coordinateSource = "geocoded_claim_address";
     }
 
     if (!geo) {
