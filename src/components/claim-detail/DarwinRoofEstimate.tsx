@@ -1553,6 +1553,103 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
               />
             )}
 
+            {/* Facet Decomposition */}
+            {estimate.facet_decomposition && (
+              <div className="rounded-lg border p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Layers className="h-4 w-4 text-primary" />
+                    Facet Decomposition
+                    <Badge variant="outline" className="text-[9px]">
+                      {estimate.facet_decomposition.roof_type_used}
+                    </Badge>
+                    <Badge variant="secondary" className="text-[9px]">
+                      {estimate.facet_decomposition.facets.length} facet{estimate.facet_decomposition.facets.length !== 1 ? "s" : ""}
+                    </Badge>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 text-xs"
+                    onClick={() => setShowFacetDetail(!showFacetDetail)}
+                  >
+                    {showFacetDetail ? "Hide Facets" : "Show Facets"}
+                  </Button>
+                </div>
+
+                {/* Facet totals summary */}
+                <div className="grid grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+                  <div className="text-center p-2 rounded bg-muted/50">
+                    <div className="font-bold tabular-nums">{Math.round(estimate.facet_decomposition.total_slope_area_sqft)}</div>
+                    <div className="text-muted-foreground">Total Area sqft</div>
+                  </div>
+                  <div className="text-center p-2 rounded bg-muted/50">
+                    <div className="font-bold tabular-nums">{estimate.facet_decomposition.total_squares.toFixed(1)}</div>
+                    <div className="text-muted-foreground">Squares</div>
+                  </div>
+                  <div className="text-center p-2 rounded bg-blue-500/10">
+                    <div className="font-bold tabular-nums">{Math.round(estimate.facet_decomposition.total_eave_lf)}</div>
+                    <div className="text-muted-foreground">Eave LF</div>
+                  </div>
+                  <div className="text-center p-2 rounded bg-orange-500/10">
+                    <div className="font-bold tabular-nums">{Math.round(estimate.facet_decomposition.total_rake_lf)}</div>
+                    <div className="text-muted-foreground">Rake LF</div>
+                  </div>
+                  <div className="text-center p-2 rounded bg-purple-500/10">
+                    <div className="font-bold tabular-nums">{Math.round(estimate.facet_decomposition.total_ridge_lf)}</div>
+                    <div className="text-muted-foreground">Ridge LF</div>
+                  </div>
+                  <div className="text-center p-2 rounded bg-teal-500/10">
+                    <div className="font-bold tabular-nums">{Math.round(estimate.facet_decomposition.total_hip_lf)}</div>
+                    <div className="text-muted-foreground">Hip LF</div>
+                  </div>
+                </div>
+
+                {/* Per-facet detail */}
+                {showFacetDetail && (
+                  <div className="space-y-2 mt-2">
+                    {estimate.facet_decomposition.facets.map((facet) => (
+                      <div key={facet.id} className="rounded-md border p-2.5 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium">{facet.label}</span>
+                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                            <span className="tabular-nums">{Math.round(facet.slope_area_sqft)} sqft</span>
+                            {facet.pitch && <Badge variant="outline" className="text-[9px]">{facet.pitch}</Badge>}
+                            <span className="text-[9px]">×{facet.slope_factor.toFixed(3)}</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {facet.edges.map((edge, ei) => {
+                            const edgeColor = edge.type === "eave" ? "bg-blue-500"
+                              : edge.type === "rake" ? "bg-orange-500"
+                              : edge.type === "ridge" ? "bg-purple-500"
+                              : edge.type === "hip" ? "bg-teal-500"
+                              : edge.type === "valley" ? "bg-rose-500"
+                              : "bg-muted-foreground";
+                            return (
+                              <span key={ei} className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                                <span className={`inline-block w-1.5 h-1.5 rounded-full ${edgeColor}`} />
+                                <span className="capitalize">{edge.type}</span>
+                                <span className="tabular-nums font-medium">{Math.round(edge.length_ft)} ft</span>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                    {/* Decomposition notes */}
+                    {estimate.facet_decomposition.decomposition_notes.length > 0 && (
+                      <div className="text-[10px] text-muted-foreground space-y-0.5 pt-1 border-t">
+                        {estimate.facet_decomposition.decomposition_notes.map((note, i) => (
+                          <div key={i}>• {note}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Detail Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-0">
               <div>
