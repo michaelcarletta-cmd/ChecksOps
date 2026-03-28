@@ -5411,6 +5411,7 @@ export type Database = {
           actual_roof_form: string | null
           actual_squares: number | null
           actual_valley_lf: number | null
+          candidate_count: number | null
           claim_id: string
           created_at: string
           created_by: string | null
@@ -5438,6 +5439,8 @@ export type Database = {
           estimate_id: string
           facet_count_match: boolean | null
           failure_patterns: Json | null
+          geometry_source: string | null
+          geometry_source_score: number | null
           id: string
           overall_accuracy_score: number | null
           pct_delta_eave_lf: number | null
@@ -5470,6 +5473,7 @@ export type Database = {
           actual_roof_form?: string | null
           actual_squares?: number | null
           actual_valley_lf?: number | null
+          candidate_count?: number | null
           claim_id: string
           created_at?: string
           created_by?: string | null
@@ -5497,6 +5501,8 @@ export type Database = {
           estimate_id: string
           facet_count_match?: boolean | null
           failure_patterns?: Json | null
+          geometry_source?: string | null
+          geometry_source_score?: number | null
           id?: string
           overall_accuracy_score?: number | null
           pct_delta_eave_lf?: number | null
@@ -5529,6 +5535,7 @@ export type Database = {
           actual_roof_form?: string | null
           actual_squares?: number | null
           actual_valley_lf?: number | null
+          candidate_count?: number | null
           claim_id?: string
           created_at?: string
           created_by?: string | null
@@ -5556,6 +5563,8 @@ export type Database = {
           estimate_id?: string
           facet_count_match?: boolean | null
           failure_patterns?: Json | null
+          geometry_source?: string | null
+          geometry_source_score?: number | null
           id?: string
           overall_accuracy_score?: number | null
           pct_delta_eave_lf?: number | null
@@ -12780,6 +12789,30 @@ export type Database = {
           rcv_claimed: number | null
           rd_available: number | null
           unclassified_payment_total: number | null
+        }
+        Relationships: []
+      }
+      darwin_source_accuracy_stats: {
+        Row: {
+          avg_accuracy_score: number | null
+          avg_geometry_quality: number | null
+          avg_pct_delta_eave: number | null
+          avg_pct_delta_footprint: number | null
+          avg_pct_delta_hip: number | null
+          avg_pct_delta_rake: number | null
+          avg_pct_delta_ridge: number | null
+          avg_pct_delta_roof_area: number | null
+          avg_pct_delta_squares: number | null
+          avg_pct_delta_valley: number | null
+          geometry_source: string | null
+          grade_a_count: number | null
+          grade_b_count: number | null
+          grade_c_count: number | null
+          grade_d_count: number | null
+          grade_f_count: number | null
+          pitch_match_pct: number | null
+          roof_form_match_pct: number | null
+          validation_count: number | null
         }
         Relationships: []
       }
