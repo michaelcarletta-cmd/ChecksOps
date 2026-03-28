@@ -270,6 +270,19 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const [checkingNearbyFootprints, setCheckingNearbyFootprints] = useState(false);
   const [nearbyDebugRows, setNearbyDebugRows] = useState<NearbyFootprintRow[]>([]);
   const [nearbyDebugError, setNearbyDebugError] = useState<string | null>(null);
+  const [lockToClaim, setLockToClaim] = useState(true);
+  const [lastAnalysisMode, setLastAnalysisMode] = useState<string | null>(null);
+
+  // Derive claim address for override detection
+  const claimAddress = (() => {
+    if (!claim) return "";
+    return [claim.property_address, claim.property_city, claim.property_state, claim.property_zip]
+      .filter(Boolean).join(", ");
+  })();
+
+  // Detect if current address differs from claim address
+  const normalizeAddr = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
+  const isAddressOverride = !lockToClaim && normalizeAddr(address) !== normalizeAddr(claimAddress) && normalizeAddr(address).length > 0;
 
   useEffect(() => {
     const load = async () => {
