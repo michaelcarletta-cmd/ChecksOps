@@ -922,7 +922,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               className="pl-9"
-              disabled={loading || lockToClaim}
+              disabled={loading || (lockToClaim && claimHasAddress)}
             />
           </div>
           <Select value={roofType} onValueChange={setRoofType}>
