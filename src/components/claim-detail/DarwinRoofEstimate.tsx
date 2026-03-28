@@ -18,6 +18,14 @@ import { DarwinRoofValidation } from "./DarwinRoofValidation";
 import { RoofConfirmationDialog, type ConfirmationLevel, type ConfirmationBasis } from "./RoofConfirmationDialog";
 import { DarwinRoofAreaDebug } from "./DarwinRoofAreaDebug";
 import { DarwinRoofOutlineStaticEditor } from "./DarwinRoofOutlineStaticEditor";
+import {
+  BUILDING_FOOTPRINT_REFRESH_STORAGE_KEY,
+  buildCentroidBounds,
+  haversineDistanceFeet,
+  isAiVisionSource,
+  type NearbyFootprintRow,
+  type PendingFootprintRefresh,
+} from "@/lib/buildingFootprints";
 
 type DerivationSource = "geometry" | "ai_estimated" | "user_override";
 type FieldAuthority = "geometry_authoritative" | "ai_provisional" | "user_authoritative" | "unknown_insufficient_geometry";
@@ -256,6 +264,12 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const [showRidgeCandidates, setShowRidgeCandidates] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [footprintTableEmpty, setFootprintTableEmpty] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [refreshAttemptedAfterIngest, setRefreshAttemptedAfterIngest] = useState(false);
+  const [autoRefreshHandled, setAutoRefreshHandled] = useState(false);
+  const [checkingNearbyFootprints, setCheckingNearbyFootprints] = useState(false);
+  const [nearbyDebugRows, setNearbyDebugRows] = useState<NearbyFootprintRow[]>([]);
+  const [nearbyDebugError, setNearbyDebugError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -278,7 +292,21 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       const { count } = await supabase.from("building_footprints").select("*", { count: "exact", head: true });
       setFootprintTableEmpty(count === 0 || count === null);
     };
+    const checkAdmin = async () => {
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData.user) return;
+
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", authData.user.id)
+        .eq("role", "admin")
+        .limit(1);
+
+      setIsAdmin((roles?.length ?? 0) > 0);
+    };
     checkFootprints();
+    checkAdmin();
   }, [claimId]);
 
   useEffect(() => {
@@ -293,17 +321,26 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     }
   }, [claim]);
 
-  const runEstimate = useCallback(async (candidateIndex?: number) => {
+  const runEstimate = useCallback(async (candidateIndex?: number, options?: { forceFreshCandidates?: boolean }) => {
     if (!address.trim()) {
       toast.error("Enter a property address");
       return;
     }
+    const forceFreshCandidates = options?.forceFreshCandidates === true;
     setLoading(true);
     setError(null);
+    if (forceFreshCandidates) {
+      setCandidateDebugData(null);
+      setRefreshAttemptedAfterIngest(true);
+    }
 
     try {
-      const body: Record<string, any> = { claim_id: claimId, address: address.trim() };
-      if (candidateIndex !== undefined) body.selected_candidate_index = candidateIndex;
+      const body: Record<string, any> = {
+        claim_id: claimId,
+        address: address.trim(),
+        force_fresh_candidates: forceFreshCandidates,
+      };
+      if (candidateIndex !== undefined && !forceFreshCandidates) body.selected_candidate_index = candidateIndex;
 
       const { data, error: fnErr } = await supabase.functions.invoke("darwin-roof-measurement", { body });
 
@@ -332,6 +369,89 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       setLoading(false);
     }
   }, [claimId, address]);
+
+  useEffect(() => {
+    if (fetchingExisting || loading || autoRefreshHandled || !address.trim()) return;
+
+    const raw = window.localStorage.getItem(BUILDING_FOOTPRINT_REFRESH_STORAGE_KEY);
+    if (!raw) return;
+
+    try {
+      const pending = JSON.parse(raw) as PendingFootprintRefresh;
+      const estimateLat = Number(estimate?.geocoded_lat);
+      const estimateLng = Number(estimate?.geocoded_lng);
+      const claimLat = Number(claim?.latitude);
+      const claimLng = Number(claim?.longitude);
+      const currentLat = Number.isFinite(estimateLat) ? estimateLat : claimLat;
+      const currentLng = Number.isFinite(estimateLng) ? estimateLng : claimLng;
+      const addressMatches = pending.address.trim().toLowerCase() === address.trim().toLowerCase();
+      const coordsMatch = Number.isFinite(currentLat) && Number.isFinite(currentLng)
+        ? haversineDistanceFeet({ lat: currentLat, lng: currentLng }, { lat: pending.lat, lng: pending.lng }) <= Math.max(pending.bboxRadiusFt * 2, 150)
+        : false;
+
+      if (!addressMatches && !coordsMatch) return;
+
+      setAutoRefreshHandled(true);
+      window.localStorage.removeItem(BUILDING_FOOTPRINT_REFRESH_STORAGE_KEY);
+      toast.message("Fresh footprint ingest detected — reloading authoritative candidates");
+      void runEstimate(undefined, { forceFreshCandidates: true });
+    } catch {
+      window.localStorage.removeItem(BUILDING_FOOTPRINT_REFRESH_STORAGE_KEY);
+    }
+  }, [address, autoRefreshHandled, claim?.latitude, claim?.longitude, estimate?.geocoded_lat, estimate?.geocoded_lng, fetchingExisting, loading, runEstimate]);
+
+  const handleCheckNearbyAuthoritativeFootprints = async () => {
+    const lat = Number(estimate?.geocoded_lat ?? claim?.latitude);
+    const lng = Number(estimate?.geocoded_lng ?? claim?.longitude);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      toast.error("No property coordinates are available yet.");
+      return;
+    }
+
+    setCheckingNearbyFootprints(true);
+    setNearbyDebugError(null);
+
+    try {
+      const pendingRaw = window.localStorage.getItem(BUILDING_FOOTPRINT_REFRESH_STORAGE_KEY);
+      const pending = pendingRaw ? (JSON.parse(pendingRaw) as PendingFootprintRefresh) : null;
+      const radiusFeet = pending?.bboxRadiusFt ?? 250;
+      const bounds = buildCentroidBounds(lat, lng, radiusFeet);
+
+      const { data, error: nearbyError } = await supabase
+        .from("building_footprints")
+        .select("source, source_id, centroid_lat, centroid_lng, area_sqft, vertex_count")
+        .gte("centroid_lat", bounds.minLat)
+        .lte("centroid_lat", bounds.maxLat)
+        .gte("centroid_lng", bounds.minLng)
+        .lte("centroid_lng", bounds.maxLng)
+        .order("area_sqft", { ascending: false })
+        .limit(25);
+
+      if (nearbyError) throw new Error(nearbyError.message);
+
+      const rows = (((data as Omit<NearbyFootprintRow, "distance_ft">[] | null) ?? [])
+        .map((row) => ({
+          ...row,
+          distance_ft: Math.round(
+            haversineDistanceFeet(
+              { lat, lng },
+              { lat: Number(row.centroid_lat), lng: Number(row.centroid_lng) },
+            ),
+          ),
+        }))
+        .sort((a, b) => a.distance_ft - b.distance_ft));
+
+      setNearbyDebugRows(rows);
+      toast.success(rows.length > 0 ? `Found ${rows.length} nearby authoritative footprint${rows.length === 1 ? "" : "s"}` : "No nearby authoritative footprints found");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load nearby authoritative footprints";
+      setNearbyDebugError(message);
+      toast.error(message);
+    } finally {
+      setCheckingNearbyFootprints(false);
+    }
+  };
 
   const startEditing = () => {
     if (!estimate) return;
@@ -698,6 +818,12 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
             </AlertDescription>
           </Alert>
         )}
+        {refreshAttemptedAfterIngest && isAiVisionSource(estimate?.imagery_source) && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>Authoritative footprint data is still not available for this property.</AlertDescription>
+          </Alert>
+        )}
         {/* Address Input */}
         <div className="flex gap-2">
           <div className="flex-1 relative">
@@ -729,6 +855,53 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
             )}
           </Button>
         </div>
+
+        {isAdmin && (
+          <div className="space-y-3 rounded-lg border border-border p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium">Admin footprint debug</div>
+                <p className="text-xs text-muted-foreground">Run the nearby-area footprint query for the currently viewed property.</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleCheckNearbyAuthoritativeFootprints} disabled={checkingNearbyFootprints}>
+                {checkingNearbyFootprints ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                Check nearby authoritative footprints
+              </Button>
+            </div>
+
+            {nearbyDebugError && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>{nearbyDebugError}</AlertDescription>
+              </Alert>
+            )}
+
+            {nearbyDebugRows.length > 0 && (
+              <div className="overflow-auto rounded-md border border-border">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/40">
+                      <th className="p-2 text-left">Source</th>
+                      <th className="p-2 text-right">Distance</th>
+                      <th className="p-2 text-right">Area</th>
+                      <th className="p-2 text-right">Vertices</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {nearbyDebugRows.map((row, index) => (
+                      <tr key={`${row.source}-${row.source_id ?? index}`} className="border-b last:border-b-0">
+                        <td className="p-2">{row.source}</td>
+                        <td className="p-2 text-right">{row.distance_ft} ft</td>
+                        <td className="p-2 text-right">{row.area_sqft.toLocaleString()}</td>
+                        <td className="p-2 text-right">{row.vertex_count ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
         {error && (
           <Alert variant="destructive">
