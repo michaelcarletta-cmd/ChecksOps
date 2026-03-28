@@ -349,12 +349,19 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
 
   useEffect(() => {
     if (claim && lockToClaim) {
+      const fullClaimAddress = claim.policyholder_address?.trim();
+      if (fullClaimAddress) {
+        setAddress(fullClaimAddress);
+        return;
+      }
+
       const parts = [
         claim.property_address,
         claim.property_city,
         claim.property_state,
         claim.property_zip,
       ].filter(Boolean);
+
       if (parts.length > 0) setAddress(parts.join(", "));
     }
   }, [claim, lockToClaim]);
