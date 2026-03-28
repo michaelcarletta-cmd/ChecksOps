@@ -303,6 +303,10 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       if (data?.error) throw new Error(data.error);
 
       setEstimate(data.measurement as RoofEstimate);
+      setCandidateDebugData({
+        candidate_debug: data.candidate_debug ?? [],
+        candidate_fetch_summary: data.candidate_fetch_summary ?? null,
+      });
       const candidateCount = data.candidateCount || 0;
       const roofForm = data.roofFormInferred ? ` — roof form inferred` : "";
       const visionInfo = data.visionClassified
