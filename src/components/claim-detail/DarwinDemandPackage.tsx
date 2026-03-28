@@ -579,6 +579,7 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
                     >
                       <Checkbox
                         checked={selectedPhotos.has(photo.id)}
+                        onClick={(e) => e.stopPropagation()}
                         onCheckedChange={() => togglePhoto(photo.id)}
                       />
                       <Camera className="h-4 w-4 text-muted-foreground flex-shrink-0" />
