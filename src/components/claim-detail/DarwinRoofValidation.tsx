@@ -34,6 +34,9 @@ interface RoofEstimate {
   confidence_score: number | null;
   geometry_quality_score: number | null;
   inferred_roof_form: RoofForm | null;
+  imagery_source: string | null;
+  selected_candidate_index: number | null;
+  candidate_footprints: any[] | null;
 }
 
 interface Validation {
