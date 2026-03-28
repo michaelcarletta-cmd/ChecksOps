@@ -207,27 +207,26 @@ function CandidateDebugPanel({ candidates, summary }: { candidates: CandidateDeb
         Footprint Candidate Debug
       </div>
 
-      {/* Fetch Summary */}
-      {summary && (
+      {(
         <div className="border-b border-border/50">
-          <DebugRow label="Microsoft (DB)" value={summary.microsoft_count} warn={summary.microsoft_count === 0} />
-          <DebugRow label="NJGIN" value={summary.njgin_count} warn={summary.njgin_count === 0} />
-          <DebugRow label="Esri/MS" value={summary.esri_count} />
-          <DebugRow label="OSM" value={summary.osm_count} warn={summary.osm_count === 0} />
-          <DebugRow label="AI Vision" value={summary.ai_count} />
+          <DebugRow label="Microsoft (DB)" value={effectiveSummary.microsoft_count} warn={effectiveSummary.microsoft_count === 0} />
+          <DebugRow label="NJGIN" value={effectiveSummary.njgin_count} warn={effectiveSummary.njgin_count === 0} />
+          <DebugRow label="Esri/MS" value={effectiveSummary.esri_count} />
+          <DebugRow label="OSM" value={effectiveSummary.osm_count} warn={effectiveSummary.osm_count === 0} />
+          <DebugRow label="AI Vision" value={effectiveSummary.ai_count} />
           <DebugRow label="Selected Source" value={
-            <span className={sourceColor(summary.selected_source ?? "")}>
-              {summary.selected_source ?? "none"}
+            <span className={sourceColor(effectiveSummary.selected_source ?? "")}>
+              {effectiveSummary.selected_source ?? "none"}
             </span>
-          } warn={summary.selected_source?.includes("AI Vision")} />
-          <DebugRow label="Selected Score" value={summary.selected_score ?? "—"} />
+          } warn={effectiveSummary.selected_source?.includes("AI Vision")} />
+          <DebugRow label="Selected Score" value={effectiveSummary.selected_score ?? "—"} />
           <DebugRow
             label="Guardrail Triggered"
-            value={summary.guardrail_triggered ? "YES ✓" : "No"}
+            value={effectiveSummary.guardrail_triggered ? "YES ✓" : "No"}
             warn={false}
           />
-          {summary.guardrail_triggered && summary.guardrail_reason && (
-            <DebugRow label="Guardrail Reason" value={summary.guardrail_reason} />
+          {effectiveSummary.guardrail_triggered && effectiveSummary.guardrail_reason && (
+            <DebugRow label="Guardrail Reason" value={effectiveSummary.guardrail_reason} />
           )}
         </div>
       )}
