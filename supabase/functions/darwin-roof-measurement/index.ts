@@ -4391,6 +4391,8 @@ Deno.serve(async (req) => {
         candidate_debug: candidateDebug,
         candidate_fetch_summary: candidateFetchSummary,
         force_fresh_candidates: forceFreshCandidates,
+        analysis_mode: analysisMode,
+        is_override: isOverride,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
