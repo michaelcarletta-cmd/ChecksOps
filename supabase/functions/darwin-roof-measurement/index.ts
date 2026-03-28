@@ -4170,7 +4170,12 @@ Deno.serve(async (req) => {
     const parsedExactPitch = typeof exact_pitch === "string" ? exact_pitch.match(/^(\d+)\/12$/) : null;
     const exactPitchRise = parsedExactPitch ? parseInt(parsedExactPitch[1]) : null;
     // roof_type: user-specified roof type for facet decomposition
-    const userRoofType = typeof roof_type === "string" && ["gable", "hip", "cross_gable"].includes(roof_type) ? roof_type : null;
+    const normalizedRoofType = typeof roof_type === "string"
+      ? roof_type.trim().toLowerCase().replace(/[-\s]+/g, "_")
+      : null;
+    const userRoofType = normalizedRoofType && ["gable", "hip", "cross_gable"].includes(normalizedRoofType)
+      ? normalizedRoofType
+      : null;
 
     if (!claim_id || !address) {
       return new Response(JSON.stringify({ error: "claim_id and address are required" }), {
