@@ -182,6 +182,8 @@ function CandidateDebugPanel({ candidates, summary }: { candidates: CandidateDeb
     guardrail_triggered: false,
     guardrail_reason: null,
   };
+
+  const sourceColor = (src: string) => {
     if (src.includes("Microsoft") || src.includes("Local DB")) return "text-green-600";
     if (src.includes("NJGIN")) return "text-blue-600";
     if (src.includes("Esri")) return "text-cyan-600";
@@ -207,31 +209,24 @@ function CandidateDebugPanel({ candidates, summary }: { candidates: CandidateDeb
         Footprint Candidate Debug
       </div>
 
-      {(
-        <div className="border-b border-border/50">
-          <DebugRow label="Microsoft (DB)" value={effectiveSummary.microsoft_count} warn={effectiveSummary.microsoft_count === 0} />
-          <DebugRow label="NJGIN" value={effectiveSummary.njgin_count} warn={effectiveSummary.njgin_count === 0} />
-          <DebugRow label="Esri/MS" value={effectiveSummary.esri_count} />
-          <DebugRow label="OSM" value={effectiveSummary.osm_count} warn={effectiveSummary.osm_count === 0} />
-          <DebugRow label="AI Vision" value={effectiveSummary.ai_count} />
-          <DebugRow label="Selected Source" value={
-            <span className={sourceColor(effectiveSummary.selected_source ?? "")}>
-              {effectiveSummary.selected_source ?? "none"}
-            </span>
-          } warn={effectiveSummary.selected_source?.includes("AI Vision")} />
-          <DebugRow label="Selected Score" value={effectiveSummary.selected_score ?? "—"} />
-          <DebugRow
-            label="Guardrail Triggered"
-            value={effectiveSummary.guardrail_triggered ? "YES ✓" : "No"}
-            warn={false}
-          />
-          {effectiveSummary.guardrail_triggered && effectiveSummary.guardrail_reason && (
-            <DebugRow label="Guardrail Reason" value={effectiveSummary.guardrail_reason} />
-          )}
-        </div>
-      )}
+      <div className="border-b border-border/50">
+        <DebugRow label="Microsoft (DB)" value={effectiveSummary.microsoft_count} warn={effectiveSummary.microsoft_count === 0} />
+        <DebugRow label="NJGIN" value={effectiveSummary.njgin_count} warn={effectiveSummary.njgin_count === 0} />
+        <DebugRow label="Esri/MS" value={effectiveSummary.esri_count} />
+        <DebugRow label="OSM" value={effectiveSummary.osm_count} warn={effectiveSummary.osm_count === 0} />
+        <DebugRow label="AI Vision" value={effectiveSummary.ai_count} />
+        <DebugRow
+          label="Selected Source"
+          value={<span className={sourceColor(effectiveSummary.selected_source ?? "")}>{effectiveSummary.selected_source ?? "none"}</span>}
+          warn={effectiveSummary.selected_source?.includes("AI Vision")}
+        />
+        <DebugRow label="Selected Score" value={effectiveSummary.selected_score ?? "—"} />
+        <DebugRow label="Guardrail Triggered" value={effectiveSummary.guardrail_triggered ? "YES ✓" : "No"} />
+        {effectiveSummary.guardrail_triggered && effectiveSummary.guardrail_reason && (
+          <DebugRow label="Guardrail Reason" value={effectiveSummary.guardrail_reason} />
+        )}
+      </div>
 
-      {/* Warnings */}
       {warnings.length > 0 && (
         <div className="px-2 py-1.5 space-y-1">
           {warnings.map((w, i) => (
@@ -243,7 +238,6 @@ function CandidateDebugPanel({ candidates, summary }: { candidates: CandidateDeb
         </div>
       )}
 
-      {/* Candidate Table */}
       {candidates.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-[10px]">
@@ -277,7 +271,6 @@ function CandidateDebugPanel({ candidates, summary }: { candidates: CandidateDeb
             </tbody>
           </table>
 
-          {/* Score breakdown for selected */}
           {candidates.filter(c => c.selected).map((c, i) => (
             <div key={i} className="px-2 py-1 bg-muted/20 text-[9px] font-mono text-muted-foreground">
               Score breakdown: src={c.candidate_score_breakdown.source_priority} offset={c.candidate_score_breakdown.centroid_offset} area={c.candidate_score_breakdown.area_sanity} vtx={c.candidate_score_breakdown.vertex_quality} conflict={c.candidate_score_breakdown.shape_conflict}
