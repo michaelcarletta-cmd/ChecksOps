@@ -71,8 +71,11 @@ interface CandidateFetchSummary {
   raw_candidate_count?: number;
   effective_candidate_count?: number;
   authoritative_candidate_count?: number;
+  weak_authoritative_count?: number;
   ai_candidates_removed?: number;
   hard_source_filter_triggered?: boolean;
+  nearest_authoritative_distance_ft?: number | null;
+  coordinate_source?: string | null;
 }
 
 interface Props {
