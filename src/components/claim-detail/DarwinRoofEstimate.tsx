@@ -323,7 +323,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   }, [claimId]);
 
   useEffect(() => {
-    if (claim) {
+    if (claim && lockToClaim) {
       const parts = [
         claim.property_address,
         claim.property_city,
@@ -332,7 +332,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       ].filter(Boolean);
       if (parts.length > 0) setAddress(parts.join(", "));
     }
-  }, [claim]);
+  }, [claim, lockToClaim]);
 
   const runEstimate = useCallback(async (candidateIndex?: number, options?: { forceFreshCandidates?: boolean }) => {
     if (!address.trim()) {
