@@ -36,6 +36,7 @@ const WorkspaceDetailPage = lazy(() => import("./pages/WorkspaceDetailPage"));
 
 const DarwinOperations = lazy(() => import("./pages/DarwinOperations"));
 const CheckCommandCenter = lazy(() => import("./pages/CheckCommandCenter"));
+const BuildingFootprintIngestion = lazy(() => import("./pages/admin/BuildingFootprintIngestion"));
 
 export const queryClient = new QueryClient({
   defaultOptions: {
