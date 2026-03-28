@@ -119,16 +119,24 @@ Deno.serve(async (req) => {
     const stateCode = STATE_CODES[state] || state.substring(0, 2).toUpperCase();
     const testMode = body.test_mode === true;
     const maxFeatures = testMode ? (body.test_limit || 50) : (body.limit || 5000);
-    const idBatchSize = body.id_batch_size || 200; // fetch geometry in batches of 200 IDs
+    const idBatchSize = body.id_batch_size || 200;
 
-    // Custom bbox override for targeted ingestion
+    // For test mode, default to a small bbox around Toms River / Lakewood area
+    // instead of all of NJ (which causes Esri 504 timeouts)
+    const TEST_BBOX_WGS84 = [-74.35, 40.10, -74.30, 40.12]; // ~3km x ~2km
+
     let bbox3857 = STATE_BBOX_3857[state];
     if (body.bbox_wgs84) {
-      // Accept [minLng, minLat, maxLng, maxLat] in WGS84
       const [minLng, minLat, maxLng, maxLat] = body.bbox_wgs84;
       const [xmin, ymin] = toWebMercator(minLng, minLat);
       const [xmax, ymax] = toWebMercator(maxLng, maxLat);
       bbox3857 = `${xmin},${ymin},${xmax},${ymax}`;
+    } else if (testMode) {
+      const [minLng, minLat, maxLng, maxLat] = TEST_BBOX_WGS84;
+      const [xmin, ymin] = toWebMercator(minLng, minLat);
+      const [xmax, ymax] = toWebMercator(maxLng, maxLat);
+      bbox3857 = `${xmin},${ymin},${xmax},${ymax}`;
+      console.log(`[Ingest] Test mode: using small bbox WGS84=${JSON.stringify(TEST_BBOX_WGS84)}`);
     }
 
     if (!bbox3857) {
