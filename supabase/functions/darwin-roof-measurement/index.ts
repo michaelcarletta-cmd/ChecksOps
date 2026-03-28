@@ -3536,6 +3536,15 @@ function deriveRoofEstimate(
   }
   notes.push("\n⚠️ PRELIMINARY. Linear values are geometry-derived with null for unsupported fields. Overhang is configurable. All values require manual confirmation.");
 
+  // ── Per-Facet Decomposition ──
+  const facetDecomposition = decomposeFacetsFromFootprint(
+    selectedCandidate, roofFormInference, userRoofType, slopeFactor, exactPitchUsed || displayPitch, overhang,
+  );
+  if (facetDecomposition) {
+    notes.push(`\n🔷 FACET DECOMPOSITION (${facetDecomposition.roof_type_used}):`);
+    for (const fn of facetDecomposition.decomposition_notes) notes.push(`  • ${fn}`);
+  }
+
   return {
     footprint_area_sqft: footprintArea,
     estimated_roof_area_sqft: roofArea,
