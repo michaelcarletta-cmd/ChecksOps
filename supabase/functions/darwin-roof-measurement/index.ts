@@ -3545,6 +3545,57 @@ function deriveRoofEstimate(
     for (const fn of facetDecomposition.decomposition_notes) notes.push(`  • ${fn}`);
   }
 
+  // ── Override linear values from facet decomposition when available ──
+  // Facet decomposition produces more accurate eave/rake/ridge/hip/valley values
+  // because it models the actual roof shape rather than just classifying footprint edges.
+  let finalRidge = linear.ridge_lf;
+  let finalHip = linear.hip_lf;
+  let finalValley = linear.valley_lf;
+  let finalEave = linear.eave_lf;
+  let finalRake = linear.rake_lf;
+  let finalFacets = resolvedFacets;
+
+  if (facetDecomposition) {
+    const fd = facetDecomposition;
+    // Only override when facet decomposition has meaningful values
+    if (fd.total_ridge_lf > 0 || fd.total_eave_lf > 0 || fd.total_rake_lf > 0) {
+      finalRidge = fd.total_ridge_lf;
+      finalHip = fd.total_hip_lf;
+      finalValley = fd.total_valley_lf;
+      finalEave = fd.total_eave_lf;
+      finalRake = fd.total_rake_lf;
+      finalFacets = fd.facets.length;
+
+      // Update field sources and confidence to reflect facet-based derivation
+      fieldSources.ridge_lf = hasGeometry ? "geometry" : "ai_estimated";
+      fieldSources.hip_lf = hasGeometry ? "geometry" : "ai_estimated";
+      fieldSources.valley_lf = hasGeometry ? "geometry" : "ai_estimated";
+      fieldSources.eave_lf = hasGeometry ? "geometry" : "ai_estimated";
+      fieldSources.rake_lf = hasGeometry ? "geometry" : "ai_estimated";
+      fieldSources.facet_count = hasGeometry ? "geometry" : "ai_estimated";
+
+      // Facet decomposition confidence: higher than raw edge classification
+      const facetConf = userRoofType ? 55 : 35; // user-specified roof type = higher confidence
+      fieldConfidence.ridge_lf = facetConf;
+      fieldConfidence.hip_lf = facetConf;
+      fieldConfidence.valley_lf = facetConf;
+      fieldConfidence.eave_lf = facetConf;
+      fieldConfidence.rake_lf = facetConf;
+      fieldConfidence.facet_count = facetConf;
+
+      // Update authority
+      const facetAuth: FieldAuthority = hasGeometry ? "geometry_authoritative" : "ai_provisional";
+      fieldAuthority.ridge_lf = facetAuth;
+      fieldAuthority.hip_lf = facetAuth;
+      fieldAuthority.valley_lf = facetAuth;
+      fieldAuthority.eave_lf = facetAuth;
+      fieldAuthority.rake_lf = facetAuth;
+      fieldAuthority.facet_count = facetAuth;
+
+      notes.push(`\n✅ Linear values overridden by facet decomposition (${fd.roof_type_used}): eave=${finalEave}, rake=${finalRake}, ridge=${finalRidge}, hip=${finalHip}, valley=${finalValley}, facets=${finalFacets}.`);
+    }
+  }
+
   return {
     footprint_area_sqft: footprintArea,
     estimated_roof_area_sqft: roofArea,
@@ -3552,12 +3603,12 @@ function deriveRoofEstimate(
     dominant_pitch: displayPitch,
     pitch_band: pitchBand,
     pitch_type: pitchType,
-    ridge_lf: linear.ridge_lf,
-    hip_lf: linear.hip_lf,
-    valley_lf: linear.valley_lf,
-    eave_lf: linear.eave_lf,
-    rake_lf: linear.rake_lf,
-    facet_count: resolvedFacets,
+    ridge_lf: finalRidge,
+    hip_lf: finalHip,
+    valley_lf: finalValley,
+    eave_lf: finalEave,
+    rake_lf: finalRake,
+    facet_count: finalFacets,
     confidence_score: roundTo(confScore, 0),
     review_required: true,
     overlay_image_url: null,
