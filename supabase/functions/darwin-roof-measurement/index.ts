@@ -4174,6 +4174,8 @@ Deno.serve(async (req) => {
         suppressedHeuristics,
         netImpact,
         shadowMatches,
+        candidate_debug: candidateDebug,
+        candidate_fetch_summary: candidateFetchSummary,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
