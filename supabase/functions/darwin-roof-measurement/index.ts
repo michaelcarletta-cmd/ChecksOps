@@ -1157,29 +1157,28 @@ function scoreCandidateFootprint(
 }
 
 /** Fetch Microsoft Building Footprints from the local building_footprints PostGIS table.
- *  Search radius: 500ft (~152m) to ensure ingested footprints are found even with
- *  minor coordinate differences between geocoding and ingestion.
+ *  Search radius: 1000ft so Darwin can still surface authoritative geometry when
+ *  geocoding is slightly offset from the targeted ingestion coordinates.
  */
 async function fetchMSBuildingFootprintFromDB(
   lat: number,
   lng: number,
   supabase: any,
-): Promise<CandidateFootprint | null> {
+): Promise<CandidateFootprint[]> {
   try {
-    // 500ft ≈ 152m ≈ 0.00137 degrees latitude
-    const SEARCH_RADIUS_FT = 500;
-    const bufferDeg = 0.00137; // ~152m / ~500ft
+    const SEARCH_RADIUS_FT = 1000;
+    const searchRadiusDeg = SEARCH_RADIUS_FT / 364000;
     const { data, error } = await supabase.rpc("find_nearest_building_footprint", {
       search_lat: lat,
       search_lng: lng,
-      search_radius: bufferDeg,
+      search_radius: searchRadiusDeg,
     });
 
     if (error) {
-      // Fallback: simple centroid proximity query with 500ft buffer
+      // Fallback: simple centroid proximity query with expanded authoritative buffer
       console.log(`[Darwin Roof] PostGIS RPC unavailable, using centroid fallback path: ${error.message}`);
-      const latBuf = bufferDeg;
-      const lngBuf = bufferDeg / Math.cos(toRad(lat));
+      const latBuf = searchRadiusDeg;
+      const lngBuf = searchRadiusDeg / Math.max(Math.cos(toRad(lat)), 0.000001);
       const { data: fallbackData, error: fallbackErr } = await supabase
         .from("building_footprints")
         .select("*")
@@ -1195,7 +1194,7 @@ async function fetchMSBuildingFootprintFromDB(
 
       if (fallbackErr || !fallbackData?.length) {
         console.log("[Darwin Roof] MS Building Footprints (DB): no results found via centroid fallback");
-        return null;
+        return [];
       }
 
       // Log ALL nearby footprint distances for diagnostics
@@ -1204,16 +1203,24 @@ async function fetchMSBuildingFootprintFromDB(
         console.log(`[Darwin Roof] MS DB nearby: source_id=${row.source_id} area=${row.area_sqft}sqft dist=${roundTo(d, 1)}ft centroid=(${row.centroid_lat},${row.centroid_lng})`);
       }
 
-      // Find nearest by centroid
-      let nearest = fallbackData[0];
-      let nearestDist = Infinity;
-      for (const row of fallbackData) {
-        const dist = haversineDistFt([lng, lat], [row.centroid_lng, row.centroid_lat]);
-        if (dist < nearestDist) { nearestDist = dist; nearest = row; }
-      }
-      console.log(`[Darwin Roof] MS DB centroid fallback: nearest centroid distance = ${roundTo(nearestDist, 1)}ft (search coords: ${lat},${lng})`);
+      const dedupedRows = Array.from(
+        new Map(
+          fallbackData.map((row: any) => [`${row.source ?? "microsoft"}-${row.source_id ?? row.id}`, row]),
+        ).values(),
+      );
 
-      return buildCandidateFromDBRow(nearest, lat, lng, nearestDist);
+      const candidates = dedupedRows
+        .map((row: any) => {
+          const dist = haversineDistFt([lng, lat], [row.centroid_lng, row.centroid_lat]);
+          return buildCandidateFromDBRow(row, lat, lng, dist);
+        })
+        .filter((candidate): candidate is CandidateFootprint => Boolean(candidate))
+        .sort((a, b) => (a.geometry_metadata?.centroid_offset_ft ?? 999999) - (b.geometry_metadata?.centroid_offset_ft ?? 999999));
+
+      const nearestDist = candidates[0]?.geometry_metadata?.centroid_offset_ft ?? null;
+      console.log(`[Darwin Roof] MS DB centroid fallback: nearest centroid distance = ${nearestDist != null ? roundTo(nearestDist, 1) : "n/a"}ft (search coords: ${lat},${lng})`);
+
+      return candidates;
     }
 
     const rowCount = data?.length ?? 0;
@@ -1221,7 +1228,7 @@ async function fetchMSBuildingFootprintFromDB(
 
     if (!data || data.length === 0) {
       console.log("[Darwin Roof] MS Building Footprints (DB): no results within search radius via PostGIS RPC");
-      return null;
+      return [];
     }
 
     // Log all returned rows for diagnostics
@@ -1230,14 +1237,26 @@ async function fetchMSBuildingFootprintFromDB(
       console.log(`[Darwin Roof] MS DB RPC nearby: source_id=${row.source_id} area=${row.area_sqft}sqft dist=${roundTo(d, 1)}ft`);
     }
 
-    // data[0] should be the nearest with geometry as GeoJSON
-    const row = data[0];
-    const dist = haversineDistFt([lng, lat], [row.centroid_lng, row.centroid_lat]);
-    console.log(`[Darwin Roof] MS DB PostGIS RPC: nearest centroid distance = ${roundTo(dist, 1)}ft (search coords: ${lat},${lng})`);
-    return buildCandidateFromDBRow(row, lat, lng, dist);
+    const dedupedRows = Array.from(
+      new Map(
+        data.map((row: any) => [`${row.source ?? "microsoft"}-${row.source_id ?? row.id}`, row]),
+      ).values(),
+    );
+
+    const candidates = dedupedRows
+      .map((row: any) => {
+        const dist = haversineDistFt([lng, lat], [row.centroid_lng, row.centroid_lat]);
+        return buildCandidateFromDBRow(row, lat, lng, dist);
+      })
+      .filter((candidate): candidate is CandidateFootprint => Boolean(candidate))
+      .sort((a, b) => (a.geometry_metadata?.centroid_offset_ft ?? 999999) - (b.geometry_metadata?.centroid_offset_ft ?? 999999));
+
+    const nearestDist = candidates[0]?.geometry_metadata?.centroid_offset_ft ?? null;
+    console.log(`[Darwin Roof] MS DB PostGIS RPC: nearest centroid distance = ${nearestDist != null ? roundTo(nearestDist, 1) : "n/a"}ft (search coords: ${lat},${lng})`);
+    return candidates;
   } catch (e) {
     console.log("[Darwin Roof] MS Building Footprints (DB) query failed:", e instanceof Error ? e.message : e);
-    return null;
+    return [];
   }
 }
 
@@ -1319,21 +1338,21 @@ async function fetchAllCandidateFootprints(
   const candidates: CandidateFootprint[] = [];
 
   // Source ladder: fetch all sources in parallel, prioritize by scoring
+  const msPromise = supabase
+    ? fetchMSBuildingFootprintFromDB(lat, lng, supabase)
+    : Promise.resolve([] as CandidateFootprint[]);
+
   const promises: Promise<any>[] = [
     fetchOSMBuildingCandidates(lat, lng),
     fetchNJBuildingCandidate(lat, lng),
     fetchEsriUSAStructuresCandidate(lat, lng),
+    msPromise,
   ];
 
-  // Add MS Building Footprints DB query if supabase client is available
-  if (supabase) {
-    promises.push(fetchMSBuildingFootprintFromDB(lat, lng, supabase));
-  }
-
-  const [osmResults, njResult, esriResult, msDbResult] = await Promise.all(promises);
+  const [osmResults, njResult, esriResult, msDbResults] = await Promise.all(promises);
 
   // Add in source-priority order (MS DB first)
-  if (msDbResult) candidates.push(msDbResult);
+  candidates.push(...msDbResults);
   if (njResult) candidates.push(njResult);
   if (esriResult) candidates.push(esriResult);
   candidates.push(...(osmResults || []));
@@ -1355,7 +1374,7 @@ async function fetchAllCandidateFootprints(
   }));
   scored.sort((a, b) => b.score.total - a.score.total);
 
-  const msCount = msDbResult ? 1 : 0;
+  const msCount = msDbResults.length;
   console.log(`[Darwin Roof] Found ${scored.length} candidate footprints (${msCount} MS-DB, ${(osmResults || []).length} OSM, ${njResult ? 1 : 0} NJGIN, ${esriResult ? 1 : 0} Esri)`);
   for (const s of scored) {
     console.log(`[Darwin Roof]   → ${s.candidate.source}: ${s.candidate.area_sqft}sqft, score=${s.score.total} (${s.score.breakdown})`);
@@ -3731,7 +3750,7 @@ Deno.serve(async (req) => {
 
     const { data: claimRecord, error: claimLookupErr } = await supabase
       .from("claims")
-      .select("policyholder_address, property_address, property_city, property_state, property_zip, latitude, longitude")
+      .select("policyholder_address, latitude, longitude")
       .eq("id", claim_id)
       .maybeSingle();
 
@@ -3742,16 +3761,10 @@ Deno.serve(async (req) => {
     // ── ADDRESS OVERRIDE DETECTION ────────────────────────────────────────
     // Build the full claim address from components for comparison
     const normalizeAddr = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
-    const claimAddressParts = [
-      claimRecord?.property_address,
-      claimRecord?.property_city,
-      claimRecord?.property_state,
-      claimRecord?.property_zip,
-    ].filter(Boolean);
-    const claimFullAddress = claimAddressParts.join(", ");
+    const claimFullAddress = (claimRecord?.policyholder_address ?? "").trim();
     const normalizedInput = normalizeAddr(address);
     const normalizedClaim = normalizeAddr(claimFullAddress);
-    const normalizedClaimAlt = normalizeAddr(claimRecord?.policyholder_address || "");
+    const normalizedClaimAlt = normalizedClaim;
 
     const isOverride = normalizedInput.length > 0 &&
       normalizedClaim.length > 0 &&
@@ -3890,7 +3903,7 @@ Deno.serve(async (req) => {
       return area >= 300 && area <= 15000 && quality >= 35 && offset <= 200 && vertexCount >= 4;
     };
 
-    // Weak sanity: offset <= 500ft (for candidates within search radius but farther from centroid)
+    // Weak sanity: offset <= 1000ft (for authoritative candidates discovered outside strict bounds)
     const passesWeakSanity = (candidate: CandidateFootprint) => {
       const area = candidate.area_sqft ?? 0;
       const quality = candidate.geometry_quality_score ?? 0;
@@ -3898,7 +3911,7 @@ Deno.serve(async (req) => {
       const vertexCount =
         candidate.geometry_metadata?.vertex_count ??
         (Array.isArray(candidate.polygon) ? candidate.polygon.length : 0);
-      return area >= 300 && area <= 15000 && quality >= 25 && offset <= 500 && vertexCount >= 4;
+      return area >= 300 && area <= 15000 && quality >= 25 && offset <= 1000 && vertexCount >= 4;
     };
 
     // Log ALL authoritative candidate distances (even if they fail sanity)
@@ -3920,13 +3933,13 @@ Deno.serve(async (req) => {
       (candidate) => isAuthoritativeCandidate(candidate.source) && passesStrictSanity(candidate)
     );
 
-    // Weak authoritative: within 500ft but outside strict bounds
+    // Weak authoritative: within 1000ft but outside strict bounds
     const weakAuthoritativeCandidates = candidates.filter(
       (candidate) => isAuthoritativeCandidate(candidate.source) && !passesStrictSanity(candidate) && passesWeakSanity(candidate)
     );
 
     if (weakAuthoritativeCandidates.length > 0) {
-      console.log(`[Darwin Roof] Found ${weakAuthoritativeCandidates.length} weak_authoritative candidate(s) within 500ft but outside strict bounds`);
+      console.log(`[Darwin Roof] Found ${weakAuthoritativeCandidates.length} weak_authoritative candidate(s) within 1000ft but outside strict bounds`);
     }
 
     // Combined: strict + weak authoritative candidates trigger the hard filter
