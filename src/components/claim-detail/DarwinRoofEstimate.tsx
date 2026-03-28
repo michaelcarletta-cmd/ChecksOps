@@ -274,7 +274,7 @@ const qualityColor = (score: number) => {
 export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const [address, setAddress] = useState("");
   const [exactPitch, setExactPitch] = useState<string>("");
-  const [roofType, setRoofType] = useState<string>("");
+  const [roofType, setRoofType] = useState<string>("auto");
   const [showFacetDetail, setShowFacetDetail] = useState(false);
   const [loading, setLoading] = useState(false);
   const [estimate, setEstimate] = useState<RoofEstimate | null>(null);
@@ -377,7 +377,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
         force_fresh_candidates: forceFreshCandidates,
       };
       if (exactPitch && PITCH_SLOPE_FACTORS[exactPitch]) body.exact_pitch = exactPitch;
-      if (roofType) body.roof_type = roofType;
+      if (roofType && roofType !== "auto") body.roof_type = roofType;
       if (candidateIndex !== undefined && !forceFreshCandidates) body.selected_candidate_index = candidateIndex;
 
       const { data, error: fnErr } = await supabase.functions.invoke("darwin-roof-measurement", { body });
@@ -926,18 +926,18 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
               <SelectValue placeholder="Roof Type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Auto-detect</SelectItem>
+              <SelectItem value="auto">Auto-detect</SelectItem>
               <SelectItem value="gable">⛺ Gable</SelectItem>
               <SelectItem value="hip">🏠 Hip</SelectItem>
               <SelectItem value="cross_gable">✝️ Cross-Gable</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={exactPitch} onValueChange={setExactPitch}>
+          <Select value={exactPitch || "auto"} onValueChange={(v) => setExactPitch(v === "auto" ? "" : v)}>
             <SelectTrigger className="w-[120px]">
               <SelectValue placeholder="Pitch" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Auto-detect</SelectItem>
+              <SelectItem value="auto">Auto-detect</SelectItem>
               {PITCH_OPTIONS.map((p) => (
                 <SelectItem key={p} value={p}>{p}</SelectItem>
               ))}
