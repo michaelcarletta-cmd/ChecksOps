@@ -293,7 +293,9 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const [checkingNearbyFootprints, setCheckingNearbyFootprints] = useState(false);
   const [nearbyDebugRows, setNearbyDebugRows] = useState<NearbyFootprintRow[]>([]);
   const [nearbyDebugError, setNearbyDebugError] = useState<string | null>(null);
-  const [lockToClaim, setLockToClaim] = useState(true);
+  // Auto-unlock if claim has no property address
+  const claimHasAddress = !!(claim?.property_address);
+  const [lockToClaim, setLockToClaim] = useState(claimHasAddress);
   const [lastAnalysisMode, setLastAnalysisMode] = useState<string | null>(null);
 
   // Derive claim address for override detection
@@ -873,10 +875,12 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
               : "bg-muted border-border text-muted-foreground hover:bg-accent"
             }`}
             onClick={() => {
+              if (!claimHasAddress) return;
               setLockToClaim(true);
               // Reset address to claim address
               if (claimAddress) setAddress(claimAddress);
             }}
+            disabled={!claimHasAddress}
           >
             <Lock className="h-3.5 w-3.5" />
             Lock to Claim Property
@@ -918,7 +922,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               className="pl-9"
-              disabled={loading || lockToClaim}
+              disabled={loading || (lockToClaim && claimHasAddress)}
             />
           </div>
           <Select value={roofType} onValueChange={setRoofType}>
