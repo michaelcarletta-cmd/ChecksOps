@@ -78,7 +78,7 @@ export default function BuildingFootprintIngestion() {
     setTestResult(null);
     try {
       const { data, error } = await supabase.functions.invoke("ingest-building-footprints", {
-        body: { state: "NewJersey", test_mode: true, test_limit: 25, batch_size: 25 },
+        body: { state: "NewJersey", test_mode: true, test_limit: 25, id_batch_size: 25 },
       });
       if (error) throw new Error(error.message);
       setTestResult(data);
@@ -96,7 +96,7 @@ export default function BuildingFootprintIngestion() {
     setTestResult(null);
     try {
       const { data, error } = await supabase.functions.invoke("ingest-building-footprints", {
-        body: { state: "NewJersey", test_mode: false, limit: 5000, batch_size: 500 },
+        body: { state: "NewJersey", test_mode: false, limit: 5000, id_batch_size: 500 },
       });
       if (error) throw new Error(error.message);
       setTestResult(data);
