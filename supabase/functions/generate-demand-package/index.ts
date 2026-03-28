@@ -458,9 +458,18 @@ Deno.serve(async (req) => {
       return json({ error: "claimId is required" }, 400);
     }
 
+    const selectedFileIds = Array.isArray(body.selectedFileIds)
+      ? body.selectedFileIds.map((x) => String(x))
+      : [];
+
+    let filesQuery = supabase.from("claim_files").select("*").eq("claim_id", claimId);
+    if (selectedFileIds.length > 0) {
+      filesQuery = filesQuery.in("id", selectedFileIds);
+    }
+
     const [claimRes, filesRes, estimateLinesRes, masterStateRes, intelligenceRes, eventsRes, paymentsRes] = await Promise.all([
       supabase.from("claims").select("*").eq("id", claimId).maybeSingle(),
-      supabase.from("claim_files").select("*").eq("claim_id", claimId).order("created_at", { ascending: false }).limit(100),
+      filesQuery,
       supabase.from("darwin_estimate_lines").select("*").eq("claim_id", claimId).order("created_at", { ascending: true }),
       supabase.from("claim_master_state").select("*").eq("claim_id", claimId).maybeSingle(),
       supabase.from("claim_intelligence_summary").select("*").eq("claim_id", claimId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
@@ -478,6 +487,15 @@ Deno.serve(async (req) => {
 
     if (!claim) {
       return json({ error: "Claim not found" }, 404);
+    }
+
+    if (filesRes.error) {
+      console.error("Failed loading claim files for demand package", {
+        claimId,
+        selectedFileIds,
+        error: filesRes.error,
+      });
+      return json({ error: "Failed to load selected documents for the demand package." }, 500);
     }
 
     // Also pull declared position from master state if not explicitly provided
@@ -499,9 +517,6 @@ Deno.serve(async (req) => {
     }
 
     // Filter files to user-selected files if provided
-    const selectedFileIds = Array.isArray(body.selectedFileIds)
-      ? body.selectedFileIds.map((x) => String(x))
-      : [];
     const effectiveFiles =
       selectedFileIds.length > 0
         ? files.filter((f: Record<string, any>) => selectedFileIds.includes(String(f.id)))
