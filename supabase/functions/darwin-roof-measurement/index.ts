@@ -1572,10 +1572,10 @@ async function fetchOSMBuildingCandidates(lat: number, lng: number): Promise<Can
 
 async function fetchNJBuildingCandidate(lat: number, lng: number): Promise<CandidateFootprint | null> {
   try {
-    // Use envelope (buffer ~50m) instead of point intersect — geocoded lat/lng may be slightly off the building polygon
-    const buf = 0.0005; // ~50m
+    // Use envelope buffer ~152m / 500ft to match MS DB search radius
+    const buf = 0.00137; // ~152m / ~500ft
     const envelope = `${lng - buf},${lat - buf},${lng + buf},${lat + buf}`;
-    const url = `https://services2.arcgis.com/XVOqAjTOJ5P6ngMu/arcgis/rest/services/Building_Footprints_of_NJ/FeatureServer/0/query?geometry=${envelope}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json&resultRecordCount=5`;
+    const url = `https://services2.arcgis.com/XVOqAjTOJ5P6ngMu/arcgis/rest/services/Building_Footprints_of_NJ/FeatureServer/0/query?geometry=${envelope}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json&resultRecordCount=10`;
     const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
     if (!res.ok) return null;
     const data = await res.json();
