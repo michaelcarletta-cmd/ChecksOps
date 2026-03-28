@@ -365,7 +365,9 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
         candidate_debug: data.candidate_debug ?? [],
         candidate_fetch_summary: data.candidate_fetch_summary ?? null,
       });
+      setLastAnalysisMode(data.analysis_mode ?? null);
       const candidateCount = data.candidateCount || 0;
+      const modeLabel = data.is_override ? " [EXTERNAL PROPERTY]" : "";
       const roofForm = data.roofFormInferred ? ` — roof form inferred` : "";
       const visionInfo = data.visionClassified
         ? ` — 🛰️ vision classified (pitch band: ${data.visionPitchBand ?? "?"}, ${data.suppressionCount || 0} suppression${data.suppressionCount !== 1 ? "s" : ""})`
@@ -374,7 +376,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       const fpMsg = data.footprintExtracted
         ? ` — footprint extracted (${candidateCount} candidate${candidateCount > 1 ? "s" : ""})${roofForm}${visionInfo}${abstentions}`
         : ` — no footprint geometry found${visionInfo}`;
-      toast.success("Roof estimate generated" + fpMsg);
+      toast.success("Roof estimate generated" + modeLabel + fpMsg);
     } catch (err: any) {
       setError(err.message || "Estimate failed");
       toast.error(err.message || "Estimate failed");
