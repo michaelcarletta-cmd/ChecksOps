@@ -3064,11 +3064,11 @@ function decomposeFacetsFromFootprint(
     const wingFacetSlope = roundTo(wingFacetPlanar * slopeFactor, 0);
 
     // ── EAVE ──
-    // Main eave: interrupted where wing sits on top (T-shape: only front interrupted)
+    // Main eave: BOTH front and rear are interrupted where wing intersects (cross-gable is symmetric)
     const mainEaveFront = roundTo(Math.max(0, roofLength - wingDepth), 0);
-    const mainEaveRear = roundTo(roofLength, 0);
-    // Wing eave: extension portions beyond main body
-    const wingEaveLen = roundTo(Math.max(wingExtPerSide, roofWidth * 0.05), 0);
+    const mainEaveRear = roundTo(Math.max(0, roofLength - wingDepth), 0);
+    // Wing extensions are gable ends — they have NO eave, only rake edges.
+    // The wing's bottom edge runs perpendicular to main ridge → that's a rake, not eave.
 
     // ── RAKE (sloped gable-end edges from eave to ridge) ──
     // Main gable ends: 2 ends × 2 rakes each = 4 mainRake edges
