@@ -94,6 +94,9 @@ interface Validation {
   accuracy_grade: string | null;
   failure_patterns: string[];
   staff_notes: string | null;
+  geometry_source: string | null;
+  geometry_source_score: number | null;
+  candidate_count: number | null;
   created_at: string;
 }
 
