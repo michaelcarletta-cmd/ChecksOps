@@ -447,6 +447,50 @@ export const DarwinRoofValidation = ({ claimId, estimate }: Props) => {
       .reduce((acc, f) => { acc[f] = (acc[f] || 0) + 1; return acc; }, {} as Record<string, number>),
   } : null;
 
+  // Source-level accuracy breakdown
+  const sourceAccuracy = validations.length > 0 ? (() => {
+    const bySource: Record<string, {
+      count: number;
+      totalScore: number;
+      avgQuality: number;
+      totalQuality: number;
+      pctDeltaSquares: number[];
+      pctDeltaRoofArea: number[];
+      pctDeltaEave: number[];
+      pctDeltaRake: number[];
+      grades: Record<string, number>;
+    }> = {};
+
+    for (const v of validations) {
+      const src = v.geometry_source || "Unknown";
+      if (!bySource[src]) {
+        bySource[src] = { count: 0, totalScore: 0, avgQuality: 0, totalQuality: 0, pctDeltaSquares: [], pctDeltaRoofArea: [], pctDeltaEave: [], pctDeltaRake: [], grades: {} };
+      }
+      const b = bySource[src];
+      b.count++;
+      b.totalScore += v.overall_accuracy_score ?? 0;
+      b.totalQuality += v.geometry_source_score ?? 0;
+      if (v.pct_delta_squares != null) b.pctDeltaSquares.push(Math.abs(v.pct_delta_squares));
+      if (v.pct_delta_roof_area != null) b.pctDeltaRoofArea.push(Math.abs(v.pct_delta_roof_area));
+      if (v.pct_delta_eave_lf != null) b.pctDeltaEave.push(Math.abs(v.pct_delta_eave_lf));
+      if (v.pct_delta_rake_lf != null) b.pctDeltaRake.push(Math.abs(v.pct_delta_rake_lf));
+      const g = v.accuracy_grade || "?";
+      b.grades[g] = (b.grades[g] || 0) + 1;
+    }
+
+    return Object.entries(bySource).map(([source, data]) => ({
+      source,
+      count: data.count,
+      avgScore: Math.round(data.totalScore / data.count),
+      avgQuality: data.totalQuality > 0 ? Math.round(data.totalQuality / data.count) : null,
+      avgPctDeltaSquares: data.pctDeltaSquares.length > 0 ? Math.round(data.pctDeltaSquares.reduce((a, b) => a + b, 0) / data.pctDeltaSquares.length * 10) / 10 : null,
+      avgPctDeltaRoofArea: data.pctDeltaRoofArea.length > 0 ? Math.round(data.pctDeltaRoofArea.reduce((a, b) => a + b, 0) / data.pctDeltaRoofArea.length * 10) / 10 : null,
+      avgPctDeltaEave: data.pctDeltaEave.length > 0 ? Math.round(data.pctDeltaEave.reduce((a, b) => a + b, 0) / data.pctDeltaEave.length * 10) / 10 : null,
+      avgPctDeltaRake: data.pctDeltaRake.length > 0 ? Math.round(data.pctDeltaRake.reduce((a, b) => a + b, 0) / data.pctDeltaRake.length * 10) / 10 : null,
+      grades: data.grades,
+    })).sort((a, b) => b.avgScore - a.avgScore);
+  })() : null;
+
   return (
     <Card>
       <CardHeader className="pb-3">
