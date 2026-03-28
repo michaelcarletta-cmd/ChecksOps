@@ -196,6 +196,34 @@ interface RoofMassDecomposition {
   notes: string[];
 }
 
+/** A single roof facet decomposed from footprint + roof type */
+interface RoofFacet {
+  id: string;
+  label: string; // e.g. "Front Slope", "Left Hip", "Right Hip"
+  area_sqft: number;
+  slope_area_sqft: number;
+  edges: {
+    type: "eave" | "rake" | "ridge" | "hip" | "valley";
+    length_ft: number;
+    bearing_deg: number;
+  }[];
+  pitch: string | null;
+  slope_factor: number;
+}
+
+interface FacetDecomposition {
+  facets: RoofFacet[];
+  total_eave_lf: number;
+  total_rake_lf: number;
+  total_ridge_lf: number;
+  total_hip_lf: number;
+  total_valley_lf: number;
+  total_slope_area_sqft: number;
+  total_squares: number;
+  roof_type_used: string;
+  decomposition_notes: string[];
+}
+
 interface RoofEstimateResult {
   footprint_area_sqft: number;
   estimated_roof_area_sqft: number;
@@ -265,6 +293,8 @@ interface RoofEstimateResult {
   roof_mass_polygons: any[] | null;
   imagery_analysis: MultiImageAnalysis | null;
   calibration_adjustment_factor: number | null;
+  // Per-facet decomposition
+  facet_decomposition: FacetDecomposition | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
