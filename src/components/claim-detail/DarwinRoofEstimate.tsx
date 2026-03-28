@@ -247,6 +247,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const [address, setAddress] = useState("");
   const [loading, setLoading] = useState(false);
   const [estimate, setEstimate] = useState<RoofEstimate | null>(null);
+  const [candidateDebugData, setCandidateDebugData] = useState<any>(null);
   const [fetchingExisting, setFetchingExisting] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editValues, setEditValues] = useState<Partial<RoofEstimate>>({});
