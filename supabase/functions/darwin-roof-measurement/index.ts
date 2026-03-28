@@ -3748,8 +3748,31 @@ Deno.serve(async (req) => {
       fetchAllCandidateFootprints(geo.lat, geo.lng, supabase),
     ]);
 
+    // Build candidate debug info and scores
+    const candidateScores = candidates.map(c => scoreCandidateFootprint(c, geo.lat, geo.lng, null));
+    const candidateDebug: any[] = candidates.map((c, i) => ({
+      source: c.source,
+      source_feature_id: c.source_feature_id,
+      geometry_quality_score: c.geometry_quality_score,
+      candidate_score_total: candidateScores[i].total,
+      candidate_score_breakdown: {
+        source_priority: candidateScores[i].source_priority,
+        centroid_offset: candidateScores[i].centroid_offset_score,
+        area_sanity: candidateScores[i].area_sanity_score,
+        vertex_quality: candidateScores[i].vertex_quality_score,
+        shape_conflict: candidateScores[i].shape_conflict_score,
+      },
+      area_sqft: c.area_sqft,
+      centroid_offset_ft: c.geometry_metadata?.centroid_offset_ft ?? null,
+      vertex_count: c.geometry_metadata?.vertex_count ?? c.polygon.length,
+      selected: false,
+      rejected_reason: null as string | null,
+    }));
+
     // Select candidate with AI Vision guardrail
     let selectedCandidate: CandidateFootprint | null = null;
+    let guardrailTriggered = false;
+    let guardrailReason: string | null = null;
     if (candidates.length > 0) {
       let idx = typeof selected_candidate_index === "number" && selected_candidate_index >= 0 && selected_candidate_index < candidates.length
         ? selected_candidate_index
@@ -3757,8 +3780,6 @@ Deno.serve(async (req) => {
       selectedCandidate = candidates[idx];
 
       // ── HARD GUARDRAIL: AI Vision cannot remain selected when authoritative sources exist ──
-      // If the selected candidate is AI Vision, check if any MS DB or NJGIN candidate
-      // has a materially better score. If so, force-swap to the better candidate.
       const isAIVision = selectedCandidate.source.includes("AI Vision") || selectedCandidate.source.includes("Default Residential");
       if (isAIVision && candidates.length > 1) {
         const authoritativeSources = ["Microsoft Building Footprints", "NJGIN Building Footprints", "Local DB"];
@@ -3766,19 +3787,39 @@ Deno.serve(async (req) => {
           if (c === selectedCandidate) return false;
           const isAuthoritative = authoritativeSources.some(s => c.source.includes(s));
           if (!isAuthoritative) return false;
-          // "Materially better" = quality score at least 10 points higher, OR the authoritative
-          // candidate has quality >= 40 (reasonable quality)
           return c.geometry_quality_score >= 40 || c.geometry_quality_score > selectedCandidate!.geometry_quality_score + 10;
         });
         if (betterCandidate) {
           const oldSource = selectedCandidate.source;
           const oldScore = selectedCandidate.geometry_quality_score;
+          guardrailTriggered = true;
+          guardrailReason = `AI Vision "${oldSource}" (quality=${oldScore}) overridden by "${betterCandidate.source}" (quality=${betterCandidate.geometry_quality_score})`;
+          // Mark old as rejected in debug
+          candidateDebug[idx].rejected_reason = `guardrail: overridden by ${betterCandidate.source}`;
           selectedCandidate = betterCandidate;
           idx = candidates.indexOf(betterCandidate);
-          console.log(`[Darwin Roof] GUARDRAIL: AI Vision source "${oldSource}" (quality=${oldScore}) overridden by authoritative "${betterCandidate.source}" (quality=${betterCandidate.geometry_quality_score})`);
+          console.log(`[Darwin Roof] GUARDRAIL: ${guardrailReason}`);
         }
       }
+
+      // Mark selected
+      if (candidateDebug[idx]) candidateDebug[idx].selected = true;
     }
+
+    // Build candidate fetch summary
+    const candidateFetchSummary = {
+      microsoft_count: candidates.filter(c => c.source.includes("Microsoft") || c.source.includes("Local DB")).length,
+      njgin_count: candidates.filter(c => c.source.includes("NJGIN")).length,
+      esri_count: candidates.filter(c => c.source.includes("Esri")).length,
+      osm_count: candidates.filter(c => c.source.includes("OpenStreetMap")).length,
+      ai_count: candidates.filter(c => c.source.includes("AI Vision")).length,
+      selected_source: selectedCandidate?.source ?? null,
+      selected_score: selectedCandidate ? (candidateScores[candidates.indexOf(selectedCandidate)]?.total ?? null) : null,
+      guardrail_triggered: guardrailTriggered,
+      guardrail_reason: guardrailReason,
+    };
+
+    console.log(`[Darwin Roof] Candidate fetch summary: MS=${candidateFetchSummary.microsoft_count} NJGIN=${candidateFetchSummary.njgin_count} Esri=${candidateFetchSummary.esri_count} OSM=${candidateFetchSummary.osm_count} AI=${candidateFetchSummary.ai_count} → selected="${candidateFetchSummary.selected_source}" (score=${candidateFetchSummary.selected_score}) guardrail=${guardrailTriggered}`);
 
     // Phase 2C: Infer roof form from selected footprint
     let roofFormInference: RoofFormInference | null = null;
