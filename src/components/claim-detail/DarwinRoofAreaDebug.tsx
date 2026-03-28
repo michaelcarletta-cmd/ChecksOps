@@ -67,6 +67,12 @@ interface CandidateFetchSummary {
   selected_score: number | null;
   guardrail_triggered: boolean;
   guardrail_reason: string | null;
+  // Hard source filter fields
+  raw_candidate_count?: number;
+  effective_candidate_count?: number;
+  authoritative_candidate_count?: number;
+  ai_candidates_removed?: number;
+  hard_source_filter_triggered?: boolean;
 }
 
 interface Props {
