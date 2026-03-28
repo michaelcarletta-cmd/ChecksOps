@@ -2368,10 +2368,11 @@ function decomposeIntoMasses(candidate: CandidateFootprint): RoofMassDecompositi
   notes.push(`Decomposed into 2 masses: A(${roundTo(massALength)}×${roundTo(massAWidth)}ft ≈${massAArea}sqft) + B(${roundTo(massBLength)}×${roundTo(massBWidth)}ft ≈${massBArea}sqft).`);
   notes.push(`Decomposed total ${totalDecomposed}sqft vs footprint ${candidate.area_sqft}sqft (ratio: ${roundTo(areaRatio, 2)}).`);
 
-  // Estimate valley length at junction (where wing meets main body)
+  // Estimate planar valley length at junction (where wing meets main body).
+  // Keep this UNSLOPED here — pitch-based slope adjustment happens later when
+  // junction valleys are promoted into measured totals.
   const junctionLength = Math.min(massBWidth, massAWidth);
-  const slopeFactor = 1.118; // moderate default for valley slope-adjustment
-  const valleyAtJunction = roundTo(junctionLength * slopeFactor, 0);
+  const valleyAtJunction = roundTo(junctionLength, 0);
 
   const massA: RoofMass = {
     id: "mass_0",
@@ -3077,9 +3078,14 @@ function decomposeFacetsFromFootprint(
     const wingRake = roundTo(halfWingDepth * slopeFactor, 0);
 
     // ── VALLEY ──
-    // Cross-gable has 2 unique valley lines (left + right of wing intersection)
-    // Each is shared between front and rear main slopes, so listed on both facets then deduplicated
-    const valleyLen = roundTo(Math.min(halfMainDepth, halfWingDepth) * Math.SQRT2 * slopeFactor, 0);
+    // Cross-gable has 2 unique valley lines (left + right of wing intersection).
+    // Use the actual junction geometry: valley plan length is the diagonal from
+    // the wing ridge end to the main-roof re-entrant corner, using the wing
+    // half-depth and the wing extension beyond the main body.
+    // Each valley is shared between front and rear main slopes, so we list it on
+    // both facets and deduplicate in aggregation below.
+    const valleyPlanLen = Math.hypot(halfWingDepth, Math.max(wingExtPerSide, 0));
+    const valleyLen = roundTo(valleyPlanLen * slopeFactor, 0);
 
     // ── FACETS (6 total) ──
     // Facet 1: Main Front Slope (interrupted eave, 2 rakes, 2 valleys where wings intersect)
@@ -3140,7 +3146,7 @@ function decomposeFacetsFromFootprint(
     notes.push(`Cross-gable: 6 facets (2 main @${mainFacetSlope}sqft, 4 wing @${wingFacetSlope}sqft).`);
     notes.push(`Main eave: front=${mainEaveFront}ft, rear=${mainEaveRear}ft (both interrupted by wing). No wing eave (gable ends).`);
     notes.push(`Main ridge: ${mainRidgeLen}ft, Wing ridge: 4×${wingRidgePerSide}ft.`);
-    notes.push(`Valleys: 4×${valleyLen}ft. Main rake: 4×${mainRake}ft, Wing rake: 8×${wingRake}ft.`);
+    notes.push(`Valleys: 4×${valleyLen}ft (plan ${roundTo(valleyPlanLen, 1)}ft each). Main rake: 4×${mainRake}ft, Wing rake: 8×${wingRake}ft.`);
   } else {
     notes.push(`Roof type '${resolvedType}' not supported for facet decomposition.`);
     return null;
