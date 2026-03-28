@@ -3578,6 +3578,7 @@ function deriveRoofEstimate(
     selectedCandidate, roofFormInference, userRoofType, slopeFactor, exactPitchUsed || displayPitch, overhang,
   );
   if (facetDecomposition) {
+    console.info(`[Darwin Roof] Facet decomposition: type=${facetDecomposition.roof_type_used}, ridge=${facetDecomposition.total_ridge_lf}, eave=${facetDecomposition.total_eave_lf}, rake=${facetDecomposition.total_rake_lf}, hip=${facetDecomposition.total_hip_lf}, valley=${facetDecomposition.total_valley_lf}`);
     notes.push(`\n🔷 FACET DECOMPOSITION (${facetDecomposition.roof_type_used}):`);
     for (const fn of facetDecomposition.decomposition_notes) notes.push(`  • ${fn}`);
   }
