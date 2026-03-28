@@ -70,7 +70,7 @@ async function fetchEsriIds(bbox3857: string): Promise<number[]> {
 async function fetchEsriFeatures(objectIds: number[]): Promise<any[]> {
   const params = new URLSearchParams({
     objectIds: objectIds.join(","),
-    outFields: "OBJECTID,GlobalID",
+    outFields: "OBJECTID,StateAbbrev,Shape__Area,Shape__Length",
     returnGeometry: "true",
     outSR: "4326",
     f: "json",
@@ -201,6 +201,7 @@ Deno.serve(async (req) => {
         const msg = `Geometry fetch error at batch ${i}: ${e instanceof Error ? e.message : String(e)}`;
         console.error(`[Ingest] ${msg}`);
         errors.push(msg);
+        totalErrors += batchIds.length;
         continue;
       }
 
@@ -236,7 +237,7 @@ Deno.serve(async (req) => {
             ? wktRing : `${wktRing}, ${ring[0][0]} ${ring[0][1]}`;
 
           sources.push("microsoft");
-          sourceIds.push(feat.attributes?.OBJECTID ? String(feat.attributes.OBJECTID) : feat.attributes?.GlobalID || "");
+          sourceIds.push(feat.attributes?.OBJECTID ? String(feat.attributes.OBJECTID) : "");
           states.push(stateCode);
           wkts.push(`POLYGON((${closed}))`);
           centroidLats.push(Math.round(cLat * 1e7) / 1e7);
