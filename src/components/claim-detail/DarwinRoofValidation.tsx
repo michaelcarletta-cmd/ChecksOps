@@ -34,6 +34,9 @@ interface RoofEstimate {
   confidence_score: number | null;
   geometry_quality_score: number | null;
   inferred_roof_form: RoofForm | null;
+  imagery_source: string | null;
+  selected_candidate_index: number | null;
+  candidate_footprints: any[] | null;
 }
 
 interface Validation {
@@ -91,6 +94,9 @@ interface Validation {
   accuracy_grade: string | null;
   failure_patterns: string[];
   staff_notes: string | null;
+  geometry_source: string | null;
+  geometry_source_score: number | null;
+  candidate_count: number | null;
   created_at: string;
 }
 
@@ -356,6 +362,9 @@ export const DarwinRoofValidation = ({ claimId, estimate }: Props) => {
         source_type: form.source_type,
         source_name: form.source_name || null,
         source_date: form.source_date || null,
+        geometry_source: estimate.imagery_source || null,
+        geometry_source_score: estimate.geometry_quality_score || null,
+        candidate_count: estimate.candidate_footprints?.length ?? null,
         ...actual,
         ...darwin,
         delta_footprint_area: d_foot.abs,
@@ -385,7 +394,7 @@ export const DarwinRoofValidation = ({ claimId, estimate }: Props) => {
 
       const { error } = await supabase
         .from("claim_roof_validations")
-        .insert(row);
+        .insert(row as any);
 
       if (error) throw error;
 
@@ -437,6 +446,50 @@ export const DarwinRoofValidation = ({ claimId, estimate }: Props) => {
       .flatMap(v => (v.failure_patterns as string[]) || [])
       .reduce((acc, f) => { acc[f] = (acc[f] || 0) + 1; return acc; }, {} as Record<string, number>),
   } : null;
+
+  // Source-level accuracy breakdown
+  const sourceAccuracy = validations.length > 0 ? (() => {
+    const bySource: Record<string, {
+      count: number;
+      totalScore: number;
+      avgQuality: number;
+      totalQuality: number;
+      pctDeltaSquares: number[];
+      pctDeltaRoofArea: number[];
+      pctDeltaEave: number[];
+      pctDeltaRake: number[];
+      grades: Record<string, number>;
+    }> = {};
+
+    for (const v of validations) {
+      const src = v.geometry_source || "Unknown";
+      if (!bySource[src]) {
+        bySource[src] = { count: 0, totalScore: 0, avgQuality: 0, totalQuality: 0, pctDeltaSquares: [], pctDeltaRoofArea: [], pctDeltaEave: [], pctDeltaRake: [], grades: {} };
+      }
+      const b = bySource[src];
+      b.count++;
+      b.totalScore += v.overall_accuracy_score ?? 0;
+      b.totalQuality += v.geometry_source_score ?? 0;
+      if (v.pct_delta_squares != null) b.pctDeltaSquares.push(Math.abs(v.pct_delta_squares));
+      if (v.pct_delta_roof_area != null) b.pctDeltaRoofArea.push(Math.abs(v.pct_delta_roof_area));
+      if (v.pct_delta_eave_lf != null) b.pctDeltaEave.push(Math.abs(v.pct_delta_eave_lf));
+      if (v.pct_delta_rake_lf != null) b.pctDeltaRake.push(Math.abs(v.pct_delta_rake_lf));
+      const g = v.accuracy_grade || "?";
+      b.grades[g] = (b.grades[g] || 0) + 1;
+    }
+
+    return Object.entries(bySource).map(([source, data]) => ({
+      source,
+      count: data.count,
+      avgScore: Math.round(data.totalScore / data.count),
+      avgQuality: data.totalQuality > 0 ? Math.round(data.totalQuality / data.count) : null,
+      avgPctDeltaSquares: data.pctDeltaSquares.length > 0 ? Math.round(data.pctDeltaSquares.reduce((a, b) => a + b, 0) / data.pctDeltaSquares.length * 10) / 10 : null,
+      avgPctDeltaRoofArea: data.pctDeltaRoofArea.length > 0 ? Math.round(data.pctDeltaRoofArea.reduce((a, b) => a + b, 0) / data.pctDeltaRoofArea.length * 10) / 10 : null,
+      avgPctDeltaEave: data.pctDeltaEave.length > 0 ? Math.round(data.pctDeltaEave.reduce((a, b) => a + b, 0) / data.pctDeltaEave.length * 10) / 10 : null,
+      avgPctDeltaRake: data.pctDeltaRake.length > 0 ? Math.round(data.pctDeltaRake.reduce((a, b) => a + b, 0) / data.pctDeltaRake.length * 10) / 10 : null,
+      grades: data.grades,
+    })).sort((a, b) => b.avgScore - a.avgScore);
+  })() : null;
 
   return (
     <Card>
@@ -495,6 +548,91 @@ export const DarwinRoofValidation = ({ claimId, estimate }: Props) => {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Source Accuracy Breakdown */}
+        {sourceAccuracy && sourceAccuracy.length > 0 && (
+          <div className="rounded-lg border p-3 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              Accuracy by Geometry Source
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-1.5 px-2 font-medium text-muted-foreground">Source</th>
+                    <th className="text-center py-1.5 px-1 font-medium text-muted-foreground">N</th>
+                    <th className="text-center py-1.5 px-1 font-medium text-muted-foreground">Avg Score</th>
+                    <th className="text-center py-1.5 px-1 font-medium text-muted-foreground">Δ Squares</th>
+                    <th className="text-center py-1.5 px-1 font-medium text-muted-foreground">Δ Area</th>
+                    <th className="text-center py-1.5 px-1 font-medium text-muted-foreground">Δ Eave</th>
+                    <th className="text-center py-1.5 px-1 font-medium text-muted-foreground">Δ Rake</th>
+                    <th className="text-center py-1.5 px-1 font-medium text-muted-foreground">Grades</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sourceAccuracy.map((row, idx) => {
+                    const isTop = idx === 0 && sourceAccuracy.length > 1;
+                    const shortSource = row.source
+                      .replace("Microsoft Building Footprints (Local DB)", "MS Footprints (DB)")
+                      .replace("Microsoft Building Footprints (Esri)", "MS/Esri")
+                      .replace("NJGIN Building Footprints", "NJGIN")
+                      .replace("OpenStreetMap Building Footprints", "OSM")
+                      .replace("AI Vision Estimate (satellite imagery)", "AI Vision")
+                      .replace("Default Residential Fallback (no GIS or vision data)", "Default Fallback");
+                    return (
+                      <tr key={row.source} className={`border-b last:border-b-0 ${isTop ? "bg-primary/5" : ""}`}>
+                        <td className="py-1.5 px-2 font-medium">
+                          <span className={
+                            row.source.includes("Microsoft") || row.source.includes("Local DB")
+                              ? "text-green-600"
+                              : row.source.includes("NJGIN")
+                                ? "text-blue-600"
+                                : row.source.includes("AI Vision")
+                                  ? "text-red-600"
+                                  : ""
+                          }>
+                            {isTop && "🏆 "}{shortSource}
+                          </span>
+                        </td>
+                        <td className="text-center py-1.5 px-1 tabular-nums">{row.count}</td>
+                        <td className={`text-center py-1.5 px-1 tabular-nums font-semibold ${
+                          row.avgScore >= 75 ? "text-green-600" : row.avgScore >= 50 ? "text-yellow-600" : "text-red-500"
+                        }`}>
+                          {row.avgScore}%
+                        </td>
+                        <td className="text-center py-1.5 px-1 tabular-nums">
+                          {row.avgPctDeltaSquares != null ? `${row.avgPctDeltaSquares}%` : "—"}
+                        </td>
+                        <td className="text-center py-1.5 px-1 tabular-nums">
+                          {row.avgPctDeltaRoofArea != null ? `${row.avgPctDeltaRoofArea}%` : "—"}
+                        </td>
+                        <td className="text-center py-1.5 px-1 tabular-nums">
+                          {row.avgPctDeltaEave != null ? `${row.avgPctDeltaEave}%` : "—"}
+                        </td>
+                        <td className="text-center py-1.5 px-1 tabular-nums">
+                          {row.avgPctDeltaRake != null ? `${row.avgPctDeltaRake}%` : "—"}
+                        </td>
+                        <td className="py-1.5 px-1">
+                          <div className="flex gap-0.5 justify-center">
+                            {Object.entries(row.grades).sort().map(([g, c]) => (
+                              <span key={g} className={`text-[9px] px-1 rounded ${gradeColor(g)}`}>
+                                {g}:{c}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              Δ columns show average absolute % deviation from ground truth. Lower = more accurate.
             </div>
           </div>
         )}
