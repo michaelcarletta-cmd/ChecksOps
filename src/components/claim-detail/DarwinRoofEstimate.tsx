@@ -688,6 +688,16 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       </CardHeader>
 
       <CardContent className="space-y-4">
+        {/* Empty footprint table warning */}
+        {footprintTableEmpty && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Microsoft footprint dataset has not been ingested yet. Darwin is using fallback geometry. 
+              <a href="/admin/building-footprints" className="underline ml-1 font-medium">Run ingestion →</a>
+            </AlertDescription>
+          </Alert>
+        )}
         {/* Address Input */}
         <div className="flex gap-2">
           <div className="flex-1 relative">
