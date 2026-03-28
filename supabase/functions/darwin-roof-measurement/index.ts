@@ -2852,6 +2852,7 @@ function deriveRoofEstimate(
   roofFormInference: RoofFormInference | null,
   visionResult: SatelliteVisionResult | null,
   suppressions: SuppressionRecord[],
+  exactPitchRise: number | null = null,
 ): RoofEstimateResult {
   const hasGeometry = !!selectedCandidate;
   const footprintArea = selectedCandidate?.area_sqft ?? 0;
