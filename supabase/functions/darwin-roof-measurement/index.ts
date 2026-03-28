@@ -2632,7 +2632,7 @@ function deriveLinearForMass(
     notes.push("Facets: 4 (hip).");
   } else if (resolvedForm === "cross_gable") {
     const valCount = roofFormInference?.hip_valley_candidates.filter(c => c.type === "valley").length ?? 0;
-    facetCount = Math.max(4, 4 + valCount * 2);
+    facetCount = Math.max(6, 6 + valCount * 2);
     linear_confidence.facet_count = 30;
     notes.push(`Facets: ${facetCount} (cross-gable, ${valCount} valley(s)).`);
   } else {
