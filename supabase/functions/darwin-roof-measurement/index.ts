@@ -2882,12 +2882,21 @@ function deriveRoofEstimate(
     pitchIsDefaultFallback = true;
   }
 
-  // ── Area (with roof polygon expansion) ──
+  // ── Area calculation ──
+  // For authoritative sources (Microsoft, NJGIN, Local DB), the footprint polygon
+  // already represents the building outline including overhangs as captured by aerial
+  // imagery. We use the RAW footprint area × slope factor — no overhang expansion,
+  // no artificial correction factors. This produces the most accurate results when
+  // compared to professional measurement reports (e.g., GAF QuickMeasure).
   let roofArea = 0, squares = 0;
   let roofPolyResult: RoofPolygonResult | null = null;
   let roofPolygonGeoJson: any = null;
   let planarRoofAreaSqft = 0;
   let correctionFactorUsed: number | null = null;
+
+  const isAuthoritativeSource = (selectedCandidate?.source ?? "").includes("Microsoft") ||
+    (selectedCandidate?.source ?? "").includes("NJGIN") ||
+    (selectedCandidate?.source ?? "").includes("Local DB");
 
   if (hasGeometry && selectedCandidate) {
     const [cLng, cLat] = polygonCentroid(selectedCandidate.polygon);
@@ -2899,18 +2908,25 @@ function deriveRoofEstimate(
     }));
 
     roofPolyResult = buildRoofPolygonFromFootprint(localXY, edgeClsForExpansion, overhang);
-    planarRoofAreaSqft = roofPolyResult.expanded_planar_area_sqft;
 
-    // Build GeoJSON for the expanded roof polygon
+    if (isAuthoritativeSource) {
+      // AUTHORITATIVE: use raw footprint area directly — no overhang expansion, no correction
+      planarRoofAreaSqft = selectedCandidate.area_sqft;
+      correctionFactorUsed = 1.0;
+      console.log(`[Darwin Roof] Authoritative source: using raw footprint area ${planarRoofAreaSqft} sqft (no expansion/correction)`);
+    } else {
+      // Non-authoritative (AI Vision, etc.): use expanded area + corrections
+      planarRoofAreaSqft = roofPolyResult.expanded_planar_area_sqft;
+      correctionFactorUsed = getValidationDerivedAreaCorrection({
+        inferredRoofForm: roofFormInference?.inferred_roof_form ?? null,
+        geometrySource: selectedCandidate.geometry_metadata?.source_name ?? null,
+        geometryQualityScore: selectedCandidate.geometry_quality_score,
+        pitchBand: pitchBand,
+      });
+    }
+
+    // Build GeoJSON for the expanded roof polygon (still useful for visualization)
     roofPolygonGeoJson = buildPolygonGeoJson(roofPolyResult.roof_polygon, { lng: cLng, lat: cLat });
-
-    // Apply validation-derived correction factor
-    correctionFactorUsed = getValidationDerivedAreaCorrection({
-      inferredRoofForm: roofFormInference?.inferred_roof_form ?? null,
-      geometrySource: selectedCandidate.geometry_metadata?.source_name ?? null,
-      geometryQualityScore: selectedCandidate.geometry_quality_score,
-      pitchBand: pitchBand,
-    });
 
     roofArea = roundTo(planarRoofAreaSqft * slopeFactor * correctionFactorUsed, 0);
     squares = roundTo(roofArea / 100, 1);
