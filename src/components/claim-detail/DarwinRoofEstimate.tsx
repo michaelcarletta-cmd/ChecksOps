@@ -839,16 +839,61 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
             <AlertDescription>Authoritative footprint data is still not available for this property.</AlertDescription>
           </Alert>
         )}
+        {/* Analysis Mode Toggle */}
+        <div className="flex items-center gap-3 text-sm">
+          <button
+            type="button"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border transition-colors ${lockToClaim
+              ? "bg-primary/10 border-primary/30 text-primary font-medium"
+              : "bg-muted border-border text-muted-foreground hover:bg-accent"
+            }`}
+            onClick={() => {
+              setLockToClaim(true);
+              // Reset address to claim address
+              if (claimAddress) setAddress(claimAddress);
+            }}
+          >
+            <Lock className="h-3.5 w-3.5" />
+            Lock to Claim Property
+          </button>
+          <button
+            type="button"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border transition-colors ${!lockToClaim
+              ? "bg-primary/10 border-primary/30 text-primary font-medium"
+              : "bg-muted border-border text-muted-foreground hover:bg-accent"
+            }`}
+            onClick={() => setLockToClaim(false)}
+          >
+            <Unlock className="h-3.5 w-3.5" />
+            Analyze Different Property
+          </button>
+          {lastAnalysisMode && (
+            <Badge variant={lastAnalysisMode === "EXTERNAL_PROPERTY" ? "destructive" : "secondary"} className="text-xs">
+              {lastAnalysisMode === "EXTERNAL_PROPERTY" ? "External" : "Claim-Locked"}
+            </Badge>
+          )}
+        </div>
+
+        {/* Override Warning */}
+        {isAddressOverride && (
+          <Alert className="border-amber-500/50 bg-amber-500/10">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-700 dark:text-amber-400">
+              You are analyzing a different property than the claim. This will not affect the claim unless confirmed.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Address Input */}
         <div className="flex gap-2">
           <div className="flex-1 relative">
             <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Enter property address..."
+              placeholder={lockToClaim ? "Claim property address" : "Enter external property address..."}
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               className="pl-9"
-              disabled={loading}
+              disabled={loading || lockToClaim}
             />
           </div>
           <Button onClick={() => runEstimate()} disabled={loading || !address.trim()}>
