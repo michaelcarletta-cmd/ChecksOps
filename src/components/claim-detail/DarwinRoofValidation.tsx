@@ -552,6 +552,91 @@ export const DarwinRoofValidation = ({ claimId, estimate }: Props) => {
           </div>
         )}
 
+        {/* Source Accuracy Breakdown */}
+        {sourceAccuracy && sourceAccuracy.length > 0 && (
+          <div className="rounded-lg border p-3 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              Accuracy by Geometry Source
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-1.5 px-2 font-medium text-muted-foreground">Source</th>
+                    <th className="text-center py-1.5 px-1 font-medium text-muted-foreground">N</th>
+                    <th className="text-center py-1.5 px-1 font-medium text-muted-foreground">Avg Score</th>
+                    <th className="text-center py-1.5 px-1 font-medium text-muted-foreground">Δ Squares</th>
+                    <th className="text-center py-1.5 px-1 font-medium text-muted-foreground">Δ Area</th>
+                    <th className="text-center py-1.5 px-1 font-medium text-muted-foreground">Δ Eave</th>
+                    <th className="text-center py-1.5 px-1 font-medium text-muted-foreground">Δ Rake</th>
+                    <th className="text-center py-1.5 px-1 font-medium text-muted-foreground">Grades</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sourceAccuracy.map((row, idx) => {
+                    const isTop = idx === 0 && sourceAccuracy.length > 1;
+                    const shortSource = row.source
+                      .replace("Microsoft Building Footprints (Local DB)", "MS Footprints (DB)")
+                      .replace("Microsoft Building Footprints (Esri)", "MS/Esri")
+                      .replace("NJGIN Building Footprints", "NJGIN")
+                      .replace("OpenStreetMap Building Footprints", "OSM")
+                      .replace("AI Vision Estimate (satellite imagery)", "AI Vision")
+                      .replace("Default Residential Fallback (no GIS or vision data)", "Default Fallback");
+                    return (
+                      <tr key={row.source} className={`border-b last:border-b-0 ${isTop ? "bg-primary/5" : ""}`}>
+                        <td className="py-1.5 px-2 font-medium">
+                          <span className={
+                            row.source.includes("Microsoft") || row.source.includes("Local DB")
+                              ? "text-green-600"
+                              : row.source.includes("NJGIN")
+                                ? "text-blue-600"
+                                : row.source.includes("AI Vision")
+                                  ? "text-red-600"
+                                  : ""
+                          }>
+                            {isTop && "🏆 "}{shortSource}
+                          </span>
+                        </td>
+                        <td className="text-center py-1.5 px-1 tabular-nums">{row.count}</td>
+                        <td className={`text-center py-1.5 px-1 tabular-nums font-semibold ${
+                          row.avgScore >= 75 ? "text-green-600" : row.avgScore >= 50 ? "text-yellow-600" : "text-red-500"
+                        }`}>
+                          {row.avgScore}%
+                        </td>
+                        <td className="text-center py-1.5 px-1 tabular-nums">
+                          {row.avgPctDeltaSquares != null ? `${row.avgPctDeltaSquares}%` : "—"}
+                        </td>
+                        <td className="text-center py-1.5 px-1 tabular-nums">
+                          {row.avgPctDeltaRoofArea != null ? `${row.avgPctDeltaRoofArea}%` : "—"}
+                        </td>
+                        <td className="text-center py-1.5 px-1 tabular-nums">
+                          {row.avgPctDeltaEave != null ? `${row.avgPctDeltaEave}%` : "—"}
+                        </td>
+                        <td className="text-center py-1.5 px-1 tabular-nums">
+                          {row.avgPctDeltaRake != null ? `${row.avgPctDeltaRake}%` : "—"}
+                        </td>
+                        <td className="py-1.5 px-1">
+                          <div className="flex gap-0.5 justify-center">
+                            {Object.entries(row.grades).sort().map(([g, c]) => (
+                              <span key={g} className={`text-[9px] px-1 rounded ${gradeColor(g)}`}>
+                                {g}:{c}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              Δ columns show average absolute % deviation from ground truth. Lower = more accurate.
+            </div>
+          </div>
+        )}
+
         {/* Input Form */}
         {showForm && (
           <div className="rounded-lg border p-4 space-y-4 bg-muted/20">
