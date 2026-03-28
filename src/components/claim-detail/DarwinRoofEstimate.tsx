@@ -247,6 +247,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const [address, setAddress] = useState("");
   const [loading, setLoading] = useState(false);
   const [estimate, setEstimate] = useState<RoofEstimate | null>(null);
+  const [candidateDebugData, setCandidateDebugData] = useState<any>(null);
   const [fetchingExisting, setFetchingExisting] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editValues, setEditValues] = useState<Partial<RoofEstimate>>({});
@@ -302,6 +303,10 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
       if (data?.error) throw new Error(data.error);
 
       setEstimate(data.measurement as RoofEstimate);
+      setCandidateDebugData({
+        candidate_debug: data.candidate_debug ?? [],
+        candidate_fetch_summary: data.candidate_fetch_summary ?? null,
+      });
       const candidateCount = data.candidateCount || 0;
       const roofForm = data.roofFormInferred ? ` — roof form inferred` : "";
       const visionInfo = data.visionClassified
@@ -1339,7 +1344,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
             )}
 
             {/* Roof Area Debug Panel */}
-            <DarwinRoofAreaDebug estimate={estimate} />
+            <DarwinRoofAreaDebug estimate={estimate} candidateDebugData={candidateDebugData} />
 
             {/* Benchmarking & Validation */}
             <DarwinRoofValidation claimId={claimId} estimate={estimate} />

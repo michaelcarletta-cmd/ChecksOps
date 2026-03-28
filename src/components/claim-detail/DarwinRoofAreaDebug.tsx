@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Bug, ChevronDown, ChevronUp } from "lucide-react";
+import { Bug, ChevronDown, ChevronUp, AlertTriangle } from "lucide-react";
 
 interface OverhangConfig {
   eave_overhang_ft: number;
@@ -32,7 +31,6 @@ interface DebugEstimate {
   geocoded_lng: number | null;
   inferred_roof_form: string | null;
   edge_classifications: any[] | null;
-  // Shape conflict
   roof_shape_conflict: boolean | null;
   roof_shape_conflict_reason: string | null;
   provisional_complexity_uplift_used: number | null;
@@ -40,8 +38,43 @@ interface DebugEstimate {
   shape_conflicted_squares: number | null;
 }
 
+interface CandidateDebugEntry {
+  source: string;
+  source_feature_id: string | null;
+  geometry_quality_score: number;
+  candidate_score_total: number;
+  candidate_score_breakdown: {
+    source_priority: number;
+    centroid_offset: number;
+    area_sanity: number;
+    vertex_quality: number;
+    shape_conflict: number;
+  };
+  area_sqft: number;
+  centroid_offset_ft: number | null;
+  vertex_count: number;
+  selected: boolean;
+  rejected_reason: string | null;
+}
+
+interface CandidateFetchSummary {
+  microsoft_count: number;
+  njgin_count: number;
+  esri_count: number;
+  osm_count: number;
+  ai_count: number;
+  selected_source: string | null;
+  selected_score: number | null;
+  guardrail_triggered: boolean;
+  guardrail_reason: string | null;
+}
+
 interface Props {
   estimate: DebugEstimate;
+  candidateDebugData?: {
+    candidate_debug: CandidateDebugEntry[];
+    candidate_fetch_summary: CandidateFetchSummary | null;
+  } | null;
 }
 
 const DebugRow = ({ label, value, warn, formula }: { label: string; value: React.ReactNode; warn?: boolean; formula?: string }) => (
@@ -63,10 +96,6 @@ const DebugRow = ({ label, value, warn, formula }: { label: string; value: React
   </div>
 );
 
-/**
- * Renders an SVG overlay of the original footprint and expanded roof polygon
- * side-by-side for visual comparison.
- */
 function PolygonOverlay({ footprintGeoJson, roofGeoJson }: { footprintGeoJson: any; roofGeoJson: any }) {
   const extractRing = (geojson: any): [number, number][] => {
     if (!geojson?.coordinates?.[0]) return [];
@@ -78,7 +107,6 @@ function PolygonOverlay({ footprintGeoJson, roofGeoJson }: { footprintGeoJson: a
 
   if (fpRing.length < 3 && roofRing.length < 3) return null;
 
-  // Compute combined bounds
   const allPts = [...fpRing, ...roofRing];
   const lngs = allPts.map(p => p[0]);
   const lats = allPts.map(p => p[1]);
@@ -95,7 +123,6 @@ function PolygonOverlay({ footprintGeoJson, roofGeoJson }: { footprintGeoJson: a
 
   const toSvg = (lng: number, lat: number): [number, number] => {
     const x = ((lng - minLng) / dLng) * (1 - 2 * pad) * svgW + pad * svgW;
-    // Flip Y since lat increases upward
     const y = ((maxLat - lat) / dLat) * (1 - 2 * pad) * svgH + pad * svgH;
     return [x, y];
   };
@@ -110,42 +137,22 @@ function PolygonOverlay({ footprintGeoJson, roofGeoJson }: { footprintGeoJson: a
     <div className="mt-2">
       <div className="text-[10px] font-medium text-muted-foreground mb-1">Polygon Overlay</div>
       <svg viewBox={`0 0 ${svgW} ${svgH}`} className="w-full max-w-[400px] h-auto border rounded bg-background" style={{ aspectRatio: `${svgW}/${svgH}` }}>
-        {/* Grid lines for reference */}
         {[0.25, 0.5, 0.75].map(f => (
           <line key={`h${f}`} x1={0} y1={f * svgH} x2={svgW} y2={f * svgH} stroke="hsl(var(--border))" strokeWidth={0.5} strokeDasharray="4 4" />
         ))}
         {[0.25, 0.5, 0.75].map(f => (
           <line key={`v${f}`} x1={f * svgW} y1={0} x2={f * svgW} y2={svgH} stroke="hsl(var(--border))" strokeWidth={0.5} strokeDasharray="4 4" />
         ))}
-
-        {/* Expanded roof polygon (drawn first so footprint overlays) */}
         {roofRing.length >= 3 && (
-          <path
-            d={toPath(roofRing)}
-            fill="hsl(var(--primary) / 0.15)"
-            stroke="hsl(var(--primary))"
-            strokeWidth={2}
-            strokeDasharray="6 3"
-          />
+          <path d={toPath(roofRing)} fill="hsl(var(--primary) / 0.15)" stroke="hsl(var(--primary))" strokeWidth={2} strokeDasharray="6 3" />
         )}
-
-        {/* Original footprint polygon */}
         {fpRing.length >= 3 && (
-          <path
-            d={toPath(fpRing)}
-            fill="hsl(var(--destructive) / 0.1)"
-            stroke="hsl(var(--destructive))"
-            strokeWidth={1.5}
-          />
+          <path d={toPath(fpRing)} fill="hsl(var(--destructive) / 0.1)" stroke="hsl(var(--destructive))" strokeWidth={1.5} />
         )}
-
-        {/* Vertex dots for footprint */}
         {fpRing.slice(0, -1).map((p, i) => {
           const [x, y] = toSvg(p[0], p[1]);
           return <circle key={`fp${i}`} cx={x} cy={y} r={2.5} fill="hsl(var(--destructive))" />;
         })}
-
-        {/* Vertex dots for roof polygon */}
         {roofRing.slice(0, -1).map((p, i) => {
           const [x, y] = toSvg(p[0], p[1]);
           return <circle key={`rp${i}`} cx={x} cy={y} r={2.5} fill="hsl(var(--primary))" />;
@@ -163,19 +170,128 @@ function PolygonOverlay({ footprintGeoJson, roofGeoJson }: { footprintGeoJson: a
   );
 }
 
-export function DarwinRoofAreaDebug({ estimate }: Props) {
+function CandidateDebugPanel({ candidates, summary }: { candidates: CandidateDebugEntry[]; summary: CandidateFetchSummary | null }) {
+  if (!summary && candidates.length === 0) return null;
+
+  const sourceColor = (src: string) => {
+    if (src.includes("Microsoft") || src.includes("Local DB")) return "text-green-600";
+    if (src.includes("NJGIN")) return "text-blue-600";
+    if (src.includes("Esri")) return "text-cyan-600";
+    if (src.includes("OpenStreetMap")) return "text-amber-600";
+    if (src.includes("AI Vision")) return "text-destructive";
+    return "text-muted-foreground";
+  };
+
+  const warnings: string[] = [];
+  if (summary) {
+    if (summary.microsoft_count === 0) warnings.push("No Microsoft footprint found");
+    if (summary.njgin_count === 0) warnings.push("No NJGIN footprint found");
+    if (summary.osm_count === 0) warnings.push("No OSM footprint found");
+    if (summary.selected_source?.includes("AI Vision") && summary.ai_count > 0) {
+      warnings.push("AI Vision remained selected — no authoritative candidate was available or scored high enough");
+    }
+  }
+
+  return (
+    <div className="rounded border border-cyan-500/40 overflow-hidden">
+      <div className="bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold uppercase text-cyan-700">
+        Footprint Candidate Debug
+      </div>
+
+      {/* Fetch Summary */}
+      {summary && (
+        <div className="border-b border-border/50">
+          <DebugRow label="Microsoft (DB)" value={summary.microsoft_count} warn={summary.microsoft_count === 0} />
+          <DebugRow label="NJGIN" value={summary.njgin_count} warn={summary.njgin_count === 0} />
+          <DebugRow label="Esri/MS" value={summary.esri_count} />
+          <DebugRow label="OSM" value={summary.osm_count} warn={summary.osm_count === 0} />
+          <DebugRow label="AI Vision" value={summary.ai_count} />
+          <DebugRow label="Selected Source" value={
+            <span className={sourceColor(summary.selected_source ?? "")}>
+              {summary.selected_source ?? "none"}
+            </span>
+          } warn={summary.selected_source?.includes("AI Vision")} />
+          <DebugRow label="Selected Score" value={summary.selected_score ?? "—"} />
+          <DebugRow
+            label="Guardrail Triggered"
+            value={summary.guardrail_triggered ? "YES ✓" : "No"}
+            warn={false}
+          />
+          {summary.guardrail_triggered && summary.guardrail_reason && (
+            <DebugRow label="Guardrail Reason" value={summary.guardrail_reason} />
+          )}
+        </div>
+      )}
+
+      {/* Warnings */}
+      {warnings.length > 0 && (
+        <div className="px-2 py-1.5 space-y-1">
+          {warnings.map((w, i) => (
+            <div key={i} className="flex items-start gap-1.5 text-[10px]">
+              <AlertTriangle className="h-3 w-3 text-amber-500 mt-0.5 shrink-0" />
+              <span className="text-amber-700">{w}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Candidate Table */}
+      {candidates.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-[10px]">
+            <thead>
+              <tr className="bg-muted/50 text-muted-foreground">
+                <th className="px-1.5 py-1 text-left font-medium">Source</th>
+                <th className="px-1.5 py-1 text-right font-medium">Score</th>
+                <th className="px-1.5 py-1 text-right font-medium">Area</th>
+                <th className="px-1.5 py-1 text-right font-medium">Offset</th>
+                <th className="px-1.5 py-1 text-right font-medium">Vtx</th>
+                <th className="px-1.5 py-1 text-right font-medium">Qual</th>
+                <th className="px-1.5 py-1 text-center font-medium">Sel</th>
+              </tr>
+            </thead>
+            <tbody>
+              {candidates.map((c, i) => (
+                <tr key={i} className={`border-t border-border/30 ${c.selected ? "bg-primary/5" : ""}`}>
+                  <td className={`px-1.5 py-1 font-mono ${sourceColor(c.source)} truncate max-w-[120px]`} title={c.source}>
+                    {c.source.replace("Building Footprints", "").replace("(satellite imagery)", "").replace("Estimate ", "").trim()}
+                  </td>
+                  <td className="px-1.5 py-1 text-right font-mono">{c.candidate_score_total}</td>
+                  <td className="px-1.5 py-1 text-right font-mono">{c.area_sqft?.toLocaleString()}</td>
+                  <td className="px-1.5 py-1 text-right font-mono">{c.centroid_offset_ft != null ? `${Math.round(c.centroid_offset_ft)}ft` : "—"}</td>
+                  <td className="px-1.5 py-1 text-right font-mono">{c.vertex_count}</td>
+                  <td className="px-1.5 py-1 text-right font-mono">{c.geometry_quality_score}</td>
+                  <td className="px-1.5 py-1 text-center">
+                    {c.selected ? <span className="text-green-600 font-bold">✓</span> : c.rejected_reason ? <span className="text-destructive" title={c.rejected_reason}>✗</span> : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Score breakdown for selected */}
+          {candidates.filter(c => c.selected).map((c, i) => (
+            <div key={i} className="px-2 py-1 bg-muted/20 text-[9px] font-mono text-muted-foreground">
+              Score breakdown: src={c.candidate_score_breakdown.source_priority} offset={c.candidate_score_breakdown.centroid_offset} area={c.candidate_score_breakdown.area_sanity} vtx={c.candidate_score_breakdown.vertex_quality} conflict={c.candidate_score_breakdown.shape_conflict}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function DarwinRoofAreaDebug({ estimate, candidateDebugData }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   const e = estimate;
   const hasPipeline = e.footprint_area_sqft != null && e.footprint_area_sqft > 0;
 
-  // Compute verification: does planar × slope × correction = final?
   const expectedArea = (e.roof_planar_area_sqft ?? 0) * (e.slope_factor_used ?? 1) * (e.correction_factor_used ?? 1) * (e.calibration_adjustment_factor ?? 1);
   const actualArea = e.estimated_roof_area_sqft ?? 0;
   const areaDelta = Math.abs(expectedArea - actualArea);
-  const areaMatch = areaDelta <= 1; // within rounding
+  const areaMatch = areaDelta <= 1;
 
-  // Edge classification summary
   const edgeCls = e.edge_classifications || [];
   const eaveCount = edgeCls.filter((ec: any) => ec.classification === "likely_eave").length;
   const rakeCount = edgeCls.filter((ec: any) => ec.classification === "likely_rake").length;
@@ -207,6 +323,12 @@ export function DarwinRoofAreaDebug({ estimate }: Props) {
 
       {expanded && (
         <div className="px-3 pb-3 space-y-3">
+          {/* Candidate Debug Panel — shown first for diagnosis */}
+          <CandidateDebugPanel
+            candidates={candidateDebugData?.candidate_debug ?? []}
+            summary={candidateDebugData?.candidate_fetch_summary ?? null}
+          />
+
           {/* Pipeline Step-Through */}
           <div className="rounded border overflow-hidden">
             <div className="bg-muted/50 px-2 py-1 text-[10px] font-semibold uppercase text-muted-foreground">
@@ -219,7 +341,7 @@ export function DarwinRoofAreaDebug({ estimate }: Props) {
                   : (e.imagery_source || "").includes("NJGIN")
                     ? "text-blue-600 font-bold"
                     : (e.imagery_source || "").includes("AI Vision")
-                      ? "text-red-600 font-bold"
+                      ? "text-destructive font-bold"
                       : ""
               }>
                 {e.imagery_source ?? "none"}
