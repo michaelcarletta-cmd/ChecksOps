@@ -1636,8 +1636,8 @@ async function fetchNJBuildingCandidate(lat: number, lng: number): Promise<Candi
 async function fetchEsriUSAStructuresCandidate(lat: number, lng: number): Promise<CandidateFootprint | null> {
   // Try multiple endpoints with retry logic
   const endpoints = [
-    `https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/MSBFP2/FeatureServer/0/query?geometry=${lng - 0.0005},${lat - 0.0005},${lng + 0.0005},${lat + 0.0005}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json&resultRecordCount=5`,
-    `https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/USA_Structures_Footprints/FeatureServer/0/query?geometry=${lng - 0.0005},${lat - 0.0005},${lng + 0.0005},${lat + 0.0005}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json&resultRecordCount=5`,
+    `https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/MSBFP2/FeatureServer/0/query?geometry=${lng - 0.00137},${lat - 0.00137},${lng + 0.00137},${lat + 0.00137}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json&resultRecordCount=10`,
+    `https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/USA_Structures_Footprints/FeatureServer/0/query?geometry=${lng - 0.00137},${lat - 0.00137},${lng + 0.00137},${lat + 0.00137}&geometryType=esriGeometryEnvelope&spatialRel=esriSpatialRelIntersects&outFields=*&returnGeometry=true&outSR=4326&f=json&resultRecordCount=10`,
   ];
 
   for (const url of endpoints) {
