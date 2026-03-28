@@ -266,6 +266,15 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
 
       const selectedFileIdsArray = Array.from(selectedFiles);
 
+      console.log("Demand package selected files", {
+        selectedFiles,
+        selectedFileIdsArray,
+        availableFiles: files.map((f) => ({
+          id: f.id,
+          file_name: f.file_name,
+        })),
+      });
+
       const selectedEstimateFile = files.find(
         (f) =>
           selectedFileIdsArray.includes(f.id) &&
