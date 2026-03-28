@@ -505,7 +505,11 @@ Deno.serve(async (req) => {
     const effectiveFiles =
       selectedFileIds.length > 0
         ? files.filter((f: Record<string, any>) => selectedFileIds.includes(String(f.id)))
-        : files;
+        : [];
+
+    if (!effectiveFiles.length) {
+      return json({ error: "No selected documents were provided for the demand package." }, 400);
+    }
 
     const inspectionFiles = effectiveFiles.filter((f: Record<string, any>) => looksLikeInspectionFile(f));
     const estimateFiles = effectiveFiles.filter((f: Record<string, any>) => looksLikeEstimateFile(f));
