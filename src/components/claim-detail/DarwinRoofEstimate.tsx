@@ -377,7 +377,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
         force_fresh_candidates: forceFreshCandidates,
       };
       if (exactPitch && PITCH_SLOPE_FACTORS[exactPitch]) body.exact_pitch = exactPitch;
-      if (roofType) body.roof_type = roofType;
+      if (roofType && roofType !== "auto") body.roof_type = roofType;
       if (candidateIndex !== undefined && !forceFreshCandidates) body.selected_candidate_index = candidateIndex;
 
       const { data, error: fnErr } = await supabase.functions.invoke("darwin-roof-measurement", { body });
