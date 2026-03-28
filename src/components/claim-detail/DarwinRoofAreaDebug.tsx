@@ -191,13 +191,14 @@ function CandidateDebugPanel({ candidates, summary }: { candidates: CandidateDeb
   };
 
   const warnings: string[] = [];
-  if (summary) {
-    if (summary.microsoft_count === 0) warnings.push("No Microsoft footprint found");
-    if (summary.njgin_count === 0) warnings.push("No NJGIN footprint found");
-    if (summary.osm_count === 0) warnings.push("No OSM footprint found");
-    if (summary.selected_source?.includes("AI Vision") && summary.ai_count > 0) {
-      warnings.push("AI Vision remained selected — no authoritative candidate was available or scored high enough");
-    }
+  if (effectiveSummary.microsoft_count === 0) warnings.push("No Microsoft footprint found");
+  if (effectiveSummary.njgin_count === 0) warnings.push("No NJGIN footprint found");
+  if (effectiveSummary.osm_count === 0) warnings.push("No OSM footprint found");
+  if (effectiveSummary.selected_source?.includes("AI Vision") && effectiveSummary.ai_count > 0) {
+    warnings.push("AI Vision remained selected — no authoritative candidate was available or scored high enough");
+  }
+  if (!summary && candidates.length === 0) {
+    warnings.push("No candidate debug payload is available for this run yet");
   }
 
   return (
