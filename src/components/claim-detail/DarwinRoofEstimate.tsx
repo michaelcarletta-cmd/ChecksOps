@@ -920,6 +920,17 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
               disabled={loading || lockToClaim}
             />
           </div>
+          <Select value={roofType} onValueChange={setRoofType}>
+            <SelectTrigger className="w-[130px]">
+              <SelectValue placeholder="Roof Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Auto-detect</SelectItem>
+              <SelectItem value="gable">⛺ Gable</SelectItem>
+              <SelectItem value="hip">🏠 Hip</SelectItem>
+              <SelectItem value="cross_gable">✝️ Cross-Gable</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={exactPitch} onValueChange={setExactPitch}>
             <SelectTrigger className="w-[120px]">
               <SelectValue placeholder="Pitch" />
