@@ -2858,17 +2858,25 @@ function deriveRoofEstimate(
   const footprintArea = selectedCandidate?.area_sqft ?? 0;
   const overhang: OverhangConfig = DEFAULT_OVERHANG;
 
-  // ── Pitch band ──
+  // ── Pitch — prefer exact pitch when provided ──
   let pitchBand: PitchBand = "unknown";
   let pitchType: PitchType = "band";
   let slopeFactor = PITCH_BAND_META.unknown.slope_factor_mid;
   let pitchIsDefaultFallback = false;
-  if (visionResult && !visionResult.pitch_band.abstain && visionResult.pitch_band.confidence >= 20) {
+  let exactPitchUsed: string | null = null;
+
+  if (exactPitchRise != null && exactPitchRise >= 0 && exactPitchRise <= 24) {
+    // EXACT PITCH: compute precise slope factor = sqrt(1 + (rise/12)²)
+    slopeFactor = Math.sqrt(1 + (exactPitchRise / 12) ** 2);
+    pitchBand = exactPitchToBand(`${exactPitchRise}/12`);
+    pitchType = "exact";
+    exactPitchUsed = `${exactPitchRise}/12`;
+    console.log(`[Darwin Roof] Exact pitch: ${exactPitchUsed}, slope_factor=${roundTo(slopeFactor, 5)}`);
+  } else if (visionResult && !visionResult.pitch_band.abstain && visionResult.pitch_band.confidence >= 20) {
     pitchBand = visionResult.pitch_band.value;
     slopeFactor = PITCH_BAND_META[pitchBand].slope_factor_mid;
   } else if (hasGeometry) {
     // Fallback: use moderate pitch when vision is unavailable/abstained
-    // This ensures area and linear calculations proceed rather than returning zero
     pitchBand = "moderate";
     slopeFactor = PITCH_BAND_META.moderate.slope_factor_mid;
     pitchIsDefaultFallback = true;
