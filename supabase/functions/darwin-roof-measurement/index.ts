@@ -3734,8 +3734,11 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { claim_id, address, selected_candidate_index, force_fresh_candidates } = body;
+    const { claim_id, address, selected_candidate_index, force_fresh_candidates, exact_pitch } = body;
     const forceFreshCandidates = force_fresh_candidates === true;
+    // exact_pitch: e.g. "7/12" — enables precise slope factor calculation
+    const parsedExactPitch = typeof exact_pitch === "string" ? exact_pitch.match(/^(\d+)\/12$/) : null;
+    const exactPitchRise = parsedExactPitch ? parseInt(parsedExactPitch[1]) : null;
 
     if (!claim_id || !address) {
       return new Response(JSON.stringify({ error: "claim_id and address are required" }), {
