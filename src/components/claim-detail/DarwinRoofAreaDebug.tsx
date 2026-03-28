@@ -210,9 +210,29 @@ export function DarwinRoofAreaDebug({ estimate }: Props) {
           {/* Pipeline Step-Through */}
           <div className="rounded border overflow-hidden">
             <div className="bg-muted/50 px-2 py-1 text-[10px] font-semibold uppercase text-muted-foreground">
-              1. Footprint Selection
+              1. Footprint Selection (Source Ladder)
             </div>
-            <DebugRow label="Source" value={e.imagery_source ?? "none"} warn={!e.imagery_source} />
+            <DebugRow label="Selected Source" value={
+              <span className={
+                (e.imagery_source || "").includes("Microsoft") || (e.imagery_source || "").includes("Local DB")
+                  ? "text-green-600 font-bold"
+                  : (e.imagery_source || "").includes("NJGIN")
+                    ? "text-blue-600 font-bold"
+                    : (e.imagery_source || "").includes("AI Vision")
+                      ? "text-red-600 font-bold"
+                      : ""
+              }>
+                {e.imagery_source ?? "none"}
+              </span>
+            } warn={!e.imagery_source || (e.imagery_source || "").includes("AI Vision")} />
+            <DebugRow label="Source Priority" value={
+              (e.imagery_source || "").includes("Local DB") ? "100 (MS DB)" :
+              (e.imagery_source || "").includes("NJGIN") ? "90 (State GIS)" :
+              (e.imagery_source || "").includes("Esri") ? "80 (Esri/MS)" :
+              (e.imagery_source || "").includes("OpenStreetMap") ? "60 (OSM)" :
+              (e.imagery_source || "").includes("AI Vision") ? "20 (AI fallback)" :
+              "—"
+            } />
             <DebugRow label="Candidate Index" value={e.selected_candidate_index ?? "—"} />
             <DebugRow label="Geometry Quality" value={`${e.geometry_quality_score ?? "—"}/100`} warn={(e.geometry_quality_score ?? 0) < 40} />
             <DebugRow label="Footprint Area (raw)" value={`${e.footprint_area_sqft?.toLocaleString() ?? "—"} sqft`} warn={!e.footprint_area_sqft} />

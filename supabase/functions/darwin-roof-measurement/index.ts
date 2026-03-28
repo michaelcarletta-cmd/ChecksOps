@@ -1065,21 +1065,255 @@ async function getElevation(lat: number, lng: number): Promise<number | null> {
 
 // ── Phase 2A+2B: Footprint extraction with multi-candidate support ───
 
+// Source ladder priority (higher = preferred):
+// 1. Microsoft Building Footprints (from building_footprints table) — authoritative, ML-extracted
+// 2. NJGIN Building Footprints — state-authoritative GIS
+// 3. Esri USA Structures — Microsoft via Esri hosting
+// 4. OpenStreetMap — community-contributed
+// 5. User-drawn outline (handled separately)
+// 6. AI Vision footprint (last resort)
+
+const SOURCE_PRIORITY: Record<string, number> = {
+  "Microsoft Building Footprints (Local DB)": 100,
+  "NJGIN Building Footprints": 90,
+  "Microsoft Building Footprints (Esri)": 80,
+  "OpenStreetMap Building Footprints": 60,
+  "AI Vision Estimate (satellite imagery)": 20,
+  "Default Residential Fallback (no GIS or vision data)": 10,
+};
+
+interface CandidateScore {
+  total: number;
+  source_priority: number;
+  centroid_offset_score: number;
+  area_sanity_score: number;
+  vertex_quality_score: number;
+  shape_conflict_score: number;
+  breakdown: string;
+}
+
+/** Score a candidate footprint for selection. Higher = better. */
+function scoreCandidateFootprint(
+  candidate: CandidateFootprint,
+  geocodeLat: number,
+  geocodeLng: number,
+  visionAreaHint: number | null,
+): CandidateScore {
+  // 1. Source priority (0-100)
+  const sourcePriority = SOURCE_PRIORITY[candidate.source] ?? 50;
+
+  // 2. Centroid offset score (0-100): closer to geocode = better
+  const offsetFt = candidate.geometry_metadata?.centroid_offset_ft ??
+    haversineDistFt([geocodeLng, geocodeLat], polygonCentroid(candidate.polygon));
+  let centroidScore = 100;
+  if (offsetFt > 200) centroidScore = 10;
+  else if (offsetFt > 150) centroidScore = 25;
+  else if (offsetFt > 100) centroidScore = 40;
+  else if (offsetFt > 50) centroidScore = 65;
+  else if (offsetFt > 25) centroidScore = 85;
+
+  // 3. Area sanity score (0-100): residential 800-5000 sqft is ideal
+  let areaScore = 70;
+  if (candidate.area_sqft >= 800 && candidate.area_sqft <= 5000) areaScore = 100;
+  else if (candidate.area_sqft >= 500 && candidate.area_sqft <= 8000) areaScore = 80;
+  else if (candidate.area_sqft < 300) areaScore = 20;
+  else if (candidate.area_sqft > 15000) areaScore = 30;
+
+  // 4. Vertex quality score (0-100): 4-12 vertices ideal for residential
+  const vCount = candidate.geometry_metadata?.vertex_count ?? candidate.polygon.length;
+  let vertexScore = 60;
+  if (vCount >= 4 && vCount <= 12) vertexScore = 100;
+  else if (vCount >= 3 && vCount <= 20) vertexScore = 75;
+  else if (vCount > 30) vertexScore = 30;
+  else if (vCount < 3) vertexScore = 10;
+
+  // 5. Shape conflict with vision area hint (0-100)
+  let shapeConflictScore = 80; // default: no conflict
+  if (visionAreaHint && visionAreaHint > 0) {
+    const areaRatio = candidate.area_sqft / visionAreaHint;
+    if (areaRatio >= 0.7 && areaRatio <= 1.4) shapeConflictScore = 100;
+    else if (areaRatio >= 0.5 && areaRatio <= 2.0) shapeConflictScore = 60;
+    else shapeConflictScore = 20;
+  }
+
+  // Weighted total
+  const total = Math.round(
+    sourcePriority * 0.30 +
+    centroidScore * 0.30 +
+    areaScore * 0.15 +
+    vertexScore * 0.10 +
+    shapeConflictScore * 0.15
+  );
+
+  return {
+    total,
+    source_priority: sourcePriority,
+    centroid_offset_score: centroidScore,
+    area_sanity_score: areaScore,
+    vertex_quality_score: vertexScore,
+    shape_conflict_score: shapeConflictScore,
+    breakdown: `src=${sourcePriority} offset=${centroidScore} area=${areaScore} vtx=${vertexScore} conflict=${shapeConflictScore} → ${total}`,
+  };
+}
+
+/** Fetch Microsoft Building Footprints from the local building_footprints PostGIS table. */
+async function fetchMSBuildingFootprintFromDB(
+  lat: number,
+  lng: number,
+  supabase: any,
+): Promise<CandidateFootprint | null> {
+  try {
+    // Query the building_footprints table using PostGIS spatial functions
+    // Find the nearest footprint within ~100m of the geocoded point
+    const bufferDeg = 0.001; // ~111m
+    const { data, error } = await supabase.rpc("find_nearest_building_footprint", {
+      search_lat: lat,
+      search_lng: lng,
+      search_radius: bufferDeg,
+    });
+
+    if (error) {
+      // Fallback: simple centroid proximity query
+      console.log(`[Darwin Roof] PostGIS RPC unavailable, using centroid fallback: ${error.message}`);
+      const latBuf = 0.001;
+      const lngBuf = 0.001 / Math.cos(toRad(lat));
+      const { data: fallbackData, error: fallbackErr } = await supabase
+        .from("building_footprints")
+        .select("*")
+        .gte("centroid_lat", lat - latBuf)
+        .lte("centroid_lat", lat + latBuf)
+        .gte("centroid_lng", lng - lngBuf)
+        .lte("centroid_lng", lng + lngBuf)
+        .order("area_sqft", { ascending: false })
+        .limit(5);
+
+      if (fallbackErr || !fallbackData?.length) {
+        console.log("[Darwin Roof] MS Building Footprints (DB): no results found");
+        return null;
+      }
+
+      // Find nearest by centroid
+      let nearest = fallbackData[0];
+      let nearestDist = Infinity;
+      for (const row of fallbackData) {
+        const dist = haversineDistFt([lng, lat], [row.centroid_lng, row.centroid_lat]);
+        if (dist < nearestDist) { nearestDist = dist; nearest = row; }
+      }
+
+      return buildCandidateFromDBRow(nearest, lat, lng, nearestDist);
+    }
+
+    if (!data || data.length === 0) {
+      console.log("[Darwin Roof] MS Building Footprints (DB): no results within search radius");
+      return null;
+    }
+
+    // data[0] should be the nearest with geometry as GeoJSON
+    const row = data[0];
+    const dist = haversineDistFt([lng, lat], [row.centroid_lng, row.centroid_lat]);
+    return buildCandidateFromDBRow(row, lat, lng, dist);
+  } catch (e) {
+    console.log("[Darwin Roof] MS Building Footprints (DB) query failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+function buildCandidateFromDBRow(
+  row: any,
+  geocodeLat: number,
+  geocodeLng: number,
+  distFt: number,
+): CandidateFootprint | null {
+  // If the row has a geometry_json field (from RPC), parse it
+  // Otherwise build a ring from bbox as approximation
+  let ring: number[][] | null = null;
+
+  if (row.geometry_json) {
+    // PostGIS ST_AsGeoJSON result
+    try {
+      const geom = typeof row.geometry_json === "string" ? JSON.parse(row.geometry_json) : row.geometry_json;
+      if (geom?.coordinates?.[0]) {
+        ring = geom.coordinates[0];
+      }
+    } catch { /* continue */ }
+  }
+
+  if (!ring && row.bbox) {
+    // Approximate from bbox
+    const b = typeof row.bbox === "string" ? JSON.parse(row.bbox) : row.bbox;
+    if (b.minLng && b.minLat && b.maxLng && b.maxLat) {
+      ring = [
+        [b.minLng, b.minLat],
+        [b.maxLng, b.minLat],
+        [b.maxLng, b.maxLat],
+        [b.minLng, b.maxLat],
+        [b.minLng, b.minLat],
+      ];
+    }
+  }
+
+  if (!ring || ring.length < 4) return null;
+
+  const areaSqft = row.area_sqft || polygonAreaSqft(ring);
+  if (areaSqft < 100 || areaSqft > 50000) return null;
+
+  const perimeterFt = polygonPerimeterFt(ring);
+  const featureId = row.source_id || row.id;
+  const metadata = buildGeometryMetadata(ring, "Microsoft Building Footprints (Local DB)", featureId, geocodeLat, geocodeLng);
+
+  // MS footprints get a quality bonus (authoritative, ML-extracted from high-res imagery)
+  const baseQuality = computeGeometryQuality(ring, areaSqft, metadata.centroid_offset_ft);
+  const qualityScore = Math.min(100, baseQuality + 15); // +15 bonus for authoritative source
+
+  const edges = classifyEdges(ring);
+  const geojson = {
+    type: "Feature",
+    properties: { source: "Microsoft Building Footprints (Local DB)", source_id: featureId, state: row.state },
+    geometry: { type: "Polygon", coordinates: [ring] },
+  };
+
+  console.log(`[Darwin Roof] MS Building Footprints (DB): found ${featureId} (${areaSqft} sqft, ${roundTo(distFt)}ft from geocode, quality=${qualityScore})`);
+
+  return {
+    polygon: ring,
+    area_sqft: areaSqft,
+    perimeter_ft: perimeterFt,
+    source: "Microsoft Building Footprints (Local DB)",
+    source_feature_id: featureId,
+    imagery_date: null,
+    geometry_quality_score: qualityScore,
+    geometry_metadata: metadata,
+    edge_classifications: edges,
+    geojson,
+  };
+}
+
 async function fetchAllCandidateFootprints(
   lat: number,
   lng: number,
+  supabase?: any,
 ): Promise<CandidateFootprint[]> {
   const candidates: CandidateFootprint[] = [];
 
-  const [osmResults, njResult, esriResult] = await Promise.all([
+  // Source ladder: fetch all sources in parallel, prioritize by scoring
+  const promises: Promise<any>[] = [
     fetchOSMBuildingCandidates(lat, lng),
     fetchNJBuildingCandidate(lat, lng),
     fetchEsriUSAStructuresCandidate(lat, lng),
-  ]);
+  ];
 
-  candidates.push(...osmResults);
+  // Add MS Building Footprints DB query if supabase client is available
+  if (supabase) {
+    promises.push(fetchMSBuildingFootprintFromDB(lat, lng, supabase));
+  }
+
+  const [osmResults, njResult, esriResult, msDbResult] = await Promise.all(promises);
+
+  // Add in source-priority order (MS DB first)
+  if (msDbResult) candidates.push(msDbResult);
   if (njResult) candidates.push(njResult);
   if (esriResult) candidates.push(esriResult);
+  candidates.push(...(osmResults || []));
 
   // Deduplicate: if two candidates overlap significantly (>80% area match), keep the higher quality one
   const deduped: CandidateFootprint[] = [];
@@ -1091,11 +1325,20 @@ async function fetchAllCandidateFootprints(
     if (!isDuplicate) deduped.push(c);
   }
 
-  deduped.sort((a, b) => b.geometry_quality_score - a.geometry_quality_score);
+  // Score and sort by composite candidate score
+  const scored = deduped.map(c => ({
+    candidate: c,
+    score: scoreCandidateFootprint(c, lat, lng, null),
+  }));
+  scored.sort((a, b) => b.score.total - a.score.total);
 
-  console.log(`[Darwin Roof] Found ${deduped.length} candidate footprints (${osmResults.length} OSM, ${njResult ? 1 : 0} NJGIN, ${esriResult ? 1 : 0} Esri USA Structures)`);
+  const msCount = msDbResult ? 1 : 0;
+  console.log(`[Darwin Roof] Found ${scored.length} candidate footprints (${msCount} MS-DB, ${(osmResults || []).length} OSM, ${njResult ? 1 : 0} NJGIN, ${esriResult ? 1 : 0} Esri)`);
+  for (const s of scored) {
+    console.log(`[Darwin Roof]   → ${s.candidate.source}: ${s.candidate.area_sqft}sqft, score=${s.score.total} (${s.score.breakdown})`);
+  }
 
-  return deduped;
+  return scored.map(s => s.candidate);
 }
 
 /**
@@ -3502,7 +3745,7 @@ Deno.serve(async (req) => {
     const [parcel, elevation, candidates] = await Promise.all([
       fetchParcelContext(geo.lat, geo.lng),
       getElevation(geo.lat, geo.lng),
-      fetchAllCandidateFootprints(geo.lat, geo.lng),
+      fetchAllCandidateFootprints(geo.lat, geo.lng, supabase),
     ]);
 
     // Select candidate

@@ -798,11 +798,24 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                 <AlertDescription>
                   <div className="space-y-1">
                     <div>
-                      <strong>Building footprint extracted</strong> from {estimate.imagery_source || "geometry source"}.
+                      <strong>Building footprint extracted</strong> from{" "}
+                      <span className={
+                        (estimate.imagery_source || "").includes("Microsoft") || (estimate.imagery_source || "").includes("Local DB")
+                          ? "text-green-600 font-semibold"
+                          : (estimate.imagery_source || "").includes("NJGIN")
+                            ? "text-blue-600 font-semibold"
+                            : (estimate.imagery_source || "").includes("OpenStreetMap")
+                              ? "text-orange-600 font-semibold"
+                              : (estimate.imagery_source || "").includes("AI Vision")
+                                ? "text-red-600 font-semibold"
+                                : "font-medium"
+                      }>
+                        {estimate.imagery_source || "geometry source"}
+                      </span>.
                       Footprint area ({estimate.footprint_area_sqft?.toLocaleString()} sqft) and perimeter ({estimate.footprint_perimeter_ft?.toLocaleString()} ft)
                       are geometry-derived. {estimate.imagery_date && `Imagery date: ${estimate.imagery_date}.`}
                     </div>
-                    <div className="flex items-center gap-3 text-xs">
+                    <div className="flex items-center gap-3 text-xs flex-wrap">
                       <span>
                         Geometry Quality:{" "}
                         <strong className={qualityColor(estimate.geometry_quality_score || 0)}>
@@ -816,6 +829,26 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
                           <span className="text-muted-foreground">Hash: {geoMeta.raw_polygon_hash}</span>
                         </>
                       )}
+                    </div>
+                    {/* Source ladder indicator */}
+                    <div className="flex items-center gap-1.5 mt-1">
+                      {["MS Footprints", "NJGIN", "Esri/MS", "OSM", "AI Vision"].map((src, idx) => {
+                        const isActive = 
+                          (idx === 0 && ((estimate.imagery_source || "").includes("Local DB") || (estimate.imagery_source || "").includes("Microsoft Building Footprints (Local"))) ||
+                          (idx === 1 && (estimate.imagery_source || "").includes("NJGIN")) ||
+                          (idx === 2 && (estimate.imagery_source || "").includes("Esri")) ||
+                          (idx === 3 && (estimate.imagery_source || "").includes("OpenStreetMap")) ||
+                          (idx === 4 && (estimate.imagery_source || "").includes("AI Vision"));
+                        return (
+                          <span key={src} className={`text-[9px] px-1.5 py-0.5 rounded-full border ${
+                            isActive
+                              ? "bg-primary/15 border-primary/50 text-primary font-semibold"
+                              : "border-muted text-muted-foreground/50"
+                          }`}>
+                            {isActive ? "●" : "○"} {src}
+                          </span>
+                        );
+                      })}
                     </div>
                     <div className="text-[10px] text-muted-foreground mt-1">
                       ⚠️ Eave and rake values are <strong>footprint-proxy</strong> measurements — they approximate roof edges from perimeter classification but are NOT exact roof-edge measurements.
