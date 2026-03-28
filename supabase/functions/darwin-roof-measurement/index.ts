@@ -3778,42 +3778,112 @@ Deno.serve(async (req) => {
       rejected_reason: null as string | null,
     }));
 
-    // Select candidate with AI Vision guardrail
-    let selectedCandidate: CandidateFootprint | null = null;
-    let guardrailTriggered = false;
-    let guardrailReason: string | null = null;
-    if (candidates.length > 0) {
-      let idx = !forceFreshCandidates && typeof selected_candidate_index === "number" && selected_candidate_index >= 0 && selected_candidate_index < candidates.length
-        ? selected_candidate_index
-        : 0;
-      selectedCandidate = candidates[idx];
+    // ── HARD AUTHORITATIVE SOURCE FILTER ──────────────────────────────────
+    const AUTHORITATIVE_SOURCE_MATCHERS = [
+      "Microsoft Building Footprints",
+      "Local DB",
+      "NJGIN Building Footprints",
+    ];
 
-      // ── HARD GUARDRAIL: AI Vision cannot remain selected when authoritative sources exist ──
-      const isAIVision = selectedCandidate.source.includes("AI Vision") || selectedCandidate.source.includes("Default Residential");
-      if (isAIVision && candidates.length > 1) {
-        const authoritativeSources = ["Microsoft Building Footprints", "NJGIN Building Footprints", "Local DB"];
-        const betterCandidate = candidates.find(c => {
-          if (c === selectedCandidate) return false;
-          const isAuthoritative = authoritativeSources.some(s => c.source.includes(s));
-          if (!isAuthoritative) return false;
-          return c.geometry_quality_score >= 40 || c.geometry_quality_score > selectedCandidate!.geometry_quality_score + 10;
-        });
-        if (betterCandidate) {
-          const oldSource = selectedCandidate.source;
-          const oldScore = selectedCandidate.geometry_quality_score;
-          guardrailTriggered = true;
-          guardrailReason = `AI Vision "${oldSource}" (quality=${oldScore}) overridden by "${betterCandidate.source}" (quality=${betterCandidate.geometry_quality_score})`;
-          // Mark old as rejected in debug
-          candidateDebug[idx].rejected_reason = `guardrail: overridden by ${betterCandidate.source}`;
-          selectedCandidate = betterCandidate;
-          idx = candidates.indexOf(betterCandidate);
-          console.log(`[Darwin Roof] GUARDRAIL: ${guardrailReason}`);
+    const isAuthoritativeCandidate = (source?: string | null) =>
+      AUTHORITATIVE_SOURCE_MATCHERS.some((matcher) =>
+        (source ?? "").includes(matcher)
+      );
+
+    const isAiVisionCandidate = (source?: string | null) =>
+      (source ?? "").includes("AI Vision") ||
+      (source ?? "").includes("Default Residential");
+
+    const passesAuthoritativeSanity = (candidate: CandidateFootprint) => {
+      const area = candidate.area_sqft ?? 0;
+      const quality = candidate.geometry_quality_score ?? 0;
+      const offset = candidate.geometry_metadata?.centroid_offset_ft ?? 999999;
+      const vertexCount =
+        candidate.geometry_metadata?.vertex_count ??
+        (Array.isArray(candidate.polygon) ? candidate.polygon.length : 0);
+
+      return (
+        area >= 300 &&
+        area <= 15000 &&
+        quality >= 35 &&
+        offset <= 200 &&
+        vertexCount >= 4
+      );
+    };
+
+    const authoritativeCandidates = candidates.filter(
+      (candidate) =>
+        isAuthoritativeCandidate(candidate.source) &&
+        passesAuthoritativeSanity(candidate)
+    );
+
+    // HARD RULE:
+    // If any authoritative candidate exists, AI Vision and Default fallback
+    // must be removed from the candidate set entirely.
+    let effectiveCandidates = candidates;
+    const aiCandidatesRemovedCount = candidates.filter((c) => isAiVisionCandidate(c.source)).length;
+
+    if (authoritativeCandidates.length > 0) {
+      effectiveCandidates = candidates.filter(
+        (candidate) => !isAiVisionCandidate(candidate.source)
+      );
+
+      console.log(
+        `[Darwin Roof] HARD SOURCE FILTER: removed AI Vision candidates because ${authoritativeCandidates.length} authoritative candidate(s) exist`
+      );
+
+      // Mark removed AI Vision candidates in debug
+      for (let i = 0; i < candidates.length; i++) {
+        if (isAiVisionCandidate(candidates[i].source)) {
+          candidateDebug[i].rejected_reason = `hard_filter: removed because ${authoritativeCandidates.length} authoritative candidate(s) passed sanity`;
         }
       }
-
-      // Mark selected
-      if (candidateDebug[idx]) candidateDebug[idx].selected = true;
     }
+
+    // Sort effective candidates: authoritative sources first, then by distance, then quality
+    const sourceRank = (source?: string | null) => {
+      const s = source ?? "";
+      if (s.includes("Microsoft") || s.includes("Local DB")) return 1;
+      if (s.includes("NJGIN")) return 2;
+      if (s.includes("Esri")) return 3;
+      if (s.includes("OpenStreetMap")) return 4;
+      if (s.includes("AI Vision")) return 5;
+      return 99;
+    };
+
+    effectiveCandidates.sort((a, b) => {
+      const rankDelta = sourceRank(a.source) - sourceRank(b.source);
+      if (rankDelta !== 0) return rankDelta;
+
+      const aOffset = a.geometry_metadata?.centroid_offset_ft ?? 999999;
+      const bOffset = b.geometry_metadata?.centroid_offset_ft ?? 999999;
+      if (aOffset !== bOffset) return aOffset - bOffset;
+
+      return (b.geometry_quality_score ?? 0) - (a.geometry_quality_score ?? 0);
+    });
+
+    // Select candidate from effective (filtered) set
+    let selectedCandidate: CandidateFootprint | null = null;
+
+    if (effectiveCandidates.length > 0) {
+      const idx =
+        !forceFreshCandidates &&
+        typeof selected_candidate_index === "number" &&
+        selected_candidate_index >= 0 &&
+        selected_candidate_index < effectiveCandidates.length
+          ? selected_candidate_index
+          : 0;
+
+      selectedCandidate = effectiveCandidates[idx];
+
+      // Mark selected in debug (find original index)
+      const originalIdx = candidates.indexOf(selectedCandidate);
+      if (originalIdx >= 0 && candidateDebug[originalIdx]) {
+        candidateDebug[originalIdx].selected = true;
+      }
+    }
+
+    const effectiveAiRemoved = aiCandidatesRemovedCount - effectiveCandidates.filter((c) => isAiVisionCandidate(c.source)).length;
 
     // Build candidate fetch summary
     const candidateFetchSummary = {
@@ -3824,11 +3894,17 @@ Deno.serve(async (req) => {
       ai_count: candidates.filter(c => c.source.includes("AI Vision")).length,
       selected_source: selectedCandidate?.source ?? null,
       selected_score: selectedCandidate ? (candidateScores[candidates.indexOf(selectedCandidate)]?.total ?? null) : null,
-      guardrail_triggered: guardrailTriggered,
-      guardrail_reason: guardrailReason,
+      guardrail_triggered: false,
+      guardrail_reason: null as string | null,
+      // New hard filter fields
+      raw_candidate_count: candidates.length,
+      effective_candidate_count: effectiveCandidates.length,
+      authoritative_candidate_count: authoritativeCandidates.length,
+      ai_candidates_removed: effectiveAiRemoved,
+      hard_source_filter_triggered: authoritativeCandidates.length > 0,
     };
 
-    console.log(`[Darwin Roof] Candidate fetch summary: MS=${candidateFetchSummary.microsoft_count} NJGIN=${candidateFetchSummary.njgin_count} Esri=${candidateFetchSummary.esri_count} OSM=${candidateFetchSummary.osm_count} AI=${candidateFetchSummary.ai_count} → selected="${candidateFetchSummary.selected_source}" (score=${candidateFetchSummary.selected_score}) guardrail=${guardrailTriggered}`);
+    console.log(`[Darwin Roof] Candidate fetch summary: MS=${candidateFetchSummary.microsoft_count} NJGIN=${candidateFetchSummary.njgin_count} Esri=${candidateFetchSummary.esri_count} OSM=${candidateFetchSummary.osm_count} AI=${candidateFetchSummary.ai_count} raw=${candidateFetchSummary.raw_candidate_count} effective=${candidateFetchSummary.effective_candidate_count} auth=${candidateFetchSummary.authoritative_candidate_count} ai_removed=${candidateFetchSummary.ai_candidates_removed} hard_filter=${candidateFetchSummary.hard_source_filter_triggered} → selected="${candidateFetchSummary.selected_source}"`);
 
     // Phase 2C: Infer roof form from selected footprint
     let roofFormInference: RoofFormInference | null = null;
