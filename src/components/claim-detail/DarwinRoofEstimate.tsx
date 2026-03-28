@@ -1344,7 +1344,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
             )}
 
             {/* Roof Area Debug Panel */}
-            <DarwinRoofAreaDebug estimate={estimate} />
+            <DarwinRoofAreaDebug estimate={estimate} candidateDebugData={candidateDebugData} />
 
             {/* Benchmarking & Validation */}
             <DarwinRoofValidation claimId={claimId} estimate={estimate} />
