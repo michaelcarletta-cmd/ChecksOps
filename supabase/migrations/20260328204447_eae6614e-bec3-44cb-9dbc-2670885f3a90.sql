@@ -1,0 +1,1 @@
+ALTER TABLE public.claim_roof_measurements ADD COLUMN IF NOT EXISTS facet_decomposition jsonb DEFAULT NULL;

@@ -170,6 +170,26 @@ interface RoofEstimate {
   roof_mass_polygons: any[] | null;
   imagery_analysis: any | null;
   calibration_adjustment_factor: number | null;
+  facet_decomposition: {
+    facets: {
+      id: string;
+      label: string;
+      area_sqft: number;
+      slope_area_sqft: number;
+      edges: { type: string; length_ft: number; bearing_deg: number }[];
+      pitch: string | null;
+      slope_factor: number;
+    }[];
+    total_eave_lf: number;
+    total_rake_lf: number;
+    total_ridge_lf: number;
+    total_hip_lf: number;
+    total_valley_lf: number;
+    total_slope_area_sqft: number;
+    total_squares: number;
+    roof_type_used: string;
+    decomposition_notes: string[];
+  } | null;
   created_at: string;
   updated_at: string;
 }
@@ -254,6 +274,8 @@ const qualityColor = (score: number) => {
 export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const [address, setAddress] = useState("");
   const [exactPitch, setExactPitch] = useState<string>("");
+  const [roofType, setRoofType] = useState<string>("");
+  const [showFacetDetail, setShowFacetDetail] = useState(false);
   const [loading, setLoading] = useState(false);
   const [estimate, setEstimate] = useState<RoofEstimate | null>(null);
   const [candidateDebugData, setCandidateDebugData] = useState<any>(null);
