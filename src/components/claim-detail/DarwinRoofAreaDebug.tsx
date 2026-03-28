@@ -171,9 +171,17 @@ function PolygonOverlay({ footprintGeoJson, roofGeoJson }: { footprintGeoJson: a
 }
 
 function CandidateDebugPanel({ candidates, summary }: { candidates: CandidateDebugEntry[]; summary: CandidateFetchSummary | null }) {
-  if (!summary && candidates.length === 0) return null;
-
-  const sourceColor = (src: string) => {
+  const effectiveSummary = summary ?? {
+    microsoft_count: 0,
+    njgin_count: 0,
+    esri_count: 0,
+    osm_count: 0,
+    ai_count: 0,
+    selected_source: null,
+    selected_score: null,
+    guardrail_triggered: false,
+    guardrail_reason: null,
+  };
     if (src.includes("Microsoft") || src.includes("Local DB")) return "text-green-600";
     if (src.includes("NJGIN")) return "text-blue-600";
     if (src.includes("Esri")) return "text-cyan-600";
