@@ -13675,6 +13675,22 @@ export type Database = {
         Returns: string
       }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      find_nearest_building_footprint: {
+        Args: { search_lat: number; search_lng: number; search_radius?: number }
+        Returns: {
+          area_sqft: number
+          bbox: Json
+          centroid_lat: number
+          centroid_lng: number
+          distance_meters: number
+          geometry_json: string
+          id: string
+          source: string
+          source_id: string
+          state: string
+          vertex_count: number
+        }[]
+      }
       generate_deposit_daily_digest: {
         Args: { p_actor_id?: string; p_digest_type?: string }
         Returns: Json
