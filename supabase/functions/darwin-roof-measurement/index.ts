@@ -3165,9 +3165,9 @@ function decomposeFacetsFromFootprint(
       else if (e.type === "valley") totalValley += e.length_ft;
     }
   }
-  // Deduplicate shared edges (ridge shared between 2 slopes, valley shared between main front/rear)
+  // Deduplicate shared edges: ridge is shared between 2 adjacent slopes so halve it.
+  // Valleys are NOT shared — each cross-gable valley is a distinct edge (front-left ≠ rear-left).
   totalRidge = roundTo(totalRidge / 2, 0);
-  totalValley = roundTo(totalValley / 2, 0);
 
   notes.push(`Totals: eave=${roundTo(totalEave)}ft, rake=${roundTo(totalRake)}ft, ridge=${totalRidge}ft, hip=${roundTo(totalHip)}ft, valley=${roundTo(totalValley)}ft.`);
   notes.push(`Total slope area: ${roundTo(totalSlopeArea)}sqft (${roundTo(totalSlopeArea / 100, 1)} squares).`);
