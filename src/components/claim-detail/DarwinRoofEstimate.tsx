@@ -410,7 +410,7 @@ export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
     } finally {
       setLoading(false);
     }
-  }, [claimId, address]);
+  }, [claimId, address, exactPitch, roofType]);
 
   useEffect(() => {
     if (fetchingExisting || loading || autoRefreshHandled || !address.trim()) return;
