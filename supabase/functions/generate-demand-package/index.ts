@@ -507,6 +507,17 @@ Deno.serve(async (req) => {
         ? files.filter((f: Record<string, any>) => selectedFileIds.includes(String(f.id)))
         : [];
 
+    console.log("Demand package file filtering", {
+      claimId,
+      selectedFileIds,
+      totalClaimFiles: files.length,
+      matchedEffectiveFiles: effectiveFiles.map((f: Record<string, any>) => ({
+        id: f.id,
+        file_name: f.file_name,
+        name: f.name,
+      })),
+    });
+
     if (!effectiveFiles.length) {
       return json({ error: "No selected documents were provided for the demand package." }, 400);
     }
