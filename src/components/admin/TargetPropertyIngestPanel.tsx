@@ -43,7 +43,7 @@ const DEFAULT_TARGET = {
   address: "118 Don Connor Blvd, Jackson, NJ 08527",
   lat: "40.1081531",
   lng: "-74.3485179",
-  bboxRadiusFt: "250",
+  bboxRadiusFt: "500",
 };
 
 export function TargetPropertyIngestPanel({ onComplete }: Props) {

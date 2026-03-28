@@ -174,7 +174,7 @@ Deno.serve(async (req) => {
     const testMode = body.test_mode === true;
     const targetLat = Number(body.target_lat);
     const targetLng = Number(body.target_lng);
-    const targetRadiusFeet = Math.max(25, Number(body.bbox_radius_ft) || 250);
+    const targetRadiusFeet = Math.max(500, Number(body.bbox_radius_ft) || 500);
     const targetedAddress = typeof body.address === "string" ? body.address.trim() : null;
     const isTargeted = Number.isFinite(targetLat) && Number.isFinite(targetLng);
     const maxFeatures = isTargeted
