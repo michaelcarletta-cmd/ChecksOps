@@ -3815,48 +3815,86 @@ Deno.serve(async (req) => {
       (source ?? "").includes("AI Vision") ||
       (source ?? "").includes("Default Residential");
 
-    const passesAuthoritativeSanity = (candidate: CandidateFootprint) => {
+    // Strict sanity: offset <= 200ft
+    const passesStrictSanity = (candidate: CandidateFootprint) => {
       const area = candidate.area_sqft ?? 0;
       const quality = candidate.geometry_quality_score ?? 0;
       const offset = candidate.geometry_metadata?.centroid_offset_ft ?? 999999;
       const vertexCount =
         candidate.geometry_metadata?.vertex_count ??
         (Array.isArray(candidate.polygon) ? candidate.polygon.length : 0);
-
-      return (
-        area >= 300 &&
-        area <= 15000 &&
-        quality >= 35 &&
-        offset <= 200 &&
-        vertexCount >= 4
-      );
+      return area >= 300 && area <= 15000 && quality >= 35 && offset <= 200 && vertexCount >= 4;
     };
 
+    // Weak sanity: offset <= 500ft (for candidates within search radius but farther from centroid)
+    const passesWeakSanity = (candidate: CandidateFootprint) => {
+      const area = candidate.area_sqft ?? 0;
+      const quality = candidate.geometry_quality_score ?? 0;
+      const offset = candidate.geometry_metadata?.centroid_offset_ft ?? 999999;
+      const vertexCount =
+        candidate.geometry_metadata?.vertex_count ??
+        (Array.isArray(candidate.polygon) ? candidate.polygon.length : 0);
+      return area >= 300 && area <= 15000 && quality >= 25 && offset <= 500 && vertexCount >= 4;
+    };
+
+    // Log ALL authoritative candidate distances (even if they fail sanity)
+    const allAuthoritativeCandidates = candidates.filter(c => isAuthoritativeCandidate(c.source));
+    for (const ac of allAuthoritativeCandidates) {
+      const offset = ac.geometry_metadata?.centroid_offset_ft ?? -1;
+      const strictPass = passesStrictSanity(ac);
+      const weakPass = passesWeakSanity(ac);
+      console.log(`[Darwin Roof] Authoritative candidate: source="${ac.source}" area=${ac.area_sqft}sqft offset=${roundTo(offset, 1)}ft quality=${ac.geometry_quality_score} vtx=${ac.geometry_metadata?.vertex_count} strict=${strictPass} weak=${weakPass}`);
+    }
+
+    // Find nearest authoritative distance for debug
+    const nearestAuthoritativeDistFt = allAuthoritativeCandidates.length > 0
+      ? Math.min(...allAuthoritativeCandidates.map(c => c.geometry_metadata?.centroid_offset_ft ?? 999999))
+      : null;
+
+    // Strict authoritative candidates
     const authoritativeCandidates = candidates.filter(
-      (candidate) =>
-        isAuthoritativeCandidate(candidate.source) &&
-        passesAuthoritativeSanity(candidate)
+      (candidate) => isAuthoritativeCandidate(candidate.source) && passesStrictSanity(candidate)
     );
 
+    // Weak authoritative: within 500ft but outside strict bounds
+    const weakAuthoritativeCandidates = candidates.filter(
+      (candidate) => isAuthoritativeCandidate(candidate.source) && !passesStrictSanity(candidate) && passesWeakSanity(candidate)
+    );
+
+    if (weakAuthoritativeCandidates.length > 0) {
+      console.log(`[Darwin Roof] Found ${weakAuthoritativeCandidates.length} weak_authoritative candidate(s) within 500ft but outside strict bounds`);
+    }
+
+    // Combined: strict + weak authoritative candidates trigger the hard filter
+    const allPassingAuthoritative = [...authoritativeCandidates, ...weakAuthoritativeCandidates];
+
     // HARD RULE:
-    // If any authoritative candidate exists, AI Vision and Default fallback
+    // If any authoritative candidate exists (strict or weak), AI Vision and Default fallback
     // must be removed from the candidate set entirely.
     let effectiveCandidates = candidates;
     const aiCandidatesRemovedCount = candidates.filter((c) => isAiVisionCandidate(c.source)).length;
 
-    if (authoritativeCandidates.length > 0) {
+    if (allPassingAuthoritative.length > 0) {
       effectiveCandidates = candidates.filter(
         (candidate) => !isAiVisionCandidate(candidate.source)
       );
 
       console.log(
-        `[Darwin Roof] HARD SOURCE FILTER: removed AI Vision candidates because ${authoritativeCandidates.length} authoritative candidate(s) exist`
+        `[Darwin Roof] HARD SOURCE FILTER: removed AI Vision candidates because ${allPassingAuthoritative.length} authoritative candidate(s) exist (${authoritativeCandidates.length} strict, ${weakAuthoritativeCandidates.length} weak)`
       );
 
       // Mark removed AI Vision candidates in debug
       for (let i = 0; i < candidates.length; i++) {
         if (isAiVisionCandidate(candidates[i].source)) {
-          candidateDebug[i].rejected_reason = `hard_filter: removed because ${authoritativeCandidates.length} authoritative candidate(s) passed sanity`;
+          candidateDebug[i].rejected_reason = `hard_filter: removed because ${allPassingAuthoritative.length} authoritative candidate(s) passed sanity`;
+        }
+      }
+
+      // Mark weak authoritative candidates in debug
+      for (let i = 0; i < candidates.length; i++) {
+        if (weakAuthoritativeCandidates.includes(candidates[i])) {
+          candidateDebug[i].rejected_reason = null; // include them, but note
+          (candidateDebug[i] as any).weak_authoritative = true;
         }
       }
     }
@@ -3917,12 +3955,15 @@ Deno.serve(async (req) => {
       selected_score: selectedCandidate ? (candidateScores[candidates.indexOf(selectedCandidate)]?.total ?? null) : null,
       guardrail_triggered: false,
       guardrail_reason: null as string | null,
-      // New hard filter fields
+      // Hard filter fields
       raw_candidate_count: candidates.length,
       effective_candidate_count: effectiveCandidates.length,
-      authoritative_candidate_count: authoritativeCandidates.length,
+      authoritative_candidate_count: allPassingAuthoritative.length,
+      weak_authoritative_count: weakAuthoritativeCandidates.length,
       ai_candidates_removed: effectiveAiRemoved,
-      hard_source_filter_triggered: authoritativeCandidates.length > 0,
+      hard_source_filter_triggered: allPassingAuthoritative.length > 0,
+      nearest_authoritative_distance_ft: nearestAuthoritativeDistFt,
+      coordinate_source: coordinateSource,
     };
 
     console.log(`[Darwin Roof] Candidate fetch summary: MS=${candidateFetchSummary.microsoft_count} NJGIN=${candidateFetchSummary.njgin_count} Esri=${candidateFetchSummary.esri_count} OSM=${candidateFetchSummary.osm_count} AI=${candidateFetchSummary.ai_count} raw=${candidateFetchSummary.raw_candidate_count} effective=${candidateFetchSummary.effective_candidate_count} auth=${candidateFetchSummary.authoritative_candidate_count} ai_removed=${candidateFetchSummary.ai_candidates_removed} hard_filter=${candidateFetchSummary.hard_source_filter_triggered} → selected="${candidateFetchSummary.selected_source}"`);
