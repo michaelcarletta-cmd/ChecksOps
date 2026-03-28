@@ -4205,17 +4205,24 @@ Deno.serve(async (req) => {
     }
 
     // ── ADDRESS OVERRIDE DETECTION ────────────────────────────────────────
-    // Build the full claim address from components for comparison
+    // Treat shortened versions of the claim address (e.g. street-only input)
+    // as the same property so claim-locked analysis doesn't accidentally flip
+    // into external-property geocoding mode.
     const normalizeAddr = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "").trim();
     const claimFullAddress = (claimRecord?.policyholder_address ?? "").trim();
     const normalizedInput = normalizeAddr(address);
     const normalizedClaim = normalizeAddr(claimFullAddress);
-    const normalizedClaimAlt = normalizedClaim;
-
-    const isOverride = normalizedInput.length > 0 &&
+    const addressesMatch =
+      normalizedInput.length > 0 &&
       normalizedClaim.length > 0 &&
-      normalizedInput !== normalizedClaim &&
-      normalizedInput !== normalizedClaimAlt;
+      (normalizedInput === normalizedClaim ||
+        normalizedClaim.startsWith(normalizedInput) ||
+        normalizedInput.startsWith(normalizedClaim));
+
+    const isOverride =
+      normalizedInput.length > 0 &&
+      normalizedClaim.length > 0 &&
+      !addressesMatch;
 
     // ── TWO EXPLICIT MODES ────────────────────────────────────────────────
     // Mode A: CLAIM_LOCKED — use claim.latitude/longitude ONLY
