@@ -4710,6 +4710,7 @@ Deno.serve(async (req) => {
         roof_mass_polygons: estimate.roof_mass_polygons ?? null,
         imagery_analysis: estimate.imagery_analysis ?? null,
         calibration_adjustment_factor: estimate.calibration_adjustment_factor ?? null,
+        facet_decomposition: estimate.facet_decomposition ?? null,
         created_by: user.id,
       })
       .select()
