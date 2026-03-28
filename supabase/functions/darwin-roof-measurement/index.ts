@@ -3623,6 +3623,7 @@ function deriveRoofEstimate(
     })) : null,
     imagery_analysis: imageryAnalysis,
     calibration_adjustment_factor: calibrationAdjustmentFactor,
+    facet_decomposition: facetDecomposition,
   };
 }
 
