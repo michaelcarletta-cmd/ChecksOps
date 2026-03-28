@@ -253,6 +253,7 @@ const qualityColor = (score: number) => {
 
 export const DarwinRoofEstimate = ({ claimId, claim }: Props) => {
   const [address, setAddress] = useState("");
+  const [exactPitch, setExactPitch] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [estimate, setEstimate] = useState<RoofEstimate | null>(null);
   const [candidateDebugData, setCandidateDebugData] = useState<any>(null);
