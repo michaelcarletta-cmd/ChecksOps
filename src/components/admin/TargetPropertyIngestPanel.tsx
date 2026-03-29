@@ -79,9 +79,13 @@ export function TargetPropertyIngestPanel({ onComplete }: Props) {
     setError(null);
 
     try {
+      // Auto-detect state from address
+      const addrLower = address.toLowerCase();
+      const detectedState = addrLower.includes(", pa ") || addrLower.includes(", pa,") || addrLower.includes("pennsylvania") ? "PA" : "NJ";
+      
       const { data, error: invokeError } = await supabase.functions.invoke("ingest-building-footprints", {
         body: {
-          state: "NewJersey",
+          state: detectedState,
           address: address.trim(),
           target_lat: targetLat,
           target_lng: targetLng,

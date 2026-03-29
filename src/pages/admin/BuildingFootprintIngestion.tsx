@@ -194,14 +194,25 @@ export default function BuildingFootprintIngestion() {
           <CardTitle className="text-lg">Run Ingestion</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex items-center gap-3 mb-2">
+            <Label className="text-sm font-medium">State:</Label>
+            <select
+              value={selectedState}
+              onChange={(e) => setSelectedState(e.target.value)}
+              className="border rounded-md px-3 py-1.5 text-sm bg-background"
+            >
+              <option value="NJ">New Jersey (NJ)</option>
+              <option value="PA">Pennsylvania (PA)</option>
+            </select>
+          </div>
           <div className="flex gap-3">
             <Button onClick={runTestIngestion} disabled={ingesting} variant="outline">
               {ingesting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Database className="h-4 w-4 mr-2" />}
-              Test Mode (25 rows)
+              Test Mode (25 rows, {selectedState})
             </Button>
             <Button onClick={runBatchIngestion} disabled={ingesting}>
               {ingesting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Database className="h-4 w-4 mr-2" />}
-              Batch Ingest (5,000 rows)
+              Batch Ingest (5,000 rows, {selectedState})
             </Button>
           </div>
 
