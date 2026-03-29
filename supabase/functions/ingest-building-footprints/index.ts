@@ -13,13 +13,7 @@ const STATE_CODES: Record<string, string> = {
   PA: "PA",
 };
 
-// State bounding boxes in Web Mercator (EPSG:3857)
-const STATE_BBOX_3857: Record<string, string> = {
-  NewJersey: "-8393948,4579616,-8218656,5052338",
-  NJ: "-8393948,4579616,-8218656,5052338",
-  Pennsylvania: "-8963370,4813697,-8326322,5160979",
-  PA: "-8963370,4813697,-8326322,5160979",
-};
+// Note: State bounding boxes are defined inside the handler as STATE_BBOX_WGS84
 
 const FEET_PER_DEGREE_LAT = 364000;
 
@@ -192,35 +186,74 @@ Deno.serve(async (req) => {
         : (body.limit || 5000);
     const idBatchSize = body.id_batch_size || 200;
 
-    // For test mode, default to a small bbox around Toms River / Lakewood area
-    // instead of all of NJ (which causes Esri 504 timeouts)
-    const TEST_BBOX_WGS84 = [-74.35, 40.10, -74.30, 40.12]; // ~3km x ~2km
+    // State bounding boxes in WGS84 for grid subdivision
+    const STATE_BBOX_WGS84: Record<string, [number, number, number, number]> = {
+      NJ: [-75.56, 38.93, -73.89, 41.36],
+      PA: [-80.52, 39.72, -74.69, 42.27],
+    };
 
-    let bbox3857 = STATE_BBOX_3857[state];
+    // For test mode, default to a small bbox around Toms River / Lakewood area
+    const TEST_BBOX_WGS84: [number, number, number, number] = [-74.35, 40.10, -74.30, 40.12];
+
+    // Grid cell size in degrees (~5km x 5km cells to avoid Esri 504 timeouts)
+    const GRID_CELL_DEG = 0.05;
+
+    let bboxes3857: string[] = [];
     if (isTargeted) {
       const [minLng, minLat, maxLng, maxLat] = buildTargetBboxWgs84(targetLng, targetLat, targetRadiusFeet);
       const [xmin, ymin] = toWebMercator(minLng, minLat);
       const [xmax, ymax] = toWebMercator(maxLng, maxLat);
-      bbox3857 = `${xmin},${ymin},${xmax},${ymax}`;
+      bboxes3857 = [`${xmin},${ymin},${xmax},${ymax}`];
       console.log(`[Ingest] Targeted mode: address=${targetedAddress ?? "n/a"}, lat=${targetLat}, lng=${targetLng}, radiusFt=${targetRadiusFeet}`);
     } else if (body.bbox_wgs84) {
       const [minLng, minLat, maxLng, maxLat] = body.bbox_wgs84;
       const [xmin, ymin] = toWebMercator(minLng, minLat);
       const [xmax, ymax] = toWebMercator(maxLng, maxLat);
-      bbox3857 = `${xmin},${ymin},${xmax},${ymax}`;
+      bboxes3857 = [`${xmin},${ymin},${xmax},${ymax}`];
     } else if (testMode) {
       const [minLng, minLat, maxLng, maxLat] = TEST_BBOX_WGS84;
       const [xmin, ymin] = toWebMercator(minLng, minLat);
       const [xmax, ymax] = toWebMercator(maxLng, maxLat);
-      bbox3857 = `${xmin},${ymin},${xmax},${ymax}`;
+      bboxes3857 = [`${xmin},${ymin},${xmax},${ymax}`];
       console.log(`[Ingest] Test mode: using small bbox WGS84=${JSON.stringify(TEST_BBOX_WGS84)}`);
+    } else {
+      // Batch mode: subdivide state bbox into grid cells
+      const stateBbox = STATE_BBOX_WGS84[stateCode];
+      if (!stateBbox) {
+        return new Response(JSON.stringify({ error: `No bbox for state: ${state}` }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const [sMinLng, sMinLat, sMaxLng, sMaxLat] = stateBbox;
+      // Pick a random grid offset so each call covers different cells
+      const gridOffsetLng = Number(body.grid_offset_lng) || 0;
+      const gridOffsetLat = Number(body.grid_offset_lat) || 0;
+      const startLng = sMinLng + gridOffsetLng * GRID_CELL_DEG;
+      const startLat = sMinLat + gridOffsetLat * GRID_CELL_DEG;
+      // Generate grid cells row by row
+      for (let lat = startLat; lat < sMaxLat; lat += GRID_CELL_DEG) {
+        for (let lng = startLng; lng < sMaxLng; lng += GRID_CELL_DEG) {
+          const cMinLng = lng;
+          const cMinLat = lat;
+          const cMaxLng = Math.min(lng + GRID_CELL_DEG, sMaxLng);
+          const cMaxLat = Math.min(lat + GRID_CELL_DEG, sMaxLat);
+          const [xmin, ymin] = toWebMercator(cMinLng, cMinLat);
+          const [xmax, ymax] = toWebMercator(cMaxLng, cMaxLat);
+          bboxes3857.push(`${xmin},${ymin},${xmax},${ymax}`);
+        }
+      }
+      console.log(`[Ingest] Batch mode: ${bboxes3857.length} grid cells for ${stateCode}`);
     }
 
-    if (!bbox3857) {
+    if (bboxes3857.length === 0) {
       return new Response(JSON.stringify({ error: `No bbox for state: ${state}` }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Time budget: stop processing 20s before edge function timeout (~150s)
+    const startTime = Date.now();
+    const TIME_BUDGET_MS = 120_000; // 2 minutes max processing
 
     // Create ingestion log
     const { data: logRow } = await supabase.from("building_footprint_ingestion_logs").insert({
@@ -230,7 +263,7 @@ Deno.serve(async (req) => {
         state,
         testMode,
         maxFeatures,
-        bbox3857,
+        grid_cells: bboxes3857.length,
         idBatchSize,
         isTargeted,
         target_address: targetedAddress,
@@ -242,132 +275,148 @@ Deno.serve(async (req) => {
     }).select("id").single();
     const logId = logRow?.id;
 
-    console.log(`[Ingest] Starting: state=${state}, testMode=${testMode}, maxFeatures=${maxFeatures}`);
-    console.log(`[Ingest] Bbox (3857): ${bbox3857}`);
-
-    // Step 1: Get all OBJECTIDs in the bounding box
-    console.log(`[Ingest] Step 1: Fetching OBJECTIDs via spatial query...`);
-    let allIds: number[];
-    try {
-      allIds = await fetchEsriIds(bbox3857);
-    } catch (e) {
-      const msg = `Failed to fetch IDs: ${e instanceof Error ? e.message : String(e)}`;
-      console.error(`[Ingest] ${msg}`);
-      if (logId) {
-        await supabase.from("building_footprint_ingestion_logs").update({
-          completed_at: new Date().toISOString(), status: "failed",
-          error_count: 1, errors: [msg],
-        }).eq("id", logId);
-      }
-      return new Response(JSON.stringify({ error: msg }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    console.log(`[Ingest] Found ${allIds.length} OBJECTIDs in bbox`);
-
-    // Limit to maxFeatures
-    const targetIds = allIds.slice(0, maxFeatures);
-    console.log(`[Ingest] Processing ${targetIds.length} of ${allIds.length} IDs`);
+    console.log(`[Ingest] Starting: state=${state}, testMode=${testMode}, maxFeatures=${maxFeatures}, gridCells=${bboxes3857.length}`);
 
     let totalFetched = 0;
     let totalParsed = 0;
     let totalInserted = 0;
     let totalSkipped = 0;
     let totalErrors = 0;
+    let cellsProcessed = 0;
     const errors: string[] = [];
 
-    // Step 2: Fetch geometry in batches by OBJECTID
-    for (let i = 0; i < targetIds.length; i += idBatchSize) {
-      const batchIds = targetIds.slice(i, i + idBatchSize);
-      console.log(`[Ingest] Fetching geometry batch ${Math.floor(i / idBatchSize) + 1}: ${batchIds.length} IDs (offset ${i})`);
+    // Process each grid cell
+    for (const cellBbox of bboxes3857) {
+      // Check time budget
+      if (Date.now() - startTime > TIME_BUDGET_MS) {
+        console.log(`[Ingest] Time budget exceeded after ${cellsProcessed} cells, stopping.`);
+        break;
+      }
 
-      let features: any[];
+      // Check if we've hit maxFeatures
+      if (totalInserted >= maxFeatures) {
+        console.log(`[Ingest] Reached maxFeatures (${maxFeatures}), stopping.`);
+        break;
+      }
+
+      // Step 1: Get OBJECTIDs for this cell
+      let cellIds: number[];
       try {
-        features = await fetchEsriFeatures(batchIds);
+        cellIds = await fetchEsriIds(cellBbox);
       } catch (e) {
-        const msg = `Geometry fetch error at batch ${i}: ${e instanceof Error ? e.message : String(e)}`;
+        const msg = `Cell ${cellsProcessed} ID fetch error: ${e instanceof Error ? e.message : String(e)}`;
         console.error(`[Ingest] ${msg}`);
         errors.push(msg);
-        totalErrors += batchIds.length;
+        totalErrors++;
+        cellsProcessed++;
         continue;
       }
 
-      totalFetched += features.length;
+      if (cellIds.length === 0) {
+        cellsProcessed++;
+        continue;
+      }
 
-      // Parse into arrays for batch RPC
-      const sources: string[] = [];
-      const sourceIds: string[] = [];
-      const states: string[] = [];
-      const wkts: string[] = [];
-      const centroidLats: number[] = [];
-      const centroidLngs: number[] = [];
-      const bboxes: any[] = [];
-      const areasSqft: number[] = [];
-      const vertexCounts: number[] = [];
+      // Limit remaining capacity
+      const remaining = maxFeatures - totalInserted;
+      const targetIds = cellIds.slice(0, Math.min(cellIds.length, remaining));
 
-      for (const feat of features) {
+      // Step 2: Fetch geometry in batches by OBJECTID
+      for (let i = 0; i < targetIds.length; i += idBatchSize) {
+        if (Date.now() - startTime > TIME_BUDGET_MS) break;
+
+        const batchIds = targetIds.slice(i, i + idBatchSize);
+
+        let features: any[];
         try {
-          if (!feat.geometry?.rings?.[0]) { totalSkipped++; continue; }
-          const ring = feat.geometry.rings[0] as number[][];
-          if (ring.length < 4) { totalSkipped++; continue; }
-
-          const areaSqft = computeAreaSqft(ring);
-          if (areaSqft < 50 || areaSqft > 100000) { totalSkipped++; continue; }
-
-          const [cLng, cLat] = computeCentroid(ring);
-          const bbox = computeBbox(ring);
-          const vertexCount = ring[ring.length - 1][0] === ring[0][0] && ring[ring.length - 1][1] === ring[0][1]
-            ? ring.length - 1 : ring.length;
-
-          const wktRing = ring.map((p: number[]) => `${p[0]} ${p[1]}`).join(", ");
-          const closed = ring[ring.length - 1][0] === ring[0][0] && ring[ring.length - 1][1] === ring[0][1]
-            ? wktRing : `${wktRing}, ${ring[0][0]} ${ring[0][1]}`;
-
-          sources.push("microsoft");
-          sourceIds.push(feat.attributes?.OBJECTID ? String(feat.attributes.OBJECTID) : "");
-          states.push(stateCode);
-          wkts.push(`POLYGON((${closed}))`);
-          centroidLats.push(Math.round(cLat * 1e7) / 1e7);
-          centroidLngs.push(Math.round(cLng * 1e7) / 1e7);
-          bboxes.push(bbox);
-          areasSqft.push(Math.round(areaSqft));
-          vertexCounts.push(vertexCount);
-          totalParsed++;
+          features = await fetchEsriFeatures(batchIds);
         } catch (e) {
-          totalErrors++;
-          errors.push(`Parse: ${e instanceof Error ? e.message : String(e)}`);
+          const msg = `Geometry fetch error cell ${cellsProcessed} batch ${i}: ${e instanceof Error ? e.message : String(e)}`;
+          console.error(`[Ingest] ${msg}`);
+          errors.push(msg);
+          totalErrors += batchIds.length;
+          continue;
+        }
+
+        totalFetched += features.length;
+
+        // Parse into arrays for batch RPC
+        const sources: string[] = [];
+        const sourceIds: string[] = [];
+        const statesArr: string[] = [];
+        const wkts: string[] = [];
+        const centroidLats: number[] = [];
+        const centroidLngs: number[] = [];
+        const bboxesArr: any[] = [];
+        const areasSqft: number[] = [];
+        const vertexCounts: number[] = [];
+
+        for (const feat of features) {
+          try {
+            if (!feat.geometry?.rings?.[0]) { totalSkipped++; continue; }
+            const ring = feat.geometry.rings[0] as number[][];
+            if (ring.length < 4) { totalSkipped++; continue; }
+
+            const areaSqft = computeAreaSqft(ring);
+            if (areaSqft < 50 || areaSqft > 100000) { totalSkipped++; continue; }
+
+            const [cLng, cLat] = computeCentroid(ring);
+            const bbox = computeBbox(ring);
+            const vertexCount = ring[ring.length - 1][0] === ring[0][0] && ring[ring.length - 1][1] === ring[0][1]
+              ? ring.length - 1 : ring.length;
+
+            const wktRing = ring.map((p: number[]) => `${p[0]} ${p[1]}`).join(", ");
+            const closed = ring[ring.length - 1][0] === ring[0][0] && ring[ring.length - 1][1] === ring[0][1]
+              ? wktRing : `${wktRing}, ${ring[0][0]} ${ring[0][1]}`;
+
+            sources.push("microsoft");
+            sourceIds.push(feat.attributes?.OBJECTID ? String(feat.attributes.OBJECTID) : "");
+            statesArr.push(stateCode);
+            wkts.push(`POLYGON((${closed}))`);
+            centroidLats.push(Math.round(cLat * 1e7) / 1e7);
+            centroidLngs.push(Math.round(cLng * 1e7) / 1e7);
+            bboxesArr.push(bbox);
+            areasSqft.push(Math.round(areaSqft));
+            vertexCounts.push(vertexCount);
+            totalParsed++;
+          } catch (e) {
+            totalErrors++;
+            errors.push(`Parse: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }
+
+        // Insert via RPC
+        if (sources.length > 0) {
+          const { data: rpcResult, error: rpcErr } = await supabase.rpc("insert_building_footprints_batch", {
+            p_sources: sources,
+            p_source_ids: sourceIds,
+            p_states: statesArr,
+            p_wkts: wkts,
+            p_centroid_lats: centroidLats,
+            p_centroid_lngs: centroidLngs,
+            p_bboxes: bboxesArr,
+            p_areas_sqft: areasSqft,
+            p_vertex_counts: vertexCounts,
+          });
+
+          if (rpcErr) {
+            const msg = `RPC error: ${rpcErr.message}`;
+            console.error(`[Ingest] ${msg}`);
+            errors.push(msg);
+            totalErrors += sources.length;
+          } else {
+            const r = rpcResult as any;
+            totalInserted += r.inserted || 0;
+            totalSkipped += r.skipped || 0;
+            totalErrors += r.errors || 0;
+            if (r.error_messages?.length > 0) errors.push(...r.error_messages.filter(Boolean));
+          }
         }
       }
 
-      // Insert via RPC
-      if (sources.length > 0) {
-        console.log(`[Ingest] Inserting ${sources.length} rows via RPC...`);
-        const { data: rpcResult, error: rpcErr } = await supabase.rpc("insert_building_footprints_batch", {
-          p_sources: sources,
-          p_source_ids: sourceIds,
-          p_states: states,
-          p_wkts: wkts,
-          p_centroid_lats: centroidLats,
-          p_centroid_lngs: centroidLngs,
-          p_bboxes: bboxes,
-          p_areas_sqft: areasSqft,
-          p_vertex_counts: vertexCounts,
-        });
-
-        if (rpcErr) {
-          const msg = `RPC error: ${rpcErr.message}`;
-          console.error(`[Ingest] ${msg}`);
-          errors.push(msg);
-          totalErrors += sources.length;
-        } else {
-          const r = rpcResult as any;
-          console.log(`[Ingest] RPC: inserted=${r.inserted}, skipped=${r.skipped}, errors=${r.errors}`);
-          totalInserted += r.inserted || 0;
-          totalSkipped += r.skipped || 0;
-          totalErrors += r.errors || 0;
-          if (r.error_messages?.length > 0) errors.push(...r.error_messages.filter(Boolean));
-        }
+      cellsProcessed++;
+      if (cellsProcessed % 10 === 0) {
+        console.log(`[Ingest] Progress: ${cellsProcessed}/${bboxes3857.length} cells, inserted=${totalInserted}, elapsed=${Math.round((Date.now() - startTime) / 1000)}s`);
       }
     }
 
@@ -397,7 +446,9 @@ Deno.serve(async (req) => {
 
     const summary = {
       success: true, state, state_code: stateCode, test_mode: testMode,
-      total_ids_in_bbox: allIds.length,
+      grid_cells_total: bboxes3857.length,
+      grid_cells_processed: cellsProcessed,
+      elapsed_seconds: Math.round((Date.now() - startTime) / 1000),
       fetched_count: totalFetched, parsed_count: totalParsed,
       inserted_count: totalInserted, skipped_count: totalSkipped,
       error_count: totalErrors, errors: errors.slice(0, 20), log_id: logId,
