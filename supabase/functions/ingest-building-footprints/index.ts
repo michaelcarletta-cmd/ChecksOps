@@ -6,11 +6,19 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const STATE_CODES: Record<string, string> = { NewJersey: "NJ" };
+const STATE_CODES: Record<string, string> = {
+  NewJersey: "NJ",
+  NJ: "NJ",
+  Pennsylvania: "PA",
+  PA: "PA",
+};
 
-// NJ bounding box in Web Mercator (EPSG:3857)
+// State bounding boxes in Web Mercator (EPSG:3857)
 const STATE_BBOX_3857: Record<string, string> = {
   NewJersey: "-8393948,4579616,-8218656,5052338",
+  NJ: "-8393948,4579616,-8218656,5052338",
+  Pennsylvania: "-8963370,4813697,-8326322,5160979",
+  PA: "-8963370,4813697,-8326322,5160979",
 };
 
 const FEET_PER_DEGREE_LAT = 364000;
