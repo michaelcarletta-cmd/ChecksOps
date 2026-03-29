@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
 import { TargetPropertyIngestPanel } from "@/components/admin/TargetPropertyIngestPanel";
 import { toast } from "sonner";
 import { Loader2, Database, RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
