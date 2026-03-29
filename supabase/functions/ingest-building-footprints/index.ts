@@ -452,7 +452,9 @@ Deno.serve(async (req) => {
 
     const summary = {
       success: true, state, state_code: stateCode, test_mode: testMode,
-      total_ids_in_bbox: allIds.length,
+      grid_cells_total: bboxes3857.length,
+      grid_cells_processed: cellsProcessed,
+      elapsed_seconds: Math.round((Date.now() - startTime) / 1000),
       fetched_count: totalFetched, parsed_count: totalParsed,
       inserted_count: totalInserted, skipped_count: totalSkipped,
       error_count: totalErrors, errors: errors.slice(0, 20), log_id: logId,
