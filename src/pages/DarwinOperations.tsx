@@ -1836,7 +1836,7 @@ const DarwinOperations = () => {
         </CardContent>
       </Card>
 
-      <DarwinRoofTuningDashboard />
+      
 
       <DarwinOperationsCenter />
     </div>
