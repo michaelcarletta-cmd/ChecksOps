@@ -37,6 +37,7 @@ export default function BuildingFootprintIngestion() {
   const [loading, setLoading] = useState(false);
   const [ingesting, setIngesting] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
+  const [selectedState, setSelectedState] = useState("NJ");
 
   const loadStats = async () => {
     setLoading(true);
