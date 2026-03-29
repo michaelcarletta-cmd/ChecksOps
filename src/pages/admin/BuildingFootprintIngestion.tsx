@@ -98,7 +98,7 @@ export default function BuildingFootprintIngestion() {
     setTestResult(null);
     try {
       const { data, error } = await supabase.functions.invoke("ingest-building-footprints", {
-        body: { state: "NewJersey", test_mode: false, limit: 5000, id_batch_size: 500 },
+        body: { state: selectedState, test_mode: false, limit: 5000, id_batch_size: 500 },
       });
       if (error) throw new Error(error.message);
       setTestResult(data);
