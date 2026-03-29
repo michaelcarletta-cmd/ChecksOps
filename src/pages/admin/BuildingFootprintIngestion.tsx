@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
 import { TargetPropertyIngestPanel } from "@/components/admin/TargetPropertyIngestPanel";
 import { toast } from "sonner";
 import { Loader2, Database, RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
@@ -37,6 +38,7 @@ export default function BuildingFootprintIngestion() {
   const [loading, setLoading] = useState(false);
   const [ingesting, setIngesting] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
+  const [selectedState, setSelectedState] = useState("NJ");
 
   const loadStats = async () => {
     setLoading(true);
@@ -79,7 +81,7 @@ export default function BuildingFootprintIngestion() {
     setTestResult(null);
     try {
       const { data, error } = await supabase.functions.invoke("ingest-building-footprints", {
-        body: { state: "NewJersey", test_mode: true, test_limit: 25, id_batch_size: 25 },
+        body: { state: selectedState, test_mode: true, test_limit: 25, id_batch_size: 25 },
       });
       if (error) throw new Error(error.message);
       setTestResult(data);
@@ -97,7 +99,7 @@ export default function BuildingFootprintIngestion() {
     setTestResult(null);
     try {
       const { data, error } = await supabase.functions.invoke("ingest-building-footprints", {
-        body: { state: "NewJersey", test_mode: false, limit: 5000, id_batch_size: 500 },
+        body: { state: selectedState, test_mode: false, limit: 5000, id_batch_size: 500 },
       });
       if (error) throw new Error(error.message);
       setTestResult(data);
@@ -193,14 +195,25 @@ export default function BuildingFootprintIngestion() {
           <CardTitle className="text-lg">Run Ingestion</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex items-center gap-3 mb-2">
+            <Label className="text-sm font-medium">State:</Label>
+            <select
+              value={selectedState}
+              onChange={(e) => setSelectedState(e.target.value)}
+              className="border rounded-md px-3 py-1.5 text-sm bg-background"
+            >
+              <option value="NJ">New Jersey (NJ)</option>
+              <option value="PA">Pennsylvania (PA)</option>
+            </select>
+          </div>
           <div className="flex gap-3">
             <Button onClick={runTestIngestion} disabled={ingesting} variant="outline">
               {ingesting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Database className="h-4 w-4 mr-2" />}
-              Test Mode (25 rows)
+              Test Mode (25 rows, {selectedState})
             </Button>
             <Button onClick={runBatchIngestion} disabled={ingesting}>
               {ingesting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Database className="h-4 w-4 mr-2" />}
-              Batch Ingest (5,000 rows)
+              Batch Ingest (5,000 rows, {selectedState})
             </Button>
           </div>
 
