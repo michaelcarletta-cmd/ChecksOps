@@ -13,13 +13,7 @@ const STATE_CODES: Record<string, string> = {
   PA: "PA",
 };
 
-// State bounding boxes in Web Mercator (EPSG:3857)
-const STATE_BBOX_3857: Record<string, string> = {
-  NewJersey: "-8393948,4579616,-8218656,5052338",
-  NJ: "-8393948,4579616,-8218656,5052338",
-  Pennsylvania: "-8963370,4813697,-8326322,5160979",
-  PA: "-8963370,4813697,-8326322,5160979",
-};
+// Note: State bounding boxes are defined inside the handler as STATE_BBOX_WGS84
 
 const FEET_PER_DEGREE_LAT = 364000;
 
