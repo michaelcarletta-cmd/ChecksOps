@@ -214,7 +214,7 @@ export default function BuildingFootprintIngestion() {
             </Button>
             <Button onClick={runBatchIngestion} disabled={ingesting}>
               {ingesting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Database className="h-4 w-4 mr-2" />}
-              Batch Ingest (5,000 rows, {selectedState})
+              Batch Ingest (2,000 rows, {selectedState})
             </Button>
           </div>
 
