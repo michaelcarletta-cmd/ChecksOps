@@ -14,7 +14,7 @@ import {
   Lock, Unlock, Pencil, Save, X, Shield, Eye, Layers, Home, Settings2
 } from "lucide-react";
 import { logAudit } from "@/hooks/useAuditLog";
-import { DarwinRoofValidation } from "./DarwinRoofValidation";
+
 import { RoofConfirmationDialog, type ConfirmationLevel, type ConfirmationBasis } from "./RoofConfirmationDialog";
 import { DarwinRoofAreaDebug } from "./DarwinRoofAreaDebug";
 import { DarwinRoofOutlineStaticEditor } from "./DarwinRoofOutlineStaticEditor";
