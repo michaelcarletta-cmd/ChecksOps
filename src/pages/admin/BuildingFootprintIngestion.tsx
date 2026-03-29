@@ -99,11 +99,12 @@ export default function BuildingFootprintIngestion() {
     setTestResult(null);
     try {
       const { data, error } = await supabase.functions.invoke("ingest-building-footprints", {
-        body: { state: selectedState, test_mode: false, limit: 5000, id_batch_size: 500 },
+        body: { state: selectedState, test_mode: false, limit: 2000, id_batch_size: 200 },
       });
       if (error) throw new Error(error.message);
       setTestResult(data);
-      toast.success(`Batch ingestion: ${data.inserted_count} rows inserted`);
+      const cellsInfo = data.grid_cells_processed ? ` (${data.grid_cells_processed}/${data.grid_cells_total} cells in ${data.elapsed_seconds}s)` : "";
+      toast.success(`Batch ingestion: ${data.inserted_count} rows inserted${cellsInfo}`);
       await loadStats();
     } catch (err: any) {
       toast.error(`Ingestion failed: ${err.message}`);
