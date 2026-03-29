@@ -192,31 +192,66 @@ Deno.serve(async (req) => {
         : (body.limit || 5000);
     const idBatchSize = body.id_batch_size || 200;
 
-    // For test mode, default to a small bbox around Toms River / Lakewood area
-    // instead of all of NJ (which causes Esri 504 timeouts)
-    const TEST_BBOX_WGS84 = [-74.35, 40.10, -74.30, 40.12]; // ~3km x ~2km
+    // State bounding boxes in WGS84 for grid subdivision
+    const STATE_BBOX_WGS84: Record<string, [number, number, number, number]> = {
+      NJ: [-75.56, 38.93, -73.89, 41.36],
+      PA: [-80.52, 39.72, -74.69, 42.27],
+    };
 
-    let bbox3857 = STATE_BBOX_3857[state];
+    // For test mode, default to a small bbox around Toms River / Lakewood area
+    const TEST_BBOX_WGS84: [number, number, number, number] = [-74.35, 40.10, -74.30, 40.12];
+
+    // Grid cell size in degrees (~5km x 5km cells to avoid Esri 504 timeouts)
+    const GRID_CELL_DEG = 0.05;
+
+    let bboxes3857: string[] = [];
     if (isTargeted) {
       const [minLng, minLat, maxLng, maxLat] = buildTargetBboxWgs84(targetLng, targetLat, targetRadiusFeet);
       const [xmin, ymin] = toWebMercator(minLng, minLat);
       const [xmax, ymax] = toWebMercator(maxLng, maxLat);
-      bbox3857 = `${xmin},${ymin},${xmax},${ymax}`;
+      bboxes3857 = [`${xmin},${ymin},${xmax},${ymax}`];
       console.log(`[Ingest] Targeted mode: address=${targetedAddress ?? "n/a"}, lat=${targetLat}, lng=${targetLng}, radiusFt=${targetRadiusFeet}`);
     } else if (body.bbox_wgs84) {
       const [minLng, minLat, maxLng, maxLat] = body.bbox_wgs84;
       const [xmin, ymin] = toWebMercator(minLng, minLat);
       const [xmax, ymax] = toWebMercator(maxLng, maxLat);
-      bbox3857 = `${xmin},${ymin},${xmax},${ymax}`;
+      bboxes3857 = [`${xmin},${ymin},${xmax},${ymax}`];
     } else if (testMode) {
       const [minLng, minLat, maxLng, maxLat] = TEST_BBOX_WGS84;
       const [xmin, ymin] = toWebMercator(minLng, minLat);
       const [xmax, ymax] = toWebMercator(maxLng, maxLat);
-      bbox3857 = `${xmin},${ymin},${xmax},${ymax}`;
+      bboxes3857 = [`${xmin},${ymin},${xmax},${ymax}`];
       console.log(`[Ingest] Test mode: using small bbox WGS84=${JSON.stringify(TEST_BBOX_WGS84)}`);
+    } else {
+      // Batch mode: subdivide state bbox into grid cells
+      const stateBbox = STATE_BBOX_WGS84[stateCode];
+      if (!stateBbox) {
+        return new Response(JSON.stringify({ error: `No bbox for state: ${state}` }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const [sMinLng, sMinLat, sMaxLng, sMaxLat] = stateBbox;
+      // Pick a random grid offset so each call covers different cells
+      const gridOffsetLng = Number(body.grid_offset_lng) || 0;
+      const gridOffsetLat = Number(body.grid_offset_lat) || 0;
+      const startLng = sMinLng + gridOffsetLng * GRID_CELL_DEG;
+      const startLat = sMinLat + gridOffsetLat * GRID_CELL_DEG;
+      // Generate grid cells row by row
+      for (let lat = startLat; lat < sMaxLat; lat += GRID_CELL_DEG) {
+        for (let lng = startLng; lng < sMaxLng; lng += GRID_CELL_DEG) {
+          const cMinLng = lng;
+          const cMinLat = lat;
+          const cMaxLng = Math.min(lng + GRID_CELL_DEG, sMaxLng);
+          const cMaxLat = Math.min(lat + GRID_CELL_DEG, sMaxLat);
+          const [xmin, ymin] = toWebMercator(cMinLng, cMinLat);
+          const [xmax, ymax] = toWebMercator(cMaxLng, cMaxLat);
+          bboxes3857.push(`${xmin},${ymin},${xmax},${ymax}`);
+        }
+      }
+      console.log(`[Ingest] Batch mode: ${bboxes3857.length} grid cells for ${stateCode}`);
     }
 
-    if (!bbox3857) {
+    if (bboxes3857.length === 0) {
       return new Response(JSON.stringify({ error: `No bbox for state: ${state}` }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
