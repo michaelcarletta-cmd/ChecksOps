@@ -945,6 +945,24 @@ function postValidateDemandPackageStrict(
     }
   }
 
+  // ── Advocacy lock ──
+  const forbiddenSelfUnderminingPhrases = [
+    'severely deficient', 'deficient estimate', 'deficient documentation',
+    'inadequate estimate', 'inadequate documentation', 'inadequate support',
+    'unsupported claim', 'unsupported estimate', 'unsupported damage',
+    'fails to support', 'failed to support', 'does not support',
+    'insufficient evidence', 'insufficient documentation', 'insufficient support',
+    'flawed estimate', 'flawed methodology', 'flawed approach',
+    'weak evidence', 'weak support', 'weak documentation',
+    'lacking evidence', 'lacking support', 'lacking documentation',
+    'deficient', 'inadequate', 'insufficient',
+  ];
+  for (const phrase of forbiddenSelfUnderminingPhrases) {
+    if (lower.includes(phrase)) {
+      errors.push(`ADVOCACY LOCK: self-undermining phrase detected: "${phrase}" — demand packages must not criticize the user's estimate or documentation.`);
+    }
+  }
+
   return errors;
 }
 
