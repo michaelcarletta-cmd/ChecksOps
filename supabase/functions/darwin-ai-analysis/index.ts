@@ -951,6 +951,19 @@ function postValidateDemandPackageStrict(
     }
   }
 
+  // ── Rot / decay lock — these terms are never covered by insurance ──
+  const forbiddenRotTerms = [
+    'rotted decking', 'rotted wood', 'rotted sheathing', 'rotted substrate',
+    'rotten wood', 'rotten decking', 'wood rot', 'dry rot', 'wet rot',
+    'rot ', ' rot', 'rotted', 'rotting', 'rotten',
+    'decay', 'decayed', 'decaying',
+  ];
+  for (const term of forbiddenRotTerms) {
+    if (lower.includes(term)) {
+      errors.push(`ROT/DECAY LOCK: forbidden term detected: "${term.trim()}" — rot and decay are never covered by insurance and must not appear in any output.`);
+    }
+  }
+
   // ── Advocacy lock ──
   const forbiddenSelfUnderminingPhrases = [
     'severely deficient', 'deficient estimate', 'deficient documentation',
