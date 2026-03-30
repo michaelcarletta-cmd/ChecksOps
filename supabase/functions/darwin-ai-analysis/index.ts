@@ -6444,7 +6444,7 @@ Create a professional, complete document ready for carrier submission.`;
             ).join('\n')}\nUse these outcomes to support valuation arguments.\n`
           : '';
 
-        systemPrompt = `You are an expert specializing in creating comprehensive demand packages for insurance claims. You operate with the strategic intelligence of the industry's top adjusters, applying the Brelly "Proof Castle" framework.
+        systemPrompt = `${DEMAND_PACKAGE_SYSTEM_PROMPT}
 
 ${getExternalWritingRules(authorName, authorTitle)}
 
