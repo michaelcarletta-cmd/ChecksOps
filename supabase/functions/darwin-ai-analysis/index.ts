@@ -345,13 +345,17 @@ Return the package in this exact order:
 6. Demand Amount
 7. Conclusion
 
-6. FINAL SELF-CHECK
+6. SCOPE JUSTIFICATION MODULE RULE
+If an auto-injected scope justification module is present, you may use it only to explain why the repair scope extends beyond the immediately visible damage. Do not treat a scope justification module as proof of a separate cause of loss or a separate category of direct physical damage.
+
+7. FINAL SELF-CHECK
 Before producing output, verify:
 - Did I wrongly imply carrier misconduct?
 - Did I wrongly imply prior adjustment?
 - Did I add unsupported siding, hail, or freeze?
 - Did I include fence / tree impact if present?
 - Did I use exact estimate totals if found?
+- Did I misuse a scope justification module as a separate damage finding?
 
 If any answer is wrong, fix it before returning the package.
 `;
@@ -608,6 +612,157 @@ function renderDemandEvidenceSummary(summary: DemandEvidenceSummary): string {
     }
   }
   return lines.join('\n');
+}
+
+// ── Scope Justification Rules Engine ──
+
+type ScopeJustificationSignals = {
+  roofDamage: boolean;
+  multiSlopeRoof: boolean;
+  underlaymentInScope: boolean;
+  ridgePresent: boolean;
+
+  sidingDamage: boolean;
+  multipleDamagedElevations: boolean;
+  rearElevationPresent: boolean;
+  layeredSidingAssembly: boolean;
+  woodShakeUnderVinyl: boolean;
+  fanfoldPresent: boolean;
+  houseWrapPresent: boolean;
+
+  codeUpgradePresent: boolean;
+  sheathingReplacementPresent: boolean;
+
+  detachResetAccessoriesPresent: boolean;
+};
+
+type ScopeModuleResult = {
+  id: string;
+  title: string;
+  body: string;
+};
+
+function detectScopeSignals(combined: string): ScopeJustificationSignals {
+  const lower = combined.toLowerCase();
+  return {
+    roofDamage: /roof damage|damaged shingle|wind damage.*slope|shingle.*crease|shingle.*missing/i.test(combined),
+    multiSlopeRoof: /front slope|back slope|left slope|right slope|multiple slopes|all slopes/i.test(combined),
+    underlaymentInScope: /underlayment|ice.?and.?water|synthetic underlayment|felt paper|30.?lb felt/i.test(combined),
+    ridgePresent: /ridge cap|ridge vent|ridge line|hip ridge/i.test(combined),
+
+    sidingDamage: /siding damage|damaged siding|vinyl siding damaged|cracked siding|punctured siding|displaced siding/i.test(combined),
+    multipleDamagedElevations: /front.*elevation.*damage|back.*elevation.*damage|left.*elevation.*damage|right.*elevation.*damage|(two|three|four|multiple)\s+elevation/i.test(combined),
+    rearElevationPresent: /rear elevation|back elevation/i.test(combined),
+    layeredSidingAssembly: /layered.*assembly|underlying.*material|wood.*shake.*under|multiple.*layer|substrate.*beneath/i.test(combined),
+    woodShakeUnderVinyl: /wood shake.*under.*vinyl|shake.*beneath.*vinyl|original.*shake.*vinyl/i.test(combined),
+    fanfoldPresent: /fanfold|fan.?fold insulation|fanfold board/i.test(combined),
+    houseWrapPresent: /house\s*wrap|tyvek|weather.?resistive.?barrier|wrb/i.test(combined),
+
+    codeUpgradePresent: /code upgrade|building code|irc|ibc|code.?required|code.?compliance|permit.*required/i.test(combined),
+    sheathingReplacementPresent: /sheathing.*replace|replace.*sheathing|decking.*replace|replace.*decking|osb.*replace|plywood.*replace/i.test(combined),
+
+    detachResetAccessoriesPresent: /detach.*reset|d\s*&\s*r|remove.*reinstall|satellite.*dish|gutter.*apron|drip.?edge|pipe.*jack|vent.*boot|flashing/i.test(combined),
+  };
+}
+
+function buildRidgeContinuityModule(signals: ScopeJustificationSignals): ScopeModuleResult | null {
+  if (!signals.roofDamage) return null;
+  if (!signals.multiSlopeRoof && !signals.ridgePresent) return null;
+  if (!signals.underlaymentInScope) return null;
+
+  return {
+    id: 'ridge_continuity',
+    title: 'Roof System Integration',
+    body: 'Although direct damage is concentrated on the affected slope, proper underlayment installation requires continuous integration and overlap at the ridge in accordance with manufacturer specifications and applicable building requirements. For that reason, the roofing scope cannot be limited to isolated patch repair where system continuity would be interrupted.',
+  };
+}
+
+function buildLayeredSidingModule(signals: ScopeJustificationSignals): ScopeModuleResult | null {
+  if (!signals.sidingDamage) return null;
+  if (!signals.layeredSidingAssembly && !signals.woodShakeUnderVinyl) return null;
+
+  return {
+    id: 'layered_siding_assembly',
+    title: 'Exterior Assembly Interdependency',
+    body: 'Field observations identified a layered wall assembly, including underlying materials beneath the current siding system. Because repair of the damaged elevations necessarily disturbs the adjoining assembly, selective replacement is not feasible without extending removal as needed to properly access, integrate, and reinstall the exterior system.',
+  };
+}
+
+function buildAdjoiningElevationModule(signals: ScopeJustificationSignals): ScopeModuleResult | null {
+  if (!signals.sidingDamage) return null;
+  if (!signals.multipleDamagedElevations) return null;
+
+  return {
+    id: 'adjoining_elevation_integration',
+    title: 'Adjoining Elevation Tie-In',
+    body: 'Where the siding system continues across connected elevations, repair cannot be confined to isolated sections without creating tie-in, fastening, and uniformity issues. Extension into adjoining elevations is required where necessary to complete a continuous and proper exterior restoration.',
+  };
+}
+
+function buildCodeUpgradeModule(signals: ScopeJustificationSignals): ScopeModuleResult | null {
+  if (!signals.codeUpgradePresent) return null;
+
+  return {
+    id: 'code_upgrade_trigger',
+    title: 'Building Code Upgrade Applicability',
+    body: 'The documented repair scope triggers applicable building code upgrade requirements. Where the scope of repair exceeds the threshold for like-kind restoration, current code standards must be applied. These code-driven costs are a direct consequence of the covered loss and are presented as part of the insured repair scope.',
+  };
+}
+
+function buildDetachResetModule(signals: ScopeJustificationSignals): ScopeModuleResult | null {
+  if (!signals.detachResetAccessoriesPresent) return null;
+  if (!signals.roofDamage && !signals.sidingDamage) return null;
+
+  return {
+    id: 'detach_reset_accessories',
+    title: 'Detach and Reset Scope',
+    body: 'Proper repair of the damaged system requires detachment and reset of affixed components and accessories. These items cannot remain in place during restoration without risk of damage or improper reinstallation and are included as necessary access and completion items within the repair scope.',
+  };
+}
+
+function buildSheathingModule(signals: ScopeJustificationSignals): ScopeModuleResult | null {
+  if (!signals.sheathingReplacementPresent) return null;
+  if (!signals.roofDamage) return null;
+
+  return {
+    id: 'sheathing_replacement',
+    title: 'Substrate Replacement Scope',
+    body: 'The documentation supports replacement of damaged roof decking or sheathing beneath the covering system. Covering replacement cannot proceed without addressing compromised substrate, as manufacturer warranties and code compliance require a sound, uniform deck surface for proper installation.',
+  };
+}
+
+function buildFanfoldHouseWrapModule(signals: ScopeJustificationSignals): ScopeModuleResult | null {
+  if (!signals.sidingDamage) return null;
+  if (!signals.fanfoldPresent && !signals.houseWrapPresent) return null;
+
+  return {
+    id: 'fanfold_housewrap',
+    title: 'Weather-Resistive Barrier Scope',
+    body: 'Removal of the damaged siding system exposes the weather-resistive barrier or fanfold insulation layer beneath. Where siding replacement is required, the underlying barrier must be inspected and replaced as needed to maintain the exterior envelope and comply with applicable building standards.',
+  };
+}
+
+function buildAllScopeModules(signals: ScopeJustificationSignals): ScopeModuleResult[] {
+  const builders = [
+    buildRidgeContinuityModule,
+    buildLayeredSidingModule,
+    buildAdjoiningElevationModule,
+    buildCodeUpgradeModule,
+    buildDetachResetModule,
+    buildSheathingModule,
+    buildFanfoldHouseWrapModule,
+  ];
+  return builders.map((fn) => fn(signals)).filter((m): m is ScopeModuleResult => m !== null);
+}
+
+function renderScopeModules(modules: ScopeModuleResult[]): string {
+  if (!modules.length) return 'No additional scope justification modules activated.';
+
+  return [
+    'AUTO-INJECTED SCOPE JUSTIFICATION MODULES',
+    '',
+    ...modules.flatMap((m) => [`[${m.title}]`, m.body, '']),
+  ].join('\n');
 }
 
 function postValidateDemandPackage(text: string, summaryText: string): string[] {
@@ -6658,9 +6813,14 @@ ${genConfig.rules ? `\nMANDATORY RULES:\n${genConfig.rules.map((r: string) => `-
           userInstructionsText: dpContext.additionalInstructions || '',
         });
         const renderedEvSummary = renderDemandEvidenceSummary(demandEvSummary);
+        // Build scope justification modules from evidence signals
+        const scopeSignals = detectScopeSignals(extractedTextForEvidence);
+        const activeModules = buildAllScopeModules(scopeSignals);
+        const scopeModuleText = renderScopeModules(activeModules);
         // Store for post-validation access
         (dpContext as any)._demandEvidenceSummaryText = renderedEvSummary;
         (dpContext as any)._demandEvidenceSummary = demandEvSummary;
+        (dpContext as any)._scopeModules = activeModules;
 
         userPrompt = `${claimSummary}
 
@@ -6689,6 +6849,15 @@ ${renderedEvSummary}
 === END STRUCTURED EVIDENCE ANALYSIS ===
 
 CRITICAL: The evidence summary above is your source of truth. Only claim damage categories marked as supported=yes. Exclude all categories marked supported=no. If hard warnings say "Do not claim X damage", you MUST NOT mention X damage in any section.
+
+=== SCOPE JUSTIFICATION MODULES ===
+${scopeModuleText}
+=== END SCOPE JUSTIFICATION MODULES ===
+
+Rules for scope justification modules:
+- Use active scope justification modules where relevant.
+- Do not state a module conclusion unless it is supported by the evidence summary.
+- Treat modules as repair-scope justification, not as separate damage findings.
 
 EVIDENCE DOCUMENTS PROVIDED FOR ANALYSIS (${evidenceSummary.documentCount || dpContext.documentCount || 0} total):
 ${docList}
