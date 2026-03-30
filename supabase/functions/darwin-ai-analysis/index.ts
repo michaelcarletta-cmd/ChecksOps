@@ -6933,20 +6933,7 @@ ${genConfigBlock}
 
 ${kbContent || ''}
 
-=== STRUCTURED EVIDENCE ANALYSIS (EVIDENCE-LOCKED — FOLLOW STRICTLY) ===
-${renderedEvSummary}
-=== END STRUCTURED EVIDENCE ANALYSIS ===
-
-CRITICAL: The evidence summary above is your source of truth. Only claim damage categories marked as supported=yes. Exclude all categories marked supported=no. If hard warnings say "Do not claim X damage", you MUST NOT mention X damage in any section.
-
-=== SCOPE JUSTIFICATION MODULES ===
-${scopeModuleText}
-=== END SCOPE JUSTIFICATION MODULES ===
-
-Rules for scope justification modules:
-- Use active scope justification modules where relevant.
-- Do not state a module conclusion unless it is supported by the evidence summary.
-- Treat modules as repair-scope justification, not as separate damage findings.
+${lockedInstructions}
 
 EVIDENCE DOCUMENTS PROVIDED FOR ANALYSIS (${evidenceSummary.documentCount || dpContext.documentCount || 0} total):
 ${docList}
@@ -6955,14 +6942,7 @@ ${(evidenceSummary.photoCount || dpContext.photoCount || 0) > 0 ? `PHOTOS PROVID
 
 ${dpContext.additionalInstructions ? `USER INSTRUCTIONS:\n${dpContext.additionalInstructions}` : ''}
 
-IMPORTANT: The PDF documents and photos have been provided for you to analyze. Read through each document carefully and extract:
-- Specific damage findings and measurements
-- Inspector/engineer observations and conclusions
-- Weather conditions and weather report data
-- Cost estimates and line items
-- Photo damage documentation and material conditions
-- Code requirements and manufacturer specifications
-- Any other relevant evidence
+IMPORTANT: Read each uploaded document carefully and extract specific details, quotes, measurements, and findings. Do not make generic statements — use the actual evidence from the documents.
 
 IMPORTANT: You must include a dedicated section titled "Counterfactual Causation Test."
 In that section:
@@ -6970,14 +6950,11 @@ In that section:
 2. Answer the question directly with Yes, No, or Indeterminate.
 3. Explain whether the observed damage would exist in the same form, extent, and timing absent the reported loss event.
 4. Identify the evidence supporting that answer.
-5. Identify competing explanations considered, including wear and tear, deterioration, foot traffic, installation defects, prior repairs, deferred maintenance, or other non-covered causes if relevant.
+5. Identify competing explanations considered.
 6. Explain whether those competing explanations better account for the observed condition.
-7. If the evidence is insufficient to establish causation confidently, say so explicitly and identify the missing proof needed.
+7. If the evidence is insufficient to establish causation confidently, say so explicitly.
 
-IMPORTANT: EVIDENCE GAPS must be identified explicitly and classified as:
-- Critical
-- Helpful
-- Optional
+IMPORTANT: EVIDENCE GAPS must be identified explicitly and classified as Critical, Helpful, or Optional.
 
 COMPANY INFORMATION FOR HEADER/SIGNATURE:
 Company: ${companyName}
@@ -6986,204 +6963,9 @@ Phone: ${companyPhone}
 Email: ${companyEmail}
 Assigned Adjuster: ${assignedUserName}
 
-Create a COMPREHENSIVE DEMAND PACKAGE with the following exact structure. DO NOT USE *** OR MARKDOWN:
+Generate the demand package following the OUTPUT STRUCTURE from the system prompt. Use plain text only — no markdown. Focus on REPAIRABILITY, UNIFORM APPEARANCE, PRE-LOSS CONDITION, and INDEMNIFICATION. NEVER use the word "matching".
 
-================================================================================
-                              DEMAND PACKAGE
-                        ${companyName}
-                       ${companyAddress}
-================================================================================
-
-TABLE OF CONTENTS
-
-I. Summary of Findings
-II. Cause of Loss
-III. Damaged Components
-IV. Weather Conditions Analysis
-V. Condition of Damaged Components (Per Reports)
-VI. Why Repairs Are Not Feasible - Repairability Analysis
-VII. Why Partial Repairs Are Not Feasible  
-VIII. Interdependency of Building Systems
-IX. Why Damaged Areas Must Be Disturbed for Repairs
-X. State/Local Code Requirements
-XI. Manufacturer Installation Standards (Adopted by Code)
-XII. HAAG Engineering Standards & Industry Best Practices
-XIII. Formal Demand and Conclusion
-
-================================================================================
-
-I. SUMMARY OF FINDINGS
-
-[Provide a comprehensive executive summary of the claim including:
-- Brief overview of the loss event
-- Total damages identified from all evidence documents
-- Settlement demand amount
-- Key evidence supporting why REPAIRS ARE NOT FEASIBLE - focus on structural integrity, material degradation, code compliance
-- Reference to previous successful settlements for similar loss types if available
-- Restoration to PRE-LOSS CONDITION requires full replacement per INDEMNIFICATION principles]
-
-================================================================================
-
-II. CAUSE OF LOSS
-
-[Detail the cause of loss based on weather data, inspection reports, and other evidence:
-- Date and nature of the loss event
-- Weather conditions at time of loss (from weather reports provided)
-- Wind speeds, hail sizes, precipitation data
-- How the event caused the documented damage
-- Timeline of events
-- Correlation between weather severity and damage patterns]
-
-================================================================================
-
-III. DAMAGED COMPONENTS
-
-[List and describe each damaged component identified in the evidence:
-- Component name and location
-- Type and extent of damage
-- Current condition and why it is IRREPARABLE
-- Reference to supporting documentation/photos
-- Note if materials are discontinued or manufacturer no longer supports repair]
-
-================================================================================
-
-IV. WEATHER CONDITIONS ANALYSIS
-
-[Analyze weather reports provided in the evidence:
-- Date of loss weather data with specific measurements
-- Wind speeds (sustained and gusts), hail size, precipitation
-- NWS storm reports and warnings issued
-- How weather conditions exceeded material tolerances
-- Correlation between weather event intensity and damage severity
-- Reference HailTrace, weather history, or other weather documentation]
-
-================================================================================
-
-V. CONDITION OF DAMAGED COMPONENTS (PER REPORTS)
-
-[Extract specific findings from inspection reports and estimates:
-- Quote specific observations from inspector/engineer reports
-- Include measurements, test results, damage descriptions
-- Reference which report each finding comes from
-- Note any HAAG-certified inspection findings
-- Document material age and pre-existing degradation that affects repairability]
-
-================================================================================
-
-VI. WHY REPAIRS ARE NOT FEASIBLE - REPAIRABILITY ANALYSIS
-
-[Core argument - explain why the damaged materials CANNOT BE REPAIRED:
-- Structural integrity has been compromised beyond repair
-- Material degradation prevents successful repair (UV oxidation, seal strip failure, brittleness)
-- Manufacturer specifications explicitly prohibit patching/partial repair
-- Code compliance cannot be achieved through repair
-- Safety concerns with repair vs replacement
-- Pre-loss condition cannot be restored through repair alone
-- Industry standards (NRCA, ARMA) require full replacement when damage exceeds thresholds
-- Reference HAAG damage identification criteria]
-
-================================================================================
-
-VII. WHY PARTIAL REPAIRS ARE NOT FEASIBLE
-
-[Explain why partial/spot repairs will not work:
-- Material discontinuation issues
-- Proper flashing and waterproofing cannot be achieved with partial work
-- Warranty implications - partial repairs void manufacturer warranties
-- Industry standards require complete system repair
-- Reference specific manufacturer guidelines that prohibit spot repairs
-- Uniform appearance cannot be maintained - affects property value
-- Adjacent materials disturbed during repair require replacement]
-
-================================================================================
-
-VIII. INTERDEPENDENCY OF BUILDING SYSTEMS
-
-[Explain how building components work together as a system:
-- Underlayment system interdependency with roofing
-- Flashing integration requirements at all penetrations
-- Ridge and ventilation system connections
-- Siding course alignment and weather barrier continuity
-- How damage to one component compromises the entire system
-- Why system must be addressed as a whole for proper restoration
-- Reference IRC and IBC requirements for system integrity]
-
-================================================================================
-
-IX. WHY DAMAGED AREAS MUST BE DISTURBED FOR REPAIRS
-
-[Explain necessary work that requires accessing adjacent areas:
-- Access requirements for proper repairs
-- Removal necessary to assess hidden damage
-- Tie-in requirements for new materials to existing
-- Building envelope integrity considerations
-- Step flashing, counter flashing requirements
-- Proper starter course and edge installations]
-
-================================================================================
-
-X. STATE AND LOCAL CODE REQUIREMENTS
-
-[Include applicable ${stateInfo.stateName} building codes:
-- International Residential Code (IRC) 2021 requirements
-- ${stateInfo.stateName} specific building code adoptions
-- Local jurisdiction code requirements
-- How these codes mandate full replacement for proper compliance
-- Reference specific code sections (e.g., IRC R905, R703)]
-
-================================================================================
-
-XI. MANUFACTURER INSTALLATION STANDARDS (ADOPTED BY CODE)
-
-[Reference manufacturer requirements that have force of law:
-- Specific manufacturer installation manuals
-- Warranty requirements that mandate certain installation practices
-- Standards that have been adopted by code
-- Why partial installation violates manufacturer standards
-- Reference ASTM standards for materials (D3161, D7158)
-- Why aged materials cannot meet original performance specifications]
-
-================================================================================
-
-XII. HAAG ENGINEERING STANDARDS & INDUSTRY BEST PRACTICES
-
-[Reference HAAG and industry standards:
-- HAAG damage identification methodology
-- HAAG thresholds for repair vs replacement recommendations
-- NRCA (National Roofing Contractors Association) guidelines
-- ARMA (Asphalt Roofing Manufacturers Association) standards
-- How these industry standards support full replacement
-- Reference specific damage patterns that meet replacement thresholds]
-
-================================================================================
-
-XIII. FORMAL DEMAND AND CONCLUSION
-
-Based on the evidence documented above, including the demonstrated IRREPARABILITY of the damaged materials and the policyholder's right to INDEMNIFICATION and restoration to PRE-LOSS CONDITION, we hereby formally demand payment of the full claim value as follows:
-
-[Include specific dollar amounts from estimates]
-
-Response is required within thirty (30) days pursuant to ${stateInfo.promptPayAct}.
-
-Failure to respond will result in escalation including but not limited to:
-- Filing complaint with ${stateInfo.stateName} Department of Insurance
-- Demand for appraisal per policy terms
-- Pursuit of bad faith claim if warranted based on documented timeline violations and regulatory non-compliance
-
-================================================================================
-
-${assignedUserName}
-Licensed Public Adjuster
-${companyName}
-${companyAddress}
-Phone: ${companyPhone}
-Email: ${companyEmail}
-
-Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-
-================================================================================
-
-Create a thorough, professional demand package using ALL evidence from the provided documents. Be specific and reference actual findings, measurements, and conclusions from the documents. NEVER use the word "matching" - focus on REPAIRABILITY, UNIFORM APPEARANCE, PRE-LOSS CONDITION, and INDEMNIFICATION. Focus on documenting damage thoroughly and explaining what is needed for proper repair. Leverage any uploaded training materials, videos, and knowledge base content to strengthen technical arguments.`;
+Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`;
         break;
       }
 
