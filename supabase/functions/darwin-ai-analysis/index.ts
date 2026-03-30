@@ -6850,6 +6850,15 @@ ${renderedEvSummary}
 
 CRITICAL: The evidence summary above is your source of truth. Only claim damage categories marked as supported=yes. Exclude all categories marked supported=no. If hard warnings say "Do not claim X damage", you MUST NOT mention X damage in any section.
 
+=== SCOPE JUSTIFICATION MODULES ===
+${scopeModuleText}
+=== END SCOPE JUSTIFICATION MODULES ===
+
+Rules for scope justification modules:
+- Use active scope justification modules where relevant.
+- Do not state a module conclusion unless it is supported by the evidence summary.
+- Treat modules as repair-scope justification, not as separate damage findings.
+
 EVIDENCE DOCUMENTS PROVIDED FOR ANALYSIS (${evidenceSummary.documentCount || dpContext.documentCount || 0} total):
 ${docList}
 
