@@ -9,6 +9,53 @@ const corsHeaders = {
 };
 
 type Json = Record<string, unknown>;
+type DemandMode = "standard" | "proven";
+
+const PROVEN_MODE_RULES = `
+You are generating a claim documentation package in "Proven Mode".
+
+CRITICAL INSTRUCTIONS:
+- Maintain authority but remain procedurally respectful
+- Do NOT use adversarial or demanding language
+- Do NOT instruct the carrier what they "must" do
+- Frame all conclusions as supported by documentation
+- Position all findings as assisting the carrier's investigation
+
+REQUIRED LANGUAGE STYLE:
+- Use phrases like:
+  - "based on observed conditions"
+  - "consistent with"
+  - "supports the conclusion that"
+  - "documentation indicates"
+  - "warrants consideration for"
+- Avoid phrases like:
+  - "must pay"
+  - "bad faith"
+  - "clearly covered"
+  - "failure to"
+
+TONE:
+- Professional
+- Neutral but confident
+- Cooperative, not submissive
+- Authoritative without being confrontational
+`;
+
+const PROVEN_MODE_OPENING = `
+We are submitting this claim along with a comprehensive documentation package to assist in your investigation and evaluation of the reported loss.
+
+The enclosed materials include our findings regarding cause of loss, observed damages, and supporting documentation relevant to scope and repair considerations.
+
+We understand that your standard process may include inspection and further evaluation, and this package is intended to streamline and assist that process from the outset.
+`;
+
+const PROCESS_ALIGNMENT = `
+This documentation is provided to align with and support your standard investigation process, including inspection, evaluation, and determination. The intent is to present a clear and well-supported understanding of the loss to facilitate an efficient and accurate resolution.
+`;
+
+const PROVEN_MODE_CLOSE = `
+We respectfully request your review of the enclosed materials and look forward to your determination. Should any additional information be required to assist in your evaluation, please advise and we will promptly provide it.
+`;
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -45,6 +92,10 @@ function pick(obj: Record<string, any>, keys: string[], fallback = ""): string {
 
 function normalizeLower(value: unknown): string {
   return safeString(value).toLowerCase();
+}
+
+function normalizeDemandMode(value: unknown): DemandMode {
+  return safeString(value).toLowerCase() === "proven" ? "proven" : "standard";
 }
 
 const FORBIDDEN_INSURANCE_TERM_REPLACEMENTS: Array<[RegExp, string]> = [
@@ -256,6 +307,7 @@ function buildDemandPrompt(args: {
   declaredPositionText: string;
   tone: string;
   carrierEstimateText: string;
+  mode: DemandMode;
 }) {
   const claim = args.claim || {};
   const insuredName = pick(claim, ["insured_name", "insured", "policyholder_name"], "Insured");
@@ -267,7 +319,8 @@ function buildDemandPrompt(args: {
 
   const masterStateText = args.masterState ? JSON.stringify(args.masterState, null, 2) : "No master state available.";
   const intelligenceText = args.intelligence ? JSON.stringify(args.intelligence, null, 2) : "No intelligence summary available.";
-  const toneBlock = getToneInstructions(args.tone);
+  const isProven = args.mode === "proven";
+  const toneBlock = isProven ? "" : getToneInstructions(args.tone);
 
   return `
 You are Darwin, an elite public adjuster demand-package engine.
@@ -278,7 +331,9 @@ Your task is to analyze:
 3. Claim timeline context
 4. Claim intelligence context
 
-Then generate a HIGH-PRESSURE, TECHNICALLY SOUND, COVERAGE-FOCUSED DEMAND PACKAGE that expands on the documents and presents the claim in a way that makes payment the reasonable next step for the carrier.
+Then generate a ${isProven ? "TECHNICALLY SOUND, DOCUMENTATION-DRIVEN CLAIM PACKAGE" : "HIGH-PRESSURE, TECHNICALLY SOUND, COVERAGE-FOCUSED DEMAND PACKAGE"} that expands on the documents and presents the claim in a way that makes ${isProven ? "an efficient and accurate carrier determination" : "payment the reasonable next step for the carrier"}.
+
+${isProven ? PROVEN_MODE_RULES : ""}
 
 IMPORTANT WRITING RULES:
 - Write as a professional public adjuster claim demand.
@@ -289,10 +344,12 @@ IMPORTANT WRITING RULES:
 - Every major damage observation should connect to scope and payment necessity.
 - Use counterfactual causation logic where helpful:
   "If not for the reported loss event, the observed condition would not be present."
-- Argue against incomplete, piecemeal, cosmetic, or partial repairs where the facts support full repair/replacement.
+- ${isProven
+    ? "Address incomplete, piecemeal, cosmetic, or partial repairs using documentation-backed reasoning where the facts support full repair/replacement."
+    : "Argue against incomplete, piecemeal, cosmetic, or partial repairs where the facts support full repair/replacement."}
 - Emphasize repairability limits, interdependency, uniform appearance, access, disturbance, code, manufacturer requirements, and restoration sequencing where supported. NEVER use the word "matching" — PA and NJ are NOT matching states.
-- If timeline facts support it, highlight claim-handling delay, inadequate investigation, under-scoping, or failure to account for the full loss.
-- Keep it assertive, evidence-driven, and carrier-facing.
+- If timeline facts support it, highlight claim-handling delay, inadequate investigation, under-scoping, or incomplete accounting of the full loss.
+- ${isProven ? "Keep it professional, neutral-but-confident, and evidence-driven." : "Keep it assertive, evidence-driven, and carrier-facing."}
 - Only analyze the selected insured-side documents provided for this demand package.
 - Do not reference carrier estimates, carrier reports, or competing scopes unless they were explicitly provided.
 - If no carrier estimate is provided, do not mention one.
@@ -305,14 +362,16 @@ IMPORTANT WRITING RULES:
 - If the inspection report identifies room/component-specific damage, fold that into the narrative so the estimate reads inevitable and justified.
 - If there are weak points or missing proof, identify them in the "strategic_notes" field only, not in the demand body.
 
-FORCE EXPANSION RULES (CRITICAL):
+${isProven ? "DOCUMENTATION EXPANSION RULES (CRITICAL):" : "FORCE EXPANSION RULES (CRITICAL):"}
 - You MUST expand every section beyond what is explicitly stated in the documents by applying professional construction, insurance, and claim-handling knowledge.
 - If the estimate includes a scope item, you must explain WHY it is required, not just restate it.
 - If the inspection identifies damage, you must connect it to:
   (a) repair necessity
   (b) replacement implications
   (c) system disturbance and access requirements
-- Assume the carrier is looking for reasons to underpay — your job is to remove that ability.
+- ${isProven
+    ? "Present each supported line item as technically justified and relevant to claim evaluation."
+    : "Assume the carrier is looking for reasons to underpay — your job is to remove that ability."}
 - Every line item in the estimate should feel inevitable and technically justified when read in context of the demand.
 
 REGULATORY PRESSURE RULES:
@@ -321,7 +380,7 @@ REGULATORY PRESSURE RULES:
   - incomplete scope evaluation
   - failure to account for full damage
   - under-scoping or cosmetic-only repair recommendations
-- Frame these as risks to the carrier without citing specific statutes unless provided.
+- Frame these as ${isProven ? "investigation and evaluation considerations" : "risks to the carrier"} without citing specific statutes unless provided.
 - Reference the carrier's obligations under standards of good-faith claim handling.
 ${toneBlock}
 
@@ -387,7 +446,15 @@ ${args.carrierEstimateText || "None provided."}
 
 FINAL REQUIREMENT:
 The "full_demand_package" field must be a polished, carrier-ready demand document with clear section headings:
-1. Executive Summary
+${isProven
+    ? `1. Summary of Findings
+2. Cause of Loss
+3. Damaged Components
+4. Repairability Analysis
+5. Code and Compliance Considerations
+6. Financial Summary
+7. Conclusion`
+    : `1. Executive Summary
 2. Cause of Loss Analysis
 3. Detailed Damage Findings
 4. Scope and Repair Justification
@@ -395,9 +462,20 @@ The "full_demand_package" field must be a polished, carrier-ready demand documen
 6. Code and Compliance Requirements
 7. System Interdependency Analysis
 8. Carrier Risk and Exposure
-9. Formal Demand
+9. Formal Demand`}
 
-The document should read like something a serious public adjuster would actually send to a carrier to push payment now.
+${isProven
+    ? `Use this opening in substance for the demand package introduction:
+${PROVEN_MODE_OPENING}
+
+Use this process alignment language in substance before the conclusion:
+${PROCESS_ALIGNMENT}
+
+Use this conclusion language in substance:
+${PROVEN_MODE_CLOSE}
+
+The document should read like a cooperative, documentation-led claim package intended to assist the carrier's investigation and determination.`
+    : "The document should read like something a serious public adjuster would actually send to a carrier to push payment now."}
 `.trim();
 }
 
@@ -493,6 +571,7 @@ Deno.serve(async (req) => {
     const declaredPositionText = safeString(body.declaredPositionText);
     const userNotes = safeString(body.userNotes);
     const tone = safeString(body.tone) || "standard"; // "standard" | "aggressive" | "litigation"
+    const mode = normalizeDemandMode(body.mode); // "standard" | "proven"
     const saveToMasterState = Boolean(body.saveToMasterState ?? true);
 
     if (!claimId) {
@@ -713,6 +792,7 @@ Deno.serve(async (req) => {
       declaredPositionText: resolvedDeclaredPosition,
       tone,
       carrierEstimateText: carrierEstimateBlock,
+      mode,
     });
 
     // Use centralized AI router with reasoning model — higher tokens for complete demands
@@ -728,7 +808,12 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          { role: "system", content: "You generate carrier-ready insurance demand packages. Return ONLY valid JSON — no markdown, no code fences, no commentary. Every section must be thorough, expanded, and litigation-aware." },
+          {
+            role: "system",
+            content: mode === "proven"
+              ? "You generate carrier-ready insurance claim documentation packages. Return ONLY valid JSON — no markdown, no code fences, no commentary. Every section must be thorough, expanded, and documentation-led."
+              : "You generate carrier-ready insurance demand packages. Return ONLY valid JSON — no markdown, no code fences, no commentary. Every section must be thorough, expanded, and litigation-aware.",
+          },
           { role: "user", content: prompt },
         ],
       }),
@@ -787,6 +872,7 @@ Deno.serve(async (req) => {
     const responsePayload = {
       success: true,
       claimId,
+      mode,
       tone,
       generatedAt: new Date().toISOString(),
       inputSummary: {
@@ -809,6 +895,7 @@ Deno.serve(async (req) => {
           ...currentState,
           demand_package: {
             generated_at: new Date().toISOString(),
+            mode,
             tone,
             title: demandPackage?.title || "",
             subject_line: demandPackage?.subject_line || "",
