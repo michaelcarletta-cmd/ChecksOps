@@ -6813,9 +6813,14 @@ ${genConfig.rules ? `\nMANDATORY RULES:\n${genConfig.rules.map((r: string) => `-
           userInstructionsText: dpContext.additionalInstructions || '',
         });
         const renderedEvSummary = renderDemandEvidenceSummary(demandEvSummary);
+        // Build scope justification modules from evidence signals
+        const scopeSignals = detectScopeSignals(extractedTextForEvidence);
+        const activeModules = buildAllScopeModules(scopeSignals);
+        const scopeModuleText = renderScopeModules(activeModules);
         // Store for post-validation access
         (dpContext as any)._demandEvidenceSummaryText = renderedEvSummary;
         (dpContext as any)._demandEvidenceSummary = demandEvSummary;
+        (dpContext as any)._scopeModules = activeModules;
 
         userPrompt = `${claimSummary}
 
