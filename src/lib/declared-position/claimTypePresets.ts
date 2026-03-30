@@ -12,7 +12,7 @@ export const CLAIM_TYPE_PRESETS: Record<string, Partial<Record<string, string>>>
     coverage_trigger_theory:
       "Coverage is triggered because fire and resulting smoke caused direct physical loss to covered property during the policy period.",
   },
-  matching_dispute: {
-    requested_remedy: "payment for full elevation or continuous material replacement",
+  repairability_dispute: {
+    requested_remedy: "payment for full elevation or continuous material replacement based on repairability",
   },
 };
