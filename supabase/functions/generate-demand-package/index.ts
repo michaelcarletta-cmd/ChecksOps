@@ -290,7 +290,7 @@ IMPORTANT WRITING RULES:
 - Use counterfactual causation logic where helpful:
   "If not for the reported loss event, the observed condition would not be present."
 - Argue against incomplete, piecemeal, cosmetic, or partial repairs where the facts support full repair/replacement.
-- Emphasize repairability limits, interdependency, matching, access, disturbance, code, manufacturer requirements, and restoration sequencing where supported.
+- Emphasize repairability limits, interdependency, uniform appearance, access, disturbance, code, manufacturer requirements, and restoration sequencing where supported. NEVER use the word "matching" — PA and NJ are NOT matching states.
 - If timeline facts support it, highlight claim-handling delay, inadequate investigation, under-scoping, or failure to account for the full loss.
 - Keep it assertive, evidence-driven, and carrier-facing.
 - Only analyze the selected insured-side documents provided for this demand package.

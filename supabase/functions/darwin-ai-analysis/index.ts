@@ -47,7 +47,7 @@ STEP 3: SCOPE DISCUSSION (Repair vs Replace)
 ONLY after coverage is supported:
 - Discuss feasibility of repair vs replacement
 - Apply policy loss settlement terms (RCV/ACV)
-- Consider matching, uniform appearance, and reasonable repair standards
+- Consider repairability, uniform appearance, and reasonable repair standards
 - Use regulations governing proper claim handling
 - Manufacturer specs may ONLY support method feasibility — they CANNOT deny coverage
 
@@ -172,6 +172,9 @@ const FORBIDDEN_INSURANCE_TERM_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\bwet\s+rot\b/gi, 'storm-damaged substrate'],
   [/\bdecay(?:ed|ing)?\b/gi, 'deterioration'],
   [/\brot(?:ted|ting|ten)?\b/gi, 'compromised'],
+  [/\bmatching\s+requirement(?:s)?\b/gi, 'repairability requirement'],
+  [/\buniform\s+matching\b/gi, 'uniform appearance'],
+  [/\bmatching\b/gi, 'repairability'],
 ];
 
 function sanitizeForbiddenInsuranceTerms(text: string): string {
@@ -985,6 +988,11 @@ function postValidateDemandPackageStrict(
   ];
   if (forbiddenTermPatterns.some((pattern) => pattern.test(text))) {
     errors.push('FORBIDDEN TERMINOLOGY LOCK: non-covered substrate wording detected. Replace with approved phrasing (e.g., compromised decking, damaged sheathing, storm-damaged substrate).');
+  }
+
+  // ── Matching terminology lock (PA/NJ are NOT matching states) ──
+  if (/\bmatching\b/i.test(text)) {
+    errors.push('MATCHING TERMINOLOGY LOCK: "matching" is forbidden in demand packages for PA/NJ. Use "repairability", "uniform appearance", or "pre-loss condition restoration" instead.');
   }
 
   // ── Advocacy lock ──
@@ -6990,7 +6998,7 @@ ${genConfig.rules ? `\nMANDATORY RULES:\n${genConfig.rules.map((r: string) => `-
           roof_wind_hail: 'Heavy emphasis on causation (wind/hail), HAAG standards, weather data correlation, seal strip degradation, repairability analysis, and manufacturer specs for roofing materials.',
           interior_water: 'Emphasize water intrusion source, moisture testing/readings, mold prevention requirements, drying protocols, secondary damage documentation, and full mitigation scope.',
           engineer_rebuttal: 'Primary focus on rebutting carrier engineer conclusions. Challenge scope of inspection, time on site, selective reporting, ASTM rating fallacy for aged materials, and carrier-bias indicators.',
-          repairability_matching: 'Core focus on why repair is infeasible: material discontinuation, manufacturer repair prohibitions, code compliance, system interdependency, uniform appearance, and pre-loss condition restoration.',
+          repairability: 'Core focus on why repair is infeasible: material discontinuation, manufacturer repair prohibitions, code compliance, system interdependency, uniform appearance, and pre-loss condition restoration.',
           code_upgrade: 'Emphasize building code upgrade requirements triggered by repair scope, IRC/IBC code sections, local amendments, permitting requirements, and why code upgrades are covered loss costs.',
           partial_denial_rebuttal: 'Focus on rebutting partial scope denial: prove all denied items are covered, causation for each denied item, inconsistency in carrier reasoning, and bad faith indicators for partial denial.',
           coverage_trigger_dispute: 'Emphasize direct physical loss trigger language, ensuing loss doctrine, storm-created opening analysis, and policy trigger interpretation. Prove the covered event initiated the loss chain. Address carrier burden when exclusion is asserted — carrier must prove exclusion applies after the insured establishes a prima facie covered loss.',
