@@ -990,6 +990,11 @@ function postValidateDemandPackageStrict(
     errors.push('FORBIDDEN TERMINOLOGY LOCK: non-covered substrate wording detected. Replace with approved phrasing (e.g., compromised decking, damaged sheathing, storm-damaged substrate).');
   }
 
+  // ── Matching terminology lock (PA/NJ are NOT matching states) ──
+  if (/\bmatching\b/i.test(text)) {
+    errors.push('MATCHING TERMINOLOGY LOCK: "matching" is forbidden in demand packages for PA/NJ. Use "repairability", "uniform appearance", or "pre-loss condition restoration" instead.');
+  }
+
   // ── Advocacy lock ──
   const forbiddenSelfUnderminingPhrases = [
     'severely deficient', 'deficient estimate', 'deficient documentation',
