@@ -457,10 +457,27 @@ function buildDemandEvidenceSummary(input: {
   if (/main material:\s*brick/i.test(inspection) || /brick block/i.test(inspection)) exteriorFacts.push('Exterior wall material is brick.');
   if (/condition:\s*good/i.test(inspection) && /main material:\s*brick/i.test(inspection)) exteriorFacts.push('Brick exterior is documented in good condition.');
 
+  // ── Step 5: Enhanced siding detection ──
   const sidingAffirmativelySupported = demandIncludesAny(lower, [
     /siding damage was found/, /cracked siding/, /punctured siding/,
     /displaced siding/, /broken siding/, /vinyl siding damaged/,
+    /storm\s*related\s*damage\s*found\s*on\s*the\s*(front|back|left|right)(\s*and\s*(front|back|left|right))?\s*elevation/i,
+    /vinyl\s*siding\s*yes\s*\d+\s*of\s*\d+\s*sq\s*ft/i,
   ]);
+
+  const sidingQuantityMatch = combined.match(/vinyl\s*siding\s*yes\s*(\d+)\s*of\s*(\d+)\s*sq\s*ft/gi);
+  const sidingQuantityFacts: string[] = [];
+  if (sidingQuantityMatch) {
+    for (const m of sidingQuantityMatch) {
+      sidingQuantityFacts.push(`Siding damage documented: ${m.trim()}`);
+    }
+  }
+  const sidingElevationMatch = combined.match(/storm\s*related\s*damage\s*found\s*on\s*the\s*(front|back|left|right)(\s*and\s*(front|back|left|right))?\s*elevation/gi);
+  if (sidingElevationMatch) {
+    for (const m of sidingElevationMatch) {
+      sidingQuantityFacts.push(`Elevation damage: ${m.trim()}`);
+    }
+  }
 
   const sidingUnsupported =
     !sidingAffirmativelySupported &&
@@ -474,9 +491,11 @@ function buildDemandEvidenceSummary(input: {
     { category: 'tarp_temporary_repairs', supported: tarpFacts.length > 0, confidence: tarpFacts.length > 1 ? 'high' : tarpFacts.length ? 'medium' : 'low', facts: tarpFacts },
     { category: 'brick_exterior', supported: exteriorFacts.length > 0, confidence: exteriorFacts.length > 1 ? 'high' : 'medium', facts: exteriorFacts },
     {
-      category: 'siding', supported: sidingAffirmativelySupported, confidence: sidingAffirmativelySupported ? 'medium' : 'low',
+      category: 'siding',
+      supported: sidingAffirmativelySupported,
+      confidence: sidingAffirmativelySupported && sidingQuantityFacts.length > 0 ? 'high' : sidingAffirmativelySupported ? 'medium' : 'low',
       facts: sidingAffirmativelySupported
-        ? ['Siding damage is affirmatively supported by the selected evidence.']
+        ? ['Siding damage is affirmatively supported by the selected evidence.', ...sidingQuantityFacts]
         : sidingUnsupported
           ? ['Siding damage is not supported by the selected evidence and must be excluded.']
           : [],
@@ -500,11 +519,18 @@ function buildDemandEvidenceSummary(input: {
     },
   ];
 
-  const dwellingRCV = demandParseMoney(estimate, /summary for dwelling.*?replacement cost value\s*\$([0-9,]+\.[0-9]{2})/i);
-  const otherStructuresRCV = demandParseMoney(estimate, /summary for other structures.*?replacement cost value\s*\$([0-9,]+\.[0-9]{2})/i);
-  const totalRCV =
+  // ── Step 6: Strict RCV extraction ──
+  // Primary: "summary for dwelling" ... "replacement cost value $X"
+  const dwellingRCV = demandParseMoney(estimate, /summary\s+for\s+dwelling[\s\S]*?replacement\s+cost\s+value\s*\$([0-9,]+\.[0-9]{2})/i);
+  const otherStructuresRCV = demandParseMoney(estimate, /summary\s+for\s+other\s+structures[\s\S]*?replacement\s+cost\s+value\s*\$([0-9,]+\.[0-9]{2})/i);
+  // Total: try explicit total first, then RCV before "net claim", then fall back to dwelling-only
+  let totalRCV =
     demandParseMoney(estimate, /total\s+([0-9,]+\.[0-9]{2})\s+100\.00%/i) ||
-    demandParseMoney(estimate, /replacement cost value\s*\$([0-9,]+\.[0-9]{2})/i);
+    demandParseMoney(estimate, /replacement\s+cost\s+value\s*\$([0-9,]+\.[0-9]{2})[\s\S]*?net\s+claim/i);
+  // If only dwelling exists, use it as totalRCV
+  if (!totalRCV && dwellingRCV) {
+    totalRCV = dwellingRCV;
+  }
 
   // ── Posture-aware hard warnings ──
   if (posture === 'initial_demand') {
