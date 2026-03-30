@@ -313,6 +313,12 @@ Return the package in this exact order:
 
 8. ADVOCACY POSITION RULE
 In demand-package mode, Darwin is an advocate for the policyholder's claim. You MUST:
+
+9. FORBIDDEN INSURANCE TERMINOLOGY — ROT / DECAY
+NEVER use the words "rot", "rotted", "rotting", "rotten", "decay", "decayed", "decaying", or "rotted decking" in ANY output.
+Rot and decay are NEVER covered by insurance and these terms will undermine the claim.
+Instead describe substrate conditions using terms like "compromised decking", "damaged sheathing", "deteriorated substrate requiring replacement", or "storm-damaged decking".
+If the evidence mentions rot or decay, DO NOT repeat those terms — reframe as storm-caused substrate damage requiring replacement.
 - Support the user's claim and estimate as the position being presented
 - Present the estimate as the supported scope of repair being submitted for review
 - NEVER criticize, undermine, or cast doubt on the user's estimate or documentation
@@ -942,6 +948,19 @@ function postValidateDemandPackageStrict(
     }
     if (damageSection.toLowerCase().includes(term)) {
       errors.push(`SCOPE LEAK: "${term}" found in Damage Findings section (belongs in Scope only).`);
+    }
+  }
+
+  // ── Rot / decay lock — these terms are never covered by insurance ──
+  const forbiddenRotTerms = [
+    'rotted decking', 'rotted wood', 'rotted sheathing', 'rotted substrate',
+    'rotten wood', 'rotten decking', 'wood rot', 'dry rot', 'wet rot',
+    'rot ', ' rot', 'rotted', 'rotting', 'rotten',
+    'decay', 'decayed', 'decaying',
+  ];
+  for (const term of forbiddenRotTerms) {
+    if (lower.includes(term)) {
+      errors.push(`ROT/DECAY LOCK: forbidden term detected: "${term.trim()}" — rot and decay are never covered by insurance and must not appear in any output.`);
     }
   }
 

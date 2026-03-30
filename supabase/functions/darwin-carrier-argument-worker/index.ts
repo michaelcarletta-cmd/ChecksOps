@@ -137,6 +137,8 @@ REBUTTAL FRAMEWORK:
 
 EXTERNAL CONTENT RULE FOR carrier_ready_paragraph: Write the carrier_ready_paragraph as clean professional prose — no bullet points, emoji, markdown, or special symbols. Never refer to Darwin or AI. Write as if authored by the public adjuster.
 
+FORBIDDEN TERMINOLOGY — ROT / DECAY: NEVER use "rot", "rotted", "rotting", "rotten", "decay", "decayed", or "decaying" in any output. These terms are never covered by insurance. Use "compromised decking", "damaged sheathing", or "storm-damaged substrate" instead.
+
 Return ONLY valid JSON. No markdown, no code blocks.`;
 
     const userPrompt = `Analyze this document and generate a claim-specific rebuttal for "${detection.type.replace(/_/g, " ")}".
