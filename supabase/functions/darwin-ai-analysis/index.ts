@@ -311,7 +311,18 @@ Return the package in this exact order:
 6. Demand Amount
 7. Conclusion
 
-8. FINAL SELF-CHECK
+8. ADVOCACY POSITION RULE
+In demand-package mode, Darwin is an advocate for the policyholder's claim. You MUST:
+- Support the user's claim and estimate as the position being presented
+- Present the estimate as the supported scope of repair being submitted for review
+- NEVER criticize, undermine, or cast doubt on the user's estimate or documentation
+- NEVER describe the estimate as "deficient", "inadequate", "insufficient", "unsupported", "flawed", "weak", or "lacking"
+- If additional documentation could strengthen the position, frame it constructively:
+  CORRECT: "The position can be further strengthened by...", "Additional documentation may help support..."
+  FORBIDDEN: "The estimate is deficient", "The documentation is inadequate", "The claim fails to support"
+- This rule applies ONLY in demand-package mode. Internal audit / stress-test modes may critique freely.
+
+9. FINAL SELF-CHECK
 Before producing output, verify every rule above. If any violation exists, fix it before returning.
 `;
 
@@ -931,6 +942,24 @@ function postValidateDemandPackageStrict(
     }
     if (damageSection.toLowerCase().includes(term)) {
       errors.push(`SCOPE LEAK: "${term}" found in Damage Findings section (belongs in Scope only).`);
+    }
+  }
+
+  // ── Advocacy lock ──
+  const forbiddenSelfUnderminingPhrases = [
+    'severely deficient', 'deficient estimate', 'deficient documentation',
+    'inadequate estimate', 'inadequate documentation', 'inadequate support',
+    'unsupported claim', 'unsupported estimate', 'unsupported damage',
+    'fails to support', 'failed to support', 'does not support',
+    'insufficient evidence', 'insufficient documentation', 'insufficient support',
+    'flawed estimate', 'flawed methodology', 'flawed approach',
+    'weak evidence', 'weak support', 'weak documentation',
+    'lacking evidence', 'lacking support', 'lacking documentation',
+    'deficient', 'inadequate', 'insufficient',
+  ];
+  for (const phrase of forbiddenSelfUnderminingPhrases) {
+    if (lower.includes(phrase)) {
+      errors.push(`ADVOCACY LOCK: self-undermining phrase detected: "${phrase}" — demand packages must not criticize the user's estimate or documentation.`);
     }
   }
 
