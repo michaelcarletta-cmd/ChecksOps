@@ -271,71 +271,37 @@ const LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES: Array<{ label: string; regex: R
 const DEMAND_PACKAGE_SYSTEM_PROMPT = `
 You are Darwin, an insurance-claim demand package writer.
 
-You generate carrier-facing initial demand packages and supplemental/rebuttal packages.
-You must correctly identify the procedural posture from the file evidence.
-
 NON-NEGOTIABLE CORE RULES
 
-1. EVIDENCE LOCK
-- Only describe facts, damage categories, and claim posture supported by the selected files.
-- Do not invent damages, coverage disputes, prior carrier findings, delays, underpayments, denials, or bad-faith themes.
-- Do not convert ambiguous or old condition into storm damage.
+1. EVIDENCE AUTHORITY
+The evidence summary provided below is your SOLE source of truth.
+Do not invent, infer, or speculate about any fact not present in the evidence summary.
+Every damage category, cause of loss, and dollar amount must come from the evidence summary.
 
 2. PROCEDURAL POSTURE LOCK
-Before writing, determine whether the selected files support one of these postures:
-
-POSTURE A: INITIAL DEMAND
-Use this when the file set contains inspection reports, estimates, photos, expert support, or claim presentation materials,
-but does NOT contain evidence of:
-- carrier estimate
-- carrier denial
-- carrier payment
-- carrier coverage position
-- carrier engineer report
-- carrier scope disagreement
-- prior submission to carrier
-- timeline delay / failure to respond
-
-POSTURE B: SUPPLEMENT / REBUTTAL
-Use this only when the file set affirmatively shows:
-- a carrier position, payment, estimate, denial, reservation, engineer report, or written disagreement
-- or the user explicitly states the package is a rebuttal / supplement / dispute response
-
-If POSTURE A applies:
-- Title and describe the document as an initial demand package or initial claim presentation
-- Do NOT say the claim was adjusted, underpaid, under-scoped, mishandled, delayed, denied, or inadequately investigated
-- Do NOT say "carrier failed," "carrier exposure," "carrier risk," "bad faith," or equivalent
-- Do NOT imply prior submission unless evidence proves it
-
-If POSTURE B applies:
-- You may describe the actual carrier position, but only if supported by the file set
+POSTURE A — INITIAL DEMAND: No accusation, no carrier misconduct, no "failed to", "bad faith", "underpaid", "wrongfully", "carrier error", "escalation", "mishandled", "delayed".
+POSTURE B — SUPPLEMENT / REBUTTAL: May describe carrier position only if evidence summary supports it.
 
 3. DAMAGE CATEGORY LOCK
-- Only include damage categories affirmatively supported by the evidence
-- If inspection says no hail damage, exclude hail
-- If files do not support siding damage, exclude siding
-- If elevations are reported undamaged, do not claim elevation/siding damage
-- If fence/tree-impact/other-structures items appear anywhere in estimate/photos/findings, include them
+Never introduce a damage category not marked supported=yes in the evidence summary.
+Never omit a category marked supported=yes.
+If a hard warning says "Do not claim X damage", that category MUST NOT appear.
 
-4. DEMAND TONE RULES
-For INITIAL DEMAND posture:
-- Use a firm but neutral, professional, carrier-facing tone focused on supported damages and requested payment
-- Prefer these phrases:
-  "submitted for review"
-  "presented for consideration"
-  "supported by the enclosed materials"
-  "the file reflects"
-  "the documentation shows"
-- Do not use accusatory language
-- Avoid these phrases:
-  "failed to"
-  "improperly"
-  "wrongfully"
-  "underpaid"
-  "carrier error"
-  "bad faith"
+4. AMOUNT LOCK
+Use ONLY the exact estimate totals from the evidence summary.
+If a total is marked "not found", state the demand is "per the enclosed estimate" — never fabricate a number.
 
-5. OUTPUT STRUCTURE
+5. SCOPE JUSTIFICATION MODULE RULE
+Scope justification modules may ONLY appear in sections discussing repair scope, interdependency, or feasibility.
+Do NOT treat a scope module as proof of a separate cause of loss or separate damage finding.
+Do NOT mention scope module concepts in the Cause of Loss or Damage Findings sections.
+
+6. TONE RULES
+For INITIAL DEMAND posture, use firm but neutral professional language:
+PREFERRED: "submitted for review", "presented for consideration", "supported by the enclosed materials", "the file reflects", "the documentation shows"
+FORBIDDEN: "failed to", "improperly", "wrongfully", "underpaid", "carrier error", "bad faith", "escalation", "mishandled"
+
+7. OUTPUT STRUCTURE
 Return the package in this exact order:
 1. Executive Summary
 2. Cause of Loss
@@ -345,19 +311,8 @@ Return the package in this exact order:
 6. Demand Amount
 7. Conclusion
 
-6. SCOPE JUSTIFICATION MODULE RULE
-If an auto-injected scope justification module is present, you may use it only to explain why the repair scope extends beyond the immediately visible damage. Do not treat a scope justification module as proof of a separate cause of loss or a separate category of direct physical damage.
-
-7. FINAL SELF-CHECK
-Before producing output, verify:
-- Did I wrongly imply carrier misconduct?
-- Did I wrongly imply prior adjustment?
-- Did I add unsupported siding, hail, or freeze?
-- Did I include fence / tree impact if present?
-- Did I use exact estimate totals if found?
-- Did I misuse a scope justification module as a separate damage finding?
-
-If any answer is wrong, fix it before returning the package.
+8. FINAL SELF-CHECK
+Before producing output, verify every rule above. If any violation exists, fix it before returning.
 `;
 
 type DemandPackagePosture = 'initial_demand' | 'supplement_or_rebuttal';
@@ -502,10 +457,27 @@ function buildDemandEvidenceSummary(input: {
   if (/main material:\s*brick/i.test(inspection) || /brick block/i.test(inspection)) exteriorFacts.push('Exterior wall material is brick.');
   if (/condition:\s*good/i.test(inspection) && /main material:\s*brick/i.test(inspection)) exteriorFacts.push('Brick exterior is documented in good condition.');
 
+  // ── Step 5: Enhanced siding detection ──
   const sidingAffirmativelySupported = demandIncludesAny(lower, [
     /siding damage was found/, /cracked siding/, /punctured siding/,
     /displaced siding/, /broken siding/, /vinyl siding damaged/,
+    /storm\s*related\s*damage\s*found\s*on\s*the\s*(front|back|left|right)(\s*and\s*(front|back|left|right))?\s*elevation/i,
+    /vinyl\s*siding\s*yes\s*\d+\s*of\s*\d+\s*sq\s*ft/i,
   ]);
+
+  const sidingQuantityMatch = combined.match(/vinyl\s*siding\s*yes\s*(\d+)\s*of\s*(\d+)\s*sq\s*ft/gi);
+  const sidingQuantityFacts: string[] = [];
+  if (sidingQuantityMatch) {
+    for (const m of sidingQuantityMatch) {
+      sidingQuantityFacts.push(`Siding damage documented: ${m.trim()}`);
+    }
+  }
+  const sidingElevationMatch = combined.match(/storm\s*related\s*damage\s*found\s*on\s*the\s*(front|back|left|right)(\s*and\s*(front|back|left|right))?\s*elevation/gi);
+  if (sidingElevationMatch) {
+    for (const m of sidingElevationMatch) {
+      sidingQuantityFacts.push(`Elevation damage: ${m.trim()}`);
+    }
+  }
 
   const sidingUnsupported =
     !sidingAffirmativelySupported &&
@@ -519,9 +491,11 @@ function buildDemandEvidenceSummary(input: {
     { category: 'tarp_temporary_repairs', supported: tarpFacts.length > 0, confidence: tarpFacts.length > 1 ? 'high' : tarpFacts.length ? 'medium' : 'low', facts: tarpFacts },
     { category: 'brick_exterior', supported: exteriorFacts.length > 0, confidence: exteriorFacts.length > 1 ? 'high' : 'medium', facts: exteriorFacts },
     {
-      category: 'siding', supported: sidingAffirmativelySupported, confidence: sidingAffirmativelySupported ? 'medium' : 'low',
+      category: 'siding',
+      supported: sidingAffirmativelySupported,
+      confidence: sidingAffirmativelySupported && sidingQuantityFacts.length > 0 ? 'high' : sidingAffirmativelySupported ? 'medium' : 'low',
       facts: sidingAffirmativelySupported
-        ? ['Siding damage is affirmatively supported by the selected evidence.']
+        ? ['Siding damage is affirmatively supported by the selected evidence.', ...sidingQuantityFacts]
         : sidingUnsupported
           ? ['Siding damage is not supported by the selected evidence and must be excluded.']
           : [],
@@ -545,11 +519,18 @@ function buildDemandEvidenceSummary(input: {
     },
   ];
 
-  const dwellingRCV = demandParseMoney(estimate, /summary for dwelling.*?replacement cost value\s*\$([0-9,]+\.[0-9]{2})/i);
-  const otherStructuresRCV = demandParseMoney(estimate, /summary for other structures.*?replacement cost value\s*\$([0-9,]+\.[0-9]{2})/i);
-  const totalRCV =
+  // ── Step 6: Strict RCV extraction ──
+  // Primary: "summary for dwelling" ... "replacement cost value $X"
+  const dwellingRCV = demandParseMoney(estimate, /summary\s+for\s+dwelling[\s\S]*?replacement\s+cost\s+value\s*\$([0-9,]+\.[0-9]{2})/i);
+  const otherStructuresRCV = demandParseMoney(estimate, /summary\s+for\s+other\s+structures[\s\S]*?replacement\s+cost\s+value\s*\$([0-9,]+\.[0-9]{2})/i);
+  // Total: try explicit total first, then RCV before "net claim", then fall back to dwelling-only
+  let totalRCV =
     demandParseMoney(estimate, /total\s+([0-9,]+\.[0-9]{2})\s+100\.00%/i) ||
-    demandParseMoney(estimate, /replacement cost value\s*\$([0-9,]+\.[0-9]{2})/i);
+    demandParseMoney(estimate, /replacement\s+cost\s+value\s*\$([0-9,]+\.[0-9]{2})[\s\S]*?net\s+claim/i);
+  // If only dwelling exists, use it as totalRCV
+  if (!totalRCV && dwellingRCV) {
+    totalRCV = dwellingRCV;
+  }
 
   // ── Posture-aware hard warnings ──
   if (posture === 'initial_demand') {
@@ -765,50 +746,155 @@ function renderScopeModules(modules: ScopeModuleResult[]): string {
   ].join('\n');
 }
 
-function postValidateDemandPackage(text: string, summaryText: string): string[] {
+// ── Step 2: Locked instruction renderer ──
+
+function renderDemandPackageLockedInstructions(
+  summary: DemandEvidenceSummary,
+  scopeModules: ScopeModuleResult[],
+): string {
+  const lines: string[] = [];
+  lines.push('=== LOCKED EVIDENCE INSTRUCTIONS (AUTHORITATIVE — DO NOT DEVIATE) ===');
+  lines.push('');
+
+  // Structured facts by category
+  lines.push('SUPPORTED DAMAGE CATEGORIES:');
+  for (const f of summary.findings.filter(f => f.supported)) {
+    lines.push(`  [${f.category.toUpperCase()}] confidence=${f.confidence}`);
+    for (const fact of f.facts) lines.push(`    - ${fact}`);
+  }
+  lines.push('');
+
+  lines.push('EXCLUDED DAMAGE CATEGORIES (must NOT appear):');
+  for (const f of summary.findings.filter(f => !f.supported && f.facts.length > 0)) {
+    lines.push(`  [${f.category.toUpperCase()}] — excluded`);
+    for (const fact of f.facts) lines.push(`    - ${fact}`);
+  }
+  lines.push('');
+
+  lines.push(`SUPPORTED CAUSES OF LOSS: ${summary.supportedCauses.join(', ') || 'none clearly identified'}`);
+  lines.push(`UNSUPPORTED CAUSES (must NOT appear): ${summary.unsupportedCauses.join(', ') || 'none'}`);
+  lines.push('');
+
+  lines.push('EXACT ESTIMATE TOTALS:');
+  lines.push(`  Dwelling RCV: ${summary.estimateTotals.dwellingRCV != null ? `$${summary.estimateTotals.dwellingRCV.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : 'not available — state "per the enclosed estimate"'}`);
+  lines.push(`  Other Structures RCV: ${summary.estimateTotals.otherStructuresRCV != null ? `$${summary.estimateTotals.otherStructuresRCV.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : 'not available'}`);
+  lines.push(`  Total RCV: ${summary.estimateTotals.totalRCV != null ? `$${summary.estimateTotals.totalRCV.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : 'not available — state "per the enclosed estimate"'}`);
+  lines.push('');
+
+  // Scope modules
+  if (scopeModules.length > 0) {
+    lines.push('SCOPE JUSTIFICATION MODULES (use ONLY in Scope of Repair section):');
+    for (const m of scopeModules) {
+      lines.push(`  [${m.title}]`);
+      lines.push(`  ${m.body}`);
+      lines.push('');
+    }
+  } else {
+    lines.push('SCOPE JUSTIFICATION MODULES: none activated.');
+    lines.push('');
+  }
+
+  // Hard warnings
+  if (summary.hardWarnings.length > 0) {
+    lines.push('HARD WARNINGS (violations cause rejection):');
+    for (const w of summary.hardWarnings) lines.push(`  !! ${w}`);
+    lines.push('');
+  }
+
+  // 7 mandatory writing rules
+  lines.push('MANDATORY WRITING RULES:');
+  lines.push('  1. Do not speculate — every claim must trace to a fact above.');
+  lines.push('  2. Use exact dollar amounts from EXACT ESTIMATE TOTALS. If unavailable, write "per the enclosed estimate".');
+  lines.push('  3. Match posture tone — initial demand = no accusation; supplement = may cite carrier position from evidence.');
+  lines.push('  4. Scope justification modules belong ONLY in the Scope of Repair section.');
+  lines.push('  5. Never introduce a damage category not listed under SUPPORTED.');
+  lines.push('  6. Never omit a damage category listed under SUPPORTED.');
+  lines.push('  7. Wind must appear in Cause of Loss if listed under SUPPORTED CAUSES. Hail/freeze must NOT appear if listed under UNSUPPORTED.');
+  lines.push('');
+  lines.push('=== END LOCKED EVIDENCE INSTRUCTIONS ===');
+
+  return lines.join('\n');
+}
+
+// ── Step 1: Strict post-validator ──
+
+function postValidateDemandPackageStrict(
+  text: string,
+  summary: DemandEvidenceSummary,
+): string[] {
   const errors: string[] = [];
   const lower = text.toLowerCase();
 
-  // ── Posture validation ──
-  const initialDemandLocked = /Detected posture: initial_demand/.test(summaryText);
-
-  if (initialDemandLocked) {
+  // ── Posture lock ──
+  if (summary.posture === 'initial_demand') {
     const forbiddenPosturePhrases = [
-      'carrier failed', 'bad faith', 'carrier risk', 'carrier exposure',
-      'carrier error', 'wrongfully', 'improperly', 'improperly adjusted',
-      'underpaid', 'under-scoped', 'mishandled', 'delayed this claim',
+      'bad faith', 'underpaid', 'escalation', 'carrier failed',
+      'carrier risk', 'carrier exposure', 'carrier error',
+      'wrongfully', 'improperly', 'improperly adjusted',
+      'under-scoped', 'mishandled', 'delayed this claim',
       'failed to investigate', 'failed to pay', 'failed to',
       'adjusted this claim', 'already adjusted',
     ];
-
     for (const phrase of forbiddenPosturePhrases) {
       if (lower.includes(phrase)) {
-        errors.push(`Generated package includes forbidden initial-demand posture phrase: "${phrase}"`);
+        errors.push(`POSTURE LOCK: forbidden initial-demand phrase detected: "${phrase}"`);
       }
     }
+  }
 
-    if (!/initial demand|initial demand package|initial presentation|submitted for review/.test(lower)) {
-      errors.push('Generated package does not read as an initial demand / initial presentation.');
+  // ── Cause lock ──
+  if (summary.supportedCauses.includes('wind') && !/\bwind\b/.test(lower)) {
+    errors.push('CAUSE LOCK: wind is a supported cause but does not appear in the output.');
+  }
+  if (summary.unsupportedCauses.includes('hail') && /\bhail\b/.test(lower)) {
+    errors.push('CAUSE LOCK: hail is unsupported but appears in the output.');
+  }
+  if (summary.unsupportedCauses.includes('freeze') && /\bfreeze\b/.test(lower)) {
+    errors.push('CAUSE LOCK: freeze is unsupported but appears in the output.');
+  }
+
+  // ── Damage lock ──
+  const sidingFinding = summary.findings.find(f => f.category === 'siding');
+  if (sidingFinding && !sidingFinding.supported) {
+    if (/siding damage|damaged siding|vinyl siding|cracked siding|punctured siding|displaced siding/i.test(text)) {
+      errors.push('DAMAGE LOCK: siding damage is unsupported but referenced in the output.');
+    }
+  }
+  const fenceFinding = summary.findings.find(f => f.category === 'fence');
+  if (fenceFinding?.supported && !/fence|chain link/i.test(text)) {
+    errors.push('DAMAGE LOCK: fence damage is supported but missing from the output.');
+  }
+  // Interior gate
+  const hasInteriorWarning = summary.hardWarnings.some(w => /interior or water/i.test(w));
+  if (hasInteriorWarning && /\b(interior water damage|interior flooding|mold remediation|drywall replacement)\b/i.test(text)) {
+    errors.push('DAMAGE LOCK: interior/water damage is unsupported but referenced in the output.');
+  }
+
+  // ── Estimate lock ──
+  if (summary.estimateTotals.totalRCV != null) {
+    const expectedStr = summary.estimateTotals.totalRCV.toLocaleString('en-US', { minimumFractionDigits: 2 });
+    const expectedPlain = summary.estimateTotals.totalRCV.toFixed(2);
+    if (!text.includes(expectedStr) && !text.includes(expectedPlain) && !text.includes(`$${expectedStr}`) && !text.includes(`$${expectedPlain}`)) {
+      errors.push(`ESTIMATE LOCK: total RCV $${expectedStr} not found in the output.`);
     }
   }
 
-  // ── Damage category validation ──
-  if (/Do not claim siding damage\./.test(summaryText) &&
-      /siding damage|damaged siding|vinyl siding|cracked siding|punctured siding|displaced siding/.test(lower)) {
-    errors.push('Generated package includes unsupported siding damage.');
-  }
-
-  if (/Do not claim hail damage\./.test(summaryText) && /\bhail\b/.test(lower)) {
-    errors.push('Generated package includes unsupported hail damage.');
-  }
-
-  if (/Do not claim freeze damage\./.test(summaryText) && /\bfreeze\b/.test(lower)) {
-    errors.push('Generated package includes unsupported freeze damage.');
-  }
-
-  if (/Fence damage is present and must be included\./.test(summaryText) &&
-      !/fence|chain link/.test(lower)) {
-    errors.push('Generated package omitted required fence damage.');
+  // ── Scope leak lock ──
+  // Check that scope-only terms don't appear in Cause of Loss or Damage Findings sections
+  const causeSection = text.match(/cause of loss[\s\S]*?(?=damage findings|damaged components|scope of repair|$)/i)?.[0] || '';
+  const damageSection = text.match(/damage findings[\s\S]*?(?=scope of repair|unsupported|excluded|demand amount|$)/i)?.[0] || '';
+  const scopeOnlyTerms = [
+    'system interdependency', 'adjoining elevation', 'ridge continuity',
+    'layered assembly', 'weather-resistive barrier', 'fanfold',
+    'detach and reset', 'substrate replacement',
+  ];
+  for (const term of scopeOnlyTerms) {
+    if (causeSection.toLowerCase().includes(term)) {
+      errors.push(`SCOPE LEAK: "${term}" found in Cause of Loss section (belongs in Scope only).`);
+    }
+    if (damageSection.toLowerCase().includes(term)) {
+      errors.push(`SCOPE LEAK: "${term}" found in Damage Findings section (belongs in Scope only).`);
+    }
   }
 
   return errors;
@@ -6822,6 +6908,9 @@ ${genConfig.rules ? `\nMANDATORY RULES:\n${genConfig.rules.map((r: string) => `-
         (dpContext as any)._demandEvidenceSummary = demandEvSummary;
         (dpContext as any)._scopeModules = activeModules;
 
+        // Step 2: Build locked instructions (replaces freeform evidence injection)
+        const lockedInstructions = renderDemandPackageLockedInstructions(demandEvSummary, activeModules);
+
         userPrompt = `${claimSummary}
 
 CLAIM FACTS:
@@ -6844,20 +6933,7 @@ ${genConfigBlock}
 
 ${kbContent || ''}
 
-=== STRUCTURED EVIDENCE ANALYSIS (EVIDENCE-LOCKED — FOLLOW STRICTLY) ===
-${renderedEvSummary}
-=== END STRUCTURED EVIDENCE ANALYSIS ===
-
-CRITICAL: The evidence summary above is your source of truth. Only claim damage categories marked as supported=yes. Exclude all categories marked supported=no. If hard warnings say "Do not claim X damage", you MUST NOT mention X damage in any section.
-
-=== SCOPE JUSTIFICATION MODULES ===
-${scopeModuleText}
-=== END SCOPE JUSTIFICATION MODULES ===
-
-Rules for scope justification modules:
-- Use active scope justification modules where relevant.
-- Do not state a module conclusion unless it is supported by the evidence summary.
-- Treat modules as repair-scope justification, not as separate damage findings.
+${lockedInstructions}
 
 EVIDENCE DOCUMENTS PROVIDED FOR ANALYSIS (${evidenceSummary.documentCount || dpContext.documentCount || 0} total):
 ${docList}
@@ -6866,14 +6942,7 @@ ${(evidenceSummary.photoCount || dpContext.photoCount || 0) > 0 ? `PHOTOS PROVID
 
 ${dpContext.additionalInstructions ? `USER INSTRUCTIONS:\n${dpContext.additionalInstructions}` : ''}
 
-IMPORTANT: The PDF documents and photos have been provided for you to analyze. Read through each document carefully and extract:
-- Specific damage findings and measurements
-- Inspector/engineer observations and conclusions
-- Weather conditions and weather report data
-- Cost estimates and line items
-- Photo damage documentation and material conditions
-- Code requirements and manufacturer specifications
-- Any other relevant evidence
+IMPORTANT: Read each uploaded document carefully and extract specific details, quotes, measurements, and findings. Do not make generic statements — use the actual evidence from the documents.
 
 IMPORTANT: You must include a dedicated section titled "Counterfactual Causation Test."
 In that section:
@@ -6881,14 +6950,11 @@ In that section:
 2. Answer the question directly with Yes, No, or Indeterminate.
 3. Explain whether the observed damage would exist in the same form, extent, and timing absent the reported loss event.
 4. Identify the evidence supporting that answer.
-5. Identify competing explanations considered, including wear and tear, deterioration, foot traffic, installation defects, prior repairs, deferred maintenance, or other non-covered causes if relevant.
+5. Identify competing explanations considered.
 6. Explain whether those competing explanations better account for the observed condition.
-7. If the evidence is insufficient to establish causation confidently, say so explicitly and identify the missing proof needed.
+7. If the evidence is insufficient to establish causation confidently, say so explicitly.
 
-IMPORTANT: EVIDENCE GAPS must be identified explicitly and classified as:
-- Critical
-- Helpful
-- Optional
+IMPORTANT: EVIDENCE GAPS must be identified explicitly and classified as Critical, Helpful, or Optional.
 
 COMPANY INFORMATION FOR HEADER/SIGNATURE:
 Company: ${companyName}
@@ -6897,204 +6963,9 @@ Phone: ${companyPhone}
 Email: ${companyEmail}
 Assigned Adjuster: ${assignedUserName}
 
-Create a COMPREHENSIVE DEMAND PACKAGE with the following exact structure. DO NOT USE *** OR MARKDOWN:
+Generate the demand package following the OUTPUT STRUCTURE from the system prompt. Use plain text only — no markdown. Focus on REPAIRABILITY, UNIFORM APPEARANCE, PRE-LOSS CONDITION, and INDEMNIFICATION. NEVER use the word "matching".
 
-================================================================================
-                              DEMAND PACKAGE
-                        ${companyName}
-                       ${companyAddress}
-================================================================================
-
-TABLE OF CONTENTS
-
-I. Summary of Findings
-II. Cause of Loss
-III. Damaged Components
-IV. Weather Conditions Analysis
-V. Condition of Damaged Components (Per Reports)
-VI. Why Repairs Are Not Feasible - Repairability Analysis
-VII. Why Partial Repairs Are Not Feasible  
-VIII. Interdependency of Building Systems
-IX. Why Damaged Areas Must Be Disturbed for Repairs
-X. State/Local Code Requirements
-XI. Manufacturer Installation Standards (Adopted by Code)
-XII. HAAG Engineering Standards & Industry Best Practices
-XIII. Formal Demand and Conclusion
-
-================================================================================
-
-I. SUMMARY OF FINDINGS
-
-[Provide a comprehensive executive summary of the claim including:
-- Brief overview of the loss event
-- Total damages identified from all evidence documents
-- Settlement demand amount
-- Key evidence supporting why REPAIRS ARE NOT FEASIBLE - focus on structural integrity, material degradation, code compliance
-- Reference to previous successful settlements for similar loss types if available
-- Restoration to PRE-LOSS CONDITION requires full replacement per INDEMNIFICATION principles]
-
-================================================================================
-
-II. CAUSE OF LOSS
-
-[Detail the cause of loss based on weather data, inspection reports, and other evidence:
-- Date and nature of the loss event
-- Weather conditions at time of loss (from weather reports provided)
-- Wind speeds, hail sizes, precipitation data
-- How the event caused the documented damage
-- Timeline of events
-- Correlation between weather severity and damage patterns]
-
-================================================================================
-
-III. DAMAGED COMPONENTS
-
-[List and describe each damaged component identified in the evidence:
-- Component name and location
-- Type and extent of damage
-- Current condition and why it is IRREPARABLE
-- Reference to supporting documentation/photos
-- Note if materials are discontinued or manufacturer no longer supports repair]
-
-================================================================================
-
-IV. WEATHER CONDITIONS ANALYSIS
-
-[Analyze weather reports provided in the evidence:
-- Date of loss weather data with specific measurements
-- Wind speeds (sustained and gusts), hail size, precipitation
-- NWS storm reports and warnings issued
-- How weather conditions exceeded material tolerances
-- Correlation between weather event intensity and damage severity
-- Reference HailTrace, weather history, or other weather documentation]
-
-================================================================================
-
-V. CONDITION OF DAMAGED COMPONENTS (PER REPORTS)
-
-[Extract specific findings from inspection reports and estimates:
-- Quote specific observations from inspector/engineer reports
-- Include measurements, test results, damage descriptions
-- Reference which report each finding comes from
-- Note any HAAG-certified inspection findings
-- Document material age and pre-existing degradation that affects repairability]
-
-================================================================================
-
-VI. WHY REPAIRS ARE NOT FEASIBLE - REPAIRABILITY ANALYSIS
-
-[Core argument - explain why the damaged materials CANNOT BE REPAIRED:
-- Structural integrity has been compromised beyond repair
-- Material degradation prevents successful repair (UV oxidation, seal strip failure, brittleness)
-- Manufacturer specifications explicitly prohibit patching/partial repair
-- Code compliance cannot be achieved through repair
-- Safety concerns with repair vs replacement
-- Pre-loss condition cannot be restored through repair alone
-- Industry standards (NRCA, ARMA) require full replacement when damage exceeds thresholds
-- Reference HAAG damage identification criteria]
-
-================================================================================
-
-VII. WHY PARTIAL REPAIRS ARE NOT FEASIBLE
-
-[Explain why partial/spot repairs will not work:
-- Material discontinuation issues
-- Proper flashing and waterproofing cannot be achieved with partial work
-- Warranty implications - partial repairs void manufacturer warranties
-- Industry standards require complete system repair
-- Reference specific manufacturer guidelines that prohibit spot repairs
-- Uniform appearance cannot be maintained - affects property value
-- Adjacent materials disturbed during repair require replacement]
-
-================================================================================
-
-VIII. INTERDEPENDENCY OF BUILDING SYSTEMS
-
-[Explain how building components work together as a system:
-- Underlayment system interdependency with roofing
-- Flashing integration requirements at all penetrations
-- Ridge and ventilation system connections
-- Siding course alignment and weather barrier continuity
-- How damage to one component compromises the entire system
-- Why system must be addressed as a whole for proper restoration
-- Reference IRC and IBC requirements for system integrity]
-
-================================================================================
-
-IX. WHY DAMAGED AREAS MUST BE DISTURBED FOR REPAIRS
-
-[Explain necessary work that requires accessing adjacent areas:
-- Access requirements for proper repairs
-- Removal necessary to assess hidden damage
-- Tie-in requirements for new materials to existing
-- Building envelope integrity considerations
-- Step flashing, counter flashing requirements
-- Proper starter course and edge installations]
-
-================================================================================
-
-X. STATE AND LOCAL CODE REQUIREMENTS
-
-[Include applicable ${stateInfo.stateName} building codes:
-- International Residential Code (IRC) 2021 requirements
-- ${stateInfo.stateName} specific building code adoptions
-- Local jurisdiction code requirements
-- How these codes mandate full replacement for proper compliance
-- Reference specific code sections (e.g., IRC R905, R703)]
-
-================================================================================
-
-XI. MANUFACTURER INSTALLATION STANDARDS (ADOPTED BY CODE)
-
-[Reference manufacturer requirements that have force of law:
-- Specific manufacturer installation manuals
-- Warranty requirements that mandate certain installation practices
-- Standards that have been adopted by code
-- Why partial installation violates manufacturer standards
-- Reference ASTM standards for materials (D3161, D7158)
-- Why aged materials cannot meet original performance specifications]
-
-================================================================================
-
-XII. HAAG ENGINEERING STANDARDS & INDUSTRY BEST PRACTICES
-
-[Reference HAAG and industry standards:
-- HAAG damage identification methodology
-- HAAG thresholds for repair vs replacement recommendations
-- NRCA (National Roofing Contractors Association) guidelines
-- ARMA (Asphalt Roofing Manufacturers Association) standards
-- How these industry standards support full replacement
-- Reference specific damage patterns that meet replacement thresholds]
-
-================================================================================
-
-XIII. FORMAL DEMAND AND CONCLUSION
-
-Based on the evidence documented above, including the demonstrated IRREPARABILITY of the damaged materials and the policyholder's right to INDEMNIFICATION and restoration to PRE-LOSS CONDITION, we hereby formally demand payment of the full claim value as follows:
-
-[Include specific dollar amounts from estimates]
-
-Response is required within thirty (30) days pursuant to ${stateInfo.promptPayAct}.
-
-Failure to respond will result in escalation including but not limited to:
-- Filing complaint with ${stateInfo.stateName} Department of Insurance
-- Demand for appraisal per policy terms
-- Pursuit of bad faith claim if warranted based on documented timeline violations and regulatory non-compliance
-
-================================================================================
-
-${assignedUserName}
-Licensed Public Adjuster
-${companyName}
-${companyAddress}
-Phone: ${companyPhone}
-Email: ${companyEmail}
-
-Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-
-================================================================================
-
-Create a thorough, professional demand package using ALL evidence from the provided documents. Be specific and reference actual findings, measurements, and conclusions from the documents. NEVER use the word "matching" - focus on REPAIRABILITY, UNIFORM APPEARANCE, PRE-LOSS CONDITION, and INDEMNIFICATION. Focus on documenting damage thoroughly and explaining what is needed for proper repair. Leverage any uploaded training materials, videos, and knowledge base content to strengthen technical arguments.`;
+Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`;
         break;
       }
 
@@ -11156,17 +11027,64 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       console.log(`[OUTPUT FILTER] Applied stripExternalFormatting for ${analysisType}`);
     }
 
-    // ── DEMAND PACKAGE POST-VALIDATION — reject hallucinated damage categories ──
+    // ── DEMAND PACKAGE STRICT POST-VALIDATION (Steps 1, 4, 7) ──
     if (analysisType === 'demand_package' && analysisResult && typeof analysisResult === 'string') {
       const dpCtx = additionalContext || {};
-      const evSummaryText = (dpCtx as any)._demandEvidenceSummaryText;
-      if (evSummaryText) {
-        const demandValidationErrors = postValidateDemandPackage(analysisResult, evSummaryText);
+      const demandEvSummaryObj = (dpCtx as any)._demandEvidenceSummary as DemandEvidenceSummary | undefined;
+      if (demandEvSummaryObj) {
+        const demandValidationErrors = postValidateDemandPackageStrict(analysisResult, demandEvSummaryObj);
         if (demandValidationErrors.length > 0) {
-          console.warn(`[DEMAND VALIDATION] ⚠️ Evidence-lock violations detected:`);
+          console.warn(`[DEMAND STRICT VALIDATION] ⚠️ Violations detected (${demandValidationErrors.length}):`);
           demandValidationErrors.forEach(e => console.warn(`  → ${e}`));
-          // Append warning footer to the output so the user is aware
-          analysisResult += `\n\n--- DARWIN EVIDENCE-LOCK WARNING ---\nThe following issues were detected in this demand package:\n${demandValidationErrors.map(e => `- ${e}`).join('\n')}\nPlease review and correct before sending to the carrier.\n--- END WARNING ---`;
+
+          // Step 7: One-pass correction attempt
+          try {
+            console.log('[DEMAND CORRECTION] Attempting one-pass correction...');
+            const correctionPrompt = `The demand package you just generated has the following validation errors:\n${demandValidationErrors.map(e => `- ${e}`).join('\n')}\n\nRewrite the ENTIRE demand package, correcting ALL violations. Keep only supported facts. Return the final corrected package.`;
+            
+            const correctionMessages = [
+              { role: 'system', content: systemPrompt },
+              { role: 'assistant', content: analysisResult },
+              { role: 'user', content: correctionPrompt },
+            ];
+
+            const correctionResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: modelId,
+                messages: correctionMessages,
+                max_tokens: 12000,
+              }),
+            });
+
+            if (correctionResp.ok) {
+              const correctionData = await correctionResp.json();
+              const correctedText = correctionData.choices?.[0]?.message?.content;
+              if (correctedText) {
+                const secondPassErrors = postValidateDemandPackageStrict(correctedText, demandEvSummaryObj);
+                if (secondPassErrors.length < demandValidationErrors.length) {
+                  console.log(`[DEMAND CORRECTION] Correction reduced violations: ${demandValidationErrors.length} → ${secondPassErrors.length}`);
+                  analysisResult = correctedText;
+                  if (secondPassErrors.length > 0) {
+                    analysisResult += `\n\n--- DARWIN EVIDENCE-LOCK WARNING ---\nThe following issues remain after correction:\n${secondPassErrors.map(e => `- ${e}`).join('\n')}\nPlease review before sending to the carrier.\n--- END WARNING ---`;
+                  }
+                } else {
+                  console.warn('[DEMAND CORRECTION] Correction did not improve — keeping original with warnings.');
+                  analysisResult += `\n\n--- DARWIN EVIDENCE-LOCK WARNING ---\nThe following issues were detected in this demand package:\n${demandValidationErrors.map(e => `- ${e}`).join('\n')}\nPlease review and correct before sending to the carrier.\n--- END WARNING ---`;
+                }
+              }
+            } else {
+              console.warn('[DEMAND CORRECTION] Correction API call failed — appending warnings to original.');
+              analysisResult += `\n\n--- DARWIN EVIDENCE-LOCK WARNING ---\nThe following issues were detected in this demand package:\n${demandValidationErrors.map(e => `- ${e}`).join('\n')}\nPlease review and correct before sending to the carrier.\n--- END WARNING ---`;
+            }
+          } catch (corrErr) {
+            console.error('[DEMAND CORRECTION] Error during correction pass:', corrErr);
+            analysisResult += `\n\n--- DARWIN EVIDENCE-LOCK WARNING ---\nThe following issues were detected in this demand package:\n${demandValidationErrors.map(e => `- ${e}`).join('\n')}\nPlease review and correct before sending to the carrier.\n--- END WARNING ---`;
+          }
         }
       }
     }
