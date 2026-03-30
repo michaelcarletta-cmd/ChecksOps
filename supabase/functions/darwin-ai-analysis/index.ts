@@ -172,6 +172,9 @@ const FORBIDDEN_INSURANCE_TERM_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\bwet\s+rot\b/gi, 'storm-damaged substrate'],
   [/\bdecay(?:ed|ing)?\b/gi, 'deterioration'],
   [/\brot(?:ted|ting|ten)?\b/gi, 'compromised'],
+  [/\bmatching\s+requirement(?:s)?\b/gi, 'repairability requirement'],
+  [/\buniform\s+matching\b/gi, 'uniform appearance'],
+  [/\bmatching\b/gi, 'repairability'],
 ];
 
 function sanitizeForbiddenInsuranceTerms(text: string): string {
