@@ -6636,6 +6636,8 @@ ${genConfig.rules ? `\nMANDATORY RULES:\n${genConfig.rules.map((r: string) => `-
           inspectionText: extractedTextForEvidence,
           estimateText: extractedTextForEvidence,
           photoText: '',
+          correspondenceText: '',
+          userInstructionsText: dpContext.additionalInstructions || '',
         });
         const renderedEvSummary = renderDemandEvidenceSummary(demandEvSummary);
         // Store for post-validation access
