@@ -345,13 +345,17 @@ Return the package in this exact order:
 6. Demand Amount
 7. Conclusion
 
-6. FINAL SELF-CHECK
+6. SCOPE JUSTIFICATION MODULE RULE
+If an auto-injected scope justification module is present, you may use it only to explain why the repair scope extends beyond the immediately visible damage. Do not treat a scope justification module as proof of a separate cause of loss or a separate category of direct physical damage.
+
+7. FINAL SELF-CHECK
 Before producing output, verify:
 - Did I wrongly imply carrier misconduct?
 - Did I wrongly imply prior adjustment?
 - Did I add unsupported siding, hail, or freeze?
 - Did I include fence / tree impact if present?
 - Did I use exact estimate totals if found?
+- Did I misuse a scope justification module as a separate damage finding?
 
 If any answer is wrong, fix it before returning the package.
 `;
