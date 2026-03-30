@@ -264,69 +264,88 @@ const LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES: Array<{ label: string; regex: R
 ];
 
 // ============================================================================
-// DEMAND PACKAGE EVIDENCE-LOCKING SYSTEM
-// Prevents hallucinated damage categories by pre-processing document text
+// DEMAND PACKAGE EVIDENCE-LOCKING SYSTEM (v2 — posture-aware)
+// Prevents hallucinated damage categories AND incorrect procedural posture
 // ============================================================================
 
 const DEMAND_PACKAGE_SYSTEM_PROMPT = `
 You are Darwin, an insurance-claim demand package writer.
 
-Your job is to generate a carrier-facing property damage demand package that is:
-1. Fact-locked to the uploaded claim evidence
-2. Written as plain professional prose
-3. Strictly limited to damages actually supported by the selected files
-4. Aligned to the user's declared position when available
+You generate carrier-facing initial demand packages and supplemental/rebuttal packages.
+You must correctly identify the procedural posture from the file evidence.
 
-CRITICAL NON-NEGOTIABLE RULES
+NON-NEGOTIABLE CORE RULES
 
-EVIDENCE LOCK
-- You may ONLY describe damage categories that are affirmatively supported by the uploaded files.
-- Do NOT infer extra damage categories unless directly supported.
-- If a category is absent, unclear, contradicted, or unsupported, exclude it.
-- Never convert old age, wear, staining, cosmetic condition, or ambiguous visuals into storm damage.
+1. EVIDENCE LOCK
+- Only describe facts, damage categories, and claim posture supported by the selected files.
+- Do not invent damages, coverage disputes, prior carrier findings, delays, underpayments, denials, or bad-faith themes.
+- Do not convert ambiguous or old condition into storm damage.
 
-NO INVENTED CAUSE OF LOSS
-- Use only the cause(s) of loss supported by the file set.
-- If files support wind only, do not add hail, freeze, water, vandalism, collapse, or other perils.
-- If files explicitly say no hail damage, you must state that hail is not supported.
-- If files do not support siding damage, do not mention siding damage.
-- If exterior walls are brick and report says no elevation damage, do not generate siding language.
+2. PROCEDURAL POSTURE LOCK
+Before writing, determine whether the selected files support one of these postures:
 
-MUST CAPTURE ALL SUPPORTED DAMAGE CATEGORIES
-- You must identify every supported damage category shown in:
-  a) inspection findings
-  b) estimate line items
-  c) photo captions / photo sheets
-  d) handwritten notes / scope sheets
-- If fencing, gates, sheds, gazebos, detached structures, tree impact, or other-structures items appear anywhere in the evidence, include them.
-- If an estimate contains a line item tied to a specific damaged component, that component must be addressed in the demand.
+POSTURE A: INITIAL DEMAND
+Use this when the file set contains inspection reports, estimates, photos, expert support, or claim presentation materials,
+but does NOT contain evidence of:
+- carrier estimate
+- carrier denial
+- carrier payment
+- carrier coverage position
+- carrier engineer report
+- carrier scope disagreement
+- prior submission to carrier
+- timeline delay / failure to respond
 
-CONFLICT RESOLUTION
-- If one file supports damage and another is silent, include the supported damage but explain it in a grounded way.
-- If one file directly contradicts another, prefer the more specific, component-level, file-supported statement and explicitly avoid overclaiming.
+POSTURE B: SUPPLEMENT / REBUTTAL
+Use this only when the file set affirmatively shows:
+- a carrier position, payment, estimate, denial, reservation, engineer report, or written disagreement
+- or the user explicitly states the package is a rebuttal / supplement / dispute response
 
-STYLE RULES
-- Plain text only
-- No markdown bullets in final output unless user explicitly asks
-- No emojis
-- No decorative section icons
-- No bracket icon tokens
-- No legal threats unless clearly requested
-- No bad-faith accusations unless grounded in documented claim handling facts
+If POSTURE A applies:
+- Title and describe the document as an initial demand package or initial claim presentation
+- Do NOT say the claim was adjusted, underpaid, under-scoped, mishandled, delayed, denied, or inadequately investigated
+- Do NOT say "carrier failed," "carrier exposure," "carrier risk," "bad faith," or equivalent
+- Do NOT imply prior submission unless evidence proves it
 
-UNSUPPORTED / EXCLUDED DAMAGE CATEGORIES
-- Explicitly list categories Darwin should NOT claim if unsupported
-- Example: hail damage not supported, siding damage not supported, freeze damage not supported
+If POSTURE B applies:
+- You may describe the actual carrier position, but only if supported by the file set
 
-IMPORTANT
-Before writing, mentally run this checklist:
-- Did I accidentally add siding?
-- Did I accidentally add hail?
-- Did I accidentally add freeze?
-- Did I capture fence / other structures / tree impact?
-- Did I use the exact estimate total if provided?
-If any answer is wrong, fix it before producing output.
+3. DAMAGE CATEGORY LOCK
+- Only include damage categories affirmatively supported by the evidence
+- If inspection says no hail damage, exclude hail
+- If files do not support siding damage, exclude siding
+- If elevations are reported undamaged, do not claim elevation/siding damage
+- If fence/tree-impact/other-structures items appear anywhere in estimate/photos/findings, include them
+
+4. DEMAND TONE RULES
+For INITIAL DEMAND posture:
+- Use neutral, professional, carrier-facing tone
+- Say "presented for review," "submitted with this package," "supported by enclosed materials"
+- Do not use accusatory language
+- Do not say "wrongfully," "improperly," "failed to," or "bad faith"
+
+5. OUTPUT STRUCTURE
+Return the package in this exact order:
+1. Executive Summary
+2. Cause of Loss
+3. Damage Findings
+4. Scope of Repair Presented
+5. Unsupported / Excluded Damage Categories
+6. Demand Amount
+7. Conclusion
+
+6. FINAL SELF-CHECK
+Before producing output, verify:
+- Did I wrongly imply carrier misconduct?
+- Did I wrongly imply prior adjustment?
+- Did I add unsupported siding, hail, or freeze?
+- Did I include fence / tree impact if present?
+- Did I use exact estimate totals if found?
+
+If any answer is wrong, fix it before returning the package.
 `;
+
+type DemandPackagePosture = 'initial_demand' | 'supplement_or_rebuttal';
 
 type DemandSupportedDamageCategory =
   | 'roof'
@@ -348,6 +367,8 @@ interface DemandEvidenceFinding {
 }
 
 interface DemandEvidenceSummary {
+  posture: DemandPackagePosture;
+  postureReasoning: string[];
   supportedCauses: string[];
   unsupportedCauses: string[];
   findings: DemandEvidenceFinding[];
@@ -379,12 +400,49 @@ function buildDemandEvidenceSummary(input: {
   inspectionText?: string;
   estimateText?: string;
   photoText?: string;
+  correspondenceText?: string;
+  userInstructionsText?: string;
 }): DemandEvidenceSummary {
   const inspection = demandClean(input.inspectionText);
   const estimate = demandClean(input.estimateText);
   const photos = demandClean(input.photoText);
-  const combined = `${inspection}\n${estimate}\n${photos}`.toLowerCase();
+  const correspondence = demandClean(input.correspondenceText);
+  const userInstructions = demandClean(input.userInstructionsText);
 
+  const combined = [inspection, estimate, photos, correspondence, userInstructions].join('\n');
+  const lower = combined.toLowerCase();
+
+  // ── Posture detection ──
+  const postureReasoning: string[] = [];
+
+  const hasCarrierDecisionEvidence = demandIncludesAny(lower, [
+    /carrier estimate/, /payment issued/, /coverage decision/, /coverage determination/,
+    /denied/, /partial denial/, /reservation of rights/, /engineer report/,
+    /carrier inspection concluded/, /carrier estimate total/, /net payment/,
+    /acv payment/, /rcv payment/, /underpaid/, /under scoped/, /scope disagreement/,
+    /reinspection request/, /supplement request/, /response to carrier/, /rebuttal/,
+  ]);
+
+  const explicitlyInitial = demandIncludesAny(lower, [
+    /initial demand/, /initial demand package/, /initial presentation/,
+    /first submission/, /not yet sent to carrier/, /never sent to the insurance company/,
+  ]);
+
+  let posture: DemandPackagePosture = 'initial_demand';
+
+  if (hasCarrierDecisionEvidence) {
+    posture = 'supplement_or_rebuttal';
+    postureReasoning.push('File set includes evidence of a carrier position or post-submission dispute posture.');
+  } else {
+    postureReasoning.push('File set does not show a carrier decision, payment, denial, or prior submission.');
+  }
+
+  if (explicitlyInitial) {
+    posture = 'initial_demand';
+    postureReasoning.push('User instructions explicitly identify this as an initial demand package.');
+  }
+
+  // ── Cause of loss detection ──
   const supportedCauses: string[] = [];
   const unsupportedCauses: string[] = [];
   const hardWarnings: string[] = [];
@@ -395,26 +453,16 @@ function buildDemandEvidenceSummary(input: {
 
   if (/no hail damage was found/i.test(inspection)) {
     unsupportedCauses.push('hail');
-  } else if (/\bhail\b/i.test(combined)) {
-    if (demandIncludesAny(combined, [
-      /hail damage was found/i,
-      /storm damaged hail/i,
-      /impact damage.*hail/i,
-    ])) {
-      supportedCauses.push('hail');
-    } else {
-      hardWarnings.push('Hail is mentioned but not affirmatively supported as a damage cause.');
-    }
   }
 
-  if (/\bfreeze\b/i.test(combined)) {
-    hardWarnings.push('Freeze appears in text but is not automatically a supported cause of loss.');
+  if (/\bfreeze\b/i.test(lower) && !demandIncludesAny(lower, [/freeze damage was found/, /freeze loss confirmed/])) {
     unsupportedCauses.push('freeze');
   }
 
+  // ── Category-level fact extraction ──
   const roofFacts: string[] = [];
   if (/wind damage was found on the back slope/i.test(inspection)) roofFacts.push('Wind damage was found on the back slope.');
-  if (/back\s+40\s+fair/i.test(inspection)) roofFacts.push('House roof damage table identifies 40 wind-damaged shingles on the back slope.');
+  if (/back\s*40\s*fair/i.test(inspection)) roofFacts.push('Roof damage table reflects 40 wind-damaged shingles on the back slope.');
   if (/25 damaged shingles\/tiles were found under the existing tarp/i.test(inspection)) roofFacts.push('One tarp area documented 25 damaged shingles under the tarp.');
   if (/4 damaged shingles\/tiles were found under the existing tarp/i.test(inspection)) roofFacts.push('A second tarp area documented 4 damaged shingles under the tarp.');
 
@@ -432,16 +480,16 @@ function buildDemandEvidenceSummary(input: {
 
   const tarpFacts: string[] = [];
   if (/detached & reset/i.test(inspection) || /tarp/i.test(inspection)) tarpFacts.push('Inspection documents tarp detach/reset and damaged shingles beneath tarp areas.');
-  if (/condition one commercial temproary repairs/i.test(estimate)) tarpFacts.push('Estimate includes temporary repairs.');
+  if (/temproary repairs|temporary repairs/i.test(estimate)) tarpFacts.push('Estimate includes temporary repairs.');
 
   const exteriorFacts: string[] = [];
   if (/no damage found to the front, right, back, and left elevations/i.test(inspection)) exteriorFacts.push('Inspection states no damage found to the front, right, back, and left elevations.');
-  if (/main material:\s*brick/i.test(inspection) || /brick block/i.test(inspection)) exteriorFacts.push('Exterior wall material is identified as brick.');
-  if (/condition:\s*good/i.test(inspection) && /main material:\s*brick/i.test(inspection)) exteriorFacts.push('Brick exterior condition is documented as good.');
+  if (/main material:\s*brick/i.test(inspection) || /brick block/i.test(inspection)) exteriorFacts.push('Exterior wall material is brick.');
+  if (/condition:\s*good/i.test(inspection) && /main material:\s*brick/i.test(inspection)) exteriorFacts.push('Brick exterior is documented in good condition.');
 
-  const sidingAffirmativelySupported = demandIncludesAny(combined, [
-    /siding damage was found/i, /cracked siding/i, /creased siding/i,
-    /punctured siding/i, /displaced siding/i, /broken siding/i, /vinyl siding damaged/i,
+  const sidingAffirmativelySupported = demandIncludesAny(lower, [
+    /siding damage was found/, /cracked siding/, /punctured siding/,
+    /displaced siding/, /broken siding/, /vinyl siding damaged/,
   ]);
 
   const sidingUnsupported =
@@ -458,22 +506,18 @@ function buildDemandEvidenceSummary(input: {
     {
       category: 'siding', supported: sidingAffirmativelySupported, confidence: sidingAffirmativelySupported ? 'medium' : 'low',
       facts: sidingAffirmativelySupported
-        ? ['Siding damage is affirmatively supported by the evidence.']
+        ? ['Siding damage is affirmatively supported by the selected evidence.']
         : sidingUnsupported
-          ? ['Siding damage is not supported by the evidence and should be excluded.']
+          ? ['Siding damage is not supported by the selected evidence and must be excluded.']
           : [],
     },
     {
-      category: 'hail', supported: supportedCauses.includes('hail'), confidence: supportedCauses.includes('hail') ? 'medium' : 'low',
-      facts: supportedCauses.includes('hail')
-        ? ['Hail is affirmatively supported as a cause of loss.']
-        : unsupportedCauses.includes('hail')
-          ? ['Inspection states that no hail damage was found.']
-          : [],
+      category: 'hail', supported: false, confidence: 'low',
+      facts: unsupportedCauses.includes('hail') ? ['Inspection states that no hail damage was found.'] : [],
     },
     {
       category: 'freeze', supported: false, confidence: 'low',
-      facts: unsupportedCauses.includes('freeze') ? ['Freeze is not affirmatively supported and should be excluded.'] : [],
+      facts: unsupportedCauses.includes('freeze') ? ['Freeze is not affirmatively supported and must be excluded.'] : [],
     },
     {
       category: 'other_structures', supported: /other structures/i.test(estimate) || fenceFacts.length > 0,
@@ -481,7 +525,7 @@ function buildDemandEvidenceSummary(input: {
       facts: /other structures/i.test(estimate)
         ? ['Estimate includes other structures damages.']
         : fenceFacts.length > 0
-          ? ['Fence damage should be treated within other structures scope where applicable.']
+          ? ['Fence damage should be presented within other structures scope where applicable.']
           : [],
     },
   ];
@@ -492,12 +536,21 @@ function buildDemandEvidenceSummary(input: {
     demandParseMoney(estimate, /total\s+([0-9,]+\.[0-9]{2})\s+100\.00%/i) ||
     demandParseMoney(estimate, /replacement cost value\s*\$([0-9,]+\.[0-9]{2})/i);
 
+  // ── Posture-aware hard warnings ──
+  if (posture === 'initial_demand') {
+    hardWarnings.push('This package must be written as an initial demand / initial presentation.');
+    hardWarnings.push('Do not say the carrier adjusted, underpaid, denied, delayed, or mishandled the claim.');
+    hardWarnings.push('Do not use bad-faith, carrier-risk, or misconduct language.');
+  }
+
   if (sidingUnsupported) hardWarnings.push('Do not claim siding damage.');
   if (unsupportedCauses.includes('hail')) hardWarnings.push('Do not claim hail damage.');
   if (unsupportedCauses.includes('freeze')) hardWarnings.push('Do not claim freeze damage.');
   if (fenceFacts.length > 0) hardWarnings.push('Fence damage is present and must be included.');
 
   return {
+    posture,
+    postureReasoning,
     supportedCauses: Array.from(new Set(supportedCauses)),
     unsupportedCauses: Array.from(new Set(unsupportedCauses)),
     findings,
@@ -509,6 +562,11 @@ function buildDemandEvidenceSummary(input: {
 function renderDemandEvidenceSummary(summary: DemandEvidenceSummary): string {
   const lines: string[] = [];
   lines.push('DEMAND PACKAGE EVIDENCE SUMMARY');
+  lines.push('');
+  lines.push(`Detected posture: ${summary.posture}`);
+  for (const reason of summary.postureReasoning) {
+    lines.push(`- ${reason}`);
+  }
   lines.push('');
   lines.push(`Supported causes of loss: ${summary.supportedCauses.join(', ') || 'none clearly supported'}`);
   lines.push(`Unsupported / excluded causes: ${summary.unsupportedCauses.join(', ') || 'none explicitly excluded'}`);
@@ -539,21 +597,47 @@ function postValidateDemandPackage(text: string, summaryText: string): string[] 
   const errors: string[] = [];
   const lower = text.toLowerCase();
 
-  const sidingForbidden =
-    /siding damage|damaged siding|vinyl siding|cracked siding|punctured siding|displaced siding/.test(lower) &&
-    /Do not claim siding damage\./.test(summaryText);
-  const hailForbidden =
-    /\bhail\b/.test(lower) && /Do not claim hail damage\./.test(summaryText);
-  const freezeForbidden =
-    /\bfreeze\b/.test(lower) && /Do not claim freeze damage\./.test(summaryText);
-  const fenceRequired =
-    /Fence damage is present and must be included\./.test(summaryText) &&
-    !/fence|chain link/.test(lower);
+  // ── Posture validation ──
+  const initialDemandLocked = /Detected posture: initial_demand/.test(summaryText);
 
-  if (sidingForbidden) errors.push('Generated package includes unsupported siding damage.');
-  if (hailForbidden) errors.push('Generated package includes unsupported hail damage.');
-  if (freezeForbidden) errors.push('Generated package includes unsupported freeze damage.');
-  if (fenceRequired) errors.push('Generated package omitted required fence damage.');
+  if (initialDemandLocked) {
+    const forbiddenPosturePhrases = [
+      'carrier failed', 'bad faith', 'carrier risk', 'carrier exposure',
+      'wrongfully', 'improperly adjusted', 'underpaid', 'under-scoped',
+      'mishandled', 'delayed this claim', 'failed to investigate',
+      'failed to pay', 'adjusted this claim', 'already adjusted',
+    ];
+
+    for (const phrase of forbiddenPosturePhrases) {
+      if (lower.includes(phrase)) {
+        errors.push(`Generated package includes forbidden initial-demand posture phrase: "${phrase}"`);
+      }
+    }
+
+    if (!/initial demand|initial demand package|initial presentation|submitted for review/.test(lower)) {
+      errors.push('Generated package does not read as an initial demand / initial presentation.');
+    }
+  }
+
+  // ── Damage category validation ──
+  if (/Do not claim siding damage\./.test(summaryText) &&
+      /siding damage|damaged siding|vinyl siding|cracked siding|punctured siding|displaced siding/.test(lower)) {
+    errors.push('Generated package includes unsupported siding damage.');
+  }
+
+  if (/Do not claim hail damage\./.test(summaryText) && /\bhail\b/.test(lower)) {
+    errors.push('Generated package includes unsupported hail damage.');
+  }
+
+  if (/Do not claim freeze damage\./.test(summaryText) && /\bfreeze\b/.test(lower)) {
+    errors.push('Generated package includes unsupported freeze damage.');
+  }
+
+  if (/Fence damage is present and must be included\./.test(summaryText) &&
+      !/fence|chain link/.test(lower)) {
+    errors.push('Generated package omitted required fence damage.');
+  }
+
   return errors;
 }
 
@@ -6552,6 +6636,8 @@ ${genConfig.rules ? `\nMANDATORY RULES:\n${genConfig.rules.map((r: string) => `-
           inspectionText: extractedTextForEvidence,
           estimateText: extractedTextForEvidence,
           photoText: '',
+          correspondenceText: '',
+          userInstructionsText: dpContext.additionalInstructions || '',
         });
         const renderedEvSummary = renderDemandEvidenceSummary(demandEvSummary);
         // Store for post-validation access
