@@ -846,6 +846,10 @@ function postValidateDemandPackageStrict(
   if (summary.supportedCauses.includes('wind') && !/\bwind\b/.test(lower)) {
     errors.push('CAUSE LOCK: wind is a supported cause but does not appear in the output.');
   }
+  // Force cause-of-loss clarity: wind must be clearly stated
+  if (summary.supportedCauses.includes('wind') && !/wind damage|wind-related|wind event/i.test(text)) {
+    errors.push('REQUIRED FACT: Wind must be clearly stated as the cause of loss.');
+  }
   if (summary.unsupportedCauses.includes('hail') && /\bhail\b/.test(lower)) {
     errors.push('CAUSE LOCK: hail is unsupported but appears in the output.');
   }
@@ -870,17 +874,50 @@ function postValidateDemandPackageStrict(
     errors.push('DAMAGE LOCK: interior/water damage is unsupported but referenced in the output.');
   }
 
-  // ── Estimate lock ──
+  // ── Force siding quantities ──
+  const sidingFindings = summary.findings.filter(f => f.category === 'siding' && f.supported);
+  for (const sf of sidingFindings) {
+    const nums = sf.fact.match(/\d+/g);
+    if (nums) {
+      for (const num of nums) {
+        if (!text.includes(num)) {
+          errors.push(`REQUIRED FACT: Siding quantity missing (${sf.fact})`);
+          break;
+        }
+      }
+    }
+  }
+
+  // ── Force gutter quantities ──
+  const gutterFindings = summary.findings.filter(f => f.category === 'gutter_downspout' && f.supported);
+  for (const gf of gutterFindings) {
+    const nums = gf.fact.match(/\d+/g);
+    if (nums) {
+      for (const num of nums) {
+        if (!text.includes(num)) {
+          errors.push(`REQUIRED FACT: Gutter/downspout quantity missing (${gf.fact})`);
+          break;
+        }
+      }
+    }
+  }
+
+  // ── Force tree mention ──
+  const treeFinding = summary.findings.find(f => f.category === 'tree_impact' && f.supported);
+  if (treeFinding && !/tree/i.test(text)) {
+    errors.push('REQUIRED FACT: Tree impact must be mentioned.');
+  }
+
+  // ── Estimate lock — force exact RCV total ──
   if (summary.estimateTotals.totalRCV != null) {
     const expectedStr = summary.estimateTotals.totalRCV.toLocaleString('en-US', { minimumFractionDigits: 2 });
     const expectedPlain = summary.estimateTotals.totalRCV.toFixed(2);
     if (!text.includes(expectedStr) && !text.includes(expectedPlain) && !text.includes(`$${expectedStr}`) && !text.includes(`$${expectedPlain}`)) {
-      errors.push(`ESTIMATE LOCK: total RCV $${expectedStr} not found in the output.`);
+      errors.push(`REQUIRED FACT: Exact total RCV must appear ($${expectedStr})`);
     }
   }
 
   // ── Scope leak lock ──
-  // Check that scope-only terms don't appear in Cause of Loss or Damage Findings sections
   const causeSection = text.match(/cause of loss[\s\S]*?(?=damage findings|damaged components|scope of repair|$)/i)?.[0] || '';
   const damageSection = text.match(/damage findings[\s\S]*?(?=scope of repair|unsupported|excluded|demand amount|$)/i)?.[0] || '';
   const scopeOnlyTerms = [
