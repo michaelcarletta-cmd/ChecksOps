@@ -319,10 +319,21 @@ If POSTURE B applies:
 
 4. DEMAND TONE RULES
 For INITIAL DEMAND posture:
-- Use neutral, professional, carrier-facing tone
-- Say "presented for review," "submitted with this package," "supported by enclosed materials"
+- Use a firm but neutral, professional, carrier-facing tone focused on supported damages and requested payment
+- Prefer these phrases:
+  "submitted for review"
+  "presented for consideration"
+  "supported by the enclosed materials"
+  "the file reflects"
+  "the documentation shows"
 - Do not use accusatory language
-- Do not say "wrongfully," "improperly," "failed to," or "bad faith"
+- Avoid these phrases:
+  "failed to"
+  "improperly"
+  "wrongfully"
+  "underpaid"
+  "carrier error"
+  "bad faith"
 
 5. OUTPUT STRUCTURE
 Return the package in this exact order:
@@ -603,9 +614,10 @@ function postValidateDemandPackage(text: string, summaryText: string): string[] 
   if (initialDemandLocked) {
     const forbiddenPosturePhrases = [
       'carrier failed', 'bad faith', 'carrier risk', 'carrier exposure',
-      'wrongfully', 'improperly adjusted', 'underpaid', 'under-scoped',
-      'mishandled', 'delayed this claim', 'failed to investigate',
-      'failed to pay', 'adjusted this claim', 'already adjusted',
+      'carrier error', 'wrongfully', 'improperly', 'improperly adjusted',
+      'underpaid', 'under-scoped', 'mishandled', 'delayed this claim',
+      'failed to investigate', 'failed to pay', 'failed to',
+      'adjusted this claim', 'already adjusted',
     ];
 
     for (const phrase of forbiddenPosturePhrases) {
