@@ -559,6 +559,12 @@ function buildDemandEvidenceSummary(input: {
   if (unsupportedCauses.includes('freeze')) hardWarnings.push('Do not claim freeze damage.');
   if (fenceFacts.length > 0) hardWarnings.push('Fence damage is present and must be included.');
 
+  const hasInteriorEvidence =
+    /drywall|flooring|ceiling|water|moisture|mold|mitigation/i.test(combined);
+  if (!hasInteriorEvidence) {
+    hardWarnings.push('Interior or water-related damages are not supported and must not be included.');
+  }
+
   return {
     posture,
     postureReasoning,
