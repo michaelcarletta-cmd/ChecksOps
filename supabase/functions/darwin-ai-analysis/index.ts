@@ -6546,6 +6546,18 @@ ${genConfig.rules ? `\nMANDATORY RULES:\n${genConfig.rules.map((r: string) => `-
         };
         const strategyEmphasis = STRATEGY_EMPHASIS[stratPreset] || STRATEGY_EMPHASIS.general_property;
 
+        // Build structured evidence summary from all extracted text content
+        const extractedTextForEvidence = content || '';
+        const demandEvSummary = buildDemandEvidenceSummary({
+          inspectionText: extractedTextForEvidence,
+          estimateText: extractedTextForEvidence,
+          photoText: '',
+        });
+        const renderedEvSummary = renderDemandEvidenceSummary(demandEvSummary);
+        // Store for post-validation access
+        (dpContext as any)._demandEvidenceSummaryText = renderedEvSummary;
+        (dpContext as any)._demandEvidenceSummary = demandEvSummary;
+
         userPrompt = `${claimSummary}
 
 CLAIM FACTS:
