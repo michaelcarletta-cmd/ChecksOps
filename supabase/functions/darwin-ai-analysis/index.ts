@@ -6580,6 +6580,12 @@ ${genConfigBlock}
 
 ${kbContent || ''}
 
+=== STRUCTURED EVIDENCE ANALYSIS (EVIDENCE-LOCKED — FOLLOW STRICTLY) ===
+${renderedEvSummary}
+=== END STRUCTURED EVIDENCE ANALYSIS ===
+
+CRITICAL: The evidence summary above is your source of truth. Only claim damage categories marked as supported=yes. Exclude all categories marked supported=no. If hard warnings say "Do not claim X damage", you MUST NOT mention X damage in any section.
+
 EVIDENCE DOCUMENTS PROVIDED FOR ANALYSIS (${evidenceSummary.documentCount || dpContext.documentCount || 0} total):
 ${docList}
 
