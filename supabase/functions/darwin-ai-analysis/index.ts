@@ -614,9 +614,10 @@ function postValidateDemandPackage(text: string, summaryText: string): string[] 
   if (initialDemandLocked) {
     const forbiddenPosturePhrases = [
       'carrier failed', 'bad faith', 'carrier risk', 'carrier exposure',
-      'wrongfully', 'improperly adjusted', 'underpaid', 'under-scoped',
-      'mishandled', 'delayed this claim', 'failed to investigate',
-      'failed to pay', 'adjusted this claim', 'already adjusted',
+      'carrier error', 'wrongfully', 'improperly', 'improperly adjusted',
+      'underpaid', 'under-scoped', 'mishandled', 'delayed this claim',
+      'failed to investigate', 'failed to pay', 'failed to',
+      'adjusted this claim', 'already adjusted',
     ];
 
     for (const phrase of forbiddenPosturePhrases) {
