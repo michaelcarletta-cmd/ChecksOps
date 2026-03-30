@@ -746,50 +746,155 @@ function renderScopeModules(modules: ScopeModuleResult[]): string {
   ].join('\n');
 }
 
-function postValidateDemandPackage(text: string, summaryText: string): string[] {
+// ── Step 2: Locked instruction renderer ──
+
+function renderDemandPackageLockedInstructions(
+  summary: DemandEvidenceSummary,
+  scopeModules: ScopeModuleResult[],
+): string {
+  const lines: string[] = [];
+  lines.push('=== LOCKED EVIDENCE INSTRUCTIONS (AUTHORITATIVE — DO NOT DEVIATE) ===');
+  lines.push('');
+
+  // Structured facts by category
+  lines.push('SUPPORTED DAMAGE CATEGORIES:');
+  for (const f of summary.findings.filter(f => f.supported)) {
+    lines.push(`  [${f.category.toUpperCase()}] confidence=${f.confidence}`);
+    for (const fact of f.facts) lines.push(`    - ${fact}`);
+  }
+  lines.push('');
+
+  lines.push('EXCLUDED DAMAGE CATEGORIES (must NOT appear):');
+  for (const f of summary.findings.filter(f => !f.supported && f.facts.length > 0)) {
+    lines.push(`  [${f.category.toUpperCase()}] — excluded`);
+    for (const fact of f.facts) lines.push(`    - ${fact}`);
+  }
+  lines.push('');
+
+  lines.push(`SUPPORTED CAUSES OF LOSS: ${summary.supportedCauses.join(', ') || 'none clearly identified'}`);
+  lines.push(`UNSUPPORTED CAUSES (must NOT appear): ${summary.unsupportedCauses.join(', ') || 'none'}`);
+  lines.push('');
+
+  lines.push('EXACT ESTIMATE TOTALS:');
+  lines.push(`  Dwelling RCV: ${summary.estimateTotals.dwellingRCV != null ? `$${summary.estimateTotals.dwellingRCV.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : 'not available — state "per the enclosed estimate"'}`);
+  lines.push(`  Other Structures RCV: ${summary.estimateTotals.otherStructuresRCV != null ? `$${summary.estimateTotals.otherStructuresRCV.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : 'not available'}`);
+  lines.push(`  Total RCV: ${summary.estimateTotals.totalRCV != null ? `$${summary.estimateTotals.totalRCV.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : 'not available — state "per the enclosed estimate"'}`);
+  lines.push('');
+
+  // Scope modules
+  if (scopeModules.length > 0) {
+    lines.push('SCOPE JUSTIFICATION MODULES (use ONLY in Scope of Repair section):');
+    for (const m of scopeModules) {
+      lines.push(`  [${m.title}]`);
+      lines.push(`  ${m.body}`);
+      lines.push('');
+    }
+  } else {
+    lines.push('SCOPE JUSTIFICATION MODULES: none activated.');
+    lines.push('');
+  }
+
+  // Hard warnings
+  if (summary.hardWarnings.length > 0) {
+    lines.push('HARD WARNINGS (violations cause rejection):');
+    for (const w of summary.hardWarnings) lines.push(`  !! ${w}`);
+    lines.push('');
+  }
+
+  // 7 mandatory writing rules
+  lines.push('MANDATORY WRITING RULES:');
+  lines.push('  1. Do not speculate — every claim must trace to a fact above.');
+  lines.push('  2. Use exact dollar amounts from EXACT ESTIMATE TOTALS. If unavailable, write "per the enclosed estimate".');
+  lines.push('  3. Match posture tone — initial demand = no accusation; supplement = may cite carrier position from evidence.');
+  lines.push('  4. Scope justification modules belong ONLY in the Scope of Repair section.');
+  lines.push('  5. Never introduce a damage category not listed under SUPPORTED.');
+  lines.push('  6. Never omit a damage category listed under SUPPORTED.');
+  lines.push('  7. Wind must appear in Cause of Loss if listed under SUPPORTED CAUSES. Hail/freeze must NOT appear if listed under UNSUPPORTED.');
+  lines.push('');
+  lines.push('=== END LOCKED EVIDENCE INSTRUCTIONS ===');
+
+  return lines.join('\n');
+}
+
+// ── Step 1: Strict post-validator ──
+
+function postValidateDemandPackageStrict(
+  text: string,
+  summary: DemandEvidenceSummary,
+): string[] {
   const errors: string[] = [];
   const lower = text.toLowerCase();
 
-  // ── Posture validation ──
-  const initialDemandLocked = /Detected posture: initial_demand/.test(summaryText);
-
-  if (initialDemandLocked) {
+  // ── Posture lock ──
+  if (summary.posture === 'initial_demand') {
     const forbiddenPosturePhrases = [
-      'carrier failed', 'bad faith', 'carrier risk', 'carrier exposure',
-      'carrier error', 'wrongfully', 'improperly', 'improperly adjusted',
-      'underpaid', 'under-scoped', 'mishandled', 'delayed this claim',
+      'bad faith', 'underpaid', 'escalation', 'carrier failed',
+      'carrier risk', 'carrier exposure', 'carrier error',
+      'wrongfully', 'improperly', 'improperly adjusted',
+      'under-scoped', 'mishandled', 'delayed this claim',
       'failed to investigate', 'failed to pay', 'failed to',
       'adjusted this claim', 'already adjusted',
     ];
-
     for (const phrase of forbiddenPosturePhrases) {
       if (lower.includes(phrase)) {
-        errors.push(`Generated package includes forbidden initial-demand posture phrase: "${phrase}"`);
+        errors.push(`POSTURE LOCK: forbidden initial-demand phrase detected: "${phrase}"`);
       }
     }
+  }
 
-    if (!/initial demand|initial demand package|initial presentation|submitted for review/.test(lower)) {
-      errors.push('Generated package does not read as an initial demand / initial presentation.');
+  // ── Cause lock ──
+  if (summary.supportedCauses.includes('wind') && !/\bwind\b/.test(lower)) {
+    errors.push('CAUSE LOCK: wind is a supported cause but does not appear in the output.');
+  }
+  if (summary.unsupportedCauses.includes('hail') && /\bhail\b/.test(lower)) {
+    errors.push('CAUSE LOCK: hail is unsupported but appears in the output.');
+  }
+  if (summary.unsupportedCauses.includes('freeze') && /\bfreeze\b/.test(lower)) {
+    errors.push('CAUSE LOCK: freeze is unsupported but appears in the output.');
+  }
+
+  // ── Damage lock ──
+  const sidingFinding = summary.findings.find(f => f.category === 'siding');
+  if (sidingFinding && !sidingFinding.supported) {
+    if (/siding damage|damaged siding|vinyl siding|cracked siding|punctured siding|displaced siding/i.test(text)) {
+      errors.push('DAMAGE LOCK: siding damage is unsupported but referenced in the output.');
+    }
+  }
+  const fenceFinding = summary.findings.find(f => f.category === 'fence');
+  if (fenceFinding?.supported && !/fence|chain link/i.test(text)) {
+    errors.push('DAMAGE LOCK: fence damage is supported but missing from the output.');
+  }
+  // Interior gate
+  const hasInteriorWarning = summary.hardWarnings.some(w => /interior or water/i.test(w));
+  if (hasInteriorWarning && /\b(interior water damage|interior flooding|mold remediation|drywall replacement)\b/i.test(text)) {
+    errors.push('DAMAGE LOCK: interior/water damage is unsupported but referenced in the output.');
+  }
+
+  // ── Estimate lock ──
+  if (summary.estimateTotals.totalRCV != null) {
+    const expectedStr = summary.estimateTotals.totalRCV.toLocaleString('en-US', { minimumFractionDigits: 2 });
+    const expectedPlain = summary.estimateTotals.totalRCV.toFixed(2);
+    if (!text.includes(expectedStr) && !text.includes(expectedPlain) && !text.includes(`$${expectedStr}`) && !text.includes(`$${expectedPlain}`)) {
+      errors.push(`ESTIMATE LOCK: total RCV $${expectedStr} not found in the output.`);
     }
   }
 
-  // ── Damage category validation ──
-  if (/Do not claim siding damage\./.test(summaryText) &&
-      /siding damage|damaged siding|vinyl siding|cracked siding|punctured siding|displaced siding/.test(lower)) {
-    errors.push('Generated package includes unsupported siding damage.');
-  }
-
-  if (/Do not claim hail damage\./.test(summaryText) && /\bhail\b/.test(lower)) {
-    errors.push('Generated package includes unsupported hail damage.');
-  }
-
-  if (/Do not claim freeze damage\./.test(summaryText) && /\bfreeze\b/.test(lower)) {
-    errors.push('Generated package includes unsupported freeze damage.');
-  }
-
-  if (/Fence damage is present and must be included\./.test(summaryText) &&
-      !/fence|chain link/.test(lower)) {
-    errors.push('Generated package omitted required fence damage.');
+  // ── Scope leak lock ──
+  // Check that scope-only terms don't appear in Cause of Loss or Damage Findings sections
+  const causeSection = text.match(/cause of loss[\s\S]*?(?=damage findings|damaged components|scope of repair|$)/i)?.[0] || '';
+  const damageSection = text.match(/damage findings[\s\S]*?(?=scope of repair|unsupported|excluded|demand amount|$)/i)?.[0] || '';
+  const scopeOnlyTerms = [
+    'system interdependency', 'adjoining elevation', 'ridge continuity',
+    'layered assembly', 'weather-resistive barrier', 'fanfold',
+    'detach and reset', 'substrate replacement',
+  ];
+  for (const term of scopeOnlyTerms) {
+    if (causeSection.toLowerCase().includes(term)) {
+      errors.push(`SCOPE LEAK: "${term}" found in Cause of Loss section (belongs in Scope only).`);
+    }
+    if (damageSection.toLowerCase().includes(term)) {
+      errors.push(`SCOPE LEAK: "${term}" found in Damage Findings section (belongs in Scope only).`);
+    }
   }
 
   return errors;
