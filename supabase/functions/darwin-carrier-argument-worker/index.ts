@@ -20,6 +20,17 @@ const ARGUMENT_TYPES = [
 
 type ArgumentType = typeof ARGUMENT_TYPES[number];
 
+interface RebuttalPlaybookCard {
+  id: string;
+  argument_type: ArgumentType;
+  principle: string | null;
+  why_different: string | null;
+  what_proves_damage: string | null;
+  documentation_checklist: string[] | null;
+  carrier_ready_template: string | null;
+  usage_count: number | null;
+}
+
 const FORBIDDEN_INSURANCE_TERM_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\brotted\s+decking\b/gi, "compromised decking"],
   [/\brotten\s+decking\b/gi, "compromised decking"],
@@ -153,7 +164,10 @@ async function processQueueItem(
     .from("rebuttal_playbook_cards")
     .select("*")
     .in("argument_type", detected.map(d => d.type));
-  const playbookMap = new Map((playbookCards || []).map((c: any) => [c.argument_type, c]));
+  const typedPlaybookCards = (playbookCards || []) as RebuttalPlaybookCard[];
+  const playbookMap = new Map<ArgumentType, RebuttalPlaybookCard>(
+    typedPlaybookCards.map((c) => [c.argument_type, c])
+  );
 
   const truncatedText = extractedText.substring(0, 15000);
 
