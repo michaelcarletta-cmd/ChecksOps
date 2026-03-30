@@ -11027,17 +11027,64 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       console.log(`[OUTPUT FILTER] Applied stripExternalFormatting for ${analysisType}`);
     }
 
-    // ── DEMAND PACKAGE POST-VALIDATION — reject hallucinated damage categories ──
+    // ── DEMAND PACKAGE STRICT POST-VALIDATION (Steps 1, 4, 7) ──
     if (analysisType === 'demand_package' && analysisResult && typeof analysisResult === 'string') {
       const dpCtx = additionalContext || {};
-      const evSummaryText = (dpCtx as any)._demandEvidenceSummaryText;
-      if (evSummaryText) {
-        const demandValidationErrors = postValidateDemandPackage(analysisResult, evSummaryText);
+      const demandEvSummaryObj = (dpCtx as any)._demandEvidenceSummary as DemandEvidenceSummary | undefined;
+      if (demandEvSummaryObj) {
+        const demandValidationErrors = postValidateDemandPackageStrict(analysisResult, demandEvSummaryObj);
         if (demandValidationErrors.length > 0) {
-          console.warn(`[DEMAND VALIDATION] ⚠️ Evidence-lock violations detected:`);
+          console.warn(`[DEMAND STRICT VALIDATION] ⚠️ Violations detected (${demandValidationErrors.length}):`);
           demandValidationErrors.forEach(e => console.warn(`  → ${e}`));
-          // Append warning footer to the output so the user is aware
-          analysisResult += `\n\n--- DARWIN EVIDENCE-LOCK WARNING ---\nThe following issues were detected in this demand package:\n${demandValidationErrors.map(e => `- ${e}`).join('\n')}\nPlease review and correct before sending to the carrier.\n--- END WARNING ---`;
+
+          // Step 7: One-pass correction attempt
+          try {
+            console.log('[DEMAND CORRECTION] Attempting one-pass correction...');
+            const correctionPrompt = `The demand package you just generated has the following validation errors:\n${demandValidationErrors.map(e => `- ${e}`).join('\n')}\n\nRewrite the ENTIRE demand package, correcting ALL violations. Keep only supported facts. Return the final corrected package.`;
+            
+            const correctionMessages = [
+              { role: 'system', content: systemPrompt },
+              { role: 'assistant', content: analysisResult },
+              { role: 'user', content: correctionPrompt },
+            ];
+
+            const correctionResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: modelId,
+                messages: correctionMessages,
+                max_tokens: 12000,
+              }),
+            });
+
+            if (correctionResp.ok) {
+              const correctionData = await correctionResp.json();
+              const correctedText = correctionData.choices?.[0]?.message?.content;
+              if (correctedText) {
+                const secondPassErrors = postValidateDemandPackageStrict(correctedText, demandEvSummaryObj);
+                if (secondPassErrors.length < demandValidationErrors.length) {
+                  console.log(`[DEMAND CORRECTION] Correction reduced violations: ${demandValidationErrors.length} → ${secondPassErrors.length}`);
+                  analysisResult = correctedText;
+                  if (secondPassErrors.length > 0) {
+                    analysisResult += `\n\n--- DARWIN EVIDENCE-LOCK WARNING ---\nThe following issues remain after correction:\n${secondPassErrors.map(e => `- ${e}`).join('\n')}\nPlease review before sending to the carrier.\n--- END WARNING ---`;
+                  }
+                } else {
+                  console.warn('[DEMAND CORRECTION] Correction did not improve — keeping original with warnings.');
+                  analysisResult += `\n\n--- DARWIN EVIDENCE-LOCK WARNING ---\nThe following issues were detected in this demand package:\n${demandValidationErrors.map(e => `- ${e}`).join('\n')}\nPlease review and correct before sending to the carrier.\n--- END WARNING ---`;
+                }
+              }
+            } else {
+              console.warn('[DEMAND CORRECTION] Correction API call failed — appending warnings to original.');
+              analysisResult += `\n\n--- DARWIN EVIDENCE-LOCK WARNING ---\nThe following issues were detected in this demand package:\n${demandValidationErrors.map(e => `- ${e}`).join('\n')}\nPlease review and correct before sending to the carrier.\n--- END WARNING ---`;
+            }
+          } catch (corrErr) {
+            console.error('[DEMAND CORRECTION] Error during correction pass:', corrErr);
+            analysisResult += `\n\n--- DARWIN EVIDENCE-LOCK WARNING ---\nThe following issues were detected in this demand package:\n${demandValidationErrors.map(e => `- ${e}`).join('\n')}\nPlease review and correct before sending to the carrier.\n--- END WARNING ---`;
+          }
         }
       }
     }
