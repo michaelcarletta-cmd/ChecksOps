@@ -20,6 +20,49 @@ const ARGUMENT_TYPES = [
 
 type ArgumentType = typeof ARGUMENT_TYPES[number];
 
+const FORBIDDEN_INSURANCE_TERM_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/\brotted\s+decking\b/gi, "compromised decking"],
+  [/\brotten\s+decking\b/gi, "compromised decking"],
+  [/\brotted\s+(?:wood|sheathing|substrate)\b/gi, "damaged sheathing"],
+  [/\brotten\s+(?:wood|sheathing|substrate)\b/gi, "damaged sheathing"],
+  [/\bwood\s+rot\b/gi, "storm-damaged substrate"],
+  [/\bdry\s+rot\b/gi, "storm-damaged substrate"],
+  [/\bwet\s+rot\b/gi, "storm-damaged substrate"],
+  [/\bdecay(?:ed|ing)?\b/gi, "deterioration"],
+  [/\brot(?:ted|ting|ten)?\b/gi, "compromised"],
+];
+
+function sanitizeForbiddenInsuranceTerms(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return value ?? null;
+  let sanitized = value;
+  for (const [pattern, replacement] of FORBIDDEN_INSURANCE_TERM_REPLACEMENTS) {
+    sanitized = sanitized.replace(pattern, replacement);
+  }
+  return sanitized;
+}
+
+function sanitizeStringArray(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  return values
+    .map((value) => (typeof value === "string" ? sanitizeForbiddenInsuranceTerms(value) : null))
+    .filter((value): value is string => Boolean(value && value.trim()));
+}
+
+function sanitizeCitationArray(values: unknown): any[] {
+  if (!Array.isArray(values)) return [];
+  return values.map((citation: any) => ({
+    ...citation,
+    file_name:
+      typeof citation?.file_name === "string"
+        ? sanitizeForbiddenInsuranceTerms(citation.file_name)
+        : citation?.file_name,
+    snippet:
+      typeof citation?.snippet === "string"
+        ? sanitizeForbiddenInsuranceTerms(citation.snippet)
+        : citation?.snippet,
+  }));
+}
+
 const DETECTION_PATTERNS: Record<ArgumentType, RegExp[]> = {
   warranty_language_misuse: [
     /manufacturer['']?s?\s+warranty/i,
@@ -208,7 +251,10 @@ Every assertion MUST have a citation. Set needs_review: true if no direct quote 
         continue;
       }
 
-      const hasNeedsReview = (parsed.citations || []).some((c: any) => c.needs_review);
+      const sanitizedCitations = sanitizeCitationArray(parsed.citations);
+      const sanitizedChecklist = sanitizeStringArray(parsed.documentation_checklist);
+      const fallbackChecklist = sanitizeStringArray(playbook?.documentation_checklist);
+      const hasNeedsReview = sanitizedCitations.some((c: any) => c.needs_review);
 
       // Upsert using the UNIQUE index
       const { error: upsertErr } = await supabase
@@ -217,21 +263,33 @@ Every assertion MUST have a citation. Set needs_review: true if no direct quote 
           {
             claim_id: claimId,
             argument_type: detection.type,
-            carrier_position: parsed.carrier_position || detection.snippets[0],
-            warranty_scope: parsed.warranty_scope || null,
-            damage_mechanism: parsed.damage_mechanism || null,
-            loss_trigger: parsed.loss_trigger || null,
-            exclusion_invoked: parsed.exclusion_invoked || null,
-            storm_date: parsed.storm_date || null,
-            collateral_hits: parsed.collateral_hits || null,
-            pattern_notes: parsed.pattern_notes || null,
-            expert_support: parsed.expert_support || null,
-            principle: parsed.principle || playbook?.principle || "",
-            why_different: parsed.why_different || playbook?.why_different || "",
-            what_proves_damage: parsed.what_proves_damage || playbook?.what_proves_damage || "",
-            documentation_checklist: parsed.documentation_checklist || playbook?.documentation_checklist || [],
-            carrier_ready_paragraph: parsed.carrier_ready_paragraph || playbook?.carrier_ready_template || "",
-            citations: parsed.citations || [],
+            carrier_position:
+              sanitizeForbiddenInsuranceTerms(parsed.carrier_position || detection.snippets[0]) ||
+              "Carrier position requires review",
+            warranty_scope: sanitizeForbiddenInsuranceTerms(parsed.warranty_scope) || null,
+            damage_mechanism: sanitizeForbiddenInsuranceTerms(parsed.damage_mechanism) || null,
+            loss_trigger: sanitizeForbiddenInsuranceTerms(parsed.loss_trigger) || null,
+            exclusion_invoked: sanitizeForbiddenInsuranceTerms(parsed.exclusion_invoked) || null,
+            storm_date: sanitizeForbiddenInsuranceTerms(parsed.storm_date) || null,
+            collateral_hits: sanitizeForbiddenInsuranceTerms(parsed.collateral_hits) || null,
+            pattern_notes: sanitizeForbiddenInsuranceTerms(parsed.pattern_notes) || null,
+            expert_support: sanitizeForbiddenInsuranceTerms(parsed.expert_support) || null,
+            principle:
+              sanitizeForbiddenInsuranceTerms(parsed.principle || playbook?.principle) ||
+              "Carrier argument misapplies standards",
+            why_different:
+              sanitizeForbiddenInsuranceTerms(parsed.why_different || playbook?.why_different) ||
+              "Insurance coverage standards differ from the carrier's cited basis",
+            what_proves_damage:
+              sanitizeForbiddenInsuranceTerms(parsed.what_proves_damage || playbook?.what_proves_damage) ||
+              "Physical evidence of covered peril damage",
+            documentation_checklist:
+              sanitizedChecklist.length > 0 ? sanitizedChecklist : fallbackChecklist,
+            carrier_ready_paragraph:
+              sanitizeForbiddenInsuranceTerms(
+                parsed.carrier_ready_paragraph || playbook?.carrier_ready_template
+              ) || "",
+            citations: sanitizedCitations,
             source_file_id: fileId || null,
             source_file_name: fileName || null,
             confidence: parsed.confidence || 0.5,
