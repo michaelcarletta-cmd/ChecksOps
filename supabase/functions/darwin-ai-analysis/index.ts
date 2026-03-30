@@ -6908,6 +6908,9 @@ ${genConfig.rules ? `\nMANDATORY RULES:\n${genConfig.rules.map((r: string) => `-
         (dpContext as any)._demandEvidenceSummary = demandEvSummary;
         (dpContext as any)._scopeModules = activeModules;
 
+        // Step 2: Build locked instructions (replaces freeform evidence injection)
+        const lockedInstructions = renderDemandPackageLockedInstructions(demandEvSummary, activeModules);
+
         userPrompt = `${claimSummary}
 
 CLAIM FACTS:
