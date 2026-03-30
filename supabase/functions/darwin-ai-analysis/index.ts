@@ -47,7 +47,7 @@ STEP 3: SCOPE DISCUSSION (Repair vs Replace)
 ONLY after coverage is supported:
 - Discuss feasibility of repair vs replacement
 - Apply policy loss settlement terms (RCV/ACV)
-- Consider matching, uniform appearance, and reasonable repair standards
+- Consider repairability, uniform appearance, and reasonable repair standards
 - Use regulations governing proper claim handling
 - Manufacturer specs may ONLY support method feasibility — they CANNOT deny coverage
 
