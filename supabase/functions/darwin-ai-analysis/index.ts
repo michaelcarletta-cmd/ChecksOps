@@ -10883,6 +10883,21 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       console.log(`[OUTPUT FILTER] Applied stripExternalFormatting for ${analysisType}`);
     }
 
+    // ── DEMAND PACKAGE POST-VALIDATION — reject hallucinated damage categories ──
+    if (analysisType === 'demand_package' && analysisResult && typeof analysisResult === 'string') {
+      const dpCtx = additionalContext || {};
+      const evSummaryText = (dpCtx as any)._demandEvidenceSummaryText;
+      if (evSummaryText) {
+        const demandValidationErrors = postValidateDemandPackage(analysisResult, evSummaryText);
+        if (demandValidationErrors.length > 0) {
+          console.warn(`[DEMAND VALIDATION] ⚠️ Evidence-lock violations detected:`);
+          demandValidationErrors.forEach(e => console.warn(`  → ${e}`));
+          // Append warning footer to the output so the user is aware
+          analysisResult += `\n\n--- DARWIN EVIDENCE-LOCK WARNING ---\nThe following issues were detected in this demand package:\n${demandValidationErrors.map(e => `- ${e}`).join('\n')}\nPlease review and correct before sending to the carrier.\n--- END WARNING ---`;
+        }
+      }
+    }
+
     // ── STATE CITATION WATCHDOG — scan output for wrong-state references ──
     let citationAudit: { violations: string[]; cleaned: string } | null = null;
     if (analysisResult && typeof analysisResult === 'string') {
