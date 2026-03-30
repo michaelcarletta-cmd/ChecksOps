@@ -47,6 +47,46 @@ function normalizeLower(value: unknown): string {
   return safeString(value).toLowerCase();
 }
 
+const FORBIDDEN_INSURANCE_TERM_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/\brotted\s+decking\b/gi, "compromised decking"],
+  [/\brotten\s+decking\b/gi, "compromised decking"],
+  [/\brotted\s+(?:wood|sheathing|substrate)\b/gi, "damaged sheathing"],
+  [/\brotten\s+(?:wood|sheathing|substrate)\b/gi, "damaged sheathing"],
+  [/\bwood\s+rot\b/gi, "storm-damaged substrate"],
+  [/\bdry\s+rot\b/gi, "storm-damaged substrate"],
+  [/\bwet\s+rot\b/gi, "storm-damaged substrate"],
+  [/\bdecay(?:ed|ing)?\b/gi, "deterioration"],
+  [/\brot(?:ted|ting|ten)?\b/gi, "compromised"],
+];
+
+function sanitizeForbiddenInsuranceTerms(value: string): string {
+  let sanitized = value;
+  for (const [pattern, replacement] of FORBIDDEN_INSURANCE_TERM_REPLACEMENTS) {
+    sanitized = sanitized.replace(pattern, replacement);
+  }
+  return sanitized;
+}
+
+function sanitizeDemandPackageObject(demandPackage: Record<string, unknown>): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = { ...demandPackage };
+  for (const [key, value] of Object.entries(sanitized)) {
+    if (typeof value === "string") {
+      sanitized[key] = sanitizeForbiddenInsuranceTerms(value);
+      continue;
+    }
+    if (Array.isArray(value)) {
+      sanitized[key] = value.map((item) =>
+        typeof item === "string" ? sanitizeForbiddenInsuranceTerms(item) : item
+      );
+    }
+  }
+  return sanitized;
+}
+
+function containsForbiddenInsuranceTerms(text: string): boolean {
+  return /\brot(?:ted|ting|ten)?\b|\bdecay(?:ed|ing)?\b/i.test(text);
+}
+
 function getBestDocumentText(file: Record<string, any>): string {
   const cleanText = safeString(file.clean_text);
   const extractedText = safeString(file.extracted_text);
@@ -258,6 +298,7 @@ IMPORTANT WRITING RULES:
 - If no carrier estimate is provided, do not mention one.
 - Do not invent code citations or policy language. If not provided, refer generally to applicable policy obligations and standards of good-faith claim handling.
 - You MUST use the authoritative estimate total if one is provided.
+- NEVER use "rot", "rotted", "rotting", "rotten", "decay", "decayed", or "decaying". These terms are not acceptable in demand packages. Use "compromised decking", "damaged sheathing", or "storm-damaged substrate" instead.
 - Do not infer the demand amount from stray dollar values inside narrative text when an authoritative estimate total is present.
 - If multiple dollar values appear in the estimate materials, treat the authoritative estimate total as controlling.
 - Use the estimate total as the demand amount unless the materials support another specific figure.
@@ -719,6 +760,8 @@ Deno.serve(async (req) => {
       }
     }
 
+    demandPackage = sanitizeDemandPackageObject(demandPackage);
+
     // Enforce authoritative estimate total over any AI-hallucinated amount
     if (explicitEstimateTotal > 0) {
       demandPackage.demand_amount = money(explicitEstimateTotal);
@@ -730,6 +773,12 @@ Deno.serve(async (req) => {
             `Demand Amount: ${money(explicitEstimateTotal)}`
           );
       }
+    }
+
+    demandPackage = sanitizeDemandPackageObject(demandPackage);
+    const serializedDemandPackage = JSON.stringify(demandPackage);
+    if (containsForbiddenInsuranceTerms(serializedDemandPackage)) {
+      throw new Error("Demand package blocked: forbidden non-covered terminology detected (rot/decay).");
     }
 
     // Generate DOCX-ready HTML for export
