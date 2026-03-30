@@ -162,6 +162,27 @@ function stripExternalFormatting(text: string): string {
   return cleaned.trim();
 }
 
+const FORBIDDEN_INSURANCE_TERM_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/\brotted\s+decking\b/gi, 'compromised decking'],
+  [/\brotten\s+decking\b/gi, 'compromised decking'],
+  [/\brotted\s+(?:wood|sheathing|substrate)\b/gi, 'damaged sheathing'],
+  [/\brotten\s+(?:wood|sheathing|substrate)\b/gi, 'damaged sheathing'],
+  [/\bwood\s+rot\b/gi, 'storm-damaged substrate'],
+  [/\bdry\s+rot\b/gi, 'storm-damaged substrate'],
+  [/\bwet\s+rot\b/gi, 'storm-damaged substrate'],
+  [/\bdecay(?:ed|ing)?\b/gi, 'deterioration'],
+  [/\brot(?:ted|ting|ten)?\b/gi, 'compromised'],
+];
+
+function sanitizeForbiddenInsuranceTerms(text: string): string {
+  if (!text || typeof text !== 'string') return text;
+  let sanitized = text;
+  for (const [pattern, replacement] of FORBIDDEN_INSURANCE_TERM_REPLACEMENTS) {
+    sanitized = sanitized.replace(pattern, replacement);
+  }
+  return sanitized;
+}
+
 const LOW_SLOPE_PRIMARY_SCENARIO = 'low_slope_snow_ice_ponding';
 const REQUIRED_LOW_SLOPE_OPENING = 'The engineering report attributes the water intrusion to snow/ice meltwater penetrating age-related and maintenance-deferred openings in the low-slope roof covering.';
 
@@ -951,17 +972,19 @@ function postValidateDemandPackageStrict(
     }
   }
 
-  // ── Rot / decay lock — these terms are never covered by insurance ──
-  const forbiddenRotTerms = [
-    'rotted decking', 'rotted wood', 'rotted sheathing', 'rotted substrate',
-    'rotten wood', 'rotten decking', 'wood rot', 'dry rot', 'wet rot',
-    'rot ', ' rot', 'rotted', 'rotting', 'rotten',
-    'decay', 'decayed', 'decaying',
+  // ── Forbidden terminology lock ──
+  const forbiddenTermPatterns = [
+    /\brotted\s+decking\b/i,
+    /\brotted\s+(?:wood|sheathing|substrate)\b/i,
+    /\brotten\s+(?:wood|decking|sheathing|substrate)\b/i,
+    /\bwood\s+rot\b/i,
+    /\bdry\s+rot\b/i,
+    /\bwet\s+rot\b/i,
+    /\brot(?:ted|ting|ten)?\b/i,
+    /\bdecay(?:ed|ing)?\b/i,
   ];
-  for (const term of forbiddenRotTerms) {
-    if (lower.includes(term)) {
-      errors.push(`ROT/DECAY LOCK: forbidden term detected: "${term.trim()}" — rot and decay are never covered by insurance and must not appear in any output.`);
-    }
+  if (forbiddenTermPatterns.some((pattern) => pattern.test(text))) {
+    errors.push('FORBIDDEN TERMINOLOGY LOCK: non-covered substrate wording detected. Replace with approved phrasing (e.g., compromised decking, damaged sheathing, storm-damaged substrate).');
   }
 
   // ── Advocacy lock ──
@@ -11108,8 +11131,8 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
 
     // ── OUTPUT CLEANUP FILTER — strip markdown/bullets from external-facing outputs ──
     if (analysisResult && typeof analysisResult === 'string' && EXTERNAL_FACING_TYPES.has(analysisType)) {
-      analysisResult = stripExternalFormatting(analysisResult);
-      console.log(`[OUTPUT FILTER] Applied stripExternalFormatting for ${analysisType}`);
+      analysisResult = sanitizeForbiddenInsuranceTerms(stripExternalFormatting(analysisResult));
+      console.log(`[OUTPUT FILTER] Applied external sanitization for ${analysisType}`);
     }
 
     // ── DEMAND PACKAGE STRICT POST-VALIDATION (Steps 1, 4, 7) ──
@@ -11149,26 +11172,25 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
             if (correctionResp.ok) {
               const correctionData = await correctionResp.json();
               const correctedText = correctionData.choices?.[0]?.message?.content;
-              if (correctedText) {
-                const secondPassErrors = postValidateDemandPackageStrict(correctedText, demandEvSummaryObj);
-                if (secondPassErrors.length < demandValidationErrors.length) {
-                  console.log(`[DEMAND CORRECTION] Correction reduced violations: ${demandValidationErrors.length} → ${secondPassErrors.length}`);
-                  analysisResult = correctedText;
-                  if (secondPassErrors.length > 0) {
-                    analysisResult += `\n\n--- DARWIN EVIDENCE-LOCK WARNING ---\nThe following issues remain after correction:\n${secondPassErrors.map(e => `- ${e}`).join('\n')}\nPlease review before sending to the carrier.\n--- END WARNING ---`;
-                  }
-                } else {
-                  console.warn('[DEMAND CORRECTION] Correction did not improve — keeping original with warnings.');
-                  analysisResult += `\n\n--- DARWIN EVIDENCE-LOCK WARNING ---\nThe following issues were detected in this demand package:\n${demandValidationErrors.map(e => `- ${e}`).join('\n')}\nPlease review and correct before sending to the carrier.\n--- END WARNING ---`;
-                }
+              if (!correctedText) {
+                throw new Error('[DEMAND CORRECTION] Correction returned empty output.');
+              }
+
+              const sanitizedCorrectedText = sanitizeForbiddenInsuranceTerms(stripExternalFormatting(correctedText));
+              const secondPassErrors = postValidateDemandPackageStrict(sanitizedCorrectedText, demandEvSummaryObj);
+              if (secondPassErrors.length === 0) {
+                console.log('[DEMAND CORRECTION] Correction pass succeeded with zero violations.');
+                analysisResult = sanitizedCorrectedText;
+              } else {
+                throw new Error(`DEMAND STRICT VALIDATION FAILED AFTER CORRECTION: ${secondPassErrors.join(' | ')}`);
               }
             } else {
-              console.warn('[DEMAND CORRECTION] Correction API call failed — appending warnings to original.');
-              analysisResult += `\n\n--- DARWIN EVIDENCE-LOCK WARNING ---\nThe following issues were detected in this demand package:\n${demandValidationErrors.map(e => `- ${e}`).join('\n')}\nPlease review and correct before sending to the carrier.\n--- END WARNING ---`;
+              throw new Error(`[DEMAND CORRECTION] Correction API call failed (${correctionResp.status}).`);
             }
           } catch (corrErr) {
             console.error('[DEMAND CORRECTION] Error during correction pass:', corrErr);
-            analysisResult += `\n\n--- DARWIN EVIDENCE-LOCK WARNING ---\nThe following issues were detected in this demand package:\n${demandValidationErrors.map(e => `- ${e}`).join('\n')}\nPlease review and correct before sending to the carrier.\n--- END WARNING ---`;
+            const errMsg = corrErr instanceof Error ? corrErr.message : 'Demand package validation failed after correction.';
+            throw new Error(`Demand package blocked by strict validator. ${errMsg}`);
           }
         }
       }
