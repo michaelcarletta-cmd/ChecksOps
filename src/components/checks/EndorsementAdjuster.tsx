@@ -420,11 +420,14 @@ export function EndorsementAdjuster({
             </div>
           ))}
 
-          {clientEndorsements.length === 0 && !endorsementsLoading && (
-            <div style={{ fontSize: byLineFontPx, fontStyle: "italic", color: "#999", marginBottom: sectionGapPx }}>
-              (No client endorsements)
-            </div>
-          )}
+          {clientEndorsements.length === 0 && !endorsementsLoading && (() => {
+            const waivedClients = signedEndorsements.filter(e => e.status === "waived" && !isFreedomOrCarletta(e.payee_name));
+            return waivedClients.length > 0 ? null : (
+              <div style={{ fontSize: byLineFontPx, fontStyle: "italic", color: "#999", marginBottom: sectionGapPx }}>
+                (No client endorsements)
+              </div>
+            );
+          })()}
 
           <div style={{ fontSize: companyFontPx, fontWeight: 700, lineHeight: 1.05, marginBottom: lineGapPx, color: "#111111" }}>
             {companyName}
