@@ -412,7 +412,7 @@ async function runBulkSync(supabase: any, allConnections: any[]): Promise<{ tota
         const isInbound = email.to.toLowerCase() === conn.email_address.toLowerCase() ||
                           email.from.toLowerCase() !== conn.email_address.toLowerCase();
 
-        const { error: insertError } = await supabase.from('emails').insert({
+        const { data: insertedEmail, error: insertError } = await supabase.from('emails').insert({
           claim_id: claim.id,
           subject: email.subject,
           body: email.full_body,
@@ -420,11 +420,16 @@ async function runBulkSync(supabase: any, allConnections: any[]): Promise<{ tota
           recipient_name: isInbound ? email.from_name : email.to_name,
           recipient_type: 'outlook_sync',
           sent_at: sentAt,
-        });
+        }).select('id').single();
 
         if (!insertError) {
           claimImported++;
-          existingBodyMap.set(key, { id: '', body_length: email.full_body.length });
+          existingBodyMap.set(key, { id: insertedEmail?.id || '', body_length: email.full_body.length });
+
+          // Download attachments if present
+          if (email.has_attachments && email.graph_id && insertedEmail?.id) {
+            await fetchAndSaveAttachments(accessToken, email.graph_id, claim.id, insertedEmail.id, supabase);
+          }
         }
       }
 
