@@ -178,6 +178,9 @@ export function ClaimAccounting({ claim, userRole }: ClaimAccountingProps) {
       {/* Insurance Checks */}
       <ChecksSection claimId={claim.id} checks={checks || []} isAdmin={isAdmin} claim={claim} expectedChecks={expectedChecks} />
 
+      {/* Mortgage Releases */}
+      <MortgageReleasesSection claimId={claim.id} checks={checks || []} isAdmin={isAdmin} />
+
       {/* Expenses */}
       <ExpensesSection claimId={claim.id} expenses={expenses || []} isAdmin={isAdmin} />
 
