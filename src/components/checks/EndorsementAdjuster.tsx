@@ -71,8 +71,7 @@ export function EndorsementAdjuster({
           .from("check_endorsements")
           .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_id")
           .eq("check_id", checkId)
-          .eq("status", "signed")
-          .not("signature_image_url", "is", null)
+          .in("status", ["signed", "waived"])
           .order("created_at", { ascending: true });
         if (error) throw error;
         if (!cancelled) setSignedEndorsements(data ?? []);
@@ -421,11 +420,14 @@ export function EndorsementAdjuster({
             </div>
           ))}
 
-          {clientEndorsements.length === 0 && !endorsementsLoading && (
-            <div style={{ fontSize: byLineFontPx, fontStyle: "italic", color: "#999", marginBottom: sectionGapPx }}>
-              (No client endorsements)
-            </div>
-          )}
+          {clientEndorsements.length === 0 && !endorsementsLoading && (() => {
+            const waivedClients = signedEndorsements.filter(e => e.status === "waived" && !isFreedomOrCarletta(e.payee_name));
+            return waivedClients.length > 0 ? null : (
+              <div style={{ fontSize: byLineFontPx, fontStyle: "italic", color: "#999", marginBottom: sectionGapPx }}>
+                (No client endorsements)
+              </div>
+            );
+          })()}
 
           <div style={{ fontSize: companyFontPx, fontWeight: 700, lineHeight: 1.05, marginBottom: lineGapPx, color: "#111111" }}>
             {companyName}
