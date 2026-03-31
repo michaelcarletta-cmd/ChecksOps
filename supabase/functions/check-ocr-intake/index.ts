@@ -395,6 +395,7 @@ Rules:
 - Payee type: mortgage_company (banks/lending/mortgage), contractor (construction/roofing/restoration), public_adjuster (adjusting/PA), insured (individuals/homeowners), unknown otherwise.
 - CRITICAL: "payees" should ONLY contain the names of people or organizations the check is payable to. Do NOT include mailing addresses, street addresses, city/state/zip, suite numbers, PO boxes, or any address components as payees. The "payee_line" field captures the full text, but "payees" must be only the entity names (e.g. "Freedom Adjustment" and "Ildefonso Rosas", NOT "865 Route 33 Business Ste 3 Unit #231 Freehold NJ 07728").
 - Amount must be numeric only. Date must be YYYY-MM-DD.
+- CRITICAL for amount: The check amount appears in TWO places — a numeric box (usually right side) AND written out in words on the "dollars" line. Check BOTH locations. Even if one is partially obscured, use the other. The amount should almost NEVER be null for a valid check. If you can read the written-out amount (e.g. "Two thousand five hundred ten and 27/100"), convert it to numeric (2510.27). Only return null if BOTH the numeric and written amounts are completely unreadable.
 - Return ONLY the JSON object, no markdown, no explanation.`;
 
       const content: Array<Record<string, unknown>> = [

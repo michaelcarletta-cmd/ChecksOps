@@ -742,6 +742,40 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Re-run OCR button                                                   */
+/* ------------------------------------------------------------------ */
+
+function RerunOcrButton({ checkId, onSuccess }: { checkId: string; onSuccess: () => void }) {
+  const [running, setRunning] = useState(false);
+  const { toast } = useToast();
+
+  const handleRerun = async () => {
+    setRunning(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const { error } = await supabase.functions.invoke("check-ocr-intake", {
+        body: { checkId },
+        headers: { Authorization: `Bearer ${session.session?.access_token}` },
+      });
+      if (error) throw new Error(error.message);
+      toast({ title: "OCR re-run complete" });
+      onSuccess();
+    } catch (e: unknown) {
+      toast({ title: "OCR re-run failed", description: e instanceof Error ? e.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <Button variant="outline" size="sm" className="w-full text-xs h-7" onClick={handleRerun} disabled={running}>
+      <RefreshCw className={`h-3 w-3 mr-1 ${running ? "animate-spin" : ""}`} />
+      {running ? "Re-analyzing..." : "Re-run OCR"}
+    </Button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Detail panel                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -1260,6 +1294,7 @@ function CheckDetailPanel({
               <DetailRow label="Payee Line" value={check.payee_line} />
               <DetailRow label="Multi-Payee" value={check.is_multi_payee ? "Yes" : "No"} />
               <DetailRow label="OCR Status" value={check.ocr_status} />
+              <RerunOcrButton checkId={checkId} onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
               <Separator />
               {/* Check Images */}
               {(frontImageUrl || backImageUrl) && (
