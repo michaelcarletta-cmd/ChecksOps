@@ -71,8 +71,7 @@ export function EndorsementAdjuster({
           .from("check_endorsements")
           .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_id")
           .eq("check_id", checkId)
-          .eq("status", "signed")
-          .not("signature_image_url", "is", null)
+          .in("status", ["signed", "waived"])
           .order("created_at", { ascending: true });
         if (error) throw error;
         if (!cancelled) setSignedEndorsements(data ?? []);
