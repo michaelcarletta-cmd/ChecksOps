@@ -88,7 +88,7 @@ async function fetchGraphEmails(accessToken: string, maxPages = 10): Promise<any
   let url: string | null =
     `https://graph.microsoft.com/v1.0/me/messages?` +
     `$filter=receivedDateTime ge ${thirtyDaysAgo}` +
-    `&$select=from,toRecipients,subject,receivedDateTime,body,bodyPreview,internetMessageId` +
+    `&$select=from,toRecipients,subject,receivedDateTime,body,bodyPreview,internetMessageId,hasAttachments,id` +
     `&$top=250&$orderby=receivedDateTime desc&$count=false`;
 
   let page = 0;
@@ -137,6 +137,7 @@ async function fetchGraphEmails(accessToken: string, maxPages = 10): Promise<any
         }
       }
       return {
+        graph_id: msg.id,
         from: msg.from?.emailAddress?.address || 'Unknown',
         from_name: msg.from?.emailAddress?.name || '',
         to: msg.toRecipients?.[0]?.emailAddress?.address || 'Unknown',
@@ -146,6 +147,7 @@ async function fetchGraphEmails(accessToken: string, maxPages = 10): Promise<any
         full_body: fullBody || msg.bodyPreview || '',
         body_preview: msg.bodyPreview || '',
         message_id: msg.internetMessageId || '',
+        has_attachments: msg.hasAttachments || false,
       };
     });
 
@@ -156,6 +158,109 @@ async function fetchGraphEmails(accessToken: string, maxPages = 10): Promise<any
 
   console.log(`Fetched ${allEmails.length} emails across ${page} page(s)`);
   return allEmails;
+}
+
+// --------------- Attachment helpers ---------------
+
+const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10MB
+
+async function fetchAndSaveAttachments(
+  accessToken: string,
+  graphMessageId: string,
+  claimId: string,
+  emailId: string,
+  supabase: any
+): Promise<number> {
+  let saved = 0;
+  try {
+    const url = `https://graph.microsoft.com/v1.0/me/messages/${graphMessageId}/attachments?$select=id,name,contentType,size,contentBytes,isInline`;
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!response.ok) {
+      console.error(`Failed to fetch attachments for message ${graphMessageId}: ${response.status}`);
+      return 0;
+    }
+
+    const data = await response.json();
+    const attachments = data.value || [];
+
+    for (const att of attachments) {
+      // Skip inline images (embedded in body) and items without content
+      if (att.isInline || !att.contentBytes || att['@odata.type'] === '#microsoft.graph.itemAttachment') continue;
+
+      const fileName = att.name || 'attachment';
+      const contentType = att.contentType || 'application/octet-stream';
+      const size = att.size || 0;
+
+      if (size > MAX_ATTACHMENT_SIZE) {
+        console.log(`Skipping large attachment ${fileName} (${size} bytes)`);
+        continue;
+      }
+
+      // Decode base64 content
+      let fileBuffer: Uint8Array;
+      try {
+        const binaryString = atob(att.contentBytes);
+        fileBuffer = Uint8Array.from(binaryString, (c: string) => c.charCodeAt(0));
+      } catch (decodeErr) {
+        console.error(`Failed to decode attachment ${fileName}:`, decodeErr);
+        continue;
+      }
+
+      const storagePath = `${claimId}/email-attachments/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
+
+      // Upload to storage
+      const { error: uploadError } = await supabase.storage
+        .from('claim-files')
+        .upload(storagePath, fileBuffer, { contentType });
+
+      if (uploadError) {
+        console.error(`Failed to upload attachment ${fileName}:`, uploadError);
+        continue;
+      }
+
+      // Create file record
+      const { data: fileRecord, error: fileError } = await supabase
+        .from('claim_files')
+        .insert({
+          claim_id: claimId,
+          file_name: fileName,
+          file_path: storagePath,
+          file_size: fileBuffer.length,
+          file_type: contentType,
+          source: 'email_attachment',
+          uploaded_by: null,
+          email_id: emailId,
+        })
+        .select('id')
+        .single();
+
+      if (fileError) {
+        console.error(`Failed to create file record for ${fileName}:`, fileError);
+        continue;
+      }
+
+      saved++;
+      console.log(`Attachment saved: ${fileName} for claim ${claimId}`);
+
+      // Trigger Darwin processing (fire and forget)
+      if (fileRecord) {
+        fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/darwin-process-document`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ fileId: fileRecord.id })
+        }).catch(err => console.error('Darwin attachment processing error:', err));
+      }
+    }
+  } catch (err) {
+    console.error(`Error fetching attachments for message ${graphMessageId}:`, err);
+  }
+  return saved;
 }
 
 
