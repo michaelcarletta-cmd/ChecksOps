@@ -1133,6 +1133,9 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
         ) : (
           <p className="text-muted-foreground text-center py-8">No checks recorded yet</p>
         )}
+
+        {/* Mortgage Disbursements - inline */}
+        <MortgageReleasesInline claimId={claimId} checks={checks} isAdmin={isAdmin} />
       </CardContent>
     </Card>
   );
