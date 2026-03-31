@@ -10,7 +10,76 @@ const corsHeaders = {
 
 type Json = Record<string, unknown>;
 type DemandMode = "standard" | "proven";
+type PolicyMatchConfidence = "none" | "low" | "medium" | "high";
+type PolicyReferenceMode = "general_only" | "qualified_reference" | "claim_specific";
 
+interface PolicyMatchResult {
+  confidence: PolicyMatchConfidence;
+  score: number;
+  referenceMode: PolicyReferenceMode;
+  matchedFiles: string[];
+  rationale: string[];
+  hasPolicyFiles: boolean;
+  hasCarrierMatch: boolean;
+  hasPolicyNumberMatch: boolean;
+  hasStateMatch: boolean;
+  hasDeclarationsIndicator: boolean;
+  genericFileCount: number;
+}
+
+const STATE_NAME_TO_CODE: Record<string, string> = {
+  alabama: "AL",
+  alaska: "AK",
+  arizona: "AZ",
+  arkansas: "AR",
+  california: "CA",
+  colorado: "CO",
+  connecticut: "CT",
+  delaware: "DE",
+  florida: "FL",
+  georgia: "GA",
+  hawaii: "HI",
+  idaho: "ID",
+  illinois: "IL",
+  indiana: "IN",
+  iowa: "IA",
+  kansas: "KS",
+  kentucky: "KY",
+  louisiana: "LA",
+  maine: "ME",
+  maryland: "MD",
+  massachusetts: "MA",
+  michigan: "MI",
+  minnesota: "MN",
+  mississippi: "MS",
+  missouri: "MO",
+  montana: "MT",
+  nebraska: "NE",
+  nevada: "NV",
+  new_hampshire: "NH",
+  new_jersey: "NJ",
+  new_mexico: "NM",
+  new_york: "NY",
+  north_carolina: "NC",
+  north_dakota: "ND",
+  ohio: "OH",
+  oklahoma: "OK",
+  oregon: "OR",
+  pennsylvania: "PA",
+  rhode_island: "RI",
+  south_carolina: "SC",
+  south_dakota: "SD",
+  tennessee: "TN",
+  texas: "TX",
+  utah: "UT",
+  vermont: "VT",
+  virginia: "VA",
+  washington: "WA",
+  west_virginia: "WV",
+  wisconsin: "WI",
+  wyoming: "WY",
+  district_of_columbia: "DC",
+};
 const PROVEN_MODE_RULES = `
 You are generating a claim documentation package in "Proven Mode".
 
@@ -196,6 +265,228 @@ function looksLikePolicyFile(file: Record<string, any>): boolean {
   ].some((term) => name.includes(term));
 }
 
+function normalizeStateCode(value: unknown): string {
+  const raw = safeString(value).toLowerCase().replace(/\s+/g, "_");
+  if (!raw) return "";
+  if (/^[a-z]{2}$/i.test(raw)) return raw.toUpperCase();
+  return STATE_NAME_TO_CODE[raw] || "";
+}
+
+function extractClaimPolicyNumberCandidates(claim: Record<string, any>): string[] {
+  const candidates = [
+    safeString(claim.policy_number),
+    safeString(claim.policy_no),
+    safeString(claim.policyNumber),
+  ]
+    .map((v) => v.replace(/[^a-zA-Z0-9]/g, "").toLowerCase())
+    .filter((v) => v.length >= 6);
+  return [...new Set(candidates)];
+}
+
+function scorePolicyMatch(args: {
+  claim: Record<string, any>;
+  policyFiles: Record<string, any>[];
+  policyTextFromFiles: string;
+}): PolicyMatchResult {
+  const claim = args.claim || {};
+  const claimCarrier = normalizeLower(
+    pick(claim, ["carrier", "carrier_name", "insurance_company"], "")
+  );
+  const claimStateCode = normalizeStateCode(
+    pick(claim, ["state", "state_code", "loss_state", "property_state"], "")
+  );
+  const claimPolicyCandidates = extractClaimPolicyNumberCandidates(claim);
+  const policyFiles = args.policyFiles || [];
+
+  if (!policyFiles.length) {
+    return {
+      confidence: "none",
+      score: 0,
+      referenceMode: "general_only",
+      matchedFiles: [],
+      rationale: ["No policy files selected for this demand package."],
+      hasPolicyFiles: false,
+      hasCarrierMatch: false,
+      hasPolicyNumberMatch: false,
+      hasStateMatch: false,
+      hasDeclarationsIndicator: false,
+      genericFileCount: 0,
+    };
+  }
+
+  let bestFileScore = 0;
+  let hasCarrierMatch = false;
+  let hasPolicyNumberMatch = false;
+  let hasStateMatch = false;
+  let hasDeclarationsIndicator = false;
+  let genericFileCount = 0;
+  const matchedFiles: string[] = [];
+  const rationale: string[] = [];
+
+  for (const file of policyFiles) {
+    const fileName = pick(file, ["file_name", "name"], "Unknown file");
+    const fileMeta = `${normalizeLower(file.file_name)} ${normalizeLower(file.name)} ${normalizeLower(
+      file.doc_type
+    )} ${normalizeLower(file.category)} ${normalizeLower(file.analysis_type)}`;
+    const text = normalizeLower(getBestDocumentText(file));
+    const haystack = `${fileMeta} ${text}`;
+
+    let score = 15;
+    let fileMatched = false;
+
+    const hasDecl = /declarations?|dec\s*page|declaration\s*page|coverage\s+summary/.test(haystack);
+    if (hasDecl) {
+      score += 20;
+      hasDeclarationsIndicator = true;
+      fileMatched = true;
+    }
+
+    if (claimCarrier && haystack.includes(claimCarrier)) {
+      score += 30;
+      hasCarrierMatch = true;
+      fileMatched = true;
+    }
+
+    if (claimStateCode && new RegExp(`\\b${claimStateCode.toLowerCase()}\\b`).test(haystack)) {
+      score += 15;
+      hasStateMatch = true;
+      fileMatched = true;
+    }
+
+    const compactHaystack = haystack.replace(/[^a-z0-9]/g, "");
+    const policyNumberMatched = claimPolicyCandidates.some((candidate) =>
+      compactHaystack.includes(candidate)
+    );
+    if (policyNumberMatched) {
+      score += 35;
+      hasPolicyNumberMatch = true;
+      fileMatched = true;
+    }
+
+    if (/sample|generic|template|specimen|example/.test(haystack)) {
+      score -= 20;
+      genericFileCount += 1;
+      rationale.push(`${fileName}: appears to be generic/sample policy content.`);
+    }
+
+    if (fileMatched) matchedFiles.push(fileName);
+    bestFileScore = Math.max(bestFileScore, Math.max(0, Math.min(100, score)));
+  }
+
+  const policyTextLength = safeString(args.policyTextFromFiles).length;
+  if (policyTextLength < 250) {
+    bestFileScore = Math.max(0, bestFileScore - 10);
+    rationale.push("Policy text extraction is limited; restrict policy-specific conclusions.");
+  }
+
+  if (hasPolicyNumberMatch) {
+    rationale.push("Policy number indicators matched selected policy materials.");
+  } else {
+    rationale.push("No direct policy number match found in selected policy materials.");
+  }
+  if (hasCarrierMatch) {
+    rationale.push("Carrier indicators matched selected policy materials.");
+  } else {
+    rationale.push("Carrier indicators not clearly matched in selected policy materials.");
+  }
+  if (hasStateMatch) {
+    rationale.push("State indicators matched selected policy materials.");
+  } else {
+    rationale.push("State indicators not clearly matched in selected policy materials.");
+  }
+
+  let confidence: PolicyMatchConfidence = "low";
+  if (bestFileScore >= 80 && hasCarrierMatch && hasPolicyNumberMatch) {
+    confidence = "high";
+  } else if (bestFileScore >= 55 && (hasCarrierMatch || hasPolicyNumberMatch || hasStateMatch)) {
+    confidence = "medium";
+  }
+
+  if (genericFileCount > 0) {
+    if (confidence === "high") confidence = "medium";
+    else if (confidence === "medium") confidence = "low";
+  }
+
+  const referenceMode: PolicyReferenceMode =
+    confidence === "high"
+      ? "claim_specific"
+      : confidence === "medium"
+      ? "qualified_reference"
+      : "general_only";
+
+  return {
+    confidence,
+    score: bestFileScore,
+    referenceMode,
+    matchedFiles: [...new Set(matchedFiles)],
+    rationale,
+    hasPolicyFiles: true,
+    hasCarrierMatch,
+    hasPolicyNumberMatch,
+    hasStateMatch,
+    hasDeclarationsIndicator,
+    genericFileCount,
+  };
+}
+
+function buildPolicyGateInstructions(
+  policyMatch: PolicyMatchResult,
+  policyText: string
+): string {
+  const base = [
+    "POLICY MATCH SUMMARY:",
+    `- Match confidence: ${policyMatch.confidence}`,
+    `- Match score: ${policyMatch.score}/100`,
+    `- Reference mode: ${policyMatch.referenceMode}`,
+    `- Policy files selected: ${policyMatch.hasPolicyFiles ? "yes" : "no"}`,
+    `- Carrier match: ${policyMatch.hasCarrierMatch ? "yes" : "no"}`,
+    `- Policy number match: ${policyMatch.hasPolicyNumberMatch ? "yes" : "no"}`,
+    `- State match: ${policyMatch.hasStateMatch ? "yes" : "no"}`,
+    `- Declarations indicator: ${policyMatch.hasDeclarationsIndicator ? "yes" : "no"}`,
+  ];
+
+  if (policyMatch.matchedFiles.length > 0) {
+    base.push(`- Matched policy files: ${policyMatch.matchedFiles.join(", ")}`);
+  }
+  if (policyMatch.rationale.length > 0) {
+    base.push("- Match rationale:");
+    for (const note of policyMatch.rationale) base.push(`  - ${note}`);
+  }
+
+  if (!policyText.trim() || policyMatch.confidence === "none" || policyMatch.referenceMode === "general_only") {
+    base.push(
+      "",
+      "POLICY REFERENCE GATE (ENFORCED):",
+      "- Do NOT quote or paraphrase specific policy clauses, section numbers, or endorsement language.",
+      "- Do NOT represent any generic/sample/specimen wording as the insured's actual policy terms.",
+      "- Keep policy discussion to general claim-handling obligations and qualify all coverage statements.",
+      "- Add a missing_evidence entry requesting the certified policy packet (declarations, form editions, endorsements, exclusions, and conditions)."
+    );
+    return base.join("\n");
+  }
+
+  if (policyMatch.referenceMode === "qualified_reference") {
+    base.push(
+      "",
+      "POLICY REFERENCE GATE (ENFORCED):",
+      "- You may use policy language only as qualified reference.",
+      "- Explicitly label references as 'based on selected policy materials' rather than confirmed claim-specific terms.",
+      "- Avoid definitive clause-to-loss conclusions unless directly supported by matching indicators.",
+      "- Include a missing_evidence item requesting full certified policy for final confirmation."
+    );
+    return base.join("\n");
+  }
+
+  base.push(
+    "",
+    "POLICY REFERENCE GATE (ENFORCED):",
+    "- You may cite and analyze specific policy language from the selected policy materials.",
+    "- Tie each cited policy term to observed facts and claimed scope.",
+    "- Do not cite any policy text not present in the selected materials."
+  );
+  return base.join("\n");
+}
+
 function summarizeEstimateLines(lines: Record<string, any>[]) {
   const roomTradeTotals = new Map<string, number>();
   const tradeTotals = new Map<string, number>();
@@ -329,6 +620,7 @@ function buildDemandPrompt(args: {
   inspectionText: string;
   estimateText: string;
   policyText: string;
+  policyMatch: PolicyMatchResult;
   timelineText: string;
   priorPaymentsText: string;
   userNotes: string;
@@ -350,6 +642,13 @@ function buildDemandPrompt(args: {
   const intelligenceText = args.intelligence ? JSON.stringify(args.intelligence, null, 2) : "No intelligence summary available.";
   const isProven = args.mode === "proven";
   const toneBlock = isProven ? "" : getToneInstructions(args.tone);
+  const policyConstraintBlock = isProven
+    ? args.policyMatch.referenceMode === "claim_specific"
+      ? `POLICY REFERENCE MODE: claim_specific (high-confidence policy match).\nYou may use direct policy-language analysis from selected materials, with precise section labels where available.`
+      : args.policyMatch.referenceMode === "qualified_reference"
+      ? `POLICY REFERENCE MODE: qualified_reference (medium-confidence policy match).\nUse cautious, qualified policy references. Do not present policy language as definitively claim-specific unless clearly labeled in selected documents.`
+      : `POLICY REFERENCE MODE: general_only (low/no policy match confidence).\nDo NOT use specific policy provisions as controlling. Use general policy principles only and explicitly note missing/inconclusive policy proof in "missing_evidence".`
+    : "";
 
   return `
 You are Darwin, an elite public adjuster demand-package engine.
@@ -363,6 +662,7 @@ Your task is to analyze:
 Then generate a ${isProven ? "TECHNICALLY SOUND, DOCUMENTATION-DRIVEN CLAIM PACKAGE" : "HIGH-PRESSURE, TECHNICALLY SOUND, COVERAGE-FOCUSED DEMAND PACKAGE"} that expands on the documents and presents the claim in a way that makes ${isProven ? "an efficient and accurate carrier determination" : "payment the reasonable next step for the carrier"}.
 
 ${isProven ? PROVEN_MODE_RULES : ""}
+${policyConstraintBlock}
 
 IMPORTANT WRITING RULES:
 - Write as a professional public adjuster claim demand.
@@ -476,6 +776,13 @@ ${args.carrierEstimateText || "None provided."}
 
 POLICY DOCUMENTS (SELECTED):
 ${args.policyText || "No policy text was identified in the selected materials."}
+
+POLICY MATCH SUMMARY:
+- Confidence: ${args.policyMatch.confidence}
+- Score: ${args.policyMatch.score}
+- Reference Mode: ${args.policyMatch.referenceMode}
+- Matched Files: ${args.policyMatch.matchedFiles.length ? args.policyMatch.matchedFiles.join(", ") : "None"}
+- Rationale: ${args.policyMatch.rationale.length ? args.policyMatch.rationale.join(" | ") : "No policy-match rationale available."}
 
 FINAL REQUIREMENT:
 The "full_demand_package" field must be a polished, carrier-ready demand document with clear section headings:
@@ -801,6 +1108,12 @@ Deno.serve(async (req) => {
       policyTextFromFiles,
       30000
     );
+    const policyMatch = scorePolicyMatch({
+      claim,
+      policyFiles,
+      policyTextFromFiles,
+    });
+    const policyTextForPrompt = applyPolicyReferenceMode(policyText, policyMatch);
 
     if (!inspectionText && !estimateText && !claimContextFallback) {
       return json({ error: "Not enough claim context was found to build a demand package yet. Add claim facts, document text, or estimate lines and try again." }, 400);
@@ -820,7 +1133,7 @@ Deno.serve(async (req) => {
       ? `CARRIER ESTIMATE:\n${carrierEstimateTextFromFiles}`
       : "CARRIER ESTIMATE:\nNone provided.";
 
-    console.log(`Demand package context: inspection=${inspectionText.length} chars, estimate=${estimateText.length} chars, timeline=${timelineText.length} chars, files=${files.length}, carrierEstimateFiles=${carrierEstimateFiles.length}, fallback=${claimContextFallback.length}`);
+    console.log(`Demand package context: inspection=${inspectionText.length} chars, estimate=${estimateText.length} chars, policy=${policyTextForPrompt.length} chars, policyMatch=${policyMatch.confidence}/${policyMatch.score}/${policyMatch.referenceMode}, timeline=${timelineText.length} chars, files=${files.length}, carrierEstimateFiles=${carrierEstimateFiles.length}, fallback=${claimContextFallback.length}`);
 
 
     const prompt = buildDemandPrompt({
@@ -837,7 +1150,8 @@ Deno.serve(async (req) => {
       tone,
       carrierEstimateText: carrierEstimateBlock,
       mode,
-      policyText,
+      policyText: policyTextForPrompt,
+      policyMatch,
     });
 
     // Use centralized AI router with reasoning model — higher tokens for complete demands
@@ -920,6 +1234,13 @@ Deno.serve(async (req) => {
       mode,
       tone,
       generatedAt: new Date().toISOString(),
+      policyMatch: {
+        confidence: policyMatch.confidence,
+        score: policyMatch.score,
+        referenceMode: policyMatch.referenceMode,
+        matchedFiles: policyMatch.matchedFiles,
+        rationale: policyMatch.rationale,
+      },
       inputSummary: {
         inspectionChars: inspectionText.length,
         estimateChars: estimateText.length,
@@ -927,6 +1248,9 @@ Deno.serve(async (req) => {
         inspectionFileCount: inspectionFiles.length,
         estimateFileCount: estimateFiles.length,
         policyFileCount: policyFiles.length,
+        policyMatchScore: policyMatch.score,
+        policyMatchConfidence: policyMatch.confidence,
+        policyReferenceMode: policyMatch.referenceMode,
         hasDeclaredPosition: !!resolvedDeclaredPosition,
         usedContextFallback: !inspectionReportTextOverride && !inspectionTextFromFiles && !allFileText,
       },
@@ -943,6 +1267,13 @@ Deno.serve(async (req) => {
             generated_at: new Date().toISOString(),
             mode,
             tone,
+            policy_match: {
+              confidence: policyMatch.confidence,
+              score: policyMatch.score,
+              reference_mode: policyMatch.referenceMode,
+              matched_files: policyMatch.matchedFiles,
+              rationale: policyMatch.rationale,
+            },
             title: demandPackage?.title || "",
             subject_line: demandPackage?.subject_line || "",
             demand_amount: demandPackage?.demand_amount || "",
