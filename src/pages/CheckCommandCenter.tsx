@@ -1124,8 +1124,9 @@ function CheckDetailPanel({
   }
   const isDepositBlocked = (endorsements.length > 0 && !allEndorsementsComplete) || check.status === "loss_draft_required";
 
+  // Only include payees who actually signed through the portal (not waived — waived means physical endorsement already exists)
   const endorsementRows = endorsements.filter(
-    (e) => e.status === "signed" || e.status === "waived" || !!e.signature_image_url || !!e.signed_at,
+    (e) => e.status === "signed" && (!!e.signature_image_url || !!e.signed_at),
   );
   const endorsementText = endorsementRows.length > 0
     ? "Pay to the Order of\nFreedom Adjustment\nFor Mobile Deposit Only\nFreedom Adjustment"
