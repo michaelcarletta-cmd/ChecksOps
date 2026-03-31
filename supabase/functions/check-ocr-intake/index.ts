@@ -34,6 +34,12 @@ interface EligibilityResult {
   rules: Record<string, unknown>;
 }
 
+interface AmountFallbackResult {
+  amount: string | null;
+  confidence: number | null;
+  raw: string | null;
+}
+
 const VALID_PAYEE_TYPES = new Set([
   "insured", "mortgage_company", "contractor", "public_adjuster", "unknown",
 ]);
@@ -71,6 +77,102 @@ function logAudit(
   });
 }
 
+function normalizeAmountValue(raw: string | null): string | null {
+  if (!raw) return null;
+
+  const direct = raw.replace(/[$,\s]/g, "");
+  if (!isNaN(Number(direct)) && Number(direct) > 0) {
+    return Number(direct).toFixed(2);
+  }
+
+  // Fallback: grab first numeric token from messy OCR output like
+  // "Amount: USD 12,540.75" or "12 540.75 dollars"
+  const match = raw.match(/\d[\d,]*(?:\.\d{1,2})?/);
+  if (!match) return null;
+
+  const token = match[0].replace(/,/g, "");
+  const parsed = Number(token);
+  if (isNaN(parsed) || parsed <= 0) return null;
+
+  return parsed.toFixed(2);
+}
+
+async function extractAmountWithFocusedPass(
+  lovableKey: string,
+  frontImageUrl: string,
+  backImageUrl: string | null,
+): Promise<AmountFallbackResult> {
+  const amountPrompt = `You are extracting ONLY the check amount from an insurance check image.
+Return ONLY valid JSON:
+{
+  "amount": "1234.56" or null,
+  "confidence": 0-100,
+  "reason": "short explanation"
+}
+
+Rules:
+- Check BOTH the numeric amount box and the written amount line ending with "dollars".
+- If one is unclear, use the other.
+- Convert written-out amount words to numeric.
+- Amount must be numeric with optional decimals, no currency symbols.
+- Return null ONLY if both locations are unreadable.`;
+
+  const content: Array<Record<string, unknown>> = [
+    { type: "text", text: amountPrompt },
+    { type: "image_url", image_url: { url: frontImageUrl } },
+  ];
+
+  if (backImageUrl) {
+    content.push(
+      { type: "text", text: "Back image (for context if needed):" },
+      { type: "image_url", image_url: { url: backImageUrl } },
+    );
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+
+  try {
+    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${lovableKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-pro",
+        response_format: { type: "json_object" },
+        messages: [{ role: "user", content }],
+      }),
+      signal: controller.signal,
+    });
+
+    if (!aiResp.ok) {
+      const detail = await aiResp.text().catch(() => "");
+      throw new Error(`Focused amount OCR failed [${aiResp.status}]: ${detail}`);
+    }
+
+    const aiData = await aiResp.json().catch(() => ({} as Record<string, unknown>)) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const rawText = aiData.choices?.[0]?.message?.content ?? "";
+
+    const rawObj = parseStrictJson(rawText) as Record<string, unknown>;
+    const amount = normalizeAmountValue(typeof rawObj.amount === "string" ? rawObj.amount : null);
+    const confidence = typeof rawObj.confidence === "number"
+      ? Math.max(0, Math.min(100, Math.round(rawObj.confidence)))
+      : null;
+
+    return {
+      amount,
+      confidence,
+      raw: rawText.slice(0, 1000),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function validateOcrOutput(raw: unknown): OcrParsedResult {
   if (typeof raw !== "object" || raw === null) {
     throw new Error("OCR output is not an object");
@@ -92,13 +194,7 @@ function validateOcrOutput(raw: unknown): OcrParsedResult {
     .filter((p) => p.name.length > 0);
 
   const rawAmount = str("amount");
-  let amount: string | null = null;
-  if (rawAmount !== null) {
-    const cleaned = rawAmount.replace(/[$,\s]/g, "");
-    if (!isNaN(Number(cleaned)) && Number(cleaned) > 0) {
-      amount = cleaned;
-    }
-  }
+  const amount = normalizeAmountValue(rawAmount);
 
   const rawDate = str("issue_date");
   let issueDate: string | null = null;
@@ -480,6 +576,40 @@ Rules:
         confidence: parsed.confidence,
       });
 
+      // If primary OCR misses amount, do a focused second pass just for amount.
+      if (!parsed.amount) {
+        stage = "amount_fallback";
+        try {
+          const fallback = await extractAmountWithFocusedPass(lovableKey, frontImageUrl, backImageUrl);
+          if (fallback.amount) {
+            parsed.amount = fallback.amount;
+            if (fallback.confidence !== null) {
+              parsed.field_confidence.amount = Math.max(parsed.field_confidence.amount ?? 0, fallback.confidence);
+            }
+            parsed.low_confidence_fields = parsed.low_confidence_fields.filter((f) => f !== "amount");
+            log("amount_fallback", "Recovered amount with focused pass", {
+              amount: fallback.amount,
+              confidence: fallback.confidence,
+            });
+
+            await logAudit(
+              supabase,
+              checkId,
+              "ocr_amount_recovered",
+              "Recovered missing amount using focused OCR fallback pass",
+              { amount: fallback.amount, confidence: fallback.confidence, raw: fallback.raw },
+              userId,
+            );
+          } else {
+            log("amount_fallback", "Focused pass still could not extract amount");
+          }
+        } catch (fallbackErr) {
+          log("amount_fallback", "Focused amount extraction failed", {
+            error: fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr),
+          });
+        }
+      }
+
     } catch (ocrErr) {
       // OCR pipeline itself failed (signed URL, AI request, parse)
       ocrError = ocrErr instanceof Error ? ocrErr.message : String(ocrErr);
@@ -533,15 +663,23 @@ Rules:
     const parsedAmount = parsed.amount ? Number(parsed.amount) : null;
     const ocrConfidence = parsed.confidence;
     const fieldConfidence = parsed.field_confidence;
+    const amountMissing = parsedAmount === null || Number.isNaN(parsedAmount);
 
     const criticalFailed = CRITICAL_FIELDS.some((f) => {
       const fc = fieldConfidence[f];
       return fc !== undefined && fc < CRITICAL_CONFIDENCE_THRESHOLD;
     });
     const overallFailed = ocrConfidence !== null && ocrConfidence < OVERALL_CONFIDENCE_THRESHOLD;
-    const needsManualReview = criticalFailed || overallFailed;
+    const needsManualReview = criticalFailed || overallFailed || amountMissing;
 
     const eligibility = evaluateEligibility(payees, isMultiPayee, ocrConfidence, fieldConfidence);
+    if (amountMissing) {
+      eligibility.recommendation = "manual_review_required";
+      eligibility.rules.amount_missing = true;
+      if (!eligibility.reasons.some((r) => r.toLowerCase().includes("amount"))) {
+        eligibility.reasons.unshift("Check amount could not be extracted automatically — manual review required");
+      }
+    }
     const checkStatus = needsManualReview
       ? "needs_review"
       : eligibility.recommendation === "loss_draft_required"
