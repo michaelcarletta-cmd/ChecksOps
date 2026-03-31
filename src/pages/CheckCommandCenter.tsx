@@ -1295,6 +1295,7 @@ function CheckDetailPanel({
               <DetailRow label="Multi-Payee" value={check.is_multi_payee ? "Yes" : "No"} />
               <DetailRow label="OCR Status" value={check.ocr_status} />
               <RerunOcrButton checkId={checkId} onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
+              <Separator />
               {/* Check Images */}
               {(frontImageUrl || backImageUrl) && (
                 <div className="space-y-2">
