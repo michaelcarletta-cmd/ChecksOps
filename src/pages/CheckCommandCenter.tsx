@@ -1404,7 +1404,11 @@ function CheckDetailPanel({
                                   );
                                 })}
 
-                                {/* Freedom Adjustment / By: Michael Carletta — always grouped */}
+                                {/* Freedom Adjustment / By: Michael Carletta — only if a portal-captured signature exists */}
+                                {endorsementRows.some((e) => {
+                                  const n = e.payee_name.toLowerCase();
+                                  return (n.includes("freedom") || n.includes("carletta")) && e.signature_image_url;
+                                }) && (
                                 <div style={{ marginTop: g(0.014) }}>
                                   <p style={{ fontSize: f(0.034), fontWeight: 700, color: "#111111" }}>Freedom Adjustment</p>
                                   <p style={{ fontSize: f(0.026), fontWeight: 600, color: "#111111" }}>By: Michael Carletta</p>
@@ -1421,6 +1425,7 @@ function CheckDetailPanel({
                                     </div>
                                   ))}
                                 </div>
+                                )}
                               </div>
                             </div>
                           );
