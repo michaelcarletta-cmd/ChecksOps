@@ -7831,7 +7831,7 @@ ${knowledgeBaseContext || ''}`
             }
 
             let emailCopyStatus = "not_requested";
-            if (params.send_email_copy !== false && notifyClient) {
+            if (params.send_email_copy === true && notifyClient) {
               const emailCopy = await invokeEdgeFunction(
                 supabaseUrlForInvoke,
                 "notify-client-claim-update",
