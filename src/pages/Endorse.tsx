@@ -159,12 +159,12 @@ export default function Endorse() {
       const json = await resp.json();
       if (!resp.ok) throw new Error(json.error || "Request failed");
 
-      setMessage({
-        text: type === "approve" ? "Thank you! Your endorsement has been recorded successfully." : "Endorsement rejected.",
-        type: type === "approve" ? "success" : "error",
-      });
-      // Refresh to show the thank-you state
-      setTimeout(() => fetchData(), 1500);
+      if (type === "approve") {
+        // Show the thank-you state directly without re-fetching (avoids "invalid link" error)
+        setData((prev) => prev ? { ...prev, status: "signed" } : prev);
+      } else {
+        setData((prev) => prev ? { ...prev, status: "rejected" } : prev);
+      }
     } catch (e: unknown) {
       setMessage({ text: `Error: ${e instanceof Error ? e.message : "Unknown error"}`, type: "error" });
     } finally {
