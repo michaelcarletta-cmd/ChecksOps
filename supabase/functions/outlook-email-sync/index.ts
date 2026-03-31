@@ -406,6 +406,18 @@ async function runBulkSync(supabase: any, allConnections: any[]): Promise<{ tota
           if (existing.body_length < 500 && email.full_body.length > existing.body_length) {
             await supabase.from('emails').update({ body: email.full_body }).eq('id', existing.id);
           }
+          // Backfill attachments for existing emails that have them but no files saved yet
+          if (email.has_attachments && email.graph_id && existing.id) {
+            const { count } = await supabase
+              .from('claim_files')
+              .select('id', { count: 'exact', head: true })
+              .eq('claim_id', claim.id)
+              .eq('email_id', existing.id)
+              .eq('source', 'email_attachment');
+            if (!count || count === 0) {
+              await fetchAndSaveAttachments(accessToken, email.graph_id, claim.id, existing.id, supabase);
+            }
+          }
           continue;
         }
 
