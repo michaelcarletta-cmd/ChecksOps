@@ -1124,9 +1124,13 @@ function CheckDetailPanel({
   }
   const isDepositBlocked = (endorsements.length > 0 && !allEndorsementsComplete) || check.status === "loss_draft_required";
 
-  // Only include payees who actually signed through the portal (not waived — waived means physical endorsement already exists)
+  // Only include true captured signatures (exclude "marked signed" internal acknowledgements)
   const endorsementRows = endorsements.filter(
-    (e) => e.status === "signed" && (!!e.signature_image_url || !!e.signed_at),
+    (e) =>
+      e.status === "signed" &&
+      typeof e.signature_image_url === "string" &&
+      e.signature_image_url.trim().length > 0 &&
+      (e.signature_method ?? "").toLowerCase() !== "internal",
   );
   const endorsementText = endorsementRows.length > 0
     ? "Pay to the Order of\nFreedom Adjustment\nFor Mobile Deposit Only\nFreedom Adjustment"
@@ -1386,17 +1390,15 @@ function CheckDetailPanel({
                                   if (nameLC.includes("freedom") || nameLC.includes("carletta")) return null;
                                   return (
                                     <div key={e.id} style={{ marginTop: g(0.008) }}>
-                                      {e.signature_image_url && e.signature_image_url.startsWith("data:image/") ? (
+                                      {e.signature_image_url?.startsWith("typed:") ? (
+                                        <p style={{ fontSize: f(0.042), fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
+                                      ) : e.signature_image_url ? (
                                         <>
                                           <p style={{ fontSize: f(0.026), fontWeight: 500, color: "#111111" }}>{e.payee_name}</p>
                                           <img src={e.signature_image_url} alt={`${e.payee_name} signature`} style={{ height: f(0.060), margin: "0 auto", display: "block", objectFit: "contain", filter: "brightness(0)" }} />
                                         </>
-                                      ) : e.signature_image_url && e.signature_image_url.startsWith("typed:") ? (
-                                        <p style={{ fontSize: f(0.042), fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
-                                      ) : e.status === "waived" ? (
-                                        <p style={{ fontSize: f(0.024), fontStyle: "italic", color: "#111111" }}>{e.payee_name} — Waived</p>
                                       ) : (
-                                        <p style={{ fontSize: f(0.026), fontWeight: 500, color: "#111111" }}>{e.payee_name}</p>
+                                        null
                                       )}
                                     </div>
                                   );
@@ -1411,10 +1413,10 @@ function CheckDetailPanel({
                                     return (n.includes("freedom") || n.includes("carletta")) && e.signature_image_url;
                                   }).slice(0, 1).map((e) => (
                                     <div key={`sig-${e.id}`} style={{ marginTop: g(0.004) }}>
-                                      {e.signature_image_url?.startsWith("data:image/") ? (
-                                        <img src={e.signature_image_url} alt="Carletta signature" style={{ height: f(0.060), margin: "0 auto", display: "block", objectFit: "contain", filter: "brightness(0)" }} />
-                                      ) : e.signature_image_url?.startsWith("typed:") ? (
+                                      {e.signature_image_url?.startsWith("typed:") ? (
                                         <p style={{ fontSize: f(0.042), fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
+                                      ) : e.signature_image_url ? (
+                                        <img src={e.signature_image_url} alt="Carletta signature" style={{ height: f(0.060), margin: "0 auto", display: "block", objectFit: "contain", filter: "brightness(0)" }} />
                                       ) : null}
                                     </div>
                                   ))}

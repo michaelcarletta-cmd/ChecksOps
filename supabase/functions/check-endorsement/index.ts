@@ -1159,6 +1159,7 @@ Deno.serve(async (req) => {
           status: "signed",
           signed_at: new Date().toISOString(),
           signature_method: "internal",
+          signature_image_url: null,
           notes: (body.notes as string) ?? "Internally endorsed by staff",
           updated_at: new Date().toISOString(),
         }).eq("id", endorsementId);
@@ -1167,6 +1168,7 @@ Deno.serve(async (req) => {
           await supabase.from("check_payees").update({
             endorsement_status: "signed",
             endorsed_at: new Date().toISOString(),
+            endorsement_image_path: null,
           }).eq("id", endorsement.payee_id);
         }
 
