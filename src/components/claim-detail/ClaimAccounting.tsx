@@ -980,6 +980,9 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                         <SelectItem value="initial">Initial Payment</SelectItem>
                         <SelectItem value="recoverable_depreciation">Recoverable Depreciation</SelectItem>
                         <SelectItem value="supplemental">Supplemental Payment</SelectItem>
+                        <SelectItem value="contents">Contents</SelectItem>
+                        <SelectItem value="ale">ALE (Additional Living Expenses)</SelectItem>
+                        <SelectItem value="other_structures">Other Structures</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
