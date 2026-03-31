@@ -591,8 +591,11 @@ Deno.serve(async (req) => {
         // Determine if this endorsement needs a payment direction answer.
         // Only show for non-mortgage payees on checks linked to a claim.
         let requiresPaymentDirection = false;
+        // Only show payment direction for client (insured) payees, not for
+        // mortgage companies, contractors, public adjusters, or internal signatures
+        const clientPayeeTypes = ["insured"];
         if (
-          endorsement.payee_type !== "mortgage_company" &&
+          clientPayeeTypes.includes(endorsement.payee_type ?? "") &&
           endorsement.status !== "signed" &&
           endorsement.status !== "waived" &&
           ci?.claim_id
