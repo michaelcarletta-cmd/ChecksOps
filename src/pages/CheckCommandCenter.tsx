@@ -23,6 +23,7 @@ import {
   RefreshCw, Banknote, ClipboardCheck, RotateCcw, Printer, Landmark, Trash2, Search,
   Download, FileImage, Undo2,
 } from "lucide-react";
+import { Pencil, Check as CheckIcon, X, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
 import { EndorsementChecklist } from "@/components/check-review/EndorsementChecklist";
@@ -1189,9 +1190,10 @@ function CheckDetailPanel({
           <p className="text-sm text-muted-foreground">{check.carrier_name}</p>
         )}
         {check.amount != null && (
-          <p className="text-xl font-bold tabular-nums">
-            ${check.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-          </p>
+          <EditableAmount checkId={checkId} currentAmount={check.amount} onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
+        )}
+        {check.amount == null && (
+          <EditableAmount checkId={checkId} currentAmount={null} onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
         )}
 
         {/* Single Source of Truth Blocking Banner */}
@@ -1556,12 +1558,7 @@ function CheckDetailPanel({
             </TabsContent>
 
             <TabsContent value="payees" className="p-4 space-y-3 mt-0">
-              {check.check_payees?.map((payee) => (
-                <PayeeCard key={payee.id} payee={payee} checkId={checkId} onRefresh={onRefresh} />
-              ))}
-              {(!check.check_payees || check.check_payees.length === 0) && (
-                <p className="text-sm text-muted-foreground text-center py-4">No payees detected yet</p>
-              )}
+              <PayeeManager checkId={checkId} payees={check.check_payees ?? []} onRefresh={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
             </TabsContent>
 
             <TabsContent value="eligibility" className="p-4 space-y-3 mt-0">
@@ -1707,6 +1704,333 @@ function DetailRow({ label, value }: { label: string; value: string | null | und
       <span className="text-muted-foreground shrink-0">{label}</span>
       <span className="font-medium text-right break-words min-w-0">{value ?? "—"}</span>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Editable Amount                                                    */
+/* ------------------------------------------------------------------ */
+
+function EditableAmount({ checkId, currentAmount, onSave }: { checkId: string; currentAmount: number | null; onSave: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(currentAmount?.toString() ?? "");
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  const handleSave = async () => {
+    const cleaned = value.replace(/[$,\s]/g, "");
+    const num = Number(cleaned);
+    if (isNaN(num) || num < 0) {
+      toast({ title: "Invalid amount", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("check_intake_items")
+        .update({ amount: num || null, updated_at: new Date().toISOString() })
+        .eq("id", checkId);
+      if (error) throw error;
+
+      // Also update linked claim_checks if exists
+      await supabase
+        .from("claim_checks")
+        .update({ amount: num, updated_at: new Date().toISOString() })
+        .eq("check_intake_item_id", checkId);
+
+      toast({ title: "Amount updated" });
+      setEditing(false);
+      onSave();
+    } catch (e: any) {
+      toast({ title: "Failed to update", description: e.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-xl font-bold">$</span>
+        <Input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="h-8 text-lg font-bold w-32"
+          autoFocus
+          onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") setEditing(false); }}
+        />
+        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleSave} disabled={saving}>
+          <CheckIcon className="h-4 w-4 text-emerald-400" />
+        </Button>
+        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditing(false)}>
+          <X className="h-4 w-4 text-muted-foreground" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 group">
+      <p className="text-xl font-bold tabular-nums">
+        {currentAmount != null
+          ? `$${currentAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+          : <span className="text-destructive">Amount missing</span>
+        }
+      </p>
+      <Button
+        size="icon"
+        variant="ghost"
+        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+        onClick={() => { setValue(currentAmount?.toString() ?? ""); setEditing(true); }}
+      >
+        <Pencil className="h-3 w-3" />
+      </Button>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Payee Manager — add / edit / remove                                */
+/* ------------------------------------------------------------------ */
+
+function PayeeManager({ checkId, payees, onRefresh }: { checkId: string; payees: CheckPayee[]; onRefresh: () => void }) {
+  const { toast } = useToast();
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newType, setNewType] = useState("unknown");
+  const [saving, setSaving] = useState(false);
+
+  const addPayee = async () => {
+    if (!newName.trim()) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from("check_payees").insert({
+        check_id: checkId,
+        payee_name: newName.trim(),
+        payee_type: newType,
+        endorsement_token: crypto.randomUUID(),
+        endorsement_token_expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+      });
+      if (error) throw error;
+      toast({ title: "Payee added" });
+      setNewName("");
+      setNewType("unknown");
+      setAdding(false);
+      onRefresh();
+    } catch (e: any) {
+      toast({ title: "Failed to add payee", description: e.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removePayee = async (payeeId: string) => {
+    try {
+      // Delete endorsements first
+      await supabase.from("check_endorsement_events").delete().eq("payee_id", payeeId);
+      await supabase.from("check_endorsements").delete().eq("payee_id", payeeId);
+      const { error } = await supabase.from("check_payees").delete().eq("id", payeeId);
+      if (error) throw error;
+      toast({ title: "Payee removed" });
+      onRefresh();
+    } catch (e: any) {
+      toast({ title: "Failed to remove", description: e.message, variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      {payees.map((payee) => (
+        <EditablePayeeCard key={payee.id} payee={payee} checkId={checkId} onRefresh={onRefresh} onRemove={() => removePayee(payee.id)} />
+      ))}
+      {payees.length === 0 && !adding && (
+        <p className="text-sm text-muted-foreground text-center py-4">No payees detected yet</p>
+      )}
+
+      {adding ? (
+        <Card className="p-3 space-y-2 border-dashed border-primary/50">
+          <Input placeholder="Payee name" value={newName} onChange={(e) => setNewName(e.target.value)} className="h-8 text-sm" autoFocus />
+          <Select value={newType} onValueChange={setNewType}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="insured">Insured</SelectItem>
+              <SelectItem value="mortgage_company">Mortgage Company</SelectItem>
+              <SelectItem value="contractor">Contractor</SelectItem>
+              <SelectItem value="public_adjuster">Public Adjuster</SelectItem>
+              <SelectItem value="unknown">Unknown</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="flex gap-1">
+            <Button size="sm" className="flex-1 text-xs h-7" onClick={addPayee} disabled={saving || !newName.trim()}>
+              <Plus className="h-3 w-3 mr-1" />Add
+            </Button>
+            <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => setAdding(false)}>Cancel</Button>
+          </div>
+        </Card>
+      ) : (
+        <Button size="sm" variant="outline" className="w-full text-xs" onClick={() => setAdding(true)}>
+          <Plus className="h-3 w-3 mr-1" />Add Payee
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Editable Payee Card                                                */
+/* ------------------------------------------------------------------ */
+
+function EditablePayeeCard({
+  payee,
+  checkId,
+  onRefresh,
+  onRemove,
+}: {
+  payee: CheckPayee;
+  checkId: string;
+  onRefresh: () => void;
+  onRemove: () => void;
+}) {
+  const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(payee.payee_name);
+  const [editType, setEditType] = useState(payee.payee_type);
+  const [email, setEmail] = useState(payee.contact_email ?? "");
+  const [phone, setPhone] = useState(payee.contact_phone ?? "");
+  const [sending, setSending] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const PayeeIcon = payeeTypeIcons[payee.payee_type] ?? AlertTriangle;
+
+  const handleSaveEdit = async () => {
+    if (!editName.trim()) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("check_payees")
+        .update({ payee_name: editName.trim(), payee_type: editType, updated_at: new Date().toISOString() })
+        .eq("id", payee.id);
+      if (error) throw error;
+      toast({ title: "Payee updated" });
+      setEditing(false);
+      onRefresh();
+    } catch (e: any) {
+      toast({ title: "Failed to update", description: e.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendEndorsementRequest = async (method: "email" | "sms" | "both") => {
+    setSending(true);
+    try {
+      const normalizedEmail = email.trim();
+      const normalizedPhone = phone.trim();
+
+      if ((method === "email" || method === "both") && !normalizedEmail) {
+        throw new Error("Please enter an email address for this payee");
+      }
+      if ((method === "sms" || method === "both") && !normalizedPhone) {
+        throw new Error("Please enter a phone number for this payee");
+      }
+
+      const { error: updateError } = await supabase
+        .from("check_payees")
+        .update({ contact_email: normalizedEmail || null, contact_phone: normalizedPhone || null })
+        .eq("id", payee.id);
+      if (updateError) throw updateError;
+
+      const { data: session } = await supabase.auth.getSession();
+      if (!session.session?.access_token) throw new Error("Not authenticated");
+
+      const { error } = await supabase.functions.invoke("check-endorsement", {
+        body: { action: "send_endorsement_request", payeeId: payee.id, method, email: normalizedEmail || undefined, phone: normalizedPhone || undefined },
+        headers: { Authorization: `Bearer ${session.session.access_token}` },
+      });
+      if (error) throw new Error(error.message);
+      toast({ title: `Endorsement request sent via ${method}` });
+      onRefresh();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      toast({ title: "Failed to send", description: msg, variant: "destructive" });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Card className="p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        {editing ? (
+          <div className="flex-1 space-y-2 mr-2">
+            <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-7 text-sm" autoFocus />
+            <Select value={editType} onValueChange={setEditType}>
+              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="insured">Insured</SelectItem>
+                <SelectItem value="mortgage_company">Mortgage Company</SelectItem>
+                <SelectItem value="contractor">Contractor</SelectItem>
+                <SelectItem value="public_adjuster">Public Adjuster</SelectItem>
+                <SelectItem value="unknown">Unknown</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="flex gap-1">
+              <Button size="sm" variant="default" className="h-6 text-xs" onClick={handleSaveEdit} disabled={saving}>
+                <CheckIcon className="h-3 w-3 mr-1" />Save
+              </Button>
+              <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setEditing(false); setEditName(payee.payee_name); setEditType(payee.payee_type); }}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <PayeeIcon className="h-4 w-4 text-muted-foreground" />
+            <span className="font-medium text-sm">{payee.payee_name}</span>
+          </div>
+        )}
+        <div className="flex items-center gap-1">
+          <Badge className={`text-[10px] ${endorsementColors[payee.endorsement_status] ?? ""}`}>
+            {payee.endorsement_status}
+          </Badge>
+          {!editing && (
+            <>
+              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditing(true)}>
+                <Pencil className="h-3 w-3" />
+              </Button>
+              <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive" onClick={onRemove}>
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+      {!editing && (
+        <p className="text-xs text-muted-foreground capitalize">
+          {payee.payee_type.replace(/_/g, " ")}
+        </p>
+      )}
+
+      {payee.endorsement_status !== "signed" && payee.endorsement_status !== "rejected" && !editing && (
+        <div className="space-y-2 pt-1">
+          <Input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-8 text-xs" />
+          <Input placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} className="h-8 text-xs" />
+          <div className="flex gap-1">
+            <Button size="sm" variant="outline" className="flex-1 text-xs h-7" disabled={sending || !email} onClick={() => sendEndorsementRequest("email")}>
+              <Send className="h-3 w-3 mr-1" />Email
+            </Button>
+            <Button size="sm" variant="outline" className="flex-1 text-xs h-7" disabled={sending || !phone} onClick={() => sendEndorsementRequest("sms")}>
+              <Send className="h-3 w-3 mr-1" />SMS
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {payee.endorsed_at && (
+        <p className="text-[10px] text-muted-foreground">
+          Endorsed {format(new Date(payee.endorsed_at), "MMM d, yyyy h:mm a")}
+        </p>
+      )}
+    </Card>
   );
 }
 
