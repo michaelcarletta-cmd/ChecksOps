@@ -762,6 +762,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
     check_date: "",
     amount: 0,
     check_type: "initial",
+    mortgage_flag: false,
     received_date: "",
     notes: "",
   });
@@ -774,6 +775,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
       check_date: "",
       amount: 0,
       check_type: "initial",
+      mortgage_flag: false,
       received_date: "",
       notes: "",
     });
@@ -828,6 +830,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
             check_date: formData.check_date,
             amount: formData.amount,
             check_type: formData.check_type,
+            mortgage_flag: formData.mortgage_flag,
             received_date: formData.received_date || null,
             notes: formData.notes,
           })
@@ -848,6 +851,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
           .from("claim_checks")
           .insert({
             ...formData,
+            mortgage_flag: formData.mortgage_flag,
             claim_id: claimId,
             created_by: user?.id,
           });
@@ -903,6 +907,7 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
       check_date: check.check_date || "",
       amount: Number(check.amount) || 0,
       check_type: check.check_type || "initial",
+      mortgage_flag: Boolean(check.mortgage_flag),
       received_date: check.received_date || "",
       notes: check.notes || "",
     });
@@ -1024,6 +1029,21 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                     rows={2}
                   />
+                </div>
+                <div>
+                  <Label>Mortgage Hold</Label>
+                  <Select
+                    value={formData.mortgage_flag ? "yes" : "no"}
+                    onValueChange={(value) => setFormData({ ...formData, mortgage_flag: value === "yes" })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="no">No (Funds depositable)</SelectItem>
+                      <SelectItem value="yes">Yes (Held by mortgage company)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full">
                   {editingCheck ? "Update Check" : "Add Check"}
@@ -1151,7 +1171,7 @@ function MortgageReleasesSection({ claimId, checks, isAdmin }: { claimId: string
   const mortgageChecks = checks.filter((c: any) => c.mortgage_flag);
   const totalHeld = mortgageChecks.reduce((sum: number, c: any) => sum + Number(c.amount), 0);
   const totalReleased = releases?.reduce((sum: number, r: any) => sum + Number(r.amount), 0) || 0;
-  const stillHeld = totalHeld - totalReleased;
+  const stillHeld = Math.max(0, totalHeld - totalReleased);
 
   const resetForm = () => {
     setFormData({ check_id: "", amount: 0, release_date: "", release_method: "check", mortgage_company_name: "", reference_number: "", notes: "" });
@@ -1211,8 +1231,6 @@ function MortgageReleasesSection({ claimId, checks, isAdmin }: { claimId: string
       toast({ title: "Release deleted" });
     },
   });
-
-  if (mortgageChecks.length === 0 && (!releases || releases.length === 0)) return null;
 
   return (
     <Card>
@@ -1302,6 +1320,11 @@ function MortgageReleasesSection({ claimId, checks, isAdmin }: { claimId: string
         </div>
       </CardHeader>
       <CardContent>
+        {mortgageChecks.length === 0 && (
+          <div className="mb-4 rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+            No checks are marked as mortgage-held yet. Edit or add a check and set <span className="font-medium text-foreground">Mortgage Hold</span> to start tracking disbursements.
+          </div>
+        )}
         {releases && releases.length > 0 ? (
           <Table>
             <TableHeader>
