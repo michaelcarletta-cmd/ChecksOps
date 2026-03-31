@@ -606,6 +606,19 @@ async function handleOutlookSync(req: Request): Promise<Response> {
           await supabase.from('emails').update({ body: email.full_body }).eq('id', existing.id);
           updatedCount++;
         }
+        // Backfill attachments for existing emails that have them but no files saved yet
+        if (email.has_attachments && email.graph_id && existing.id) {
+          const { count } = await supabase
+            .from('claim_files')
+            .select('id', { count: 'exact', head: true })
+            .eq('claim_id', claim_id)
+            .eq('email_id', existing.id)
+            .eq('source', 'email_attachment');
+          if (!count || count === 0) {
+            const saved = await fetchAndSaveAttachments(accessToken, email.graph_id, claim_id, existing.id, supabase);
+            attachmentCount += saved;
+          }
+        }
         continue;
       }
 
