@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
     console.log(`[COMPOSITE] back image path: ${backImagePath}`);
 
     // ── Strict endorsement fetch ──
-    const { data: endorsements, error: endErr } = await supabase
+    const { data: fetchedEndorsements, error: endErr } = await supabase
       .from("check_endorsements")
       .select("id, payee_name, payee_type, status, signed_at, signature_image_url, signature_method, check_id, check_payees!check_endorsements_payee_id_fkey(endorsement_image_path)")
       .eq("check_id", checkId)
@@ -150,6 +150,9 @@ Deno.serve(async (req) => {
       .order("created_at", { ascending: true });
 
     if (endErr) throw new Error(`Failed to load endorsements: ${endErr.message}`);
+    const endorsements = (fetchedEndorsements ?? []).filter(
+      (e: any) => (e.signature_method ?? "").toLowerCase() !== "internal",
+    );
     if (!endorsements?.length) {
       return jsonResp({ success: false, error: "No valid signed endorsement assets found for this check.", code: "NO_SIGNED_ENDORSEMENTS", checkId }, 400);
     }
