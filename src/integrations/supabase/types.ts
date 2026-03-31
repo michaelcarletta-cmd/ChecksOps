@@ -10838,6 +10838,73 @@ export type Database = {
         }
         Relationships: []
       }
+      mortgage_releases: {
+        Row: {
+          amount: number
+          check_id: string | null
+          claim_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          mortgage_company_name: string | null
+          notes: string | null
+          reference_number: string | null
+          release_date: string
+          release_method: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          check_id?: string | null
+          claim_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          mortgage_company_name?: string | null
+          notes?: string | null
+          reference_number?: string | null
+          release_date: string
+          release_method?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          check_id?: string | null
+          claim_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          mortgage_company_name?: string | null
+          notes?: string | null
+          reference_number?: string | null
+          release_date?: string
+          release_method?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mortgage_releases_check_id_fkey"
+            columns: ["check_id"]
+            isOneToOne: false
+            referencedRelation: "claim_checks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mortgage_releases_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "mortgage_releases_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notification_preferences: {
         Row: {
           created_at: string
