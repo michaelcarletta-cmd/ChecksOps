@@ -5,6 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -105,6 +106,7 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
   const [additionalInstructions, setAdditionalInstructions] = useState('');
   const [strategyPreset, setStrategyPreset] = useState<string>('roof_wind_hail');
   const [tone, setTone] = useState<string>('standard');
+  const [provenMode, setProvenMode] = useState<boolean>(true);
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [generatedPackage, setGeneratedPackage] = useState<string | null>(null);
@@ -287,6 +289,7 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
         body: {
           claimId,
           tone,
+          mode: provenMode ? "proven" : "standard",
           selectedFileIds: selectedFileIdsArray,
           selectedEstimateId: selectedEstimateFile?.id || null,
           estimateTotal: null,
@@ -310,9 +313,10 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
         claim_id: claimId,
         analysis_type: 'demand_package',
         result: demandText,
-        input_summary: `Tone: ${tone}, Strategy: ${strategyPreset}`,
+        input_summary: `Tone: ${tone}, Strategy: ${strategyPreset}, Proven Mode: ${provenMode ? 'on' : 'off'}`,
         metadata: {
           tone,
+          mode: provenMode ? "proven" : "standard",
           strategyPreset,
           demandAmount: demandPackage?.demand_amount || '',
           confidenceScore: demandPackage?.confidence_score || 0,
@@ -466,6 +470,17 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
           <p className="text-xs text-muted-foreground">
             Controls assertiveness level. Litigation Ready is for final-step demands before formal dispute.
           </p>
+        </div>
+
+        {/* Proven Mode */}
+        <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border">
+          <div className="space-y-1">
+            <Label className="text-sm font-medium">Proven Mode</Label>
+            <p className="text-xs text-muted-foreground">
+              Uses documentation-led language and leans on selected policy materials to support coverage and scope positions.
+            </p>
+          </div>
+          <Switch checked={provenMode} onCheckedChange={setProvenMode} />
         </div>
 
         {/* Declared Position Status */}

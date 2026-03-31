@@ -20,6 +20,8 @@ CRITICAL INSTRUCTIONS:
 - Do NOT instruct the carrier what they "must" do
 - Frame all conclusions as supported by documentation
 - Position all findings as assisting the carrier's investigation
+- Use policy language from the provided policy documents to support coverage position where available
+- Quote or paraphrase only policy language present in provided materials; do not invent provisions
 
 REQUIRED LANGUAGE STYLE:
 - Use phrases like:
@@ -39,6 +41,17 @@ TONE:
 - Neutral but confident
 - Cooperative, not submissive
 - Authoritative without being confrontational
+`;
+
+const PROVEN_MODE_POLICY_RULES = `
+PROVEN MODE POLICY UTILIZATION (CRITICAL):
+- Treat policy documents (declarations, forms, endorsements, conditions, exclusions, exceptions, and definitions) as primary evidence when present.
+- Build a "policy support chain": observed condition -> loss mechanism -> applicable policy language -> coverage-supporting interpretation.
+- If policy language supports the claim, explain how the documented facts are consistent with that language.
+- If exclusions are present, analyze whether exceptions, carve-backs, ensuing loss language, or burden-of-proof limits (if supported by provided documents) warrant consideration for coverage.
+- Cite policy wording in plain language and, where available, reference section labels exactly as shown in the provided policy documents.
+- Do not fabricate policy citations or quote text that is not present in the provided materials.
+- If policy documents are missing or incomplete, state the limitation in "missing_evidence" and keep the coverage discussion appropriately qualified.
 `;
 
 const PROVEN_MODE_OPENING = `
@@ -165,6 +178,21 @@ function looksLikeCarrierEstimateFile(file: Record<string, any>): boolean {
     "travelers",
     "farmers",
     "liberty mutual",
+  ].some((term) => name.includes(term));
+}
+
+function looksLikePolicyFile(file: Record<string, any>): boolean {
+  const name = `${normalizeLower(file.file_name)} ${normalizeLower(file.name)} ${normalizeLower(file.doc_type)} ${normalizeLower(file.category)} ${normalizeLower(file.analysis_type)}`;
+  return [
+    "policy",
+    "declarations",
+    "dec page",
+    "declaration page",
+    "coverage",
+    "endorsement",
+    "exclusion",
+    "policy jacket",
+    "hoa policy",
   ].some((term) => name.includes(term));
 }
 
@@ -300,6 +328,7 @@ function buildDemandPrompt(args: {
   intelligence: Record<string, any> | null;
   inspectionText: string;
   estimateText: string;
+  policyText: string;
   timelineText: string;
   priorPaymentsText: string;
   userNotes: string;
@@ -361,6 +390,7 @@ IMPORTANT WRITING RULES:
 - Use the estimate total as the demand amount unless the materials support another specific figure.
 - If the inspection report identifies room/component-specific damage, fold that into the narrative so the estimate reads inevitable and justified.
 - If there are weak points or missing proof, identify them in the "strategic_notes" field only, not in the demand body.
+${isProven ? PROVEN_MODE_POLICY_RULES : ""}
 
 ${isProven ? "DOCUMENTATION EXPANSION RULES (CRITICAL):" : "FORCE EXPANSION RULES (CRITICAL):"}
 - You MUST expand every section beyond what is explicitly stated in the documents by applying professional construction, insurance, and claim-handling knowledge.
@@ -444,6 +474,9 @@ ${args.estimateText || "No estimate text available."}
 CARRIER ESTIMATE:
 ${args.carrierEstimateText || "None provided."}
 
+POLICY DOCUMENTS (SELECTED):
+${args.policyText || "No policy text was identified in the selected materials."}
+
 FINAL REQUIREMENT:
 The "full_demand_package" field must be a polished, carrier-ready demand document with clear section headings:
 ${isProven
@@ -473,6 +506,8 @@ ${PROCESS_ALIGNMENT}
 
 Use this conclusion language in substance:
 ${PROVEN_MODE_CLOSE}
+
+If policy text is present, you must explicitly tie observed facts to specific policy language and section labels where available. If policy text is absent, note the limitation in "missing_evidence".
 
 The document should read like a cooperative, documentation-led claim package intended to assist the carrier's investigation and determination.`
     : "The document should read like something a serious public adjuster would actually send to a carrier to push payment now."}
@@ -659,6 +694,7 @@ Deno.serve(async (req) => {
 
     const inspectionFiles = effectiveFiles.filter((f: Record<string, any>) => looksLikeInspectionFile(f));
     const estimateFiles = effectiveFiles.filter((f: Record<string, any>) => looksLikeEstimateFile(f));
+    const policyFiles = effectiveFiles.filter((f: Record<string, any>) => looksLikePolicyFile(f));
     const carrierEstimateFiles: Record<string, any>[] = [];
 
     // Gather extracted text from matched files
@@ -667,6 +703,10 @@ Deno.serve(async (req) => {
     ).filter((t: string) => t.length > 20).join("\n\n");
 
     const estimateTextFromFiles = estimateFiles.map((f: Record<string, any>) =>
+      [`FILE: ${pick(f, ["file_name", "name"], "Unknown file")}`, getBestDocumentText(f)].filter(Boolean).join("\n")
+    ).filter((t: string) => t.length > 20).join("\n\n");
+
+    const policyTextFromFiles = policyFiles.map((f: Record<string, any>) =>
       [`FILE: ${pick(f, ["file_name", "name"], "Unknown file")}`, getBestDocumentText(f)].filter(Boolean).join("\n")
     ).filter((t: string) => t.length > 20).join("\n\n");
 
@@ -757,6 +797,10 @@ Deno.serve(async (req) => {
       ].filter(Boolean).join("\n\n") || allFileText || claimContextFallback,
       70000
     );
+    const policyText = truncate(
+      policyTextFromFiles,
+      30000
+    );
 
     if (!inspectionText && !estimateText && !claimContextFallback) {
       return json({ error: "Not enough claim context was found to build a demand package yet. Add claim facts, document text, or estimate lines and try again." }, 400);
@@ -793,6 +837,7 @@ Deno.serve(async (req) => {
       tone,
       carrierEstimateText: carrierEstimateBlock,
       mode,
+      policyText,
     });
 
     // Use centralized AI router with reasoning model — higher tokens for complete demands
@@ -881,6 +926,7 @@ Deno.serve(async (req) => {
         estimateLineCount: estimateLines.length,
         inspectionFileCount: inspectionFiles.length,
         estimateFileCount: estimateFiles.length,
+        policyFileCount: policyFiles.length,
         hasDeclaredPosition: !!resolvedDeclaredPosition,
         usedContextFallback: !inspectionReportTextOverride && !inspectionTextFromFiles && !allFileText,
       },
