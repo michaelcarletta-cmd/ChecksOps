@@ -1141,7 +1141,230 @@ function ChecksSection({ claimId, checks, isAdmin, claim, expectedChecks }: any)
   );
 }
 
-// Mortgage Releases Section Component
+// Mortgage Releases Inline (inside ChecksSection card)
+function MortgageReleasesInline({ claimId, checks, isAdmin }: { claimId: string; checks: any[]; isAdmin: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [editingRelease, setEditingRelease] = useState<any>(null);
+  const [formData, setFormData] = useState({
+    check_id: "",
+    amount: 0,
+    release_date: "",
+    release_method: "check",
+    mortgage_company_name: "",
+    reference_number: "",
+    notes: "",
+  });
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: releases } = useQuery({
+    queryKey: ["mortgage-releases", claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("mortgage_releases")
+        .select("*")
+        .eq("claim_id", claimId)
+        .order("release_date", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const mortgageChecks = checks.filter((c: any) => c.mortgage_flag);
+  const totalHeld = mortgageChecks.reduce((sum: number, c: any) => sum + Number(c.amount), 0);
+  const totalReleased = releases?.reduce((sum: number, r: any) => sum + Number(r.amount), 0) || 0;
+  const stillHeld = Math.max(0, totalHeld - totalReleased);
+
+  const resetForm = () => {
+    setFormData({ check_id: "", amount: 0, release_date: "", release_method: "check", mortgage_company_name: "", reference_number: "", notes: "" });
+    setEditingRelease(null);
+  };
+
+  const handleEdit = (release: any) => {
+    setEditingRelease(release);
+    setFormData({
+      check_id: release.check_id || "",
+      amount: Number(release.amount) || 0,
+      release_date: release.release_date || "",
+      release_method: release.release_method || "check",
+      mortgage_company_name: release.mortgage_company_name || "",
+      reference_number: release.reference_number || "",
+      notes: release.notes || "",
+    });
+    setOpen(true);
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        claim_id: claimId,
+        check_id: formData.check_id || null,
+        amount: formData.amount,
+        release_date: formData.release_date,
+        release_method: formData.release_method,
+        mortgage_company_name: formData.mortgage_company_name || null,
+        reference_number: formData.reference_number || null,
+        notes: formData.notes || null,
+      };
+      if (editingRelease) {
+        const { error } = await supabase.from("mortgage_releases").update(payload).eq("id", editingRelease.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("mortgage_releases").insert(payload);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mortgage-releases", claimId] });
+      toast({ title: editingRelease ? "Release updated" : "Release recorded" });
+      setOpen(false);
+      resetForm();
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("mortgage_releases").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mortgage-releases", claimId] });
+      toast({ title: "Release deleted" });
+    },
+  });
+
+  return (
+    <div className="mt-6 border-t pt-4">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h4 className="text-sm font-semibold flex items-center gap-2">
+            <Building2 className="h-4 w-4" />
+            Mortgage Disbursements
+          </h4>
+          <div className="flex gap-4 text-xs text-muted-foreground mt-1">
+            <span>Held: <span className="font-semibold text-foreground">${totalHeld.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></span>
+            <span>Released: <span className="font-semibold text-emerald-500">${totalReleased.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></span>
+            {stillHeld > 0 && <span>Remaining: <span className="font-semibold text-amber-500">${stillHeld.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span></span>}
+          </div>
+        </div>
+        {isAdmin && (
+          <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm(); }}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline"><Plus className="h-4 w-4 mr-1" /> Record Release</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>{editingRelease ? "Edit Release" : "Record Mortgage Release"}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Amount Released</Label>
+                    <Input type="number" step="0.01" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: Number(e.target.value) })} />
+                  </div>
+                  <div>
+                    <Label>Release Date</Label>
+                    <Input type="date" value={formData.release_date} onChange={(e) => setFormData({ ...formData, release_date: e.target.value })} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Mortgage Company</Label>
+                    <Input value={formData.mortgage_company_name} onChange={(e) => setFormData({ ...formData, mortgage_company_name: e.target.value })} />
+                  </div>
+                  <div>
+                    <Label>Release Method</Label>
+                    <Select value={formData.release_method} onValueChange={(v) => setFormData({ ...formData, release_method: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="check">Check</SelectItem>
+                        <SelectItem value="wire">Wire Transfer</SelectItem>
+                        <SelectItem value="ach">ACH</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {mortgageChecks.length > 0 && (
+                  <div>
+                    <Label>Associated Check (optional)</Label>
+                    <Select value={formData.check_id} onValueChange={(v) => setFormData({ ...formData, check_id: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select check..." /></SelectTrigger>
+                      <SelectContent>
+                        {mortgageChecks.map((c: any) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            #{c.check_number || "N/A"} — ${Number(c.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div>
+                  <Label>Reference #</Label>
+                  <Input value={formData.reference_number} onChange={(e) => setFormData({ ...formData, reference_number: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Notes</Label>
+                  <Textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} />
+                </div>
+                <Button onClick={() => saveMutation.mutate()} disabled={!formData.amount || !formData.release_date} className="w-full">
+                  {editingRelease ? "Update Release" : "Record Release"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
+      </div>
+
+      {mortgageChecks.length === 0 && (!releases || releases.length === 0) && (
+        <p className="text-xs text-muted-foreground">No checks are mortgage-held. Set <span className="font-medium text-foreground">Mortgage Hold</span> on a check to track releases.</p>
+      )}
+
+      {releases && releases.length > 0 && (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Mortgage Co.</TableHead>
+              <TableHead>Method</TableHead>
+              <TableHead>Ref #</TableHead>
+              <TableHead className="text-right">Amount</TableHead>
+              {isAdmin && <TableHead className="w-[80px]"></TableHead>}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {releases.map((r: any) => (
+              <TableRow key={r.id}>
+                <TableCell>{format(new Date(r.release_date), "MMM dd, yyyy")}</TableCell>
+                <TableCell>{r.mortgage_company_name || "—"}</TableCell>
+                <TableCell className="capitalize">{r.release_method}</TableCell>
+                <TableCell>{r.reference_number || "—"}</TableCell>
+                <TableCell className="text-right font-semibold text-primary">
+                  ${Number(r.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </TableCell>
+                {isAdmin && (
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(r)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(r.id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </div>
+  );
+}
+
+// Mortgage Releases Section Component (legacy, no longer rendered)
 function MortgageReleasesSection({ claimId, checks, isAdmin }: { claimId: string; checks: any[]; isAdmin: boolean }) {
   const [open, setOpen] = useState(false);
   const [editingRelease, setEditingRelease] = useState<any>(null);
