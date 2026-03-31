@@ -574,6 +574,7 @@ async function handleOutlookSync(req: Request): Promise<Response> {
 
     let importedCount = 0;
     let updatedCount = 0;
+    let attachmentCount = 0;
     let firstInsertError: string | null = null;
 
     for (const email of matchingEmails) {
@@ -584,8 +585,6 @@ async function handleOutlookSync(req: Request): Promise<Response> {
       const existing = existingBodyMap.get(key);
       
       if (existing) {
-        // If the existing record is truncated (short body, typically from inbound webhook)
-        // and the outlook version has more content, update the body
         if (existing.body_length < 500 && email.full_body.length > existing.body_length) {
           await supabase.from('emails').update({ body: email.full_body }).eq('id', existing.id);
           updatedCount++;
@@ -596,7 +595,7 @@ async function handleOutlookSync(req: Request): Promise<Response> {
       const isInbound = email.to.toLowerCase() === connection.email_address.toLowerCase() ||
                         email.from.toLowerCase() !== connection.email_address.toLowerCase();
 
-      const { error: insertError } = await supabase.from('emails').insert({
+      const { data: insertedEmail, error: insertError } = await supabase.from('emails').insert({
         claim_id,
         subject: email.subject,
         body: email.full_body,
@@ -604,17 +603,23 @@ async function handleOutlookSync(req: Request): Promise<Response> {
         recipient_name: isInbound ? email.from_name : email.to_name,
         recipient_type: 'outlook_sync',
         sent_at: sentAt,
-      });
+      }).select('id').single();
 
       if (insertError) {
         if (!firstInsertError) firstInsertError = insertError.message;
       } else {
         importedCount++;
-        existingBodyMap.set(key, { id: '', body_length: email.full_body.length, recipient_type: 'outlook_sync' });
+        existingBodyMap.set(key, { id: insertedEmail?.id || '', body_length: email.full_body.length, recipient_type: 'outlook_sync' });
+
+        // Download attachments if present
+        if (email.has_attachments && email.graph_id && insertedEmail?.id) {
+          const saved = await fetchAndSaveAttachments(accessToken, email.graph_id, claim_id, insertedEmail.id, supabase);
+          attachmentCount += saved;
+        }
       }
     }
 
-    // Update last sync; store firstInsertError if applicable
+    // Update last sync
     await supabase
       .from('email_connections')
       .update({
@@ -629,6 +634,7 @@ async function handleOutlookSync(req: Request): Promise<Response> {
       matching: matchingEmails.length,
       imported: importedCount,
       updated_truncated: updatedCount,
+      attachments_saved: attachmentCount,
     };
     if (firstInsertError) {
       result.warning = `Some emails could not be saved: ${firstInsertError}`;
