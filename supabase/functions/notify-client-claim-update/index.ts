@@ -26,9 +26,22 @@ Deno.serve(async (req) => {
     );
 
     const payload: ClaimUpdatePayload = await req.json();
-    const { claimId, changeType, oldValue, newValue, customMessage } = payload;
+    const { claimId, changeType, oldValue, newValue, customMessage, folderName } = payload;
 
-    console.log(`Processing client notification for claim ${claimId}, change type: ${changeType}`);
+    console.log(`Processing client notification for claim ${claimId}, change type: ${changeType}, folder: ${folderName || 'none'}`);
+
+    // FOLDER GATE: Only send document_added notifications for Carrier Documents folder
+    if (changeType === 'document_added') {
+      const carrierFolderNames = ['carrier documents', 'carrier docs', 'carrier correspondence'];
+      const normalizedFolder = (folderName || '').toLowerCase().trim();
+      if (!normalizedFolder || !carrierFolderNames.some(cf => normalizedFolder.includes(cf))) {
+        console.log(`Skipping document_added notification - folder "${folderName}" is not a Carrier Documents folder`);
+        return new Response(
+          JSON.stringify({ success: true, skipped: true, reason: 'non_carrier_folder' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
 
     // Fetch claim details with client info
     const { data: claim, error: claimError } = await supabase
