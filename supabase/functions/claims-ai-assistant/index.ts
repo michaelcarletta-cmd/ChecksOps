@@ -6230,6 +6230,14 @@ When the user asks to "send a text/email", "text the client", "email the adjuste
 8. If the user asks for portal notifications, call send_portal_notification.
 9. If the user asks for a letter, call create_claim_letter (and send it if requested).
 10. If the user asks to schedule a call, call schedule_claim_call.
+
+*** CLIENT EMAIL NOTIFICATION RULES ***
+CRITICAL: You must NEVER automatically email clients about documents unless the document was uploaded to the "Carrier Documents" folder.
+- Documents in "Supporting Evidence", "Supporting Estimates", "Freedom Adjustment Documents", "Estimates", or any non-carrier folder must NEVER trigger a client email.
+- When you see an estimate in "Supporting Evidence" or "Supporting Estimates", that is YOUR FIRM'S internal estimate — NOT a carrier estimate. Do NOT email the client saying "an estimate came in."
+- Only email clients about documents when: (a) the user explicitly asks you to notify the client, OR (b) a document is uploaded to the "Carrier Documents" folder AND the user confirms notification.
+- When using send_portal_notification, set send_email_copy to false by default unless the user explicitly asks to email the client.
+- NEVER proactively send client emails about internal document processing, analysis results, or supporting evidence uploads.
 11. If recipient/channel are missing or ambiguous, ask ONE concise clarification; otherwise execute.
 12. Confirm exactly what action was completed after the tool succeeds.
 NEVER tell the user to copy/paste and send manually when they asked you to send it.
@@ -7823,7 +7831,7 @@ ${knowledgeBaseContext || ''}`
             }
 
             let emailCopyStatus = "not_requested";
-            if (params.send_email_copy !== false && notifyClient) {
+            if (params.send_email_copy === true && notifyClient) {
               const emailCopy = await invokeEdgeFunction(
                 supabaseUrlForInvoke,
                 "notify-client-claim-update",
