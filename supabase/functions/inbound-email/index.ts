@@ -123,6 +123,178 @@ function stripHtml(html: string): string {
     .trim();
 }
 
+interface NormalizedAttachment {
+  fileName: string;
+  contentType: string;
+  base64Content?: string;
+  bytes?: Uint8Array;
+}
+
+function sanitizeFileName(fileName: string): string {
+  const cleaned = fileName
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || 'attachment';
+}
+
+function decodeBase64ToBytes(base64: string): Uint8Array | null {
+  try {
+    const cleaned = base64.replace(/[\r\n\s]/g, '');
+    const binaryString = atob(cleaned);
+    return Uint8Array.from(binaryString, char => char.charCodeAt(0));
+  } catch (e) {
+    console.error('Attachment base64 decode error:', e);
+    return null;
+  }
+}
+
+function extractAttachmentContent(attachment: Record<string, unknown>): string | undefined {
+  const candidates = [
+    attachment.content,
+    attachment.Content,
+    attachment.data,
+    attachment.base64,
+    attachment.contentBytes,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) return candidate;
+    if (candidate && typeof candidate === 'object' && 'data' in candidate) {
+      const nested = (candidate as { data?: unknown }).data;
+      if (typeof nested === 'string' && nested.trim()) return nested;
+    }
+  }
+
+  return undefined;
+}
+
+function normalizePayloadAttachments(payload: Record<string, unknown>): NormalizedAttachment[] {
+  const sources = [
+    payload.attachments,
+    payload.Attachments,
+    (payload.data as { attachments?: unknown } | undefined)?.attachments,
+    (payload.email as { attachments?: unknown } | undefined)?.attachments,
+  ];
+
+  const rawAttachments: Record<string, unknown>[] = [];
+  for (const source of sources) {
+    if (Array.isArray(source)) {
+      rawAttachments.push(...source.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object'));
+    }
+  }
+
+  return rawAttachments.map((attachment) => ({
+    fileName: sanitizeFileName(
+      String(
+        attachment.filename ||
+        attachment.fileName ||
+        attachment.name ||
+        attachment.Name ||
+        'attachment'
+      )
+    ),
+    contentType: String(
+      attachment.contentType ||
+      attachment.content_type ||
+      attachment.ContentType ||
+      attachment.mimeType ||
+      attachment.type ||
+      'application/octet-stream'
+    ),
+    base64Content: extractAttachmentContent(attachment),
+  }));
+}
+
+function extractFileNameFromMimeHeaders(headers: string): string | null {
+  const encodedFileNameMatch = headers.match(/filename\*=UTF-8''([^\r\n;]+)/i);
+  if (encodedFileNameMatch?.[1]) {
+    try {
+      return decodeURIComponent(encodedFileNameMatch[1]);
+    } catch {
+      return encodedFileNameMatch[1];
+    }
+  }
+
+  const fileNameMatch = headers.match(/filename="?([^"\r\n;]+)"?/i);
+  if (fileNameMatch?.[1]) return fileNameMatch[1];
+
+  const nameMatch = headers.match(/name="?([^"\r\n;]+)"?/i);
+  if (nameMatch?.[1]) return nameMatch[1];
+
+  return null;
+}
+
+function extractRawMimeAttachments(rawContent: string): NormalizedAttachment[] {
+  if (!rawContent) return [];
+
+  const boundaryMatch = rawContent.match(/boundary="?([^"\s;]+)"?/i);
+  if (!boundaryMatch?.[1]) return [];
+
+  const boundary = boundaryMatch[1];
+  const escapedBoundary = boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const parts = rawContent.split(new RegExp(`--${escapedBoundary}`));
+  const extracted: NormalizedAttachment[] = [];
+
+  for (const part of parts) {
+    const trimmedPart = part.trim();
+    if (!trimmedPart || trimmedPart === '--') continue;
+
+    const partSections = part.split(/\r?\n\r?\n/);
+    if (partSections.length < 2) continue;
+
+    const headers = partSections[0] || '';
+    const body = partSections.slice(1).join('\n\n').trim();
+    if (!headers || !body) continue;
+
+    const headerLower = headers.toLowerCase();
+    const fileName = extractFileNameFromMimeHeaders(headers);
+    const contentTypeMatch = headers.match(/content-type:\s*([^;\r\n]+)/i);
+    const contentType = contentTypeMatch?.[1]?.trim() || 'application/octet-stream';
+
+    const isAttachment =
+      headerLower.includes('content-disposition: attachment') ||
+      (!!fileName && !/content-type:\s*text\/(plain|html)/i.test(headers));
+
+    if (!isAttachment) continue;
+
+    const transferEncodingMatch = headers.match(/content-transfer-encoding:\s*([^\r\n]+)/i);
+    const transferEncoding = transferEncodingMatch?.[1]?.trim().toLowerCase() || '';
+
+    let bytes: Uint8Array | null = null;
+    if (transferEncoding === 'base64' || isBase64Encoded(body)) {
+      bytes = decodeBase64ToBytes(body);
+    } else if (transferEncoding === 'quoted-printable') {
+      bytes = new TextEncoder().encode(decodeQuotedPrintable(body));
+    } else {
+      bytes = new TextEncoder().encode(body);
+    }
+
+    if (!bytes || bytes.length === 0) continue;
+
+    extracted.push({
+      fileName: sanitizeFileName(fileName || `attachment-${extracted.length + 1}`),
+      contentType,
+      bytes,
+    });
+  }
+
+  return extracted;
+}
+
+function collectInboundAttachments(payload: Record<string, unknown>, rawContent: string): NormalizedAttachment[] {
+  const payloadAttachments = normalizePayloadAttachments(payload);
+  const rawMimeAttachments = extractRawMimeAttachments(rawContent);
+  const deduped = new Map<string, NormalizedAttachment>();
+
+  for (const attachment of [...payloadAttachments, ...rawMimeAttachments]) {
+    const key = `${attachment.fileName.toLowerCase()}::${attachment.contentType.toLowerCase()}`;
+    if (!deduped.has(key)) deduped.set(key, attachment);
+  }
+
+  return Array.from(deduped.values());
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -345,28 +517,22 @@ Deno.serve(async (req) => {
 
     console.log(`Email logged to claim ${claim.claim_number} (policy: ${claim.policy_number}) from ${senderEmail}`);
 
-    // Process email attachments if present
-    const attachments = payload.attachments || payload.Attachments || [];
+    // Process email attachments from payload and/or raw MIME body
+    const attachments = collectInboundAttachments(payload as Record<string, unknown>, rawContent);
     const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024; // 10MB limit
     
     for (const attachment of attachments) {
       try {
-        const fileName = attachment.filename || attachment.name || attachment.Name || 'attachment';
-        const contentType = attachment.contentType || attachment.content_type || attachment.ContentType || 'application/octet-stream';
-        const content = attachment.content || attachment.Content || attachment.data; // base64 encoded
+        const fileName = attachment.fileName || 'attachment';
+        const contentType = attachment.contentType || 'application/octet-stream';
         
-        if (!content) {
-          console.log(`Skipping attachment ${fileName}: no content`);
-          continue;
+        let fileBuffer = attachment.bytes;
+        if (!fileBuffer && attachment.base64Content) {
+          fileBuffer = decodeBase64ToBytes(attachment.base64Content);
         }
-        
-        // Decode base64 content
-        let fileBuffer: Uint8Array;
-        try {
-          const binaryString = atob(content.replace(/[\r\n\s]/g, ''));
-          fileBuffer = Uint8Array.from(binaryString, c => c.charCodeAt(0));
-        } catch (decodeError) {
-          console.error(`Failed to decode attachment ${fileName}:`, decodeError);
+
+        if (!fileBuffer) {
+          console.log(`Skipping attachment ${fileName}: no content`);
           continue;
         }
         
@@ -376,7 +542,7 @@ Deno.serve(async (req) => {
           continue;
         }
         
-        const storagePath = `${claim.id}/email-attachments/${Date.now()}-${fileName}`;
+        const storagePath = `${claim.id}/email-attachments/${Date.now()}-${sanitizeFileName(fileName)}`;
         
         // Upload to storage
         const { error: uploadError } = await supabase.storage
