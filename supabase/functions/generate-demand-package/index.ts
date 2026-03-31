@@ -487,6 +487,37 @@ function buildPolicyGateInstructions(
   return base.join("\n");
 }
 
+function applyPolicyReferenceMode(
+  policyText: string,
+  policyMatch: PolicyMatchResult
+): string {
+  const gateBlock = buildPolicyGateInstructions(policyMatch, policyText);
+  if (!policyText.trim() || policyMatch.confidence === "none" || policyMatch.referenceMode === "general_only") {
+    return [
+      gateBlock,
+      "",
+      "POLICY TEXT PAYLOAD:",
+      "Not provided to model as claim-specific policy evidence due to low/none policy match confidence.",
+    ].join("\n");
+  }
+
+  if (policyMatch.referenceMode === "qualified_reference") {
+    return [
+      gateBlock,
+      "",
+      "POLICY TEXT PAYLOAD (QUALIFIED):",
+      policyText,
+    ].join("\n");
+  }
+
+  return [
+    gateBlock,
+    "",
+    "POLICY TEXT PAYLOAD (CLAIM-SPECIFIC):",
+    policyText,
+  ].join("\n");
+}
+
 function summarizeEstimateLines(lines: Record<string, any>[]) {
   const roomTradeTotals = new Map<string, number>();
   const tradeTotals = new Map<string, number>();
