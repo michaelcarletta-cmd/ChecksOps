@@ -11,6 +11,7 @@ interface ClaimUpdatePayload {
   oldValue?: string;
   newValue?: string;
   customMessage?: string;
+  folderName?: string;
 }
 
 Deno.serve(async (req) => {
