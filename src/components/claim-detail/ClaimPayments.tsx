@@ -9,10 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { DollarSign, Trash2, CreditCard, Banknote, FileCheck } from "lucide-react";
+import { DollarSign, Trash2, CreditCard, FileCheck } from "lucide-react";
 import { QuickBooksPaymentDialog } from "@/components/QuickBooksPaymentDialog";
-import { RampPaymentDialog } from "@/components/RampPaymentDialog";
-import { OnlineCheckWriterDialog } from "@/components/OnlineCheckWriterDialog";
+import { CheckbookPaymentDialog } from "@/components/CheckbookPaymentDialog";
 
 interface ClaimPaymentsProps {
   claimId: string;
@@ -35,14 +34,12 @@ interface Contractor {
   id: string;
   full_name: string | null;
   email: string;
-  ramp_vendor_id?: string | null;
 }
 
 interface Referrer {
   id: string;
   name: string;
   email: string | null;
-  ramp_vendor_id?: string | null;
 }
 
 export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
@@ -51,15 +48,12 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   const [referrers, setReferrers] = useState<Referrer[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [qbPaymentOpen, setQbPaymentOpen] = useState(false);
-  const [rampPaymentOpen, setRampPaymentOpen] = useState(false);
-  const [ocwPaymentOpen, setOcwPaymentOpen] = useState(false);
+  const [checkbookPaymentOpen, setCheckbookPaymentOpen] = useState(false);
   const [selectedRecipient, setSelectedRecipient] = useState<{ 
     name: string; 
     email?: string; 
     phone?: string;
     type: 'contractor' | 'client' | 'referrer';
-    rampVendorId?: string;
-    recipientReferenceId?: string;
   } | null>(null);
   const [formData, setFormData] = useState({
     payment_date: new Date().toISOString().split("T")[0],
@@ -212,7 +206,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   const totalReceived = receivedPayments.reduce((sum, payment) => sum + payment.amount, 0);
 
   const handleQuickBooksPayment = (recipientType: 'contractor' | 'client' | 'referrer', recipientId?: string) => {
-    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer'; rampVendorId?: string; recipientReferenceId?: string } = { 
+    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer' } = { 
       name: 'Client (Policyholder)', 
       type: 'client' 
     };
@@ -224,8 +218,6 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
           name: contractor.full_name || contractor.email, 
           email: contractor.email,
           type: 'contractor',
-          rampVendorId: contractor.ramp_vendor_id || undefined,
-          recipientReferenceId: contractor.id,
         };
       }
     } else if (recipientType === 'referrer' && recipientId) {
@@ -235,8 +227,6 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
           name: referrer.name,
           email: referrer.email || undefined,
           type: 'referrer',
-          rampVendorId: referrer.ramp_vendor_id || undefined,
-          recipientReferenceId: referrer.id,
         };
       }
     }
@@ -245,8 +235,8 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
     setQbPaymentOpen(true);
   };
 
-  const handleRampPayment = (recipientType: 'contractor' | 'client' | 'referrer', recipientId?: string) => {
-    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer'; rampVendorId?: string; recipientReferenceId?: string } = { 
+  const handleCheckbookPayment = (recipientType: 'contractor' | 'client' | 'referrer', recipientId?: string) => {
+    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer' } = { 
       name: 'Client (Policyholder)', 
       type: 'client' 
     };
@@ -258,8 +248,6 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
           name: contractor.full_name || contractor.email, 
           email: contractor.email,
           type: 'contractor',
-          rampVendorId: contractor.ramp_vendor_id || undefined,
-          recipientReferenceId: contractor.id,
         };
       }
     } else if (recipientType === 'referrer' && recipientId) {
@@ -269,28 +257,12 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
           name: referrer.name,
           email: referrer.email || undefined,
           type: 'referrer',
-          rampVendorId: referrer.ramp_vendor_id || undefined,
-          recipientReferenceId: referrer.id,
         };
       }
     }
     
     setSelectedRecipient(recipient);
-    setRampPaymentOpen(true);
-  };
-
-  const handleRampVendorCreated = async (vendorId: string) => {
-    if (!selectedRecipient) return;
-    
-    // Save the Ramp vendor ID to the appropriate table
-    if (selectedRecipient.type === 'contractor') {
-      fetchContractors();
-    } else if (selectedRecipient.type === 'referrer') {
-      fetchReferrers();
-    }
-    
-    // Update selected recipient with new vendor ID
-    setSelectedRecipient(prev => prev ? { ...prev, rampVendorId: vendorId } : null);
+    setCheckbookPaymentOpen(true);
   };
 
   return (
@@ -472,56 +444,15 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
               </Select>
               <Select onValueChange={(value) => {
                 if (value === 'client') {
-                  handleRampPayment('client');
+                  handleCheckbookPayment('client');
                 } else if (value.startsWith('contractor-')) {
-                  handleRampPayment('contractor', value.replace('contractor-', ''));
+                  handleCheckbookPayment('contractor', value.replace('contractor-', ''));
                 } else if (value.startsWith('referrer-')) {
-                  handleRampPayment('referrer', value.replace('referrer-', ''));
+                  handleCheckbookPayment('referrer', value.replace('referrer-', ''));
                 }
               }}>
                 <SelectTrigger>
-                  <SelectValue placeholder={<span className="flex items-center gap-2"><Banknote className="h-4 w-4" /> Ramp Bill Pay</span>} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="client">Client (Policyholder)</SelectItem>
-                  {contractors.map(c => (
-                    <SelectItem key={c.id} value={`contractor-${c.id}`}>{c.full_name || c.email}</SelectItem>
-                  ))}
-                  {referrers.map(r => (
-                    <SelectItem key={r.id} value={`referrer-${r.id}`}>{r.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select onValueChange={(value) => {
-                if (value === 'client') {
-                  setSelectedRecipient({ name: 'Client (Policyholder)', type: 'client' });
-                  setOcwPaymentOpen(true);
-                } else if (value.startsWith('contractor-')) {
-                  const contractorId = value.replace('contractor-', '');
-                  const contractor = contractors.find(c => c.id === contractorId);
-                  if (contractor) {
-                    setSelectedRecipient({ 
-                      name: contractor.full_name || contractor.email, 
-                      email: contractor.email,
-                      type: 'contractor' 
-                    });
-                    setOcwPaymentOpen(true);
-                  }
-                } else if (value.startsWith('referrer-')) {
-                  const referrerId = value.replace('referrer-', '');
-                  const referrer = referrers.find(r => r.id === referrerId);
-                  if (referrer) {
-                    setSelectedRecipient({ 
-                      name: referrer.name, 
-                      email: referrer.email || undefined,
-                      type: 'referrer' 
-                    });
-                    setOcwPaymentOpen(true);
-                  }
-                }
-              }}>
-                <SelectTrigger>
-                  <SelectValue placeholder={<span className="flex items-center gap-2"><FileCheck className="h-4 w-4" /> Check Writer</span>} />
+                  <SelectValue placeholder={<span className="flex items-center gap-2"><FileCheck className="h-4 w-4" /> Send Check</span>} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="client">Client (Policyholder)</SelectItem>
@@ -574,14 +505,6 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
                       title="Pay via QuickBooks"
                     >
                       <CreditCard className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleRampPayment(payment.recipient_type as 'contractor' | 'client' | 'referrer', payment.recipient_id || undefined)}
-                      title="Pay via Ramp"
-                    >
-                      <Banknote className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -654,23 +577,13 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
               recipientPhone={selectedRecipient.phone}
               onSuccess={fetchPayments}
             />
-            <RampPaymentDialog
-              open={rampPaymentOpen}
-              onOpenChange={setRampPaymentOpen}
+            <CheckbookPaymentDialog
+              open={checkbookPaymentOpen}
+              onOpenChange={setCheckbookPaymentOpen}
               recipientName={selectedRecipient.name}
               recipientEmail={selectedRecipient.email}
-              recipientPhone={selectedRecipient.phone}
               recipientType={selectedRecipient.type}
-              recipientReferenceId={selectedRecipient.recipientReferenceId}
-              rampVendorId={selectedRecipient.rampVendorId}
-              onSuccess={fetchPayments}
-              onVendorCreated={handleRampVendorCreated}
-            />
-            <OnlineCheckWriterDialog
-              open={ocwPaymentOpen}
-              onOpenChange={setOcwPaymentOpen}
-              recipientName={selectedRecipient.name}
-              recipientEmail={selectedRecipient.email}
+              claimId={claimId}
               onSuccess={fetchPayments}
             />
           </>

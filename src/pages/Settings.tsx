@@ -41,7 +41,7 @@ import { ZapierIntegrationSettings } from "@/components/settings/ZapierIntegrati
 import { OrganizationSettings } from "@/components/settings/OrganizationSettings";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 import { AuditLogSettings } from "@/components/settings/AuditLogSettings";
-import { RampSettings } from "@/components/settings/RampSettings";
+
 import { useQuery } from "@tanstack/react-query";
 import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
 
@@ -657,7 +657,7 @@ export default function Settings() {
                   <OutlookConnectionSettings embedded />
                   <ZapierIntegrationSettings embedded />
                   <QuickBooksSettings embedded />
-                  {isAdmin && <RampSettings embedded />}
+                  
                 </CardContent>
               </CollapsibleContent>
             </Card>
