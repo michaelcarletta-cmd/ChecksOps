@@ -56,8 +56,6 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
     email?: string; 
     phone?: string;
     type: 'contractor' | 'client' | 'referrer';
-    rampVendorId?: string;
-    recipientReferenceId?: string;
   } | null>(null);
   const [formData, setFormData] = useState({
     payment_date: new Date().toISOString().split("T")[0],
