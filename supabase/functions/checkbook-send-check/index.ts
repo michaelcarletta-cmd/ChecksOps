@@ -192,7 +192,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         checkId: checkResult.id,
-        checkNumber: checkNumber,
+        checkNumber: checkResult.number || checkResult.id || null,
         status: checkResult.status,
         data: checkResult,
       }),
