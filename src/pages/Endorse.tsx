@@ -105,20 +105,15 @@ export default function Endorse() {
   };
 
   const getSignatureData = (): string | null => {
-    if (mode === "draw") {
-      const canvas = canvasRef.current;
-      if (!canvas) return null;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return null;
-      const d = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-      let empty = true;
-      for (let i = 3; i < d.length; i += 4) { if (d[i] > 0) { empty = false; break; } }
-      if (empty) return null;
-      return canvas.toDataURL("image/png");
-    } else {
-      const v = typedName.trim();
-      return v ? `typed:${v}` : null;
-    }
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    const d = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let empty = true;
+    for (let i = 3; i < d.length; i += 4) { if (d[i] > 0) { empty = false; break; } }
+    if (empty) return null;
+    return canvas.toDataURL("image/png");
   };
 
   const submit = async (type: "approve" | "reject") => {
