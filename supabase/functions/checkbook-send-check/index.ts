@@ -113,9 +113,32 @@ Deno.serve(async (req) => {
           },
         }),
       });
+    } else if (action === "request-payment") {
+      // Request payment (invoice) — sends recipient an email to pay you
+      if (!recipientEmail) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Recipient email is required for payment requests" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      checkResponse = await fetch(`${BASE}/invoice`, {
+        method: "POST",
+        headers: {
+          Authorization: authHeader,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          recipient: recipientEmail,
+          name: recipientName,
+          amount: Number(amount).toFixed(2),
+          description: description || `Payment request for ${recipientName}`,
+        }),
+      });
     } else {
       return new Response(
-        JSON.stringify({ success: false, error: "Invalid action. Use send-digital or send-physical" }),
+        JSON.stringify({ success: false, error: "Invalid action. Use send-digital, send-physical, or request-payment" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

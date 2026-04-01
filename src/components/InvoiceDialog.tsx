@@ -266,23 +266,25 @@ export function InvoiceDialog({
 
     setIsCreatingPaymentLink(true);
     try {
-      const { data, error } = await supabase.functions.invoke("collect-payment", {
+      const { data, error } = await supabase.functions.invoke("checkbook-send-check", {
         body: {
+          action: "request-payment",
+          recipientName: formData.recipientName,
+          recipientEmail: formData.recipientEmail,
           amount: total,
-          description: `Invoice ${formData.invoiceNumber}`,
-          customerEmail: formData.recipientEmail || undefined,
-          customerName: formData.recipientName,
-          invoiceNumber: formData.invoiceNumber,
-          claimNumber,
+          description: `Invoice ${formData.invoiceNumber}${claimNumber ? ` — Claim ${claimNumber}` : ""}`,
         },
       });
 
       if (error) throw error;
       if (data?.success === false) throw new Error(data.error);
 
-      setPaymentLink(data.url);
-      await navigator.clipboard.writeText(data.url);
-      toast.success("Payment link created & copied to clipboard!");
+      const invoiceUrl = data?.data?.url || data?.data?.id || "";
+      if (invoiceUrl) {
+        setPaymentLink(invoiceUrl);
+        await navigator.clipboard.writeText(invoiceUrl);
+      }
+      toast.success("Payment request sent via Checkbook.io!");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to create payment link";
       toast.error(message);
