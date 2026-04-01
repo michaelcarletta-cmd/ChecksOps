@@ -789,6 +789,7 @@ function CheckDetailPanel({
 }) {
   const [detailTab, setDetailTab] = useState("overview");
   const [undoing, setUndoing] = useState(false);
+  const [reuploadingBack, setReuploadingBack] = useState(false);
   const [preparingDepositPrint, setPreparingDepositPrint] = useState(false);
   const [showEndorsementAdjuster, setShowEndorsementAdjuster] = useState(false);
   const [depositViewerOpen, setDepositViewerOpen] = useState(false);
