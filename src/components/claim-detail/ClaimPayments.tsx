@@ -53,8 +53,12 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
     name: string; 
     email?: string; 
     phone?: string;
-    type: 'contractor' | 'client' | 'referrer';
+    type: 'contractor' | 'client' | 'referrer' | 'other';
   } | null>(null);
+  const [customPayeeOpen, setCustomPayeeOpen] = useState(false);
+  const [customPayeePurpose, setCustomPayeePurpose] = useState<'qb' | 'checkbook'>('checkbook');
+  const [customPayeeName, setCustomPayeeName] = useState("");
+  const [customPayeeEmail, setCustomPayeeEmail] = useState("");
   const [formData, setFormData] = useState({
     payment_date: new Date().toISOString().split("T")[0],
     amount: "",
@@ -205,8 +209,8 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   const totalReleased = releasedPayments.reduce((sum, payment) => sum + payment.amount, 0);
   const totalReceived = receivedPayments.reduce((sum, payment) => sum + payment.amount, 0);
 
-  const handleQuickBooksPayment = (recipientType: 'contractor' | 'client' | 'referrer', recipientId?: string) => {
-    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer' } = { 
+  const handleQuickBooksPayment = (recipientType: 'contractor' | 'client' | 'referrer' | 'other', recipientId?: string) => {
+    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer' | 'other' } = { 
       name: 'Client (Policyholder)', 
       type: 'client' 
     };
@@ -229,14 +233,16 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
           type: 'referrer',
         };
       }
+    } else if (recipientType === 'other') {
+      return;
     }
     
     setSelectedRecipient(recipient);
     setQbPaymentOpen(true);
   };
 
-  const handleCheckbookPayment = (recipientType: 'contractor' | 'client' | 'referrer', recipientId?: string) => {
-    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer' } = { 
+  const handleCheckbookPayment = (recipientType: 'contractor' | 'client' | 'referrer' | 'other', recipientId?: string) => {
+    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer' | 'other' } = { 
       name: 'Client (Policyholder)', 
       type: 'client' 
     };
@@ -259,10 +265,37 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
           type: 'referrer',
         };
       }
+    } else if (recipientType === 'other') {
+      // Will be set from the custom payee dialog
+      return;
     }
     
     setSelectedRecipient(recipient);
     setCheckbookPaymentOpen(true);
+  };
+
+  const openCustomPayeeDialog = (purpose: 'qb' | 'checkbook') => {
+    setCustomPayeeName("");
+    setCustomPayeeEmail("");
+    setCustomPayeePurpose(purpose);
+    setCustomPayeeOpen(true);
+  };
+
+  const handleCustomPayeeSubmit = () => {
+    const name = customPayeeName.trim();
+    const email = customPayeeEmail.trim();
+    if (!name) {
+      toast.error("Please enter a payee name");
+      return;
+    }
+    const recipient = { name, email: email || undefined, type: 'other' as const };
+    setSelectedRecipient(recipient);
+    setCustomPayeeOpen(false);
+    if (customPayeePurpose === 'checkbook') {
+      setCheckbookPaymentOpen(true);
+    } else {
+      setQbPaymentOpen(true);
+    }
   };
 
   return (
@@ -423,6 +456,8 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
               <Select onValueChange={(value) => {
                 if (value === 'client') {
                   handleQuickBooksPayment('client');
+                } else if (value === 'other') {
+                  openCustomPayeeDialog('qb');
                 } else if (value.startsWith('contractor-')) {
                   handleQuickBooksPayment('contractor', value.replace('contractor-', ''));
                 } else if (value.startsWith('referrer-')) {
@@ -440,11 +475,14 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
                   {referrers.map(r => (
                     <SelectItem key={r.id} value={`referrer-${r.id}`}>{r.name}</SelectItem>
                   ))}
+                  <SelectItem value="other">Other (Custom Payee)...</SelectItem>
                 </SelectContent>
               </Select>
               <Select onValueChange={(value) => {
                 if (value === 'client') {
                   handleCheckbookPayment('client');
+                } else if (value === 'other') {
+                  openCustomPayeeDialog('checkbook');
                 } else if (value.startsWith('contractor-')) {
                   handleCheckbookPayment('contractor', value.replace('contractor-', ''));
                 } else if (value.startsWith('referrer-')) {
@@ -462,6 +500,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
                   {referrers.map(r => (
                     <SelectItem key={r.id} value={`referrer-${r.id}`}>{r.name}</SelectItem>
                   ))}
+                  <SelectItem value="other">Other (Custom Payee)...</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -588,6 +627,39 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
             />
           </>
         )}
+
+        {/* Custom Payee Dialog */}
+        <Dialog open={customPayeeOpen} onOpenChange={setCustomPayeeOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Custom Payee</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Payee Name *</Label>
+                <Input
+                  placeholder="e.g. Inspector, Appraiser, Umpire..."
+                  value={customPayeeName}
+                  onChange={(e) => setCustomPayeeName(e.target.value)}
+                  maxLength={100}
+                />
+              </div>
+              <div>
+                <Label>Email (for digital delivery)</Label>
+                <Input
+                  type="email"
+                  placeholder="payee@email.com"
+                  value={customPayeeEmail}
+                  onChange={(e) => setCustomPayeeEmail(e.target.value)}
+                  maxLength={255}
+                />
+              </div>
+              <Button onClick={handleCustomPayeeSubmit} className="w-full">
+                Continue to Payment
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
