@@ -511,14 +511,6 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => handleRampPayment(payment.recipient_type as 'contractor' | 'client' | 'referrer', payment.recipient_id || undefined)}
-                      title="Pay via Ramp"
-                    >
-                      <Banknote className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
                       onClick={() => handleDelete(payment.id)}
                     >
                       <Trash2 className="h-4 w-4" />
