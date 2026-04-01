@@ -657,7 +657,7 @@ export default function Settings() {
                   <OutlookConnectionSettings embedded />
                   <ZapierIntegrationSettings embedded />
                   <QuickBooksSettings embedded />
-                  {isAdmin && <RampSettings embedded />}
+                  
                 </CardContent>
               </CollapsibleContent>
             </Card>
