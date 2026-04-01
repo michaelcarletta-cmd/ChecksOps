@@ -456,6 +456,8 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
               <Select onValueChange={(value) => {
                 if (value === 'client') {
                   handleQuickBooksPayment('client');
+                } else if (value === 'other') {
+                  openCustomPayeeDialog('qb');
                 } else if (value.startsWith('contractor-')) {
                   handleQuickBooksPayment('contractor', value.replace('contractor-', ''));
                 } else if (value.startsWith('referrer-')) {
@@ -473,11 +475,14 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
                   {referrers.map(r => (
                     <SelectItem key={r.id} value={`referrer-${r.id}`}>{r.name}</SelectItem>
                   ))}
+                  <SelectItem value="other">Other (Custom Payee)...</SelectItem>
                 </SelectContent>
               </Select>
               <Select onValueChange={(value) => {
                 if (value === 'client') {
                   handleCheckbookPayment('client');
+                } else if (value === 'other') {
+                  openCustomPayeeDialog('checkbook');
                 } else if (value.startsWith('contractor-')) {
                   handleCheckbookPayment('contractor', value.replace('contractor-', ''));
                 } else if (value.startsWith('referrer-')) {
@@ -495,6 +500,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
                   {referrers.map(r => (
                     <SelectItem key={r.id} value={`referrer-${r.id}`}>{r.name}</SelectItem>
                   ))}
+                  <SelectItem value="other">Other (Custom Payee)...</SelectItem>
                 </SelectContent>
               </Select>
             </div>
