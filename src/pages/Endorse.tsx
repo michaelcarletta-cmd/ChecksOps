@@ -76,7 +76,7 @@ export default function Endorse() {
     resize();
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
-  }, [data, mode]);
+  }, [data]);
 
   const getCtx = () => canvasRef.current?.getContext("2d") ?? null;
 
