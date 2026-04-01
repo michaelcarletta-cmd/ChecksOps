@@ -186,22 +186,6 @@ Deno.serve(async (req) => {
           log("Warning: failed to add claim payment", paymentErr);
         }
       }
-
-    // 2. Add to claim_payments if linked to a claim
-    if (claimId) {
-      const { error: paymentErr } = await sb.from("claim_payments").insert({
-        claim_id: claimId,
-        payment_date: new Date().toISOString().split("T")[0],
-        amount: Number(amount),
-        payment_method: "check",
-        check_number: String(checkNumber),
-        recipient_type: recipientType || "contractor",
-        notes: `Sent via Checkbook.io (${action === "send-digital" ? "Digital" : "Physical"})`,
-        direction: "released",
-      });
-      if (paymentErr) {
-        log("Warning: failed to add claim payment", paymentErr);
-      }
     }
 
     return new Response(
