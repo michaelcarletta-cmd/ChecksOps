@@ -152,22 +152,40 @@ Deno.serve(async (req) => {
     const checkResult = await checkResponse.json();
     log("Check sent successfully", { id: checkResult.id, number: checkResult.number });
 
-    // Record in outstanding_checks and claim_payments if claimId provided
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const sb = createClient(supabaseUrl, supabaseKey);
+    // Only track outgoing checks (not payment requests/invoices)
+    if (action !== "request-payment") {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const sb = createClient(supabaseUrl, supabaseKey);
 
-    const checkNumber = checkResult.number || checkResult.id || "CB-" + Date.now();
+      const checkNumber = checkResult.number || checkResult.id || "CB-" + Date.now();
 
-    // 1. Add to outstanding_checks (sales tracker)
-    const { error: outstandingErr } = await sb.from("outstanding_checks").insert({
-      check_number: String(checkNumber),
-      payee: recipientName,
-      amount: Number(amount),
-    });
-    if (outstandingErr) {
-      log("Warning: failed to add outstanding check", outstandingErr);
-    }
+      // 1. Add to outstanding_checks (sales tracker)
+      const { error: outstandingErr } = await sb.from("outstanding_checks").insert({
+        check_number: String(checkNumber),
+        payee: recipientName,
+        amount: Number(amount),
+      });
+      if (outstandingErr) {
+        log("Warning: failed to add outstanding check", outstandingErr);
+      }
+
+      // 2. Add to claim_payments if linked to a claim
+      if (claimId) {
+        const { error: paymentErr } = await sb.from("claim_payments").insert({
+          claim_id: claimId,
+          payment_date: new Date().toISOString().split("T")[0],
+          amount: Number(amount),
+          payment_method: "check",
+          check_number: String(checkNumber),
+          recipient_type: recipientType || "contractor",
+          notes: `Sent via Checkbook.io (${action === "send-digital" ? "Digital" : "Physical"})`,
+          direction: "released",
+        });
+        if (paymentErr) {
+          log("Warning: failed to add claim payment", paymentErr);
+        }
+      }
 
     // 2. Add to claim_payments if linked to a claim
     if (claimId) {
