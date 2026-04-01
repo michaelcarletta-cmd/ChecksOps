@@ -50,8 +50,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   const [referrers, setReferrers] = useState<Referrer[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [qbPaymentOpen, setQbPaymentOpen] = useState(false);
-  const [rampPaymentOpen, setRampPaymentOpen] = useState(false);
-  const [ocwPaymentOpen, setOcwPaymentOpen] = useState(false);
+  const [checkbookPaymentOpen, setCheckbookPaymentOpen] = useState(false);
   const [selectedRecipient, setSelectedRecipient] = useState<{ 
     name: string; 
     email?: string; 
