@@ -627,6 +627,39 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
             />
           </>
         )}
+
+        {/* Custom Payee Dialog */}
+        <Dialog open={customPayeeOpen} onOpenChange={setCustomPayeeOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Custom Payee</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Payee Name *</Label>
+                <Input
+                  placeholder="e.g. Inspector, Appraiser, Umpire..."
+                  value={customPayeeName}
+                  onChange={(e) => setCustomPayeeName(e.target.value)}
+                  maxLength={100}
+                />
+              </div>
+              <div>
+                <Label>Email (for digital delivery)</Label>
+                <Input
+                  type="email"
+                  placeholder="payee@email.com"
+                  value={customPayeeEmail}
+                  onChange={(e) => setCustomPayeeEmail(e.target.value)}
+                  maxLength={255}
+                />
+              </div>
+              <Button onClick={handleCustomPayeeSubmit} className="w-full">
+                Continue to Payment
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
