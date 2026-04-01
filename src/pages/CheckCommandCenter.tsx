@@ -789,6 +789,7 @@ function CheckDetailPanel({
 }) {
   const [detailTab, setDetailTab] = useState("overview");
   const [undoing, setUndoing] = useState(false);
+  const [reuploadingBack, setReuploadingBack] = useState(false);
   const [preparingDepositPrint, setPreparingDepositPrint] = useState(false);
   const [showEndorsementAdjuster, setShowEndorsementAdjuster] = useState(false);
   const [depositViewerOpen, setDepositViewerOpen] = useState(false);
@@ -1345,9 +1346,55 @@ function CheckDetailPanel({
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
                         <p className="text-[10px] text-muted-foreground">Back</p>
-                        <a href={backImageUrl} download={`check-${check.check_number ?? check.id}-back`} target="_blank" rel="noopener noreferrer">
-                          <Button variant="ghost" size="icon" className="h-5 w-5"><Download className="h-3 w-3" /></Button>
-                        </a>
+                        <div className="flex items-center gap-1">
+                          <label className="cursor-pointer">
+                            <Button variant="ghost" size="icon" className="h-5 w-5" asChild disabled={reuploadingBack}>
+                              <span><Upload className={`h-3 w-3 ${reuploadingBack ? "animate-spin" : ""}`} /></span>
+                            </Button>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file || !check) return;
+                                setReuploadingBack(true);
+                                try {
+                                  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+                                  const newPath = `checks/${check.id}/back-${Date.now()}.${ext}`;
+                                  const { error: uploadErr } = await supabase.storage
+                                    .from("claim-files")
+                                    .upload(newPath, file, { cacheControl: "31536000", upsert: false, contentType: file.type || "image/jpeg" });
+                                  if (uploadErr) throw uploadErr;
+                                  const { error: updateErr } = await supabase
+                                    .from("check_intake_items")
+                                    .update({ back_image_path: newPath })
+                                    .eq("id", check.id);
+                                  if (updateErr) throw updateErr;
+                                  await supabase.from("check_audit_log").insert({
+                                    check_id: check.id,
+                                    event_type: "back_image_reuploaded",
+                                    actor_id: user?.id ?? null,
+                                    event_description: "Back of check re-uploaded (e.g. after mortgage signature)",
+                                    event_data: { old_path: check.back_image_path, new_path: newPath },
+                                  });
+                                  toast({ title: "Back image updated", description: "The back of the check has been re-uploaded successfully." });
+                                  qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+                                  qc.invalidateQueries({ queryKey: ["check-back-img"] });
+                                  onRefresh();
+                                } catch (err: any) {
+                                  toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+                                } finally {
+                                  setReuploadingBack(false);
+                                  e.target.value = "";
+                                }
+                              }}
+                            />
+                          </label>
+                          <a href={backImageUrl} download={`check-${check.check_number ?? check.id}-back`} target="_blank" rel="noopener noreferrer">
+                            <Button variant="ghost" size="icon" className="h-5 w-5"><Download className="h-3 w-3" /></Button>
+                          </a>
+                        </div>
                       </div>
                       <div className="check-back-wrap relative inline-block max-w-full rounded border border-border" style={{ overflow: "visible", containerType: "inline-size" as any }}>
                         <img
@@ -1441,6 +1488,55 @@ function CheckDetailPanel({
                           </div>
                         )}
                       </div>
+                    </div>
+                  )}
+                  {!backImageUrl && (
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-muted-foreground">Back — No image uploaded</p>
+                      <label className="cursor-pointer">
+                        <Button variant="outline" size="sm" className="w-full text-xs" asChild disabled={reuploadingBack}>
+                          <span><Upload className={`h-3 w-3 mr-1 ${reuploadingBack ? "animate-spin" : ""}`} />{reuploadingBack ? "Uploading..." : "Upload Back of Check"}</span>
+                        </Button>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file || !check) return;
+                            setReuploadingBack(true);
+                            try {
+                              const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+                              const newPath = `checks/${check.id}/back-${Date.now()}.${ext}`;
+                              const { error: uploadErr } = await supabase.storage
+                                .from("claim-files")
+                                .upload(newPath, file, { cacheControl: "31536000", upsert: false, contentType: file.type || "image/jpeg" });
+                              if (uploadErr) throw uploadErr;
+                              const { error: updateErr } = await supabase
+                                .from("check_intake_items")
+                                .update({ back_image_path: newPath })
+                                .eq("id", check.id);
+                              if (updateErr) throw updateErr;
+                              await supabase.from("check_audit_log").insert({
+                                check_id: check.id,
+                                event_type: "back_image_uploaded",
+                                actor_id: user?.id ?? null,
+                                event_description: "Back of check uploaded",
+                                event_data: { new_path: newPath },
+                              });
+                              toast({ title: "Back image uploaded", description: "You can now collect endorsement signatures." });
+                              qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+                              qc.invalidateQueries({ queryKey: ["check-back-img"] });
+                              onRefresh();
+                            } catch (err: any) {
+                              toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+                            } finally {
+                              setReuploadingBack(false);
+                              e.target.value = "";
+                            }
+                          }}
+                        />
+                      </label>
                     </div>
                   )}
                   {/* Open for Mobile Deposit — only visible when all endorsements complete */}
