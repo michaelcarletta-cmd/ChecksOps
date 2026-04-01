@@ -446,15 +446,15 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
               </Select>
               <Select onValueChange={(value) => {
                 if (value === 'client') {
-                  handleRampPayment('client');
+                  handleCheckbookPayment('client');
                 } else if (value.startsWith('contractor-')) {
-                  handleRampPayment('contractor', value.replace('contractor-', ''));
+                  handleCheckbookPayment('contractor', value.replace('contractor-', ''));
                 } else if (value.startsWith('referrer-')) {
-                  handleRampPayment('referrer', value.replace('referrer-', ''));
+                  handleCheckbookPayment('referrer', value.replace('referrer-', ''));
                 }
               }}>
                 <SelectTrigger>
-                  <SelectValue placeholder={<span className="flex items-center gap-2"><Banknote className="h-4 w-4" /> Ramp Bill Pay</span>} />
+                  <SelectValue placeholder={<span className="flex items-center gap-2"><FileCheck className="h-4 w-4" /> Send Check</span>} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="client">Client (Policyholder)</SelectItem>
@@ -466,34 +466,6 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
                   ))}
                 </SelectContent>
               </Select>
-              <Select onValueChange={(value) => {
-                if (value === 'client') {
-                  setSelectedRecipient({ name: 'Client (Policyholder)', type: 'client' });
-                  setOcwPaymentOpen(true);
-                } else if (value.startsWith('contractor-')) {
-                  const contractorId = value.replace('contractor-', '');
-                  const contractor = contractors.find(c => c.id === contractorId);
-                  if (contractor) {
-                    setSelectedRecipient({ 
-                      name: contractor.full_name || contractor.email, 
-                      email: contractor.email,
-                      type: 'contractor' 
-                    });
-                    setOcwPaymentOpen(true);
-                  }
-                } else if (value.startsWith('referrer-')) {
-                  const referrerId = value.replace('referrer-', '');
-                  const referrer = referrers.find(r => r.id === referrerId);
-                  if (referrer) {
-                    setSelectedRecipient({ 
-                      name: referrer.name, 
-                      email: referrer.email || undefined,
-                      type: 'referrer' 
-                    });
-                    setOcwPaymentOpen(true);
-                  }
-                }
-              }}>
                 <SelectTrigger>
                   <SelectValue placeholder={<span className="flex items-center gap-2"><FileCheck className="h-4 w-4" /> Check Writer</span>} />
                 </SelectTrigger>
