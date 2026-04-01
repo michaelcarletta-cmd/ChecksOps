@@ -19,8 +19,7 @@ export default function Endorse() {
   const [data, setData] = useState<EndorsementData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"draw" | "type">("draw");
-  const [typedName, setTypedName] = useState("");
+  
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
