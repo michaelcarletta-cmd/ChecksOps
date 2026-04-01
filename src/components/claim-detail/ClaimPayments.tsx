@@ -466,19 +466,6 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
                   ))}
                 </SelectContent>
               </Select>
-                <SelectTrigger>
-                  <SelectValue placeholder={<span className="flex items-center gap-2"><FileCheck className="h-4 w-4" /> Check Writer</span>} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="client">Client (Policyholder)</SelectItem>
-                  {contractors.map(c => (
-                    <SelectItem key={c.id} value={`contractor-${c.id}`}>{c.full_name || c.email}</SelectItem>
-                  ))}
-                  {referrers.map(r => (
-                    <SelectItem key={r.id} value={`referrer-${r.id}`}>{r.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
           </div>
         )}
