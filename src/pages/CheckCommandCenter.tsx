@@ -1490,6 +1490,55 @@ function CheckDetailPanel({
                       </div>
                     </div>
                   )}
+                  {!backImageUrl && (
+                    <div className="space-y-1">
+                      <p className="text-[10px] text-muted-foreground">Back — No image uploaded</p>
+                      <label className="cursor-pointer">
+                        <Button variant="outline" size="sm" className="w-full text-xs" asChild disabled={reuploadingBack}>
+                          <span><Upload className={`h-3 w-3 mr-1 ${reuploadingBack ? "animate-spin" : ""}`} />{reuploadingBack ? "Uploading..." : "Upload Back of Check"}</span>
+                        </Button>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file || !check) return;
+                            setReuploadingBack(true);
+                            try {
+                              const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+                              const newPath = `checks/${check.id}/back-${Date.now()}.${ext}`;
+                              const { error: uploadErr } = await supabase.storage
+                                .from("claim-files")
+                                .upload(newPath, file, { cacheControl: "31536000", upsert: false, contentType: file.type || "image/jpeg" });
+                              if (uploadErr) throw uploadErr;
+                              const { error: updateErr } = await supabase
+                                .from("check_intake_items")
+                                .update({ back_image_path: newPath })
+                                .eq("id", check.id);
+                              if (updateErr) throw updateErr;
+                              await supabase.from("check_audit_log").insert({
+                                check_id: check.id,
+                                event_type: "back_image_uploaded",
+                                actor_id: user?.id ?? null,
+                                event_description: "Back of check uploaded",
+                                event_data: { new_path: newPath },
+                              });
+                              toast({ title: "Back image uploaded", description: "You can now collect endorsement signatures." });
+                              qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+                              qc.invalidateQueries({ queryKey: ["check-back-img"] });
+                              onRefresh();
+                            } catch (err: any) {
+                              toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+                            } finally {
+                              setReuploadingBack(false);
+                              e.target.value = "";
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                  )}
                   {/* Open for Mobile Deposit — only visible when all endorsements complete */}
                   {allEndorsementsComplete && !isDepositBlocked && (
                     <Button
