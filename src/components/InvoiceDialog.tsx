@@ -266,9 +266,8 @@ export function InvoiceDialog({
 
     setIsCreatingPaymentLink(true);
     try {
-      const { data, error } = await supabase.functions.invoke("ramp-payments", {
+      const { data, error } = await supabase.functions.invoke("collect-payment", {
         body: {
-          action: "create-receivable-link",
           amount: total,
           description: `Invoice ${formData.invoiceNumber}`,
           customerEmail: formData.recipientEmail || undefined,
@@ -283,7 +282,7 @@ export function InvoiceDialog({
 
       setPaymentLink(data.url);
       await navigator.clipboard.writeText(data.url);
-      toast.success("Ramp payment link created & copied to clipboard!");
+      toast.success("Payment link created & copied to clipboard!");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to create payment link";
       toast.error(message);
