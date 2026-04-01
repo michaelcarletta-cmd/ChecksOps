@@ -246,57 +246,32 @@ export default function Endorse() {
 
             <div style={{ marginTop: 20 }}>
               <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: 8, fontWeight: 600 }}>Your Signature</p>
-              <div style={styles.sigTabs}>
-                <button
-                  style={{ ...styles.sigTab, ...(mode === "draw" ? styles.sigTabActive : {}) }}
-                  onClick={() => setMode("draw")}
-                >Draw</button>
-                <button
-                  style={{ ...styles.sigTab, ...(mode === "type" ? styles.sigTabActive : {}) }}
-                  onClick={() => setMode("type")}
-                >Type</button>
+              <p style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>Draw your signature below using your finger or mouse</p>
+              <div style={styles.canvasWrap} ref={containerRef}>
+                <canvas
+                  ref={canvasRef}
+                  height={120}
+                  style={{ display: "block", width: "100%", borderRadius: 8, cursor: "crosshair", touchAction: "none" }}
+                  onMouseDown={(e) => startDraw(e.nativeEvent.offsetX, e.nativeEvent.offsetY)}
+                  onMouseMove={(e) => moveDraw(e.nativeEvent.offsetX, e.nativeEvent.offsetY)}
+                  onMouseUp={endDraw}
+                  onMouseLeave={endDraw}
+                  onTouchStart={(e) => {
+                    e.preventDefault();
+                    const t = e.touches[0];
+                    const r = (e.target as HTMLCanvasElement).getBoundingClientRect();
+                    startDraw(t.clientX - r.left, t.clientY - r.top);
+                  }}
+                  onTouchMove={(e) => {
+                    e.preventDefault();
+                    const t = e.touches[0];
+                    const r = (e.target as HTMLCanvasElement).getBoundingClientRect();
+                    moveDraw(t.clientX - r.left, t.clientY - r.top);
+                  }}
+                  onTouchEnd={endDraw}
+                />
+                <button style={styles.clearBtn} onClick={clearCanvas}>Clear</button>
               </div>
-
-              {mode === "draw" && (
-                <div style={styles.canvasWrap} ref={containerRef}>
-                  <canvas
-                    ref={canvasRef}
-                    height={120}
-                    style={{ display: "block", width: "100%", borderRadius: 8, cursor: "crosshair", touchAction: "none" }}
-                    onMouseDown={(e) => startDraw(e.nativeEvent.offsetX, e.nativeEvent.offsetY)}
-                    onMouseMove={(e) => moveDraw(e.nativeEvent.offsetX, e.nativeEvent.offsetY)}
-                    onMouseUp={endDraw}
-                    onMouseLeave={endDraw}
-                    onTouchStart={(e) => {
-                      e.preventDefault();
-                      const t = e.touches[0];
-                      const r = (e.target as HTMLCanvasElement).getBoundingClientRect();
-                      startDraw(t.clientX - r.left, t.clientY - r.top);
-                    }}
-                    onTouchMove={(e) => {
-                      e.preventDefault();
-                      const t = e.touches[0];
-                      const r = (e.target as HTMLCanvasElement).getBoundingClientRect();
-                      moveDraw(t.clientX - r.left, t.clientY - r.top);
-                    }}
-                    onTouchEnd={endDraw}
-                  />
-                  <button style={styles.clearBtn} onClick={clearCanvas}>Clear</button>
-                </div>
-              )}
-
-              {mode === "type" && (
-                <div>
-                  <input
-                    type="text"
-                    style={styles.sigInput}
-                    placeholder="Type your full name..."
-                    value={typedName}
-                    onChange={(e) => setTypedName(e.target.value)}
-                  />
-                  <div style={styles.typedPreview}>{typedName || ""}</div>
-                </div>
-              )}
             </div>
 
             {/* Payment Direction Section */}
