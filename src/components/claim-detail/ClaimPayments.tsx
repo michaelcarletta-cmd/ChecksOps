@@ -229,8 +229,6 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
           name: referrer.name,
           email: referrer.email || undefined,
           type: 'referrer',
-          rampVendorId: referrer.ramp_vendor_id || undefined,
-          recipientReferenceId: referrer.id,
         };
       }
     }
