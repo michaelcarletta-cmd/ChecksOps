@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
       throw new Error("Checkbook.io API credentials not configured");
     }
 
-    const authHeader = "Basic " + btoa(`${API_KEY}:${API_SECRET}`);
+    const authHeader = `${API_KEY}:${API_SECRET}`;
     // Toggle between sandbox and production
     const USE_SANDBOX = Deno.env.get("CHECKBOOK_SANDBOX") !== "false"; // defaults to sandbox
     const BASE = USE_SANDBOX
