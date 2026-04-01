@@ -220,8 +220,6 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
           name: contractor.full_name || contractor.email, 
           email: contractor.email,
           type: 'contractor',
-          rampVendorId: contractor.ramp_vendor_id || undefined,
-          recipientReferenceId: contractor.id,
         };
       }
     } else if (recipientType === 'referrer' && recipientId) {
