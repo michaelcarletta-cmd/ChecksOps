@@ -14,7 +14,7 @@ interface CheckbookPaymentDialogProps {
   onOpenChange: (open: boolean) => void;
   recipientName: string;
   recipientEmail?: string;
-  recipientType: "contractor" | "client" | "referrer";
+  recipientType: "contractor" | "client" | "referrer" | "other";
   claimId?: string;
   defaultAmount?: number;
   onSuccess?: () => void;

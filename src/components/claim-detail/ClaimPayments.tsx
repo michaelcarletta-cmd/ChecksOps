@@ -239,8 +239,8 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
     setQbPaymentOpen(true);
   };
 
-  const handleCheckbookPayment = (recipientType: 'contractor' | 'client' | 'referrer', recipientId?: string) => {
-    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer' } = { 
+  const handleCheckbookPayment = (recipientType: 'contractor' | 'client' | 'referrer' | 'other', recipientId?: string) => {
+    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer' | 'other' } = { 
       name: 'Client (Policyholder)', 
       type: 'client' 
     };
@@ -263,10 +263,37 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
           type: 'referrer',
         };
       }
+    } else if (recipientType === 'other') {
+      // Will be set from the custom payee dialog
+      return;
     }
     
     setSelectedRecipient(recipient);
     setCheckbookPaymentOpen(true);
+  };
+
+  const openCustomPayeeDialog = (purpose: 'qb' | 'checkbook') => {
+    setCustomPayeeName("");
+    setCustomPayeeEmail("");
+    setCustomPayeePurpose(purpose);
+    setCustomPayeeOpen(true);
+  };
+
+  const handleCustomPayeeSubmit = () => {
+    const name = customPayeeName.trim();
+    const email = customPayeeEmail.trim();
+    if (!name) {
+      toast.error("Please enter a payee name");
+      return;
+    }
+    const recipient = { name, email: email || undefined, type: 'other' as const };
+    setSelectedRecipient(recipient);
+    setCustomPayeeOpen(false);
+    if (customPayeePurpose === 'checkbook') {
+      setCheckbookPaymentOpen(true);
+    } else {
+      setQbPaymentOpen(true);
+    }
   };
 
   return (
