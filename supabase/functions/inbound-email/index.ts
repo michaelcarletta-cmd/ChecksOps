@@ -302,8 +302,10 @@ Deno.serve(async (req) => {
 
   try {
     // Validate webhook secret to prevent unauthorized access
+    // Check header first, then fall back to query parameter (for Resend webhooks)
     const webhookSecret = Deno.env.get('INBOUND_EMAIL_WEBHOOK_SECRET');
-    const providedSecret = req.headers.get('x-email-webhook-secret');
+    const url = new URL(req.url);
+    const providedSecret = req.headers.get('x-email-webhook-secret') || url.searchParams.get('secret');
 
     if (!webhookSecret) {
       console.error("INBOUND_EMAIL_WEBHOOK_SECRET not configured");
@@ -314,7 +316,7 @@ Deno.serve(async (req) => {
     }
 
     if (!providedSecret || providedSecret !== webhookSecret) {
-      console.error("Invalid or missing webhook secret");
+      console.error("Invalid or missing webhook secret. Header present:", !!req.headers.get('x-email-webhook-secret'), "Query present:", !!url.searchParams.get('secret'));
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
