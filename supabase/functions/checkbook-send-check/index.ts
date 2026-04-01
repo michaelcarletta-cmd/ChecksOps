@@ -24,11 +24,8 @@ Deno.serve(async (req) => {
     }
 
     const authHeader = `${API_KEY}:${API_SECRET}`;
-    // Toggle between sandbox and production
-    const USE_SANDBOX = Deno.env.get("CHECKBOOK_SANDBOX") !== "false"; // defaults to sandbox
-    const BASE = USE_SANDBOX
-      ? "https://sandbox.checkbook.io/v3"
-      : "https://api.checkbook.io/v3";
+    // Production only
+    const BASE = "https://api.checkbook.io/v3";
 
     const body = await req.json();
     const {
