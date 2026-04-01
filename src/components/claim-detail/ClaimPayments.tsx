@@ -53,8 +53,12 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
     name: string; 
     email?: string; 
     phone?: string;
-    type: 'contractor' | 'client' | 'referrer';
+    type: 'contractor' | 'client' | 'referrer' | 'other';
   } | null>(null);
+  const [customPayeeOpen, setCustomPayeeOpen] = useState(false);
+  const [customPayeePurpose, setCustomPayeePurpose] = useState<'qb' | 'checkbook'>('checkbook');
+  const [customPayeeName, setCustomPayeeName] = useState("");
+  const [customPayeeEmail, setCustomPayeeEmail] = useState("");
   const [formData, setFormData] = useState({
     payment_date: new Date().toISOString().split("T")[0],
     amount: "",
