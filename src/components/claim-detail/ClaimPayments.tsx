@@ -209,8 +209,8 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   const totalReleased = releasedPayments.reduce((sum, payment) => sum + payment.amount, 0);
   const totalReceived = receivedPayments.reduce((sum, payment) => sum + payment.amount, 0);
 
-  const handleQuickBooksPayment = (recipientType: 'contractor' | 'client' | 'referrer', recipientId?: string) => {
-    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer' } = { 
+  const handleQuickBooksPayment = (recipientType: 'contractor' | 'client' | 'referrer' | 'other', recipientId?: string) => {
+    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer' | 'other' } = { 
       name: 'Client (Policyholder)', 
       type: 'client' 
     };
@@ -233,6 +233,8 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
           type: 'referrer',
         };
       }
+    } else if (recipientType === 'other') {
+      return;
     }
     
     setSelectedRecipient(recipient);
