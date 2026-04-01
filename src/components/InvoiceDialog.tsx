@@ -305,7 +305,7 @@ export function InvoiceDialog({
       }
 
       const paymentButton = paymentLink
-        ? `<p style="margin: 24px 0;"><a href="${paymentLink}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Pay via Ramp — $${calculateSubtotal().toFixed(2)}</a></p>`
+        ? `<p style="margin: 24px 0;"><a href="${paymentLink}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Pay Online — $${calculateSubtotal().toFixed(2)}</a></p>`
         : "";
 
       const lineItemsHtml = lineItems

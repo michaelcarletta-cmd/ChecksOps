@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { DollarSign, Trash2, CreditCard, Banknote, FileCheck } from "lucide-react";
+import { DollarSign, Trash2, CreditCard, FileCheck } from "lucide-react";
 import { QuickBooksPaymentDialog } from "@/components/QuickBooksPaymentDialog";
 import { CheckbookPaymentDialog } from "@/components/CheckbookPaymentDialog";
 
