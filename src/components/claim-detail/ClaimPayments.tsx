@@ -237,8 +237,8 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
     setQbPaymentOpen(true);
   };
 
-  const handleRampPayment = (recipientType: 'contractor' | 'client' | 'referrer', recipientId?: string) => {
-    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer'; rampVendorId?: string; recipientReferenceId?: string } = { 
+  const handleCheckbookPayment = (recipientType: 'contractor' | 'client' | 'referrer', recipientId?: string) => {
+    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer' } = { 
       name: 'Client (Policyholder)', 
       type: 'client' 
     };
@@ -250,8 +250,6 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
           name: contractor.full_name || contractor.email, 
           email: contractor.email,
           type: 'contractor',
-          rampVendorId: contractor.ramp_vendor_id || undefined,
-          recipientReferenceId: contractor.id,
         };
       }
     } else if (recipientType === 'referrer' && recipientId) {
@@ -261,28 +259,12 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
           name: referrer.name,
           email: referrer.email || undefined,
           type: 'referrer',
-          rampVendorId: referrer.ramp_vendor_id || undefined,
-          recipientReferenceId: referrer.id,
         };
       }
     }
     
     setSelectedRecipient(recipient);
-    setRampPaymentOpen(true);
-  };
-
-  const handleRampVendorCreated = async (vendorId: string) => {
-    if (!selectedRecipient) return;
-    
-    // Save the Ramp vendor ID to the appropriate table
-    if (selectedRecipient.type === 'contractor') {
-      fetchContractors();
-    } else if (selectedRecipient.type === 'referrer') {
-      fetchReferrers();
-    }
-    
-    // Update selected recipient with new vendor ID
-    setSelectedRecipient(prev => prev ? { ...prev, rampVendorId: vendorId } : null);
+    setCheckbookPaymentOpen(true);
   };
 
   return (
