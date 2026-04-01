@@ -587,23 +587,13 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
               recipientPhone={selectedRecipient.phone}
               onSuccess={fetchPayments}
             />
-            <RampPaymentDialog
-              open={rampPaymentOpen}
-              onOpenChange={setRampPaymentOpen}
+            <CheckbookPaymentDialog
+              open={checkbookPaymentOpen}
+              onOpenChange={setCheckbookPaymentOpen}
               recipientName={selectedRecipient.name}
               recipientEmail={selectedRecipient.email}
-              recipientPhone={selectedRecipient.phone}
               recipientType={selectedRecipient.type}
-              recipientReferenceId={selectedRecipient.recipientReferenceId}
-              rampVendorId={selectedRecipient.rampVendorId}
-              onSuccess={fetchPayments}
-              onVendorCreated={handleRampVendorCreated}
-            />
-            <OnlineCheckWriterDialog
-              open={ocwPaymentOpen}
-              onOpenChange={setOcwPaymentOpen}
-              recipientName={selectedRecipient.name}
-              recipientEmail={selectedRecipient.email}
+              claimId={claimId}
               onSuccess={fetchPayments}
             />
           </>
