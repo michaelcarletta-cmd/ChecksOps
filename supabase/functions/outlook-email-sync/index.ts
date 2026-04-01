@@ -480,9 +480,13 @@ async function handleOutlookSync(req: Request): Promise<Response> {
     const cronSecret = req.headers.get('x-cron-secret');
     const expectedSecret = Deno.env.get('CRON_SECRET');
     const authHeader = req.headers.get('Authorization');
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    const isCronCall = (cronSecret && cronSecret === expectedSecret) ||
-                       (authHeader && authHeader === `Bearer ${anonKey}`);
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_PUBLIC_KEY');
+    
+    // Accept: matching cron secret, anon key as Bearer, or the apikey header matching the anon key
+    const apikeyHeader = req.headers.get('apikey');
+    const isCronCall = (cronSecret && expectedSecret && cronSecret === expectedSecret) ||
+                       (anonKey && authHeader === `Bearer ${anonKey}`) ||
+                       (anonKey && apikeyHeader === anonKey);
     if (!isCronCall) {
       if (authHeader) {
         const token = authHeader.replace('Bearer ', '');
