@@ -34,14 +34,12 @@ interface Contractor {
   id: string;
   full_name: string | null;
   email: string;
-  ramp_vendor_id?: string | null;
 }
 
 interface Referrer {
   id: string;
   name: string;
   email: string | null;
-  ramp_vendor_id?: string | null;
 }
 
 export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
