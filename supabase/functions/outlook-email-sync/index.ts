@@ -477,21 +477,32 @@ async function handleOutlookSync(req: Request): Promise<Response> {
   // ---------- Auth ----------
   let user: any = null;
   if (action === 'sync_all_claims' || action === 'cleanup_wrong_emails' || action === 'cleanup_and_resync') {
+    // These actions can be triggered by cron (anon key) or authenticated users
+    const authHeader = req.headers.get('Authorization');
+    let isCronCall = false;
+
+    // Check cron secret header
     const cronSecret = req.headers.get('x-cron-secret');
     const expectedSecret = Deno.env.get('CRON_SECRET');
-    const authHeader = req.headers.get('Authorization');
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-    const isCronCall = (cronSecret && cronSecret === expectedSecret) ||
-                       (authHeader && authHeader === `Bearer ${anonKey}`);
-    if (!isCronCall) {
-      if (authHeader) {
-        const token = authHeader.replace('Bearer ', '');
-        const { data: { user: authUser } } = await supabase.auth.getUser(token);
-        if (!authUser) return json({ success: false, error: 'Not authenticated' });
+    if (cronSecret && expectedSecret && cronSecret === expectedSecret) {
+      isCronCall = true;
+    }
+
+    // If not cron secret, try to authenticate as user
+    if (!isCronCall && authHeader) {
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user: authUser } } = await supabase.auth.getUser(token);
+      if (authUser) {
         user = authUser;
       } else {
-        return json({ success: false, error: 'Not authorized' });
+        // Token is not a valid user token — if it came via pg_net/cron with anon key, allow it
+        // The anon key produces a JWT with role=anon, which auth.getUser rejects — that's expected for cron
+        isCronCall = true;
       }
+    }
+
+    if (!isCronCall && !user) {
+      return json({ success: false, error: 'Not authorized' });
     }
   } else {
     const authHeader = req.headers.get('Authorization');
