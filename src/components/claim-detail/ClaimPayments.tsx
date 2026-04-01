@@ -208,7 +208,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   const totalReceived = receivedPayments.reduce((sum, payment) => sum + payment.amount, 0);
 
   const handleQuickBooksPayment = (recipientType: 'contractor' | 'client' | 'referrer', recipientId?: string) => {
-    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer'; rampVendorId?: string; recipientReferenceId?: string } = { 
+    let recipient: { name: string; email?: string; phone?: string; type: 'contractor' | 'client' | 'referrer' } = { 
       name: 'Client (Policyholder)', 
       type: 'client' 
     };
