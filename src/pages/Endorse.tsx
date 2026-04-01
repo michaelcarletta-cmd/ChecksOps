@@ -19,8 +19,7 @@ export default function Endorse() {
   const [data, setData] = useState<EndorsementData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"draw" | "type">("draw");
-  const [typedName, setTypedName] = useState("");
+  
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
@@ -77,7 +76,7 @@ export default function Endorse() {
     resize();
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
-  }, [data, mode]);
+  }, [data]);
 
   const getCtx = () => canvasRef.current?.getContext("2d") ?? null;
 
@@ -106,20 +105,15 @@ export default function Endorse() {
   };
 
   const getSignatureData = (): string | null => {
-    if (mode === "draw") {
-      const canvas = canvasRef.current;
-      if (!canvas) return null;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return null;
-      const d = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-      let empty = true;
-      for (let i = 3; i < d.length; i += 4) { if (d[i] > 0) { empty = false; break; } }
-      if (empty) return null;
-      return canvas.toDataURL("image/png");
-    } else {
-      const v = typedName.trim();
-      return v ? `typed:${v}` : null;
-    }
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    const d = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let empty = true;
+    for (let i = 3; i < d.length; i += 4) { if (d[i] > 0) { empty = false; break; } }
+    if (empty) return null;
+    return canvas.toDataURL("image/png");
   };
 
   const submit = async (type: "approve" | "reject") => {
@@ -252,57 +246,32 @@ export default function Endorse() {
 
             <div style={{ marginTop: 20 }}>
               <p style={{ fontSize: 13, color: "#94a3b8", marginBottom: 8, fontWeight: 600 }}>Your Signature</p>
-              <div style={styles.sigTabs}>
-                <button
-                  style={{ ...styles.sigTab, ...(mode === "draw" ? styles.sigTabActive : {}) }}
-                  onClick={() => setMode("draw")}
-                >Draw</button>
-                <button
-                  style={{ ...styles.sigTab, ...(mode === "type" ? styles.sigTabActive : {}) }}
-                  onClick={() => setMode("type")}
-                >Type</button>
+              <p style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>Draw your signature below using your finger or mouse</p>
+              <div style={styles.canvasWrap} ref={containerRef}>
+                <canvas
+                  ref={canvasRef}
+                  height={120}
+                  style={{ display: "block", width: "100%", borderRadius: 8, cursor: "crosshair", touchAction: "none" }}
+                  onMouseDown={(e) => startDraw(e.nativeEvent.offsetX, e.nativeEvent.offsetY)}
+                  onMouseMove={(e) => moveDraw(e.nativeEvent.offsetX, e.nativeEvent.offsetY)}
+                  onMouseUp={endDraw}
+                  onMouseLeave={endDraw}
+                  onTouchStart={(e) => {
+                    e.preventDefault();
+                    const t = e.touches[0];
+                    const r = (e.target as HTMLCanvasElement).getBoundingClientRect();
+                    startDraw(t.clientX - r.left, t.clientY - r.top);
+                  }}
+                  onTouchMove={(e) => {
+                    e.preventDefault();
+                    const t = e.touches[0];
+                    const r = (e.target as HTMLCanvasElement).getBoundingClientRect();
+                    moveDraw(t.clientX - r.left, t.clientY - r.top);
+                  }}
+                  onTouchEnd={endDraw}
+                />
+                <button style={styles.clearBtn} onClick={clearCanvas}>Clear</button>
               </div>
-
-              {mode === "draw" && (
-                <div style={styles.canvasWrap} ref={containerRef}>
-                  <canvas
-                    ref={canvasRef}
-                    height={120}
-                    style={{ display: "block", width: "100%", borderRadius: 8, cursor: "crosshair", touchAction: "none" }}
-                    onMouseDown={(e) => startDraw(e.nativeEvent.offsetX, e.nativeEvent.offsetY)}
-                    onMouseMove={(e) => moveDraw(e.nativeEvent.offsetX, e.nativeEvent.offsetY)}
-                    onMouseUp={endDraw}
-                    onMouseLeave={endDraw}
-                    onTouchStart={(e) => {
-                      e.preventDefault();
-                      const t = e.touches[0];
-                      const r = (e.target as HTMLCanvasElement).getBoundingClientRect();
-                      startDraw(t.clientX - r.left, t.clientY - r.top);
-                    }}
-                    onTouchMove={(e) => {
-                      e.preventDefault();
-                      const t = e.touches[0];
-                      const r = (e.target as HTMLCanvasElement).getBoundingClientRect();
-                      moveDraw(t.clientX - r.left, t.clientY - r.top);
-                    }}
-                    onTouchEnd={endDraw}
-                  />
-                  <button style={styles.clearBtn} onClick={clearCanvas}>Clear</button>
-                </div>
-              )}
-
-              {mode === "type" && (
-                <div>
-                  <input
-                    type="text"
-                    style={styles.sigInput}
-                    placeholder="Type your full name..."
-                    value={typedName}
-                    onChange={(e) => setTypedName(e.target.value)}
-                  />
-                  <div style={styles.typedPreview}>{typedName || ""}</div>
-                </div>
-              )}
             </div>
 
             {/* Payment Direction Section */}
