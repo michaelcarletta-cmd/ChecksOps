@@ -155,7 +155,7 @@ const ClaimDetail = () => {
 
   // Generate claim-specific email address using policy number
   const getClaimEmail = (claim: any): string => {
-    const domain = "claims.freedomclaims.work";
+    const domain = "freedomclaims.work";
     if (claim.policy_number) {
       // Sanitize policy number: lowercase, replace non-alphanumeric with hyphens
       const sanitized = claim.policy_number
