@@ -198,6 +198,9 @@ export const ClaimEmails = ({ claimId, claim }: ClaimEmailsProps) => {
 
   const { data: emails, isLoading } = useQuery({
     queryKey: ["emails", claimId],
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       const allEmails: any[] = [];
       let offset = 0;
