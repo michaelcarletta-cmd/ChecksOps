@@ -402,7 +402,7 @@ Deno.serve(async (req) => {
     console.log("Final cleaned text:", text.substring(0, 500));
 
     // Parse the "to" address to find the claim identifier
-    // Expected format: claim-{policy_number}@claims.freedomclaims.work
+    // Expected format: claim-{policy_number}@freedomclaims.work
     const toAddresses = Array.isArray(to) ? to : [to];
     let claimIdentifier: string | null = null;
 
