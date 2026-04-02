@@ -412,7 +412,7 @@ export function EmailComposer({
       const sanitizedPolicyNumber = claim.policy_number 
         ? claim.policy_number.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
         : claim.id.slice(0, 8);
-      const claimEmail = `claim-${sanitizedPolicyNumber}@freedomclaims.work`;
+      const claimEmail = `claim-${sanitizedPolicyNumber}@claims.freedomclaims.work`;
 
       const recipientPayload = selectedRecipients.map(r => ({
         email: r.email,

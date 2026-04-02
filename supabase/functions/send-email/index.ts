@@ -314,7 +314,7 @@ Deno.serve(async (req) => {
             ? claimForReply.policy_number.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
             : null);
         if (emailId) {
-          replyToAddress = `claim-${emailId}@freedomclaims.work`;
+          replyToAddress = `claim-${emailId}@claims.freedomclaims.work`;
           console.log(`Setting Reply-To: ${replyToAddress}`);
         }
       }

@@ -219,7 +219,7 @@ Deno.serve(async (req) => {
         
         try {
           await resend.emails.send({
-            from: "Freedom Claims <noreply@freedomclaims.work>",
+            from: "Freedom Claims <noreply@claims.freedomclaims.work>",
             to: [profile.email],
             subject: `Task Reminders: ${userTasks.length} task(s) need attention`,
             html: `
