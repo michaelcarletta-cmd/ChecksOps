@@ -295,6 +295,38 @@ function collectInboundAttachments(payload: Record<string, unknown>, rawContent:
   return Array.from(deduped.values());
 }
 
+function pickFirstString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+
+  return '';
+}
+
+function normalizeEmailAddresses(value: unknown): string[] {
+  if (!value) return [];
+
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => normalizeEmailAddresses(item));
+  }
+
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return normalizeEmailAddresses(
+      record.email ?? record.address ?? record.value ?? record.original ?? ''
+    );
+  }
+
+  return [];
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -334,15 +366,20 @@ Deno.serve(async (req) => {
     
     let from: string = '';
     let to: string = '';
+    let toAddresses: string[] = [];
     let subject: string = '';
     let text: string = '';
     let html: string = '';
     let rawContent: string = '';
+    const nestedData = payload.data && typeof payload.data === 'object'
+      ? payload.data as Record<string, unknown>
+      : null;
 
     // Cloudflare Email Workers format
     if (payload.from && payload.to && payload.source === 'cloudflare') {
       from = payload.from;
-      to = payload.to;
+      toAddresses = normalizeEmailAddresses(payload.to);
+      to = toAddresses[0] || '';
       subject = payload.subject || '(No Subject)';
       text = payload.text || '';
       html = payload.html || '';
@@ -352,7 +389,8 @@ Deno.serve(async (req) => {
     // Mailjet Parse API format
     else if (payload.Sender || payload.Recipient) {
       from = payload.From || payload.Sender || '';
-      to = payload.Recipient || '';
+      toAddresses = normalizeEmailAddresses(payload.Recipient);
+      to = toAddresses[0] || '';
       subject = payload.Subject || '(No Subject)';
       text = payload["Text-part"] || '';
       html = payload["Html-part"] || '';
@@ -360,12 +398,30 @@ Deno.serve(async (req) => {
     }
     // Resend/generic format
     else {
-      from = typeof payload.from === 'string' ? payload.from : payload.from?.email || '';
-      to = typeof payload.to === 'string' ? payload.to : (Array.isArray(payload.to) ? payload.to[0] : payload.to?.email || '');
-      subject = payload.subject || '(No Subject)';
-      text = payload.text || '';
-      html = payload.html || '';
-      rawContent = payload.raw || '';
+      const genericPayload = nestedData ?? payload as Record<string, unknown>;
+
+      from = pickFirstString(
+        typeof genericPayload.from === 'string' ? genericPayload.from : undefined,
+        (genericPayload.from as { email?: string } | undefined)?.email,
+        typeof payload.from === 'string' ? payload.from : undefined,
+        (payload.from as { email?: string } | undefined)?.email,
+      );
+      toAddresses = normalizeEmailAddresses(genericPayload.to ?? payload.to);
+      to = toAddresses[0] || '';
+      subject = pickFirstString(genericPayload.subject, payload.subject) || '(No Subject)';
+      text = pickFirstString(
+        genericPayload.text,
+        genericPayload.textBody,
+        genericPayload['text-part'],
+        payload.text,
+      );
+      html = pickFirstString(
+        genericPayload.html,
+        genericPayload.htmlBody,
+        genericPayload['html-part'],
+        payload.html,
+      );
+      rawContent = pickFirstString(genericPayload.raw, genericPayload.raw_email, payload.raw);
       console.log("Processing generic payload");
     }
 
@@ -403,11 +459,10 @@ Deno.serve(async (req) => {
 
     // Parse the "to" address to find the claim identifier
     // Expected format: claim-{policy_number}@freedomclaims.work
-    const toAddresses = Array.isArray(to) ? to : [to];
     let claimIdentifier: string | null = null;
 
     for (const addr of toAddresses) {
-      const email = typeof addr === 'string' ? addr : addr?.email || addr;
+      const email = typeof addr === 'string' ? addr : '';
       if (!email) continue;
       
       // Match claim-{identifier}@ pattern
@@ -530,7 +585,10 @@ Deno.serve(async (req) => {
         
         let fileBuffer = attachment.bytes;
         if (!fileBuffer && attachment.base64Content) {
-          fileBuffer = decodeBase64ToBytes(attachment.base64Content);
+          const decodedBytes = decodeBase64ToBytes(attachment.base64Content);
+          if (decodedBytes) {
+            fileBuffer = decodedBytes;
+          }
         }
 
         if (!fileBuffer) {
