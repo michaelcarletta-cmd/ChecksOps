@@ -2320,7 +2320,7 @@ function buildClaimMailboxEmail(claimData: any, claimId: string): string {
     ? String(claimData.policy_number).replace(/[^a-zA-Z0-9]/g, "").toLowerCase()
     : "";
   const token = sanitizedPolicyNumber || claimId.slice(0, 8);
-  return `claim-${token}@freedomclaims.work`;
+  return `claim-${token}@claims.freedomclaims.work`;
 }
 
 function buildClaimNumberSubject(claimData: any, claimId: string): string {
