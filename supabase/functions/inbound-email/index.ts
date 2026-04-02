@@ -585,7 +585,10 @@ Deno.serve(async (req) => {
         
         let fileBuffer = attachment.bytes;
         if (!fileBuffer && attachment.base64Content) {
-          fileBuffer = decodeBase64ToBytes(attachment.base64Content);
+          const decodedBytes = decodeBase64ToBytes(attachment.base64Content);
+          if (decodedBytes) {
+            fileBuffer = decodedBytes;
+          }
         }
 
         if (!fileBuffer) {
