@@ -20,7 +20,7 @@ interface OCWPaymentDialogProps {
   onSuccess?: () => void;
 }
 
-export function CheckbookPaymentDialog({
+export function OCWPaymentDialog({
   open,
   onOpenChange,
   recipientName,
@@ -29,7 +29,7 @@ export function CheckbookPaymentDialog({
   claimId,
   defaultAmount,
   onSuccess,
-}: CheckbookPaymentDialogProps) {
+}: OCWPaymentDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [deliveryMethod, setDeliveryMethod] = useState<"digital" | "physical">("digital");
   const [formData, setFormData] = useState({
