@@ -56,7 +56,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
     type: 'contractor' | 'client' | 'referrer' | 'other';
   } | null>(null);
   const [customPayeeOpen, setCustomPayeeOpen] = useState(false);
-  const [customPayeePurpose, setCustomPayeePurpose] = useState<'qb' | 'checkbook'>('checkbook');
+  const [customPayeePurpose, setCustomPayeePurpose] = useState<'qb' | 'ocw'>('ocw');
   const [customPayeeName, setCustomPayeeName] = useState("");
   const [customPayeeEmail, setCustomPayeeEmail] = useState("");
   const [formData, setFormData] = useState({
