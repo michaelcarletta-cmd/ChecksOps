@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Loader2, Mail, Truck } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-interface CheckbookPaymentDialogProps {
+interface OCWPaymentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   recipientName: string;
