@@ -482,7 +482,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
                 if (value === 'client') {
                   handleCheckbookPayment('client');
                 } else if (value === 'other') {
-                  openCustomPayeeDialog('checkbook');
+                  openCustomPayeeDialog('ocw');
                 } else if (value.startsWith('contractor-')) {
                   handleCheckbookPayment('contractor', value.replace('contractor-', ''));
                 } else if (value.startsWith('referrer-')) {
