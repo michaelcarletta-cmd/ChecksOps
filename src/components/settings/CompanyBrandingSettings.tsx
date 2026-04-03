@@ -153,6 +153,7 @@ export function CompanyBrandingSettings() {
         esign_date_y: dateCoords.y,
         esign_date_width: dateCoords.w,
         esign_date_height: dateCoords.h,
+        online_check_writer_bank_account_id: ocwBankAccountId || null,
         updated_at: new Date().toISOString()
       };
 
