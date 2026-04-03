@@ -271,7 +271,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
     }
     
     setSelectedRecipient(recipient);
-    setCheckbookPaymentOpen(true);
+    setOcwPaymentOpen(true);
   };
 
   const openCustomPayeeDialog = (purpose: 'qb' | 'checkbook') => {
