@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { DollarSign, Trash2, CreditCard, FileCheck } from "lucide-react";
 import { QuickBooksPaymentDialog } from "@/components/QuickBooksPaymentDialog";
-import { CheckbookPaymentDialog } from "@/components/CheckbookPaymentDialog";
+import { OCWPaymentDialog } from "@/components/CheckbookPaymentDialog";
 
 interface ClaimPaymentsProps {
   claimId: string;
