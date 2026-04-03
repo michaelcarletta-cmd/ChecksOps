@@ -52,6 +52,7 @@ export function CompanyBrandingSettings() {
   const [endorseButtonColor, setEndorseButtonColor] = useState("#2563eb");
   const [showEndorsePreview, setShowEndorsePreview] = useState(false);
   const [sigCoords, setSigCoords] = useState({ page: 1, x: 100, y: 600, w: 200, h: 50 });
+  const [ocwBankAccountId, setOcwBankAccountId] = useState("");
   const [dateCoords, setDateCoords] = useState({ page: 1, x: 350, y: 600, w: 100, h: 25 });
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
