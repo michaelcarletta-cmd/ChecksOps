@@ -274,7 +274,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
     setOcwPaymentOpen(true);
   };
 
-  const openCustomPayeeDialog = (purpose: 'qb' | 'checkbook') => {
+  const openCustomPayeeDialog = (purpose: 'qb' | 'ocw') => {
     setCustomPayeeName("");
     setCustomPayeeEmail("");
     setCustomPayeePurpose(purpose);
