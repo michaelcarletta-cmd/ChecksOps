@@ -266,7 +266,7 @@ export function InvoiceDialog({
 
     setIsCreatingPaymentLink(true);
     try {
-      const { data, error } = await supabase.functions.invoke("checkbook-send-check", {
+      const { data, error } = await supabase.functions.invoke("ocw-send-check", {
         body: {
           action: "request-payment",
           recipientName: formData.recipientName,
