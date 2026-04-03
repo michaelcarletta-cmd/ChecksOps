@@ -78,6 +78,7 @@ export function OCWPaymentDialog({
         description: formData.description || undefined,
         recipientType,
         claimId,
+        bankAccountId,
       };
 
       if (deliveryMethod === "physical") {
