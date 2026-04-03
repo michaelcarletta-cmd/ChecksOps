@@ -634,6 +634,35 @@ export function CompanyBrandingSettings() {
         </CardContent>
       </Card>
 
+      {/* Online Check Writer */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileCheck className="h-5 w-5" />
+            Online Check Writer
+          </CardTitle>
+          <CardDescription>
+            Configure your Online Check Writer bank account for sending checks
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label>Bank Account ID</Label>
+            <Input
+              value={ocwBankAccountId}
+              onChange={(e) => setOcwBankAccountId(e.target.value)}
+              placeholder="e.g. QEmZGE7O27jaw3v"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Find this in your Online Check Writer developer settings at{" "}
+              <a href="https://live.onlinecheckwriter.com/manage/developer/index" target="_blank" rel="noopener noreferrer" className="underline">
+                live.onlinecheckwriter.com/manage/developer
+              </a>
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
