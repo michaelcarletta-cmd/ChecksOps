@@ -616,9 +616,9 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
               recipientPhone={selectedRecipient.phone}
               onSuccess={fetchPayments}
             />
-            <CheckbookPaymentDialog
-              open={checkbookPaymentOpen}
-              onOpenChange={setCheckbookPaymentOpen}
+            <OCWPaymentDialog
+              open={ocwPaymentOpen}
+              onOpenChange={setOcwPaymentOpen}
               recipientName={selectedRecipient.name}
               recipientEmail={selectedRecipient.email}
               recipientType={selectedRecipient.type}
