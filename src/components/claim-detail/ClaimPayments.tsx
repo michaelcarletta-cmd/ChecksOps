@@ -291,8 +291,8 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
     const recipient = { name, email: email || undefined, type: 'other' as const };
     setSelectedRecipient(recipient);
     setCustomPayeeOpen(false);
-    if (customPayeePurpose === 'checkbook') {
-      setCheckbookPaymentOpen(true);
+    if (customPayeePurpose === 'ocw') {
+      setOcwPaymentOpen(true);
     } else {
       setQbPaymentOpen(true);
     }
