@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Loader2, Mail, Truck } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-interface CheckbookPaymentDialogProps {
+interface OCWPaymentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   recipientName: string;
@@ -20,7 +20,7 @@ interface CheckbookPaymentDialogProps {
   onSuccess?: () => void;
 }
 
-export function CheckbookPaymentDialog({
+export function OCWPaymentDialog({
   open,
   onOpenChange,
   recipientName,
@@ -29,7 +29,7 @@ export function CheckbookPaymentDialog({
   claimId,
   defaultAmount,
   onSuccess,
-}: CheckbookPaymentDialogProps) {
+}: OCWPaymentDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [deliveryMethod, setDeliveryMethod] = useState<"digital" | "physical">("digital");
   const [formData, setFormData] = useState({
@@ -81,7 +81,7 @@ export function CheckbookPaymentDialog({
         };
       }
 
-      const { data, error } = await supabase.functions.invoke("checkbook-send-check", {
+      const { data, error } = await supabase.functions.invoke("ocw-send-check", {
         body: payload,
       });
 

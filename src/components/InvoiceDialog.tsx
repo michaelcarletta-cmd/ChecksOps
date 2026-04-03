@@ -266,7 +266,7 @@ export function InvoiceDialog({
 
     setIsCreatingPaymentLink(true);
     try {
-      const { data, error } = await supabase.functions.invoke("checkbook-send-check", {
+      const { data, error } = await supabase.functions.invoke("ocw-send-check", {
         body: {
           action: "request-payment",
           recipientName: formData.recipientName,
@@ -284,7 +284,7 @@ export function InvoiceDialog({
         setPaymentLink(invoiceUrl);
         await navigator.clipboard.writeText(invoiceUrl);
       }
-      toast.success("Payment request sent via Checkbook.io!");
+      toast.success("Payment request sent via Online Check Writer!");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to create payment link";
       toast.error(message);

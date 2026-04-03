@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { DollarSign, Trash2, CreditCard, FileCheck } from "lucide-react";
 import { QuickBooksPaymentDialog } from "@/components/QuickBooksPaymentDialog";
-import { CheckbookPaymentDialog } from "@/components/CheckbookPaymentDialog";
+import { OCWPaymentDialog } from "@/components/CheckbookPaymentDialog";
 
 interface ClaimPaymentsProps {
   claimId: string;
@@ -48,7 +48,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
   const [referrers, setReferrers] = useState<Referrer[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [qbPaymentOpen, setQbPaymentOpen] = useState(false);
-  const [checkbookPaymentOpen, setCheckbookPaymentOpen] = useState(false);
+  const [ocwPaymentOpen, setOcwPaymentOpen] = useState(false);
   const [selectedRecipient, setSelectedRecipient] = useState<{ 
     name: string; 
     email?: string; 
@@ -56,7 +56,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
     type: 'contractor' | 'client' | 'referrer' | 'other';
   } | null>(null);
   const [customPayeeOpen, setCustomPayeeOpen] = useState(false);
-  const [customPayeePurpose, setCustomPayeePurpose] = useState<'qb' | 'checkbook'>('checkbook');
+  const [customPayeePurpose, setCustomPayeePurpose] = useState<'qb' | 'ocw'>('ocw');
   const [customPayeeName, setCustomPayeeName] = useState("");
   const [customPayeeEmail, setCustomPayeeEmail] = useState("");
   const [formData, setFormData] = useState({
@@ -271,10 +271,10 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
     }
     
     setSelectedRecipient(recipient);
-    setCheckbookPaymentOpen(true);
+    setOcwPaymentOpen(true);
   };
 
-  const openCustomPayeeDialog = (purpose: 'qb' | 'checkbook') => {
+  const openCustomPayeeDialog = (purpose: 'qb' | 'ocw') => {
     setCustomPayeeName("");
     setCustomPayeeEmail("");
     setCustomPayeePurpose(purpose);
@@ -291,8 +291,8 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
     const recipient = { name, email: email || undefined, type: 'other' as const };
     setSelectedRecipient(recipient);
     setCustomPayeeOpen(false);
-    if (customPayeePurpose === 'checkbook') {
-      setCheckbookPaymentOpen(true);
+    if (customPayeePurpose === 'ocw') {
+      setOcwPaymentOpen(true);
     } else {
       setQbPaymentOpen(true);
     }
@@ -482,7 +482,7 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
                 if (value === 'client') {
                   handleCheckbookPayment('client');
                 } else if (value === 'other') {
-                  openCustomPayeeDialog('checkbook');
+                  openCustomPayeeDialog('ocw');
                 } else if (value.startsWith('contractor-')) {
                   handleCheckbookPayment('contractor', value.replace('contractor-', ''));
                 } else if (value.startsWith('referrer-')) {
@@ -616,9 +616,9 @@ export function ClaimPayments({ claimId, isAdmin }: ClaimPaymentsProps) {
               recipientPhone={selectedRecipient.phone}
               onSuccess={fetchPayments}
             />
-            <CheckbookPaymentDialog
-              open={checkbookPaymentOpen}
-              onOpenChange={setCheckbookPaymentOpen}
+            <OCWPaymentDialog
+              open={ocwPaymentOpen}
+              onOpenChange={setOcwPaymentOpen}
               recipientName={selectedRecipient.name}
               recipientEmail={selectedRecipient.email}
               recipientType={selectedRecipient.type}
