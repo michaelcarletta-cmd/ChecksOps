@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ export function OCWPaymentDialog({
 }: OCWPaymentDialogProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [deliveryMethod, setDeliveryMethod] = useState<"digital" | "physical">("digital");
+  const [bankAccountId, setBankAccountId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     amount: defaultAmount?.toString() || "",
     description: "",
@@ -42,6 +43,14 @@ export function OCWPaymentDialog({
     state: "",
     zip: "",
   });
+
+  useEffect(() => {
+    if (open) {
+      supabase.from("company_branding" as any).select("online_check_writer_bank_account_id").limit(1).maybeSingle().then(({ data }) => {
+        if (data) setBankAccountId((data as any).online_check_writer_bank_account_id || null);
+      });
+    }
+  }, [open]);
 
   const handleSend = async () => {
     if (!formData.amount || Number(formData.amount) <= 0) {
@@ -69,6 +78,7 @@ export function OCWPaymentDialog({
         description: formData.description || undefined,
         recipientType,
         claimId,
+        bankAccountId,
       };
 
       if (deliveryMethod === "physical") {

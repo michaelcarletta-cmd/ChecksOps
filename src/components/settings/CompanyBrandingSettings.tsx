@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, Building2, FileText, Loader2, Mail, Eye, EyeOff, Palette } from "lucide-react";
+import { Upload, Building2, FileText, Loader2, Mail, Eye, EyeOff, Palette, FileCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 const MERGE_FIELDS = [
@@ -52,6 +52,7 @@ export function CompanyBrandingSettings() {
   const [endorseButtonColor, setEndorseButtonColor] = useState("#2563eb");
   const [showEndorsePreview, setShowEndorsePreview] = useState(false);
   const [sigCoords, setSigCoords] = useState({ page: 1, x: 100, y: 600, w: 200, h: 50 });
+  const [ocwBankAccountId, setOcwBankAccountId] = useState("");
   const [dateCoords, setDateCoords] = useState({ page: 1, x: 350, y: 600, w: 100, h: 25 });
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -91,6 +92,7 @@ export function CompanyBrandingSettings() {
       setEndorseButtonColor(branding.endorsement_email_button_color || "#2563eb");
       setSigCoords({ page: branding.esign_signature_page || 1, x: branding.esign_signature_x || 100, y: branding.esign_signature_y || 600, w: branding.esign_signature_width || 200, h: branding.esign_signature_height || 50 });
       setDateCoords({ page: branding.esign_date_page || 1, x: branding.esign_date_x || 350, y: branding.esign_date_y || 600, w: branding.esign_date_width || 100, h: branding.esign_date_height || 25 });
+      setOcwBankAccountId(branding.online_check_writer_bank_account_id || "");
     }
   };
 
@@ -151,6 +153,7 @@ export function CompanyBrandingSettings() {
         esign_date_y: dateCoords.y,
         esign_date_width: dateCoords.w,
         esign_date_height: dateCoords.h,
+        online_check_writer_bank_account_id: ocwBankAccountId || null,
         updated_at: new Date().toISOString()
       };
 
@@ -627,6 +630,35 @@ export function CompanyBrandingSettings() {
                 </div>
               </div>
             )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Online Check Writer */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileCheck className="h-5 w-5" />
+            Online Check Writer
+          </CardTitle>
+          <CardDescription>
+            Configure your Online Check Writer bank account for sending checks
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label>Bank Account ID</Label>
+            <Input
+              value={ocwBankAccountId}
+              onChange={(e) => setOcwBankAccountId(e.target.value)}
+              placeholder="e.g. QEmZGE7O27jaw3v"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Find this in your Online Check Writer developer settings at{" "}
+              <a href="https://live.onlinecheckwriter.com/manage/developer/index" target="_blank" rel="noopener noreferrer" className="underline">
+                live.onlinecheckwriter.com/manage/developer
+              </a>
+            </p>
           </div>
         </CardContent>
       </Card>
