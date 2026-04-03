@@ -92,6 +92,7 @@ export function CompanyBrandingSettings() {
       setEndorseButtonColor(branding.endorsement_email_button_color || "#2563eb");
       setSigCoords({ page: branding.esign_signature_page || 1, x: branding.esign_signature_x || 100, y: branding.esign_signature_y || 600, w: branding.esign_signature_width || 200, h: branding.esign_signature_height || 50 });
       setDateCoords({ page: branding.esign_date_page || 1, x: branding.esign_date_x || 350, y: branding.esign_date_y || 600, w: branding.esign_date_width || 100, h: branding.esign_date_height || 25 });
+      setOcwBankAccountId(branding.online_check_writer_bank_account_id || "");
     }
   };
 
