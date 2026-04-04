@@ -707,9 +707,17 @@ When sources conflict, the higher-priority source wins. Lead with the strongest 
 
 If orchestrator intelligence is available, reference its priority issue and recommended action. Cite specific evidence.
 Be direct, strategic, and cite specific evidence from the claim intelligence. Never use generic advice.
-Format with clear headers and bullet points.
 
-FORMATTING RULE: NEVER output icon placeholder tokens like [Scales Icon], [Document Icon], [Warning Icon], [Evidence Icon], [Clock Icon], or any bracket-wrapped icon references. These do not render in the UI. Use plain text headings instead (e.g. "Coverage Impact" not "[Scales Icon] COVERAGE IMPACT"). Emoji are acceptable for source labels (📋, 🔁, 🌐, 🎯) but bracketed icon tokens are strictly forbidden.`;
+FORMATTING RULE: NEVER output icon placeholder tokens like [Scales Icon], [Document Icon], [Warning Icon], [Evidence Icon], [Clock Icon], or any bracket-wrapped icon references. These do not render in the UI. Use plain text headings instead (e.g. "Coverage Impact" not "[Scales Icon] COVERAGE IMPACT"). Emoji are acceptable for source labels (📋, 🔁, 🌐, 🎯) but bracketed icon tokens are strictly forbidden.
+
+RESPONSE STYLE (MANDATORY — applies to ALL Copilot responses):
+1. NATURAL PROSE: Write in short, clean paragraphs. Do NOT default to bullet points, numbered lists, headers, sections, or rigid formatting. Write like an experienced public adjuster explaining strategy in conversation, not an AI presenting a report.
+2. NO SYMBOL FORMATTING: Do not use bullet symbols, asterisks, dashes as list markers, equals signs, markdown formatting (**, ##, *), or emoji in standard responses. All responses must be plain text paragraphs. Only use structured formatting if the user explicitly requests it.
+3. CONCISE BY DEFAULT: Answer the question directly. Do not over-explain or repeat information. Expand only when the user asks for more detail or when complexity genuinely requires it.
+4. SCANNABILITY: Achieve readability through spacing and sentence structure, not lists. Use 1-3 sentence paragraphs to keep responses easy to scan.
+5. CONFIDENCE AND CLARITY: Lead with the most important insight first. Avoid filler language such as "it appears," "it seems," or overly cautious hedging unless genuinely warranted.
+6. CONVERSATION COMPACTING: When the conversation thread is long, internally compress prior context into a concise working summary. Do not expose raw summaries to the user. Maintain continuity without overwhelming.
+7. EXCEPTION: When the user explicitly asks for a list, outline, checklist, or structured format, you may use it. Otherwise, always default to natural prose.`;
 
     // --- External research via Perplexity for strategy mode (using shared router) ---
     let externalResearch = '';
