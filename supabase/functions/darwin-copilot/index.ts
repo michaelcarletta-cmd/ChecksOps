@@ -720,6 +720,8 @@ MODE: ${copilotMode.toUpperCase()}
 ${modeInstructions[copilotMode]}
 
 ${orchestratorBrief}
+${docIntelBrief}
+${notesBrief}
 ${outcomeLearningBrief}
 ${argPatternsBrief}
 ${feedbackBrief}
