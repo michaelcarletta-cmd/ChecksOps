@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
       claimRes, filesRes, estimateRes, photoRes, strategyRes, argsRes, 
       rebuttalsRes, deadlinesRes, intelSummaryRes,
       timelineEventsRes, estimateLinesRes, feedbackRes, regulationsRes,
-      claimUpdatesRes, emailsRes
+      claimUpdatesRes, emailsRes, docIntelRes, userNotesRes
     ] = await Promise.all([
       supabase.from('claims').select('*').eq('id', claimId).single(),
       supabase.from('claim_files').select('id, file_name, document_type, folder_key, created_at').eq('claim_id', claimId),
@@ -73,13 +73,23 @@ Deno.serve(async (req) => {
         .eq('claim_id', claimId).eq('is_accepted', true).order('recovery_impact_rank', { ascending: true }).limit(50),
       supabase.from('darwin_feedback_events').select('output_type, feedback_type, actual_outcome, actual_recovery_delta, feedback_detail')
         .eq('claim_id', claimId).order('created_at', { ascending: false }).limit(20),
-      // Fetch state regulations for violation detection (state resolved after claim loads)
       supabase.from('state_insurance_regulations').select('*').order('regulation_type'),
-      // Fetch claim updates and emails for client communication drafting
       supabase.from('claim_updates').select('update_type, content, created_at')
         .eq('claim_id', claimId).order('created_at', { ascending: false }).limit(20),
       supabase.from('emails').select('subject, body, recipient_name, recipient_type, sent_at')
         .eq('claim_id', claimId).order('sent_at', { ascending: false }).limit(15),
+      // Document intelligence — extracted facts, denial reasons, coverage positions from all processed files
+      supabase.from('claim_document_intelligence')
+        .select('document_type, document_subtype, summary, coverage_position, denial_reasons, exclusions_cited, testing_performed, testing_missing, estimate_totals, scope_positions, contradictions, cause_of_loss, extracted_facts, code_references, manufacturer_references, confidence_score, sender, recipient')
+        .eq('claim_id', claimId)
+        .order('confidence_score', { ascending: false })
+        .limit(30),
+      // User notes for this claim context
+      supabase.from('claim_updates').select('id, update_type, content, created_at, user_id')
+        .eq('claim_id', claimId)
+        .eq('update_type', 'note')
+        .order('created_at', { ascending: false })
+        .limit(30),
     ]);
 
     const claim = claimRes.data;
