@@ -682,7 +682,39 @@ USER FEEDBACK PATTERNS FOR THIS CLAIM:
 Lean toward approaches that match successful patterns. Avoid repeating rejected approaches.
 ` : '';
 
-    const systemPrompt = `You are Darwin Copilot — an embedded intelligence assistant for public adjusters.
+    // Build document intelligence brief — extracted content from all processed files
+    const docIntelBrief = docIntelligence.length > 0 ? `
+DOCUMENT INTELLIGENCE (${docIntelligence.length} documents analyzed — extracted facts from denial letters, estimates, engineering reports, correspondence, and more):
+${docIntelligence.map((d: any, i: number) => {
+  const parts = [`${i + 1}. [${d.type}${d.subtype ? '/' + d.subtype : ''}] ${d.summary}`];
+  if (d.coverage_position) parts.push(`   Coverage Position: ${JSON.stringify(d.coverage_position)}`);
+  if (d.denial_reasons) parts.push(`   Denial Reasons: ${JSON.stringify(d.denial_reasons)}`);
+  if (d.exclusions) parts.push(`   Exclusions Cited: ${JSON.stringify(d.exclusions)}`);
+  if (d.contradictions) parts.push(`   Contradictions Found: ${JSON.stringify(d.contradictions)}`);
+  if (d.testing_done) parts.push(`   Testing Performed: ${JSON.stringify(d.testing_done)}`);
+  if (d.testing_missing) parts.push(`   Testing Missing: ${JSON.stringify(d.testing_missing)}`);
+  if (d.estimate_totals) parts.push(`   Estimate Totals: ${JSON.stringify(d.estimate_totals)}`);
+  if (d.scope_positions) parts.push(`   Scope Positions: ${JSON.stringify(d.scope_positions)}`);
+  if (d.cause_of_loss) parts.push(`   Cause of Loss: ${d.cause_of_loss}`);
+  if (d.extracted_facts) parts.push(`   Key Facts: ${JSON.stringify(d.extracted_facts)}`);
+  if (d.code_refs) parts.push(`   Code References: ${JSON.stringify(d.code_refs)}`);
+  if (d.manufacturer_refs) parts.push(`   Manufacturer References: ${JSON.stringify(d.manufacturer_refs)}`);
+  if (d.from) parts.push(`   From: ${d.from}`);
+  return parts.join('\n');
+}).join('\n\n')}
+This is your PRIMARY source for answering questions about what documents say, what the carrier argued, what the denial basis is, and what evidence exists. USE THIS DATA to answer questions directly.
+` : '';
+
+    // Build notes brief
+    const notesBrief = claimNotes.length > 0 ? `
+USER NOTES ON THIS CLAIM (${claimNotes.length} notes):
+${claimNotes.map((n: any) => `[${n.date}] ${n.content}`).join('\n')}
+These notes contain the adjuster's own observations, thoughts, and reminders. Reference them when relevant.
+` : '';
+
+    const systemPrompt = `You are Darwin Copilot — a senior claims strategist embedded alongside the public adjuster. You are their trusted colleague sitting right next to them, discussing the claim together to strengthen their case and decide next steps.
+
+You have access to everything: every document that has been processed, every email sent or received, every note the adjuster has written, the full timeline, estimates, carrier arguments, rebuttals, knowledge base materials, cross-claim learning from similar disputes, and live web research capabilities. Your knowledge does not stop at the internal database — you actively search for manufacturer specs, building codes, state regulations, case law, and industry standards to support the claim.
 
 MODE: ${copilotMode.toUpperCase()}
 ${modeInstructions[copilotMode]}
