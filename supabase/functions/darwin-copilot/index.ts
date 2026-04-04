@@ -448,6 +448,34 @@ Deno.serve(async (req) => {
       body_preview: (e.body || '').slice(0, 200),
     }));
 
+    // Build document intelligence digest — extracted facts from all processed files
+    const docIntelligence = (docIntelRes.data || []).map((d: any) => ({
+      type: d.document_type,
+      subtype: d.document_subtype,
+      summary: (d.summary || '').slice(0, 400),
+      coverage_position: d.coverage_position,
+      denial_reasons: d.denial_reasons,
+      exclusions: d.exclusions_cited,
+      testing_done: d.testing_performed,
+      testing_missing: d.testing_missing,
+      estimate_totals: d.estimate_totals,
+      scope_positions: d.scope_positions,
+      contradictions: d.contradictions,
+      cause_of_loss: d.cause_of_loss,
+      extracted_facts: d.extracted_facts,
+      code_refs: d.code_references,
+      manufacturer_refs: d.manufacturer_references,
+      confidence: d.confidence_score,
+      from: d.sender,
+      to: d.recipient,
+    }));
+
+    // Build user notes digest
+    const claimNotes = (userNotesRes.data || []).map((n: any) => ({
+      content: (n.content || '').slice(0, 500),
+      date: n.created_at ? new Date(n.created_at).toLocaleDateString() : 'Unknown',
+    }));
+
     const claimIntel = {
       claim,
       orchestrator_summary: intelSummary ? {
@@ -460,6 +488,8 @@ Deno.serve(async (req) => {
         confidence_score: intelSummary.confidence_score,
       } : null,
       files: (filesRes.data || []).length,
+      file_list: (filesRes.data || []).map((f: any) => ({ name: f.file_name, type: f.document_type, folder: f.folder_key })),
+      document_intelligence: docIntelligence,
       estimate_analysis: estimateRes.data?.[0] || null,
       photo_findings: {
         total: (photoRes.data || []).length,
@@ -467,12 +497,33 @@ Deno.serve(async (req) => {
         strong_evidence: (photoRes.data || []).filter((f: any) => f.evidence_strength === 'strong').length,
       },
       strategy_simulations: (strategyRes.data || []).slice(0, 3),
-      carrier_arguments: (argsRes.data || []).length,
-      rebuttals: (rebuttalsRes.data || []).length,
+      carrier_arguments: (argsRes.data || []).map((a: any) => ({
+        type: a.argument_type,
+        text: (a.argument_text || '').slice(0, 300),
+        category: a.argument_category,
+        carrier_position: (a.carrier_position_summary || '').slice(0, 300),
+        strength: a.strength_score,
+        rebuttal_confidence: a.rebuttal_confidence,
+        rebuttal_strategies: a.rebuttal_strategies,
+        contradictions: a.contradictions,
+        evidence_gaps: a.evidence_gaps,
+      })),
+      rebuttals: (rebuttalsRes.data || []).map((r: any) => ({
+        type: r.argument_type,
+        carrier_position: (r.carrier_position || '').slice(0, 300),
+        principle: r.principle,
+        what_proves_damage: (r.what_proves_damage || '').slice(0, 300),
+        why_different: (r.why_different || '').slice(0, 300),
+        carrier_ready_paragraph: (r.carrier_ready_paragraph || '').slice(0, 500),
+        confidence: r.confidence,
+        damage_mechanism: r.damage_mechanism,
+        exclusion_invoked: r.exclusion_invoked,
+      })),
       deadlines: deadlinesRes.data || [],
       carrier_outcomes: carrierOutcomes,
       argument_patterns_library: argPatterns.slice(0, 8),
       feedback_patterns: feedbackPatterns,
+      claim_notes: claimNotes,
       // Cross-surface intelligence
       timeline_intelligence: timelineIntel,
       estimate_builder_intelligence: estimateIntel,
