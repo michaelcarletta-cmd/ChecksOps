@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
       claimRes, filesRes, estimateRes, photoRes, strategyRes, argsRes, 
       rebuttalsRes, deadlinesRes, intelSummaryRes,
       timelineEventsRes, estimateLinesRes, feedbackRes, regulationsRes,
-      claimUpdatesRes, emailsRes
+      claimUpdatesRes, emailsRes, docIntelRes, userNotesRes
     ] = await Promise.all([
       supabase.from('claims').select('*').eq('id', claimId).single(),
       supabase.from('claim_files').select('id, file_name, document_type, folder_key, created_at').eq('claim_id', claimId),
@@ -73,13 +73,23 @@ Deno.serve(async (req) => {
         .eq('claim_id', claimId).eq('is_accepted', true).order('recovery_impact_rank', { ascending: true }).limit(50),
       supabase.from('darwin_feedback_events').select('output_type, feedback_type, actual_outcome, actual_recovery_delta, feedback_detail')
         .eq('claim_id', claimId).order('created_at', { ascending: false }).limit(20),
-      // Fetch state regulations for violation detection (state resolved after claim loads)
       supabase.from('state_insurance_regulations').select('*').order('regulation_type'),
-      // Fetch claim updates and emails for client communication drafting
       supabase.from('claim_updates').select('update_type, content, created_at')
         .eq('claim_id', claimId).order('created_at', { ascending: false }).limit(20),
       supabase.from('emails').select('subject, body, recipient_name, recipient_type, sent_at')
         .eq('claim_id', claimId).order('sent_at', { ascending: false }).limit(15),
+      // Document intelligence — extracted facts, denial reasons, coverage positions from all processed files
+      supabase.from('claim_document_intelligence')
+        .select('document_type, document_subtype, summary, coverage_position, denial_reasons, exclusions_cited, testing_performed, testing_missing, estimate_totals, scope_positions, contradictions, cause_of_loss, extracted_facts, code_references, manufacturer_references, confidence_score, sender, recipient')
+        .eq('claim_id', claimId)
+        .order('confidence_score', { ascending: false })
+        .limit(30),
+      // User notes for this claim context
+      supabase.from('claim_updates').select('id, update_type, content, created_at, user_id')
+        .eq('claim_id', claimId)
+        .eq('update_type', 'note')
+        .order('created_at', { ascending: false })
+        .limit(30),
     ]);
 
     const claim = claimRes.data;
@@ -438,6 +448,34 @@ Deno.serve(async (req) => {
       body_preview: (e.body || '').slice(0, 200),
     }));
 
+    // Build document intelligence digest — extracted facts from all processed files
+    const docIntelligence = (docIntelRes.data || []).map((d: any) => ({
+      type: d.document_type,
+      subtype: d.document_subtype,
+      summary: (d.summary || '').slice(0, 400),
+      coverage_position: d.coverage_position,
+      denial_reasons: d.denial_reasons,
+      exclusions: d.exclusions_cited,
+      testing_done: d.testing_performed,
+      testing_missing: d.testing_missing,
+      estimate_totals: d.estimate_totals,
+      scope_positions: d.scope_positions,
+      contradictions: d.contradictions,
+      cause_of_loss: d.cause_of_loss,
+      extracted_facts: d.extracted_facts,
+      code_refs: d.code_references,
+      manufacturer_refs: d.manufacturer_references,
+      confidence: d.confidence_score,
+      from: d.sender,
+      to: d.recipient,
+    }));
+
+    // Build user notes digest
+    const claimNotes = (userNotesRes.data || []).map((n: any) => ({
+      content: (n.content || '').slice(0, 500),
+      date: n.created_at ? new Date(n.created_at).toLocaleDateString() : 'Unknown',
+    }));
+
     const claimIntel = {
       claim,
       orchestrator_summary: intelSummary ? {
@@ -450,6 +488,8 @@ Deno.serve(async (req) => {
         confidence_score: intelSummary.confidence_score,
       } : null,
       files: (filesRes.data || []).length,
+      file_list: (filesRes.data || []).map((f: any) => ({ name: f.file_name, type: f.document_type, folder: f.folder_key })),
+      document_intelligence: docIntelligence,
       estimate_analysis: estimateRes.data?.[0] || null,
       photo_findings: {
         total: (photoRes.data || []).length,
@@ -457,12 +497,33 @@ Deno.serve(async (req) => {
         strong_evidence: (photoRes.data || []).filter((f: any) => f.evidence_strength === 'strong').length,
       },
       strategy_simulations: (strategyRes.data || []).slice(0, 3),
-      carrier_arguments: (argsRes.data || []).length,
-      rebuttals: (rebuttalsRes.data || []).length,
+      carrier_arguments: (argsRes.data || []).map((a: any) => ({
+        type: a.argument_type,
+        text: (a.argument_text || '').slice(0, 300),
+        category: a.argument_category,
+        carrier_position: (a.carrier_position_summary || '').slice(0, 300),
+        strength: a.strength_score,
+        rebuttal_confidence: a.rebuttal_confidence,
+        rebuttal_strategies: a.rebuttal_strategies,
+        contradictions: a.contradictions,
+        evidence_gaps: a.evidence_gaps,
+      })),
+      rebuttals: (rebuttalsRes.data || []).map((r: any) => ({
+        type: r.argument_type,
+        carrier_position: (r.carrier_position || '').slice(0, 300),
+        principle: r.principle,
+        what_proves_damage: (r.what_proves_damage || '').slice(0, 300),
+        why_different: (r.why_different || '').slice(0, 300),
+        carrier_ready_paragraph: (r.carrier_ready_paragraph || '').slice(0, 500),
+        confidence: r.confidence,
+        damage_mechanism: r.damage_mechanism,
+        exclusion_invoked: r.exclusion_invoked,
+      })),
       deadlines: deadlinesRes.data || [],
       carrier_outcomes: carrierOutcomes,
       argument_patterns_library: argPatterns.slice(0, 8),
       feedback_patterns: feedbackPatterns,
+      claim_notes: claimNotes,
       // Cross-surface intelligence
       timeline_intelligence: timelineIntel,
       estimate_builder_intelligence: estimateIntel,
@@ -621,12 +682,46 @@ USER FEEDBACK PATTERNS FOR THIS CLAIM:
 Lean toward approaches that match successful patterns. Avoid repeating rejected approaches.
 ` : '';
 
-    const systemPrompt = `You are Darwin Copilot — an embedded intelligence assistant for public adjusters.
+    // Build document intelligence brief — extracted content from all processed files
+    const docIntelBrief = docIntelligence.length > 0 ? `
+DOCUMENT INTELLIGENCE (${docIntelligence.length} documents analyzed — extracted facts from denial letters, estimates, engineering reports, correspondence, and more):
+${docIntelligence.map((d: any, i: number) => {
+  const parts = [`${i + 1}. [${d.type}${d.subtype ? '/' + d.subtype : ''}] ${d.summary}`];
+  if (d.coverage_position) parts.push(`   Coverage Position: ${JSON.stringify(d.coverage_position)}`);
+  if (d.denial_reasons) parts.push(`   Denial Reasons: ${JSON.stringify(d.denial_reasons)}`);
+  if (d.exclusions) parts.push(`   Exclusions Cited: ${JSON.stringify(d.exclusions)}`);
+  if (d.contradictions) parts.push(`   Contradictions Found: ${JSON.stringify(d.contradictions)}`);
+  if (d.testing_done) parts.push(`   Testing Performed: ${JSON.stringify(d.testing_done)}`);
+  if (d.testing_missing) parts.push(`   Testing Missing: ${JSON.stringify(d.testing_missing)}`);
+  if (d.estimate_totals) parts.push(`   Estimate Totals: ${JSON.stringify(d.estimate_totals)}`);
+  if (d.scope_positions) parts.push(`   Scope Positions: ${JSON.stringify(d.scope_positions)}`);
+  if (d.cause_of_loss) parts.push(`   Cause of Loss: ${d.cause_of_loss}`);
+  if (d.extracted_facts) parts.push(`   Key Facts: ${JSON.stringify(d.extracted_facts)}`);
+  if (d.code_refs) parts.push(`   Code References: ${JSON.stringify(d.code_refs)}`);
+  if (d.manufacturer_refs) parts.push(`   Manufacturer References: ${JSON.stringify(d.manufacturer_refs)}`);
+  if (d.from) parts.push(`   From: ${d.from}`);
+  return parts.join('\n');
+}).join('\n\n')}
+This is your PRIMARY source for answering questions about what documents say, what the carrier argued, what the denial basis is, and what evidence exists. USE THIS DATA to answer questions directly.
+` : '';
+
+    // Build notes brief
+    const notesBrief = claimNotes.length > 0 ? `
+USER NOTES ON THIS CLAIM (${claimNotes.length} notes):
+${claimNotes.map((n: any) => `[${n.date}] ${n.content}`).join('\n')}
+These notes contain the adjuster's own observations, thoughts, and reminders. Reference them when relevant.
+` : '';
+
+    const systemPrompt = `You are Darwin Copilot — a senior claims strategist embedded alongside the public adjuster. You are their trusted colleague sitting right next to them, discussing the claim together to strengthen their case and decide next steps.
+
+You have access to everything: every document that has been processed, every email sent or received, every note the adjuster has written, the full timeline, estimates, carrier arguments, rebuttals, knowledge base materials, cross-claim learning from similar disputes, and live web research capabilities. Your knowledge does not stop at the internal database — you actively search for manufacturer specs, building codes, state regulations, case law, and industry standards to support the claim.
 
 MODE: ${copilotMode.toUpperCase()}
 ${modeInstructions[copilotMode]}
 
 ${orchestratorBrief}
+${docIntelBrief}
+${notesBrief}
 ${outcomeLearningBrief}
 ${argPatternsBrief}
 ${feedbackBrief}
@@ -710,16 +805,29 @@ RESPONSE STYLE (MANDATORY — applies to ALL Copilot responses):
 4. SCANNABILITY: Achieve readability through spacing and sentence structure, not lists. Use 1-3 sentence paragraphs to keep responses easy to scan.
 5. CONFIDENCE AND CLARITY: Lead with the most important insight first. Avoid filler language such as "it appears," "it seems," or overly cautious hedging unless genuinely warranted.
 6. CONVERSATION COMPACTING: When the conversation thread is long, internally compress prior context into a concise working summary. Do not expose raw summaries to the user. Maintain continuity without overwhelming.
-7. EXCEPTION: When the user explicitly asks for a list, outline, checklist, or structured format, you may use it. Otherwise, always default to natural prose.`;
+7. EXCEPTION: When the user explicitly asks for a list, outline, checklist, or structured format, you may use it. Otherwise, always default to natural prose.
 
-    // --- External research via Perplexity for strategy mode (using shared router) ---
+TASK AND NOTE CREATION:
+When the user asks you to create a task, note, or reminder, present it clearly in your response with a recommended title, description, due date, and priority. Tell the user you have outlined it for them and they can add it through the Tasks or Notes section. You cannot directly insert tasks or notes into the system, but you can draft them precisely so the user can add them quickly.
+
+When the user asks you to draft an email, create a task, write a note, or plan next steps, treat it as a collaborative exercise. Present your draft, explain your reasoning, and ask if they want to adjust anything before finalizing.
+
+YOUR ROLE AS A COLLEAGUE:
+You are not a help desk. You are a senior colleague who happens to have perfect recall of every document, email, timeline event, and industry standard. When the adjuster asks you something, answer like you have the file open in front of you — because you do. Reference specific documents, dates, dollar amounts, and carrier positions by name. When you are uncertain, say so honestly and explain what additional information would resolve the uncertainty.`;
+
+    // --- External research via Perplexity (available in ALL modes for comprehensive knowledge) ---
     let externalResearch = '';
-    if (copilotMode === 'strategy') {
+    {
       const lastUserMsg = conversationHistory?.length
         ? conversationHistory[conversationHistory.length - 1]?.content
         : userQuestion;
 
-      if (lastUserMsg) {
+      // Determine if external research would benefit this question
+      const researchKeywords = ['code', 'standard', 'regulation', 'statute', 'manufacturer', 'spec', 'requirement', 'law', 'legal', 'building code', 'IRC', 'IBC', 'ASTM', 'warranty', 'installation', 'best practice', 'industry', 'rebut', 'deny', 'denial', 'coverage', 'exclusion', 'how to', 'what does', 'is it', 'can they', 'should I', 'precedent', 'case law'];
+      const msgLower = (lastUserMsg || '').toLowerCase();
+      const needsResearch = copilotMode === 'strategy' || copilotMode === 'rebuttal' || copilotMode === 'war_room' || researchKeywords.some(k => msgLower.includes(k));
+
+      if (lastUserMsg && needsResearch) {
         try {
           const trade = claim?.construction_trade || claim?.trade || '';
           const materialType = claim?.roof_material || claim?.material_type || '';
