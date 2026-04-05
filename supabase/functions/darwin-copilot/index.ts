@@ -81,10 +81,25 @@ function hasUsableDocumentIntel(row: Record<string, unknown>) {
 }
 
 function asksForDocumentReupload(message: string) {
-  const prefix = (message || '').slice(0, 500);
+  const prefix = (message || '').slice(0, 800);
   return /(?:please|can you|could you)\s+(?:provide|paste|send|share|upload)\b[\s\S]{0,140}\b(?:content|text|copy|document|letter|pdf|file|documents|letters)\b/i.test(prefix)
     || /once i have reviewed\b[\s\S]{0,120}\b(?:document|letter|pdf|file|documents|letters)\b/i.test(prefix)
     || /i need to understand the specific reasons[\s\S]{0,140}\b(?:provide|paste|send|share|upload)\b/i.test(prefix);
+}
+
+// Detect when AI gives a generic "framework" response instead of analyzing actual claim data
+function givesGenericFrameworkResponse(message: string) {
+  const text = (message || '').slice(0, 1200);
+  // Pattern 1: "I/we need to analyze/review the [document]" — AI defers instead of answering
+  const defersToAnalysis = /\b(?:i need to|we need to|need to|let's start by|first.{0,30}need to|to proceed.{0,30}need to)\s+(?:analyze|review|examine|read|look at|go through|study|assess|check|inspect)\b[\s\S]{0,80}\b(?:denial|coverage|letter|document|pdf|file|decision|ror|reservation)\b/i.test(text);
+  // Pattern 2: Numbered "framework" steps without citing any specific claim data
+  const hasNumberedSteps = (text.match(/^\s*\d+\.\s+/gm) || []).length >= 3;
+  const citesSpecificData = /\$[\d,]+|\bpolicy\s+(?:number|#|no\.?)\s*\w|exclusion\s+(?:section|clause|provision)\s+\w|\bcited\s+(?:section|exclusion|provision)|specific(?:ally)?\s+(?:states?|cites?|quotes?|references?)\b/i.test(text);
+  const isGenericFramework = hasNumberedSteps && !citesSpecificData;
+  // Pattern 3: "Here's the plan" / "Here's a strategic approach" without actual analysis
+  const planWithoutSubstance = /\b(?:here'?s?\s+(?:a |the )?(?:plan|framework|approach|strategy|roadmap|step-by-step))\b/i.test(text) && !citesSpecificData;
+  
+  return defersToAnalysis || isGenericFramework || planWithoutSubstance;
 }
 
 // Quick inline garbage check — lightweight version for copilot fallback
