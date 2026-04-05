@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
 import { callPerplexityResearch, runDarwinTask } from "../_shared/ai-router.ts";
+import { isGarbageText } from "../_shared/document-intelligence-types.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
