@@ -81,10 +81,25 @@ function hasUsableDocumentIntel(row: Record<string, unknown>) {
 }
 
 function asksForDocumentReupload(message: string) {
-  const prefix = (message || '').slice(0, 500);
+  const prefix = (message || '').slice(0, 800);
   return /(?:please|can you|could you)\s+(?:provide|paste|send|share|upload)\b[\s\S]{0,140}\b(?:content|text|copy|document|letter|pdf|file|documents|letters)\b/i.test(prefix)
     || /once i have reviewed\b[\s\S]{0,120}\b(?:document|letter|pdf|file|documents|letters)\b/i.test(prefix)
     || /i need to understand the specific reasons[\s\S]{0,140}\b(?:provide|paste|send|share|upload)\b/i.test(prefix);
+}
+
+// Detect when AI gives a generic "framework" response instead of analyzing actual claim data
+function givesGenericFrameworkResponse(message: string) {
+  const text = (message || '').slice(0, 1200);
+  // Pattern 1: "I/we need to analyze/review the [document]" — AI defers instead of answering
+  const defersToAnalysis = /\b(?:i need to|we need to|need to|let's start by|first.{0,30}need to|to proceed.{0,30}need to)\s+(?:analyze|review|examine|read|look at|go through|study|assess|check|inspect)\b[\s\S]{0,80}\b(?:denial|coverage|letter|document|pdf|file|decision|ror|reservation)\b/i.test(text);
+  // Pattern 2: Numbered "framework" steps without citing any specific claim data
+  const hasNumberedSteps = (text.match(/^\s*\d+\.\s+/gm) || []).length >= 3;
+  const citesSpecificData = /\$[\d,]+|\bpolicy\s+(?:number|#|no\.?)\s*\w|exclusion\s+(?:section|clause|provision)\s+\w|\bcited\s+(?:section|exclusion|provision)|specific(?:ally)?\s+(?:states?|cites?|quotes?|references?)\b/i.test(text);
+  const isGenericFramework = hasNumberedSteps && !citesSpecificData;
+  // Pattern 3: "Here's the plan" / "Here's a strategic approach" without actual analysis
+  const planWithoutSubstance = /\b(?:here'?s?\s+(?:a |the )?(?:plan|framework|approach|strategy|roadmap|step-by-step))\b/i.test(text) && !citesSpecificData;
+  
+  return defersToAnalysis || isGenericFramework || planWithoutSubstance;
 }
 
 // Quick inline garbage check — lightweight version for copilot fallback
@@ -1272,10 +1287,25 @@ ${research.text}`;
       historyText,
     );
 
-    if (directAnswerOnlyTurn && (startsWithActionConfirmation(ai.text || '') || looksLikeToolStyleFailure(ai.text || '') || asksForDocumentReupload(ai.text || ''))) {
+    if (directAnswerOnlyTurn && (startsWithActionConfirmation(ai.text || '') || looksLikeToolStyleFailure(ai.text || '') || asksForDocumentReupload(ai.text || '') || givesGenericFrameworkResponse(ai.text || ''))) {
+      console.log('[Copilot Retry] Response failed quality check — retrying with stronger grounding instruction');
       ai = await runDarwinTask(
         taskType as any,
-        `${finalSystemPrompt}\n\nCORRECTION FOR THIS TURN: The user asked for analysis, not a system action, search-status update, or request to re-provide documents. Rewrite the response as a direct, natural answer grounded in the claim evidence. Do NOT mention adding notes, creating tasks, drafting emails, logging activity, searching communications, or asking the user to provide/paste/upload claim files that are already attached. If some attached file extraction is incomplete, mention that briefly and then answer using the other claim intelligence already provided.`,
+        `${finalSystemPrompt}\n\nCRITICAL CORRECTION FOR THIS TURN: Your previous response was rejected because it gave a generic framework instead of analyzing the actual claim data. The user asked for analysis, NOT a plan to analyze later.
+
+WHAT YOU MUST DO NOW:
+1. Look at the DOCUMENT INTELLIGENCE, RAW DOCUMENT TEXT, CARRIER ARGUMENTS, and REBUTTALS sections in your context above.
+2. If denial reasons, exclusions, or coverage positions are listed there — QUOTE THEM and analyze them directly.
+3. If raw document text is provided — READ IT and extract the denial reasons, exclusions cited, and carrier position yourself.
+4. If no document content is available at all — say so honestly in ONE sentence, then answer using whatever other claim evidence IS available (timeline, emails, notes, estimate data).
+
+DO NOT:
+- Say "I need to analyze the denial letter" — you already have the data
+- Give a numbered framework/plan/roadmap for future analysis
+- Ask the user to provide or upload anything
+- Give generic insurance advice not tied to THIS claim's specific facts
+
+START your response with a specific fact from the claim data (a denial reason, an exclusion, a dollar amount, a date).`,
         historyText,
       );
     }
