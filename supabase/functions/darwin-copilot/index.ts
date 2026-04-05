@@ -1287,10 +1287,25 @@ ${research.text}`;
       historyText,
     );
 
-    if (directAnswerOnlyTurn && (startsWithActionConfirmation(ai.text || '') || looksLikeToolStyleFailure(ai.text || '') || asksForDocumentReupload(ai.text || ''))) {
+    if (directAnswerOnlyTurn && (startsWithActionConfirmation(ai.text || '') || looksLikeToolStyleFailure(ai.text || '') || asksForDocumentReupload(ai.text || '') || givesGenericFrameworkResponse(ai.text || ''))) {
+      console.log('[Copilot Retry] Response failed quality check — retrying with stronger grounding instruction');
       ai = await runDarwinTask(
         taskType as any,
-        `${finalSystemPrompt}\n\nCORRECTION FOR THIS TURN: The user asked for analysis, not a system action, search-status update, or request to re-provide documents. Rewrite the response as a direct, natural answer grounded in the claim evidence. Do NOT mention adding notes, creating tasks, drafting emails, logging activity, searching communications, or asking the user to provide/paste/upload claim files that are already attached. If some attached file extraction is incomplete, mention that briefly and then answer using the other claim intelligence already provided.`,
+        `${finalSystemPrompt}\n\nCRITICAL CORRECTION FOR THIS TURN: Your previous response was rejected because it gave a generic framework instead of analyzing the actual claim data. The user asked for analysis, NOT a plan to analyze later.
+
+WHAT YOU MUST DO NOW:
+1. Look at the DOCUMENT INTELLIGENCE, RAW DOCUMENT TEXT, CARRIER ARGUMENTS, and REBUTTALS sections in your context above.
+2. If denial reasons, exclusions, or coverage positions are listed there — QUOTE THEM and analyze them directly.
+3. If raw document text is provided — READ IT and extract the denial reasons, exclusions cited, and carrier position yourself.
+4. If no document content is available at all — say so honestly in ONE sentence, then answer using whatever other claim evidence IS available (timeline, emails, notes, estimate data).
+
+DO NOT:
+- Say "I need to analyze the denial letter" — you already have the data
+- Give a numbered framework/plan/roadmap for future analysis
+- Ask the user to provide or upload anything
+- Give generic insurance advice not tied to THIS claim's specific facts
+
+START your response with a specific fact from the claim data (a denial reason, an exclusion, a dollar amount, a date).`,
         historyText,
       );
     }
