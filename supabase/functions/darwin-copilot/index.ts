@@ -34,6 +34,17 @@ function startsWithActionConfirmation(message: string) {
   return /\b(?:note added|added note|task created|created task|task added|email drafted|draft created|reminder created|update added|queued for review|saved to|logged to|activity added)\b/i.test(prefix);
 }
 
+function looksLikeToolStyleFailure(message: string) {
+  const prefix = (message || '').slice(0, 240);
+  return /\b(?:no communications found matching|no emails found matching|no notes found matching|no tasks found matching|no activity found matching|no results found(?: matching)?|could not find any communications|searched .* but found nothing)\b/i.test(prefix);
+}
+
+function shouldExcludeAssistantHistory(message: string) {
+  const trimmed = (message || '').trim();
+  if (!trimmed) return true;
+  return startsWithActionConfirmation(trimmed) || looksLikeToolStyleFailure(trimmed);
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -1025,6 +1036,9 @@ ${research.text}`;
     if (conversationHistory && Array.isArray(conversationHistory) && conversationHistory.length > 0) {
       // Use full conversation history for multi-turn strategy conversations
       for (const msg of conversationHistory) {
+        if (msg.role === 'assistant' && shouldExcludeAssistantHistory(msg.content || '')) {
+          continue;
+        }
         aiMessages.push({ role: msg.role, content: msg.content });
       }
     } else {
@@ -1050,10 +1064,10 @@ ${research.text}`;
       historyText,
     );
 
-    if (directAnswerOnlyTurn && startsWithActionConfirmation(ai.text || '')) {
+    if (directAnswerOnlyTurn && (startsWithActionConfirmation(ai.text || '') || looksLikeToolStyleFailure(ai.text || ''))) {
       ai = await runDarwinTask(
         taskType as any,
-        `${finalSystemPrompt}\n\nCORRECTION FOR THIS TURN: The user asked for analysis, not a system action. Rewrite the response as a direct, natural answer grounded in the claim evidence. Do NOT mention adding notes, creating tasks, drafting emails, logging activity, or taking any system action.`,
+        `${finalSystemPrompt}\n\nCORRECTION FOR THIS TURN: The user asked for analysis, not a system action or a search-status update. Rewrite the response as a direct, natural answer grounded in the claim evidence. Do NOT mention adding notes, creating tasks, drafting emails, logging activity, searching communications, or reporting that nothing was found. Use the claim intelligence already provided and answer the question.`,
         historyText,
       );
     }
