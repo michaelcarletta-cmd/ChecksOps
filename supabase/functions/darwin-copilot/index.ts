@@ -904,6 +904,7 @@ ${modeInstructions[copilotMode]}
 ${orchestratorBrief}
 ${claimFileAvailabilityBrief}
 ${docIntelBrief}
+${rawTextFallbackBrief}
 ${notesBrief}
 ${outcomeLearningBrief}
 ${argPatternsBrief}
