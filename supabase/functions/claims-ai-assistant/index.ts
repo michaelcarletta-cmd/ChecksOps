@@ -5439,6 +5439,74 @@ Deno.serve(async (req) => {
       claim = claimData;
     }
 
+    // ── Fetch document intelligence for in-claim mode ──
+    // This gives the AI actual denial reasons, coverage positions, and extracted facts
+    let docIntelligenceContext = "";
+    if (claimId && mode !== "general") {
+      try {
+        const [docIntelRes, rawTextRes] = await Promise.all([
+          supabase.from('claim_document_intelligence')
+            .select('claim_file_id, document_type, document_subtype, summary, coverage_position, denial_reasons, exclusions_cited, testing_performed, testing_missing, estimate_totals, scope_positions, contradictions, cause_of_loss, extracted_facts, confidence_score, sender, recipient')
+            .eq('claim_id', claimId)
+            .order('confidence_score', { ascending: false })
+            .limit(20),
+          // Also get raw text from key denial files as fallback
+          supabase.from('claim_files')
+            .select('id, file_name, clean_text, extracted_text, text_quality_status, document_type')
+            .eq('claim_id', claimId)
+            .not('extracted_text', 'is', null)
+            .limit(10),
+        ]);
+
+        const docIntel = (docIntelRes.data || []);
+        const fileNameMap = new Map((rawTextRes.data || []).map((f: any) => [f.id, f.file_name]));
+
+        // Filter for usable intelligence (not just PDF metadata)
+        const usableIntel = docIntel.filter((d: any) => {
+          const summary = (d.summary || '').trim();
+          if (/technical pdf file|metadata and structural|fonts?, images?, and page/i.test(summary)) return false;
+          const hasStructured = [d.coverage_position, d.denial_reasons, d.exclusions_cited, d.contradictions, d.cause_of_loss, d.extracted_facts, d.estimate_totals, d.scope_positions]
+            .some((v: unknown) => Array.isArray(v) ? (v as unknown[]).length > 0 : (v && typeof v === 'object' ? Object.keys(v as Record<string, unknown>).length > 0 : (typeof v === 'string' ? v.trim().length > 0 : Boolean(v))));
+          return hasStructured || (summary.length >= 80);
+        });
+
+        if (usableIntel.length > 0) {
+          const intelLines = usableIntel.map((d: any, i: number) => {
+            const fileName = d.claim_file_id ? fileNameMap.get(d.claim_file_id) || d.document_type : d.document_type;
+            const parts = [`${i + 1}. [${fileName}${d.document_subtype ? '/' + d.document_subtype : ''}] ${(d.summary || '').slice(0, 400)}`];
+            if (d.coverage_position) parts.push(`   Coverage Position: ${JSON.stringify(d.coverage_position)}`);
+            if (d.denial_reasons) parts.push(`   Denial Reasons: ${JSON.stringify(d.denial_reasons)}`);
+            if (d.exclusions_cited) parts.push(`   Exclusions Cited: ${JSON.stringify(d.exclusions_cited)}`);
+            if (d.contradictions) parts.push(`   Contradictions: ${JSON.stringify(d.contradictions)}`);
+            if (d.cause_of_loss) parts.push(`   Cause of Loss: ${d.cause_of_loss}`);
+            if (d.extracted_facts) parts.push(`   Key Facts: ${JSON.stringify(d.extracted_facts)}`);
+            if (d.estimate_totals) parts.push(`   Estimate Totals: ${JSON.stringify(d.estimate_totals)}`);
+            if (d.scope_positions) parts.push(`   Scope Positions: ${JSON.stringify(d.scope_positions)}`);
+            return parts.join('\n');
+          });
+          docIntelligenceContext = `\n\n=== DOCUMENT INTELLIGENCE (${usableIntel.length} documents analyzed) ===\nThis is your PRIMARY source for denial reasons, coverage positions, carrier arguments, and evidence. USE THIS DATA to answer questions directly. Do NOT say "I need to review the denial letter" when this data already contains what the denial says.\n\n${intelLines.join('\n\n')}\n=== END DOCUMENT INTELLIGENCE ===\n`;
+        } else {
+          // Fallback: inject raw text from denial-related files
+          const denialFiles = (rawTextRes.data || []).filter((f: any) => 
+            /coverage decision|reservation of rights|\bdenial\b|\bror\b/i.test(f.file_name || '') || f.document_type === 'carrier_denial'
+          );
+          const fallbackFiles = denialFiles.length > 0 ? denialFiles : (rawTextRes.data || []).slice(0, 3);
+          const textEntries: string[] = [];
+          for (const f of fallbackFiles) {
+            const text = (f.clean_text || f.extracted_text || '').trim();
+            if (text.length >= 100 && !/^%?PDF-\d|endobj|endstream|startxref/i.test(text.substring(0, 500))) {
+              textEntries.push(`--- FILE: ${f.file_name} ---\n${text.slice(0, 5000)}${text.length > 5000 ? '\n[...truncated]' : ''}`);
+            }
+          }
+          if (textEntries.length > 0) {
+            docIntelligenceContext = `\n\n=== RAW DOCUMENT TEXT (from claim files) ===\nThe structured intelligence pipeline has not fully processed these yet. READ the text below carefully to find denial reasons, exclusions cited, coverage positions, and key facts. Answer the user's question directly using this text.\n\n${textEntries.join('\n\n')}\n=== END RAW DOCUMENT TEXT ===\n`;
+          }
+        }
+      } catch (docIntelErr) {
+        console.warn('[Claims AI] Error fetching document intelligence:', docIntelErr);
+      }
+    }
+
     // Analyze uploaded files/estimates
     let filesContext = "";
     if (claim && claim.claim_files && claim.claim_files.length > 0) {
