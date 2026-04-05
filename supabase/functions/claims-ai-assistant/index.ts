@@ -6460,6 +6460,46 @@ Be relentlessly focused on advancing the claim toward a fair, full, and fast set
     let toolCallsProcessed = 0;
     let toolCallProcessingMs = 0;
 
+    // ── Guard: detect when AI calls add_claim_note on an analytical question ──
+    const isAnalyticalQuestion = /\b(?:how|what|why|explain|analy[sz]e|review|assess|rebut|respond|strategy|argument|weakness|next step|next move|denial|coverage|carrier position|contradiction|should we|what do you think|how do we|how do i)\b/i.test(reportQuestion);
+    
+    if (firstChoice.message.tool_calls && firstChoice.message.tool_calls.length > 0) {
+      const toolNames = firstChoice.message.tool_calls.map((tc: any) => tc.function?.name);
+      const onlyNoteOrNotepad = toolNames.every((n: string) => n === 'add_claim_note' || n === 'add_notepad_item');
+      
+      if (isAnalyticalQuestion && onlyNoteOrNotepad) {
+        console.log('[Claims AI Guard] AI tried to add_claim_note on analytical question — retrying without tools');
+        // Retry without tools to force a direct answer
+        const retryBody = {
+          model: "google/gemini-2.5-flash",
+          messages: [
+            ...conversationMessages.slice(0, -1),
+            { role: "user", content: `${reportQuestion}\n\nIMPORTANT: Answer this question directly with substantive analysis. Do NOT add notes, create tasks, or take any actions. Analyze the claim data and document intelligence provided in your context to give a thorough strategic answer.` }
+          ],
+          max_tokens: 2500,
+        };
+        
+        const retryResponse = await fetchWithTimeout("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(retryBody),
+        }, AI_GATEWAY_REQUEST_TIMEOUT_MS);
+        
+        if (retryResponse.ok) {
+          const retryData = await retryResponse.json();
+          answer = retryData.choices?.[0]?.message?.content || answer;
+          // Skip tool call processing
+          return new Response(
+            JSON.stringify({ response: answer, tasksCreated: [], emailsSent: [], smsSent: [], communicationDrafts: [], portalNotificationsSent: [], lettersCreated: [], callsScheduled: [] }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+          );
+        }
+      }
+    }
+
     // Handle tool calls if present
     if (firstChoice.message.tool_calls && firstChoice.message.tool_calls.length > 0) {
       console.log("Processing tool calls:", firstChoice.message.tool_calls.length);
