@@ -1304,27 +1304,47 @@ ${research.text}`;
       historyText,
     );
 
-    if (directAnswerOnlyTurn && (startsWithActionConfirmation(ai.text || '') || looksLikeToolStyleFailure(ai.text || '') || asksForDocumentReupload(ai.text || '') || givesGenericFrameworkResponse(ai.text || ''))) {
+    // Check response quality — catch generic frameworks, icon tokens, conditional evasion, etc.
+    const responseText = ai.text || '';
+    const failsQualityCheck = directAnswerOnlyTurn && (
+      startsWithActionConfirmation(responseText) ||
+      looksLikeToolStyleFailure(responseText) ||
+      asksForDocumentReupload(responseText) ||
+      givesGenericFrameworkResponse(responseText)
+    );
+
+    // Also strip icon tokens from ANY response (even passing ones)
+    if (ai.text) {
+      ai.text = ai.text.replace(/\[(?:Scales|Arrow|Magnifying Glass|Receipt|Document|Warning|Evidence|Clock|Shield|Flag|Lightbulb|Check)\s*Icon\]/gi, '');
+    }
+
+    if (failsQualityCheck) {
       console.log('[Copilot Retry] Response failed quality check — retrying with stronger grounding instruction');
       ai = await runDarwinTask(
         taskType as any,
-        `${finalSystemPrompt}\n\nCRITICAL CORRECTION FOR THIS TURN: Your previous response was rejected because it gave a generic framework instead of analyzing the actual claim data. The user asked for analysis, NOT a plan to analyze later.
+        `${finalSystemPrompt}\n\nCRITICAL CORRECTION FOR THIS TURN: Your previous response was rejected because it gave a generic framework, used conditional speculation ("if they are citing..."), or deferred to future analysis instead of analyzing the actual claim data NOW.
 
 WHAT YOU MUST DO NOW:
 1. Look at the DOCUMENT INTELLIGENCE, RAW DOCUMENT TEXT, CARRIER ARGUMENTS, and REBUTTALS sections in your context above.
 2. If denial reasons, exclusions, or coverage positions are listed there — QUOTE THEM and analyze them directly.
 3. If raw document text is provided — READ IT and extract the denial reasons, exclusions cited, and carrier position yourself.
 4. If no document content is available at all — say so honestly in ONE sentence, then answer using whatever other claim evidence IS available (timeline, emails, notes, estimate data).
+5. If you genuinely have NO claim data at all — state this clearly and explain what specific documents need to be uploaded and processed.
 
-DO NOT:
-- Say "I need to analyze the denial letter" — you already have the data
-- Give a numbered framework/plan/roadmap for future analysis
-- Ask the user to provide or upload anything
-- Give generic insurance advice not tied to THIS claim's specific facts
+BANNED PATTERNS (these will cause rejection):
+- "We need to review/analyze/determine..." — you already have the data or you don't
+- "If they are citing..." / "If the carrier is denying based on..." — state what IS happening, not hypotheticals
+- Bullet point lists or numbered steps that just describe future work
+- [Icon] tokens like [Scales Icon] or [Arrow Icon] — use plain text
+- Generic insurance advice not tied to THIS claim's specific facts
 
-START your response with a specific fact from the claim data (a denial reason, an exclusion, a dollar amount, a date).`,
+START your response with a specific fact from the claim data (a denial reason, an exclusion, a dollar amount, a date). If no such fact exists in your context, say "The denial letter content has not been extracted yet" and proceed with available evidence.`,
         historyText,
       );
+      // Strip icon tokens from retry too
+      if (ai.text) {
+        ai.text = ai.text.replace(/\[(?:Scales|Arrow|Magnifying Glass|Receipt|Document|Warning|Evidence|Clock|Shield|Flag|Lightbulb|Check)\s*Icon\]/gi, '');
+      }
     }
 
     return new Response(
