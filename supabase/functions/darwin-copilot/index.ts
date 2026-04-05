@@ -8,6 +8,32 @@ const corsHeaders = {
 
 type CopilotMode = 'operational' | 'rebuttal' | 'estimate' | 'war_room' | 'training' | 'strategy';
 
+function getLatestUserTurn(userQuestion?: string, conversationHistory?: Array<{ role?: string; content?: string }>) {
+  if (Array.isArray(conversationHistory)) {
+    for (let i = conversationHistory.length - 1; i >= 0; i -= 1) {
+      const msg = conversationHistory[i];
+      if (msg?.role === 'user' && typeof msg.content === 'string' && msg.content.trim()) {
+        return msg.content.trim();
+      }
+    }
+  }
+
+  return (userQuestion || '').trim();
+}
+
+function isExplicitDraftOrActionRequest(message: string) {
+  return /\b(?:draft|write|compose|prepare|generate|create|add|make|log)\b[\s\S]{0,40}\b(?:email|letter|message|note|task|todo|reminder|update|timeline entry|activity)\b|\b(?:email|letter|message|note|task|todo|reminder|update|timeline entry|activity)\b[\s\S]{0,20}\b(?:draft|write|compose|prepare|generate|create|add|make|log)\b/i.test(message);
+}
+
+function isAnalysisQuestion(message: string) {
+  return /\b(?:how|what|why|explain|analy[sz]e|review|assess|rebut|respond|strategy|argument|weakness|weakest|next step|next move|denial|coverage|carrier position|contradiction|pressure|should we|what do you think)\b/i.test(message);
+}
+
+function startsWithActionConfirmation(message: string) {
+  const prefix = (message || '').slice(0, 180);
+  return /\b(?:note added|added note|task created|created task|task added|email drafted|draft created|reminder created|update added|queued for review|saved to|logged to|activity added)\b/i.test(prefix);
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -22,6 +48,9 @@ Deno.serve(async (req) => {
     if (!claimId) throw new Error('claimId required');
 
     const copilotMode: CopilotMode = mode || 'operational';
+    const latestUserTurn = getLatestUserTurn(userQuestion, conversationHistory);
+    const explicitDraftOrActionRequest = isExplicitDraftOrActionRequest(latestUserTurn);
+    const directAnswerOnlyTurn = isAnalysisQuestion(latestUserTurn) && !explicitDraftOrActionRequest;
 
     // ── Fetch calling user's profile for identity injection ──────────────
     let authorName: string | undefined;
@@ -726,6 +755,18 @@ These notes contain the adjuster's own observations, thoughts, and reminders. Re
       prioritizedKbChunks.length > 0 ? `✅ ${prioritizedKbChunks.length} knowledge base chunks` : null,
     ].filter(Boolean).join('\n');
 
+    const turnBehaviorBrief = directAnswerOnlyTurn
+      ? `CURRENT TURN RULE: The latest user message is an analysis/conversation request, not a create/save action request.
+- Answer the user's question directly using the available claim intelligence.
+- Do NOT create, add, log, queue, save, or pretend to create any note, task, reminder, activity, email, or update.
+- Do NOT open with action confirmations like "Note added", "Task created", "Email drafted", or "Reminder created".
+- If a note, task, or email would help, mention it only as an OPTIONAL follow-up after answering the question.`
+      : explicitDraftOrActionRequest
+        ? `CURRENT TURN RULE: The latest user message explicitly asks for a draft or action-style deliverable.
+- Provide draft content only.
+- Never claim it was saved, sent, logged, or created in the system.`
+        : `CURRENT TURN RULE: Stay conversational and helpful. If the user asks for analysis, answer directly. If the user asks for a draft, provide a draft only.`;
+
     const systemPrompt = `You are Darwin Copilot — a senior claims strategist embedded alongside the public adjuster. You are their trusted colleague sitting right next to them, discussing the claim together to strengthen their case and decide next steps.
 
 ABSOLUTE RULE — READ THIS FIRST:
@@ -733,6 +774,8 @@ You have ALREADY been given the claim's full intelligence below. Before you writ
 
 DATA YOU HAVE RIGHT NOW:
 ${dataAvailability}
+
+${turnBehaviorBrief}
 
 WHAT THIS MEANS:
 - If document intelligence exists → you KNOW what the denial says, what exclusions were cited, what the carrier's position is. Quote it.
@@ -768,12 +811,12 @@ ${timelineEvents.length > 0 ? `\nTIMELINE ACTIVITY (${timelineEvents.length} eve
 
 When asked to draft a client update email, use ALL available context: claim status, timeline events, recent emails, claim updates, deadlines, and any recent activity. Do NOT say there is "no update" unless the claim truly has zero data. Synthesize the claim's current position into a clear, reassuring update for the policyholder.
 
-CRITICAL — EMAIL SENDING PROHIBITION:
-You are a DRAFTING assistant ONLY. You do NOT have the ability to send emails, SMS, or any communications. You MUST NEVER tell the user an email "has been sent" or "will be sent." When the user asks you to draft an email or communication:
-1. Present the draft text in the chat for the user to review and edit.
-2. Clearly state: "Here is the draft for your review. Please review, edit as needed, and send through the Communications tab when ready."
-3. NEVER imply that asking you to write an email results in it being delivered. ALL communications require manual user review and approval before sending.
-4. If the user says "send this email" or "email the client," respond with the draft and remind them that all emails must be reviewed and sent manually through the system.
+CRITICAL — ACTION EXECUTION PROHIBITION:
+You are a reasoning and drafting assistant ONLY. You do NOT have the ability to create, save, add, queue, schedule, or send notes, tasks, reminders, emails, SMS, or any other records or communications. You MUST NEVER tell the user that a note "was added," a task "was created," or an email "was sent" unless the user is explicitly shown draft text and you clearly state it is ONLY a draft.
+1. For notes, tasks, reminders, letters, or emails: present draft content in chat for review.
+2. Clearly state that the content is a draft for review when the user explicitly asked for that deliverable.
+3. NEVER imply that asking you to write something results in it being saved, created, logged, or delivered.
+4. If the user asks an analysis question, answer it directly first instead of proposing or pretending to create records.
 This is a strict compliance requirement — no exceptions.
 
 KNOWLEDGE BASE (contextually retrieved — prioritized by relevance to this claim):
@@ -1001,11 +1044,19 @@ ${research.text}`;
       ? 'copilot_reasoning'
       : 'copilot_drafting';
 
-    const ai = await runDarwinTask(
+    let ai = await runDarwinTask(
       taskType as any,
       finalSystemPrompt,
       historyText,
     );
+
+    if (directAnswerOnlyTurn && startsWithActionConfirmation(ai.text || '')) {
+      ai = await runDarwinTask(
+        taskType as any,
+        `${finalSystemPrompt}\n\nCORRECTION FOR THIS TURN: The user asked for analysis, not a system action. Rewrite the response as a direct, natural answer grounded in the claim evidence. Do NOT mention adding notes, creating tasks, drafting emails, logging activity, or taking any system action.`,
+        historyText,
+      );
+    }
 
     return new Response(
       JSON.stringify({
