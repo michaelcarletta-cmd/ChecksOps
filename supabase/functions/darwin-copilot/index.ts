@@ -558,43 +558,65 @@ Deno.serve(async (req) => {
     const docIntelligence = rawDocIntelligence.filter((d: any) => hasUsableDocumentIntel(d));
     const unusableDocIntelCount = rawDocIntelligence.length - docIntelligence.length;
 
-    // ── FALLBACK: When document intelligence is empty/unusable, read raw extracted_text from claim_files ──
+    // ── FALLBACK: When document intelligence is empty/unusable, extract text from claim files ──
+    // Uses garbage detection + inline OCR via vision AI as last resort
     let rawTextFallbackBrief = '';
     if (docIntelligence.length === 0 && claimFiles.length > 0) {
-      // Prioritize denial-related files, then any files with extracted text
       const priorityFileIds = likelyDenialFiles.map((f: any) => f.id);
       const otherFileIds = claimFiles
         .filter((f: any) => !priorityFileIds.includes(f.id))
         .map((f: any) => f.id);
-      const fileIdsToFetch = [...priorityFileIds, ...otherFileIds].slice(0, 8);
+      // Focus on denial files first, then others — limit to 5 to avoid timeout
+      const fileIdsToFetch = [...priorityFileIds, ...otherFileIds].slice(0, 5);
 
       if (fileIdsToFetch.length > 0) {
         const { data: rawTextRows } = await supabase
           .from('claim_files')
-          .select('id, file_name, extracted_text, clean_text')
-          .in('id', fileIdsToFetch)
-          .not('extracted_text', 'is', null);
+          .select('id, file_name, file_path, file_type, extracted_text, clean_text, text_quality_status')
+          .in('id', fileIdsToFetch);
 
-        if (rawTextRows && rawTextRows.length > 0) {
-          const textEntries = rawTextRows
-            .map((r: any) => {
-              const text = (r.clean_text || r.extracted_text || '').trim();
-              if (!text || text.length < 50) return null;
-              // Truncate to avoid overwhelming the context window
-              const truncated = text.slice(0, 4000);
-              return `--- FILE: ${r.file_name} ---\n${truncated}${text.length > 4000 ? '\n[...truncated]' : ''}`;
-            })
-            .filter(Boolean);
+        const textEntries: string[] = [];
 
-          if (textEntries.length > 0) {
-            rawTextFallbackBrief = `
-RAW DOCUMENT TEXT FALLBACK (Document intelligence pipeline has not yet extracted structured facts from these files, but their raw text content is available. Use this text to answer questions about denial reasons, coverage positions, exclusions, and other claim facts):
+        for (const r of (rawTextRows || [])) {
+          const bestText = (r.clean_text || r.extracted_text || '').trim();
+          const isGarbage = !bestText || bestText.length < 50 || isGarbageTextInline(bestText) || r.text_quality_status === 'unusable';
+
+          if (!isGarbage && bestText.length >= 50) {
+            // Good text available — use it
+            const truncated = bestText.slice(0, 5000);
+            textEntries.push(`--- FILE: ${r.file_name} ---\n${truncated}${bestText.length > 5000 ? '\n[...truncated]' : ''}`);
+          } else if (r.file_path && (r.file_type?.includes('pdf') || r.file_name?.toLowerCase().endsWith('.pdf'))) {
+            // Text is garbage or missing — attempt inline OCR via vision AI
+            console.log(`[Copilot Fallback] Attempting inline OCR for "${r.file_name}" (text_quality=${r.text_quality_status}, existing_len=${bestText.length})`);
+            try {
+              const ocrText = await inlineOcrFromStorage(supabase, r.file_path, r.file_name);
+              if (ocrText && ocrText.length > 100) {
+                const truncated = ocrText.slice(0, 5000);
+                textEntries.push(`--- FILE: ${r.file_name} (OCR extracted) ---\n${truncated}${ocrText.length > 5000 ? '\n[...truncated]' : ''}`);
+                // Persist the good OCR text back to claim_files for future use
+                await supabase.from('claim_files').update({
+                  clean_text: ocrText.substring(0, 100000),
+                  text_quality_status: 'fair',
+                  needs_reprocessing: false,
+                }).eq('id', r.id);
+                console.log(`[Copilot Fallback] OCR success for "${r.file_name}" — ${ocrText.length} chars, persisted to clean_text`);
+              } else {
+                console.warn(`[Copilot Fallback] OCR returned insufficient text for "${r.file_name}"`);
+              }
+            } catch (ocrErr) {
+              console.warn(`[Copilot Fallback] OCR failed for "${r.file_name}":`, ocrErr);
+            }
+          }
+        }
+
+        if (textEntries.length > 0) {
+          rawTextFallbackBrief = `
+RAW DOCUMENT TEXT (extracted directly from claim files — structured intelligence pipeline has not processed these yet):
 
 ${textEntries.join('\n\n')}
 
-IMPORTANT: Since structured document intelligence is not available, you MUST read through this raw text carefully to find denial reasons, exclusions cited, coverage positions, and other relevant facts. Do NOT say you need to review the documents — the text is RIGHT HERE. Extract the key points and answer the user's question directly.
+CRITICAL: This raw text contains the actual content of denial letters, coverage decisions, and other claim documents. READ IT CAREFULLY to find denial reasons, exclusions cited, coverage positions, and key facts. Answer the user's question directly using this text. Do NOT say you need to review the documents — the text is RIGHT HERE.
 `;
-          }
         }
       }
     }
