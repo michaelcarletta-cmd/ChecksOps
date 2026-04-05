@@ -89,17 +89,34 @@ function asksForDocumentReupload(message: string) {
 
 // Detect when AI gives a generic "framework" response instead of analyzing actual claim data
 function givesGenericFrameworkResponse(message: string) {
-  const text = (message || '').slice(0, 1200);
-  // Pattern 1: "I/we need to analyze/review the [document]" — AI defers instead of answering
-  const defersToAnalysis = /\b(?:i need to|we need to|need to|let's start by|first.{0,30}need to|to proceed.{0,30}need to)\s+(?:analyze|review|examine|read|look at|go through|study|assess|check|inspect)\b[\s\S]{0,80}\b(?:denial|coverage|letter|document|pdf|file|decision|ror|reservation)\b/i.test(text);
-  // Pattern 2: Numbered "framework" steps without citing any specific claim data
+  const text = (message || '').slice(0, 2000);
+  // Specific data markers — if present, the response is grounded in claim facts
+  const citesSpecificData = /\$[\d,]+|\bpolicy\s+(?:number|#|no\.?)\s*\w|exclusion\s+(?:section|clause|provision)\s+\w|\bcited\s+(?:section|exclusion|provision)|specific(?:ally)?\s+(?:states?|cites?|quotes?|references?)\b|\b(?:Section|Exclusion|Condition|Endorsement)\s+[A-Z0-9]/i.test(text);
+  if (citesSpecificData) return false; // Has substance — not generic
+
+  // Pattern 1: "I/we need to/must" + action verb — AI defers instead of answering
+  const defersToAnalysis = /\b(?:i need to|we need to|need to|we must|let's start by|first.{0,30}need to|to proceed.{0,30}need to)\s+(?:analyze|review|examine|read|look at|go through|study|assess|check|inspect|focus|establish|determine|show|demonstrate|scrutinize|understand|see how|identify|pinpoint)\b/i.test(text);
+
+  // Pattern 2: Numbered steps OR bullet lists without specific data
   const hasNumberedSteps = (text.match(/^\s*\d+\.\s+/gm) || []).length >= 3;
-  const citesSpecificData = /\$[\d,]+|\bpolicy\s+(?:number|#|no\.?)\s*\w|exclusion\s+(?:section|clause|provision)\s+\w|\bcited\s+(?:section|exclusion|provision)|specific(?:ally)?\s+(?:states?|cites?|quotes?|references?)\b/i.test(text);
-  const isGenericFramework = hasNumberedSteps && !citesSpecificData;
+  const hasBulletList = (text.match(/^\s*[\*\-•]\s+/gm) || []).length >= 3;
+  const isGenericFramework = hasNumberedSteps || hasBulletList;
+
   // Pattern 3: "Here's the plan" / "Here's a strategic approach" without actual analysis
-  const planWithoutSubstance = /\b(?:here'?s?\s+(?:a |the )?(?:plan|framework|approach|strategy|roadmap|step-by-step))\b/i.test(text) && !citesSpecificData;
-  
-  return defersToAnalysis || isGenericFramework || planWithoutSubstance;
+  const planWithoutSubstance = /\b(?:here'?s?\s+(?:a |the )?(?:plan|framework|approach|strategy|roadmap|step-by-step))\b/i.test(text);
+
+  // Pattern 4: Conditional evasion — "if they are citing...", "if the carrier is denying..."
+  const conditionalCount = (text.match(/\bif\s+(?:they(?:'re| are)|the carrier is|those|there'?s?\s+an?)\s+/gi) || []).length;
+  const hasConditionalEvasion = conditionalCount >= 3;
+
+  // Pattern 5: Icon placeholder tokens that should never appear
+  const hasIconTokens = /\[(?:Scales|Arrow|Magnifying Glass|Receipt|Document|Warning|Evidence|Clock|Shield|Flag|Lightbulb|Check)\s*Icon\]/i.test(text);
+
+  // Pattern 6: "We also need to" / "We must review" / "We need to determine" repeated
+  const actionDeferCount = (text.match(/\b(?:we (?:need to|must|should|also need to)|need to)\s+(?:review|analyze|determine|establish|understand|identify|examine|see|check|look)\b/gi) || []).length;
+  const heavyDeferral = actionDeferCount >= 2;
+
+  return defersToAnalysis || isGenericFramework || planWithoutSubstance || hasConditionalEvasion || hasIconTokens || heavyDeferral;
 }
 
 // Quick inline garbage check — lightweight version for copilot fallback
@@ -717,6 +734,19 @@ ${textEntries.join('\n\n')}
 
 CRITICAL: This raw text contains the actual content of denial letters, coverage decisions, and other claim documents. READ IT CAREFULLY to find denial reasons, exclusions cited, coverage positions, and key facts. Answer the user's question directly using this text. Do NOT say you need to review the documents — the text is RIGHT HERE.
 `;
+        } else {
+          // No text could be extracted from any file — be honest about it
+          const missingFileNames = (rawTextRows || []).map((r: any) => r.file_name).join(', ');
+          rawTextFallbackBrief = `
+DOCUMENT TEXT STATUS: UNAVAILABLE
+The following claim files exist but their text content could not be extracted or recovered: ${missingFileNames}.
+This is likely because the physical files were lost from storage and need to be re-uploaded by the user.
+
+CRITICAL INSTRUCTION: Do NOT pretend you can analyze documents you cannot see. Do NOT give generic frameworks about "what we need to do." Instead:
+1. State clearly that the denial letter content is not available for analysis.
+2. Tell the user the specific files that need to be re-uploaded: ${likelyDenialFiles.map((f: any) => f.file_name).join(', ')}.
+3. Then provide whatever analysis you CAN based on the claim metadata (loss description, carrier name, claim status, timeline, notes) that IS available.
+`;
         }
       }
     }
@@ -1287,27 +1317,47 @@ ${research.text}`;
       historyText,
     );
 
-    if (directAnswerOnlyTurn && (startsWithActionConfirmation(ai.text || '') || looksLikeToolStyleFailure(ai.text || '') || asksForDocumentReupload(ai.text || '') || givesGenericFrameworkResponse(ai.text || ''))) {
+    // Check response quality — catch generic frameworks, icon tokens, conditional evasion, etc.
+    const responseText = ai.text || '';
+    const failsQualityCheck = directAnswerOnlyTurn && (
+      startsWithActionConfirmation(responseText) ||
+      looksLikeToolStyleFailure(responseText) ||
+      asksForDocumentReupload(responseText) ||
+      givesGenericFrameworkResponse(responseText)
+    );
+
+    // Also strip icon tokens from ANY response (even passing ones)
+    if (ai.text) {
+      ai.text = ai.text.replace(/\[(?:Scales|Arrow|Magnifying Glass|Receipt|Document|Warning|Evidence|Clock|Shield|Flag|Lightbulb|Check)\s*Icon\]/gi, '');
+    }
+
+    if (failsQualityCheck) {
       console.log('[Copilot Retry] Response failed quality check — retrying with stronger grounding instruction');
       ai = await runDarwinTask(
         taskType as any,
-        `${finalSystemPrompt}\n\nCRITICAL CORRECTION FOR THIS TURN: Your previous response was rejected because it gave a generic framework instead of analyzing the actual claim data. The user asked for analysis, NOT a plan to analyze later.
+        `${finalSystemPrompt}\n\nCRITICAL CORRECTION FOR THIS TURN: Your previous response was rejected because it gave a generic framework, used conditional speculation ("if they are citing..."), or deferred to future analysis instead of analyzing the actual claim data NOW.
 
 WHAT YOU MUST DO NOW:
 1. Look at the DOCUMENT INTELLIGENCE, RAW DOCUMENT TEXT, CARRIER ARGUMENTS, and REBUTTALS sections in your context above.
 2. If denial reasons, exclusions, or coverage positions are listed there — QUOTE THEM and analyze them directly.
 3. If raw document text is provided — READ IT and extract the denial reasons, exclusions cited, and carrier position yourself.
 4. If no document content is available at all — say so honestly in ONE sentence, then answer using whatever other claim evidence IS available (timeline, emails, notes, estimate data).
+5. If you genuinely have NO claim data at all — state this clearly and explain what specific documents need to be uploaded and processed.
 
-DO NOT:
-- Say "I need to analyze the denial letter" — you already have the data
-- Give a numbered framework/plan/roadmap for future analysis
-- Ask the user to provide or upload anything
-- Give generic insurance advice not tied to THIS claim's specific facts
+BANNED PATTERNS (these will cause rejection):
+- "We need to review/analyze/determine..." — you already have the data or you don't
+- "If they are citing..." / "If the carrier is denying based on..." — state what IS happening, not hypotheticals
+- Bullet point lists or numbered steps that just describe future work
+- [Icon] tokens like [Scales Icon] or [Arrow Icon] — use plain text
+- Generic insurance advice not tied to THIS claim's specific facts
 
-START your response with a specific fact from the claim data (a denial reason, an exclusion, a dollar amount, a date).`,
+START your response with a specific fact from the claim data (a denial reason, an exclusion, a dollar amount, a date). If no such fact exists in your context, say "The denial letter content has not been extracted yet" and proceed with available evidence.`,
         historyText,
       );
+      // Strip icon tokens from retry too
+      if (ai.text) {
+        ai.text = ai.text.replace(/\[(?:Scales|Arrow|Magnifying Glass|Receipt|Document|Warning|Evidence|Clock|Shield|Flag|Lightbulb|Check)\s*Icon\]/gi, '');
+      }
     }
 
     return new Response(
