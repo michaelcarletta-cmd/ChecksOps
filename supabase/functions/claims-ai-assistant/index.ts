@@ -5745,9 +5745,14 @@ ${deepAnalysisFramework}
 
 If the document is ambiguous about the type of loss, ask the user to clarify rather than assuming.`;
       }
-      
-      uploadedDocContext = `\n\n=== UPLOADED DOCUMENT FOR ANALYSIS ===\nDocument Name: ${documentName || 'Unknown'}\n\n${docAnalysisInstructions}\n\nDocument Content:\n${resolvedDocContent}\n=== END UPLOADED DOCUMENT ===\n`;
-      contextContent += uploadedDocContext;
+       
+       uploadedDocContext = `\n\n=== UPLOADED DOCUMENT FOR ANALYSIS ===\nDocument Name: ${documentName || 'Unknown'}\n\n${docAnalysisInstructions}\n\nDocument Content:\n${resolvedDocContent}\n=== END UPLOADED DOCUMENT ===\n`;
+       contextContent += uploadedDocContext;
+    }
+
+    // Inject document intelligence context (denial reasons, coverage positions, extracted facts)
+    if (docIntelligenceContext) {
+      contextContent += docIntelligenceContext;
     }
 
     // Handle report generation
