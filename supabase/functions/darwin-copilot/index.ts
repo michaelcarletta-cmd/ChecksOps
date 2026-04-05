@@ -89,17 +89,34 @@ function asksForDocumentReupload(message: string) {
 
 // Detect when AI gives a generic "framework" response instead of analyzing actual claim data
 function givesGenericFrameworkResponse(message: string) {
-  const text = (message || '').slice(0, 1200);
-  // Pattern 1: "I/we need to analyze/review the [document]" — AI defers instead of answering
-  const defersToAnalysis = /\b(?:i need to|we need to|need to|let's start by|first.{0,30}need to|to proceed.{0,30}need to)\s+(?:analyze|review|examine|read|look at|go through|study|assess|check|inspect)\b[\s\S]{0,80}\b(?:denial|coverage|letter|document|pdf|file|decision|ror|reservation)\b/i.test(text);
-  // Pattern 2: Numbered "framework" steps without citing any specific claim data
+  const text = (message || '').slice(0, 2000);
+  // Specific data markers — if present, the response is grounded in claim facts
+  const citesSpecificData = /\$[\d,]+|\bpolicy\s+(?:number|#|no\.?)\s*\w|exclusion\s+(?:section|clause|provision)\s+\w|\bcited\s+(?:section|exclusion|provision)|specific(?:ally)?\s+(?:states?|cites?|quotes?|references?)\b|\b(?:Section|Exclusion|Condition|Endorsement)\s+[A-Z0-9]/i.test(text);
+  if (citesSpecificData) return false; // Has substance — not generic
+
+  // Pattern 1: "I/we need to/must" + action verb — AI defers instead of answering
+  const defersToAnalysis = /\b(?:i need to|we need to|need to|we must|let's start by|first.{0,30}need to|to proceed.{0,30}need to)\s+(?:analyze|review|examine|read|look at|go through|study|assess|check|inspect|focus|establish|determine|show|demonstrate|scrutinize|understand|see how|identify|pinpoint)\b/i.test(text);
+
+  // Pattern 2: Numbered steps OR bullet lists without specific data
   const hasNumberedSteps = (text.match(/^\s*\d+\.\s+/gm) || []).length >= 3;
-  const citesSpecificData = /\$[\d,]+|\bpolicy\s+(?:number|#|no\.?)\s*\w|exclusion\s+(?:section|clause|provision)\s+\w|\bcited\s+(?:section|exclusion|provision)|specific(?:ally)?\s+(?:states?|cites?|quotes?|references?)\b/i.test(text);
-  const isGenericFramework = hasNumberedSteps && !citesSpecificData;
+  const hasBulletList = (text.match(/^\s*[\*\-•]\s+/gm) || []).length >= 3;
+  const isGenericFramework = hasNumberedSteps || hasBulletList;
+
   // Pattern 3: "Here's the plan" / "Here's a strategic approach" without actual analysis
-  const planWithoutSubstance = /\b(?:here'?s?\s+(?:a |the )?(?:plan|framework|approach|strategy|roadmap|step-by-step))\b/i.test(text) && !citesSpecificData;
-  
-  return defersToAnalysis || isGenericFramework || planWithoutSubstance;
+  const planWithoutSubstance = /\b(?:here'?s?\s+(?:a |the )?(?:plan|framework|approach|strategy|roadmap|step-by-step))\b/i.test(text);
+
+  // Pattern 4: Conditional evasion — "if they are citing...", "if the carrier is denying..."
+  const conditionalCount = (text.match(/\bif\s+(?:they(?:'re| are)|the carrier is|those|there'?s?\s+an?)\s+/gi) || []).length;
+  const hasConditionalEvasion = conditionalCount >= 3;
+
+  // Pattern 5: Icon placeholder tokens that should never appear
+  const hasIconTokens = /\[(?:Scales|Arrow|Magnifying Glass|Receipt|Document|Warning|Evidence|Clock|Shield|Flag|Lightbulb|Check)\s*Icon\]/i.test(text);
+
+  // Pattern 6: "We also need to" / "We must review" / "We need to determine" repeated
+  const actionDeferCount = (text.match(/\b(?:we (?:need to|must|should|also need to)|need to)\s+(?:review|analyze|determine|establish|understand|identify|examine|see|check|look)\b/gi) || []).length;
+  const heavyDeferral = actionDeferCount >= 2;
+
+  return defersToAnalysis || isGenericFramework || planWithoutSubstance || hasConditionalEvasion || hasIconTokens || heavyDeferral;
 }
 
 // Quick inline garbage check — lightweight version for copilot fallback
