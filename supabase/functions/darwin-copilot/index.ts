@@ -216,7 +216,7 @@ Deno.serve(async (req) => {
       claimUpdatesRes, emailsRes, docIntelRes, userNotesRes
     ] = await Promise.all([
       supabase.from('claims').select('*').eq('id', claimId).single(),
-      supabase.from('claim_files').select('id, file_name, document_type, folder_key, created_at').eq('claim_id', claimId),
+      supabase.from('claim_files').select('id, file_name, document_type, file_path, file_type, folder_id, uploaded_at').eq('claim_id', claimId),
       supabase.from('claim_estimate_analysis').select('*').eq('claim_id', claimId).order('created_at', { ascending: false }).limit(1),
       supabase.from('claim_photo_findings').select('*').eq('claim_id', claimId),
       supabase.from('claim_strategy_simulations').select('*').eq('claim_id', claimId).order('score', { ascending: false }),
