@@ -849,7 +849,7 @@ These notes contain the adjuster's own observations, thoughts, and reminders. Re
 
     // Build a data availability summary so the AI knows EXACTLY what it has
     const dataAvailability = [
-      docIntelligence.length > 0 ? `✅ ${docIntelligence.length} processed documents with usable extracted intelligence (denial reasons, coverage positions, contradictions, facts)` : '❌ No usable document intelligence extracted yet',
+      docIntelligence.length > 0 ? `✅ ${docIntelligence.length} processed documents with usable extracted intelligence (denial reasons, coverage positions, contradictions, facts)` : rawTextFallbackBrief ? `⚠️ No structured document intelligence, but RAW TEXT from ${claimFiles.length} files is available below — read it carefully` : '❌ No usable document intelligence extracted yet',
       likelyDenialFiles.length > 0 ? `✅ ${likelyDenialFiles.length} denial-related files are attached to the claim` : null,
       unusableDocIntelCount > 0 ? `⚠️ ${unusableDocIntelCount} extracted document entries appear unusable/technical and should NOT be treated as reviewed claim facts` : null,
       (rebuttalsRes.data || []).length > 0 ? `✅ ${(rebuttalsRes.data || []).length} carrier argument rebuttals ready` : null,
