@@ -638,24 +638,31 @@ Deno.serve(async (req) => {
     // Uses garbage detection + inline OCR via vision AI as last resort
     let rawTextFallbackBrief = '';
     if (docIntelligence.length === 0 && claimFiles.length > 0) {
+      console.log(`[Copilot Fallback] No usable document intelligence — attempting text extraction for ${claimFiles.length} files`);
       const priorityFileIds = likelyDenialFiles.map((f: any) => f.id);
       const otherFileIds = claimFiles
         .filter((f: any) => !priorityFileIds.includes(f.id))
         .map((f: any) => f.id);
-      // Focus on denial files first, then others — limit to 5 to avoid timeout
-      const fileIdsToFetch = [...priorityFileIds, ...otherFileIds].slice(0, 5);
+      // Focus on denial files first — limit to 3 to avoid timeout
+      const fileIdsToFetch = [...priorityFileIds, ...otherFileIds].slice(0, 3);
+      console.log(`[Copilot Fallback] Fetching text for ${fileIdsToFetch.length} files (${priorityFileIds.length} priority)`);
 
       if (fileIdsToFetch.length > 0) {
-        const { data: rawTextRows } = await supabase
+        const { data: rawTextRows, error: rawTextError } = await supabase
           .from('claim_files')
           .select('id, file_name, file_path, file_type, extracted_text, clean_text, text_quality_status')
           .in('id', fileIdsToFetch);
+
+        if (rawTextError) {
+          console.error('[Copilot Fallback] Error fetching file text:', rawTextError);
+        }
 
         const textEntries: string[] = [];
 
         for (const r of (rawTextRows || [])) {
           const bestText = (r.clean_text || r.extracted_text || '').trim();
           const isGarbage = !bestText || bestText.length < 50 || isGarbageTextInline(bestText) || r.text_quality_status === 'unusable';
+          console.log(`[Copilot Fallback] File "${r.file_name}": textLen=${bestText.length}, quality=${r.text_quality_status}, isGarbage=${isGarbage}`);
 
           if (!isGarbage && bestText.length >= 50) {
             // Good text available — use it
@@ -663,7 +670,7 @@ Deno.serve(async (req) => {
             textEntries.push(`--- FILE: ${r.file_name} ---\n${truncated}${bestText.length > 5000 ? '\n[...truncated]' : ''}`);
           } else if (r.file_path && (r.file_type?.includes('pdf') || r.file_name?.toLowerCase().endsWith('.pdf'))) {
             // Text is garbage or missing — attempt inline OCR via vision AI
-            console.log(`[Copilot Fallback] Attempting inline OCR for "${r.file_name}" (text_quality=${r.text_quality_status}, existing_len=${bestText.length})`);
+            console.log(`[Copilot Fallback] Attempting inline OCR for "${r.file_name}"`);
             try {
               const ocrText = await inlineOcrFromStorage(supabase, r.file_path, r.file_name);
               if (ocrText && ocrText.length > 100) {
@@ -675,15 +682,17 @@ Deno.serve(async (req) => {
                   text_quality_status: 'fair',
                   needs_reprocessing: false,
                 }).eq('id', r.id);
-                console.log(`[Copilot Fallback] OCR success for "${r.file_name}" — ${ocrText.length} chars, persisted to clean_text`);
+                console.log(`[Copilot Fallback] OCR success for "${r.file_name}" — ${ocrText.length} chars, persisted`);
               } else {
-                console.warn(`[Copilot Fallback] OCR returned insufficient text for "${r.file_name}"`);
+                console.warn(`[Copilot Fallback] OCR returned insufficient text for "${r.file_name}" (${ocrText?.length || 0} chars)`);
               }
             } catch (ocrErr) {
               console.warn(`[Copilot Fallback] OCR failed for "${r.file_name}":`, ocrErr);
             }
           }
         }
+
+        console.log(`[Copilot Fallback] Final text entries: ${textEntries.length}`);
 
         if (textEntries.length > 0) {
           rawTextFallbackBrief = `
