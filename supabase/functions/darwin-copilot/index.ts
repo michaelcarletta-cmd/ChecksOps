@@ -715,7 +715,7 @@ CRITICAL: This raw text contains the actual content of denial letters, coverage 
         confidence_score: intelSummary.confidence_score,
       } : null,
       files: claimFiles.length,
-      file_list: claimFiles.map((f: any) => ({ name: f.file_name, type: f.document_type, folder: f.folder_key })),
+      file_list: claimFiles.map((f: any) => ({ name: f.file_name, type: f.document_type, folder: f.folder_id })),
       document_intelligence: docIntelligence,
       estimate_analysis: estimateRes.data?.[0] || null,
       photo_findings: {
