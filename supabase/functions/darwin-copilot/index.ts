@@ -162,7 +162,7 @@ async function inlineOcrFromStorage(supabase: any, filePath: string, fileName: s
   return data.choices?.[0]?.message?.content || null;
 }
 
-
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
