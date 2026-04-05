@@ -558,6 +558,47 @@ Deno.serve(async (req) => {
     const docIntelligence = rawDocIntelligence.filter((d: any) => hasUsableDocumentIntel(d));
     const unusableDocIntelCount = rawDocIntelligence.length - docIntelligence.length;
 
+    // ── FALLBACK: When document intelligence is empty/unusable, read raw extracted_text from claim_files ──
+    let rawTextFallbackBrief = '';
+    if (docIntelligence.length === 0 && claimFiles.length > 0) {
+      // Prioritize denial-related files, then any files with extracted text
+      const priorityFileIds = likelyDenialFiles.map((f: any) => f.id);
+      const otherFileIds = claimFiles
+        .filter((f: any) => !priorityFileIds.includes(f.id))
+        .map((f: any) => f.id);
+      const fileIdsToFetch = [...priorityFileIds, ...otherFileIds].slice(0, 8);
+
+      if (fileIdsToFetch.length > 0) {
+        const { data: rawTextRows } = await supabase
+          .from('claim_files')
+          .select('id, file_name, extracted_text, clean_text')
+          .in('id', fileIdsToFetch)
+          .not('extracted_text', 'is', null);
+
+        if (rawTextRows && rawTextRows.length > 0) {
+          const textEntries = rawTextRows
+            .map((r: any) => {
+              const text = (r.clean_text || r.extracted_text || '').trim();
+              if (!text || text.length < 50) return null;
+              // Truncate to avoid overwhelming the context window
+              const truncated = text.slice(0, 4000);
+              return `--- FILE: ${r.file_name} ---\n${truncated}${text.length > 4000 ? '\n[...truncated]' : ''}`;
+            })
+            .filter(Boolean);
+
+          if (textEntries.length > 0) {
+            rawTextFallbackBrief = `
+RAW DOCUMENT TEXT FALLBACK (Document intelligence pipeline has not yet extracted structured facts from these files, but their raw text content is available. Use this text to answer questions about denial reasons, coverage positions, exclusions, and other claim facts):
+
+${textEntries.join('\n\n')}
+
+IMPORTANT: Since structured document intelligence is not available, you MUST read through this raw text carefully to find denial reasons, exclusions cited, coverage positions, and other relevant facts. Do NOT say you need to review the documents — the text is RIGHT HERE. Extract the key points and answer the user's question directly.
+`;
+          }
+        }
+      }
+    }
+
     // Build user notes digest
     const claimNotes = (userNotesRes.data || []).map((n: any) => ({
       content: (n.content || '').slice(0, 500),
