@@ -45,6 +45,47 @@ function shouldExcludeAssistantHistory(message: string) {
   return startsWithActionConfirmation(trimmed) || looksLikeToolStyleFailure(trimmed);
 }
 
+function hasMeaningfulValue(value: unknown) {
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === 'object') return Object.keys(value as Record<string, unknown>).length > 0;
+  return typeof value === 'string' ? value.trim().length > 0 : Boolean(value);
+}
+
+function isLikelyTechnicalPdfSummary(summary: string) {
+  return /technical pdf file|metadata and structural information|fonts?, images?, and page stru|page structure|font resources|cross-reference|xref|object stream|pdf itself/i.test(summary || '');
+}
+
+function hasUsableDocumentIntel(row: Record<string, unknown>) {
+  const summary = String(row.summary || '').trim();
+  const hasStructuredEvidence = [
+    row.coverage_position,
+    row.denial_reasons,
+    row.exclusions,
+    row.testing_done,
+    row.testing_missing,
+    row.estimate_totals,
+    row.scope_positions,
+    row.contradictions,
+    row.cause_of_loss,
+    row.extracted_facts,
+    row.code_refs,
+    row.manufacturer_refs,
+    row.from,
+    row.to,
+  ].some(hasMeaningfulValue);
+
+  if (hasStructuredEvidence) return true;
+  if (!summary) return false;
+  return summary.length >= 80 && !isLikelyTechnicalPdfSummary(summary);
+}
+
+function asksForDocumentReupload(message: string) {
+  const prefix = (message || '').slice(0, 500);
+  return /(?:please|can you|could you)\s+(?:provide|paste|send|share|upload)\b[\s\S]{0,140}\b(?:content|text|copy|document|letter|pdf|file|documents|letters)\b/i.test(prefix)
+    || /once i have reviewed\b[\s\S]{0,120}\b(?:document|letter|pdf|file|documents|letters)\b/i.test(prefix)
+    || /i need to understand the specific reasons[\s\S]{0,140}\b(?:provide|paste|send|share|upload)\b/i.test(prefix);
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -120,7 +161,7 @@ Deno.serve(async (req) => {
         .eq('claim_id', claimId).order('sent_at', { ascending: false }).limit(15),
       // Document intelligence — extracted facts, denial reasons, coverage positions from all processed files
       supabase.from('claim_document_intelligence')
-        .select('document_type, document_subtype, summary, coverage_position, denial_reasons, exclusions_cited, testing_performed, testing_missing, estimate_totals, scope_positions, contradictions, cause_of_loss, extracted_facts, code_references, manufacturer_references, confidence_score, sender, recipient')
+        .select('claim_file_id, document_type, document_subtype, summary, coverage_position, denial_reasons, exclusions_cited, testing_performed, testing_missing, estimate_totals, scope_positions, contradictions, cause_of_loss, extracted_facts, code_references, manufacturer_references, confidence_score, sender, recipient')
         .eq('claim_id', claimId)
         .order('confidence_score', { ascending: false })
         .limit(30),
@@ -488,8 +529,13 @@ Deno.serve(async (req) => {
       body_preview: (e.body || '').slice(0, 200),
     }));
 
+    const claimFiles = filesRes.data || [];
+    const claimFileNamesById = new Map(claimFiles.map((f: any) => [f.id, f.file_name]));
+    const likelyDenialFiles = claimFiles.filter((f: any) => /coverage decision|reservation of rights|\bdenial\b|\bror\b/i.test(f.file_name || ''));
+
     // Build document intelligence digest — extracted facts from all processed files
-    const docIntelligence = (docIntelRes.data || []).map((d: any) => ({
+    const rawDocIntelligence = (docIntelRes.data || []).map((d: any) => ({
+      file_name: d.claim_file_id ? claimFileNamesById.get(d.claim_file_id) || null : null,
       type: d.document_type,
       subtype: d.document_subtype,
       summary: (d.summary || '').slice(0, 400),
@@ -509,6 +555,8 @@ Deno.serve(async (req) => {
       from: d.sender,
       to: d.recipient,
     }));
+    const docIntelligence = rawDocIntelligence.filter((d: any) => hasUsableDocumentIntel(d));
+    const unusableDocIntelCount = rawDocIntelligence.length - docIntelligence.length;
 
     // Build user notes digest
     const claimNotes = (userNotesRes.data || []).map((n: any) => ({
@@ -527,8 +575,8 @@ Deno.serve(async (req) => {
         missing_evidence: intelSummary.missing_evidence,
         confidence_score: intelSummary.confidence_score,
       } : null,
-      files: (filesRes.data || []).length,
-      file_list: (filesRes.data || []).map((f: any) => ({ name: f.file_name, type: f.document_type, folder: f.folder_key })),
+      files: claimFiles.length,
+      file_list: claimFiles.map((f: any) => ({ name: f.file_name, type: f.document_type, folder: f.folder_key })),
       document_intelligence: docIntelligence,
       estimate_analysis: estimateRes.data?.[0] || null,
       photo_findings: {
@@ -722,11 +770,17 @@ USER FEEDBACK PATTERNS FOR THIS CLAIM:
 Lean toward approaches that match successful patterns. Avoid repeating rejected approaches.
 ` : '';
 
+    const claimFileAvailabilityBrief = likelyDenialFiles.length > 0 ? `
+ATTACHED CLAIM FILES RELEVANT TO THIS QUESTION:
+${likelyDenialFiles.map((f: any) => `- ${f.file_name}`).join('\n')}
+These files already exist on the claim. NEVER ask the user to provide, upload, paste, or re-send the contents of files that are already attached here. If extracted intelligence from one of these files is incomplete or unusable, say that briefly and continue answering from the other claim evidence you do have.
+` : '';
+
     // Build document intelligence brief — extracted content from all processed files
     const docIntelBrief = docIntelligence.length > 0 ? `
 DOCUMENT INTELLIGENCE (${docIntelligence.length} documents analyzed — extracted facts from denial letters, estimates, engineering reports, correspondence, and more):
 ${docIntelligence.map((d: any, i: number) => {
-  const parts = [`${i + 1}. [${d.type}${d.subtype ? '/' + d.subtype : ''}] ${d.summary}`];
+  const parts = [`${i + 1}. [${d.file_name || d.type}${d.subtype ? '/' + d.subtype : ''}] ${d.summary}`];
   if (d.coverage_position) parts.push(`   Coverage Position: ${JSON.stringify(d.coverage_position)}`);
   if (d.denial_reasons) parts.push(`   Denial Reasons: ${JSON.stringify(d.denial_reasons)}`);
   if (d.exclusions) parts.push(`   Exclusions Cited: ${JSON.stringify(d.exclusions)}`);
@@ -754,7 +808,9 @@ These notes contain the adjuster's own observations, thoughts, and reminders. Re
 
     // Build a data availability summary so the AI knows EXACTLY what it has
     const dataAvailability = [
-      docIntelligence.length > 0 ? `✅ ${docIntelligence.length} processed documents with extracted intelligence (denial reasons, coverage positions, contradictions, facts)` : '❌ No document intelligence extracted yet',
+      docIntelligence.length > 0 ? `✅ ${docIntelligence.length} processed documents with usable extracted intelligence (denial reasons, coverage positions, contradictions, facts)` : '❌ No usable document intelligence extracted yet',
+      likelyDenialFiles.length > 0 ? `✅ ${likelyDenialFiles.length} denial-related files are attached to the claim` : null,
+      unusableDocIntelCount > 0 ? `⚠️ ${unusableDocIntelCount} extracted document entries appear unusable/technical and should NOT be treated as reviewed claim facts` : null,
       (rebuttalsRes.data || []).length > 0 ? `✅ ${(rebuttalsRes.data || []).length} carrier argument rebuttals ready` : null,
       (argsRes.data || []).length > 0 ? `✅ ${(argsRes.data || []).length} carrier arguments mapped` : null,
       timelineEvents.length > 0 ? `✅ ${timelineEvents.length} timeline events` : null,
@@ -794,6 +850,8 @@ WHAT THIS MEANS:
 - If carrier arguments are mapped → you KNOW their specific arguments. Address each one.
 - If timeline events exist → you KNOW the chronology. Cite specific dates.
 - If emails exist → you KNOW what was communicated. Reference specific correspondence.
+- If a relevant file is already listed in the attached claim files → NEVER ask the user to provide, paste, upload, or re-send it.
+- If a file exists but its extracted intelligence is unusable → acknowledge that briefly, then still answer from the usable claim evidence you already have.
 - NEVER say "I need to review the denial letter" or "the denial letter needs to be analyzed" when document intelligence already contains the denial reasons and exclusions.
 - NEVER give a generic "framework" or "template" response. Every answer must be grounded in THIS claim's specific data.
 
@@ -803,6 +861,7 @@ MODE: ${copilotMode.toUpperCase()}
 ${modeInstructions[copilotMode]}
 
 ${orchestratorBrief}
+${claimFileAvailabilityBrief}
 ${docIntelBrief}
 ${notesBrief}
 ${outcomeLearningBrief}
@@ -1064,10 +1123,10 @@ ${research.text}`;
       historyText,
     );
 
-    if (directAnswerOnlyTurn && (startsWithActionConfirmation(ai.text || '') || looksLikeToolStyleFailure(ai.text || ''))) {
+    if (directAnswerOnlyTurn && (startsWithActionConfirmation(ai.text || '') || looksLikeToolStyleFailure(ai.text || '') || asksForDocumentReupload(ai.text || ''))) {
       ai = await runDarwinTask(
         taskType as any,
-        `${finalSystemPrompt}\n\nCORRECTION FOR THIS TURN: The user asked for analysis, not a system action or a search-status update. Rewrite the response as a direct, natural answer grounded in the claim evidence. Do NOT mention adding notes, creating tasks, drafting emails, logging activity, searching communications, or reporting that nothing was found. Use the claim intelligence already provided and answer the question.`,
+        `${finalSystemPrompt}\n\nCORRECTION FOR THIS TURN: The user asked for analysis, not a system action, search-status update, or request to re-provide documents. Rewrite the response as a direct, natural answer grounded in the claim evidence. Do NOT mention adding notes, creating tasks, drafting emails, logging activity, searching communications, or asking the user to provide/paste/upload claim files that are already attached. If some attached file extraction is incomplete, mention that briefly and then answer using the other claim intelligence already provided.`,
         historyText,
       );
     }
