@@ -734,6 +734,19 @@ ${textEntries.join('\n\n')}
 
 CRITICAL: This raw text contains the actual content of denial letters, coverage decisions, and other claim documents. READ IT CAREFULLY to find denial reasons, exclusions cited, coverage positions, and key facts. Answer the user's question directly using this text. Do NOT say you need to review the documents — the text is RIGHT HERE.
 `;
+        } else {
+          // No text could be extracted from any file — be honest about it
+          const missingFileNames = (rawTextRows || []).map((r: any) => r.file_name).join(', ');
+          rawTextFallbackBrief = `
+DOCUMENT TEXT STATUS: UNAVAILABLE
+The following claim files exist but their text content could not be extracted or recovered: ${missingFileNames}.
+This is likely because the physical files were lost from storage and need to be re-uploaded by the user.
+
+CRITICAL INSTRUCTION: Do NOT pretend you can analyze documents you cannot see. Do NOT give generic frameworks about "what we need to do." Instead:
+1. State clearly that the denial letter content is not available for analysis.
+2. Tell the user the specific files that need to be re-uploaded: ${likelyDenialFiles.map((f: any) => f.file_name).join(', ')}.
+3. Then provide whatever analysis you CAN based on the claim metadata (loss description, carrier name, claim status, timeline, notes) that IS available.
+`;
         }
       }
     }
