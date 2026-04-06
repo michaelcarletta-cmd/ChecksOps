@@ -34,6 +34,139 @@ function isEmailDraftRequest(message: string) {
   return /\b(?:draft|write|compose|prepare|generate|create|send)\b[\s\S]{0,60}\b(?:email|e-mail|client update email|update email|client email)\b|\b(?:email|e-mail|client update email)\b[\s\S]{0,30}\b(?:draft|write|compose|prepare|generate|create)\b|\bdraft\b[\s\S]{0,30}\b(?:email|e-mail)\b/i.test(message);
 }
 
+function humanizeClaimText(value: string | null | undefined, fallback = 'Unknown') {
+  const text = (value || '').trim();
+  if (!text) return fallback;
+  return text
+    .replace(/[\-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function summarizeStructuredValue(value: unknown, fallback = 'N/A') {
+  if (!value) return fallback;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || fallback;
+  }
+
+  if (Array.isArray(value)) {
+    const parts = value
+      .map((item) => summarizeStructuredValue(item, ''))
+      .filter(Boolean);
+    return parts.length > 0 ? parts.join('; ') : fallback;
+  }
+
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    for (const key of ['action', 'summary', 'description', 'label', 'title', 'next_step', 'recommended_action']) {
+      const candidate = record[key];
+      if (typeof candidate === 'string' && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+
+    const entries = Object.entries(record)
+      .filter(([, entryValue]) => entryValue != null && String(entryValue).trim())
+      .slice(0, 3)
+      .map(([key, entryValue]) => `${humanizeClaimText(key, key)}: ${String(entryValue).trim()}`);
+
+    return entries.length > 0 ? entries.join('; ') : fallback;
+  }
+
+  return String(value);
+}
+
+function getClientFirstName(name?: string | null) {
+  const cleaned = (name || '').trim();
+  if (!cleaned || cleaned.toLowerCase() === 'the client') return '';
+  return cleaned.split(/\s+/)[0]?.replace(/[^A-Za-z'’-]/g, '') || '';
+}
+
+function stripLeadingDateTag(value: string | null | undefined) {
+  return (value || '').replace(/^\[[^\]]+\]\s*/, '').trim();
+}
+
+function collapseWhitespace(value: string) {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function isDraftClarificationResponse(message: string) {
+  const text = (message || '').trim().toLowerCase();
+  if (!text) return true;
+
+  return /need more information|could you please specify|once i have these details|once i have this information|what was the content of the recent note|what was the nature of the recent communication|who was the communication with|what was discussed or decided/.test(text);
+}
+
+function containsForbiddenDraftPhrase(message: string) {
+  return /reviewing your claim details|updated your claim file|we will be in touch shortly|will be in touch shortly|check the portal for details|please check the portal/i.test(message || '');
+}
+
+function buildDeterministicClientDraft({
+  draftType,
+  clientName,
+  facts,
+}: {
+  draftType: 'sms' | 'email';
+  clientName?: string | null;
+  facts: {
+    claim_number: string;
+    carrier: string;
+    claim_status: string;
+    property_address: string;
+    last_contact_date: string;
+    last_contact_with: string;
+    last_contact_subject: string;
+    latest_note: string;
+    latest_update: string;
+    next_action: string;
+    has_correspondence: boolean;
+    has_notes: boolean;
+  };
+}) {
+  const firstName = getClientFirstName(clientName);
+  const noteText = stripLeadingDateTag(facts.latest_note);
+  const updateText = stripLeadingDateTag(facts.latest_update);
+  const safeStatus = facts.claim_status && facts.claim_status !== 'Unknown' ? facts.claim_status : 'in progress';
+  const safeAction = facts.next_action && facts.next_action !== 'N/A'
+    ? stripLeadingDateTag(facts.next_action)
+    : 'review the next documented claim step';
+
+  const activitySentence = facts.has_correspondence
+    ? `${facts.carrier} communication was logged on ${facts.last_contact_date}${facts.last_contact_subject !== 'N/A' ? ` regarding ${facts.last_contact_subject}` : ''}.`
+    : facts.has_notes && noteText
+      ? `Our latest file note says ${noteText}.`
+      : updateText && updateText !== 'No updates'
+        ? `Our latest claim update says ${updateText}.`
+        : `We do not have a recent insurance-company communication or claim note logged in the file yet.`;
+
+  const nextStepSentence = safeAction
+    ? `Next step: ${safeAction.charAt(0).toLowerCase() + safeAction.slice(1)}.`
+    : '';
+
+  if (draftType === 'sms') {
+    const prefix = firstName ? `${firstName}, ` : '';
+    const sms = collapseWhitespace(`${prefix}${activitySentence} Your claim is currently ${safeStatus.toLowerCase()}. ${nextStepSentence}`);
+    return sms.length <= 320 ? sms : `${sms.slice(0, 317).trimEnd()}...`;
+  }
+
+  const greeting = firstName ? `Hi ${firstName},` : 'Hello,';
+  const subjectLine = `Subject: Claim update for ${facts.claim_number !== 'N/A' ? facts.claim_number : facts.property_address}`;
+  return [
+    subjectLine,
+    '',
+    greeting,
+    '',
+    `I wanted to share a current update on your claim. ${activitySentence}`,
+    '',
+    `Your claim is currently ${safeStatus.toLowerCase()}. ${nextStepSentence}`,
+    '',
+    'We will keep the file updated as new carrier activity is logged.',
+    '',
+    'Regards,',
+  ].join('\n');
+}
+
 function isAnalysisQuestion(message: string) {
   return /\b(?:how|what|why|explain|analy[sz]e|review|assess|rebut|respond|strategy|argument|weakness|weakest|next step|next move|denial|coverage|carrier position|contradiction|pressure|should we|what do you think)\b/i.test(message);
 }
@@ -1390,7 +1523,7 @@ START your response with a specific fact from the claim data (a denial reason, a
         claim_number: claim?.claim_number || claim?.carrier_claim_number || 'N/A',
         property_address: [claim?.property_address, claim?.property_city, claim?.property_state].filter(Boolean).join(', ') || 'N/A',
         carrier: carrier,
-        claim_status: claim?.status || 'Unknown',
+        claim_status: humanizeClaimText(claim?.status, 'Unknown'),
         loss_type: lossType || 'N/A',
         loss_date: claim?.loss_date ? new Date(claim.loss_date).toLocaleDateString() : 'N/A',
         last_contact_date: lastContactDate || 'No recent contact',
@@ -1398,16 +1531,20 @@ START your response with a specific fact from the claim data (a denial reason, a
         last_contact_subject: lastContactSubject || 'N/A',
         latest_note: latestNote ? `[${latestNote.date}] ${latestNote.content}` : 'No notes',
         latest_update: latestUpdate ? `[${latestUpdate.date}] ${latestUpdate.content}` : 'No updates',
-        next_action: intelSummary?.recommended_next_action
-          ? (typeof intelSummary.recommended_next_action === 'object'
-            ? JSON.stringify(intelSummary.recommended_next_action)
-            : String(intelSummary.recommended_next_action))
-          : 'Review claim and determine next steps',
+        next_action: summarizeStructuredValue(intelSummary?.recommended_next_action, 'Review claim and determine next steps'),
         pending_deadlines: deadlines.filter((d: any) => d.status === 'pending' || d.status === 'approaching')
           .map((d: any) => `${d.deadline_type}: ${d.deadline_date}`),
         has_correspondence: emailHistory.length > 0,
         has_notes: claimNotes.length > 0,
       };
+
+      const clientDisplayName = claim?.policyholder_name || claim?.customer_name || 'the client';
+      const deterministicDraft = buildDeterministicClientDraft({
+        draftType,
+        clientName: clientDisplayName,
+        facts: extractedFacts,
+      });
+      const hasDraftSourceData = extractedFacts.has_correspondence || extractedFacts.has_notes || extractedFacts.latest_update !== 'No updates';
 
       // Build specific draft instruction
       const draftInstruction = draftType === 'sms'
@@ -1427,13 +1564,13 @@ START your response with a specific fact from the claim data (a denial reason, a
 
       // Build a concrete facts block so the AI has explicit data points to reference
       const recentNotes = claimNotes.slice(0, 5).map((n: any) => `  - [${n.date}] ${n.content}`).join('\n');
-      const recentEmails = emailHistory.slice(0, 5).map((e: any) => `  - [${e.date}] ${e.direction === 'inbound' ? 'FROM' : 'TO'} ${e.recipient || e.sender || 'unknown'}: "${e.subject}"${e.snippet ? ' — ' + e.snippet : ''}`).join('\n');
+      const recentEmails = emailHistory.slice(0, 5).map((e: any) => `  - [${e.date}] ${e.recipient_type === 'inbound' ? 'FROM' : 'TO'} ${e.recipient || 'unknown'}: "${e.subject}"${e.body_preview ? ' — ' + e.body_preview : ''}`).join('\n');
       const recentUpdates = claimUpdates.slice(0, 5).map((u: any) => `  - [${u.date || u.created_at}] ${u.content}`).join('\n');
 
       const concreteFactsBlock = `
 === CONCRETE CLAIM FACTS (USE THESE EXACTLY) ===
 Claim Number: ${extractedFacts.claim_number}
-Policyholder: ${claim?.policyholder_name || claim?.customer_name || 'the client'}
+Policyholder: ${clientDisplayName}
 Property: ${extractedFacts.property_address}
 Carrier: ${extractedFacts.carrier}
 Current Status: ${extractedFacts.claim_status}
@@ -1455,9 +1592,13 @@ ${recentUpdates || '  (none)'}
 === END FACTS ===`;
 
       // Use AI to generate the draft using full claim context + explicit facts
-      const draftAi = await runDarwinTask(
-        'copilot_drafting' as any,
-        `${finalSystemPrompt}
+      let draftModel: string | undefined;
+      let draftText = deterministicDraft;
+
+      if (hasDraftSourceData) {
+        const draftAi = await runDarwinTask(
+          'copilot_drafting' as any,
+          `${finalSystemPrompt}
 
 SPECIAL INSTRUCTION — STRUCTURED DRAFT GENERATION:
 You are generating a ${draftType === 'sms' ? 'SMS text message' : 'client email'} draft.
@@ -1474,19 +1615,26 @@ CRITICAL RULES:
 5. Write as if authored by ${authorName || 'the public adjuster'}.
 6. Address the client by first name if available from: ${claim?.policyholder_name || claim?.customer_name || 'the client'}.
 7. Return ONLY the draft text — no analysis, no preamble, no explanation, no markdown formatting.`,
-        `Generate a ${draftType === 'sms' ? 'SMS' : 'email'} draft for the client on claim ${extractedFacts.claim_number}. Use the concrete facts provided. ${latestUserTurn}`,
-      );
+          `Generate a ${draftType === 'sms' ? 'SMS' : 'email'} draft for the client on claim ${extractedFacts.claim_number}. Use the concrete facts provided. ${latestUserTurn}`,
+        );
+
+        draftModel = draftAi.model;
+        const candidateDraft = (draftAi.text || '').trim();
+        if (candidateDraft && !isDraftClarificationResponse(candidateDraft) && !containsForbiddenDraftPhrase(candidateDraft)) {
+          draftText = candidateDraft;
+        }
+      }
 
       return new Response(
         JSON.stringify({
           ok: true,
-          response: ai.text, // Still include the AI's analysis as context
-          model: ai.model,
+          response: draftText,
+          model: draftModel || ai.model,
           strategyMode: false,
           draftData: {
             type: draftType,
             facts: extractedFacts,
-            draft: draftAi.text || '',
+            draft: draftText,
             generated_at: new Date().toISOString(),
           },
         }),
