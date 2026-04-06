@@ -1473,11 +1473,12 @@ ${research.text}`;
 
     // Check response quality — catch generic frameworks, icon tokens, conditional evasion, etc.
     const responseText = ai.text || '';
-    const failsQualityCheck = !isDraftGeneration && directAnswerOnlyTurn && (
+    const failsQualityCheck = !isDraftGeneration && (
       startsWithActionConfirmation(responseText) ||
       looksLikeToolStyleFailure(responseText) ||
       asksForDocumentReupload(responseText) ||
-      givesGenericFrameworkResponse(responseText)
+      givesGenericFrameworkResponse(responseText) ||
+      isAskingForClarification(responseText)
     );
 
     // Also strip icon tokens from ANY response (even passing ones)
