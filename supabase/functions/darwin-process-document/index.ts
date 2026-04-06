@@ -424,7 +424,7 @@ Deno.serve(async (req) => {
     // Map classification to expanded document_type
     const docTypeMap: Record<string, string> = {
       'denial': 'denial_letter',
-      'estimate': 'carrier_estimate',
+      'estimate': 'estimate',
       'approval': 'coverage_letter',
       'rfi': 'carrier_correspondence',
       'engineering_report': 'engineering_report',
