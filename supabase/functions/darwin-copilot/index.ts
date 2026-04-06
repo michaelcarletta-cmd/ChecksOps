@@ -1322,11 +1322,15 @@ ${research.text}`;
       ? 'copilot_reasoning'
       : 'copilot_drafting';
 
-    let ai = await runDarwinTask(
-      taskType as any,
-      finalSystemPrompt,
-      historyText,
-    );
+    // Skip the general AI call entirely for draft requests — go straight to structured draft generation
+    let ai: { text: string; model?: string } = { text: '', model: '' };
+    if (!isDraftGeneration) {
+      ai = await runDarwinTask(
+        taskType as any,
+        finalSystemPrompt,
+        historyText,
+      );
+    }
 
     // Check response quality — catch generic frameworks, icon tokens, conditional evasion, etc.
     const responseText = ai.text || '';
