@@ -95,7 +95,13 @@ function isDraftClarificationResponse(message: string) {
   const text = (message || '').trim().toLowerCase();
   if (!text) return true;
 
-  return /need more information|could you please specify|once i have these details|once i have this information|what was the content of the recent note|what was the nature of the recent communication|who was the communication with|what was discussed or decided/.test(text);
+  return /need more information|could you please specify|once i have these details|once i have this information|what was the content of the recent note|what was the nature of the recent communication|who was the communication with|what was discussed or decided|need a bit more clarification|please specify which|could you clarify|what information you'd like|what would you like me to include|can you tell me more about/.test(text);
+}
+
+function isAskingForClarification(message: string) {
+  const text = (message || '').trim().toLowerCase();
+  if (!text) return false;
+  return /\b(?:need (?:more|a bit more) (?:information|clarification|details|context)|could you (?:please )?(?:specify|clarify|provide|tell me)|once i have (?:these|this|the) (?:details|information)|what (?:information|details|specifics) (?:would you|do you|should i)|please (?:specify|clarify|provide)|which (?:recent )?(?:note|communication|email|update) (?:are you|you are|you're) referring|i need to understand|can you (?:provide|share|give) more)\b/.test(text);
 }
 
 function containsForbiddenDraftPhrase(message: string) {
@@ -1467,11 +1473,12 @@ ${research.text}`;
 
     // Check response quality — catch generic frameworks, icon tokens, conditional evasion, etc.
     const responseText = ai.text || '';
-    const failsQualityCheck = !isDraftGeneration && directAnswerOnlyTurn && (
+    const failsQualityCheck = !isDraftGeneration && (
       startsWithActionConfirmation(responseText) ||
       looksLikeToolStyleFailure(responseText) ||
       asksForDocumentReupload(responseText) ||
-      givesGenericFrameworkResponse(responseText)
+      givesGenericFrameworkResponse(responseText) ||
+      isAskingForClarification(responseText)
     );
 
     // Also strip icon tokens from ANY response (even passing ones)
@@ -1495,6 +1502,7 @@ WHAT YOU MUST DO NOW:
 BANNED PATTERNS (these will cause rejection):
 - "We need to review/analyze/determine..." — you already have the data or you don't
 - "If they are citing..." / "If the carrier is denying based on..." — state what IS happening, not hypotheticals
+- "Could you please specify..." / "I need more clarification..." / "Which note are you referring to..." — NEVER ask the user to clarify. USE the data provided in the system context.
 - Bullet point lists or numbered steps that just describe future work
 - [Icon] tokens like [Scales Icon] or [Arrow Icon] — use plain text
 - Generic insurance advice not tied to THIS claim's specific facts
@@ -1505,6 +1513,14 @@ START your response with a specific fact from the claim data (a denial reason, a
       // Strip icon tokens from retry too
       if (ai.text) {
         ai.text = ai.text.replace(/\[(?:Scales|Arrow|Magnifying Glass|Receipt|Document|Warning|Evidence|Clock|Shield|Flag|Lightbulb|Check)\s*Icon\]/gi, '');
+      }
+      // If retry STILL asks for clarification, replace with a grounded response
+      if (isAskingForClarification(ai.text || '')) {
+        console.log('[Copilot Retry] Retry still asks for clarification — using claim data summary');
+        const updates = claimUpdates.slice(0, 3).map((u: any) => `• [${u.date}] ${u.content}`).join('\n');
+        const emails = emailHistory.slice(0, 3).map((e: any) => `• [${e.date}] ${e.subject}`).join('\n');
+        const notes = claimNotes.slice(0, 3).map((n: any) => `• [${n.date}] ${n.content}`).join('\n');
+        ai.text = `Here's what I found in the claim file:\n\n**Recent Activity:**\n${updates || 'No recent updates logged.'}\n\n**Recent Emails:**\n${emails || 'No emails logged.'}\n\n**Recent Notes:**\n${notes || 'No notes logged.'}\n\nCurrent status: ${humanizeClaimText(claim?.status, 'Unknown')}. Next action: ${summarizeStructuredValue(intelSummary?.recommended_next_action, 'Review claim file and determine next steps.')}.`;
       }
     }
 
