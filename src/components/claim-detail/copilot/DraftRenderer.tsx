@@ -91,8 +91,8 @@ export function DraftRenderer({ draftData }: DraftRendererProps) {
             </div>
 
             {noCorrespondence && (
-              <div className="mt-2 p-1.5 rounded bg-amber-500/10 border border-amber-500/20">
-                <p className="text-[10px] text-amber-700 dark:text-amber-400">
+              <div className="mt-2 p-1.5 rounded bg-destructive/10 border border-destructive/20">
+                <p className="text-[10px] text-destructive">
                   No recent correspondence found. Draft is based on claim metadata and status only. Consider adding notes with specific context for a more accurate draft.
                 </p>
               </div>
