@@ -1421,23 +1421,56 @@ START your response with a specific fact from the claim data (a denial reason, a
 - Be warm, professional, and reassuring
 - Include a proper greeting and sign-off`;
 
-      // Use AI to generate the draft using full claim context
+      // Build a concrete facts block so the AI has explicit data points to reference
+      const recentNotes = claimNotes.slice(0, 5).map((n: any) => `  - [${n.date}] ${n.content}`).join('\n');
+      const recentEmails = emailHistory.slice(0, 5).map((e: any) => `  - [${e.date}] ${e.direction === 'inbound' ? 'FROM' : 'TO'} ${e.recipient || e.sender || 'unknown'}: "${e.subject}"${e.snippet ? ' — ' + e.snippet : ''}`).join('\n');
+      const recentUpdates = claimUpdates.slice(0, 5).map((u: any) => `  - [${u.date || u.created_at}] ${u.content}`).join('\n');
+
+      const concreteFactsBlock = `
+=== CONCRETE CLAIM FACTS (USE THESE EXACTLY) ===
+Claim Number: ${extractedFacts.claim_number}
+Policyholder: ${claim?.policyholder_name || claim?.customer_name || 'the client'}
+Property: ${extractedFacts.property_address}
+Carrier: ${extractedFacts.carrier}
+Current Status: ${extractedFacts.claim_status}
+Loss Type: ${extractedFacts.loss_type}
+Loss Date: ${extractedFacts.loss_date}
+Last Contact: ${extractedFacts.last_contact_date}${extractedFacts.last_contact_with !== 'N/A' ? ' with ' + extractedFacts.last_contact_with : ''}
+Last Email Subject: ${extractedFacts.last_contact_subject}
+Next Action: ${extractedFacts.next_action}
+${extractedFacts.pending_deadlines.length > 0 ? 'Pending Deadlines: ' + extractedFacts.pending_deadlines.join('; ') : ''}
+
+Recent Notes:
+${recentNotes || '  (none)'}
+
+Recent Emails:
+${recentEmails || '  (none)'}
+
+Recent Updates:
+${recentUpdates || '  (none)'}
+=== END FACTS ===`;
+
+      // Use AI to generate the draft using full claim context + explicit facts
       const draftAi = await runDarwinTask(
         'copilot_drafting' as any,
         `${finalSystemPrompt}
 
 SPECIAL INSTRUCTION — STRUCTURED DRAFT GENERATION:
-You are generating a ${draftType === 'sms' ? 'SMS text message' : 'client email'} draft. 
+You are generating a ${draftType === 'sms' ? 'SMS text message' : 'client email'} draft.
+
+${concreteFactsBlock}
 
 ${draftInstruction}
 
 CRITICAL RULES:
-1. Use ONLY facts from the claim intelligence provided above. Reference specific dates, dollar amounts, carrier names, and actions taken.
-2. Do NOT use generic template language like "reviewing your claim details" or "will contact you shortly."
-3. The draft must reflect the ACTUAL current state of this specific claim.
-4. Write as if authored by ${authorName || 'the public adjuster'}.
-5. Return ONLY the draft text — no analysis, no preamble, no explanation.`,
-        `Generate a ${draftType === 'sms' ? 'SMS' : 'email'} draft for the client on claim ${claim?.claim_number || claimId}. ${latestUserTurn}`,
+1. Use ONLY the concrete facts above. You MUST reference specific dates, the carrier name "${extractedFacts.carrier}", and actual actions from the notes/emails.
+2. FORBIDDEN phrases: "reviewing your claim details", "will contact you shortly", "updated your claim file", "we will be in touch shortly", "check the portal for details", "please check the portal". These are vague and unacceptable.
+3. INSTEAD use specifics like: "${extractedFacts.carrier} sent [specific document] on [date]", "we submitted [specific action] on [date]", "your next step is [concrete action]".
+4. The draft must reflect the ACTUAL current state: "${extractedFacts.claim_status}". Reference what specifically happened most recently from the notes/emails above.
+5. Write as if authored by ${authorName || 'the public adjuster'}.
+6. Address the client by first name if available from: ${claim?.policyholder_name || claim?.customer_name || 'the client'}.
+7. Return ONLY the draft text — no analysis, no preamble, no explanation, no markdown formatting.`,
+        `Generate a ${draftType === 'sms' ? 'SMS' : 'email'} draft for the client on claim ${extractedFacts.claim_number}. Use the concrete facts provided. ${latestUserTurn}`,
       );
 
       return new Response(
