@@ -81,13 +81,13 @@ export function useDarwinCopilot(claimId: string) {
 
       const data = await resp.json();
 
-      if (!data.ok || !data.response) {
+      if (!data.ok || (!data.response && !data.draftData)) {
         throw new Error(data.error || 'Empty response from Copilot');
       }
 
       const assistantMsg: CopilotMessage = {
         role: 'assistant',
-        content: data.response,
+        content: data.response || data.draftData?.draft || '',
         timestamp: Date.now(),
         draftData: data.draftData || undefined,
       };
