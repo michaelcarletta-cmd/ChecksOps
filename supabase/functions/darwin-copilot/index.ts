@@ -1502,6 +1502,7 @@ WHAT YOU MUST DO NOW:
 BANNED PATTERNS (these will cause rejection):
 - "We need to review/analyze/determine..." — you already have the data or you don't
 - "If they are citing..." / "If the carrier is denying based on..." — state what IS happening, not hypotheticals
+- "Could you please specify..." / "I need more clarification..." / "Which note are you referring to..." — NEVER ask the user to clarify. USE the data provided in the system context.
 - Bullet point lists or numbered steps that just describe future work
 - [Icon] tokens like [Scales Icon] or [Arrow Icon] — use plain text
 - Generic insurance advice not tied to THIS claim's specific facts
@@ -1512,6 +1513,14 @@ START your response with a specific fact from the claim data (a denial reason, a
       // Strip icon tokens from retry too
       if (ai.text) {
         ai.text = ai.text.replace(/\[(?:Scales|Arrow|Magnifying Glass|Receipt|Document|Warning|Evidence|Clock|Shield|Flag|Lightbulb|Check)\s*Icon\]/gi, '');
+      }
+      // If retry STILL asks for clarification, replace with a grounded response
+      if (isAskingForClarification(ai.text || '')) {
+        console.log('[Copilot Retry] Retry still asks for clarification — using claim data summary');
+        const updates = claimUpdates.slice(0, 3).map((u: any) => `• [${u.date}] ${u.content}`).join('\n');
+        const emails = emailHistory.slice(0, 3).map((e: any) => `• [${e.date}] ${e.subject}`).join('\n');
+        const notes = claimNotes.slice(0, 3).map((n: any) => `• [${n.date}] ${n.content}`).join('\n');
+        ai.text = `Here's what I found in the claim file:\n\n**Recent Activity:**\n${updates || 'No recent updates logged.'}\n\n**Recent Emails:**\n${emails || 'No emails logged.'}\n\n**Recent Notes:**\n${notes || 'No notes logged.'}\n\nCurrent status: ${humanizeClaimText(claim?.status, 'Unknown')}. Next action: ${summarizeStructuredValue(intelSummary?.recommended_next_action, 'Review claim file and determine next steps.')}.`;
       }
     }
 
