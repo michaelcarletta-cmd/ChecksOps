@@ -95,7 +95,13 @@ function isDraftClarificationResponse(message: string) {
   const text = (message || '').trim().toLowerCase();
   if (!text) return true;
 
-  return /need more information|could you please specify|once i have these details|once i have this information|what was the content of the recent note|what was the nature of the recent communication|who was the communication with|what was discussed or decided/.test(text);
+  return /need more information|could you please specify|once i have these details|once i have this information|what was the content of the recent note|what was the nature of the recent communication|who was the communication with|what was discussed or decided|need a bit more clarification|please specify which|could you clarify|what information you'd like|what would you like me to include|can you tell me more about/.test(text);
+}
+
+function isAskingForClarification(message: string) {
+  const text = (message || '').trim().toLowerCase();
+  if (!text) return false;
+  return /\b(?:need (?:more|a bit more) (?:information|clarification|details|context)|could you (?:please )?(?:specify|clarify|provide|tell me)|once i have (?:these|this|the) (?:details|information)|what (?:information|details|specifics) (?:would you|do you|should i)|please (?:specify|clarify|provide)|which (?:recent )?(?:note|communication|email|update) (?:are you|you are|you're) referring|i need to understand|can you (?:provide|share|give) more)\b/.test(text);
 }
 
 function containsForbiddenDraftPhrase(message: string) {
