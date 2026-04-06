@@ -339,6 +339,17 @@ export function DarwinCopilotPanel({ claimId, isExpanded, onToggleExpand }: Darw
 function MessageBubble({ message }: { message: CopilotMessage }) {
   const isUser = message.role === 'user';
 
+  // If this is a draft response, render the DraftRenderer
+  if (!isUser && message.draftData) {
+    return (
+      <div className="flex justify-start">
+        <div className="max-w-[95%] w-full">
+          <DraftRenderer draftData={message.draftData} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
       <div className={cn(
