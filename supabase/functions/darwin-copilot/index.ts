@@ -219,6 +219,9 @@ Deno.serve(async (req) => {
     const latestUserTurn = getLatestUserTurn(userQuestion, conversationHistory);
     const explicitDraftOrActionRequest = isExplicitDraftOrActionRequest(latestUserTurn);
     const directAnswerOnlyTurn = isAnalysisQuestion(latestUserTurn) && !explicitDraftOrActionRequest;
+    const isSmsDraft = isSmsDraftRequest(latestUserTurn);
+    const isEmailDraft = isEmailDraftRequest(latestUserTurn);
+    const isDraftGeneration = isSmsDraft || isEmailDraft;
 
     // ── Fetch calling user's profile for identity injection ──────────────
     let authorName: string | undefined;
