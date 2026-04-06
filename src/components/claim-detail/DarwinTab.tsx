@@ -719,13 +719,6 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
         )}
       </div>
 
-      <Suspense fallback={<LoadingFallback />}>
-        <DarwinCommandBar
-          claimId={claimId}
-          claim={claim}
-          placeholder="Hey Darwin… run an analysis, write a case study, or ask: What's been paid and what hasn't?"
-        />
-      </Suspense>
 
       {/* Main Layout: workspace panel + assistant drawer */}
       <div
