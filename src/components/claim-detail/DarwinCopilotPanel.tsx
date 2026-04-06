@@ -5,6 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useDarwinCopilot, type CopilotMessage } from "@/hooks/useDarwinCopilot";
+import { DraftRenderer } from "./copilot/DraftRenderer";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Popover,
