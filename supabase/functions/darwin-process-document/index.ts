@@ -946,7 +946,8 @@ Deno.serve(async (req) => {
         targetClaimId, 
         classificationResult, 
         automation,
-        fileId
+        fileId,
+        documentSubtype
       );
     }
 
