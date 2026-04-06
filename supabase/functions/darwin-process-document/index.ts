@@ -2110,18 +2110,25 @@ async function processDocumentActions(
       break;
 
     case 'estimate':
-      // Create task to review estimate
+      // Determine if this is a CARRIER estimate vs PA/contractor estimate
+      const estimateSubtype = documentSubtype || classification.metadata.estimate_type || 'unknown';
+      const isCarrierEstimate = estimateSubtype === 'carrier_estimate' || estimateSubtype === 'xactimate' || estimateSubtype === 'symbility';
+      const isOwnEstimate = estimateSubtype === 'pa_estimate' || estimateSubtype === 'contractor_estimate' || estimateSubtype === 'supplement_estimate' || estimateSubtype === 'contractor';
+      
+      console.log(`[EstimateAction] file_id=${fileId} subtype=${estimateSubtype} isCarrier=${isCarrierEstimate} isOwn=${isOwnEstimate}`);
+
+      // Create task to review estimate (always)
       await supabase.from('tasks').insert({
         claim_id: claimId,
-        title: 'Review Estimate',
-        description: `New ${classification.metadata.estimate_type || ''} estimate detected. ${classification.metadata.gross_rcv ? `RCV: $${classification.metadata.gross_rcv.toLocaleString()}` : ''}`,
-        priority: 'medium',
+        title: isCarrierEstimate ? 'Review Carrier Estimate' : 'Review Estimate',
+        description: `New ${estimateSubtype} estimate detected. ${classification.metadata.gross_rcv ? `RCV: $${classification.metadata.gross_rcv.toLocaleString()}` : ''}`,
+        priority: isCarrierEstimate ? 'high' : 'medium',
         due_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         status: 'pending',
       });
 
-      // Extract to accounting if we have amounts
-      if (classification.metadata.gross_rcv && classification.metadata.gross_rcv > 0) {
+      // Extract to accounting if we have amounts (only for carrier estimates)
+      if (isCarrierEstimate && classification.metadata.gross_rcv && classification.metadata.gross_rcv > 0) {
         // Check for existing settlement record
         const { data: existingSettlement } = await supabase
           .from('claim_settlements')
@@ -2133,22 +2140,23 @@ async function processDocumentActions(
           await supabase.from('claim_settlements').insert({
             claim_id: claimId,
             estimate_amount: classification.metadata.gross_rcv,
-            notes: `Auto-extracted from ${classification.metadata.estimate_type || 'estimate'} by Darwin`,
+            notes: `Auto-extracted from carrier ${estimateSubtype} by Darwin`,
           });
         } else {
           await supabase.from('claim_settlements').update({
             estimate_amount: classification.metadata.gross_rcv,
-            notes: `Updated from ${classification.metadata.estimate_type || 'estimate'} by Darwin`,
+            notes: `Updated from carrier ${estimateSubtype} by Darwin`,
           }).eq('id', existingSettlement[0].id);
         }
       }
 
-      // Update status if autonomous (semi or fully)
-      if (isAutonomous) {
+      // ONLY update status and send emails for CARRIER estimates
+      // PA/contractor estimates should NEVER trigger "Estimate Received from Carrier" or client emails
+      if (isAutonomous && isCarrierEstimate) {
         const estimateStatus = await findMatchingStatus(supabase, 'estimate', 'Estimate Received from Carrier');
         await supabase.from('claims').update({ status: estimateStatus }).eq('id', claimId);
         
-        // Draft client notification email
+        // Draft client notification email ONLY for carrier estimates
         if (claim?.policyholder_email) {
           try {
             const estimateAmount = classification.metadata.gross_rcv 
@@ -2159,10 +2167,10 @@ async function processDocumentActions(
               claimId, 
               claim, 
               estimateStatus, 
-              `We have received an estimate for your claim.${estimateAmount}`,
-              true // Can auto-send for estimates
+              `We have received an estimate from your insurance carrier for your claim.${estimateAmount}`,
+              true // Can auto-send for carrier estimates
             );
-            console.log(`Successfully drafted estimate email for claim ${claimId}`);
+            console.log(`Successfully drafted carrier estimate email for claim ${claimId}`);
           } catch (emailError: any) {
             console.error(`Failed to draft estimate client email:`, emailError);
             await supabase.from('darwin_action_log').insert({
@@ -2175,6 +2183,22 @@ async function processDocumentActions(
             });
           }
         }
+      } else if (isAutonomous && isOwnEstimate) {
+        // Log that we detected our own estimate but did NOT change status or email
+        console.log(`[EstimateAction] Skipping status/email for non-carrier estimate (${estimateSubtype}) on claim ${claimId}`);
+        await supabase.from('darwin_action_log').insert({
+          claim_id: claimId,
+          action_type: 'estimate_classified',
+          action_details: { 
+            estimate_subtype: estimateSubtype, 
+            is_carrier: false,
+            file_id: fileId,
+            gross_rcv: classification.metadata.gross_rcv || null,
+          },
+          was_auto_executed: true,
+          result: `Detected ${estimateSubtype} — no status change or client email (not a carrier estimate)`,
+          trigger_source: 'darwin_process_document',
+        });
       }
       break;
 
