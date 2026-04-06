@@ -130,7 +130,7 @@ function buildDeterministicClientDraft({
   const safeStatus = facts.claim_status && facts.claim_status !== 'Unknown' ? facts.claim_status : 'in progress';
   const safeAction = facts.next_action && facts.next_action !== 'N/A'
     ? stripLeadingDateTag(facts.next_action)
-    : 'reviewing the next documented claim step';
+    : 'review the next documented claim step';
 
   const activitySentence = facts.has_correspondence
     ? `${facts.carrier} communication was logged on ${facts.last_contact_date}${facts.last_contact_subject !== 'N/A' ? ` regarding ${facts.last_contact_subject}` : ''}.`
@@ -141,7 +141,7 @@ function buildDeterministicClientDraft({
         : `We do not have a recent insurance-company communication or claim note logged in the file yet.`;
 
   const nextStepSentence = safeAction
-    ? `Next, we are ${safeAction.charAt(0).toLowerCase() + safeAction.slice(1)}.`
+    ? `Next step: ${safeAction.charAt(0).toLowerCase() + safeAction.slice(1)}.`
     : '';
 
   if (draftType === 'sms') {
