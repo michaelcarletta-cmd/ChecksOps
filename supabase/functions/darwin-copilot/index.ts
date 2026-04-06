@@ -23,7 +23,15 @@ function getLatestUserTurn(userQuestion?: string, conversationHistory?: Array<{ 
 }
 
 function isExplicitDraftOrActionRequest(message: string) {
-  return /\b(?:draft|write|compose|prepare|generate|create|add|make|log)\b[\s\S]{0,40}\b(?:email|letter|message|note|task|todo|reminder|update|timeline entry|activity)\b|\b(?:email|letter|message|note|task|todo|reminder|update|timeline entry|activity)\b[\s\S]{0,20}\b(?:draft|write|compose|prepare|generate|create|add|make|log)\b/i.test(message);
+  return /\b(?:draft|write|compose|prepare|generate|create|add|make|log)\b[\s\S]{0,40}\b(?:email|letter|message|note|task|todo|reminder|update|timeline entry|activity|sms|text message)\b|\b(?:email|letter|message|note|task|todo|reminder|update|timeline entry|activity|sms|text message)\b[\s\S]{0,20}\b(?:draft|write|compose|prepare|generate|create|add|make|log)\b/i.test(message);
+}
+
+function isSmsDraftRequest(message: string) {
+  return /\b(?:draft|write|compose|prepare|generate|create|send)\b[\s\S]{0,40}\b(?:sms|text message|text msg|text the client|text the homeowner|text the insured|text update)\b|\b(?:sms|text message|text msg)\b[\s\S]{0,20}\b(?:draft|write|compose|prepare|generate|create)\b/i.test(message);
+}
+
+function isEmailDraftRequest(message: string) {
+  return /\b(?:draft|write|compose|prepare|generate|create|send)\b[\s\S]{0,40}\b(?:email|e-mail)\b|\b(?:email|e-mail)\b[\s\S]{0,20}\b(?:draft|write|compose|prepare|generate|create)\b/i.test(message);
 }
 
 function isAnalysisQuestion(message: string) {
