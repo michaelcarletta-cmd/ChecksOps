@@ -5,6 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useDarwinCopilot, type CopilotMessage } from "@/hooks/useDarwinCopilot";
+import { DraftRenderer } from "./copilot/DraftRenderer";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Popover,
@@ -129,10 +130,10 @@ export function DarwinCopilotPanel({ claimId, isExpanded, onToggleExpand }: Darw
   };
 
   const QUICK_PROMPTS = [
+    "Draft an SMS update for the client",
+    "Draft a client update email",
     "What's the strongest argument against the carrier?",
     "What evidence am I missing?",
-    "Draft rebuttal language for the top dispute",
-    "Explain the carrier's weakest position",
     "What should I do next on this claim?",
   ];
 
@@ -337,6 +338,17 @@ export function DarwinCopilotPanel({ claimId, isExpanded, onToggleExpand }: Darw
 
 function MessageBubble({ message }: { message: CopilotMessage }) {
   const isUser = message.role === 'user';
+
+  // If this is a draft response, render the DraftRenderer
+  if (!isUser && message.draftData) {
+    return (
+      <div className="flex justify-start">
+        <div className="max-w-[95%] w-full">
+          <DraftRenderer draftData={message.draftData} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>

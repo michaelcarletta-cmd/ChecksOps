@@ -2,10 +2,36 @@ import { useState, useCallback, useRef } from "react";
 
 type CopilotMode = 'operational' | 'rebuttal' | 'estimate' | 'war_room' | 'training' | 'strategy';
 
+export interface DraftFacts {
+  claim_number: string;
+  property_address: string;
+  carrier: string;
+  claim_status: string;
+  loss_type: string;
+  loss_date: string;
+  last_contact_date: string;
+  last_contact_with: string;
+  last_contact_subject: string;
+  latest_note: string;
+  latest_update: string;
+  next_action: string;
+  pending_deadlines: string[];
+  has_correspondence: boolean;
+  has_notes: boolean;
+}
+
+export interface DraftData {
+  type: 'sms' | 'email';
+  facts: DraftFacts;
+  draft: string;
+  generated_at: string;
+}
+
 export interface CopilotMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
+  draftData?: DraftData;
 }
 
 export function useDarwinCopilot(claimId: string) {
@@ -63,6 +89,7 @@ export function useDarwinCopilot(claimId: string) {
         role: 'assistant',
         content: data.response,
         timestamp: Date.now(),
+        draftData: data.draftData || undefined,
       };
       setMessages(prev => [...prev, assistantMsg]);
     } catch (err: any) {

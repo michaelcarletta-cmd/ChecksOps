@@ -23,7 +23,15 @@ function getLatestUserTurn(userQuestion?: string, conversationHistory?: Array<{ 
 }
 
 function isExplicitDraftOrActionRequest(message: string) {
-  return /\b(?:draft|write|compose|prepare|generate|create|add|make|log)\b[\s\S]{0,40}\b(?:email|letter|message|note|task|todo|reminder|update|timeline entry|activity)\b|\b(?:email|letter|message|note|task|todo|reminder|update|timeline entry|activity)\b[\s\S]{0,20}\b(?:draft|write|compose|prepare|generate|create|add|make|log)\b/i.test(message);
+  return /\b(?:draft|write|compose|prepare|generate|create|add|make|log)\b[\s\S]{0,40}\b(?:email|letter|message|note|task|todo|reminder|update|timeline entry|activity|sms|text message)\b|\b(?:email|letter|message|note|task|todo|reminder|update|timeline entry|activity|sms|text message)\b[\s\S]{0,20}\b(?:draft|write|compose|prepare|generate|create|add|make|log)\b/i.test(message);
+}
+
+function isSmsDraftRequest(message: string) {
+  return /\b(?:draft|write|compose|prepare|generate|create|send)\b[\s\S]{0,40}\b(?:sms|text message|text msg|text the client|text the homeowner|text the insured|text update)\b|\b(?:sms|text message|text msg)\b[\s\S]{0,20}\b(?:draft|write|compose|prepare|generate|create)\b/i.test(message);
+}
+
+function isEmailDraftRequest(message: string) {
+  return /\b(?:draft|write|compose|prepare|generate|create|send)\b[\s\S]{0,40}\b(?:email|e-mail)\b|\b(?:email|e-mail)\b[\s\S]{0,20}\b(?:draft|write|compose|prepare|generate|create)\b/i.test(message);
 }
 
 function isAnalysisQuestion(message: string) {
@@ -211,6 +219,9 @@ Deno.serve(async (req) => {
     const latestUserTurn = getLatestUserTurn(userQuestion, conversationHistory);
     const explicitDraftOrActionRequest = isExplicitDraftOrActionRequest(latestUserTurn);
     const directAnswerOnlyTurn = isAnalysisQuestion(latestUserTurn) && !explicitDraftOrActionRequest;
+    const isSmsDraft = isSmsDraftRequest(latestUserTurn);
+    const isEmailDraft = isEmailDraftRequest(latestUserTurn);
+    const isDraftGeneration = isSmsDraft || isEmailDraft;
 
     // ── Fetch calling user's profile for identity injection ──────────────
     let authorName: string | undefined;
@@ -1358,6 +1369,95 @@ START your response with a specific fact from the claim data (a denial reason, a
       if (ai.text) {
         ai.text = ai.text.replace(/\[(?:Scales|Arrow|Magnifying Glass|Receipt|Document|Warning|Evidence|Clock|Shield|Flag|Lightbulb|Check)\s*Icon\]/gi, '');
       }
+    }
+
+    // ── Structured draft generation for SMS/Email ──────────────
+    if (isDraftGeneration) {
+      const draftType = isSmsDraft ? 'sms' : 'email';
+      
+      // Extract facts from claim context
+      const lastContactDate = emailHistory.length > 0 ? emailHistory[0].date : null;
+      const lastContactRecipient = emailHistory.length > 0 ? emailHistory[0].recipient : null;
+      const lastContactSubject = emailHistory.length > 0 ? emailHistory[0].subject : null;
+      const latestNote = claimNotes.length > 0 ? claimNotes[0] : null;
+      const latestUpdate = claimUpdates.length > 0 ? claimUpdates[0] : null;
+
+      const extractedFacts = {
+        claim_number: claim?.claim_number || claim?.carrier_claim_number || 'N/A',
+        property_address: [claim?.property_address, claim?.property_city, claim?.property_state].filter(Boolean).join(', ') || 'N/A',
+        carrier: carrier,
+        claim_status: claim?.status || 'Unknown',
+        loss_type: lossType || 'N/A',
+        loss_date: claim?.loss_date ? new Date(claim.loss_date).toLocaleDateString() : 'N/A',
+        last_contact_date: lastContactDate || 'No recent contact',
+        last_contact_with: lastContactRecipient || 'N/A',
+        last_contact_subject: lastContactSubject || 'N/A',
+        latest_note: latestNote ? `[${latestNote.date}] ${latestNote.content}` : 'No notes',
+        latest_update: latestUpdate ? `[${latestUpdate.date}] ${latestUpdate.content}` : 'No updates',
+        next_action: intelSummary?.recommended_next_action
+          ? (typeof intelSummary.recommended_next_action === 'object'
+            ? JSON.stringify(intelSummary.recommended_next_action)
+            : String(intelSummary.recommended_next_action))
+          : 'Review claim and determine next steps',
+        pending_deadlines: deadlines.filter((d: any) => d.status === 'pending' || d.status === 'approaching')
+          .map((d: any) => `${d.deadline_type}: ${d.deadline_date}`),
+        has_correspondence: emailHistory.length > 0,
+        has_notes: claimNotes.length > 0,
+      };
+
+      // Build specific draft instruction
+      const draftInstruction = draftType === 'sms'
+        ? `Generate a professional but concise SMS text message (under 320 characters) to update the client/homeowner about their claim. The message must:
+- Reference specific claim activity (dates, carrier name, what happened)
+- State the current status based on actual notes and correspondence
+- Include the next concrete step (not generic "we'll be in touch")
+- Be warm but professional
+- NOT include any greeting or signature — just the message body`
+        : `Generate a professional email to update the client/homeowner about their claim. The email must:
+- Have a clear, specific subject line referencing the claim
+- Reference specific claim activity (dates, carrier communications, what happened)
+- State the current status based on actual notes and correspondence
+- Include the next concrete step with timeline if available
+- Be warm, professional, and reassuring
+- Include a proper greeting and sign-off`;
+
+      // Use AI to generate the draft using full claim context
+      const draftAi = await runDarwinTask(
+        'copilot_drafting' as any,
+        `${finalSystemPrompt}
+
+SPECIAL INSTRUCTION — STRUCTURED DRAFT GENERATION:
+You are generating a ${draftType === 'sms' ? 'SMS text message' : 'client email'} draft. 
+
+${draftInstruction}
+
+CRITICAL RULES:
+1. Use ONLY facts from the claim intelligence provided above. Reference specific dates, dollar amounts, carrier names, and actions taken.
+2. Do NOT use generic template language like "reviewing your claim details" or "will contact you shortly."
+3. The draft must reflect the ACTUAL current state of this specific claim.
+4. Write as if authored by ${authorName || 'the public adjuster'}.
+5. Return ONLY the draft text — no analysis, no preamble, no explanation.`,
+        `Generate a ${draftType === 'sms' ? 'SMS' : 'email'} draft for the client on claim ${claim?.claim_number || claimId}. ${latestUserTurn}`,
+      );
+
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          response: ai.text, // Still include the AI's analysis as context
+          model: ai.model,
+          strategyMode: false,
+          draftData: {
+            type: draftType,
+            facts: extractedFacts,
+            draft: draftAi.text || '',
+            generated_at: new Date().toISOString(),
+          },
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        },
+      );
     }
 
     return new Response(
