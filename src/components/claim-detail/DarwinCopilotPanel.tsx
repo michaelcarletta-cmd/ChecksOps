@@ -130,10 +130,10 @@ export function DarwinCopilotPanel({ claimId, isExpanded, onToggleExpand }: Darw
   };
 
   const QUICK_PROMPTS = [
+    "Draft an SMS update for the client",
+    "Draft a client update email",
     "What's the strongest argument against the carrier?",
     "What evidence am I missing?",
-    "Draft rebuttal language for the top dispute",
-    "Explain the carrier's weakest position",
     "What should I do next on this claim?",
   ];
 
