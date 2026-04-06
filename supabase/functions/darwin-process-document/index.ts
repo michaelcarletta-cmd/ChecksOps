@@ -2038,7 +2038,8 @@ async function processDocumentActions(
   claimId: string,
   classification: ClassificationResult,
   automation: any,
-  fileId: string
+  fileId: string,
+  documentSubtype?: string | null
 ) {
   const isFullyAutonomous = automation.autonomy_level === 'fully_autonomous';
   // Semi-autonomous should also auto-update status (only emails to insurance need review)
