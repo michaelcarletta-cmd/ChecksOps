@@ -1334,7 +1334,7 @@ ${research.text}`;
 
     // Check response quality — catch generic frameworks, icon tokens, conditional evasion, etc.
     const responseText = ai.text || '';
-    const failsQualityCheck = directAnswerOnlyTurn && (
+    const failsQualityCheck = !isDraftGeneration && directAnswerOnlyTurn && (
       startsWithActionConfirmation(responseText) ||
       looksLikeToolStyleFailure(responseText) ||
       asksForDocumentReupload(responseText) ||
