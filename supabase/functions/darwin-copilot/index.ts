@@ -27,11 +27,11 @@ function isExplicitDraftOrActionRequest(message: string) {
 }
 
 function isSmsDraftRequest(message: string) {
-  return /\b(?:draft|write|compose|prepare|generate|create|send)\b[\s\S]{0,40}\b(?:sms|text message|text msg|text the client|text the homeowner|text the insured|text update)\b|\b(?:sms|text message|text msg)\b[\s\S]{0,20}\b(?:draft|write|compose|prepare|generate|create)\b/i.test(message);
+  return /\b(?:draft|write|compose|prepare|generate|create|send)\b[\s\S]{0,60}\b(?:sms|text message|text msg|text update|text the client|text the homeowner|text the insured)\b|\b(?:sms|text message|text msg|text update)\b[\s\S]{0,30}\b(?:draft|write|compose|prepare|generate|create)\b|\bdraft\b[\s\S]{0,30}\bsms\b/i.test(message);
 }
 
 function isEmailDraftRequest(message: string) {
-  return /\b(?:draft|write|compose|prepare|generate|create|send)\b[\s\S]{0,40}\b(?:email|e-mail)\b|\b(?:email|e-mail)\b[\s\S]{0,20}\b(?:draft|write|compose|prepare|generate|create)\b/i.test(message);
+  return /\b(?:draft|write|compose|prepare|generate|create|send)\b[\s\S]{0,60}\b(?:email|e-mail|client update email|update email|client email)\b|\b(?:email|e-mail|client update email)\b[\s\S]{0,30}\b(?:draft|write|compose|prepare|generate|create)\b|\bdraft\b[\s\S]{0,30}\b(?:email|e-mail)\b/i.test(message);
 }
 
 function isAnalysisQuestion(message: string) {
@@ -1322,15 +1322,19 @@ ${research.text}`;
       ? 'copilot_reasoning'
       : 'copilot_drafting';
 
-    let ai = await runDarwinTask(
-      taskType as any,
-      finalSystemPrompt,
-      historyText,
-    );
+    // Skip the general AI call entirely for draft requests — go straight to structured draft generation
+    let ai: { text: string; model?: string } = { text: '', model: '' };
+    if (!isDraftGeneration) {
+      ai = await runDarwinTask(
+        taskType as any,
+        finalSystemPrompt,
+        historyText,
+      );
+    }
 
     // Check response quality — catch generic frameworks, icon tokens, conditional evasion, etc.
     const responseText = ai.text || '';
-    const failsQualityCheck = directAnswerOnlyTurn && (
+    const failsQualityCheck = !isDraftGeneration && directAnswerOnlyTurn && (
       startsWithActionConfirmation(responseText) ||
       looksLikeToolStyleFailure(responseText) ||
       asksForDocumentReupload(responseText) ||
