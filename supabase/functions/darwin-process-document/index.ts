@@ -128,10 +128,16 @@ async function updateClaimMasterStateDocIntelSummary(
   }
 }
 
-function mapDocumentType(classification: string): string {
+function mapDocumentType(classification: string, documentSubtype?: string | null): string {
+  // If we have a specific subtype for estimates, use it instead of defaulting to carrier_estimate
+  if (classification === 'estimate' && documentSubtype) {
+    const validSubtypes = ['carrier_estimate', 'pa_estimate', 'contractor_estimate', 'supplement_estimate'];
+    if (validSubtypes.includes(documentSubtype)) return documentSubtype;
+  }
+  
   const docTypeMap: Record<string, string> = {
     denial: 'denial_letter',
-    estimate: 'carrier_estimate',
+    estimate: 'estimate', // Default to generic 'estimate', not 'carrier_estimate'
     approval: 'coverage_letter',
     rfi: 'carrier_correspondence',
     engineering_report: 'engineering_report',
