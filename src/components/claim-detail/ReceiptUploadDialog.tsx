@@ -12,6 +12,12 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { CrudDropdown } from "./CrudDropdown";
 import { PaymentMethodForm } from "./PaymentMethodForm";
+import * as pdfjs from "pdfjs-dist";
+
+pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.mjs",
+  import.meta.url,
+).toString();
 
 const PDF_MIME_TYPE = "application/pdf";
 
@@ -27,14 +33,35 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
+/** Rasterize every page of a PDF into JPEG base64 strings */
+const pdfPagesToImages = async (file: File): Promise<string[]> => {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+  const images: string[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 1.5 });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext("2d")!;
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    // Get JPEG base64 (strip data URL prefix)
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    images.push(dataUrl.split(",")[1]);
+  }
+  return images;
+};
+
 const buildReceiptExtractionPayload = async (file: File) => {
   const isPdf = file.type === PDF_MIME_TYPE || file.name.toLowerCase().endsWith(".pdf");
 
   if (isPdf) {
-    // Send raw PDF — Gemini handles multi-page PDFs natively
+    // Convert each PDF page to a JPEG to avoid edge function memory limits
+    const pageImages = await pdfPagesToImages(file);
     return {
-      imageBase64: await fileToBase64(file),
-      mimeType: PDF_MIME_TYPE,
+      pageImages,
+      mimeType: "image/jpeg",
     };
   }
 
@@ -43,7 +70,6 @@ const buildReceiptExtractionPayload = async (file: File) => {
     mimeType: file.type || "image/jpeg",
   };
 };
-
 interface ExtractedReceipt {
   vendor_name: string | null;
   date: string | null;
