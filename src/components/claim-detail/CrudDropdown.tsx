@@ -18,6 +18,8 @@ interface CrudDropdownItem {
 interface CrudDropdownProps {
   table: string;
   labelField: string;
+  /** Called with the label text whenever the selection changes */
+  onLabelChange?: (label: string) => void;
   value: string;
   onValueChange: (value: string) => void;
   placeholder: string;
