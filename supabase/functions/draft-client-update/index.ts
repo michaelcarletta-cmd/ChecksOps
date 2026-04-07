@@ -8,6 +8,50 @@ const corsHeaders = {
 
 const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 
+function isGenericClientUpdateDraft(text: string, context: {
+  claimNumber?: string;
+  carrier?: string;
+  recentDocuments?: Array<{ name?: string; type?: string; subtype?: string }>;
+  recentActivity?: Array<{ summary?: string; type?: string; date?: string }>;
+}) {
+  const lower = (text || "").toLowerCase();
+  const genericPhrases = [
+    "we wanted to update you",
+    "latest communication regarding your claim",
+    "we will continue to advocate on your behalf",
+    "we will let you know of any new developments",
+    "please call us if you have any questions",
+  ];
+  const genericHits = genericPhrases.filter((p) => lower.includes(p)).length;
+
+  const hasClaimNumber =
+    !!context.claimNumber && text.includes(context.claimNumber);
+  const hasCarrier =
+    !!context.carrier && lower.includes(String(context.carrier).toLowerCase());
+  const hasActivityKeyword = (context.recentActivity || []).some((a) => {
+    const s = `${a.type || ""} ${a.summary || ""}`.toLowerCase();
+    return s && (
+      lower.includes((a.type || "").toLowerCase()) ||
+      (a.summary && lower.includes(a.summary.slice(0, 20).toLowerCase()))
+    );
+  });
+  const hasDocumentKeyword = (context.recentDocuments || []).some((d) => {
+    const s = `${d.name || ""} ${d.type || ""} ${d.subtype || ""}`.toLowerCase();
+    return s && (
+      (d.type && lower.includes(String(d.type).toLowerCase())) ||
+      (d.subtype && lower.includes(String(d.subtype).toLowerCase()))
+    );
+  });
+
+  const specificityScore =
+    Number(hasClaimNumber) +
+    Number(hasCarrier) +
+    Number(hasActivityKeyword) +
+    Number(hasDocumentKeyword);
+
+  return genericHits >= 2 && specificityScore < 2;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -141,32 +185,52 @@ Deno.serve(async (req) => {
 
     const firstName = (claim.policyholder_name || "").split(/\s+/)[0] || "there";
 
-    // ── 3. Single-pass: extract facts + draft in one call ────────────────
-    const system = `You are Darwin Copilot for a public adjusting firm.
-Your job is to draft client update emails based only on actual claim activity, notes, documents, and recent events.
-You must first identify the most important update-worthy facts and ignore internal noise.
+    // ── 3. Build fact hints ──────────────────────────────────────────────
+    const factHints = {
+      claim_number: claimSummary.claim_number,
+      carrier: claimSummary.insurance_company,
+      status: claimSummary.status,
+      latest_activity_date: latestMeaningfulActivity?.date || null,
+      latest_activity_type: latestMeaningfulActivity?.type || null,
+      latest_activity_summary: latestMeaningfulActivity?.summary || null,
+      recent_document_names: recentDocuments.slice(0, 3).map((d: any) => d.name),
+      recent_email_subjects: recentEmails.slice(0, 3).map((e: any) => e.subject),
+    };
 
-Rules:
-- Only include facts supported by claim notes, claim activity, or documents.
-- Prefer the most recent relevant developments.
-- Do not invent progress.
-- Do not mention internal strategy, litigation posture, or internal disagreements unless explicitly requested.
+    // ── 4. Build prompts ─────────────────────────────────────────────────
+    const system = `You are Darwin Copilot for a public adjusting firm.
+Your job is to draft a client claim update email based only on actual claim activity, notes, communications, emails, and documents.
+
+CRITICAL RULES:
+- Do not write a generic status update.
+- The email must include at least 2 specific factual details from the provided data when such details exist.
+- Specific factual details include:
+  - carrier name
+  - claim number
+  - recent communication date
+  - inspection status
+  - payment/check status
+  - recent document received
+  - follow-up action taken
+  - pending item
+  - next confirmed step
+- If specific facts exist and you fail to mention them, your answer is wrong.
+- Do not invent facts.
+- Do not mention internal strategy, internal disagreements, or unclear speculation.
 - Write clearly in plain English for a client.
 - Be reassuring but do not overpromise.
-- Focus on:
-  1. what happened recently
-  2. current status
-  3. what we are doing next
-  4. what the client should expect
-If recent notes are vague, say that the claim remains under review and state the next confirmed action.
+- If there has been little movement, say exactly what is still pending and what follow-up is being done.
 
 EXTERNAL CONTENT WRITING RULES:
-1. AUTHORSHIP: Never refer to Darwin, AI, or any automated system. Write as if authored by the claims team.
-2. PLAIN TEXT: Use clean professional prose with paragraph formatting. No bullet points, emoji, markdown, or special symbols.
-3. TONE: Warm, professional, reassuring language for policyholder communication.
-4. ADDRESS: Address the client as "${firstName}".`.trim();
+1. Never refer to Darwin, AI, or any automated system.
+2. Use clean professional prose only.
+3. No bullet points, markdown, emojis, or special formatting.
+4. Address the client naturally as "${firstName}".`.trim();
 
     const user = `Draft a client claim update email using the information below.
+
+FACT HINTS
+${JSON.stringify(factHints, null, 2)}
 
 CLAIM SUMMARY
 ${JSON.stringify(claimSummary, null, 2)}
@@ -177,7 +241,7 @@ ${JSON.stringify(latestMeaningfulActivity, null, 2)}
 RECENT NOTES
 ${JSON.stringify(recentNotes, null, 2)}
 
-RECENT ACTIVITY (communications diary and events)
+RECENT ACTIVITY
 ${JSON.stringify(recentActivity, null, 2)}
 
 RECENT EMAILS
@@ -186,27 +250,26 @@ ${JSON.stringify(recentEmails, null, 2)}
 RECENT DOCUMENTS
 ${JSON.stringify(recentDocuments, null, 2)}
 
-IMPORTANT:
-Before drafting, determine:
-- the most important recent developments
-- the current claim status
-- the next confirmed step
-- any pending items
-- any facts that should not be included because they are internal-only or unclear
+Before writing the email, identify for yourself:
+1. the 2 to 4 most important concrete claim facts
+2. the current status
+3. the next confirmed step
+4. what is still pending
 
-Then draft the email.
+Then draft the email using those concrete facts.
 
-Output requirements:
-- return only the email body
-- no markdown
-- sound human and professional
+REQUIREMENTS:
+- Output only the email body
+- No subject line
+- No markdown
 - 2 to 5 short paragraphs
-- include only concrete updates supported by the data
-- if there is little meaningful movement, say so professionally and explain what is pending
-- end with a warm closing such as "Regards," or "Sincerely,"
-- do NOT include any team name or signature line after the closing
-- do NOT include a subject line — output only the email body`.trim();
+- Include at least 2 concrete claim-specific details if they exist in the data
+- Prefer concrete facts over general reassurance
+- If there is a recent communication, payment issue, check issue, document upload, inspection, or follow-up, mention it
+- End with a warm closing only
+- Do NOT include any team name or signature line after the closing`.trim();
 
+    // ── 5. Call AI ───────────────────────────────────────────────────────
     const config = getModelForTask("client_update");
     const result = await callOpenAIText({
       system,
@@ -217,7 +280,40 @@ Output requirements:
       maxOutputTokens: 1200,
     });
 
-    const emailBody = (result.text || "").trim();
+    let emailBody = (result.text || "").trim();
+
+    // ── 6. Quality gate: retry if too generic ────────────────────────────
+    if (
+      isGenericClientUpdateDraft(emailBody, {
+        claimNumber: claimSummary.claim_number,
+        carrier: claimSummary.insurance_company,
+        recentDocuments,
+        recentActivity,
+      })
+    ) {
+      const retryUser = `${user}\n\nIMPORTANT: Your first draft was too generic.
+Rewrite it and include actual claim-specific facts from the provided data.
+You must mention at least 2 concrete details such as:
+- carrier name
+- specific recent communication
+- check/payment issue
+- document received
+- follow-up action
+- pending status
+Do not write a vague update.`;
+
+      const retry = await callOpenAIText({
+        system,
+        user: retryUser,
+        model: config.model,
+        reasoningEffort: "medium",
+        temperature: 0.3,
+        maxOutputTokens: 1200,
+      });
+
+      emailBody = (retry.text || "").trim();
+    }
+
     if (!emailBody) {
       return new Response(JSON.stringify({ error: "Empty draft returned" }), { status: 502, headers: jsonHeaders });
     }
@@ -231,6 +327,7 @@ Output requirements:
           recentEmailsCount: recentEmails.length,
           recentDocumentsCount: recentDocuments.length,
           latestMeaningfulActivity,
+          factHints,
         },
       }),
       { headers: jsonHeaders }
