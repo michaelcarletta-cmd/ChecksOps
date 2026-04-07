@@ -44,6 +44,7 @@ interface CrudDropdownProps {
 export const CrudDropdown = ({
   table,
   labelField,
+  onLabelChange,
   value,
   onValueChange,
   placeholder,
