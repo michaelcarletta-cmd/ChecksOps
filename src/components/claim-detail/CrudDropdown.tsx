@@ -176,7 +176,11 @@ export const CrudDropdown = ({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center gap-1.5">
-        <Select value={value} onValueChange={onValueChange}>
+        <Select value={value} onValueChange={(v) => {
+            onValueChange(v);
+            const found = items.find(i => i.id === v);
+            if (found && onLabelChange) onLabelChange(found.label);
+          }}>
           <SelectTrigger className="flex-1">
             <SelectValue placeholder={placeholder} />
           </SelectTrigger>
