@@ -52,6 +52,15 @@ interface ExtractedReceipt {
   needs_review: boolean;
 }
 
+interface EditableReceipt extends ExtractedReceipt {
+  editVendor: string;
+  editDate: string;
+  editTotal: string;
+  editCategory: string;
+  included: boolean;
+  duplicateWarning: string | null;
+}
+
 interface ExistingExpense {
   vendor_name: string | null;
   expense_date: string;
@@ -78,30 +87,20 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
   const [open, setOpen] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [extracted, setExtracted] = useState<ExtractedReceipt | null>(null);
+  const [receipts, setReceipts] = useState<EditableReceipt[]>([]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
-  const [editVendor, setEditVendor] = useState("");
-  const [editDate, setEditDate] = useState("");
-  const [editTotal, setEditTotal] = useState("");
-  const [editCategory, setEditCategory] = useState("other");
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [selectedPayeeId, setSelectedPayeeId] = useState("");
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const resetState = () => {
-    setExtracted(null);
+    setReceipts([]);
     setPreviewUrl(null);
     setReceiptFile(null);
     setExtracting(false);
     setSaving(false);
-    setDuplicateWarning(null);
-    setEditVendor("");
-    setEditDate("");
-    setEditTotal("");
-    setEditCategory("other");
     setSelectedCategoryId("");
     setSelectedPayeeId("");
     setSelectedPaymentMethodId("");
@@ -143,24 +142,24 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
       const result = response.data;
       if (!result.success) throw new Error(result.error || 'Extraction failed');
 
-      const data = result.data as ExtractedReceipt;
-      setExtracted(data);
-      setEditVendor(data.vendor_name || "");
-      setEditDate(data.date || format(new Date(), "yyyy-MM-dd"));
-      setEditTotal(data.total != null ? data.total.toFixed(2) : "");
-      setEditCategory(data.suggested_category || "other");
+      const rawReceipts: ExtractedReceipt[] = result.data?.receipts || [result.data];
+      const editableReceipts: EditableReceipt[] = rawReceipts.map((r: ExtractedReceipt) => ({
+        ...r,
+        editVendor: r.vendor_name || "",
+        editDate: r.date || format(new Date(), "yyyy-MM-dd"),
+        editTotal: r.total != null ? r.total.toFixed(2) : "",
+        editCategory: r.suggested_category || "other",
+        included: true,
+        duplicateWarning: checkForDuplicate(r.vendor_name, r.date, r.total),
+      }));
 
-      // Check for duplicate
-      const dupMsg = checkForDuplicate(data.vendor_name, data.date, data.total);
-      setDuplicateWarning(dupMsg);
+      setReceipts(editableReceipts);
 
-      if (dupMsg) {
-        toast.warning("Possible duplicate receipt detected");
-      } else if (data.needs_review) {
-        toast.warning("Total unclear — please verify before saving");
-      } else {
-        toast.success("Receipt extracted successfully");
-      }
+      const dupeCount = editableReceipts.filter(r => r.duplicateWarning).length;
+      const reviewCount = editableReceipts.filter(r => r.needs_review).length;
+      if (dupeCount > 0) toast.warning(`${dupeCount} possible duplicate(s) detected`);
+      else if (reviewCount > 0) toast.warning(`${reviewCount} receipt(s) need review`);
+      else toast.success(`Extracted ${editableReceipts.length} receipt(s) successfully`);
     } catch (err: any) {
       console.error("Receipt extraction error:", err);
       toast.error("Failed to extract receipt: " + (err.message || "Unknown error"));
@@ -169,30 +168,41 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
     }
   };
 
-  const totalValue = parseFloat(editTotal);
-  const canSave = editTotal !== "" && !isNaN(totalValue) && totalValue > 0;
+  const updateReceipt = (idx: number, updates: Partial<EditableReceipt>) => {
+    setReceipts(prev => prev.map((r, i) => i === idx ? { ...r, ...updates } : r));
+  };
+
+  const includedReceipts = receipts.filter(r => r.included);
+  const canSave = includedReceipts.length > 0 && includedReceipts.every(r => {
+    const v = parseFloat(r.editTotal);
+    return r.editTotal !== "" && !isNaN(v) && v > 0;
+  });
+  const grandTotal = includedReceipts.reduce((sum, r) => sum + (parseFloat(r.editTotal) || 0), 0);
 
   const handleSaveExpense = async () => {
     if (!canSave) {
-      toast.error("Please enter a valid total amount");
+      toast.error("Please enter a valid total for all included receipts");
       return;
     }
 
-    // Re-check duplicate with edited values
-    const dupMsg = checkForDuplicate(editVendor, editDate, totalValue);
-    if (dupMsg) {
-      const confirmed = window.confirm(`${dupMsg}\n\nDo you still want to add this expense?`);
-      if (!confirmed) return;
+    const dupeReceipts = includedReceipts.filter(r => {
+      const v = parseFloat(r.editTotal);
+      return checkForDuplicate(r.editVendor, r.editDate, v);
+    });
+    if (dupeReceipts.length > 0) {
+      const confirmed = window.confirm(
+        `${dupeReceipts.length} receipt(s) look like duplicates. Add them anyway?`
+      );
+      if (!confirmed) return;  
     }
 
     setSaving(true);
     try {
       const { data: userData } = await supabase.auth.getUser();
-      const expenseDate = editDate || format(new Date(), "yyyy-MM-dd");
 
+      // Upload the source file once
       let receiptFilePath: string | null = null;
       if (receiptFile) {
-        // Check for duplicate file (same name + size)
         const { data: existingFiles } = await supabase
           .from('claim_files')
           .select('id, file_name, file_path, folder_id')
@@ -202,7 +212,6 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
 
         if (existingFiles && existingFiles.length > 0) {
           receiptFilePath = existingFiles[0].file_path;
-          toast.info("File already exists in claim — linking existing copy");
         } else {
           const fileExt = receiptFile.name.split('.').pop();
           const fileName = `${claimId}/receipts/${Date.now()}.${fileExt}`;
@@ -212,7 +221,7 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
           if (!uploadError) {
             receiptFilePath = fileName;
 
-            const receiptDate = editDate ? new Date(editDate) : new Date();
+            const receiptDate = includedReceipts[0]?.editDate ? new Date(includedReceipts[0].editDate) : new Date();
             const monthLabel = receiptDate.toLocaleString('en-US', { month: 'long', year: 'numeric' });
             const subfolderName = `Receipts - ${monthLabel}`;
 
@@ -249,24 +258,30 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
         }
       }
 
-      const catInfo = EXPENSE_CATEGORIES.find(c => c.value === editCategory);
-      const { error } = await supabase.from("claim_loss_of_use_expenses").insert({
-        claim_id: claimId,
-        expense_category: editCategory,
-        expense_date: expenseDate,
-        vendor_name: editVendor || null,
-        description: editVendor
-          ? `${catInfo?.label || editCategory} — ${editVendor}`
-          : catInfo?.label || editCategory,
-        amount: totalValue,
-        receipt_file_path: receiptFilePath,
-        receipt_file_name: receiptFile?.name || null,
-        created_by: userData.user?.id,
-      } as any);
+      // Insert all included receipts
+      const rows = includedReceipts.map(r => {
+        const catInfo = EXPENSE_CATEGORIES.find(c => c.value === r.editCategory);
+        const total = parseFloat(r.editTotal);
+        return {
+          claim_id: claimId,
+          expense_category: r.editCategory,
+          expense_date: r.editDate || format(new Date(), "yyyy-MM-dd"),
+          vendor_name: r.editVendor || null,
+          description: r.editVendor
+            ? `${catInfo?.label || r.editCategory} — ${r.editVendor}`
+            : catInfo?.label || r.editCategory,
+          amount: total,
+          receipt_file_path: receiptFilePath,
+          receipt_file_name: receiptFile?.name || null,
+          created_by: userData.user?.id,
+        };
+      });
+
+      const { error } = await supabase.from("claim_loss_of_use_expenses").insert(rows as any);
 
       if (error) throw error;
 
-      toast.success(`Added $${totalValue.toFixed(2)} expense from ${editVendor || 'receipt'}`);
+      toast.success(`Added ${rows.length} expense(s) totaling $${grandTotal.toFixed(2)}`);
       resetState();
       setOpen(false);
       onExpensesAdded();
@@ -293,7 +308,7 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
           </DialogTitle>
         </DialogHeader>
 
-        {!extracted && !extracting && (
+        {receipts.length === 0 && !extracting && (
           <div className="space-y-4">
             <div
               className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
@@ -323,129 +338,147 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
           </div>
         )}
 
-        {extracted && (
-          <div className="space-y-4">
-            {/* Duplicate warning */}
-            {duplicateWarning && (
-              <div className="flex items-center gap-2 bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-300 rounded-lg p-3 text-sm">
-                <Copy className="h-4 w-4 flex-shrink-0" />
-                <span>{duplicateWarning}</span>
-              </div>
-            )}
-
-            {/* Needs Review banner */}
-            {extracted.needs_review && !duplicateWarning && (
-              <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 rounded-lg p-3 text-sm">
-                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                <span>Total unclear or ambiguous — please verify the amount below before saving.</span>
-              </div>
-            )}
-
-            {!extracted.needs_review && !duplicateWarning && extracted.total != null && (
-              <div className="flex items-center gap-2 bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-300 rounded-lg p-3 text-sm">
-                <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
-                <span>Extracted successfully. Review and confirm.</span>
-              </div>
-            )}
-
+        {receipts.length > 0 && (
+          <div className="space-y-3">
             {receiptFile && (
               <div className="text-xs text-muted-foreground bg-muted/50 rounded px-2.5 py-1.5 truncate">
                 📄 Document: <span className="font-medium text-foreground">{receiptFile.name}</span>
+                {" · "}{receipts.length} receipt(s) found
               </div>
             )}
 
-            {previewUrl && (
-              <div className="flex justify-center">
-                <img src={previewUrl} alt="Receipt" className="max-h-40 rounded-lg border" />
-              </div>
-            )}
+            <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-1">
+              {receipts.map((r, idx) => {
+                const totalVal = parseFloat(r.editTotal);
+                const isValid = r.editTotal !== "" && !isNaN(totalVal) && totalVal > 0;
+                return (
+                  <div
+                    key={idx}
+                    className={`border rounded-lg p-3 space-y-2 transition-opacity ${r.included ? '' : 'opacity-40'}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={r.included}
+                          onChange={(e) => updateReceipt(idx, { included: e.target.checked })}
+                          className="rounded"
+                        />
+                        Receipt {idx + 1}
+                        {r.editVendor && <span className="text-muted-foreground font-normal">— {r.editVendor}</span>}
+                      </label>
+                      {isValid && (
+                        <Badge variant="secondary" className="font-mono">${totalVal.toFixed(2)}</Badge>
+                      )}
+                    </div>
 
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label>Vendor Name</Label>
-                <Input value={editVendor} onChange={(e) => setEditVendor(e.target.value)} placeholder="Store name" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Date</Label>
-                  <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Total Charged *</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={editTotal}
-                    onChange={(e) => setEditTotal(e.target.value)}
-                    className={extracted.needs_review && !editTotal ? "border-amber-400" : ""}
+                    {r.duplicateWarning && (
+                      <div className="flex items-center gap-1.5 text-xs text-destructive">
+                        <Copy className="h-3 w-3" /> {r.duplicateWarning}
+                      </div>
+                    )}
+                    {r.needs_review && !r.duplicateWarning && (
+                      <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                        <AlertTriangle className="h-3 w-3" /> Verify total
+                      </div>
+                    )}
+
+                    {r.included && (
+                      <div className="space-y-2">
+                        <Input
+                          value={r.editVendor}
+                          onChange={(e) => updateReceipt(idx, { editVendor: e.target.value })}
+                          placeholder="Vendor name"
+                          className="h-8 text-sm"
+                        />
+                        <div className="grid grid-cols-3 gap-2">
+                          <Input
+                            type="date"
+                            value={r.editDate}
+                            onChange={(e) => updateReceipt(idx, { editDate: e.target.value })}
+                            className="h-8 text-sm"
+                          />
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="Total"
+                            value={r.editTotal}
+                            onChange={(e) => updateReceipt(idx, { editTotal: e.target.value })}
+                            className={`h-8 text-sm ${r.needs_review && !r.editTotal ? "border-amber-400" : ""}`}
+                          />
+                          <Select value={r.editCategory} onValueChange={(v) => updateReceipt(idx, { editCategory: v })}>
+                            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {EXPENSE_CATEGORIES.map(cat => (
+                                <SelectItem key={cat.value} value={cat.value}>{cat.icon} {cat.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Shared fields */}
+            <div className="space-y-2 border-t pt-3">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Custom Category</Label>
+                  <CrudDropdown
+                    table="expenses_categories"
+                    labelField="name"
+                    value={selectedCategoryId}
+                    onValueChange={setSelectedCategoryId}
+                    placeholder="Category…"
+                    emptyText="No categories yet"
+                    dialogTitle="Category"
                   />
                 </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Category</Label>
-                <Select value={editCategory} onValueChange={setEditCategory}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {EXPENSE_CATEGORIES.map(cat => (
-                      <SelectItem key={cat.value} value={cat.value}>{cat.icon} {cat.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Custom Category</Label>
-                <CrudDropdown
-                  table="expenses_categories"
-                  labelField="name"
-                  value={selectedCategoryId}
-                  onValueChange={setSelectedCategoryId}
-                  placeholder="Select or add category…"
-                  emptyText="No categories yet"
-                  dialogTitle="Category"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Paid To</Label>
-                <CrudDropdown
-                  table="expenses_payees"
-                  labelField="name"
-                  value={selectedPayeeId}
-                  onValueChange={setSelectedPayeeId}
-                  placeholder="Select or add payee…"
-                  emptyText="No payees yet"
-                  dialogTitle="Payee"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Payment Method</Label>
-                <CrudDropdown
-                  table="payment_methods"
-                  labelField="label"
-                  value={selectedPaymentMethodId}
-                  onValueChange={setSelectedPaymentMethodId}
-                  placeholder="Select or add method…"
-                  emptyText="No payment methods yet"
-                  dialogTitle="Payment Method"
-                  transformRow={(row: any) => ({
-                    id: row.id,
-                    label: row.label,
-                    sublabel: row.method_type,
-                  })}
-                  buildCustomInsert={(fields, userId) => ({
-                    label: fields.label,
-                    method_type: fields.method_type,
-                    card_last_four: fields.card_last_four || null,
-                    created_by: userId,
-                  })}
-                  renderAddForm={(props) => (
-                    <PaymentMethodForm
-                      onSave={props.onSave}
-                      onCancel={props.onCancel}
-                      saving={props.saving}
-                    />
-                  )}
-                />
+                <div className="space-y-1">
+                  <Label className="text-xs">Paid To</Label>
+                  <CrudDropdown
+                    table="expenses_payees"
+                    labelField="name"
+                    value={selectedPayeeId}
+                    onValueChange={setSelectedPayeeId}
+                    placeholder="Payee…"
+                    emptyText="No payees yet"
+                    dialogTitle="Payee"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Payment Method</Label>
+                  <CrudDropdown
+                    table="payment_methods"
+                    labelField="label"
+                    value={selectedPaymentMethodId}
+                    onValueChange={setSelectedPaymentMethodId}
+                    placeholder="Method…"
+                    emptyText="No methods yet"
+                    dialogTitle="Payment Method"
+                    transformRow={(row: any) => ({
+                      id: row.id,
+                      label: row.label,
+                      sublabel: row.method_type,
+                    })}
+                    buildCustomInsert={(fields, userId) => ({
+                      label: fields.label,
+                      method_type: fields.method_type,
+                      card_last_four: fields.card_last_four || null,
+                      created_by: userId,
+                    })}
+                    renderAddForm={(props) => (
+                      <PaymentMethodForm
+                        onSave={props.onSave}
+                        onCancel={props.onCancel}
+                        saving={props.saving}
+                      />
+                    )}
+                  />
+                </div>
               </div>
             </div>
 
@@ -454,11 +487,10 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
               <Button
                 className="flex-1"
                 onClick={handleSaveExpense}
-                disabled={saving || !canSave}
-                variant={duplicateWarning ? "destructive" : "default"}
+                disabled={saving || !canSave || includedReceipts.length === 0}
               >
                 {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-                {duplicateWarning ? "Add Anyway" : `Add Expense — $${canSave ? totalValue.toFixed(2) : '0.00'}`}
+                {`Add ${includedReceipts.length} Expense(s) — $${canSave ? grandTotal.toFixed(2) : '0.00'}`}
               </Button>
             </div>
           </div>
