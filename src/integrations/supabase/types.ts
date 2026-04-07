@@ -9807,6 +9807,54 @@ export type Database = {
           },
         ]
       }
+      expenses_categories: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      expenses_payees: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       extracted_document_data: {
         Row: {
           acv_total: number | null
@@ -11127,6 +11175,36 @@ export type Database = {
           created_at?: string
           id?: string
           payee?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      payment_methods: {
+        Row: {
+          card_last_four: string | null
+          created_at: string
+          created_by: string
+          id: string
+          label: string
+          method_type: string
+          updated_at: string
+        }
+        Insert: {
+          card_last_four?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          label: string
+          method_type?: string
+          updated_at?: string
+        }
+        Update: {
+          card_last_four?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          label?: string
+          method_type?: string
           updated_at?: string
         }
         Relationships: []
