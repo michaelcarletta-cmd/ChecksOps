@@ -383,6 +383,15 @@ Before writing the email, identify for yourself:
 
 Then draft the email using those concrete facts.
 
+IMPORTANT:
+If the available data is limited or does not show clear recent activity:
+- You MUST still draft a client update
+- Explain that the claim remains under review
+- State what is currently pending
+- Provide a reasonable next step based on the claim status
+Do NOT ask for more information.
+Do NOT refuse the task.
+
 REQUIREMENTS:
 - Output only the email body
 - No subject line
