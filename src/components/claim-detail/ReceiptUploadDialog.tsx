@@ -9,6 +9,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Camera, FileUp, Loader2, Receipt, AlertTriangle, CheckCircle2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { CrudDropdown } from "./CrudDropdown";
+import { PaymentMethodForm } from "./PaymentMethodForm";
 
 interface ExtractedReceipt {
   vendor_name: string | null;
