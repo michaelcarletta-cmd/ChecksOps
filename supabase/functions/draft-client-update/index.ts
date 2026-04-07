@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
         .limit(15),
       supabase
         .from("emails")
-        .select("subject, body, recipient_type, recipient_name, sent_at, send_status")
+        .select("subject, body, recipient_type, recipient_name, sent_at")
         .eq("claim_id", claimId)
         .order("sent_at", { ascending: false })
         .limit(10),
@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
         .limit(10),
       supabase
         .from("claim_events")
-        .select("event_type, occurred_at, summary, actor, doc_type")
+        .select("event_type, occurred_at, summary, actor")
         .eq("claim_id", claimId)
         .order("occurred_at", { ascending: false })
         .limit(15),
@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Claim not found" }), { status: 404, headers: jsonHeaders });
     }
 
-    // ── 2. Build structured data payloads ────────────────────────────────
+    // ── 2. Build structured context ──────────────────────────────────────
     const claimSummary = {
       claim_number: claim.claim_number || "N/A",
       policyholder_name: claim.policyholder_name || "Policyholder",
@@ -119,14 +119,34 @@ Deno.serve(async (req) => {
       date: f.uploaded_at,
     }));
 
-    // ── 3. Phase 1: Extract structured facts ─────────────────────────────
-    const extractionSystem = `You are extracting claim-update facts for a client email.
-Return only structured JSON.
-Only include information that is appropriate to communicate to the client.
-Ignore duplicate notes, internal-only commentary, weak speculation, and irrelevant logs.
-Prefer recent and meaningful events.`.trim();
+    const firstName = (claim.policyholder_name || "").split(/\s+/)[0] || "there";
 
-    const extractionUser = `Review the claim information below and extract the best possible client update.
+    // ── 3. Single-pass: extract facts + draft in one call ────────────────
+    const system = `You are Darwin Copilot for a public adjusting firm.
+Your job is to draft client update emails based only on actual claim activity, notes, documents, and recent events.
+You must first identify the most important update-worthy facts and ignore internal noise.
+
+Rules:
+- Only include facts supported by claim notes, claim activity, or documents.
+- Prefer the most recent relevant developments.
+- Do not invent progress.
+- Do not mention internal strategy, litigation posture, or internal disagreements unless explicitly requested.
+- Write clearly in plain English for a client.
+- Be reassuring but do not overpromise.
+- Focus on:
+  1. what happened recently
+  2. current status
+  3. what we are doing next
+  4. what the client should expect
+If recent notes are vague, say that the claim remains under review and state the next confirmed action.
+
+EXTERNAL CONTENT WRITING RULES:
+1. AUTHORSHIP: Never refer to Darwin, AI, or any automated system. Write as if authored by the claims team.
+2. PLAIN TEXT: Use clean professional prose with paragraph formatting. No bullet points, emoji, markdown, or special symbols.
+3. TONE: Warm, professional, reassuring language for policyholder communication.
+4. ADDRESS: Address the client as "${firstName}".`.trim();
+
+    const user = `Draft a client claim update email using the information below.
 
 CLAIM SUMMARY
 ${JSON.stringify(claimSummary, null, 2)}
@@ -134,7 +154,7 @@ ${JSON.stringify(claimSummary, null, 2)}
 RECENT NOTES
 ${JSON.stringify(recentNotes, null, 2)}
 
-RECENT ACTIVITY
+RECENT ACTIVITY (communications diary and events)
 ${JSON.stringify(recentActivity, null, 2)}
 
 RECENT EMAILS
@@ -143,114 +163,44 @@ ${JSON.stringify(recentEmails, null, 2)}
 RECENT DOCUMENTS
 ${JSON.stringify(recentDocuments, null, 2)}
 
-Return:
-- recent_developments
-- current_status
-- pending_items
-- next_step
-- client_action_needed
-- do_not_mention
-- confidence_note`.trim();
+IMPORTANT:
+Before drafting, determine:
+- the most important recent developments
+- the current claim status
+- the next confirmed step
+- any pending items
+- any facts that should not be included because they are internal-only or unclear
 
-    const jsonSchema = {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        recent_developments: { type: "array", items: { type: "string" } },
-        current_status: { type: "string" },
-        pending_items: { type: "array", items: { type: "string" } },
-        next_step: { type: "string" },
-        client_action_needed: { type: "string" },
-        do_not_mention: { type: "array", items: { type: "string" } },
-        confidence_note: { type: "string" },
-      },
-      required: [
-        "recent_developments", "current_status", "pending_items",
-        "next_step", "client_action_needed", "do_not_mention", "confidence_note",
-      ],
-    };
+Then draft the email.
 
-    const extractConfig = getModelForTask("copilot_reasoning");
-    const extractionResult = await callOpenAIText({
-      system: extractionSystem,
-      user: extractionUser,
-      model: extractConfig.model,
-      reasoningEffort: "high",
-      temperature: 0.2,
-      maxOutputTokens: 1500,
-      jsonSchema,
-    });
-
-    let extractedUpdate: Record<string, unknown>;
-    try {
-      extractedUpdate = JSON.parse(extractionResult.text);
-    } catch {
-      console.error("Extraction JSON parse failed:", extractionResult.text?.slice(0, 500));
-      // Fallback: pass raw data directly to drafting
-      extractedUpdate = {
-        recent_developments: recentNotes.slice(0, 3).map((n: any) => `[${n.date}] ${n.content}`),
-        current_status: claimSummary.status,
-        pending_items: [],
-        next_step: "We will continue working on your claim and keep you updated.",
-        client_action_needed: "No action needed at this time.",
-        do_not_mention: [],
-        confidence_note: "Limited data available.",
-      };
-    }
-
-    // ── 4. Phase 2: Draft from extracted facts ───────────────────────────
-    const firstName = (claim.policyholder_name || "").split(/\s+/)[0] || "there";
-
-    const draftingSystem = `You draft professional client update emails for a public adjusting firm.
-Use only the provided structured update facts.
-Do not add facts.
-Do not mention items listed under do_not_mention.
-Keep the tone clear, calm, and confident.
-
-EXTERNAL CONTENT WRITING RULES:
-1. AUTHORSHIP: Never refer to Darwin, AI, or any automated system. Write as if authored by the claims team.
-2. PLAIN TEXT: Use clean professional prose with paragraph formatting. No bullet points, emoji, markdown, or special symbols.
-3. TONE: Warm, professional, reassuring language for policyholder communication.
-4. ADDRESS: Address the client as "${firstName}".`.trim();
-
-    const draftingUser = `Draft a client update email from this structured update data:
-
-${JSON.stringify(extractedUpdate, null, 2)}
-
-Requirements:
+Output requirements:
 - return only the email body
 - no markdown
-- no bullet points
-- professional but human
+- sound human and professional
 - 2 to 5 short paragraphs
-- explain the current status and next step clearly
 - include only concrete updates supported by the data
 - if there is little meaningful movement, say so professionally and explain what is pending
-- if no client action is needed, say we will continue to keep them updated
 - end with a warm closing such as "Regards," or "Sincerely,"
 - do NOT include any team name or signature line after the closing
-- do NOT include a subject line`.trim();
+- do NOT include a subject line — output only the email body`.trim();
 
-    const draftConfig = getModelForTask("client_update");
-    const draftResult = await callOpenAIText({
-      system: draftingSystem,
-      user: draftingUser,
-      model: draftConfig.model,
-      reasoningEffort: "medium",
-      temperature: 0.4,
-      maxOutputTokens: 1200,
+    const config = getModelForTask("copilot_reasoning");
+    const result = await callOpenAIText({
+      system,
+      user,
+      model: config.model,
+      reasoningEffort: "high",
+      temperature: 0.3,
+      maxOutputTokens: 1500,
     });
 
-    const emailBody = (draftResult.text || "").trim();
+    const emailBody = (result.text || "").trim();
     if (!emailBody) {
       return new Response(JSON.stringify({ error: "Empty draft returned" }), { status: 502, headers: jsonHeaders });
     }
 
     return new Response(
-      JSON.stringify({
-        body: emailBody,
-        extractedFacts: extractedUpdate,
-      }),
+      JSON.stringify({ body: emailBody }),
       { headers: jsonHeaders }
     );
   } catch (e) {
