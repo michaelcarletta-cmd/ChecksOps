@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
     const [claimRes, updatesRes, emailsRes, diaryRes, eventsRes, filesRes] = await Promise.all([
       supabase
         .from("claims")
-        .select("id, claim_number, policyholder_name, status, insurance_company, loss_type, loss_date, policyholder_email, property_address")
+        .select("id, claim_number, policyholder_name, status, insurance_company, loss_type, loss_date, policyholder_email, policyholder_address")
         .eq("id", claimId)
         .single(),
       supabase
