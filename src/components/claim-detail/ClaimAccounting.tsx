@@ -1651,6 +1651,9 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
 
   const resetForm = () => {
     setEditingExpense(null);
+    setSelectedCategoryId("");
+    setSelectedPayeeId("");
+    setSelectedPaymentMethodId("");
     setFormData({
       expense_date: "",
       description: "",
