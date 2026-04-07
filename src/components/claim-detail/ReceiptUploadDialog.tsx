@@ -13,6 +13,7 @@ import { format } from "date-fns";
 import { CrudDropdown } from "./CrudDropdown";
 import { PaymentMethodForm } from "./PaymentMethodForm";
 import * as pdfjs from "pdfjs-dist";
+import { Progress } from "@/components/ui/progress";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.mjs",
@@ -23,6 +24,7 @@ const PDF_MIME_TYPE = "application/pdf";
 
 const PDF_PAGE_RENDER_SCALE = 1.1;
 const PDF_PAGE_MAX_DIMENSION = 1400;
+const RECEIPT_EXTRACTION_TIMEOUT_MS = 45000;
 
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -69,31 +71,14 @@ interface ReceiptExtractionPayload {
   mimeType: string;
 }
 
-const buildReceiptExtractionPayloads = async (file: File): Promise<ReceiptExtractionPayload[]> => {
-  const isPdf = file.type === PDF_MIME_TYPE || file.name.toLowerCase().endsWith(".pdf");
+interface ReceiptExtractionResponse {
+  success?: boolean;
+  error?: string;
+  data?: {
+    receipts?: ExtractedReceipt[];
+  } | ExtractedReceipt;
+}
 
-  if (!isPdf) {
-    return [{
-      imageBase64: await fileToBase64(file),
-      mimeType: file.type || "image/jpeg",
-    }];
-  }
-
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-  const payloads: ReceiptExtractionPayload[] = [];
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const imageBase64 = await renderPdfPageToImageBase64(page);
-    payloads.push({
-      pageImages: [imageBase64],
-      mimeType: "image/jpeg",
-    });
-  }
-
-  return payloads;
-};
 interface ExtractedReceipt {
   vendor_name: string | null;
   date: string | null;
@@ -117,6 +102,14 @@ interface ExistingExpense {
   amount: number;
 }
 
+interface ExtractionProgressState {
+  currentPage: number;
+  totalPages: number;
+  phase: "preparing" | "analyzing";
+  receiptsFound: number;
+  isPdf: boolean;
+}
+
 const EXPENSE_CATEGORIES = [
   { value: "lodging", label: "Lodging (Hotel/Rental)", icon: "🏨" },
   { value: "meals", label: "Meals & Food", icon: "🍽️" },
@@ -136,6 +129,7 @@ interface ReceiptUploadDialogProps {
 export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses = [] }: ReceiptUploadDialogProps) => {
   const [open, setOpen] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [extractionProgress, setExtractionProgress] = useState<ExtractionProgressState | null>(null);
   const [saving, setSaving] = useState(false);
   const [receipts, setReceipts] = useState<EditableReceipt[]>([]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -146,10 +140,14 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const resetState = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
     setReceipts([]);
     setPreviewUrl(null);
     setReceiptFile(null);
     setExtracting(false);
+    setExtractionProgress(null);
     setSaving(false);
     setSelectedCategoryId("");
     setSelectedPayeeId("");
@@ -174,34 +172,141 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+
     setReceiptFile(file);
     setPreviewUrl(URL.createObjectURL(file));
     await extractReceipt(file);
   };
 
+  const invokeReceiptExtraction = async (
+    payload: ReceiptExtractionPayload,
+    timeoutMessage: string,
+  ): Promise<Awaited<ReturnType<typeof supabase.functions.invoke>>> => {
+    let timeoutId: number | undefined;
+
+    try {
+      return await Promise.race([
+        supabase.functions.invoke("extract-receipt", { body: payload }),
+        new Promise<never>((_, reject) => {
+          timeoutId = window.setTimeout(() => reject(new Error(timeoutMessage)), RECEIPT_EXTRACTION_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+    }
+  };
+
+  const normalizeExtractedReceipts = (result: ReceiptExtractionResponse | null | undefined): ExtractedReceipt[] => {
+    if (!result?.data) return [];
+
+    if (typeof result.data === "object" && Array.isArray((result.data as { receipts?: ExtractedReceipt[] }).receipts)) {
+      return (result.data as { receipts?: ExtractedReceipt[] }).receipts ?? [];
+    }
+
+    return [result.data as ExtractedReceipt];
+  };
+
   const extractReceipt = async (file: File) => {
     setExtracting(true);
+    setExtractionProgress(null);
+
     try {
-      const payloads = await buildReceiptExtractionPayloads(file);
       const extractedReceipts: ExtractedReceipt[] = [];
 
-      for (let i = 0; i < payloads.length; i++) {
-        const response = await supabase.functions.invoke("extract-receipt", {
-          body: payloads[i],
+      const isPdf = file.type === PDF_MIME_TYPE || file.name.toLowerCase().endsWith(".pdf");
+
+      if (!isPdf) {
+        setExtractionProgress({
+          currentPage: 1,
+          totalPages: 1,
+          phase: "analyzing",
+          receiptsFound: 0,
+          isPdf: false,
         });
+
+        const response = await invokeReceiptExtraction(
+          {
+            imageBase64: await fileToBase64(file),
+            mimeType: file.type || "image/jpeg",
+          },
+          "Receipt analysis timed out. Please try the image again.",
+        );
 
         if (response.error) {
           const message = await getFunctionErrorMessage(response.error, "Failed to extract receipt");
-          throw new Error(payloads.length > 1 ? `Failed on page ${i + 1} of ${payloads.length}: ${message}` : message);
+          throw new Error(message);
         }
 
-        const result = response.data;
+        const result = response.data as ReceiptExtractionResponse | null;
         if (!result.success) {
           throw new Error(result.error || "Extraction failed");
         }
 
-        const pageReceipts: ExtractedReceipt[] = result.data?.receipts || (result.data ? [result.data] : []);
-        extractedReceipts.push(...pageReceipts);
+        extractedReceipts.push(...normalizeExtractedReceipts(result));
+      } else {
+        let pdf: Awaited<ReturnType<typeof pdfjs.getDocument>>["promise"] extends Promise<infer T> ? T : never;
+
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+
+          for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+            setExtractionProgress({
+              currentPage: pageNumber,
+              totalPages: pdf.numPages,
+              phase: "preparing",
+              receiptsFound: extractedReceipts.length,
+              isPdf: true,
+            });
+
+            const page = await pdf.getPage(pageNumber);
+            const imageBase64 = await renderPdfPageToImageBase64(page);
+
+            setExtractionProgress({
+              currentPage: pageNumber,
+              totalPages: pdf.numPages,
+              phase: "analyzing",
+              receiptsFound: extractedReceipts.length,
+              isPdf: true,
+            });
+
+            const response = await invokeReceiptExtraction(
+              {
+                pageImages: [imageBase64],
+                mimeType: "image/jpeg",
+              },
+              `Receipt analysis timed out on page ${pageNumber} of ${pdf.numPages}. Try splitting the PDF into smaller sections.`,
+            );
+
+            if (response.error) {
+              const message = await getFunctionErrorMessage(response.error, "Failed to extract receipt");
+              throw new Error(`Failed on page ${pageNumber} of ${pdf.numPages}: ${message}`);
+            }
+
+            const result = response.data as ReceiptExtractionResponse | null;
+            if (!result.success) {
+              throw new Error(result.error || `Extraction failed on page ${pageNumber}`);
+            }
+
+            extractedReceipts.push(...normalizeExtractedReceipts(result));
+
+            setExtractionProgress({
+              currentPage: pageNumber,
+              totalPages: pdf.numPages,
+              phase: "analyzing",
+              receiptsFound: extractedReceipts.length,
+              isPdf: true,
+            });
+          }
+        } finally {
+          await pdf?.destroy?.();
+        }
       }
 
       if (extractedReceipts.length === 0) {
@@ -230,6 +335,7 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
       toast.error("Failed to extract receipt: " + (err.message || "Unknown error"));
     } finally {
       setExtracting(false);
+      setExtractionProgress(null);
     }
   };
 
@@ -243,6 +349,28 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
     return r.editTotal !== "" && !isNaN(v) && v > 0;
   });
   const grandTotal = includedReceipts.reduce((sum, r) => sum + (parseFloat(r.editTotal) || 0), 0);
+  const isPdfPreview = !!receiptFile && (receiptFile.type === PDF_MIME_TYPE || receiptFile.name.toLowerCase().endsWith(".pdf"));
+  const extractionProgressValue = extractionProgress
+    ? Math.max(
+        6,
+        Math.round(
+          (((extractionProgress.currentPage - 1) * 2 + (extractionProgress.phase === "analyzing" ? 2 : 1)) /
+            (Math.max(extractionProgress.totalPages, 1) * 2)) * 100,
+        ),
+      )
+    : 0;
+  const extractionStatusLabel = extractionProgress
+    ? extractionProgress.isPdf
+      ? extractionProgress.phase === "preparing"
+        ? `Preparing page ${extractionProgress.currentPage} of ${extractionProgress.totalPages}…`
+        : `Analyzing page ${extractionProgress.currentPage} of ${extractionProgress.totalPages}…`
+      : "Analyzing image…"
+    : "Analyzing receipt…";
+  const extractionStatusDetail = extractionProgress?.receiptsFound
+    ? `${extractionProgress.receiptsFound} receipt(s) found so far`
+    : extractionProgress?.isPdf
+      ? `${extractionProgress.totalPages} page(s) detected`
+      : "This can take a few seconds";
 
   const handleSaveExpense = async () => {
     if (!canSave) {
@@ -396,9 +524,18 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
         {extracting && (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Analyzing receipt…</p>
-            {previewUrl && (
+            <div className="w-full max-w-xs space-y-2">
+              <p className="text-sm text-center text-muted-foreground">{extractionStatusLabel}</p>
+              <Progress value={extractionProgressValue} />
+              <p className="text-xs text-center text-muted-foreground">{extractionStatusDetail}</p>
+            </div>
+            {previewUrl && !isPdfPreview && (
               <img src={previewUrl} alt="Receipt preview" className="max-h-32 rounded-lg opacity-50 mt-2" />
+            )}
+            {isPdfPreview && receiptFile && (
+              <div className="text-xs text-muted-foreground bg-muted/50 rounded px-2.5 py-1.5 max-w-xs truncate text-center">
+                {receiptFile.name}
+              </div>
             )}
           </div>
         )}
