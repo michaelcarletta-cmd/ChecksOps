@@ -18,6 +18,8 @@ import { ClaimPayments } from "./ClaimPayments";
 import { InvoiceDialog } from "@/components/InvoiceDialog";
 import { EstimateUploadDialog } from "./EstimateUploadDialog";
 import { CheckProcessingCard } from "@/components/claims/CheckProcessingCard";
+import { CrudDropdown } from "./CrudDropdown";
+import { PaymentMethodForm } from "./PaymentMethodForm";
 interface ClaimAccountingProps {
   claim: any;
   userRole: string | null;
@@ -1601,6 +1603,9 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
   const [open, setOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<any>(null);
   const [expenseTab, setExpenseTab] = useState("not_paid");
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
+  const [selectedPayeeId, setSelectedPayeeId] = useState("");
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState("");
   const [formData, setFormData] = useState({
     expense_date: "",
     description: "",
@@ -1646,6 +1651,9 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
 
   const resetForm = () => {
     setEditingExpense(null);
+    setSelectedCategoryId("");
+    setSelectedPayeeId("");
+    setSelectedPaymentMethodId("");
     setFormData({
       expense_date: "",
       description: "",
@@ -1770,17 +1778,16 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
                   </div>
                   <div>
                     <Label>Category</Label>
-                    <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="contractor">Contractor</SelectItem>
-                        <SelectItem value="materials">Materials</SelectItem>
-                        <SelectItem value="inspection">Inspection</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <CrudDropdown
+                      table="expenses_categories"
+                      labelField="name"
+                      value={selectedCategoryId}
+                      onValueChange={setSelectedCategoryId}
+                      onLabelChange={(label) => setFormData(f => ({ ...f, category: label }))}
+                      placeholder="Select or add category…"
+                      emptyText="No categories yet"
+                      dialogTitle="Category"
+                    />
                   </div>
                 </div>
                 <div>
@@ -1802,18 +1809,43 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
                   </div>
                   <div>
                     <Label>Paid To</Label>
-                    <Input
-                      value={formData.paid_to}
-                      onChange={(e) => setFormData({ ...formData, paid_to: e.target.value })}
+                    <CrudDropdown
+                      table="expenses_payees"
+                      labelField="name"
+                      value={selectedPayeeId}
+                      onValueChange={setSelectedPayeeId}
+                      onLabelChange={(label) => setFormData(f => ({ ...f, paid_to: label }))}
+                      placeholder="Select or add payee…"
+                      emptyText="No payees yet"
+                      dialogTitle="Payee"
                     />
                   </div>
                 </div>
                 <div>
                   <Label>Payment Method</Label>
-                  <Input
-                    value={formData.payment_method}
-                    onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-                    placeholder="Check, Credit Card, etc."
+                  <CrudDropdown
+                    table="payment_methods"
+                    labelField="label"
+                    value={selectedPaymentMethodId}
+                    onValueChange={setSelectedPaymentMethodId}
+                    onLabelChange={(label) => setFormData(f => ({ ...f, payment_method: label }))}
+                    placeholder="Select or add method…"
+                    emptyText="No payment methods yet"
+                    dialogTitle="Payment Method"
+                    transformRow={(row: any) => ({
+                      id: row.id,
+                      label: row.label,
+                      sublabel: row.method_type,
+                    })}
+                    buildCustomInsert={(fields, userId) => ({
+                      label: fields.label,
+                      method_type: fields.method_type,
+                      card_last_four: fields.card_last_four || null,
+                      created_by: userId,
+                    })}
+                    renderAddForm={(props) => (
+                      <PaymentMethodForm {...props} />
+                    )}
                   />
                 </div>
                 <div>
@@ -1883,6 +1915,7 @@ function ExpenseTableInner({ expenses, isAdmin, handleEdit, deleteMutation, mark
           <TableHead>Description</TableHead>
           <TableHead>Category</TableHead>
           <TableHead>Paid To</TableHead>
+          <TableHead>Method</TableHead>
           <TableHead className="text-right">Amount</TableHead>
           <TableHead>Status</TableHead>
           {isAdmin && <TableHead className="w-[80px]"></TableHead>}
@@ -1895,6 +1928,7 @@ function ExpenseTableInner({ expenses, isAdmin, handleEdit, deleteMutation, mark
             <TableCell>{expense.description}</TableCell>
             <TableCell className="capitalize">{expense.category}</TableCell>
             <TableCell>{expense.paid_to || "—"}</TableCell>
+            <TableCell>{expense.payment_method || "—"}</TableCell>
             <TableCell className="text-right font-semibold text-rose-600 dark:text-rose-400">
               ${Number(expense.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </TableCell>
