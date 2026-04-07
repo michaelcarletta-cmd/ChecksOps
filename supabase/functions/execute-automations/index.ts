@@ -601,6 +601,7 @@ async function sendSms(supabase: any, config: any, execution: any) {
     }
 
     const results = [];
+    const errors = [];
     for (const staff of recipients) {
       try {
         const result = await sendToPhone(staff.phone);
@@ -609,13 +610,16 @@ async function sendSms(supabase: any, config: any, execution: any) {
           staff_id: staff.id,
           staff_name: staff.full_name,
         });
-      } catch (err) {
-        console.error(`Failed to send SMS to assigned staff ${staff.id}:`, err);
+      } catch (err: any) {
+        const errMsg = err?.message || String(err);
+        console.error(`Failed to send SMS to assigned staff ${staff.id} (${staff.phone}):`, errMsg);
+        errors.push({ staff_id: staff.id, staff_name: staff.full_name, phone: staff.phone, error: errMsg });
       }
     }
 
     if (results.length === 0) {
-      throw new Error('Failed to send SMS to assigned claim staff');
+      const errorDetail = errors.map(e => `${e.staff_name} (${e.phone}): ${e.error}`).join('; ');
+      throw new Error(`Failed to send SMS to assigned claim staff: ${errorDetail}`);
     }
 
     return { sent_count: results.length, results };
