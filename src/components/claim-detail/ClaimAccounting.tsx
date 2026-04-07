@@ -1915,6 +1915,7 @@ function ExpenseTableInner({ expenses, isAdmin, handleEdit, deleteMutation, mark
           <TableHead>Description</TableHead>
           <TableHead>Category</TableHead>
           <TableHead>Paid To</TableHead>
+          <TableHead>Method</TableHead>
           <TableHead className="text-right">Amount</TableHead>
           <TableHead>Status</TableHead>
           {isAdmin && <TableHead className="w-[80px]"></TableHead>}
@@ -1927,6 +1928,7 @@ function ExpenseTableInner({ expenses, isAdmin, handleEdit, deleteMutation, mark
             <TableCell>{expense.description}</TableCell>
             <TableCell className="capitalize">{expense.category}</TableCell>
             <TableCell>{expense.paid_to || "—"}</TableCell>
+            <TableCell>{expense.payment_method || "—"}</TableCell>
             <TableCell className="text-right font-semibold text-rose-600 dark:text-rose-400">
               ${Number(expense.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </TableCell>
