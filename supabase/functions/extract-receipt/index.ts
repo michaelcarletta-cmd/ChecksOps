@@ -27,9 +27,11 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'AI API key not configured' }), { status: 500, headers: corsHeaders });
     }
 
-    const prompt = `You are a receipt data extraction expert for insurance ALE (Additional Living Expense) claims. The input may be a single image OR a multi-page PDF. Examine ALL pages of the document. Your job is to extract ONLY three things:
+    const prompt = `You are a receipt data extraction expert for insurance ALE (Additional Living Expense) claims. The input may be a single image OR a multi-page PDF containing MULTIPLE separate receipts. Examine ALL pages of the document.
 
-1. **Vendor Name** — the store or business name at the top of the receipt.
+YOUR TASK: Identify EVERY individual receipt in the document and extract these fields from EACH one:
+
+1. **Vendor Name** — the store or business name on the receipt.
 2. **Purchase Date** — the transaction date in YYYY-MM-DD format.
 3. **Final Charged Total** — the amount the customer actually paid.
 
@@ -39,10 +41,15 @@ RULES FOR FINDING THE TOTAL (STRICT):
 - If a payment tender line exists (e.g. "Visa", "Amex", "MC", "Mastercard", "Debit", "Credit Card"), the amount on that line MUST exactly match the total you extracted. If it does not match, set needs_review to true.
 - If more than one possible total exists and it is unclear which is the final charged amount, set needs_review to true and total to null.
     - If the document is rotated or upside down, mentally rotate it upright before reading.
-    - If the receipt spans multiple pages, look across ALL pages to find the final total — it is usually on the last page.
+
+MULTI-RECEIPT RULES:
+- A single PDF may contain MANY separate receipts (one per page, or multiple per page).
+- Each distinct vendor/transaction is a SEPARATE receipt — extract each one individually.
+- If the same receipt spans two pages, combine them into ONE entry.
+- If a page has a receipt from Walmart and another from Target, those are TWO entries.
 
 CATEGORY SUGGESTION:
-Based on the vendor name and any visible items, suggest one category:
+For each receipt, suggest one category based on the vendor name and visible items:
 - "meals" — grocery stores, restaurants, fast food, convenience stores selling food
 - "lodging" — hotels, motels, Airbnb, short-term rentals
 - "storage" — storage unit facilities
@@ -51,16 +58,20 @@ Based on the vendor name and any visible items, suggest one category:
 - "pet_boarding" — kennels, pet care facilities
 - "other" — anything else
 
-Return ONLY this JSON:
+Return ONLY this JSON — always an array, even if there is only one receipt:
 {
-  "vendor_name": "Store Name" or null,
-  "date": "YYYY-MM-DD" or null,
-  "total": 49.99 or null,
-  "suggested_category": "meals",
-  "needs_review": false
+  "receipts": [
+    {
+      "vendor_name": "Store Name" or null,
+      "date": "YYYY-MM-DD" or null,
+      "total": 49.99 or null,
+      "suggested_category": "meals",
+      "needs_review": false
+    }
+  ]
 }
 
-If you cannot confidently determine the total, set needs_review to true and total to null. Accuracy over completion.`;
+If you cannot confidently determine the total for a receipt, set needs_review to true and total to null. Accuracy over completion.`;
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -110,7 +121,18 @@ If you cannot confidently determine the total, set needs_review to true and tota
       return new Response(JSON.stringify({ error: 'Failed to parse receipt data', raw: content }), { status: 500, headers: corsHeaders });
     }
 
-    return new Response(JSON.stringify({ success: true, data: extracted }), {
+    // Normalize: support both old single-receipt and new multi-receipt format
+    let receipts: any[];
+    if (Array.isArray(extracted.receipts)) {
+      receipts = extracted.receipts;
+    } else if (extracted.vendor_name !== undefined || extracted.total !== undefined) {
+      // Legacy single-receipt response
+      receipts = [extracted];
+    } else {
+      receipts = [extracted];
+    }
+
+    return new Response(JSON.stringify({ success: true, data: { receipts } }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error: unknown) {
