@@ -208,7 +208,7 @@ Output requirements:
       model: config.model,
       reasoningEffort: "medium",
       temperature: 0.4,
-      maxOutputTokens: 1500,
+      maxOutputTokens: 1200,
     });
 
     const emailBody = (result.text || "").trim();
