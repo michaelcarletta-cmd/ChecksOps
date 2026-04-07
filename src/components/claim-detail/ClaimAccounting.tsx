@@ -1603,6 +1603,9 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
   const [open, setOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<any>(null);
   const [expenseTab, setExpenseTab] = useState("not_paid");
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
+  const [selectedPayeeId, setSelectedPayeeId] = useState("");
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState("");
   const [formData, setFormData] = useState({
     expense_date: "",
     description: "",
