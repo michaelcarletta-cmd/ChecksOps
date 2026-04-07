@@ -418,6 +418,18 @@ REQUIREMENTS:
     let emailBody = (result.text || "").trim();
 
     if (
+      !emailBody ||
+      emailBody.toLowerCase().includes("need more information") ||
+      emailBody.toLowerCase().includes("no new notes")
+    ) {
+      emailBody = buildFallbackEmail({
+        firstName,
+        claimSummary,
+        latestMeaningfulActivity,
+      });
+    }
+
+    if (
       isGenericClientUpdateDraft(emailBody, {
         claimNumber: claimSummary.claim_number,
         carrier: claimSummary.insurance_company,
