@@ -104,6 +104,9 @@ Deno.serve(async (req) => {
       })),
     ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 15);
 
+    const latestMeaningfulActivity =
+      recentActivity.find((a: any) => a.summary || a.promises || a.follow_up) || null;
+
     const recentEmails = (emailsRes.data ?? []).map((e: any) => ({
       date: e.sent_at,
       subject: e.subject,
@@ -168,6 +171,9 @@ EXTERNAL CONTENT WRITING RULES:
 CLAIM SUMMARY
 ${JSON.stringify(claimSummary, null, 2)}
 
+LATEST MEANINGFUL ACTIVITY
+${JSON.stringify(latestMeaningfulActivity, null, 2)}
+
 RECENT NOTES
 ${JSON.stringify(recentNotes, null, 2)}
 
@@ -217,7 +223,16 @@ Output requirements:
     }
 
     return new Response(
-      JSON.stringify({ body: emailBody }),
+      JSON.stringify({
+        body: emailBody,
+        debug: {
+          recentNotesCount: recentNotes.length,
+          recentActivityCount: recentActivity.length,
+          recentEmailsCount: recentEmails.length,
+          recentDocumentsCount: recentDocuments.length,
+          latestMeaningfulActivity,
+        },
+      }),
       { headers: jsonHeaders }
     );
   } catch (e) {
