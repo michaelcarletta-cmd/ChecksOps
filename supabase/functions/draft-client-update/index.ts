@@ -104,6 +104,9 @@ Deno.serve(async (req) => {
       })),
     ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 15);
 
+    const latestMeaningfulActivity =
+      recentActivity.find((a: any) => a.summary || a.promises || a.follow_up) || null;
+
     const recentEmails = (emailsRes.data ?? []).map((e: any) => ({
       date: e.sent_at,
       subject: e.subject,
