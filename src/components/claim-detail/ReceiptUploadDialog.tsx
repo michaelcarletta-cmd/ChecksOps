@@ -70,6 +70,9 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
     setEditDate("");
     setEditTotal("");
     setEditCategory("other");
+    setSelectedCategoryId("");
+    setSelectedPayeeId("");
+    setSelectedPaymentMethodId("");
   };
 
   const checkForDuplicate = (vendor: string | null, date: string | null, total: number | null): string | null => {
