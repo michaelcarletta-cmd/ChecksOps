@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'AI API key not configured' }), { status: 500, headers: corsHeaders });
     }
 
-    const prompt = `You are a receipt data extraction expert for insurance ALE (Additional Living Expense) claims. Your job is to extract ONLY three things from this receipt image:
+    const prompt = `You are a receipt data extraction expert for insurance ALE (Additional Living Expense) claims. The input may be a single image OR a multi-page PDF. Examine ALL pages of the document. Your job is to extract ONLY three things:
 
 1. **Vendor Name** — the store or business name at the top of the receipt.
 2. **Purchase Date** — the transaction date in YYYY-MM-DD format.
@@ -38,7 +38,8 @@ RULES FOR FINDING THE TOTAL (STRICT):
 - IGNORE subtotals, tax lines, discount lines, savings lines, and individual item prices.
 - If a payment tender line exists (e.g. "Visa", "Amex", "MC", "Mastercard", "Debit", "Credit Card"), the amount on that line MUST exactly match the total you extracted. If it does not match, set needs_review to true.
 - If more than one possible total exists and it is unclear which is the final charged amount, set needs_review to true and total to null.
-- If the image is rotated or upside down, mentally rotate it upright before reading.
+    - If the document is rotated or upside down, mentally rotate it upright before reading.
+    - If the receipt spans multiple pages, look across ALL pages to find the final total — it is usually on the last page.
 
 CATEGORY SUGGESTION:
 Based on the vendor name and any visible items, suggest one category:

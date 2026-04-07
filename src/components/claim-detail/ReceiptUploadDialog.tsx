@@ -10,7 +10,6 @@ import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { Camera, FileUp, Loader2, Receipt, AlertTriangle, CheckCircle2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { pdfjs } from "react-pdf";
 import { CrudDropdown } from "./CrudDropdown";
 import { PaymentMethodForm } from "./PaymentMethodForm";
 
