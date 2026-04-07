@@ -3,17 +3,25 @@ import { callOpenAIText, getModelForTask } from "../_shared/ai-router.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
+const jsonHeaders = {
+  ...corsHeaders,
+  "Content-Type": "application/json",
+};
 
-function isGenericClientUpdateDraft(text: string, context: {
-  claimNumber?: string;
-  carrier?: string;
-  recentDocuments?: Array<{ name?: string; type?: string; subtype?: string }>;
-  recentActivity?: Array<{ summary?: string; type?: string; date?: string }>;
-}) {
+function isGenericClientUpdateDraft(
+  text: string,
+  context: {
+    claimNumber?: string;
+    carrier?: string;
+    recentDocuments?: Array<{ name?: string; type?: string; subtype?: string }>;
+    recentActivity?: Array<{ summary?: string; type?: string; date?: string }>;
+  },
+) {
   const lower = (text || "").toLowerCase();
   const genericPhrases = [
     "we wanted to update you",
@@ -28,18 +36,26 @@ function isGenericClientUpdateDraft(text: string, context: {
     !!context.claimNumber && text.includes(context.claimNumber);
   const hasCarrier =
     !!context.carrier && lower.includes(String(context.carrier).toLowerCase());
+
   const hasActivityKeyword = (context.recentActivity || []).some((a) => {
     const s = `${a.type || ""} ${a.summary || ""}`.toLowerCase();
-    return s && (
-      lower.includes((a.type || "").toLowerCase()) ||
-      (a.summary && lower.includes(a.summary.slice(0, 20).toLowerCase()))
+    return (
+      !!s &&
+      (
+        lower.includes((a.type || "").toLowerCase()) ||
+        (a.summary && lower.includes(a.summary.slice(0, 20).toLowerCase()))
+      )
     );
   });
+
   const hasDocumentKeyword = (context.recentDocuments || []).some((d) => {
     const s = `${d.name || ""} ${d.type || ""} ${d.subtype || ""}`.toLowerCase();
-    return s && (
-      (d.type && lower.includes(String(d.type).toLowerCase())) ||
-      (d.subtype && lower.includes(String(d.subtype).toLowerCase()))
+    return (
+      !!s &&
+      (
+        (d.type && lower.includes(String(d.type).toLowerCase())) ||
+        (d.subtype && lower.includes(String(d.subtype).toLowerCase()))
+      )
     );
   });
 
@@ -50,6 +66,76 @@ function isGenericClientUpdateDraft(text: string, context: {
     Number(hasDocumentKeyword);
 
   return genericHits >= 2 && specificityScore < 2;
+}
+
+function lacksMeaningfulDetail(text: string) {
+  const lower = (text || "").toLowerCase();
+
+  const weakPatterns = [
+    "awaiting response",
+    "we will let you know",
+    "continue to advocate",
+    "no updates at this time",
+  ];
+
+  return weakPatterns.some((p) => lower.includes(p));
+}
+
+function scoreActivity(a: any) {
+  let score = 0;
+  if (!a) return 0;
+
+  const text = `${a.type || ""} ${a.summary || ""} ${a.promises || ""}`.toLowerCase();
+
+  if (text.includes("payment") || text.includes("check")) score += 5;
+  if (text.includes("inspection") || text.includes("report")) score += 4;
+  if (text.includes("denial") || text.includes("coverage")) score += 4;
+  if (text.includes("submitted") || text.includes("sent")) score += 3;
+  if (text.includes("called") || text.includes("spoke")) score += 3;
+  if (text.includes("follow up") || text.includes("follow-up")) score += 3;
+  if (text.includes("estimate")) score += 2;
+  if (text.includes("email")) score += 2;
+  if (text.includes("letter")) score += 2;
+
+  if (a.follow_up) score += 3;
+  if (a.summary) score += 1;
+
+  if (a.date) {
+    const ts = new Date(a.date).getTime();
+    if (!Number.isNaN(ts)) {
+      const daysOld = (Date.now() - ts) / (1000 * 60 * 60 * 24);
+      if (daysOld < 3) score += 3;
+      else if (daysOld < 7) score += 2;
+      else if (daysOld < 14) score += 1;
+    }
+  }
+
+  return score;
+}
+
+function buildFallbackEmail(args: {
+  firstName: string;
+  claimSummary: {
+    claim_number?: string;
+    insurance_company?: string;
+  };
+  latestMeaningfulActivity: any;
+}) {
+  const { firstName, claimSummary, latestMeaningfulActivity } = args;
+  const carrier = claimSummary.insurance_company || "the carrier";
+  const claimNumber = claimSummary.claim_number || "your claim";
+
+  const activitySentence = latestMeaningfulActivity?.summary
+    ? `The most recent activity on the file reflects the following: ${latestMeaningfulActivity.summary}.`
+    : "We are continuing to review the most recent activity and documents associated with the file.";
+
+  return `Dear ${firstName},
+
+I wanted to provide you with an update on claim ${claimNumber} with ${carrier}. ${activitySentence}
+
+At this time, we are continuing to monitor the claim and follow up on the pending items reflected in the file. We will keep you updated as soon as there is a meaningful development or confirmed next step.
+
+Regards,`;
 }
 
 Deno.serve(async (req) => {
@@ -63,13 +149,16 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const { claimId } = body as { claimId?: string };
+
     if (!claimId) {
-      return new Response(JSON.stringify({ error: "claimId required" }), { status: 400, headers: jsonHeaders });
+      return new Response(
+        JSON.stringify({ error: "claimId required" }),
+        { status: 400, headers: jsonHeaders },
+      );
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // ── 1. Gather all claim context in parallel ──────────────────────────
     const [claimRes, updatesRes, emailsRes, diaryRes, eventsRes, filesRes] = await Promise.all([
       supabase
         .from("claims")
@@ -110,10 +199,12 @@ Deno.serve(async (req) => {
 
     const claim = claimRes.data;
     if (claimRes.error || !claim) {
-      return new Response(JSON.stringify({ error: "Claim not found" }), { status: 404, headers: jsonHeaders });
+      return new Response(
+        JSON.stringify({ error: "Claim not found" }),
+        { status: 404, headers: jsonHeaders },
+      );
     }
 
-    // ── 2. Build structured context ──────────────────────────────────────
     const claimSummary = {
       claim_number: claim.claim_number || "N/A",
       policyholder_name: claim.policyholder_name || "Policyholder",
@@ -146,10 +237,16 @@ Deno.serve(async (req) => {
         summary: (e.summary || "").slice(0, 200),
         actor: e.actor || null,
       })),
-    ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 15);
+    ]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 15);
 
-    const latestMeaningfulActivity =
-      recentActivity.find((a: any) => a.summary || a.promises || a.follow_up) || null;
+    const rankedActivity = recentActivity
+      .map((a: any) => ({ ...a, _score: scoreActivity(a) }))
+      .sort((a: any, b: any) => b._score - a._score);
+
+    const latestMeaningfulActivity = rankedActivity[0] || null;
+    const topActivities = rankedActivity.slice(0, 3).map(({ _score, ...rest }: any) => rest);
 
     const recentEmails = (emailsRes.data ?? []).map((e: any) => ({
       date: e.sent_at,
@@ -160,7 +257,9 @@ Deno.serve(async (req) => {
 
     const recentDocuments = (filesRes.data ?? [])
       .filter((f: any) => {
-        const text = `${f.file_name || ""} ${f.document_type || ""} ${f.document_subtype || ""} ${f.document_summary || ""}`.toLowerCase();
+        const text =
+          `${f.file_name || ""} ${f.document_type || ""} ${f.document_subtype || ""} ${f.document_summary || ""}`
+            .toLowerCase();
         return (
           text.includes("estimate") ||
           text.includes("payment") ||
@@ -185,7 +284,6 @@ Deno.serve(async (req) => {
 
     const firstName = (claim.policyholder_name || "").split(/\s+/)[0] || "there";
 
-    // ── 3. Build fact hints ──────────────────────────────────────────────
     const factHints = {
       claim_number: claimSummary.claim_number,
       carrier: claimSummary.insurance_company,
@@ -197,7 +295,6 @@ Deno.serve(async (req) => {
       recent_email_subjects: recentEmails.slice(0, 3).map((e: any) => e.subject),
     };
 
-    // ── 4. Build prompts ─────────────────────────────────────────────────
     const system = `You are Darwin Copilot for a public adjusting firm.
 Your job is to draft a client claim update email based only on actual claim activity, notes, communications, emails, and documents.
 
@@ -221,6 +318,19 @@ CRITICAL RULES:
 - Be reassuring but do not overpromise.
 - If there has been little movement, say exactly what is still pending and what follow-up is being done.
 
+PRIORITY RULES (VERY IMPORTANT):
+When selecting facts for the email, you MUST prioritize in this order:
+1. Most recent communication with carrier or client
+2. Payment / check status
+3. Inspection or report results
+4. New documents received
+5. Follow-up actions taken
+6. Pending items or delays
+7. General claim status only if nothing else exists
+
+- Do NOT default to "we submitted and are awaiting response" if more specific activity exists.
+- Always prefer specific dates, actions, documents, or communications over general summaries.
+
 EXTERNAL CONTENT WRITING RULES:
 1. Never refer to Darwin, AI, or any automated system.
 2. Use clean professional prose only.
@@ -232,11 +342,15 @@ EXTERNAL CONTENT WRITING RULES:
 FACT HINTS
 ${JSON.stringify(factHints, null, 2)}
 
+MANDATORY FACT TO INCLUDE
+You MUST include and clearly reference this activity in the email if it exists:
+${JSON.stringify(latestMeaningfulActivity, null, 2)}
+
+TOP PRIORITY ACTIVITIES
+${JSON.stringify(topActivities, null, 2)}
+
 CLAIM SUMMARY
 ${JSON.stringify(claimSummary, null, 2)}
-
-LATEST MEANINGFUL ACTIVITY
-${JSON.stringify(latestMeaningfulActivity, null, 2)}
 
 RECENT NOTES
 ${JSON.stringify(recentNotes, null, 2)}
@@ -263,14 +377,15 @@ REQUIREMENTS:
 - No subject line
 - No markdown
 - 2 to 5 short paragraphs
-- Include at least 2 concrete claim-specific details if they exist in the data
+- Include at least 2 concrete claim-specific facts if they exist in the data
 - Prefer concrete facts over general reassurance
 - If there is a recent communication, payment issue, check issue, document upload, inspection, or follow-up, mention it
+- Do NOT use phrases like "we submitted and are awaiting response" if more specific activity exists
 - End with a warm closing only
 - Do NOT include any team name or signature line after the closing`.trim();
 
-    // ── 5. Call AI ───────────────────────────────────────────────────────
     const config = getModelForTask("client_update");
+
     const result = await callOpenAIText({
       system,
       user,
@@ -282,25 +397,31 @@ REQUIREMENTS:
 
     let emailBody = (result.text || "").trim();
 
-    // ── 6. Quality gate: retry if too generic ────────────────────────────
     if (
       isGenericClientUpdateDraft(emailBody, {
         claimNumber: claimSummary.claim_number,
         carrier: claimSummary.insurance_company,
         recentDocuments,
         recentActivity,
-      })
+      }) || lacksMeaningfulDetail(emailBody)
     ) {
-      const retryUser = `${user}\n\nIMPORTANT: Your first draft was too generic.
-Rewrite it and include actual claim-specific facts from the provided data.
-You must mention at least 2 concrete details such as:
-- carrier name
-- specific recent communication
-- check/payment issue
-- document received
-- follow-up action
-- pending status
-Do not write a vague update.`;
+      const retryUser = `${user}
+
+IMPORTANT: Your previous response was too generic or lacked meaningful detail.
+
+You MUST rewrite the email using:
+- the most recent communication
+- a specific action taken
+- a concrete claim detail (document, call, submission, payment, or follow-up)
+
+You MUST reference at least one real event, not a general summary.
+
+Do NOT say:
+- "awaiting response"
+- "we will let you know"
+- "continue to advocate"
+
+If you fail to include a specific action or event, your answer is incorrect.`;
 
       const retry = await callOpenAIText({
         system,
@@ -314,8 +435,22 @@ Do not write a vague update.`;
       emailBody = (retry.text || "").trim();
     }
 
-    if (!emailBody) {
-      return new Response(JSON.stringify({ error: "Empty draft returned" }), { status: 502, headers: jsonHeaders });
+    const finalTooWeak =
+      !emailBody ||
+      isGenericClientUpdateDraft(emailBody, {
+        claimNumber: claimSummary.claim_number,
+        carrier: claimSummary.insurance_company,
+        recentDocuments,
+        recentActivity,
+      }) ||
+      lacksMeaningfulDetail(emailBody);
+
+    if (finalTooWeak) {
+      emailBody = buildFallbackEmail({
+        firstName,
+        claimSummary,
+        latestMeaningfulActivity,
+      });
     }
 
     return new Response(
@@ -327,16 +462,19 @@ Do not write a vague update.`;
           recentEmailsCount: recentEmails.length,
           recentDocumentsCount: recentDocuments.length,
           latestMeaningfulActivity,
+          topActivities,
           factHints,
         },
       }),
-      { headers: jsonHeaders }
+      { headers: jsonHeaders },
     );
   } catch (e) {
     console.error("draft-client-update error:", e);
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: jsonHeaders }
+      JSON.stringify({
+        error: e instanceof Error ? e.message : "Unknown error",
+      }),
+      { status: 500, headers: jsonHeaders },
     );
   }
 });
