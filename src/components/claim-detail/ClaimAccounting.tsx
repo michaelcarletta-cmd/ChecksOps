@@ -18,6 +18,8 @@ import { ClaimPayments } from "./ClaimPayments";
 import { InvoiceDialog } from "@/components/InvoiceDialog";
 import { EstimateUploadDialog } from "./EstimateUploadDialog";
 import { CheckProcessingCard } from "@/components/claims/CheckProcessingCard";
+import { CrudDropdown } from "./CrudDropdown";
+import { PaymentMethodForm } from "./PaymentMethodForm";
 interface ClaimAccountingProps {
   claim: any;
   userRole: string | null;
