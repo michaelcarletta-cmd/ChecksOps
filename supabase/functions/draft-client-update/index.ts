@@ -171,6 +171,9 @@ EXTERNAL CONTENT WRITING RULES:
 CLAIM SUMMARY
 ${JSON.stringify(claimSummary, null, 2)}
 
+LATEST MEANINGFUL ACTIVITY
+${JSON.stringify(latestMeaningfulActivity, null, 2)}
+
 RECENT NOTES
 ${JSON.stringify(recentNotes, null, 2)}
 
