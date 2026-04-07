@@ -223,7 +223,16 @@ Output requirements:
     }
 
     return new Response(
-      JSON.stringify({ body: emailBody }),
+      JSON.stringify({
+        body: emailBody,
+        debug: {
+          recentNotesCount: recentNotes.length,
+          recentActivityCount: recentActivity.length,
+          recentEmailsCount: recentEmails.length,
+          recentDocumentsCount: recentDocuments.length,
+          latestMeaningfulActivity,
+        },
+      }),
       { headers: jsonHeaders }
     );
   } catch (e) {
