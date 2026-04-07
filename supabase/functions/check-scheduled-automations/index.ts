@@ -255,7 +255,7 @@ async function processInspectionUpcoming24hAutomation(
         inspection_id: inspection.id,
         triggered_by: 'inspection_upcoming_24h',
       })
-      .in('status', ['pending', 'running', 'success'])
+      .in('status', ['pending', 'running', 'success', 'failed'])
       .order('created_at', { ascending: false })
       .limit(1);
 
