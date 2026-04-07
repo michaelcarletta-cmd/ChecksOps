@@ -1770,17 +1770,16 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
                   </div>
                   <div>
                     <Label>Category</Label>
-                    <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="contractor">Contractor</SelectItem>
-                        <SelectItem value="materials">Materials</SelectItem>
-                        <SelectItem value="inspection">Inspection</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <CrudDropdown
+                      table="expenses_categories"
+                      labelField="name"
+                      value={selectedCategoryId}
+                      onValueChange={setSelectedCategoryId}
+                      onLabelChange={(label) => setFormData(f => ({ ...f, category: label }))}
+                      placeholder="Select or add category…"
+                      emptyText="No categories yet"
+                      dialogTitle="Category"
+                    />
                   </div>
                 </div>
                 <div>
@@ -1802,18 +1801,43 @@ function ExpensesSection({ claimId, expenses, isAdmin }: any) {
                   </div>
                   <div>
                     <Label>Paid To</Label>
-                    <Input
-                      value={formData.paid_to}
-                      onChange={(e) => setFormData({ ...formData, paid_to: e.target.value })}
+                    <CrudDropdown
+                      table="expenses_payees"
+                      labelField="name"
+                      value={selectedPayeeId}
+                      onValueChange={setSelectedPayeeId}
+                      onLabelChange={(label) => setFormData(f => ({ ...f, paid_to: label }))}
+                      placeholder="Select or add payee…"
+                      emptyText="No payees yet"
+                      dialogTitle="Payee"
                     />
                   </div>
                 </div>
                 <div>
                   <Label>Payment Method</Label>
-                  <Input
-                    value={formData.payment_method}
-                    onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-                    placeholder="Check, Credit Card, etc."
+                  <CrudDropdown
+                    table="payment_methods"
+                    labelField="label"
+                    value={selectedPaymentMethodId}
+                    onValueChange={setSelectedPaymentMethodId}
+                    onLabelChange={(label) => setFormData(f => ({ ...f, payment_method: label }))}
+                    placeholder="Select or add method…"
+                    emptyText="No payment methods yet"
+                    dialogTitle="Payment Method"
+                    transformRow={(row: any) => ({
+                      id: row.id,
+                      label: row.label,
+                      sublabel: row.method_type,
+                    })}
+                    buildCustomInsert={(fields, userId) => ({
+                      label: fields.label,
+                      method_type: fields.method_type,
+                      card_last_four: fields.card_last_four || null,
+                      created_by: userId,
+                    })}
+                    renderAddForm={(props) => (
+                      <PaymentMethodForm {...props} />
+                    )}
                   />
                 </div>
                 <div>
