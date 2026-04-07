@@ -111,13 +111,30 @@ Deno.serve(async (req) => {
       body_preview: (e.body || "").slice(0, 300),
     }));
 
-    const recentDocuments = (filesRes.data ?? []).map((f: any) => ({
-      name: f.file_name,
-      type: f.document_type,
-      subtype: f.document_subtype,
-      summary: (f.document_summary || "").slice(0, 200),
-      date: f.uploaded_at,
-    }));
+    const recentDocuments = (filesRes.data ?? [])
+      .filter((f: any) => {
+        const text = `${f.file_name || ""} ${f.document_type || ""} ${f.document_subtype || ""} ${f.document_summary || ""}`.toLowerCase();
+        return (
+          text.includes("estimate") ||
+          text.includes("payment") ||
+          text.includes("check") ||
+          text.includes("inspection") ||
+          text.includes("report") ||
+          text.includes("letter") ||
+          text.includes("coverage") ||
+          text.includes("denial") ||
+          text.includes("proof") ||
+          text.includes("rebuttal")
+        );
+      })
+      .map((f: any) => ({
+        name: f.file_name,
+        type: f.document_type,
+        subtype: f.document_subtype,
+        summary: (f.document_summary || "").slice(0, 200),
+        date: f.uploaded_at,
+      }))
+      .slice(0, 8);
 
     const firstName = (claim.policyholder_name || "").split(/\s+/)[0] || "there";
 
@@ -191,7 +208,7 @@ Output requirements:
       model: config.model,
       reasoningEffort: "medium",
       temperature: 0.4,
-      maxOutputTokens: 1500,
+      maxOutputTokens: 1200,
     });
 
     const emailBody = (result.text || "").trim();
