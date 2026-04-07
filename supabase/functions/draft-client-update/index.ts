@@ -298,6 +298,17 @@ Deno.serve(async (req) => {
     const system = `You are Darwin Copilot for a public adjusting firm.
 Your job is to draft a client claim update email based only on actual claim activity, notes, communications, emails, and documents.
 
+FAILSAFE RULE (CRITICAL):
+- You are NEVER allowed to ask for more information.
+- You are NEVER allowed to say "I need more information" or similar.
+- You MUST always produce a usable client update email.
+If data is limited:
+- Use whatever information is available
+- State that the claim is still under review
+- Explain what is currently pending
+- Provide the next step based on the existing context
+Not drafting an email is always incorrect.
+
 CRITICAL RULES:
 - Do not write a generic status update.
 - The email must include at least 2 specific factual details from the provided data when such details exist.
@@ -372,6 +383,15 @@ Before writing the email, identify for yourself:
 
 Then draft the email using those concrete facts.
 
+IMPORTANT:
+If the available data is limited or does not show clear recent activity:
+- You MUST still draft a client update
+- Explain that the claim remains under review
+- State what is currently pending
+- Provide a reasonable next step based on the claim status
+Do NOT ask for more information.
+Do NOT refuse the task.
+
 REQUIREMENTS:
 - Output only the email body
 - No subject line
@@ -396,6 +416,18 @@ REQUIREMENTS:
     });
 
     let emailBody = (result.text || "").trim();
+
+    if (
+      !emailBody ||
+      emailBody.toLowerCase().includes("need more information") ||
+      emailBody.toLowerCase().includes("no new notes")
+    ) {
+      emailBody = buildFallbackEmail({
+        firstName,
+        claimSummary,
+        latestMeaningfulActivity,
+      });
+    }
 
     if (
       isGenericClientUpdateDraft(emailBody, {
