@@ -9,6 +9,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Camera, FileUp, Loader2, Receipt, AlertTriangle, CheckCircle2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { CrudDropdown } from "./CrudDropdown";
+import { PaymentMethodForm } from "./PaymentMethodForm";
 
 interface ExtractedReceipt {
   vendor_name: string | null;
@@ -52,6 +54,9 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
   const [editDate, setEditDate] = useState("");
   const [editTotal, setEditTotal] = useState("");
   const [editCategory, setEditCategory] = useState("other");
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
+  const [selectedPayeeId, setSelectedPayeeId] = useState("");
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const resetState = () => {
@@ -65,6 +70,9 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
     setEditDate("");
     setEditTotal("");
     setEditCategory("other");
+    setSelectedCategoryId("");
+    setSelectedPayeeId("");
+    setSelectedPaymentMethodId("");
   };
 
   const checkForDuplicate = (vendor: string | null, date: string | null, total: number | null): string | null => {
@@ -362,6 +370,60 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Custom Category</Label>
+                <CrudDropdown
+                  table="expenses_categories"
+                  labelField="name"
+                  value={selectedCategoryId}
+                  onValueChange={setSelectedCategoryId}
+                  placeholder="Select or add category…"
+                  emptyText="No categories yet"
+                  dialogTitle="Category"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Paid To</Label>
+                <CrudDropdown
+                  table="expenses_payees"
+                  labelField="name"
+                  value={selectedPayeeId}
+                  onValueChange={setSelectedPayeeId}
+                  placeholder="Select or add payee…"
+                  emptyText="No payees yet"
+                  dialogTitle="Payee"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Payment Method</Label>
+                <CrudDropdown
+                  table="payment_methods"
+                  labelField="label"
+                  value={selectedPaymentMethodId}
+                  onValueChange={setSelectedPaymentMethodId}
+                  placeholder="Select or add method…"
+                  emptyText="No payment methods yet"
+                  dialogTitle="Payment Method"
+                  transformRow={(row: any) => ({
+                    id: row.id,
+                    label: row.label,
+                    sublabel: row.method_type,
+                  })}
+                  buildCustomInsert={(fields, userId) => ({
+                    label: fields.label,
+                    method_type: fields.method_type,
+                    card_last_four: fields.card_last_four || null,
+                    created_by: userId,
+                  })}
+                  renderAddForm={(props) => (
+                    <PaymentMethodForm
+                      onSave={props.onSave}
+                      onCancel={props.onCancel}
+                      saving={props.saving}
+                    />
+                  )}
+                />
               </div>
             </div>
 
