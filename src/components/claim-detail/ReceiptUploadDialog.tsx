@@ -54,6 +54,9 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
   const [editDate, setEditDate] = useState("");
   const [editTotal, setEditTotal] = useState("");
   const [editCategory, setEditCategory] = useState("other");
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
+  const [selectedPayeeId, setSelectedPayeeId] = useState("");
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const resetState = () => {
