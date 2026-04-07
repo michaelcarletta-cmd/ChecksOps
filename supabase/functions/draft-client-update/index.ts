@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
       status: claim.status || "N/A",
       loss_type: claim.loss_type || "N/A",
       loss_date: claim.loss_date || "N/A",
-      property_address: claim.property_address || "N/A",
+      property_address: claim.policyholder_address || "N/A",
     };
 
     const recentNotes = (updatesRes.data ?? []).map((u: any) => ({
