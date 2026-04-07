@@ -71,6 +71,14 @@ interface ReceiptExtractionPayload {
   mimeType: string;
 }
 
+interface ReceiptExtractionResponse {
+  success?: boolean;
+  error?: string;
+  data?: {
+    receipts?: ExtractedReceipt[];
+  } | ExtractedReceipt;
+}
+
 interface ExtractedReceipt {
   vendor_name: string | null;
   date: string | null;
@@ -194,9 +202,15 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
     }
   };
 
-  const normalizeExtractedReceipts = (result: any): ExtractedReceipt[] => (
-    result?.data?.receipts || (result?.data ? [result.data] : [])
-  );
+  const normalizeExtractedReceipts = (result: ReceiptExtractionResponse | null | undefined): ExtractedReceipt[] => {
+    if (!result?.data) return [];
+
+    if (typeof result.data === "object" && Array.isArray((result.data as { receipts?: ExtractedReceipt[] }).receipts)) {
+      return (result.data as { receipts?: ExtractedReceipt[] }).receipts ?? [];
+    }
+
+    return [result.data as ExtractedReceipt];
+  };
 
   const extractReceipt = async (file: File) => {
     setExtracting(true);
@@ -229,7 +243,7 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
           throw new Error(message);
         }
 
-        const result = response.data;
+        const result = response.data as ReceiptExtractionResponse | null;
         if (!result.success) {
           throw new Error(result.error || "Extraction failed");
         }
@@ -275,7 +289,7 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
               throw new Error(`Failed on page ${pageNumber} of ${pdf.numPages}: ${message}`);
             }
 
-            const result = response.data;
+            const result = response.data as ReceiptExtractionResponse | null;
             if (!result.success) {
               throw new Error(result.error || `Extraction failed on page ${pageNumber}`);
             }
