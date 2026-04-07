@@ -184,13 +184,13 @@ Output requirements:
 - do NOT include any team name or signature line after the closing
 - do NOT include a subject line — output only the email body`.trim();
 
-    const config = getModelForTask("copilot_reasoning");
+    const config = getModelForTask("client_update");
     const result = await callOpenAIText({
       system,
       user,
       model: config.model,
-      reasoningEffort: "high",
-      temperature: 0.3,
+      reasoningEffort: "medium",
+      temperature: 0.4,
       maxOutputTokens: 1500,
     });
 
