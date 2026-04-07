@@ -21,6 +21,9 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 
 const PDF_MIME_TYPE = "application/pdf";
 
+const PDF_PAGE_RENDER_SCALE = 1.1;
+const PDF_PAGE_MAX_DIMENSION = 1400;
+
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -33,42 +36,63 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
-/** Rasterize every page of a PDF into JPEG base64 strings */
-const pdfPagesToImages = async (file: File): Promise<string[]> => {
-  const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-  const images: string[] = [];
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale: 1.5 });
-    const canvas = document.createElement("canvas");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    const ctx = canvas.getContext("2d")!;
-    await page.render({ canvasContext: ctx, viewport }).promise;
-    // Get JPEG base64 (strip data URL prefix)
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-    images.push(dataUrl.split(",")[1]);
+const renderPdfPageToImageBase64 = async (page: any): Promise<string> => {
+  const baseViewport = page.getViewport({ scale: PDF_PAGE_RENDER_SCALE });
+  const largestDimension = Math.max(baseViewport.width, baseViewport.height);
+  const adjustedScale = largestDimension > PDF_PAGE_MAX_DIMENSION
+    ? (PDF_PAGE_RENDER_SCALE * PDF_PAGE_MAX_DIMENSION) / largestDimension
+    : PDF_PAGE_RENDER_SCALE;
+
+  const viewport = page.getViewport({ scale: adjustedScale });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("Failed to prepare PDF page for receipt extraction");
   }
-  return images;
+
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
+
+  canvas.width = 0;
+  canvas.height = 0;
+  page.cleanup?.();
+
+  return dataUrl.split(",")[1] || dataUrl;
 };
 
-const buildReceiptExtractionPayload = async (file: File) => {
+interface ReceiptExtractionPayload {
+  imageBase64?: string;
+  pageImages?: string[];
+  mimeType: string;
+}
+
+const buildReceiptExtractionPayloads = async (file: File): Promise<ReceiptExtractionPayload[]> => {
   const isPdf = file.type === PDF_MIME_TYPE || file.name.toLowerCase().endsWith(".pdf");
 
-  if (isPdf) {
-    // Convert each PDF page to a JPEG to avoid edge function memory limits
-    const pageImages = await pdfPagesToImages(file);
-    return {
-      pageImages,
-      mimeType: "image/jpeg",
-    };
+  if (!isPdf) {
+    return [{
+      imageBase64: await fileToBase64(file),
+      mimeType: file.type || "image/jpeg",
+    }];
   }
 
-  return {
-    imageBase64: await fileToBase64(file),
-    mimeType: file.type || "image/jpeg",
-  };
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+  const payloads: ReceiptExtractionPayload[] = [];
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const imageBase64 = await renderPdfPageToImageBase64(page);
+    payloads.push({
+      pageImages: [imageBase64],
+      mimeType: "image/jpeg",
+    });
+  }
+
+  return payloads;
 };
 interface ExtractedReceipt {
   vendor_name: string | null;
@@ -158,18 +182,33 @@ export const ReceiptUploadDialog = ({ claimId, onExpensesAdded, existingExpenses
   const extractReceipt = async (file: File) => {
     setExtracting(true);
     try {
-      const payload = await buildReceiptExtractionPayload(file);
-      const response = await supabase.functions.invoke('extract-receipt', {
-        body: payload,
-      });
-      if (response.error) {
-        throw new Error(await getFunctionErrorMessage(response.error, 'Failed to extract receipt'));
-      }
-      const result = response.data;
-      if (!result.success) throw new Error(result.error || 'Extraction failed');
+      const payloads = await buildReceiptExtractionPayloads(file);
+      const extractedReceipts: ExtractedReceipt[] = [];
 
-      const rawReceipts: ExtractedReceipt[] = result.data?.receipts || [result.data];
-      const editableReceipts: EditableReceipt[] = rawReceipts.map((r: ExtractedReceipt) => ({
+      for (let i = 0; i < payloads.length; i++) {
+        const response = await supabase.functions.invoke("extract-receipt", {
+          body: payloads[i],
+        });
+
+        if (response.error) {
+          const message = await getFunctionErrorMessage(response.error, "Failed to extract receipt");
+          throw new Error(payloads.length > 1 ? `Failed on page ${i + 1} of ${payloads.length}: ${message}` : message);
+        }
+
+        const result = response.data;
+        if (!result.success) {
+          throw new Error(result.error || "Extraction failed");
+        }
+
+        const pageReceipts: ExtractedReceipt[] = result.data?.receipts || (result.data ? [result.data] : []);
+        extractedReceipts.push(...pageReceipts);
+      }
+
+      if (extractedReceipts.length === 0) {
+        throw new Error("No receipts were found in this file");
+      }
+
+      const editableReceipts: EditableReceipt[] = extractedReceipts.map((r: ExtractedReceipt) => ({
         ...r,
         editVendor: r.vendor_name || "",
         editDate: r.date || format(new Date(), "yyyy-MM-dd"),
