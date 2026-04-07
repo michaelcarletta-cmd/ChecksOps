@@ -10,14 +10,10 @@ import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { Camera, FileUp, Loader2, Receipt, AlertTriangle, CheckCircle2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { pdfjs } from "react-pdf";
 import { CrudDropdown } from "./CrudDropdown";
 import { PaymentMethodForm } from "./PaymentMethodForm";
 
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
-
 const PDF_MIME_TYPE = "application/pdf";
-const RECEIPT_IMAGE_MIME_TYPE = "image/jpeg";
 
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -31,60 +27,20 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
-const pdfToImageBase64 = async (file: File): Promise<string> => {
-  const buffer = await file.arrayBuffer();
-  const pdf = await pdfjs.getDocument({ data: buffer }).promise;
-
-  try {
-    const page = await pdf.getPage(1);
-    const baseViewport = page.getViewport({ scale: 1 });
-    const scale = Math.max(1.5, Math.min(2, 1400 / baseViewport.width));
-    const viewport = page.getViewport({ scale });
-
-    const canvas = document.createElement("canvas");
-    const context = canvas.getContext("2d");
-
-    if (!context) {
-      throw new Error("Unable to prepare PDF preview");
-    }
-
-    canvas.width = Math.ceil(viewport.width);
-    canvas.height = Math.ceil(viewport.height);
-    context.fillStyle = "#ffffff";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-
-    await page.render({
-      canvasContext: context,
-      viewport,
-      background: "#ffffff",
-    }).promise;
-
-    const dataUrl = canvas.toDataURL(RECEIPT_IMAGE_MIME_TYPE, 0.9);
-    const base64 = dataUrl.split(",")[1];
-
-    if (!base64) {
-      throw new Error("Unable to convert PDF receipt");
-    }
-
-    return base64;
-  } finally {
-    pdf.destroy();
-  }
-};
-
 const buildReceiptExtractionPayload = async (file: File) => {
   const isPdf = file.type === PDF_MIME_TYPE || file.name.toLowerCase().endsWith(".pdf");
 
   if (isPdf) {
+    // Send raw PDF — Gemini handles multi-page PDFs natively
     return {
-      imageBase64: await pdfToImageBase64(file),
-      mimeType: RECEIPT_IMAGE_MIME_TYPE,
+      imageBase64: await fileToBase64(file),
+      mimeType: PDF_MIME_TYPE,
     };
   }
 
   return {
     imageBase64: await fileToBase64(file),
-    mimeType: file.type || RECEIPT_IMAGE_MIME_TYPE,
+    mimeType: file.type || "image/jpeg",
   };
 };
 
