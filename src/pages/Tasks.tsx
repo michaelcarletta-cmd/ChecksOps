@@ -1,266 +1,52 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
-import { Calendar, User, ExternalLink } from "lucide-react";
-import { format, isPast } from "date-fns";
-import { Link } from "react-router-dom";
+import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import TaskAIAssistant from "@/components/TaskAIAssistant";
-import { parseLocalDate } from "@/lib/utils";
-
-interface Task {
-  id: string;
-  title: string;
-  description: string | null;
-  due_date: string | null;
-  status: string;
-  priority: string;
-  claim_id: string;
-  claim_number: string;
-  client_name: string | null;
-  assigned_to: string | null;
-  created_at: string;
-  follow_up_enabled?: boolean | null;
-  follow_up_interval_days?: number | null;
-  follow_up_current_count?: number | null;
-  follow_up_last_sent_at?: string | null;
-}
-
-interface TaskUser {
-  id: string;
-  full_name: string | null;
-  email: string;
-}
+import { ExecutionQueuePanel } from "@/components/execution/ExecutionQueuePanel";
+import { useExecutionQueue } from "@/hooks/useExecutionQueue";
+import { ExecutionTaskCard } from "@/components/execution/ExecutionTaskCard";
+import { TaskDetailDrawer } from "@/components/execution/TaskDetailDrawer";
+import { completeTask, activateTask, ExecutionTask } from "@/services/taskExecutionService";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 const Tasks = () => {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [users, setUsers] = useState<TaskUser[]>([]);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const { activeTasks, backlogTasks, blockedTasks, loading, refetch } = useExecutionQueue();
+  const [selectedTask, setSelectedTask] = useState<ExecutionTask | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    const init = async () => {
+  const { data: completedTasks = [] } = useQuery({
+    queryKey: ["completed-tasks"],
+    queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      setCurrentUserId(user?.id || null);
-      fetchTasks();
-      fetchUsers();
-    };
-    init();
-
-    const channel = supabase
-      .channel("all-tasks")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "tasks",
-        },
-        () => {
-          fetchTasks();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  const fetchTasks = async () => {
-    try {
-      // Only fetch tasks due within 48 hours or overdue (outstanding)
-      const fortyEightHoursFromNow = new Date();
-      fortyEightHoursFromNow.setHours(fortyEightHoursFromNow.getHours() + 48);
-
+      if (!user) return [];
       const { data, error } = await supabase
         .from("tasks")
-        .select(`
-          *,
-          claims!inner(claim_number, clients(name))
-        `)
-        .not("due_date", "is", null)
-        .lte("due_date", fortyEightHoursFromNow.toISOString())
-        .order("due_date", { ascending: true, nullsFirst: false })
-        .order("created_at", { ascending: false });
+        .select("*, claims(claim_number, policyholder_name)")
+        .or(`assigned_to.eq.${user.id},assigned_to.is.null`)
+        .eq("status", "completed")
+        .order("completed_at", { ascending: false })
+        .limit(20);
+      if (error) return [];
+      return (data || []).map((t: any) => ({
+        ...t,
+        claim_number: t.claims?.claim_number,
+        policyholder_name: t.claims?.policyholder_name,
+      }));
+    },
+  });
 
-      if (error) throw error;
-
-      const tasksWithDetails =
-        data?.map((task: any) => ({
-          ...task,
-          claim_number: task.claims.claim_number,
-          client_name: task.claims.clients?.name || null,
-        })) || [];
-
-      setTasks(tasksWithDetails);
-    } catch (error: any) {
-      console.error("Error fetching tasks:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load tasks",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+  const handleAction = async (action: () => Promise<{ success: boolean; error?: string }>, msg: string) => {
+    const r = await action();
+    if (r.success) { toast({ title: msg }); refetch(); }
+    else toast({ title: "Error", description: r.error, variant: "destructive" });
   };
-
-  const fetchUsers = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .order("full_name");
-
-      if (error) throw error;
-      setUsers(data || []);
-    } catch (error: any) {
-      console.error("Error fetching users:", error);
-    }
-  };
-
-  const handleToggleComplete = async (taskId: string, currentStatus: string) => {
-    try {
-      const newStatus = currentStatus === "completed" ? "pending" : "completed";
-      const { error } = await supabase
-        .from("tasks")
-        .update({
-          status: newStatus,
-          completed_at: newStatus === "completed" ? new Date().toISOString() : null,
-        })
-        .eq("id", taskId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: `Task marked as ${newStatus}`,
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: "Failed to update task",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Filter tasks: show only unassigned tasks OR tasks assigned to current user
-  const myTasks = tasks.filter((task) => 
-    !task.assigned_to || task.assigned_to === currentUserId
-  );
-  
-  const pendingTasks = myTasks.filter((task) => task.status !== "completed");
-  const completedTasks = myTasks.filter((task) => task.status === "completed");
-
-  const TaskList = ({ taskList }: { taskList: Task[] }) => (
-    <div className="space-y-3">
-      {taskList.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">No tasks found</div>
-      ) : (
-        taskList.map((task) => {
-          const isOverdue =
-            task.due_date && isPast(parseLocalDate(task.due_date)) && task.status !== "completed";
-          const priorityColors = {
-            high: "destructive",
-            medium: "default",
-            low: "secondary",
-          } as const;
-
-          const assignee = users.find((user) => user.id === task.assigned_to);
-
-          return (
-            <Card
-              key={task.id}
-              className={`p-4 ${task.status === "completed" ? "opacity-60" : ""} ${
-                isOverdue ? "border-red-500" : ""
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <Checkbox
-                  checked={task.status === "completed"}
-                  onCheckedChange={() => handleToggleComplete(task.id, task.status)}
-                  className="mt-1"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h3
-                        className={`font-medium text-foreground ${
-                          task.status === "completed" ? "line-through" : ""
-                        }`}
-                      >
-                        {task.title}
-                      </h3>
-                      {task.description && (
-                        <p className="text-sm text-muted-foreground mt-1">{task.description}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <TaskAIAssistant task={task} claimId={task.claim_id} onTaskUpdated={fetchTasks} />
-                      <Link to={`/claims/${task.claim_id}`}>
-                        <Button variant="ghost" size="sm">
-                          <ExternalLink className="h-4 w-4" />
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-4 mt-3 text-sm">
-                    <Badge variant="outline">
-                      {task.claim_number}{task.client_name ? ` - ${task.client_name}` : ''}
-                    </Badge>
-                    <Badge
-                      variant={
-                        priorityColors[task.priority as keyof typeof priorityColors] as
-                          | "default"
-                          | "destructive"
-                          | "outline"
-                          | "secondary"
-                      }
-                    >
-                      {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)} Priority
-                    </Badge>
-                    {task.due_date && (
-                      <div
-                        className={`flex items-center gap-1 text-muted-foreground ${
-                          isOverdue ? "text-red-600 dark:text-red-400 font-semibold" : ""
-                        }`}
-                      >
-                        <Calendar className="h-4 w-4" />
-                        <span>
-                          {isOverdue && "Overdue: "}
-                          {format(parseLocalDate(task.due_date), "MMM d, yyyy")}
-                        </span>
-                      </div>
-                    )}
-                    {assignee && (
-                      <div className="flex items-center gap-1 text-muted-foreground">
-                        <User className="h-4 w-4" />
-                        <span>{assignee.full_name || assignee.email}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </Card>
-          );
-        })
-      )}
-    </div>
-  );
 
   if (loading) {
     return (
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Tasks</h1>
-          <p className="text-muted-foreground mt-1">Loading tasks...</p>
+          <p className="text-muted-foreground mt-1">Loading...</p>
         </div>
       </div>
     );
@@ -270,27 +56,45 @@ const Tasks = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-foreground">Tasks</h1>
-        <p className="text-muted-foreground mt-1">Manage all your tasks across claims</p>
+        <p className="text-muted-foreground mt-1">Manage your execution queue</p>
       </div>
 
-      <Tabs defaultValue="pending" className="space-y-6">
-        <TabsList className="flex flex-row w-full bg-muted/40 p-2 gap-1 overflow-x-auto scrollbar-hide">
-          <TabsTrigger value="pending" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">
-            Pending ({pendingTasks.length})
-          </TabsTrigger>
-          <TabsTrigger value="completed" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">
-            Completed ({completedTasks.length})
-          </TabsTrigger>
-        </TabsList>
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <ExecutionQueuePanel />
+        </div>
 
-        <TabsContent value="pending">
-          <TaskList taskList={pendingTasks} />
-        </TabsContent>
+        <div>
+          <Tabs defaultValue="completed">
+            <TabsList className="w-full">
+              <TabsTrigger value="completed" className="flex-1 text-xs">
+                Completed ({completedTasks.length})
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="completed" className="space-y-2 mt-2">
+              {completedTasks.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">No completed tasks yet</p>
+              ) : (
+                completedTasks.map((task: ExecutionTask) => (
+                  <ExecutionTaskCard
+                    key={task.id}
+                    task={task}
+                    compact
+                    onOpenDetail={() => setSelectedTask(task)}
+                  />
+                ))
+              )}
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
 
-        <TabsContent value="completed">
-          <TaskList taskList={completedTasks} />
-        </TabsContent>
-      </Tabs>
+      <TaskDetailDrawer
+        task={selectedTask}
+        open={!!selectedTask}
+        onClose={() => setSelectedTask(null)}
+        onRefetch={refetch}
+      />
     </div>
   );
 };

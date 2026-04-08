@@ -7,6 +7,8 @@ import { useNavigate } from "react-router-dom";
 import { DashboardCalendar } from "@/components/dashboard/DashboardCalendar";
 import { DashboardNotepad } from "@/components/dashboard/DashboardNotepad";
 import { useRenderCount } from "@/hooks/useRenderCount";
+import { ExecutionQueuePanel } from "@/components/execution/ExecutionQueuePanel";
+import { DailyExecutionResetModal } from "@/components/execution/DailyExecutionResetModal";
 
 const Index = () => {
   useRenderCount("DashboardIndex");
@@ -195,50 +197,19 @@ const Index = () => {
         ))}
       </div>
 
-      {/* Notepad and Calendar Section */}
+      {/* Execution Queue + Calendar */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <DashboardNotepad />
-        <DashboardCalendar />
+        <ExecutionQueuePanel />
+        <div className="space-y-6">
+          <DashboardNotepad />
+          <DashboardCalendar />
+        </div>
       </div>
 
-      {/* Tasks and Quick Stats */}
+      <DailyExecutionResetModal />
+
+      {/* Financial Summary */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Upcoming Tasks */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ListTodo className="h-5 w-5" />
-              Upcoming Tasks
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {!tasks || tasks.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No pending tasks</p>
-            ) : (
-              <div className="space-y-3">
-                {tasks.slice(0, 5).map((task) => (
-                  <div
-                    key={task.id}
-                    className="flex items-center justify-between p-3 rounded-lg border cursor-pointer hover:bg-accent/50 transition-colors"
-                    onClick={() => navigate(`/claims/${task.claim_id}`)}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{task.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {(task.claims as any)?.policyholder_name || (task.claims as any)?.claim_number}
-                      </p>
-                    </div>
-                    {task.due_date && (
-                      <span className="text-xs text-muted-foreground ml-2 shrink-0">
-                        {formatDistanceToNow(new Date(task.due_date), { addSuffix: true })}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
 
         {/* Financial Summary */}
         <Card>

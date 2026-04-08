@@ -12395,6 +12395,41 @@ export type Database = {
           },
         ]
       }
+      task_activity_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          metadata_json: Json | null
+          task_id: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          metadata_json?: Json | null
+          task_id: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          metadata_json?: Json | null
+          task_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_activity_events_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       task_automations: {
         Row: {
           created_at: string | null
@@ -12436,12 +12471,16 @@ export type Database = {
       }
       tasks: {
         Row: {
+          active_rank: number | null
+          age_score: number
           assigned_to: string | null
+          blocked_reason: string | null
           claim_id: string | null
           completed_at: string | null
           created_at: string
           created_by: string | null
           description: string | null
+          done_definition: string | null
           due_date: string | null
           follow_up_current_count: number | null
           follow_up_enabled: boolean | null
@@ -12451,19 +12490,32 @@ export type Database = {
           follow_up_next_at: string | null
           follow_up_stop_reason: string | null
           follow_up_stopped_at: string | null
+          gravity_score: number
           id: string
+          impact_score: number
+          last_touched_at: string | null
+          linked_entity_id: string | null
+          linked_entity_type: string | null
+          paused_at: string | null
           priority: string | null
+          priority_level: string
+          started_at: string | null
           status: string
           title: string
           updated_at: string
+          urgency_score: number
         }
         Insert: {
+          active_rank?: number | null
+          age_score?: number
           assigned_to?: string | null
+          blocked_reason?: string | null
           claim_id?: string | null
           completed_at?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
+          done_definition?: string | null
           due_date?: string | null
           follow_up_current_count?: number | null
           follow_up_enabled?: boolean | null
@@ -12473,19 +12525,32 @@ export type Database = {
           follow_up_next_at?: string | null
           follow_up_stop_reason?: string | null
           follow_up_stopped_at?: string | null
+          gravity_score?: number
           id?: string
+          impact_score?: number
+          last_touched_at?: string | null
+          linked_entity_id?: string | null
+          linked_entity_type?: string | null
+          paused_at?: string | null
           priority?: string | null
+          priority_level?: string
+          started_at?: string | null
           status?: string
           title: string
           updated_at?: string
+          urgency_score?: number
         }
         Update: {
+          active_rank?: number | null
+          age_score?: number
           assigned_to?: string | null
+          blocked_reason?: string | null
           claim_id?: string | null
           completed_at?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
+          done_definition?: string | null
           due_date?: string | null
           follow_up_current_count?: number | null
           follow_up_enabled?: boolean | null
@@ -12495,11 +12560,20 @@ export type Database = {
           follow_up_next_at?: string | null
           follow_up_stop_reason?: string | null
           follow_up_stopped_at?: string | null
+          gravity_score?: number
           id?: string
+          impact_score?: number
+          last_touched_at?: string | null
+          linked_entity_id?: string | null
+          linked_entity_type?: string | null
+          paused_at?: string | null
           priority?: string | null
+          priority_level?: string
+          started_at?: string | null
           status?: string
           title?: string
           updated_at?: string
+          urgency_score?: number
         }
         Relationships: [
           {
