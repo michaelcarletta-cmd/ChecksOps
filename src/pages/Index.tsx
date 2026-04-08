@@ -7,6 +7,8 @@ import { useNavigate } from "react-router-dom";
 import { DashboardCalendar } from "@/components/dashboard/DashboardCalendar";
 import { DashboardNotepad } from "@/components/dashboard/DashboardNotepad";
 import { useRenderCount } from "@/hooks/useRenderCount";
+import { ExecutionQueuePanel } from "@/components/execution/ExecutionQueuePanel";
+import { DailyExecutionResetModal } from "@/components/execution/DailyExecutionResetModal";
 
 const Index = () => {
   useRenderCount("DashboardIndex");
