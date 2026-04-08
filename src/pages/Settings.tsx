@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature } from "lucide-react";
+import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature, ListTree } from "lucide-react";
 import {
   DndContext,
   closestCenter,
