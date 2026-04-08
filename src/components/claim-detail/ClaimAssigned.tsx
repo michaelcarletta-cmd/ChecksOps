@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatPhoneNumber } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { User, MapPin, Plus, Trash2, Edit, Search, Check, ChevronsUpDown } from "lucide-react";
 import { ClaimAssignments } from "./ClaimAssignments";
@@ -474,11 +475,12 @@ export function ClaimAssigned({ claim }: ClaimAssignedProps) {
                 <Label htmlFor="adjuster_phone">Phone</Label>
                 <Input
                   id="adjuster_phone"
+                  type="tel"
                   value={formData.adjuster_phone}
                   onChange={(e) =>
-                    setFormData({ ...formData, adjuster_phone: e.target.value })
+                    setFormData({ ...formData, adjuster_phone: formatPhoneNumber(e.target.value) })
                   }
-                  placeholder="Phone number"
+                  placeholder="123-456-7890"
                 />
               </div>
               <div className="grid gap-2">

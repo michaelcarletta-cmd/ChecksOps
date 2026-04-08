@@ -23,6 +23,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, Search, Phone, Mail } from "lucide-react";
+import { formatPhoneNumber } from "@/lib/utils";
 
 interface Adjuster {
   id: string;
@@ -35,13 +36,6 @@ interface Adjuster {
   is_active: boolean;
   created_at: string;
 }
-
-const formatPhoneNumber = (value: string) => {
-  const cleaned = value.replace(/\D/g, "");
-  if (cleaned.length <= 3) return cleaned;
-  if (cleaned.length <= 6) return `${cleaned.slice(0, 3)}-${cleaned.slice(3)}`;
-  return `${cleaned.slice(0, 3)}-${cleaned.slice(3, 6)}-${cleaned.slice(6, 10)}`;
-};
 
 export function AdjustersTab() {
   const queryClient = useQueryClient();
