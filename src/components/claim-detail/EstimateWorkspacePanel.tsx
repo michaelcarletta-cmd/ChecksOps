@@ -2,19 +2,18 @@ import { useState, useEffect, Suspense, lazy } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calculator } from "lucide-react";
 
-const DarwinRoofEstimate = lazy(() => import("@/components/claim-detail/DarwinRoofEstimate").then(m => ({ default: m.DarwinRoofEstimate })));
+
 const DarwinEstimateComparison = lazy(() => import("@/components/claim-detail/DarwinEstimateComparison").then(m => ({ default: m.DarwinEstimateComparison })));
 const DarwinEstimateGapAnalysis = lazy(() => import("@/components/claim-detail/DarwinEstimateGapAnalysis").then(m => ({ default: m.DarwinEstimateGapAnalysis })));
 const DarwinSupplementGenerator = lazy(() => import("@/components/claim-detail/DarwinSupplementGenerator").then(m => ({ default: m.DarwinSupplementGenerator })));
 const DarwinEstimateBuilder = lazy(() => import("@/components/claim-detail/DarwinEstimateBuilder").then(m => ({ default: m.DarwinEstimateBuilder })));
 const DarwinScopeEngine = lazy(() => import("@/components/claim-detail/DarwinScopeEngine").then(m => ({ default: m.DarwinScopeEngine })));
 
-type SectionKey = "roof_estimate" | "estimate_comparison" | "gap_analysis" | "supplement" | "estimate_builder" | "scope_engine";
+type SectionKey = "estimate_comparison" | "gap_analysis" | "supplement" | "estimate_builder" | "scope_engine";
 
 const STORAGE_KEY = "estimate-workspace-selected-section";
 
 const sectionOptions: { value: SectionKey; label: string }[] = [
-  { value: "roof_estimate", label: "Roof Estimate" },
   { value: "estimate_comparison", label: "Estimate Comparison" },
   { value: "gap_analysis", label: "Estimate Gap Analysis" },
   { value: "supplement", label: "Supplement Generator" },
@@ -31,7 +30,7 @@ export const EstimateWorkspacePanel = ({ claimId, claim }: EstimateWorkspacePane
   const [selectedSection, setSelectedSection] = useState<SectionKey>(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored && sectionOptions.some(o => o.value === stored)) return stored as SectionKey;
-    return "roof_estimate";
+    return "estimate_comparison";
   });
 
   useEffect(() => {
@@ -63,7 +62,7 @@ export const EstimateWorkspacePanel = ({ claimId, claim }: EstimateWorkspacePane
       </div>
 
       <Suspense fallback={<div className="text-xs text-muted-foreground py-4">Loading…</div>}>
-        {selectedSection === "roof_estimate" && <DarwinRoofEstimate claimId={claimId} claim={claim} />}
+        
         {selectedSection === "estimate_comparison" && <DarwinEstimateComparison claimId={claimId} claim={claim} />}
         {selectedSection === "gap_analysis" && <DarwinEstimateGapAnalysis claimId={claimId} claim={claim} />}
         {selectedSection === "supplement" && <DarwinSupplementGenerator claimId={claimId} claim={claim} />}
