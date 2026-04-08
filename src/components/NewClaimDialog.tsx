@@ -7,10 +7,30 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Upload, Loader2, FileText, Sparkles } from "lucide-react";
+import { Plus, Upload, Loader2, FileText, Sparkles, Check, X, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { formatPhoneNumber } from "@/lib/utils";
+import { formatPhoneNumber, cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+
+interface TeamMemberOption {
+  id: string;
+  full_name: string | null;
+  email: string;
+}
 
 interface InsuranceCompany {
   id: string;
