@@ -9,6 +9,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { ChevronRight } from "lucide-react";
 
 interface ClaimStatus {
   id: string;
@@ -17,17 +19,25 @@ interface ClaimStatus {
   gradient: string | null;
 }
 
+interface SubStatus {
+  id: string;
+  parent_status_id: string;
+  name: string;
+  display_order: number;
+}
+
 interface ClaimStatusSelectProps {
   claimId: string;
   currentStatus: string;
+  currentSubStatusId?: string | null;
   onStatusChange?: (newStatus: string) => void;
+  onSubStatusChange?: (subStatusId: string | null) => void;
 }
 
 function getStatusStyle(status: ClaimStatus): React.CSSProperties {
   if (status.gradient) {
     return { background: status.gradient, color: "#fff" };
   }
-  // Build a subtle tinted style from the solid color
   return {
     backgroundColor: `${status.color}18`,
     color: status.color,
@@ -46,8 +56,9 @@ function getStatusTriggerStyle(status: ClaimStatus): React.CSSProperties {
   };
 }
 
-export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: ClaimStatusSelectProps) {
+export function ClaimStatusSelect({ claimId, currentStatus, currentSubStatusId, onStatusChange, onSubStatusChange }: ClaimStatusSelectProps) {
   const [statuses, setStatuses] = useState<ClaimStatus[]>([]);
+  const [subStatuses, setSubStatuses] = useState<SubStatus[]>([]);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const { toast } = useToast();
@@ -58,14 +69,22 @@ export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: Cl
 
   const fetchStatuses = async () => {
     try {
-      const { data, error } = await supabase
-        .from("claim_statuses")
-        .select("id, name, color, gradient")
-        .eq("is_active", true)
-        .order("display_order");
+      const [statusRes, subRes] = await Promise.all([
+        supabase
+          .from("claim_statuses")
+          .select("id, name, color, gradient")
+          .eq("is_active", true)
+          .order("display_order"),
+        supabase
+          .from("claim_sub_statuses")
+          .select("id, parent_status_id, name, display_order")
+          .eq("is_active", true)
+          .order("display_order"),
+      ]);
 
-      if (error) throw error;
-      setStatuses(data || []);
+      if (statusRes.error) throw statusRes.error;
+      setStatuses(statusRes.data || []);
+      setSubStatuses(subRes.data || []);
     } catch (error: any) {
       console.error("Error fetching statuses:", error);
     } finally {
@@ -79,7 +98,7 @@ export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: Cl
     try {
       const { error } = await supabase
         .from("claims")
-        .update({ status: newStatus })
+        .update({ status: newStatus, sub_status_id: null })
         .eq("id", claimId);
 
       if (error) throw error;
@@ -103,6 +122,7 @@ export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: Cl
       });
 
       onStatusChange?.(newStatus);
+      onSubStatusChange?.(null);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -114,42 +134,105 @@ export function ClaimStatusSelect({ claimId, currentStatus, onStatusChange }: Cl
     }
   };
 
+  const handleSubStatusChange = async (subStatusId: string) => {
+    setLoading(true);
+    try {
+      const value = subStatusId === "none" ? null : subStatusId;
+      const { error } = await supabase
+        .from("claims")
+        .update({ sub_status_id: value })
+        .eq("id", claimId);
+
+      if (error) throw error;
+
+      toast({ title: "Sub-status updated" });
+      onSubStatusChange?.(value);
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (initialLoading) {
     return <Skeleton className="h-8 w-[160px] rounded-full" />;
   }
 
   const currentStatusObj = statuses.find(s => s.name === currentStatus);
+  const currentSubSubs = currentStatusObj
+    ? subStatuses.filter(s => s.parent_status_id === currentStatusObj.id)
+    : [];
+  const currentSubObj = currentSubStatusId
+    ? subStatuses.find(s => s.id === currentSubStatusId)
+    : null;
 
   return (
-    <Select value={currentStatus || ""} onValueChange={handleStatusChange} disabled={loading || statuses.length === 0}>
-      <SelectTrigger
-        className="min-w-[140px] max-w-[280px] w-auto rounded-full border shadow-sm h-8 text-xs font-semibold px-3 transition-colors [&>svg]:text-current"
-        style={currentStatusObj ? getStatusTriggerStyle(currentStatusObj) : undefined}
-      >
-        {currentStatusObj ? (
-          <span className="text-left whitespace-nowrap">{currentStatusObj.name}</span>
-        ) : (
-          <SelectValue placeholder="Select status" />
-        )}
-      </SelectTrigger>
-      <SelectContent>
-        {statuses.map((status) => (
-          <SelectItem key={status.id} value={status.name} className="p-0 my-0.5">
-            <div
-              className="flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap"
-              style={getStatusStyle(status)}
-            >
-              {!status.gradient && (
-                <div
-                  className="w-2 h-2 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: status.color }}
-                />
+    <div className="flex flex-wrap items-center gap-2">
+      <Select value={currentStatus || ""} onValueChange={handleStatusChange} disabled={loading || statuses.length === 0}>
+        <SelectTrigger
+          className="min-w-[140px] max-w-[280px] w-auto rounded-full border shadow-sm h-8 text-xs font-semibold px-3 transition-colors [&>svg]:text-current"
+          style={currentStatusObj ? getStatusTriggerStyle(currentStatusObj) : undefined}
+        >
+          {currentStatusObj ? (
+            <span className="text-left whitespace-nowrap">{currentStatusObj.name}</span>
+          ) : (
+            <SelectValue placeholder="Select status" />
+          )}
+        </SelectTrigger>
+        <SelectContent>
+          {statuses.map((status) => (
+            <SelectItem key={status.id} value={status.name} className="p-0 my-0.5">
+              <div
+                className="flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap"
+                style={getStatusStyle(status)}
+              >
+                {!status.gradient && (
+                  <div
+                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: status.color }}
+                  />
+                )}
+                {status.name}
+                {subStatuses.filter(s => s.parent_status_id === status.id).length > 0 && (
+                  <span className="text-[10px] opacity-60 ml-1">
+                    ({subStatuses.filter(s => s.parent_status_id === status.id).length} steps)
+                  </span>
+                )}
+              </div>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {currentSubSubs.length > 0 && (
+        <>
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+          <Select
+            value={currentSubStatusId || "none"}
+            onValueChange={handleSubStatusChange}
+            disabled={loading}
+          >
+            <SelectTrigger className="min-w-[120px] max-w-[220px] w-auto rounded-full border shadow-sm h-8 text-xs font-medium px-3">
+              {currentSubObj ? (
+                <span className="text-left whitespace-nowrap">{currentSubObj.name}</span>
+              ) : (
+                <span className="text-muted-foreground">Select step...</span>
               )}
-              {status.name}
-            </div>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none" className="text-xs text-muted-foreground">
+                No sub-step
+              </SelectItem>
+              {currentSubSubs.map((sub, idx) => (
+                <SelectItem key={sub.id} value={sub.id} className="text-xs">
+                  <span className="text-muted-foreground mr-1">{idx + 1}.</span>
+                  {sub.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </>
+      )}
+    </div>
   );
 }
