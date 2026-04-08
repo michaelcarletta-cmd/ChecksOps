@@ -186,6 +186,23 @@ export function NewClaimDialog() {
           }
         }
       }
+
+      // Fetch team members (staff and admin)
+      const { data: staffRoles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .in("role", ["admin", "staff"]);
+
+      if (staffRoles && staffRoles.length > 0) {
+        const staffIds = staffRoles.map(r => r.user_id);
+        const { data: staffProfiles } = await supabase
+          .from("profiles")
+          .select("id, full_name, email")
+          .in("id", staffIds)
+          .eq("approval_status", "approved")
+          .order("full_name");
+        setTeamMembers(staffProfiles || []);
+      }
     } catch (error: any) {
       console.error("Error fetching dropdown data:", error);
       toast({
@@ -495,25 +512,18 @@ export function NewClaimDialog() {
 
       const claim = data as { id: string } | null;
 
-      // Auto-assign staff member who created the claim
-      if (claim?.id) {
-        const { data: userData } = await supabase.auth.getUser();
-        const user = userData?.user;
-        if (user) {
-          const { data: roles } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", user.id);
-          
-          const isStaff = roles?.some(r => r.role === "staff");
-          
-          // Assign the staff member to the claim they just created
-          if (isStaff) {
-            await supabase
-              .from("claim_staff")
-              .insert({ claim_id: claim.id, staff_id: user.id });
-          }
-        }
+      // Auto-assign the creator + any additionally selected team members
+      if (claim?.id && user) {
+        const staffIdsToAssign = new Set<string>();
+        staffIdsToAssign.add(user.id); // Always add the creator
+        selectedTeamMembers.forEach(id => staffIdsToAssign.add(id));
+
+        const inserts = Array.from(staffIdsToAssign).map(staffId => ({
+          claim_id: claim.id,
+          staff_id: staffId,
+        }));
+
+        await supabase.from("claim_staff").insert(inserts);
       }
 
       // Auto-create Darwin automation with passive scope + semi-autonomous level
@@ -562,6 +572,7 @@ export function NewClaimDialog() {
       setOpen(false);
       setSelectedClientId("");
       setSelectedWorkspaceId("");
+      setSelectedTeamMembers([]);
       setFormData({
         policyholderName: "",
         policyholderPhone: "",
@@ -903,7 +914,101 @@ export function NewClaimDialog() {
                   placeholder="Describe the incident..."
                   rows={3}
                 />
+          </div>
+
+          {/* Assign Team Members Section */}
+          {teamMembers.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-foreground border-b border-border pb-2">
+                Assign Team Members
+              </h3>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 mb-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">
+                    You will be automatically assigned. Add additional team members below.
+                  </span>
+                </div>
+                
+                {/* Current user badge */}
+                {user && (
+                  <Badge variant="secondary" className="mr-1">
+                    You (auto-assigned)
+                  </Badge>
+                )}
+
+                {/* Selected members badges */}
+                {selectedTeamMembers.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {selectedTeamMembers.map(memberId => {
+                      const member = teamMembers.find(m => m.id === memberId);
+                      return (
+                        <Badge key={memberId} variant="secondary" className="flex items-center gap-1 pr-1">
+                          {member?.full_name || member?.email || "Unknown"}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="ml-1 h-5 w-5 rounded-full p-0"
+                            onClick={() => setSelectedTeamMembers(prev => prev.filter(id => id !== memberId))}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <Popover open={teamMemberPopoverOpen} onOpenChange={setTeamMemberPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" type="button" className="h-8 text-xs mt-2">
+                      {selectedTeamMembers.length === 0 ? "Add team members" : "Add more"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[250px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search team members..." />
+                      <CommandList>
+                        <CommandEmpty>No team members found.</CommandEmpty>
+                        <CommandGroup>
+                          {teamMembers
+                            .filter(m => m.id !== user?.id) // Don't show the creator (auto-assigned)
+                            .map(member => {
+                              const isSelected = selectedTeamMembers.includes(member.id);
+                              return (
+                                <CommandItem
+                                  key={member.id}
+                                  value={member.full_name || member.email}
+                                  onSelect={() => {
+                                    setSelectedTeamMembers(prev =>
+                                      isSelected
+                                        ? prev.filter(id => id !== member.id)
+                                        : [...prev, member.id]
+                                    );
+                                  }}
+                                >
+                                  <div className={cn(
+                                    "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
+                                    isSelected ? "bg-primary text-primary-foreground" : "opacity-50 [&_svg]:invisible"
+                                  )}>
+                                    <Check className="h-3 w-3" />
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="text-sm">{member.full_name || "No name"}</span>
+                                    <span className="text-xs text-muted-foreground">{member.email}</span>
+                                  </div>
+                                </CommandItem>
+                              );
+                            })}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
+            </div>
+          )}
             </div>
           </div>
 
