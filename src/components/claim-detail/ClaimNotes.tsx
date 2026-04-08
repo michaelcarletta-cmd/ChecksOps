@@ -329,13 +329,23 @@ ${timeline}`;
       createdAt = iso;
     }
 
+    const isCommunication = commEmail || commPhone;
+    const methods: string[] = [];
+    if (commEmail) methods.push('email');
+    if (commPhone) methods.push('phone');
+
+    const updateType = isCommunication ? "communication_log" : "note";
+    const contentToSave = isCommunication
+      ? JSON.stringify({ type: 'communication', methods, text: newUpdate })
+      : newUpdate;
+
     const { data: update, error: updateError } = await supabase
       .from("claim_updates")
       .insert({
         claim_id: claimId,
-        content: newUpdate,
+        content: contentToSave,
         user_id: user.id,
-        update_type: "note",
+        update_type: updateType,
         recipients: recipients,
         ...(createdAt ? { created_at: createdAt } : {}),
       })
