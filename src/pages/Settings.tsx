@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature } from "lucide-react";
+import { Plus, Trash2, GripVertical, ChevronDown, FolderKanban, FileSignature, ListTree } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -54,6 +54,14 @@ interface ClaimStatus {
   name: string;
   color: string;
   gradient: string | null;
+  display_order: number;
+  is_active: boolean;
+}
+
+interface SubStatus {
+  id: string;
+  parent_status_id: string;
+  name: string;
   display_order: number;
   is_active: boolean;
 }
@@ -111,6 +119,11 @@ function SortableStatusRow({ status, onUpdateName, onUpdateColor, onUpdateGradie
   const [useGradient, setUseGradient] = useState(!!status.gradient);
   const [customGradient, setCustomGradient] = useState(status.gradient || "");
   const [colorOpen, setColorOpen] = useState(false);
+  const [subStatusesOpen, setSubStatusesOpen] = useState(false);
+  const [subStatuses, setSubStatuses] = useState<SubStatus[]>([]);
+  const [newSubName, setNewSubName] = useState("");
+  const [loadingSubs, setLoadingSubs] = useState(false);
+  const { toast } = useToast();
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -121,6 +134,50 @@ function SortableStatusRow({ status, onUpdateName, onUpdateColor, onUpdateGradie
   const bgStyle = status.gradient
     ? { background: status.gradient }
     : { backgroundColor: status.color };
+
+  const fetchSubStatuses = async () => {
+    setLoadingSubs(true);
+    const { data, error } = await supabase
+      .from("claim_sub_statuses")
+      .select("*")
+      .eq("parent_status_id", status.id)
+      .order("display_order");
+    if (!error) setSubStatuses(data || []);
+    setLoadingSubs(false);
+  };
+
+  const addSubStatus = async () => {
+    const name = newSubName.trim();
+    if (!name) return;
+    const maxOrder = subStatuses.length > 0 ? Math.max(...subStatuses.map(s => s.display_order)) + 1 : 0;
+    const { error } = await supabase
+      .from("claim_sub_statuses")
+      .insert({ parent_status_id: status.id, name, display_order: maxOrder });
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      setNewSubName("");
+      fetchSubStatuses();
+    }
+  };
+
+  const deleteSubStatus = async (id: string) => {
+    const { error } = await supabase.from("claim_sub_statuses").delete().eq("id", id);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      fetchSubStatuses();
+    }
+  };
+
+  const updateSubName = async (id: string, name: string) => {
+    await supabase.from("claim_sub_statuses").update({ name }).eq("id", id);
+    setSubStatuses(prev => prev.map(s => s.id === id ? { ...s, name } : s));
+  };
+
+  useEffect(() => {
+    if (subStatusesOpen) fetchSubStatuses();
+  }, [subStatusesOpen]);
 
   return (
     <div
@@ -139,6 +196,18 @@ function SortableStatusRow({ status, onUpdateName, onUpdateColor, onUpdateGradie
           {status.name}
         </div>
         <div className="flex-1" />
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 px-2 text-xs gap-1"
+          onClick={() => setSubStatusesOpen(!subStatusesOpen)}
+        >
+          <ListTree className="h-3 w-3" />
+          {subStatusesOpen ? "Hide" : "Sub-steps"}
+          {subStatuses.length > 0 && !subStatusesOpen && (
+            <span className="ml-1 text-[10px] bg-primary/10 text-primary rounded-full px-1.5">{subStatuses.length}</span>
+          )}
+        </Button>
         <Button
           variant="outline"
           size="sm"
@@ -165,6 +234,52 @@ function SortableStatusRow({ status, onUpdateName, onUpdateColor, onUpdateGradie
         className="h-8 text-sm"
         placeholder="Status name"
       />
+
+      {/* Sub-statuses panel */}
+      {subStatusesOpen && (
+        <div className="space-y-2 pt-2 border-t">
+          <p className="text-xs font-medium text-muted-foreground">Sub-steps for "{status.name}"</p>
+          <div className="flex gap-2">
+            <Input
+              placeholder="e.g. Inspection, Prepare Estimate..."
+              value={newSubName}
+              onChange={(e) => setNewSubName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addSubStatus()}
+              className="h-8 text-sm flex-1"
+            />
+            <Button onClick={addSubStatus} size="sm" className="h-8 whitespace-nowrap">
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Add
+            </Button>
+          </div>
+          {loadingSubs ? (
+            <p className="text-xs text-muted-foreground">Loading...</p>
+          ) : subStatuses.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">No sub-steps yet. Add steps that happen within this status.</p>
+          ) : (
+            <div className="space-y-1">
+              {subStatuses.map((sub, idx) => (
+                <div key={sub.id} className="flex items-center gap-2 bg-muted/40 rounded px-2 py-1.5">
+                  <span className="text-xs text-muted-foreground w-5 text-center">{idx + 1}.</span>
+                  <Input
+                    value={sub.name}
+                    onChange={(e) => updateSubName(sub.id, e.target.value)}
+                    className="h-7 text-xs flex-1 bg-transparent border-none focus-visible:ring-1"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => deleteSubStatus(sub.id)}
+                  >
+                    <Trash2 className="h-3 w-3 text-muted-foreground" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {colorOpen && (
         <div className="space-y-2 pt-1 border-t">

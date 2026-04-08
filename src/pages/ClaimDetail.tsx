@@ -267,7 +267,9 @@ const ClaimDetail = () => {
                 <ClaimStatusSelect 
                   claimId={claim.id} 
                   currentStatus={claim.status}
+                  currentSubStatusId={claim.sub_status_id}
                   onStatusChange={handleStatusChange}
+                  onSubStatusChange={() => queryClient.invalidateQueries({ queryKey: ["claim", id] })}
                 />
               )}
               {/* Read-only status display for portal users only */}
