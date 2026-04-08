@@ -401,6 +401,8 @@ ${timeline}`;
     setTaskTitle("");
     setTaskDueDate("");
     setTaskPriority("medium");
+    setCommEmail(false);
+    setCommPhone(false);
     setLoading(false);
     fetchUpdates();
   };
