@@ -269,7 +269,7 @@ const ClaimDetail = () => {
                   currentStatus={claim.status}
                   currentSubStatusId={claim.sub_status_id}
                   onStatusChange={handleStatusChange}
-                  onSubStatusChange={() => refetch()}
+                  onSubStatusChange={() => queryClient.invalidateQueries({ queryKey: ["claim", id] })}
                 />
               )}
               {/* Read-only status display for portal users only */}
