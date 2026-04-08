@@ -481,6 +481,23 @@ ${timeline}`;
               className="min-h-[100px]"
             />
 
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer rounded px-1 py-0.5 hover:bg-muted/50 transition-colors w-fit">
+                <Checkbox
+                  checked={commEmail}
+                  onCheckedChange={(checked) => setCommEmail(checked as boolean)}
+                />
+                📧 Email made/attempted
+              </Label>
+              <Label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer rounded px-1 py-0.5 hover:bg-muted/50 transition-colors w-fit">
+                <Checkbox
+                  checked={commPhone}
+                  onCheckedChange={(checked) => setCommPhone(checked as boolean)}
+                />
+                ☎️ Phone call made/attempted
+              </Label>
+            </div>
+
             <div className="grid gap-2 sm:grid-cols-2 items-end">
               <div className="space-y-2">
                 <Label className="flex items-center gap-2 text-sm cursor-pointer">
