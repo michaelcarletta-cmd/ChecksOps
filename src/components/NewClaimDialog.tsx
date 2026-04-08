@@ -91,6 +91,10 @@ export function NewClaimDialog() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [extracting, setExtracting] = useState(false);
   const [extractedFileName, setExtractedFileName] = useState<string | null>(null);
+  const [teamMembers, setTeamMembers] = useState<TeamMemberOption[]>([]);
+  const [selectedTeamMembers, setSelectedTeamMembers] = useState<string[]>([]);
+  const [teamMemberPopoverOpen, setTeamMemberPopoverOpen] = useState(false);
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
