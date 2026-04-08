@@ -477,6 +477,7 @@ ${timeline}`;
                 SMS / Text
               </TabsTrigger>
             </>
+          )}
         </TabsList>
 
         <TabsContent value="notes" className="space-y-6">
