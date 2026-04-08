@@ -12488,6 +12488,7 @@ export type Database = {
           priority: string | null
           title: string
           trigger_status: string | null
+          trigger_sub_status_id: string | null
           trigger_type: string
           updated_at: string | null
         }
@@ -12500,6 +12501,7 @@ export type Database = {
           priority?: string | null
           title: string
           trigger_status?: string | null
+          trigger_sub_status_id?: string | null
           trigger_type: string
           updated_at?: string | null
         }
@@ -12512,10 +12514,19 @@ export type Database = {
           priority?: string | null
           title?: string
           trigger_status?: string | null
+          trigger_sub_status_id?: string | null
           trigger_type?: string
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "task_automations_trigger_sub_status_id_fkey"
+            columns: ["trigger_sub_status_id"]
+            isOneToOne: false
+            referencedRelation: "claim_sub_statuses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tasks: {
         Row: {
