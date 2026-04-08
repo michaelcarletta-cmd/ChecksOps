@@ -468,11 +468,16 @@ ${timeline}`;
           </TabsTrigger>
           {!isPortalUser && (
             <>
-              <TabsTrigger value="communications" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap flex items-center gap-2">
-                <Phone className="h-4 w-4" />
-                Communications Log
-              </TabsTrigger>
               <TabsTrigger value="emails" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap flex items-center gap-2">
+                <Mail className="h-4 w-4" />
+                Emails
+              </TabsTrigger>
+              <TabsTrigger value="sms" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap flex items-center gap-2">
+                <MessageSquare className="h-4 w-4" />
+                SMS / Text
+              </TabsTrigger>
+            </>
+          )}
                 <Mail className="h-4 w-4" />
                 Emails
               </TabsTrigger>
