@@ -646,7 +646,7 @@ ${timeline}`;
                 : update.profiles?.full_name || update.profiles?.email || "Unknown";
 
               return (
-                <div key={update.id} className="flex gap-3 p-4 rounded-lg bg-muted/50">
+                <div key={update.id} className="flex gap-3 p-4 rounded-lg bg-muted/50 animate-in fade-in duration-150">
                   <Avatar className="h-8 w-8">
                     <AvatarFallback className="bg-primary text-primary-foreground text-xs">
                       {authorName.charAt(0).toUpperCase()}
@@ -654,11 +654,36 @@ ${timeline}`;
                   </Avatar>
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">{authorName}</span>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium">{authorName}</span>
                         <span className="text-xs text-muted-foreground">
                           {format(new Date(update.created_at), "MMM d, yyyy h:mm a")}
                         </span>
+                        {(() => {
+                          let commMethods: string[] = [];
+                          try {
+                            const parsed = JSON.parse(update.content);
+                            if (parsed?.type === 'communication' && Array.isArray(parsed.methods)) {
+                              commMethods = parsed.methods;
+                            }
+                          } catch {}
+                          return commMethods.length > 0 ? (
+                            <>
+                              {commMethods.includes('email') && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                                  📧 Email
+                                </span>
+                              )}
+                              {commMethods.includes('phone') && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                                  ☎️ Phone
+                                </span>
+                              )}
+                            </>
+                          ) : null;
+                        })()}
+                      </div>
+                      <div className="flex items-center gap-2">
                         {(isStaff || isCurrentUser) && (
                           <div className="flex gap-1">
                             <Button
@@ -681,7 +706,17 @@ ${timeline}`;
                         )}
                       </div>
                     </div>
-                    <p className="text-sm text-foreground whitespace-pre-wrap">{update.content}</p>
+                    <p className="text-sm text-foreground whitespace-pre-wrap">
+                      {(() => {
+                        try {
+                          const parsed = JSON.parse(update.content);
+                          if (parsed?.type === 'communication' && parsed.text) {
+                            return parsed.text;
+                          }
+                        } catch {}
+                        return update.content;
+                      })()}
+                    </p>
                     {update.recipients && update.recipients.length > 0 && isStaff && (
                       <p className="text-xs text-muted-foreground mt-2">
                         Notified {update.recipients.length}{" "}
