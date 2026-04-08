@@ -58,6 +58,14 @@ interface ClaimStatus {
   is_active: boolean;
 }
 
+interface SubStatus {
+  id: string;
+  parent_status_id: string;
+  name: string;
+  display_order: number;
+  is_active: boolean;
+}
+
 interface SortableStatusRowProps {
   status: ClaimStatus;
   onUpdateName: (id: string, name: string) => void;
