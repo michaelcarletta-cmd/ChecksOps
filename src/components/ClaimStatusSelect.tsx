@@ -145,12 +145,51 @@ export function ClaimStatusSelect({ claimId, currentStatus, currentSubStatusId, 
 
       if (error) throw error;
 
+      // Fire sub-status task automations
+      if (value) {
+        fireSubStatusAutomations(claimId, value);
+      }
+
       toast({ title: "Sub-status updated" });
       onSubStatusChange?.(value);
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fireSubStatusAutomations = async (claimId: string, subStatusId: string) => {
+    try {
+      const { data: automations } = await supabase
+        .from("task_automations")
+        .select("*")
+        .eq("trigger_type", "on_sub_status_change")
+        .eq("trigger_sub_status_id", subStatusId)
+        .eq("is_active", true);
+
+      if (!automations || automations.length === 0) return;
+
+      const { data: { user } } = await supabase.auth.getUser();
+
+      for (const auto of automations) {
+        const dueDate = auto.due_date_offset
+          ? new Date(Date.now() + auto.due_date_offset * 86400000).toISOString().split("T")[0]
+          : null;
+
+        await supabase.from("tasks").insert({
+          title: auto.title,
+          description: auto.description,
+          claim_id: claimId,
+          priority: auto.priority || "medium",
+          priority_level: auto.priority || "medium",
+          status: "backlog",
+          due_date: dueDate,
+          created_by: user?.id || null,
+        });
+      }
+    } catch (err) {
+      console.error("Sub-status automation error:", err);
     }
   };
 
