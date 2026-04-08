@@ -84,6 +84,8 @@ export const ClaimNotes = ({ claimId, claim: claimProp, isPortalUser = false }: 
   const [deleteTarget, setDeleteTarget] = useState<Update | null>(null);
   const [createTask, setCreateTask] = useState(false);
   const [taskTitle, setTaskTitle] = useState("");
+  const [commEmail, setCommEmail] = useState(false);
+  const [commPhone, setCommPhone] = useState(false);
   const [taskDueDate, setTaskDueDate] = useState("");
   const [taskPriority, setTaskPriority] = useState("medium");
   const { user, userRole } = useAuth();
