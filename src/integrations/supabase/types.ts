@@ -6153,6 +6153,44 @@ export type Database = {
           },
         ]
       }
+      claim_sub_statuses: {
+        Row: {
+          created_at: string
+          display_order: number
+          id: string
+          is_active: boolean
+          name: string
+          parent_status_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          name: string
+          parent_status_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_order?: number
+          id?: string
+          is_active?: boolean
+          name?: string
+          parent_status_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_sub_statuses_parent_status_id_fkey"
+            columns: ["parent_status_id"]
+            isOneToOne: false
+            referencedRelation: "claim_statuses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_thesis_objects: {
         Row: {
           anticipated_pushback: string | null
@@ -6444,6 +6482,7 @@ export type Database = {
           ssn_last_four: string | null
           state_code: string | null
           status: string | null
+          sub_status_id: string | null
           updated_at: string | null
           workspace_id: string | null
         }
@@ -6515,6 +6554,7 @@ export type Database = {
           ssn_last_four?: string | null
           state_code?: string | null
           status?: string | null
+          sub_status_id?: string | null
           updated_at?: string | null
           workspace_id?: string | null
         }
@@ -6586,6 +6626,7 @@ export type Database = {
           ssn_last_four?: string | null
           state_code?: string | null
           status?: string | null
+          sub_status_id?: string | null
           updated_at?: string | null
           workspace_id?: string | null
         }
@@ -6630,6 +6671,13 @@ export type Database = {
             columns: ["referrer_id"]
             isOneToOne: false
             referencedRelation: "referrers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claims_sub_status_id_fkey"
+            columns: ["sub_status_id"]
+            isOneToOne: false
+            referencedRelation: "claim_sub_statuses"
             referencedColumns: ["id"]
           },
           {
@@ -13816,6 +13864,7 @@ export type Database = {
               ssn_last_four: string | null
               state_code: string | null
               status: string | null
+              sub_status_id: string | null
               updated_at: string | null
               workspace_id: string | null
             }
@@ -13912,6 +13961,7 @@ export type Database = {
               ssn_last_four: string | null
               state_code: string | null
               status: string | null
+              sub_status_id: string | null
               updated_at: string | null
               workspace_id: string | null
             }
