@@ -40,7 +40,7 @@ interface ActionConfig {
     recipient_types?: ('policyholder' | 'adjuster' | 'referrer' | 'contractors')[]; // Multiple recipient types
     manual_emails?: string[]; // Manually entered email addresses
     manual_emails_text?: string; // Raw input for editing
-    recipient_type?: 'policyholder' | 'adjuster' | 'referrer' | 'contractors' | 'claim_staff'; // Legacy + SMS support
+    recipient_type?: 'policyholder' | 'adjuster' | 'referrer' | 'contractors' | 'claim_staff' | 'admins'; // Legacy + SMS support
     subject?: string;
     message?: string;
     email_template_id?: string; // Reference to email template
@@ -412,6 +412,7 @@ export const AutomationsSettings = () => {
           adjuster: 'Insurance Adjuster',
           contractors: 'Assigned Contractors',
           claim_staff: 'Assigned Staff',
+          admins: 'All Admins',
         };
         return `SMS to ${smsRecipientLabel[action.config.recipient_type || ''] || action.config.recipient_type || 'recipient'}`;
       case 'create_task':
@@ -973,6 +974,7 @@ export const AutomationsSettings = () => {
                               <SelectItem value="adjuster">Insurance Adjuster</SelectItem>
                               <SelectItem value="contractors">Assigned Contractors</SelectItem>
                               <SelectItem value="claim_staff">Assigned Staff</SelectItem>
+                              <SelectItem value="admins">All Admins</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
