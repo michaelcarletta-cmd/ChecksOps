@@ -252,7 +252,7 @@ export const AutomationsSettings = () => {
     setFormDescription(automation.description || "");
     setTriggerType(automation.trigger_type);
     setTriggerConfig(automation.trigger_config || {});
-    setActions((automation.actions as ActionConfig[]) || []);
+    setActions(((automation.actions as ActionConfig[]) || []).map(normalizeAction));
     setCurrentAction(null);
     setEditingActionIndex(null);
     setIsDialogOpen(true);
@@ -297,7 +297,7 @@ export const AutomationsSettings = () => {
 
   const editAction = (index: number) => {
     const action = actions[index];
-    setCurrentAction({ ...action });
+    setCurrentAction(normalizeAction(action));
     setEditingActionIndex(index);
   };
 
@@ -418,23 +418,25 @@ export const AutomationsSettings = () => {
   };
 
   const getActionDescription = (action: ActionConfig) => {
-    switch (action.type) {
+    const normalizedAction = normalizeAction(action);
+
+    switch (normalizedAction.type) {
       case 'send_email':
-        const attachmentInfo = action.config.attachment_folders?.length 
-          ? ` (with ${action.config.attachment_folders.length} folder attachments)` 
+        const attachmentInfo = normalizedAction.config.attachment_folders?.length 
+          ? ` (with ${normalizedAction.config.attachment_folders.length} folder attachments)` 
           : '';
-        const templateInfo = action.config.email_template_id 
-          ? emailTemplates?.find(t => t.id === action.config.email_template_id)?.name || 'Template'
-          : action.config.subject;
+        const templateInfo = normalizedAction.config.email_template_id 
+          ? emailTemplates?.find(t => t.id === normalizedAction.config.email_template_id)?.name || 'Template'
+          : normalizedAction.config.subject;
         // Build recipients description
         const recipientParts: string[] = [];
-        if (action.config.recipient_types?.length) {
-          recipientParts.push(action.config.recipient_types.join(', '));
-        } else if (action.config.recipient_type) {
-          recipientParts.push(action.config.recipient_type);
+        if (normalizedAction.config.recipient_types?.length) {
+          recipientParts.push(normalizedAction.config.recipient_types.join(', '));
+        } else if (normalizedAction.config.recipient_type) {
+          recipientParts.push(normalizedAction.config.recipient_type);
         }
-        if (action.config.manual_emails?.length) {
-          recipientParts.push(`+${action.config.manual_emails.length} manual`);
+        if (normalizedAction.config.manual_emails?.length) {
+          recipientParts.push(`+${normalizedAction.config.manual_emails.length} manual`);
         }
         const recipientsStr = recipientParts.length > 0 ? recipientParts.join(' & ') : 'no recipients';
         return `Email to ${recipientsStr}: ${templateInfo}${attachmentInfo}`;
@@ -446,22 +448,22 @@ export const AutomationsSettings = () => {
           claim_staff: 'Assigned Staff',
           admins: 'All Admins',
         };
-        return `SMS to ${smsRecipientLabel[action.config.recipient_type || ''] || action.config.recipient_type || 'recipient'}`;
+        return `SMS to ${smsRecipientLabel[normalizedAction.config.recipient_type || ''] || normalizedAction.config.recipient_type || 'recipient'}`;
       case 'create_task':
-        const assignInfo = action.config.assign_to_type === 'user' 
-          ? ` → ${users?.find(u => u.id === action.config.assign_to_user_id)?.full_name || 'User'}`
-          : action.config.assign_to_type === 'claim_contractor' 
+        const assignInfo = normalizedAction.config.assign_to_type === 'user' 
+          ? ` → ${users?.find(u => u.id === normalizedAction.config.assign_to_user_id)?.full_name || 'User'}`
+          : normalizedAction.config.assign_to_type === 'claim_contractor' 
             ? ' → Claim Contractor'
             : '';
-        return `Create task: ${action.config.title}${assignInfo}`;
+        return `Create task: ${normalizedAction.config.title}${assignInfo}`;
       case 'send_notification':
         return `Send notification`;
       case 'update_claim_status':
-        return `Change status to: ${action.config.new_status}`;
+        return `Change status to: ${normalizedAction.config.new_status}`;
       case 'call_webhook':
-        return `Call webhook: ${action.config.webhook_url ? 'Zapier' : 'Not configured'}`;
+        return `Call webhook: ${normalizedAction.config.webhook_url ? 'Zapier' : 'Not configured'}`;
       default:
-        return action.type;
+        return normalizedAction.type;
     }
   };
 
