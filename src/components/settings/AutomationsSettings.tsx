@@ -40,7 +40,7 @@ interface ActionConfig {
     recipient_types?: ('policyholder' | 'adjuster' | 'referrer' | 'contractors')[]; // Multiple recipient types
     manual_emails?: string[]; // Manually entered email addresses
     manual_emails_text?: string; // Raw input for editing
-    recipient_type?: 'policyholder' | 'adjuster' | 'referrer' | 'contractors' | 'claim_staff'; // Legacy + SMS support
+    recipient_type?: 'policyholder' | 'adjuster' | 'referrer' | 'contractors' | 'claim_staff' | 'admins'; // Legacy + SMS support
     subject?: string;
     message?: string;
     email_template_id?: string; // Reference to email template
