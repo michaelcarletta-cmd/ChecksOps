@@ -625,6 +625,55 @@ async function sendSms(supabase: any, config: any, execution: any) {
     return { sent_count: results.length, results };
   }
 
+  // Handle admin users — send to all users with admin role
+  if (config.recipient_type === 'admins') {
+    const { data: adminRoles, error: adminRolesError } = await supabase
+      .from('user_roles')
+      .select('user_id')
+      .eq('role', 'admin');
+
+    if (adminRolesError) throw adminRolesError;
+
+    if (!adminRoles || adminRoles.length === 0) {
+      console.log(`No admin users found, skipping SMS action`);
+      return { sent_count: 0, skipped: true, reason: 'no_admins_found' };
+    }
+
+    const adminIds = adminRoles.map((r: any) => r.user_id);
+    const { data: adminProfiles, error: adminProfilesError } = await supabase
+      .from('profiles')
+      .select('id, full_name, phone')
+      .in('id', adminIds);
+
+    if (adminProfilesError) throw adminProfilesError;
+
+    const recipients = (adminProfiles || []).filter((a: any) => !!a.phone);
+    if (recipients.length === 0) {
+      console.log(`Admin users have no phone numbers, skipping SMS action`);
+      return { sent_count: 0, skipped: true, reason: 'admins_missing_phone' };
+    }
+
+    const results = [];
+    const errors = [];
+    for (const admin of recipients) {
+      try {
+        const result = await sendToPhone(admin.phone);
+        results.push({ ...result, admin_id: admin.id, admin_name: admin.full_name });
+      } catch (err: any) {
+        const errMsg = err?.message || String(err);
+        console.error(`Failed to send SMS to admin ${admin.id} (${admin.phone}):`, errMsg);
+        errors.push({ admin_id: admin.id, admin_name: admin.full_name, phone: admin.phone, error: errMsg });
+      }
+    }
+
+    if (results.length === 0) {
+      const errorDetail = errors.map(e => `${e.admin_name} (${e.phone}): ${e.error}`).join('; ');
+      throw new Error(`Failed to send SMS to admins: ${errorDetail}`);
+    }
+
+    return { sent_count: results.length, results };
+  }
+
   // Determine recipient phone for non-contractor types
   let recipientPhone = '';
 
