@@ -32,6 +32,7 @@ interface ClaimStatusSelectProps {
   currentSubStatusId?: string | null;
   onStatusChange?: (newStatus: string) => void;
   onSubStatusChange?: (subStatusId: string | null) => void;
+  compact?: boolean;
 }
 
 function getStatusStyle(status: ClaimStatus): React.CSSProperties {
@@ -56,7 +57,7 @@ function getStatusTriggerStyle(status: ClaimStatus): React.CSSProperties {
   };
 }
 
-export function ClaimStatusSelect({ claimId, currentStatus, currentSubStatusId, onStatusChange, onSubStatusChange }: ClaimStatusSelectProps) {
+export function ClaimStatusSelect({ claimId, currentStatus, currentSubStatusId, onStatusChange, onSubStatusChange, compact }: ClaimStatusSelectProps) {
   const [statuses, setStatuses] = useState<ClaimStatus[]>([]);
   const [subStatuses, setSubStatuses] = useState<SubStatus[]>([]);
   const [loading, setLoading] = useState(false);
@@ -204,6 +205,37 @@ export function ClaimStatusSelect({ claimId, currentStatus, currentSubStatusId, 
   const currentSubObj = currentSubStatusId
     ? subStatuses.find(s => s.id === currentSubStatusId)
     : null;
+
+  // In compact mode, if a sub-status is selected, show only the sub-status badge
+  if (compact && currentSubObj && currentStatusObj) {
+    return (
+      <div className="flex items-center gap-2">
+        <Select
+          value={currentSubStatusId || "none"}
+          onValueChange={handleSubStatusChange}
+          disabled={loading}
+        >
+          <SelectTrigger
+            className="min-w-[120px] max-w-[220px] w-auto rounded-full border shadow-sm h-8 text-xs font-semibold px-3 transition-colors [&>svg]:text-current"
+            style={currentStatusObj ? getStatusTriggerStyle(currentStatusObj) : undefined}
+          >
+            <span className="text-left whitespace-nowrap">{currentSubObj.name}</span>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none" className="text-xs text-muted-foreground">
+              No sub-step
+            </SelectItem>
+            {currentSubSubs.map((sub, idx) => (
+              <SelectItem key={sub.id} value={sub.id} className="text-xs">
+                <span className="text-muted-foreground mr-1">{idx + 1}.</span>
+                {sub.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-2">
