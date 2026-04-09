@@ -138,7 +138,7 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
               <SearchX className="h-10 w-10 mb-2 opacity-50" />
-              <p className="text-sm">No tasks found for "{debouncedSearch}"</p>
+              <p className="text-sm">No tasks match "{debouncedSearch}"</p>
             </div>
           ) : (
             <div className="space-y-2">
