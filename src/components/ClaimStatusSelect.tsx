@@ -57,7 +57,7 @@ function getStatusTriggerStyle(status: ClaimStatus): React.CSSProperties {
   };
 }
 
-export function ClaimStatusSelect({ claimId, currentStatus, currentSubStatusId, onStatusChange, onSubStatusChange }: ClaimStatusSelectProps) {
+export function ClaimStatusSelect({ claimId, currentStatus, currentSubStatusId, onStatusChange, onSubStatusChange, compact }: ClaimStatusSelectProps) {
   const [statuses, setStatuses] = useState<ClaimStatus[]>([]);
   const [subStatuses, setSubStatuses] = useState<SubStatus[]>([]);
   const [loading, setLoading] = useState(false);
