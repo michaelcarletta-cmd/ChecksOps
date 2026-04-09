@@ -48,9 +48,12 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
         .from("tasks")
         .select("*, claims(claim_number, policyholder_name), profiles:assigned_to(full_name)")
         .or(`assigned_to.eq.${user.id},assigned_to.is.null`)
-        .in("status", ["backlog", "pending", "blocked"])
+        .not("status", "eq", "completed")
         .order("gravity_score", { ascending: false });
-      if (error) return [];
+      if (error) {
+        console.error("Task search query error:", error);
+        return [];
+      }
       return (data || []).map((t: any) => ({
         ...t,
         claim_number: t.claims?.claim_number,
