@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ExecutionQueuePanel } from "@/components/execution/ExecutionQueuePanel";
 import { useExecutionQueue } from "@/hooks/useExecutionQueue";
+import { TaskSearchPanel } from "@/components/execution/TaskSearchPanel";
 import { ExecutionTaskCard } from "@/components/execution/ExecutionTaskCard";
 import { TaskDetailDrawer } from "@/components/execution/TaskDetailDrawer";
 import { completeTask, activateTask, ExecutionTask } from "@/services/taskExecutionService";
