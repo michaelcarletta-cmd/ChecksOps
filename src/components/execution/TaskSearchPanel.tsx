@@ -107,7 +107,7 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
     }
   };
 
-  const showResults = debouncedSearch.trim().length > 0;
+  const hasSearch = debouncedSearch.trim().length > 0;
 
   return (
     <div className="space-y-3">
@@ -129,7 +129,7 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
         )}
       </div>
 
-      {showResults && (
+      {hasSearch && (
         <>
           {isLoading ? (
             <div className="space-y-2">
