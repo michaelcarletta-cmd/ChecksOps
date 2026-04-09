@@ -503,6 +503,8 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                         <ClaimStatusSelect 
                           claimId={claim.id} 
                           currentStatus={claim.status}
+                          currentSubStatusId={(claim as any).sub_status_id}
+                          compact
                         />
                       </TableCell>
                       <TableCell>

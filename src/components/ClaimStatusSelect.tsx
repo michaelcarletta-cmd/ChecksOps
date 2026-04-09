@@ -32,6 +32,7 @@ interface ClaimStatusSelectProps {
   currentSubStatusId?: string | null;
   onStatusChange?: (newStatus: string) => void;
   onSubStatusChange?: (subStatusId: string | null) => void;
+  compact?: boolean;
 }
 
 function getStatusStyle(status: ClaimStatus): React.CSSProperties {
