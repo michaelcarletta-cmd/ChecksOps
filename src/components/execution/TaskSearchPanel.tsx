@@ -48,9 +48,12 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
         .from("tasks")
         .select("*, claims(claim_number, policyholder_name), profiles:assigned_to(full_name)")
         .or(`assigned_to.eq.${user.id},assigned_to.is.null`)
-        .in("status", ["backlog", "pending", "blocked"])
+        .not("status", "eq", "completed")
         .order("gravity_score", { ascending: false });
-      if (error) return [];
+      if (error) {
+        console.error("Task search query error:", error);
+        return [];
+      }
       return (data || []).map((t: any) => ({
         ...t,
         claim_number: t.claims?.claim_number,
@@ -104,7 +107,7 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
     }
   };
 
-  const showResults = debouncedSearch.trim().length > 0;
+  const hasSearch = debouncedSearch.trim().length > 0;
 
   return (
     <div className="space-y-3">
@@ -126,7 +129,7 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
         )}
       </div>
 
-      {showResults && (
+      {hasSearch && (
         <>
           {isLoading ? (
             <div className="space-y-2">
@@ -135,7 +138,7 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
               <SearchX className="h-10 w-10 mb-2 opacity-50" />
-              <p className="text-sm">No tasks found for "{debouncedSearch}"</p>
+              <p className="text-sm">No tasks match "{debouncedSearch}"</p>
             </div>
           ) : (
             <div className="space-y-2">
