@@ -442,11 +442,67 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
           </div>
         </div>
 
-        <div className="rounded-md border overflow-x-auto">
-          <Table className="min-w-[800px]">
+        {/* Mobile card layout */}
+        <div className="block md:hidden space-y-2">
+          {filteredClaims.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">No claims found</p>
+          ) : (
+            filteredClaims.map((claim) => {
+              const hasNotification = claimsWithNotifications.has(claim.id);
+              return (
+                <div
+                  key={claim.id}
+                  className={`rounded-lg border p-3 cursor-pointer transition-colors active:bg-muted/70 ${hasNotification ? 'bg-primary/5 border-l-4 border-l-primary' : 'bg-card'}`}
+                  onClick={() => handleClaimClick(claim.id)}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Checkbox
+                        checked={selectedClaims.has(claim.id)}
+                        onCheckedChange={() => toggleClaimSelection(claim.id)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          {hasNotification && (
+                            <Badge variant="destructive" className="h-4 w-4 p-0 flex items-center justify-center shrink-0">
+                              <Bell className="h-2.5 w-2.5" />
+                            </Badge>
+                          )}
+                          <span className="text-sm font-semibold text-foreground">{claim.claim_number || "—"}</span>
+                        </div>
+                        <p className="text-sm text-foreground mt-0.5">{claim.policyholder_name || "—"}</p>
+                      </div>
+                    </div>
+                    <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+                      <ClaimStatusSelect
+                        claimId={claim.id}
+                        currentStatus={claim.status}
+                        currentSubStatusId={(claim as any).sub_status_id}
+                        compact
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-2 pl-8 space-y-0.5">
+                    <p className="text-xs text-muted-foreground truncate">{claim.policyholder_address || "N/A"}</p>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span>{claim.loss_type || "N/A"}</span>
+                      <span>·</span>
+                      <span>{format(new Date(claim.created_at), "MMM dd, yyyy")}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop table layout */}
+        <div className="hidden md:block rounded-md border overflow-x-auto">
+          <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-12 sticky left-0 bg-background z-10">
+                <TableHead className="w-12">
                   <Checkbox
                     checked={filteredClaims.length > 0 && selectedClaims.size === filteredClaims.length}
                     onCheckedChange={toggleAllClaims}
@@ -471,12 +527,12 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                 filteredClaims.map((claim) => {
                   const hasNotification = claimsWithNotifications.has(claim.id);
                   return (
-                    <TableRow 
-                      key={claim.id} 
+                    <TableRow
+                      key={claim.id}
                       className={`hover:bg-muted/50 transition-colors cursor-pointer ${hasNotification ? 'bg-primary/5 border-l-4 border-l-primary' : ''}`}
                       onClick={() => handleClaimClick(claim.id)}
                     >
-                      <TableCell onClick={(e) => e.stopPropagation()} className={`sticky left-0 z-10 ${hasNotification ? 'bg-primary/5' : 'bg-background'}`}>
+                      <TableCell onClick={(e) => e.stopPropagation()} className={hasNotification ? 'bg-primary/5' : 'bg-background'}>
                         <Checkbox
                           checked={selectedClaims.has(claim.id)}
                           onCheckedChange={() => toggleClaimSelection(claim.id)}
@@ -500,8 +556,8 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                       </TableCell>
                       <TableCell className="min-w-[100px] whitespace-nowrap">{claim.loss_type || "N/A"}</TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
-                        <ClaimStatusSelect 
-                          claimId={claim.id} 
+                        <ClaimStatusSelect
+                          claimId={claim.id}
                           currentStatus={claim.status}
                           currentSubStatusId={(claim as any).sub_status_id}
                           compact
