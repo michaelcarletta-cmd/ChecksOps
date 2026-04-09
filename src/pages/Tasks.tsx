@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ExecutionQueuePanel } from "@/components/execution/ExecutionQueuePanel";
 import { useExecutionQueue } from "@/hooks/useExecutionQueue";
+import { TaskSearchPanel } from "@/components/execution/TaskSearchPanel";
 import { ExecutionTaskCard } from "@/components/execution/ExecutionTaskCard";
 import { TaskDetailDrawer } from "@/components/execution/TaskDetailDrawer";
 import { completeTask, activateTask, ExecutionTask } from "@/services/taskExecutionService";
@@ -58,6 +59,8 @@ const Tasks = () => {
         <h1 className="text-3xl font-bold text-foreground">Tasks</h1>
         <p className="text-muted-foreground mt-1">Manage your execution queue</p>
       </div>
+
+      <TaskSearchPanel onQueueUpdated={refetch} />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
