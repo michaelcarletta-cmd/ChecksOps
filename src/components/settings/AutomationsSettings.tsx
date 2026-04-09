@@ -337,6 +337,38 @@ export const AutomationsSettings = () => {
     }
   };
 
+  const normalizeAction = (action: Partial<ActionConfig> | null | undefined): ActionConfig => {
+    const rawAction = (action ?? {}) as Record<string, any>;
+
+    return {
+      type: (rawAction.type as ActionConfig["type"]) || "send_notification",
+      config: {
+        recipient_type: rawAction.recipient_type,
+        subject: rawAction.subject,
+        message: rawAction.message ?? rawAction.message_template,
+        email_template_id: rawAction.email_template_id,
+        sms_template_id: rawAction.sms_template_id,
+        title: rawAction.title,
+        description: rawAction.description,
+        priority: rawAction.priority,
+        due_date_offset: rawAction.due_date_offset,
+        due_date_type: rawAction.due_date_type,
+        assign_to_type: rawAction.assign_to_type,
+        assign_to_user_id: rawAction.assign_to_user_id,
+        new_status: rawAction.new_status,
+        webhook_url: rawAction.webhook_url,
+        webhook_include_files: rawAction.webhook_include_files,
+        recipient_types: rawAction.recipient_types,
+        manual_emails: rawAction.manual_emails,
+        manual_emails_text: rawAction.manual_emails_text,
+        attachment_folders: rawAction.attachment_folders,
+        file_name_patterns: rawAction.file_name_patterns,
+        file_name_patterns_text: rawAction.file_name_patterns_text,
+        ...(rawAction.config || {}),
+      },
+    };
+  };
+
   const getTriggerDescription = (automation: any) => {
     const config = automation.trigger_config || {};
     const senderLabels: Record<string, string> = {
