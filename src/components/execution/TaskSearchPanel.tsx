@@ -51,27 +51,64 @@ interface TaskSearchPanelProps {
 
 const SEARCH_STORAGE_KEY = "tasks-search-term";
 
+const normalizeSearchValue = (value: string | number | null | undefined) =>
+  (value ?? "").toString().trim().toLowerCase();
+
 export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
   const [search, setSearch] = useState(() => window.localStorage.getItem(SEARCH_STORAGE_KEY) ?? "");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
-  const debouncedSearch = useDebouncedValue(search, 200);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const debouncedSearch = useDebouncedValue(search, 300);
   const { toast } = useToast();
+
+  const hasSearch = search.trim().length > 0;
+  const isFiltering = search !== debouncedSearch;
 
   useEffect(() => {
     window.localStorage.setItem(SEARCH_STORAGE_KEY, search);
   }, [search]);
 
-  const { data: allTasks = [], isLoading } = useQuery({
-    queryKey: ["all-searchable-tasks"],
-    queryFn: async (): Promise<SearchableTask[]> => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [];
+  useEffect(() => {
+    let mounted = true;
 
+    const loadSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!mounted) return;
+
+      setAuthUserId(session?.user?.id ?? null);
+      setAuthLoading(false);
+    };
+
+    void loadSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+
+      setAuthUserId(session?.user?.id ?? null);
+      setAuthLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const { data: allTasks = [], isLoading } = useQuery({
+    queryKey: ["all-searchable-tasks", authUserId],
+    enabled: !!authUserId,
+    queryFn: async (): Promise<SearchableTask[]> => {
       const { data: tasks, error } = await supabase
         .from("tasks")
         .select("*, claims(claim_number, policyholder_name)")
-        .or(`assigned_to.eq.${user.id},assigned_to.is.null`)
+        .or(`assigned_to.eq.${authUserId},assigned_to.is.null`)
         .not("status", "eq", "completed")
         .order("gravity_score", { ascending: false });
 
@@ -123,7 +160,7 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
   });
 
   const filtered = useMemo(() => {
-    const q = debouncedSearch.trim().toLowerCase();
+    const q = normalizeSearchValue(debouncedSearch);
     if (!q) return allTasks;
 
     return allTasks.filter((task) => {
@@ -132,13 +169,23 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
         task.title,
         task.description,
         task.category,
+        task.priority,
+        task.priority_level,
         task.assigned_name,
         task.policyholder_name,
       ];
 
-      return fields.some((value) => (value ?? "").toString().toLowerCase().includes(q));
+      return fields.some((value) => normalizeSearchValue(value).includes(q));
     });
   }, [allTasks, debouncedSearch]);
+
+  useEffect(() => {
+    console.log("Task search filter applied", {
+      query: debouncedSearch,
+      totalCount: allTasks.length,
+      resultCount: filtered.length,
+    });
+  }, [allTasks.length, debouncedSearch, filtered.length]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -201,16 +248,21 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
         )}
       </div>
 
-      {isLoading ? (
+      {authLoading || isLoading || isFiltering ? (
         <div className="space-y-2">
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-16 w-full" />
           ))}
         </div>
+      ) : hasSearch && filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+          <SearchX className="mb-2 h-10 w-10 opacity-50" />
+          <p className="text-sm">No tasks found for "{debouncedSearch.trim() || search.trim()}"</p>
+        </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
           <SearchX className="mb-2 h-10 w-10 opacity-50" />
-          <p className="text-sm">No tasks match "{debouncedSearch.trim() || search.trim()}"</p>
+          <p className="text-sm">No tasks available</p>
         </div>
       ) : (
         <>
