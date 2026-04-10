@@ -2180,14 +2180,39 @@ function collectLowSlopeForbiddenViolations(
   return [...violations];
 }
 
-function collectLowSlopeStrictPreSendViolations(result: string, primaryScenario: string | null): string[] {
+function collectLowSlopeStrictPreSendViolations(result: string, primaryScenario: string | null, engineerCausationSentence?: string): string[] {
   if (!result || primaryScenario !== LOW_SLOPE_PRIMARY_SCENARIO) return [];
 
-  return Array.from(new Set(
-    LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES
-      .filter((rule) => rule.regex.test(result))
-      .map((rule) => rule.label),
-  ));
+  const causationLower = String(engineerCausationSentence || '').toLowerCase();
+  const quoteRanges = getQuoteRanges(result);
+  const violations = new Set<string>();
+
+  for (const rule of LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES) {
+    const scanRegex = new RegExp(rule.regex.source, rule.regex.flags.includes('g') ? rule.regex.flags : `${rule.regex.flags}g`);
+    let match: RegExpExecArray | null;
+    let foundOutsideQuote = false;
+
+    while ((match = scanRegex.exec(result)) !== null) {
+      const matchIndex = match.index;
+      const inAllowedDirectQuote = quoteRanges.some((range) => {
+        const isWithinRange = matchIndex >= range.start && matchIndex < range.end;
+        if (!isWithinRange) return false;
+        const quoteLower = range.quoteText.toLowerCase();
+        return Boolean(quoteLower) && causationLower.includes(quoteLower);
+      });
+
+      if (!inAllowedDirectQuote) {
+        foundOutsideQuote = true;
+        break;
+      }
+    }
+
+    if (foundOutsideQuote) {
+      violations.add(rule.label);
+    }
+  }
+
+  return [...violations];
 }
 
 function collectAllLowSlopeFinalViolations(
@@ -2199,7 +2224,7 @@ function collectAllLowSlopeFinalViolations(
 
   return Array.from(
     new Set([
-      ...collectLowSlopeStrictPreSendViolations(finalText, primaryScenario),
+      ...collectLowSlopeStrictPreSendViolations(finalText, primaryScenario, engineerCausationSentence),
       ...collectLowSlopeForbiddenViolations(finalText, primaryScenario, engineerCausationSentence),
     ]),
   );
@@ -10699,7 +10724,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       }
 
       const provisionalViolations = Array.from(new Set([
-        ...collectLowSlopeStrictPreSendViolations(analysisResult, engineerContext.primaryScenario),
+        ...collectLowSlopeStrictPreSendViolations(analysisResult, engineerContext.primaryScenario, engineerRebuttalCausationQuote),
         ...collectLowSlopeForbiddenViolations(analysisResult, engineerContext.primaryScenario, engineerRebuttalCausationQuote),
       ]));
 
@@ -11057,7 +11082,10 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       const structuredScenarioDiagnosticsRulePackLoaded = getRulePackLoaded(structuredEnforcedScenarioForResponse);
       const structuredScenarioDiagnosticsSuppressedRulePacks = getSuppressedRulePacks(structuredEnforcedScenarioForResponse);
 
-      const finalStructuredText = analysisResult;
+      // Final suppression pass before validation to strip surviving forbidden terms
+      const finalStructuredText = lowSlopeSupportCorpusForFilters
+        ? suppressLowSlopeUnsupportedBoilerplate(analysisResult, lowSlopeSupportCorpusForFilters)
+        : analysisResult;
       let structuredViolations: string[] = [];
       let structuredValidationErrorMessage: string | null = null;
 
@@ -11215,9 +11243,13 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     }
 
     const responsePath: 'non_structured' = 'non_structured';
-    const finalResponseText = typeof analysisResult === 'string'
-      ? analysisResult
-      : JSON.stringify(analysisResult ?? '');
+    // Final suppression pass before validation
+    const suppressedResponseText = (lowSlopeSupportCorpusForFilters && typeof analysisResult === 'string')
+      ? suppressLowSlopeUnsupportedBoilerplate(analysisResult, lowSlopeSupportCorpusForFilters)
+      : analysisResult;
+    const finalResponseText = typeof suppressedResponseText === 'string'
+      ? suppressedResponseText
+      : JSON.stringify(suppressedResponseText ?? '');
 
     const preSendLowSlopeDetection = detectLowSlopeAcrossSources([
       engineerRebuttalCausationQuote,
