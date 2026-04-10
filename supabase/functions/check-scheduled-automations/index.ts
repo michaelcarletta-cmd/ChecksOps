@@ -124,6 +124,18 @@ Deno.serve(async (req) => {
       console.log('RD check tracking result:', rdCheckResult);
     }
 
+    // Process immediate task notifications (urgent escalation)
+    console.log('Triggering immediate task notification processing...');
+    const { data: immediateResult, error: immediateError } = await supabase.functions.invoke('process-immediate-notifications', {
+      headers: { 'x-cron-secret': cronSecret || '' }
+    });
+
+    if (immediateError) {
+      console.error('Error processing immediate notifications:', immediateError);
+    } else {
+      console.log('Immediate notifications result:', immediateResult);
+    }
+
     return new Response(
       JSON.stringify({ 
         checked: results.length, 
@@ -131,6 +143,7 @@ Deno.serve(async (req) => {
         executed: executeResult,
         rdFollowUps: rdFollowUpResult,
         rdCheckTracking: rdCheckResult,
+        immediateNotifications: immediateResult,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

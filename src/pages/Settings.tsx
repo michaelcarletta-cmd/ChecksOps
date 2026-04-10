@@ -41,6 +41,7 @@ import { ZapierIntegrationSettings } from "@/components/settings/ZapierIntegrati
 import { OrganizationSettings } from "@/components/settings/OrganizationSettings";
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 import { AuditLogSettings } from "@/components/settings/AuditLogSettings";
+import { NotificationDeliveryLogView } from "@/components/settings/NotificationDeliveryLogView";
 
 import { useQuery } from "@tanstack/react-query";
 import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
@@ -600,6 +601,9 @@ export default function Settings() {
             <TabsTrigger value="audit-logs" className="w-full md:w-auto justify-start text-base font-medium px-4">Audit Logs</TabsTrigger>
           )}
           {isAdmin && (
+            <TabsTrigger value="notification-logs" className="w-full md:w-auto justify-start text-base font-medium px-4">Notification Logs</TabsTrigger>
+          )}
+          {isAdmin && (
             <TabsTrigger value="backup" className="w-full md:w-auto justify-start text-base font-medium px-4">Backup Status</TabsTrigger>
           )}
         </TabsList>
@@ -856,6 +860,12 @@ export default function Settings() {
         {isAdmin && (
           <TabsContent value="audit-logs" className="w-full">
             <AuditLogSettings />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="notification-logs" className="w-full">
+            <NotificationDeliveryLogView />
           </TabsContent>
         )}
 
