@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { Home, Plus, DollarSign, Receipt, Upload, CheckCircle, CreditCard, Edit, Trash2, X, Wallet, Save } from "lucide-react";
+import { Home, Plus, DollarSign, Receipt, Upload, CheckCircle, CreditCard, Edit, Trash2, X, Wallet, Save, ArrowRightLeft } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -291,7 +291,7 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
         expense_category: updatedData.expense_category,
         expense_date: updatedData.expense_date,
         vendor_name: updatedData.vendor_name || null,
-        description: updatedData.description || EXPENSE_CATEGORIES.find(c => c.value === updatedData.expense_category)?.label || updatedData.expense_category,
+        description: updatedData.description,
         amount: parseFloat(updatedData.amount),
         notes: updatedData.notes || null,
       })
@@ -304,6 +304,49 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
     const { error } = await supabase.from("claim_loss_of_use_expenses").delete().eq("id", id);
     if (error) { toast.error("Failed to delete expense"); console.error(error); }
     else { toast.success("Expense deleted"); fetchExpenses(); }
+  };
+
+  const handleTransferToContents = async (expense: LossOfUseExpense) => {
+    const { data: userData } = await supabase.auth.getUser();
+
+    // Insert into home inventory
+    const { error: insertError } = await supabase.from("claim_home_inventory").insert({
+      claim_id: claimId,
+      room_name: "Transferred from ALE",
+      item_name: expense.description || expense.vendor_name || "ALE Purchase",
+      item_description: [
+        expense.vendor_name ? `Vendor: ${expense.vendor_name}` : null,
+        expense.expense_category ? `ALE Category: ${expense.expense_category}` : null,
+        expense.notes,
+      ].filter(Boolean).join(" | ") || null,
+      quantity: 1,
+      original_purchase_price: expense.amount,
+      condition_before_loss: "new",
+      is_total_loss: true,
+      notes: `Transferred from ALE/Loss of Use on ${format(new Date(), "yyyy-MM-dd")}. Original date: ${expense.expense_date}`,
+      source: "ale_transfer",
+      created_by: userData.user?.id,
+    } as any);
+
+    if (insertError) {
+      toast.error("Failed to transfer to contents inventory");
+      console.error(insertError);
+      return;
+    }
+
+    // Remove from ALE
+    const { error: deleteError } = await supabase
+      .from("claim_loss_of_use_expenses")
+      .delete()
+      .eq("id", expense.id);
+
+    if (deleteError) {
+      toast.error("Item added to contents but failed to remove from ALE");
+      console.error(deleteError);
+    } else {
+      toast.success("Expense moved to Home Inventory contents");
+      fetchExpenses();
+    }
   };
 
   // Calculate totals from filtered
