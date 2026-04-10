@@ -321,6 +321,7 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
       ].filter(Boolean).join(" | ") || null,
       quantity: 1,
       original_purchase_price: expense.amount,
+      replacement_cost: expense.amount,
       condition_before_loss: "new",
       is_total_loss: true,
       notes: `Transferred from ALE/Loss of Use on ${format(new Date(), "yyyy-MM-dd")}. Original date: ${expense.expense_date}`,
