@@ -36,8 +36,7 @@ Deno.serve(async (req) => {
       .from('jobnimbus_sync_queue')
       .select(`
         *,
-        claims (*),
-        profiles:contractor_id (jobnimbus_api_key, full_name)
+        claims (*)
       `)
       .eq('status', 'pending')
       .order('created_at', { ascending: true })
