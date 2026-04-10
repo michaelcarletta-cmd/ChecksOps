@@ -217,7 +217,6 @@ async function syncTask(apiKey: string, claim: any, payload: any) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      record_type_name: 'Task',
       title: taskData.title || 'Task',
       description: taskData.description || '',
       related: [{ jnid: jobId }],
