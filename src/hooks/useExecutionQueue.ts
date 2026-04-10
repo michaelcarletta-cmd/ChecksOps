@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { ExecutionTask, computeGravityScore, getStaleStatus } from "@/services/taskExecutionService";
+import { ExecutionTask, getStaleStatus, isActiveStatus, isBacklogLikeStatus, isBlockedStatus } from "@/services/taskExecutionService";
 import { useToast } from "@/hooks/use-toast";
 
 export function useExecutionQueue() {
@@ -13,7 +13,14 @@ export function useExecutionQueue() {
 
   const fetchTasks = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setCurrentUserId(null);
+      setActiveTasks([]);
+      setBacklogTasks([]);
+      setBlockedTasks([]);
+      setLoading(false);
+      return;
+    }
     setCurrentUserId(user.id);
 
     const { data, error } = await supabase
@@ -35,9 +42,32 @@ export function useExecutionQueue() {
       policyholder_name: t.claims?.policyholder_name,
     }));
 
-    setActiveTasks(mapped.filter((t: ExecutionTask) => t.status === 'active').sort((a: ExecutionTask, b: ExecutionTask) => (a.active_rank || 99) - (b.active_rank || 99)));
-    setBacklogTasks(mapped.filter((t: ExecutionTask) => t.status === 'backlog' || t.status === 'pending').sort((a: ExecutionTask, b: ExecutionTask) => b.gravity_score - a.gravity_score));
-    setBlockedTasks(mapped.filter((t: ExecutionTask) => t.status === 'blocked'));
+    const nextActiveTasks = mapped
+      .filter((t: ExecutionTask) => isActiveStatus(t.status))
+      .sort((a: ExecutionTask, b: ExecutionTask) => (a.active_rank || 99) - (b.active_rank || 99));
+    const nextBacklogTasks = mapped
+      .filter((t: ExecutionTask) => isBacklogLikeStatus(t.status))
+      .sort((a: ExecutionTask, b: ExecutionTask) => b.gravity_score - a.gravity_score);
+    const nextBlockedTasks = mapped.filter((t: ExecutionTask) => isBlockedStatus(t.status));
+
+    if (import.meta.env.DEV) {
+      const byStatus = mapped.reduce<Record<string, number>>((acc, task) => {
+        acc[task.status] = (acc[task.status] || 0) + 1;
+        return acc;
+      }, {});
+      console.debug("[useExecutionQueue] task counts", {
+        fetched: mapped.length,
+        byStatus,
+        active: nextActiveTasks.length,
+        backlog: nextBacklogTasks.length,
+        blocked: nextBlockedTasks.length,
+        snoozedImmediate: mapped.filter((task: ExecutionTask) => !!task.snoozed_until && new Date(task.snoozed_until).getTime() > Date.now()).length,
+      });
+    }
+
+    setActiveTasks(nextActiveTasks);
+    setBacklogTasks(nextBacklogTasks);
+    setBlockedTasks(nextBlockedTasks);
     setLoading(false);
   }, []);
 
