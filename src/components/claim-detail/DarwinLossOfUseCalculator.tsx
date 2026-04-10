@@ -687,18 +687,18 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
               {unpaidExpenses.length === 0 ? (
                 <p className="text-center py-4 text-muted-foreground text-sm">All expenses are paid!</p>
               ) : (
-                <ExpenseTable expenses={unpaidExpenses} categories={EXPENSE_CATEGORIES} markAsSubmitted={markAsSubmitted} markAsReimbursed={markAsReimbursed} markAsPaid={markAsPaid} markAsUnpaid={markAsUnpaid} onEdit={handleEditExpense} onDelete={handleDeleteExpense} />
+                <ExpenseTable expenses={unpaidExpenses} categories={EXPENSE_CATEGORIES} markAsSubmitted={markAsSubmitted} markAsReimbursed={markAsReimbursed} markAsPaid={markAsPaid} markAsUnpaid={markAsUnpaid} onEdit={handleEditExpense} onDelete={handleDeleteExpense} onTransferToContents={handleTransferToContents} />
               )}
             </TabsContent>
             <TabsContent value="paid">
               {paidExpenses.length === 0 ? (
                 <p className="text-center py-4 text-muted-foreground text-sm">No paid expenses yet</p>
               ) : (
-                <ExpenseTable expenses={paidExpenses} categories={EXPENSE_CATEGORIES} markAsSubmitted={markAsSubmitted} markAsReimbursed={markAsReimbursed} markAsPaid={markAsPaid} markAsUnpaid={markAsUnpaid} onEdit={handleEditExpense} onDelete={handleDeleteExpense} />
+                <ExpenseTable expenses={paidExpenses} categories={EXPENSE_CATEGORIES} markAsSubmitted={markAsSubmitted} markAsReimbursed={markAsReimbursed} markAsPaid={markAsPaid} markAsUnpaid={markAsUnpaid} onEdit={handleEditExpense} onDelete={handleDeleteExpense} onTransferToContents={handleTransferToContents} />
               )}
             </TabsContent>
             <TabsContent value="all">
-              <ExpenseTable expenses={filteredExpenses} categories={EXPENSE_CATEGORIES} markAsSubmitted={markAsSubmitted} markAsReimbursed={markAsReimbursed} markAsPaid={markAsPaid} markAsUnpaid={markAsUnpaid} onEdit={handleEditExpense} onDelete={handleDeleteExpense} />
+              <ExpenseTable expenses={filteredExpenses} categories={EXPENSE_CATEGORIES} markAsSubmitted={markAsSubmitted} markAsReimbursed={markAsReimbursed} markAsPaid={markAsPaid} markAsUnpaid={markAsUnpaid} onEdit={handleEditExpense} onDelete={handleDeleteExpense} onTransferToContents={handleTransferToContents} />
             </TabsContent>
           </Tabs>
         )}
@@ -708,7 +708,7 @@ export const DarwinLossOfUseCalculator = ({ claimId, claim }: DarwinLossOfUseCal
 };
 
 /* Extracted table to keep things clean */
-function ExpenseTable({ expenses, categories, markAsSubmitted, markAsReimbursed, markAsPaid, markAsUnpaid, onEdit, onDelete }: {
+function ExpenseTable({ expenses, categories, markAsSubmitted, markAsReimbursed, markAsPaid, markAsUnpaid, onEdit, onDelete, onTransferToContents }: {
   expenses: LossOfUseExpense[];
   categories: typeof EXPENSE_CATEGORIES;
   markAsSubmitted: (id: string) => void;
@@ -717,6 +717,8 @@ function ExpenseTable({ expenses, categories, markAsSubmitted, markAsReimbursed,
   markAsUnpaid: (id: string) => void;
   onEdit: (expense: LossOfUseExpense, data: any) => void;
   onDelete: (id: string) => void;
+  onTransferToContents: (expense: LossOfUseExpense) => void;
+}) {
 }) {
   const [editingExpense, setEditingExpense] = useState<LossOfUseExpense | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
