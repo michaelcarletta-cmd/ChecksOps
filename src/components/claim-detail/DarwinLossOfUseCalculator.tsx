@@ -812,6 +812,7 @@ function ExpenseTable({ expenses, categories, markAsSubmitted, markAsReimbursed,
                       {!isPaid && <Button variant="ghost" size="sm" onClick={() => markAsPaid(expense.id)} title="Mark as paid"><CreditCard className="h-4 w-4" /></Button>}
                       {!expense.is_submitted_to_insurer && <Button variant="ghost" size="sm" onClick={() => markAsSubmitted(expense.id)} title="Mark as submitted"><Upload className="h-4 w-4" /></Button>}
                       {expense.is_submitted_to_insurer && !expense.is_reimbursed && <Button variant="ghost" size="sm" onClick={() => markAsReimbursed(expense.id, expense.amount)} title="Mark as reimbursed"><DollarSign className="h-4 w-4" /></Button>}
+                      <Button variant="ghost" size="sm" onClick={() => onTransferToContents(expense)} title="Move to Contents Inventory" className="text-orange-600 hover:text-orange-700"><ArrowRightLeft className="h-4 w-4" /></Button>
                     </div>
                   </TableCell>
                 </TableRow>
