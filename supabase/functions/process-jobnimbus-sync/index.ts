@@ -252,7 +252,6 @@ async function syncNote(apiKey: string, claim: any, payload: any) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      record_type_name: 'Activity',
       note: noteData.content || '',
       related: [{ jnid: jobId }],
     }),
