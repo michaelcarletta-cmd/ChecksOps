@@ -136,6 +136,18 @@ Deno.serve(async (req) => {
       console.log('Immediate notifications result:', immediateResult);
     }
 
+    // Process JobNimbus sync queue
+    console.log('Triggering JobNimbus sync processing...');
+    const { data: jobNimbusResult, error: jobNimbusError } = await supabase.functions.invoke('process-jobnimbus-sync', {
+      headers: { 'x-cron-secret': cronSecret || '' }
+    });
+
+    if (jobNimbusError) {
+      console.error('Error processing JobNimbus sync:', jobNimbusError);
+    } else {
+      console.log('JobNimbus sync result:', jobNimbusResult);
+    }
+
     return new Response(
       JSON.stringify({ 
         checked: results.length, 
@@ -144,6 +156,7 @@ Deno.serve(async (req) => {
         rdFollowUps: rdFollowUpResult,
         rdCheckTracking: rdCheckResult,
         immediateNotifications: immediateResult,
+        jobNimbusSync: jobNimbusResult,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
