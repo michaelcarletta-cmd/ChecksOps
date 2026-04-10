@@ -1088,20 +1088,9 @@ function detectLowSlopePhysicalMechanism(text: string): { shouldForce: boolean; 
 }
 
 function detectLowSlopeAcrossSources(sources: Array<string | null | undefined>): { shouldForce: boolean; matchedTerms: string[] } {
-  const matchedTerms = new Set<string>();
-
-  for (const source of sources) {
-    if (!source) continue;
-    const detection = detectLowSlopePhysicalMechanism(source);
-    for (const term of detection.matchedTerms) {
-      matchedTerms.add(term);
-    }
-  }
-
-  return {
-    shouldForce: matchedTerms.size > 0,
-    matchedTerms: Array.from(matchedTerms),
-  };
+  // Concatenate all sources and run the tiered detection once
+  const combinedText = sources.filter(Boolean).join(' ');
+  return detectLowSlopePhysicalMechanism(combinedText);
 }
 
 type EngineerReportSourceOrigin =
