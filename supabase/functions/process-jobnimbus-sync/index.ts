@@ -308,7 +308,8 @@ async function syncFile(apiKey: string, claim: any, payload: any, supabase: any)
     body: JSON.stringify({
       filename: fileData.file_name || 'file',
       url: signedUrl.signedUrl,
-      related: [{ jnid: jobId }],
+      primary: { id: jobId, type: 'job' },
+      related: [{ id: jobId, type: 'job' }],
     }),
   });
 
