@@ -15,6 +15,7 @@ import { InventoryPhotoScanner } from "./inventory/InventoryPhotoScanner";
 import { InventoryTable } from "./inventory/InventoryTable";
 import { InventorySummary } from "./inventory/InventorySummary";
 import { InventoryPDFImport } from "./inventory/InventoryPDFImport";
+import { InventoryReceiptScanner } from "./inventory/InventoryReceiptScanner";
 
 interface InventoryItem {
   id: string;
@@ -259,6 +260,9 @@ export const DarwinHomeInventoryBuilder = ({ claimId, claim }: DarwinHomeInvento
               <TabsTrigger value="pdf" className="justify-start gap-2 w-full text-xs md:text-sm">
                 <FileUp className="h-4 w-4 shrink-0" /> <span className="hidden md:inline">Import PDF</span><span className="md:hidden">PDF</span>
               </TabsTrigger>
+              <TabsTrigger value="receipts" className="justify-start gap-2 w-full text-xs md:text-sm">
+                <Receipt className="h-4 w-4 shrink-0" /> <span className="hidden md:inline">Receipts</span><span className="md:hidden">Receipts</span>
+              </TabsTrigger>
               <TabsTrigger value="inventory" className="justify-start gap-2 w-full text-xs md:text-sm">
                 <ClipboardList className="h-4 w-4 shrink-0" /> <span className="hidden md:inline">Inventory ({items.length})</span><span className="md:hidden">({items.length})</span>
               </TabsTrigger>
@@ -274,6 +278,10 @@ export const DarwinHomeInventoryBuilder = ({ claimId, claim }: DarwinHomeInvento
 
               <TabsContent value="pdf" className="mt-0">
                 <InventoryPDFImport claimId={claimId} onItemsAdded={fetchItems} />
+              </TabsContent>
+
+              <TabsContent value="receipts" className="mt-0">
+                <InventoryReceiptScanner claimId={claimId} onItemsAdded={fetchItems} />
               </TabsContent>
 
               <TabsContent value="inventory" className="mt-0">
