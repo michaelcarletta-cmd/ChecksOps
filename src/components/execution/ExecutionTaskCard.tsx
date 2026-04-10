@@ -1,7 +1,13 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Play, Pause, CheckCircle2, AlertTriangle, ArrowDown, GripVertical, Clock, Flame, ExternalLink, Zap, Timer } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Play, Pause, CheckCircle2, AlertTriangle, ArrowDown, GripVertical, Clock, Flame, ExternalLink, Zap, Timer, AlarmClock } from "lucide-react";
 import { ExecutionTask, getStaleStatus, getImmediateTaskDueStatus, isTaskSnoozed } from "@/services/taskExecutionService";
 import { formatDistanceToNow, format } from "date-fns";
 import { Link } from "react-router-dom";
@@ -16,6 +22,7 @@ interface ExecutionTaskCardProps {
   onBlock?: () => void;
   onBacklog?: () => void;
   onOpenDetail?: () => void;
+  onSnooze?: (minutes: number) => void;
   compact?: boolean;
 }
 
@@ -44,6 +51,7 @@ export function ExecutionTaskCard({
   onBlock,
   onBacklog,
   onOpenDetail,
+  onSnooze,
   compact,
 }: ExecutionTaskCardProps) {
   const staleStatus = getStaleStatus(task.last_touched_at);
@@ -52,6 +60,9 @@ export function ExecutionTaskCard({
   const isImmediate = task.immediate_enabled || task.priority_level === 'immediate';
   const dueStatus = task.due_at ? getImmediateTaskDueStatus(task as any) : 'normal';
   const isSnoozed = isTaskSnoozed(task as any);
+  const canSnooze = isImmediate && onSnooze && task.snooze_allowed !== false
+    && (task.snooze_count || 0) < (task.max_snooze_count || 2)
+    && task.status !== 'completed' && task.status !== 'dropped';
 
   return (
     <Card
@@ -166,6 +177,20 @@ export function ExecutionTaskCard({
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onBacklog} title="Move to Backlog">
               <ArrowDown className="h-3.5 w-3.5 text-muted-foreground" />
             </Button>
+          )}
+          {canSnooze && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7" title="Snooze">
+                  <AlarmClock className="h-3.5 w-3.5 text-amber-500" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-36">
+                <DropdownMenuItem onClick={() => onSnooze(5)}>Snooze 5 min</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onSnooze(10)}>Snooze 10 min</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onSnooze(15)}>Snooze 15 min</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           {task.claim_id && (
             <Link to={`/claims/${task.claim_id}`} onClick={(e) => e.stopPropagation()}>

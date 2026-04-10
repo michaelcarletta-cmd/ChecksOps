@@ -14,6 +14,7 @@ import {
   completeTask,
   blockTask,
   moveToBacklog,
+  snoozeImmediateTask,
   MAX_ACTIVE_TASKS,
   ExecutionTask,
 } from "@/services/taskExecutionService";
@@ -33,6 +34,10 @@ export function ExecutionQueuePanel() {
     } else {
       toast({ title: "Error", description: result.error, variant: "destructive" });
     }
+  };
+
+  const handleSnooze = (taskId: string, minutes: number) => {
+    handleAction(() => snoozeImmediateTask(taskId, minutes), `Snoozed for ${minutes} min`);
   };
 
   if (loading) {
@@ -91,6 +96,7 @@ export function ExecutionQueuePanel() {
                     onBacklog={() => handleAction(() => moveToBacklog(task.id), "Moved to backlog")}
                     onBlock={() => setBlockingTaskId(task.id)}
                     onOpenDetail={() => setSelectedTask(task)}
+                    onSnooze={(mins) => handleSnooze(task.id, mins)}
                   />
                 ))
               )}
@@ -108,6 +114,7 @@ export function ExecutionQueuePanel() {
                     onActivate={() => handleAction(() => activateTask(task.id), "Task activated")}
                     onComplete={() => handleAction(() => completeTask(task.id), "Task completed ✓")}
                     onOpenDetail={() => setSelectedTask(task)}
+                    onSnooze={(mins) => handleSnooze(task.id, mins)}
                   />
                 ))
               )}
@@ -120,7 +127,9 @@ export function ExecutionQueuePanel() {
                   task={task}
                   compact
                   onActivate={() => handleAction(() => activateTask(task.id), "Task reactivated")}
+                  onComplete={() => handleAction(() => completeTask(task.id), "Task completed ✓")}
                   onOpenDetail={() => setSelectedTask(task)}
+                  onSnooze={(mins) => handleSnooze(task.id, mins)}
                 />
               ))}
             </TabsContent>
