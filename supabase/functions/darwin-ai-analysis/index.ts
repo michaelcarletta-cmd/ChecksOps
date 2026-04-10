@@ -255,18 +255,44 @@ const LOW_SLOPE_ALLOWED_CONTENT_BULLET_LIST = [
   'structural snow-load analysis is not membrane watertightness analysis',
 ].map((item) => `- ${item}`).join('\n');
 
-const LOW_SLOPE_FORCE_TERMS = [
+// Definitive terms: any single match forces low-slope
+const LOW_SLOPE_DEFINITIVE_TERMS = [
+  'low-slope roof covering',
+  'low slope roof covering',
+  'low-slope roof',
+  'low slope roof',
+  'cap sheet',
+  'epdm',
+  'tpo membrane',
+  'built-up roof',
+  'modified bitumen membrane',
+];
+
+// Contextual terms: require 2+ matches to force low-slope
+const LOW_SLOPE_CONTEXTUAL_TERMS = [
   'snow melt',
   'snowmelt',
   'ice melt',
   'ponding',
   'drainage obstruction',
-  'low-slope roof covering',
-  'low slope roof covering',
   'membrane',
-  'cap sheet',
   'standing water',
 ];
+
+// If these appear prominently, suppress low-slope forcing (steep-slope indicator)
+const STEEP_SLOPE_DISQUALIFIERS = [
+  'shingle',
+  'architectural shingle',
+  'asphalt shingle',
+  'three-tab',
+  '3-tab',
+  'wind uplift',
+  'seal strip',
+  'unsealed tab',
+];
+
+// Combined for backward compat in lists/display
+const LOW_SLOPE_FORCE_TERMS = [...LOW_SLOPE_DEFINITIVE_TERMS, ...LOW_SLOPE_CONTEXTUAL_TERMS];
 
 const LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES: Array<{ label: string; regex: RegExp }> = [
   { label: 'shingle', regex: /\bshingle(?:s)?\b/i },
@@ -1035,25 +1061,36 @@ const SCENARIO_RULE_PACKS: Record<string, string> = {
 
 function detectLowSlopePhysicalMechanism(text: string): { shouldForce: boolean; matchedTerms: string[] } {
   const textLower = String(text || '').toLowerCase();
-  const matchedTerms = LOW_SLOPE_FORCE_TERMS.filter((term) => textLower.includes(term));
-  return { shouldForce: matchedTerms.length > 0, matchedTerms };
+
+  // Check for steep-slope disqualifiers — if shingle terms are prominent, this is NOT low-slope
+  const steepSlopeHits = STEEP_SLOPE_DISQUALIFIERS.filter((term) => textLower.includes(term));
+  const hasSteepSlopeSignals = steepSlopeHits.length >= 2;
+
+  // Check definitive low-slope terms (any single match is sufficient)
+  const definitiveMatches = LOW_SLOPE_DEFINITIVE_TERMS.filter((term) => textLower.includes(term));
+  
+  // Check contextual terms (need 2+ to trigger)
+  const contextualMatches = LOW_SLOPE_CONTEXTUAL_TERMS.filter((term) => textLower.includes(term));
+  
+  const allMatched = [...definitiveMatches, ...contextualMatches];
+
+  // Force low-slope only if:
+  // 1. A definitive term is found, OR 2+ contextual terms are found
+  // AND steep-slope disqualifiers are NOT dominant
+  const hasLowSlopeSignal = definitiveMatches.length > 0 || contextualMatches.length >= 2;
+  const shouldForce = hasLowSlopeSignal && !hasSteepSlopeSignals;
+
+  if (hasSteepSlopeSignals && hasLowSlopeSignal) {
+    console.log(`[detectLowSlopePhysicalMechanism] SUPPRESSED: steep-slope disqualifiers=[${steepSlopeHits.join(', ')}] override low-slope matches=[${allMatched.join(', ')}]`);
+  }
+
+  return { shouldForce, matchedTerms: allMatched };
 }
 
 function detectLowSlopeAcrossSources(sources: Array<string | null | undefined>): { shouldForce: boolean; matchedTerms: string[] } {
-  const matchedTerms = new Set<string>();
-
-  for (const source of sources) {
-    if (!source) continue;
-    const detection = detectLowSlopePhysicalMechanism(source);
-    for (const term of detection.matchedTerms) {
-      matchedTerms.add(term);
-    }
-  }
-
-  return {
-    shouldForce: matchedTerms.size > 0,
-    matchedTerms: Array.from(matchedTerms),
-  };
+  // Concatenate all sources and run the tiered detection once
+  const combinedText = sources.filter(Boolean).join(' ');
+  return detectLowSlopePhysicalMechanism(combinedText);
 }
 
 type EngineerReportSourceOrigin =
