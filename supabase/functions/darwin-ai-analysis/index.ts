@@ -11243,9 +11243,13 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     }
 
     const responsePath: 'non_structured' = 'non_structured';
-    const finalResponseText = typeof analysisResult === 'string'
-      ? analysisResult
-      : JSON.stringify(analysisResult ?? '');
+    // Final suppression pass before validation
+    const suppressedResponseText = (lowSlopeSupportCorpusForFilters && typeof analysisResult === 'string')
+      ? suppressLowSlopeUnsupportedBoilerplate(analysisResult, lowSlopeSupportCorpusForFilters)
+      : analysisResult;
+    const finalResponseText = typeof suppressedResponseText === 'string'
+      ? suppressedResponseText
+      : JSON.stringify(suppressedResponseText ?? '');
 
     const preSendLowSlopeDetection = detectLowSlopeAcrossSources([
       engineerRebuttalCausationQuote,
