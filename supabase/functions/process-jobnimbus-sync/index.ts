@@ -228,7 +228,8 @@ async function syncTask(apiKey: string, claim: any, payload: any) {
     body: JSON.stringify({
       title: taskData.title || 'Task',
       description: taskData.description || '',
-      related: [{ jnid: jobId }],
+      primary: { id: jobId, type: 'job' },
+      related: [{ id: jobId, type: 'job' }],
       date_due: taskData.due_date || null,
       is_completed: taskData.status === 'completed',
     }),
@@ -261,8 +262,10 @@ async function syncNote(apiKey: string, claim: any, payload: any) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
+      record_type_name: 'Note',
       note: noteData.content || '',
-      related: [{ jnid: jobId }],
+      primary: { id: jobId, type: 'job' },
+      related: [{ id: jobId, type: 'job' }],
     }),
   });
 
@@ -305,7 +308,8 @@ async function syncFile(apiKey: string, claim: any, payload: any, supabase: any)
     body: JSON.stringify({
       filename: fileData.file_name || 'file',
       url: signedUrl.signedUrl,
-      related: [{ jnid: jobId }],
+      primary: { id: jobId, type: 'job' },
+      related: [{ id: jobId, type: 'job' }],
     }),
   });
 
