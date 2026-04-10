@@ -309,12 +309,12 @@ async function syncFile(apiKey: string, claim: any, payload: any, supabase: any)
 }
 
 function mapStatusToJobNimbus(status: string): string {
-  // Map your claim statuses to JobNimbus status names
   const statusMap: Record<string, string> = {
-    'open': 'New Lead',
-    'in_progress': 'In Progress',
-    'pending': 'Pending',
-    'closed': 'Completed',
+    'open': 'Lead',
+    'in_progress': 'Contract Signed',
+    'pending': 'Lead',
+    'closed': 'Job Completed',
+    'lost': 'Lost',
   };
-  return statusMap[status?.toLowerCase()] || 'New Lead';
+  return statusMap[status?.toLowerCase()] || 'Lead';
 }
