@@ -179,6 +179,10 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
     });
   }, [allTasks, debouncedSearch]);
 
+  // Only show results when user is actively searching
+  const showResults = hasSearch;
+  const displayedTasks = showResults ? filtered.slice(0, 20) : [];
+
   useEffect(() => {
     console.log("Task search filter applied", {
       query: debouncedSearch,
@@ -248,26 +252,21 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
         )}
       </div>
 
-      {authLoading || isLoading || isFiltering ? (
+      {!showResults ? null : (authLoading || isLoading || isFiltering) ? (
         <div className="space-y-2">
           {[1, 2, 3].map((i) => (
             <Skeleton key={i} className="h-16 w-full" />
           ))}
         </div>
-      ) : hasSearch && filtered.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
           <SearchX className="mb-2 h-10 w-10 opacity-50" />
           <p className="text-sm">No tasks found for "{debouncedSearch.trim() || search.trim()}"</p>
         </div>
-      ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
-          <SearchX className="mb-2 h-10 w-10 opacity-50" />
-          <p className="text-sm">No tasks available</p>
-        </div>
       ) : (
         <>
           <div className="space-y-2">
-            {filtered.map((task) => (
+            {displayedTasks.map((task) => (
               <Card
                 key={task.id}
                 className={`p-3 transition-all hover:shadow-md ${selectedIds.has(task.id) ? "border-primary ring-1 ring-primary/20" : ""}`}
@@ -318,6 +317,12 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
               </Card>
             ))}
           </div>
+
+          {filtered.length > 20 && (
+            <p className="text-xs text-muted-foreground text-center py-1">
+              Showing 20 of {filtered.length} results. Refine your search.
+            </p>
+          )}
 
           {selectedIds.size > 0 && (
             <div className="flex items-center justify-between border-t border-border pt-2">
