@@ -17,8 +17,11 @@ import {
   computeGravityScore,
   markTaskImmediate,
   downgradeImmediateTask,
+  snoozeImmediateTask,
+  isTaskSnoozed,
 } from "@/services/taskExecutionService";
 import { format } from "date-fns";
+import { AlarmClock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Zap } from "lucide-react";
 
@@ -326,14 +329,52 @@ export function TaskDetailDrawer({ task, open, onClose, onRefetch }: Props) {
             )}
 
             {isImmediate && (
-              <Button
-                variant="outline"
-                onClick={handleDowngrade}
-                disabled={saving}
-                className="w-full"
-              >
-                Downgrade from Immediate
-              </Button>
+              <div className="space-y-2">
+                <Button
+                  variant="outline"
+                  onClick={handleDowngrade}
+                  disabled={saving}
+                  className="w-full"
+                >
+                  Downgrade from Immediate
+                </Button>
+
+                {task.snooze_allowed !== false &&
+                  (task.snooze_count || 0) < (task.max_snooze_count || 2) &&
+                  task.status !== 'completed' && task.status !== 'dropped' && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Quick Snooze</Label>
+                    <div className="flex gap-2">
+                      {[5, 10, 15].map((mins) => (
+                        <Button
+                          key={mins}
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 gap-1 text-xs"
+                          disabled={saving}
+                          onClick={async () => {
+                            setSaving(true);
+                            const r = await snoozeImmediateTask(task.id, mins);
+                            setSaving(false);
+                            if (r.success) {
+                              toast({ title: `Snoozed for ${mins} min` });
+                              onRefetch();
+                              onClose();
+                            } else {
+                              toast({ title: "Error", description: r.error, variant: "destructive" });
+                            }
+                          }}
+                        >
+                          <AlarmClock className="h-3 w-3" /> {mins}m
+                        </Button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      {task.snooze_count || 0} / {task.max_snooze_count || 2} snoozes used
+                    </p>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 

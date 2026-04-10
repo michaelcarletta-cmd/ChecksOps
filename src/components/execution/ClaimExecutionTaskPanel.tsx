@@ -2,11 +2,20 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
-import { ListTodo, Plus, CheckCircle2, Play, ExternalLink, Zap, AlertTriangle } from "lucide-react";
+import { ListTodo, CheckCircle2, Play, Pause, Zap, AlertTriangle, AlarmClock } from "lucide-react";
 import {
   activateTask,
   completeTask,
+  pauseTask,
+  resumeTask,
+  snoozeImmediateTask,
   ExecutionTask,
   getClaimImmediateTasks,
   getImmediateTaskDueStatus,
@@ -36,7 +45,6 @@ export function ClaimExecutionTaskPanel({ claimId, claimNumber }: Props) {
 
     if (!error) setTasks((data as unknown as ExecutionTask[]) || []);
 
-    // Fetch urgent tasks separately for the banner
     const urgent = await getClaimImmediateTasks(claimId);
     setUrgentTasks(urgent);
 
@@ -51,15 +59,9 @@ export function ClaimExecutionTaskPanel({ claimId, claimNumber }: Props) {
     return () => { supabase.removeChannel(ch); };
   }, [claimId]);
 
-  const handleActivate = async (id: string) => {
-    const r = await activateTask(id);
-    if (r.success) { toast({ title: "Task activated" }); fetchTasks(); }
-    else toast({ title: "Error", description: r.error, variant: "destructive" });
-  };
-
-  const handleComplete = async (id: string) => {
-    const r = await completeTask(id);
-    if (r.success) { toast({ title: "Task completed ✓" }); fetchTasks(); }
+  const handleAction = async (action: () => Promise<{ success: boolean; error?: string }>, msg: string) => {
+    const r = await action();
+    if (r.success) { toast({ title: msg }); fetchTasks(); }
     else toast({ title: "Error", description: r.error, variant: "destructive" });
   };
 
@@ -114,6 +116,11 @@ export function ClaimExecutionTaskPanel({ claimId, claimNumber }: Props) {
           <div className="space-y-1.5">
             {[...activeTasks, ...otherTasks].slice(0, 8).map((task) => {
               const isImmediate = task.immediate_enabled || task.priority_level === 'immediate';
+              const isPaused = !!task.paused_at;
+              const canSnooze = isImmediate && task.snooze_allowed !== false
+                && (task.snooze_count || 0) < (task.max_snooze_count || 2)
+                && task.status !== 'completed' && task.status !== 'dropped';
+
               return (
                 <div key={task.id} className={`flex items-center gap-2 text-xs p-1.5 rounded border hover:bg-accent/50 ${
                   isImmediate ? 'border-destructive/30 bg-destructive/[0.02]' : ''
@@ -136,14 +143,38 @@ export function ClaimExecutionTaskPanel({ claimId, claimNumber }: Props) {
                     </div>
                   </div>
                   <div className="flex gap-0.5 shrink-0">
-                    {task.status !== 'active' && (
-                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleActivate(task.id)}>
-                        <Play className="h-3 w-3" />
+                    {task.status === 'active' && isPaused && (
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleAction(() => resumeTask(task.id), "Task resumed")} title="Resume">
+                        <Play className="h-3 w-3 text-primary" />
                       </Button>
                     )}
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleComplete(task.id)}>
+                    {task.status === 'active' && !isPaused && (
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleAction(() => pauseTask(task.id), "Task paused")} title="Pause">
+                        <Pause className="h-3 w-3" />
+                      </Button>
+                    )}
+                    {task.status !== 'active' && (
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleAction(() => activateTask(task.id), "Task activated")} title="Activate">
+                        <Play className="h-3 w-3 text-primary" />
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleAction(() => completeTask(task.id), "Task completed ✓")} title="Complete">
                       <CheckCircle2 className="h-3 w-3 text-emerald-500" />
                     </Button>
+                    {canSnooze && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" title="Snooze">
+                            <AlarmClock className="h-3 w-3 text-amber-500" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-36">
+                          <DropdownMenuItem onClick={() => handleAction(() => snoozeImmediateTask(task.id, 5), "Snoozed 5 min")}>Snooze 5 min</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleAction(() => snoozeImmediateTask(task.id, 10), "Snoozed 10 min")}>Snooze 10 min</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleAction(() => snoozeImmediateTask(task.id, 15), "Snoozed 15 min")}>Snooze 15 min</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
                 </div>
               );
