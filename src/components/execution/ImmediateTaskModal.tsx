@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,8 +9,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { AlertTriangle, Clock, Play, Pause, CheckCircle2, ArrowDown, ChevronDown, Shield } from "lucide-react";
-import { ExecutionTask, acknowledgeImmediateTask, getImmediateTaskDueStatus, AcknowledgeAction } from "@/services/taskExecutionService";
+import { AlertTriangle, Clock, Play, CheckCircle2, ArrowDown, ChevronDown, Shield } from "lucide-react";
+import {
+  ExecutionTask,
+  acknowledgeImmediateTask,
+  getImmediateTaskDueStatus,
+  AcknowledgeAction,
+  DueStatus,
+} from "@/services/taskExecutionService";
 import { formatDistanceToNow, format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 
@@ -20,11 +26,17 @@ interface Props {
   onClose: () => void;
   onRefetch: () => void;
   onQueueFull?: (task: ExecutionTask) => void;
+  onModalOpen?: () => void;
 }
 
-export function ImmediateTaskModal({ task, open, onClose, onRefetch, onQueueFull }: Props) {
+export function ImmediateTaskModal({ task, open, onClose, onRefetch, onQueueFull, onModalOpen }: Props) {
   const [acting, setActing] = useState(false);
   const { toast } = useToast();
+
+  // Notify parent when modal opens for dedupe tracking
+  useEffect(() => {
+    if (open && onModalOpen) onModalOpen();
+  }, [open, onModalOpen]);
 
   if (!task) return null;
 
@@ -62,8 +74,17 @@ export function ImmediateTaskModal({ task, open, onClose, onRefetch, onQueueFull
   const escalationLabel = task.escalation_level >= 3 ? 'CRITICAL ESCALATION' :
     task.escalation_level >= 2 ? 'ESCALATED' : 'IMMEDIATE';
 
+  const dueStatusLabel: Record<DueStatus, { text: string; className: string } | null> = {
+    overdue: { text: 'OVERDUE', className: 'bg-destructive text-destructive-foreground' },
+    urgent: { text: 'DUE SOON', className: 'bg-orange-500/15 text-orange-700 border-orange-500/30' },
+    due_soon: { text: 'DUE SOON', className: 'bg-orange-500/15 text-orange-700 border-orange-500/30' },
+    normal: null,
+  };
+
+  const dueBadge = dueStatusLabel[dueStatus];
+
   return (
-    <Dialog open={open} onOpenChange={(v) => { /* prevent close without action */ }}>
+    <Dialog open={open} onOpenChange={() => { /* prevent close without action */ }}>
       <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
         <DialogHeader>
           <div className="flex items-center gap-2 mb-1">
@@ -73,11 +94,8 @@ export function ImmediateTaskModal({ task, open, onClose, onRefetch, onQueueFull
             <Badge variant="destructive" className="text-xs font-bold tracking-wider">
               {escalationLabel}
             </Badge>
-            {dueStatus === 'overdue' && (
-              <Badge variant="destructive" className="text-xs">OVERDUE</Badge>
-            )}
-            {dueStatus === 'urgent' && (
-              <Badge className="text-xs bg-orange-500/15 text-orange-700 border-orange-500/30">DUE SOON</Badge>
+            {dueBadge && (
+              <Badge className={`text-xs ${dueBadge.className}`}>{dueBadge.text}</Badge>
             )}
           </div>
           <DialogTitle className="text-lg">Immediate action required</DialogTitle>
