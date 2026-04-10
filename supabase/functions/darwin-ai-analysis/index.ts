@@ -2224,7 +2224,7 @@ function collectAllLowSlopeFinalViolations(
 
   return Array.from(
     new Set([
-      ...collectLowSlopeStrictPreSendViolations(finalText, primaryScenario),
+      ...collectLowSlopeStrictPreSendViolations(finalText, primaryScenario, engineerCausationSentence),
       ...collectLowSlopeForbiddenViolations(finalText, primaryScenario, engineerCausationSentence),
     ]),
   );
@@ -10724,7 +10724,7 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       }
 
       const provisionalViolations = Array.from(new Set([
-        ...collectLowSlopeStrictPreSendViolations(analysisResult, engineerContext.primaryScenario),
+        ...collectLowSlopeStrictPreSendViolations(analysisResult, engineerContext.primaryScenario, engineerRebuttalCausationQuote),
         ...collectLowSlopeForbiddenViolations(analysisResult, engineerContext.primaryScenario, engineerRebuttalCausationQuote),
       ]));
 
