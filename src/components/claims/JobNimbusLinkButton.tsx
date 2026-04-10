@@ -84,8 +84,8 @@ export function JobNimbusLinkButton({ claimId, currentJobId, onLinked }: JobNimb
     try {
       // Queue a sync which will create a new job
       const { error } = await supabase
-        .from('jobnimbus_sync_queue')
-        .insert({ claim_id: claimId, sync_type: 'claim', status: 'pending' });
+        .from('jobnimbus_sync_queue' as any)
+        .insert({ claim_id: claimId, sync_type: 'claim', status: 'pending', contractor_id: null });
 
       if (error) throw error;
       toast.success("Claim queued for JobNimbus sync — a new job will be created");
