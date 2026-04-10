@@ -140,36 +140,27 @@ Deno.serve(async (req) => {
 async function syncClaim(apiKey: string, claim: any, supabase: any) {
   console.log(`Syncing claim ${claim.id} to JobNimbus`);
 
-  // Check if job already exists in JobNimbus
   let jobId = claim.jobnimbus_job_id;
 
   const policyholderName = (claim.policyholder_name || '').trim();
   const primaryName = policyholderName || claim.claim_number || 'Unknown';
 
-  const jobData: Record<string, any> = {
-    name: primaryName,
-    status_name: mapStatusToJobNimbus(claim.status),
-    description: claim.loss_description || '',
-    location: {
-      address: claim.policyholder_address || '',
-    },
-  };
+  // Split name into first/last for contact
+  const nameParts = primaryName.split(/\s+/);
+  const firstName = nameParts[0] || primaryName;
+  const lastName = nameParts.slice(1).join(' ') || '';
 
-  if (jobId) {
-    jobData.primary = {
-      id: jobId,
-      type: 'job',
-      name: primaryName,
-    };
-  }
-  
-  // Only include non-empty custom fields
-  if (claim.claim_number) jobData.number = claim.claim_number;
-
-  let response;
   if (jobId) {
     // Update existing job
-    response = await fetch(`${JOBNIMBUS_API_BASE}/jobs/${jobId}`, {
+    const jobData: Record<string, any> = {
+      name: primaryName,
+      status_name: mapStatusToJobNimbus(claim.status),
+      description: claim.loss_description || '',
+      location: { address: claim.policyholder_address || '' },
+    };
+    if (claim.claim_number) jobData.number = claim.claim_number;
+
+    const response = await fetch(`${JOBNIMBUS_API_BASE}/jobs/${jobId}`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -177,31 +168,85 @@ async function syncClaim(apiKey: string, claim: any, supabase: any) {
       },
       body: JSON.stringify(jobData),
     });
-  } else {
-    // Create new job
-    response = await fetch(`${JOBNIMBUS_API_BASE}/jobs`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(jobData),
-    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`JobNimbus API error: ${response.status} - ${errorText}`);
+    }
+
+    return await response.json();
   }
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`JobNimbus API error: ${response.status} - ${errorText}`);
+  // --- Create new: first create/find a contact, then create the job ---
+  // Step 1: Create a contact for the policyholder
+  const contactData: Record<string, any> = {
+    first_name: firstName,
+    last_name: lastName,
+    display_name: primaryName,
+    record_type_name: 'Customer',
+  };
+  if (claim.policyholder_email) contactData.email = claim.policyholder_email;
+  if (claim.policyholder_phone) contactData.home_phone = claim.policyholder_phone;
+  if (claim.policyholder_address) {
+    contactData.address_line1 = claim.policyholder_address;
   }
 
-  const result = await response.json();
-  
-  // Save JobNimbus job ID back to claim if new
-  if (!jobId && result.jnid) {
+  console.log('Creating JN contact:', JSON.stringify(contactData));
+
+  const contactResponse = await fetch(`${JOBNIMBUS_API_BASE}/contacts`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(contactData),
+  });
+
+  if (!contactResponse.ok) {
+    const errorText = await contactResponse.text();
+    throw new Error(`JobNimbus contact creation error: ${contactResponse.status} - ${errorText}`);
+  }
+
+  const contact = await contactResponse.json();
+  const contactId = contact.jnid;
+  console.log(`Created JN contact ${contactId}`);
+
+  // Step 2: Create the job linked to the contact
+  const jobData: Record<string, any> = {
+    name: primaryName,
+    status_name: mapStatusToJobNimbus(claim.status),
+    description: claim.loss_description || '',
+    location: { address: claim.policyholder_address || '' },
+    primary: { id: contactId, type: 'contact' },
+    related: [{ id: contactId, type: 'contact' }],
+  };
+  if (claim.claim_number) jobData.number = claim.claim_number;
+
+  console.log('Creating JN job:', JSON.stringify(jobData));
+
+  const jobResponse = await fetch(`${JOBNIMBUS_API_BASE}/jobs`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(jobData),
+  });
+
+  if (!jobResponse.ok) {
+    const errorText = await jobResponse.text();
+    throw new Error(`JobNimbus job creation error: ${jobResponse.status} - ${errorText}`);
+  }
+
+  const result = await jobResponse.json();
+
+  // Save JobNimbus job ID back to claim
+  if (result.jnid) {
     await supabase
       .from('claims')
       .update({ jobnimbus_job_id: result.jnid })
       .eq('id', claim.id);
+    console.log(`Saved JN job ID ${result.jnid} to claim ${claim.id}`);
   }
 
   return result;
