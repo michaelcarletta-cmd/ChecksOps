@@ -294,7 +294,6 @@ async function syncFile(apiKey: string, claim: any, payload: any, supabase: any)
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      record_type_name: 'Document',
       filename: fileData.file_name || 'file',
       url: signedUrl.signedUrl,
       related: [{ jnid: jobId }],
