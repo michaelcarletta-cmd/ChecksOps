@@ -33,6 +33,7 @@ export function useExecutionQueue() {
 
     if (error) {
       console.error('Error fetching execution queue:', error);
+      setLoading(false);
       return;
     }
 
