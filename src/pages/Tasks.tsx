@@ -2,9 +2,13 @@ import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ExecutionQueuePanel } from "@/components/execution/ExecutionQueuePanel";
 import { useExecutionQueue } from "@/hooks/useExecutionQueue";
+import { useImmediateTasks } from "@/hooks/useImmediateTasks";
 import { TaskSearchPanel } from "@/components/execution/TaskSearchPanel";
 import { ExecutionTaskCard } from "@/components/execution/ExecutionTaskCard";
 import { TaskDetailDrawer } from "@/components/execution/TaskDetailDrawer";
+import { UrgentCenter } from "@/components/execution/UrgentCenter";
+import { ImmediateTaskModal } from "@/components/execution/ImmediateTaskModal";
+import { QueueFullOverrideDialog } from "@/components/execution/QueueFullOverrideDialog";
 import { completeTask, activateTask, ExecutionTask } from "@/services/taskExecutionService";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -12,8 +16,14 @@ import { useQuery } from "@tanstack/react-query";
 
 const Tasks = () => {
   const { activeTasks, backlogTasks, blockedTasks, loading, refetch } = useExecutionQueue();
+  const { immediateTasks, pendingInterrupt, hasUrgentWork, refetch: refetchImmediate, clearInterrupt } = useImmediateTasks();
   const [selectedTask, setSelectedTask] = useState<ExecutionTask | null>(null);
+  const [interruptTask, setInterruptTask] = useState<ExecutionTask | null>(null);
+  const [queueFullTask, setQueueFullTask] = useState<ExecutionTask | null>(null);
   const { toast } = useToast();
+
+  // Show pending interrupt modal
+  const activeInterrupt = interruptTask || pendingInterrupt;
 
   const { data: completedTasks = [] } = useQuery({
     queryKey: ["completed-tasks"],
@@ -38,9 +48,11 @@ const Tasks = () => {
 
   const handleAction = async (action: () => Promise<{ success: boolean; error?: string }>, msg: string) => {
     const r = await action();
-    if (r.success) { toast({ title: msg }); refetch(); }
+    if (r.success) { toast({ title: msg }); refetch(); refetchImmediate(); }
     else toast({ title: "Error", description: r.error, variant: "destructive" });
   };
+
+  const handleRefetchAll = () => { refetch(); refetchImmediate(); };
 
   if (loading) {
     return (
@@ -60,7 +72,15 @@ const Tasks = () => {
         <p className="text-muted-foreground mt-1">Manage your execution queue</p>
       </div>
 
-      <TaskSearchPanel onQueueUpdated={refetch} />
+      <TaskSearchPanel onQueueUpdated={handleRefetchAll} />
+
+      {/* Urgent Center - only appears when immediate tasks exist */}
+      {hasUrgentWork && (
+        <UrgentCenter
+          immediateTasks={immediateTasks}
+          onOpenInterrupt={(t) => setInterruptTask(t)}
+        />
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
@@ -96,7 +116,25 @@ const Tasks = () => {
         task={selectedTask}
         open={!!selectedTask}
         onClose={() => setSelectedTask(null)}
-        onRefetch={refetch}
+        onRefetch={handleRefetchAll}
+      />
+
+      {/* Immediate Task Interrupt Modal */}
+      <ImmediateTaskModal
+        task={activeInterrupt}
+        open={!!activeInterrupt}
+        onClose={() => { clearInterrupt(); setInterruptTask(null); }}
+        onRefetch={handleRefetchAll}
+        onQueueFull={(t) => setQueueFullTask(t)}
+      />
+
+      {/* Queue Full Override Dialog */}
+      <QueueFullOverrideDialog
+        immediateTask={queueFullTask}
+        activeTasks={activeTasks}
+        open={!!queueFullTask}
+        onClose={() => setQueueFullTask(null)}
+        onRefetch={handleRefetchAll}
       />
     </div>
   );

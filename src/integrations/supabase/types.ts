@@ -11001,6 +11001,50 @@ export type Database = {
           },
         ]
       }
+      notification_delivery_logs: {
+        Row: {
+          channel: string
+          created_at: string
+          delivery_status: string
+          escalation_level: number
+          id: string
+          notification_type: string
+          provider_response: Json | null
+          task_id: string
+          user_id: string
+        }
+        Insert: {
+          channel: string
+          created_at?: string
+          delivery_status: string
+          escalation_level?: number
+          id?: string
+          notification_type: string
+          provider_response?: Json | null
+          task_id: string
+          user_id: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          delivery_status?: string
+          escalation_level?: number
+          id?: string
+          notification_type?: string
+          provider_response?: Json | null
+          task_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_delivery_logs_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notification_preferences: {
         Row: {
           created_at: string
@@ -12536,11 +12580,17 @@ export type Database = {
           blocked_reason: string | null
           claim_id: string | null
           completed_at: string | null
+          countdown_enabled: boolean
           created_at: string
           created_by: string | null
+          deadline_source: string | null
           description: string | null
           done_definition: string | null
+          due_at: string | null
           due_date: string | null
+          email_enabled: boolean
+          escalation_enabled: boolean
+          escalation_level: number
           follow_up_current_count: number | null
           follow_up_enabled: boolean | null
           follow_up_interval_days: number | null
@@ -12551,18 +12601,32 @@ export type Database = {
           follow_up_stopped_at: string | null
           gravity_score: number
           id: string
+          immediate_enabled: boolean
           impact_score: number
+          last_acknowledged_at: string | null
+          last_notified_at: string | null
           last_touched_at: string | null
           linked_entity_id: string | null
           linked_entity_type: string | null
+          max_snooze_count: number
+          next_notification_at: string | null
+          notification_channels: string[]
+          notification_strategy: string
           paused_at: string | null
           priority: string | null
           priority_level: string
+          push_enabled: boolean
+          requires_acknowledgement: boolean
+          sms_enabled: boolean
+          snooze_allowed: boolean
+          snooze_count: number
+          snoozed_until: string | null
           started_at: string | null
           status: string
           title: string
           updated_at: string
           urgency_score: number
+          urgent_reason: string | null
         }
         Insert: {
           active_rank?: number | null
@@ -12571,11 +12635,17 @@ export type Database = {
           blocked_reason?: string | null
           claim_id?: string | null
           completed_at?: string | null
+          countdown_enabled?: boolean
           created_at?: string
           created_by?: string | null
+          deadline_source?: string | null
           description?: string | null
           done_definition?: string | null
+          due_at?: string | null
           due_date?: string | null
+          email_enabled?: boolean
+          escalation_enabled?: boolean
+          escalation_level?: number
           follow_up_current_count?: number | null
           follow_up_enabled?: boolean | null
           follow_up_interval_days?: number | null
@@ -12586,18 +12656,32 @@ export type Database = {
           follow_up_stopped_at?: string | null
           gravity_score?: number
           id?: string
+          immediate_enabled?: boolean
           impact_score?: number
+          last_acknowledged_at?: string | null
+          last_notified_at?: string | null
           last_touched_at?: string | null
           linked_entity_id?: string | null
           linked_entity_type?: string | null
+          max_snooze_count?: number
+          next_notification_at?: string | null
+          notification_channels?: string[]
+          notification_strategy?: string
           paused_at?: string | null
           priority?: string | null
           priority_level?: string
+          push_enabled?: boolean
+          requires_acknowledgement?: boolean
+          sms_enabled?: boolean
+          snooze_allowed?: boolean
+          snooze_count?: number
+          snoozed_until?: string | null
           started_at?: string | null
           status?: string
           title: string
           updated_at?: string
           urgency_score?: number
+          urgent_reason?: string | null
         }
         Update: {
           active_rank?: number | null
@@ -12606,11 +12690,17 @@ export type Database = {
           blocked_reason?: string | null
           claim_id?: string | null
           completed_at?: string | null
+          countdown_enabled?: boolean
           created_at?: string
           created_by?: string | null
+          deadline_source?: string | null
           description?: string | null
           done_definition?: string | null
+          due_at?: string | null
           due_date?: string | null
+          email_enabled?: boolean
+          escalation_enabled?: boolean
+          escalation_level?: number
           follow_up_current_count?: number | null
           follow_up_enabled?: boolean | null
           follow_up_interval_days?: number | null
@@ -12621,18 +12711,32 @@ export type Database = {
           follow_up_stopped_at?: string | null
           gravity_score?: number
           id?: string
+          immediate_enabled?: boolean
           impact_score?: number
+          last_acknowledged_at?: string | null
+          last_notified_at?: string | null
           last_touched_at?: string | null
           linked_entity_id?: string | null
           linked_entity_type?: string | null
+          max_snooze_count?: number
+          next_notification_at?: string | null
+          notification_channels?: string[]
+          notification_strategy?: string
           paused_at?: string | null
           priority?: string | null
           priority_level?: string
+          push_enabled?: boolean
+          requires_acknowledgement?: boolean
+          sms_enabled?: boolean
+          snooze_allowed?: boolean
+          snooze_count?: number
+          snoozed_until?: string | null
           started_at?: string | null
           status?: string
           title?: string
           updated_at?: string
           urgency_score?: number
+          urgent_reason?: string | null
         }
         Relationships: [
           {
