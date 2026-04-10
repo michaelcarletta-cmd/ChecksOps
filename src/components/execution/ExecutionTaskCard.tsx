@@ -1,9 +1,9 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Play, Pause, CheckCircle2, AlertTriangle, ArrowDown, GripVertical, Clock, Flame, ExternalLink } from "lucide-react";
-import { ExecutionTask, getStaleStatus } from "@/services/taskExecutionService";
-import { formatDistanceToNow } from "date-fns";
+import { Play, Pause, CheckCircle2, AlertTriangle, ArrowDown, GripVertical, Clock, Flame, ExternalLink, Zap, Timer } from "lucide-react";
+import { ExecutionTask, getStaleStatus, getImmediateTaskDueStatus, isTaskSnoozed } from "@/services/taskExecutionService";
+import { formatDistanceToNow, format } from "date-fns";
 import { Link } from "react-router-dom";
 
 interface ExecutionTaskCardProps {
@@ -20,6 +20,7 @@ interface ExecutionTaskCardProps {
 }
 
 const priorityColors: Record<string, string> = {
+  immediate: "bg-destructive/15 text-destructive border-destructive/30 font-bold",
   critical: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30",
   high: "bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-500/30",
   medium: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
@@ -48,10 +49,14 @@ export function ExecutionTaskCard({
   const staleStatus = getStaleStatus(task.last_touched_at);
   const isPaused = !!task.paused_at;
   const isActive = task.status === 'active';
+  const isImmediate = task.immediate_enabled || task.priority_level === 'immediate';
+  const dueStatus = task.due_at ? getImmediateTaskDueStatus(task as any) : 'normal';
+  const isSnoozed = isTaskSnoozed(task as any);
 
   return (
     <Card
       className={`p-3 transition-all hover:shadow-md cursor-pointer group ${
+        isImmediate ? 'border-destructive/50 ring-1 ring-destructive/20 bg-destructive/[0.02]' :
         staleStatus === 'requires_decision' ? 'border-red-500 ring-1 ring-red-500/20' :
         staleStatus === 'stale' ? 'border-amber-500/50' :
         isActive && !isPaused ? 'border-primary/30' : ''
@@ -67,7 +72,13 @@ export function ExecutionTaskCard({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            {task.active_rank === 1 && isActive && (
+            {isImmediate && (
+              <Badge variant="destructive" className="text-[9px] px-1.5 py-0 font-bold tracking-wider gap-0.5">
+                <Zap className="h-2.5 w-2.5" />
+                IMMEDIATE
+              </Badge>
+            )}
+            {!isImmediate && task.active_rank === 1 && isActive && (
               <Badge variant="default" className="text-[10px] px-1.5 py-0 bg-primary">DO NEXT</Badge>
             )}
             <h4 className="text-sm font-medium truncate text-foreground">{task.title}</h4>
@@ -79,22 +90,44 @@ export function ExecutionTaskCard({
                 {task.claim_number}
               </Badge>
             )}
-            <Badge className={`text-[10px] px-1.5 py-0 border ${priorityColors[task.priority_level] || priorityColors.medium}`}>
-              {task.priority_level}
-            </Badge>
+            {!isImmediate && (
+              <Badge className={`text-[10px] px-1.5 py-0 border ${priorityColors[task.priority_level] || priorityColors.medium}`}>
+                {task.priority_level}
+              </Badge>
+            )}
             {task.gravity_score > 0 && (
               <span className={`flex items-center gap-0.5 ${gravityColor(task.gravity_score)}`}>
                 <Flame className="h-3 w-3" />
                 {task.gravity_score}
               </span>
             )}
-            {staleStatus !== 'fresh' && (
+            {isImmediate && task.escalation_level >= 2 && (
+              <Badge className="text-[10px] px-1 py-0 bg-orange-500/15 text-orange-700 border-orange-500/30">
+                L{task.escalation_level}
+              </Badge>
+            )}
+            {isImmediate && isSnoozed && task.snoozed_until && (
+              <span className="flex items-center gap-0.5 text-amber-600">
+                <Timer className="h-3 w-3" />
+                {format(new Date(task.snoozed_until), "h:mm a")}
+              </span>
+            )}
+            {task.due_at && (
+              <span className={`flex items-center gap-0.5 ${
+                dueStatus === 'overdue' ? 'text-destructive font-medium' :
+                dueStatus === 'urgent' ? 'text-orange-600' : 'text-muted-foreground'
+              }`}>
+                <Clock className="h-3 w-3" />
+                {dueStatus === 'overdue' ? 'OVERDUE' : format(new Date(task.due_at), "h:mm a")}
+              </span>
+            )}
+            {staleStatus !== 'fresh' && !isImmediate && (
               <span className={`flex items-center gap-0.5 ${staleStatus === 'requires_decision' ? 'text-red-500' : 'text-amber-500'}`}>
                 <AlertTriangle className="h-3 w-3" />
                 {staleStatus === 'requires_decision' ? 'Action needed' : 'Stale'}
               </span>
             )}
-            {task.last_touched_at && (
+            {!isImmediate && task.last_touched_at && (
               <span className="text-muted-foreground flex items-center gap-0.5">
                 <Clock className="h-3 w-3" />
                 {formatDistanceToNow(new Date(task.last_touched_at), { addSuffix: true })}
