@@ -228,7 +228,8 @@ async function syncTask(apiKey: string, claim: any, payload: any) {
     body: JSON.stringify({
       title: taskData.title || 'Task',
       description: taskData.description || '',
-      related: [{ jnid: jobId }],
+      primary: { id: jobId, type: 'job' },
+      related: [{ id: jobId, type: 'job' }],
       date_due: taskData.due_date || null,
       is_completed: taskData.status === 'completed',
     }),
