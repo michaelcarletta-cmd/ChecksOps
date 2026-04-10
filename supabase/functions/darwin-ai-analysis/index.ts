@@ -1061,8 +1061,30 @@ const SCENARIO_RULE_PACKS: Record<string, string> = {
 
 function detectLowSlopePhysicalMechanism(text: string): { shouldForce: boolean; matchedTerms: string[] } {
   const textLower = String(text || '').toLowerCase();
-  const matchedTerms = LOW_SLOPE_FORCE_TERMS.filter((term) => textLower.includes(term));
-  return { shouldForce: matchedTerms.length > 0, matchedTerms };
+
+  // Check for steep-slope disqualifiers — if shingle terms are prominent, this is NOT low-slope
+  const steepSlopeHits = STEEP_SLOPE_DISQUALIFIERS.filter((term) => textLower.includes(term));
+  const hasSteepSlopeSignals = steepSlopeHits.length >= 2;
+
+  // Check definitive low-slope terms (any single match is sufficient)
+  const definitiveMatches = LOW_SLOPE_DEFINITIVE_TERMS.filter((term) => textLower.includes(term));
+  
+  // Check contextual terms (need 2+ to trigger)
+  const contextualMatches = LOW_SLOPE_CONTEXTUAL_TERMS.filter((term) => textLower.includes(term));
+  
+  const allMatched = [...definitiveMatches, ...contextualMatches];
+
+  // Force low-slope only if:
+  // 1. A definitive term is found, OR 2+ contextual terms are found
+  // AND steep-slope disqualifiers are NOT dominant
+  const hasLowSlopeSignal = definitiveMatches.length > 0 || contextualMatches.length >= 2;
+  const shouldForce = hasLowSlopeSignal && !hasSteepSlopeSignals;
+
+  if (hasSteepSlopeSignals && hasLowSlopeSignal) {
+    console.log(`[detectLowSlopePhysicalMechanism] SUPPRESSED: steep-slope disqualifiers=[${steepSlopeHits.join(', ')}] override low-slope matches=[${allMatched.join(', ')}]`);
+  }
+
+  return { shouldForce, matchedTerms: allMatched };
 }
 
 function detectLowSlopeAcrossSources(sources: Array<string | null | undefined>): { shouldForce: boolean; matchedTerms: string[] } {
