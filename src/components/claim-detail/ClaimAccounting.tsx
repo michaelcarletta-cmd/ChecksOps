@@ -2112,13 +2112,16 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
                       />
                     </div>
                     <div>
-                      <Label className="text-xs text-muted-foreground">Amount ($) - Calculated</Label>
+                      <Label className="text-xs text-muted-foreground">Amount ($)</Label>
                       <Input
                         type="number"
                         step="0.01"
                         value={formData.company_fee_amount}
-                        disabled
-                        className="bg-muted"
+                        onChange={(e) => {
+                          const amount = parseFloat(e.target.value) || 0;
+                          const adjusterAmount = calculateAdjusterFee(amount, formData.adjuster_fee_percentage);
+                          setFormData({ ...formData, company_fee_amount: amount, adjuster_fee_amount: adjusterAmount });
+                        }}
                       />
                     </div>
                   </div>
@@ -2144,13 +2147,12 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
                       />
                     </div>
                     <div>
-                      <Label className="text-xs text-muted-foreground">Amount ($) - Calculated</Label>
+                      <Label className="text-xs text-muted-foreground">Amount ($)</Label>
                       <Input
                         type="number"
                         step="0.01"
                         value={formData.adjuster_fee_amount}
-                        disabled
-                        className="bg-muted"
+                        onChange={(e) => setFormData({ ...formData, adjuster_fee_amount: parseFloat(e.target.value) || 0 })}
                       />
                     </div>
                   </div>
@@ -2176,13 +2178,12 @@ function FeesSection({ claimId, fees, grossProfit, totalChecksReceived, checks, 
                       />
                     </div>
                     <div>
-                      <Label className="text-xs text-muted-foreground">Amount ($) - Calculated</Label>
+                      <Label className="text-xs text-muted-foreground">Amount ($)</Label>
                       <Input
                         type="number"
                         step="0.01"
                         value={formData.contractor_fee_amount}
-                        disabled
-                        className="bg-muted"
+                        onChange={(e) => setFormData({ ...formData, contractor_fee_amount: parseFloat(e.target.value) || 0 })}
                       />
                     </div>
                   </div>
