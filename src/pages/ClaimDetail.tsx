@@ -303,6 +303,11 @@ const ClaimDetail = () => {
         </div>
         {isStaffOrAdmin && (
           <div className="flex flex-wrap md:flex-row items-stretch md:items-center gap-1.5 md:gap-2 md:ml-auto">
+            <JobNimbusLinkButton
+              claimId={claim.id}
+              currentJobId={claim.jobnimbus_job_id}
+              onLinked={(jobId) => queryClient.setQueryData(["claim", id], (old: any) => old ? { ...old, jobnimbus_job_id: jobId } : old)}
+            />
             <Button variant="outline" size="sm" className="h-8 text-xs md:text-sm" onClick={() => setShareDialogOpen(true)}>
               <Share2 className="h-3.5 w-3.5 mr-1.5" />
               Share
