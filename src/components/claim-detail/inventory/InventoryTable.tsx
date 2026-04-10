@@ -99,7 +99,8 @@ export const InventoryTable = ({ items, loading, onRefresh, claimId }: Inventory
       item.room_name.toLowerCase().includes(q) ||
       (item.manufacturer?.toLowerCase().includes(q) ?? false) ||
       (item.model_number?.toLowerCase().includes(q) ?? false) ||
-      (item.category?.toLowerCase().includes(q) ?? false)
+      (item.category?.toLowerCase().includes(q) ?? false) ||
+      (item.source === "ale_transfer" && ("ale".includes(q) || "from ale".includes(q) || "transfer".includes(q)))
     );
   });
 
