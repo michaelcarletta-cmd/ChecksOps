@@ -36,8 +36,7 @@ Deno.serve(async (req) => {
       .from('jobnimbus_sync_queue')
       .select(`
         *,
-        claims (*),
-        profiles:contractor_id (jobnimbus_api_key, full_name)
+        claims (*)
       `)
       .eq('status', 'pending')
       .order('created_at', { ascending: true })
@@ -67,9 +66,9 @@ Deno.serve(async (req) => {
           .update({ status: 'processing' })
           .eq('id', item.id);
 
-        const apiKey = item.profiles?.jobnimbus_api_key;
+        const apiKey = Deno.env.get('JOBNIMBUS_API_KEY');
         if (!apiKey) {
-          throw new Error('No JobNimbus API key found for contractor');
+          throw new Error('No JobNimbus API key configured');
         }
 
         const claim = item.claims;
