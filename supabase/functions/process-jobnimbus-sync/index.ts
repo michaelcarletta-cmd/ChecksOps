@@ -143,8 +143,7 @@ async function syncClaim(apiKey: string, claim: any, supabase: any) {
   // Check if job already exists in JobNimbus
   let jobId = claim.jobnimbus_job_id;
 
-  const jobData = {
-    record_type_name: 'Job',
+  const jobData: Record<string, any> = {
     primary: {
       name: claim.policyholder_name || 'Unknown',
     },
@@ -153,13 +152,10 @@ async function syncClaim(apiKey: string, claim: any, supabase: any) {
     location: {
       address: claim.policyholder_address || '',
     },
-    // Custom fields
-    cf_claim_number: claim.claim_number || '',
-    cf_policy_number: claim.policy_number || '',
-    cf_loss_date: claim.loss_date || '',
-    cf_loss_type: claim.loss_type || '',
-    cf_insurance_company: claim.insurance_company || '',
   };
+  
+  // Only include non-empty custom fields
+  if (claim.claim_number) jobData.number = claim.claim_number;
 
   let response;
   if (jobId) {
