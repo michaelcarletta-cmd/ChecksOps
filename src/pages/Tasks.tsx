@@ -9,7 +9,7 @@ import { TaskDetailDrawer } from "@/components/execution/TaskDetailDrawer";
 import { UrgentCenter } from "@/components/execution/UrgentCenter";
 import { ImmediateTaskModal } from "@/components/execution/ImmediateTaskModal";
 import { QueueFullOverrideDialog } from "@/components/execution/QueueFullOverrideDialog";
-import { completeTask, activateTask, ExecutionTask } from "@/services/taskExecutionService";
+import { ExecutionTask } from "@/services/taskExecutionService";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
@@ -24,7 +24,7 @@ const Tasks = () => {
 
   const activeInterrupt = interruptTask || pendingInterrupt;
 
-  const { data: completedTasks = [] } = useQuery({
+  const { data: completedTasks = [], refetch: refetchCompleted } = useQuery({
     queryKey: ["completed-tasks"],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -35,23 +35,23 @@ const Tasks = () => {
         .or(`assigned_to.eq.${user.id},assigned_to.is.null`)
         .eq("status", "completed")
         .order("completed_at", { ascending: false })
-        .limit(20);
+        .order("updated_at", { ascending: false });
       if (error) return [];
-      return (data || []).map((t: any) => ({
+      const mapped = (data || []).map((t: any) => ({
         ...t,
         claim_number: t.claims?.claim_number,
         policyholder_name: t.claims?.policyholder_name,
       }));
+      if (import.meta.env.DEV) {
+        console.debug("[Tasks] completed task counts", { completed: mapped.length });
+      }
+      return mapped;
     },
   });
 
-  const handleAction = async (action: () => Promise<{ success: boolean; error?: string }>, msg: string) => {
-    const r = await action();
-    if (r.success) { toast({ title: msg }); refetch(); refetchImmediate(); }
-    else toast({ title: "Error", description: r.error, variant: "destructive" });
+  const handleRefetchAll = async () => {
+    await Promise.all([refetch(), refetchImmediate(), refetchCompleted()]);
   };
-
-  const handleRefetchAll = () => { refetch(); refetchImmediate(); };
 
   if (loading) {
     return (
@@ -82,7 +82,13 @@ const Tasks = () => {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <ExecutionQueuePanel />
+          <ExecutionQueuePanel
+            activeTasks={activeTasks}
+            backlogTasks={backlogTasks}
+            blockedTasks={blockedTasks}
+            loading={loading}
+            onRefetch={handleRefetchAll}
+          />
         </div>
 
         <div>

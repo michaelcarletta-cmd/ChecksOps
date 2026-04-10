@@ -77,6 +77,15 @@ export function useImmediateTasks() {
   const snoozedTasks = immediateTasks.filter(t => isTaskSnoozed(t));
   const overdueTasks = immediateTasks.filter(t => getImmediateTaskDueStatus(t) === 'overdue');
 
+  if (import.meta.env.DEV) {
+    console.debug("[useImmediateTasks] task counts", {
+      immediate: immediateTasks.length,
+      actionable: activeTasks.length,
+      snoozed: snoozedTasks.length,
+      overdue: overdueTasks.length,
+    });
+  }
+
   const clearInterrupt = useCallback(() => {
     isModalOpenRef.current = false;
     setPendingInterrupt(null);
@@ -89,8 +98,11 @@ export function useImmediateTasks() {
   return {
     immediateTasks,
     activeTasks,
+    activeImmediateTasks: activeTasks,
     snoozedTasks,
+    snoozedImmediateTasks: snoozedTasks,
     overdueTasks,
+    overdueImmediateTasks: overdueTasks,
     pendingInterrupt,
     loading,
     refetch: fetchImmediateTasks,

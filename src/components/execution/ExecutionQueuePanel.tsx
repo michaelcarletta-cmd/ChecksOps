@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ListTodo, Archive, AlertTriangle } from "lucide-react";
-import { useExecutionQueue } from "@/hooks/useExecutionQueue";
 import { ExecutionTaskCard } from "./ExecutionTaskCard";
 import { TaskDetailDrawer } from "./TaskDetailDrawer";
 import { BlockTaskDialog } from "./BlockTaskDialog";
@@ -20,8 +19,15 @@ import {
 } from "@/services/taskExecutionService";
 import { useToast } from "@/hooks/use-toast";
 
-export function ExecutionQueuePanel() {
-  const { activeTasks, backlogTasks, blockedTasks, loading, refetch } = useExecutionQueue();
+interface ExecutionQueuePanelProps {
+  activeTasks: ExecutionTask[];
+  backlogTasks: ExecutionTask[];
+  blockedTasks: ExecutionTask[];
+  loading: boolean;
+  onRefetch: () => void | Promise<void>;
+}
+
+export function ExecutionQueuePanel({ activeTasks, backlogTasks, blockedTasks, loading, onRefetch }: ExecutionQueuePanelProps) {
   const [selectedTask, setSelectedTask] = useState<ExecutionTask | null>(null);
   const [blockingTaskId, setBlockingTaskId] = useState<string | null>(null);
   const { toast } = useToast();
@@ -30,7 +36,7 @@ export function ExecutionQueuePanel() {
     const result = await action();
     if (result.success) {
       toast({ title: successMsg });
-      refetch();
+      await onRefetch();
     } else {
       toast({ title: "Error", description: result.error, variant: "destructive" });
     }
@@ -106,7 +112,7 @@ export function ExecutionQueuePanel() {
               {backlogTasks.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">Backlog is empty</p>
               ) : (
-                backlogTasks.slice(0, 10).map((task) => (
+                backlogTasks.map((task) => (
                   <ExecutionTaskCard
                     key={task.id}
                     task={task}
@@ -141,7 +147,7 @@ export function ExecutionQueuePanel() {
         task={selectedTask}
         open={!!selectedTask}
         onClose={() => setSelectedTask(null)}
-        onRefetch={refetch}
+        onRefetch={onRefetch}
       />
 
       <BlockTaskDialog

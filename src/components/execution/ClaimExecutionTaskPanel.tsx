@@ -22,7 +22,7 @@ import {
   isTaskSnoozed,
 } from "@/services/taskExecutionService";
 import { useToast } from "@/hooks/use-toast";
-import { formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 
 interface Props {
   claimId: string;
@@ -47,6 +47,21 @@ export function ClaimExecutionTaskPanel({ claimId, claimNumber }: Props) {
 
     const urgent = await getClaimImmediateTasks(claimId);
     setUrgentTasks(urgent);
+
+    if (import.meta.env.DEV) {
+      const fetchedTasks = ((data as unknown as ExecutionTask[]) || []);
+      const byStatus = fetchedTasks.reduce<Record<string, number>>((acc, task) => {
+        acc[task.status] = (acc[task.status] || 0) + 1;
+        return acc;
+      }, {});
+      console.debug("[ClaimExecutionTaskPanel] task counts", {
+        claimId,
+        fetched: fetchedTasks.length,
+        byStatus,
+        immediate: urgent.length,
+        snoozedImmediate: urgent.filter((task) => isTaskSnoozed(task)).length,
+      });
+    }
 
     setLoading(false);
   };
@@ -114,9 +129,10 @@ export function ClaimExecutionTaskPanel({ claimId, claimNumber }: Props) {
           <p className="text-xs text-muted-foreground">No open tasks on this claim</p>
         ) : (
           <div className="space-y-1.5">
-            {[...activeTasks, ...otherTasks].slice(0, 8).map((task) => {
+            {[...activeTasks, ...otherTasks].map((task) => {
               const isImmediate = task.immediate_enabled || task.priority_level === 'immediate';
               const isPaused = !!task.paused_at;
+              const isSnoozed = isTaskSnoozed(task);
               const canSnooze = isImmediate && task.snooze_allowed !== false
                 && (task.snooze_count || 0) < (task.max_snooze_count || 2)
                 && task.status !== 'completed' && task.status !== 'dropped';
@@ -139,6 +155,11 @@ export function ClaimExecutionTaskPanel({ claimId, claimNumber }: Props) {
                           </Badge>
                           <Badge variant="outline" className="text-[9px] px-1 py-0">{task.priority_level}</Badge>
                         </>
+                      )}
+                      {isSnoozed && task.snoozed_until && (
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-500/40 text-amber-600">
+                          Until {format(new Date(task.snoozed_until), "h:mm a")}
+                        </Badge>
                       )}
                     </div>
                   </div>

@@ -25,7 +25,7 @@ const Index = () => {
   const monthEnd = endOfMonth(now);
 
   const { immediateTasks, pendingInterrupt, hasUrgentWork, refetch: refetchImmediate, clearInterrupt, markModalOpen } = useImmediateTasks();
-  const { activeTasks, refetch: refetchQueue } = useExecutionQueue();
+  const { activeTasks, backlogTasks, blockedTasks, loading: queueLoading, refetch: refetchQueue } = useExecutionQueue();
   const [interruptTask, setInterruptTask] = useState<ExecutionTask | null>(null);
   const [queueFullTask, setQueueFullTask] = useState<ExecutionTask | null>(null);
 
@@ -179,7 +179,13 @@ const Index = () => {
 
       {/* Execution Queue + Calendar */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <ExecutionQueuePanel />
+        <ExecutionQueuePanel
+          activeTasks={activeTasks}
+          backlogTasks={backlogTasks}
+          blockedTasks={blockedTasks}
+          loading={queueLoading}
+          onRefetch={handleRefetchAll}
+        />
         <div className="space-y-6">
           <DashboardNotepad />
           <DashboardCalendar />
