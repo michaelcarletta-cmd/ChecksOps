@@ -719,7 +719,6 @@ function ExpenseTable({ expenses, categories, markAsSubmitted, markAsReimbursed,
   onDelete: (id: string) => void;
   onTransferToContents: (expense: LossOfUseExpense) => void;
 }) {
-}) {
   const [editingExpense, setEditingExpense] = useState<LossOfUseExpense | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editData, setEditData] = useState({
