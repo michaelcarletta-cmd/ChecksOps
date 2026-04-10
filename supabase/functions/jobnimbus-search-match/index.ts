@@ -33,8 +33,9 @@ Deno.serve(async (req) => {
       .eq('id', claimId)
       .single();
 
+    console.log('Claim query result:', JSON.stringify({ claim, claimError }));
     if (claimError || !claim) {
-      return new Response(JSON.stringify({ error: 'Claim not found' }), {
+      return new Response(JSON.stringify({ error: 'Claim not found', details: claimError?.message }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
