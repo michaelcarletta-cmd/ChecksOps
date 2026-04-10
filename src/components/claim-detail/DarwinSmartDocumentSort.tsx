@@ -358,7 +358,7 @@ export const DarwinSmartDocumentSort = ({ claimId }: DarwinSmartDocumentSortProp
         multiple
         onChange={handleFileSelect}
         className="hidden"
-        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.heic,.xls,.xlsx,.txt"
+        accept="*/*"
       />
       <Card>
         <CollapsibleTrigger asChild>
@@ -540,15 +540,21 @@ export const DarwinSmartDocumentSort = ({ claimId }: DarwinSmartDocumentSortProp
 
                           {!doc.isUploaded && !doc.isProcessing && (
                             <div className="flex items-center gap-2">
-                              <select
-                                value={doc.suggestedFolder}
-                                onChange={(e) => updateFolder(doc.file, e.target.value)}
-                                className="text-xs border rounded px-2 py-1 bg-background"
-                              >
-                                {Object.keys(FOLDER_MAPPING).map(folder => (
-                                  <option key={folder} value={folder}>{folder}</option>
-                                ))}
-                              </select>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  list={`folder-options-${idx}`}
+                                  value={doc.suggestedFolder}
+                                  onChange={(e) => updateFolder(doc.file, e.target.value)}
+                                  className="text-xs border rounded px-2 py-1 bg-background w-40"
+                                  placeholder="Type or select folder"
+                                />
+                                <datalist id={`folder-options-${idx}`}>
+                                  {Object.keys(FOLDER_MAPPING).map(folder => (
+                                    <option key={folder} value={folder} />
+                                  ))}
+                                </datalist>
+                              </div>
                               <Button 
                                 variant="ghost" 
                                 size="sm"
