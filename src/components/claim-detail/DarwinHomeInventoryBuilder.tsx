@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { Package, Plus, Camera, ClipboardList, BarChart3, FileUp } from "lucide-react";
+import { Package, Plus, Camera, ClipboardList, BarChart3, FileUp, Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { InventoryPhotoScanner } from "./inventory/InventoryPhotoScanner";
 import { InventoryTable } from "./inventory/InventoryTable";
