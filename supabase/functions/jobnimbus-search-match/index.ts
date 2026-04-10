@@ -29,11 +29,11 @@ Deno.serve(async (req) => {
     // Get claim details
     const { data: claim, error: claimError } = await supabase
       .from('claims')
-      .select('id, policyholder_name, policyholder_address, claim_number, contractor_id, jobnimbus_job_id')
+      .select('id, policyholder_name, policyholder_address, claim_number, jobnimbus_job_id')
       .eq('id', claimId)
       .single();
 
-    console.log('Claim query result:', JSON.stringify({ claim, claimError }));
+    console.log('Claim query result:', JSON.stringify({ claim: !!claim, claimError }));
     if (claimError || !claim) {
       return new Response(JSON.stringify({ error: 'Claim not found', details: claimError?.message }), {
         status: 404,
@@ -41,19 +41,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get API key - try contractor's key first, then fall back to company key
-    let apiKey: string | undefined;
-    if (claim.contractor_id) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('jobnimbus_api_key')
-        .eq('id', claim.contractor_id)
-        .single();
-      apiKey = profile?.jobnimbus_api_key;
-    }
-    if (!apiKey) {
-      apiKey = Deno.env.get('JOBNIMBUS_API_KEY');
-    }
+    // Use company-wide API key
+    const apiKey = Deno.env.get('JOBNIMBUS_API_KEY');
 
     if (!apiKey) {
       return new Response(JSON.stringify({ error: 'No JobNimbus API key configured' }), {
