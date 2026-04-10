@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Trash2, CheckCircle2, AlertTriangle, Bot, User, Pencil, Save, X, Search, ShieldQuestion, Camera, ShieldCheck, RefreshCw } from "lucide-react";
+import { Trash2, CheckCircle2, AlertTriangle, Bot, User, Pencil, Save, X, Search, ShieldQuestion, Camera, ShieldCheck, RefreshCw, Receipt, ArrowRightLeft, FileUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { BoostAgeConfidenceDialog } from "./BoostAgeConfidenceDialog";
@@ -99,7 +99,8 @@ export const InventoryTable = ({ items, loading, onRefresh, claimId }: Inventory
       item.room_name.toLowerCase().includes(q) ||
       (item.manufacturer?.toLowerCase().includes(q) ?? false) ||
       (item.model_number?.toLowerCase().includes(q) ?? false) ||
-      (item.category?.toLowerCase().includes(q) ?? false)
+      (item.category?.toLowerCase().includes(q) ?? false) ||
+      (item.source === "ale_transfer" && ("ale".includes(q) || "from ale".includes(q) || "transfer".includes(q)))
     );
   });
 
@@ -242,6 +243,18 @@ export const InventoryTable = ({ items, loading, onRefresh, claimId }: Inventory
                     {item.source === "ai_photo_scan" ? (
                       <Badge variant="secondary" className="text-xs gap-1">
                         <Bot className="h-3 w-3" /> AI
+                      </Badge>
+                    ) : item.source === "receipt" ? (
+                      <Badge variant="secondary" className="text-xs gap-1 bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                        <Receipt className="h-3 w-3" /> Receipt
+                      </Badge>
+                    ) : item.source === "ale_transfer" ? (
+                      <Badge variant="secondary" className="text-xs gap-1 bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300">
+                        <ArrowRightLeft className="h-3 w-3" /> From ALE
+                      </Badge>
+                    ) : item.source === "pdf_import" ? (
+                      <Badge variant="secondary" className="text-xs gap-1 bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+                        <FileUp className="h-3 w-3" /> PDF
                       </Badge>
                     ) : (
                       <Badge variant="outline" className="text-xs gap-1">
