@@ -10361,7 +10361,7 @@ export type Database = {
       jobnimbus_sync_queue: {
         Row: {
           claim_id: string | null
-          contractor_id: string
+          contractor_id: string | null
           created_at: string | null
           error_message: string | null
           id: string
@@ -10372,7 +10372,7 @@ export type Database = {
         }
         Insert: {
           claim_id?: string | null
-          contractor_id: string
+          contractor_id?: string | null
           created_at?: string | null
           error_message?: string | null
           id?: string
@@ -10383,7 +10383,7 @@ export type Database = {
         }
         Update: {
           claim_id?: string | null
-          contractor_id?: string
+          contractor_id?: string | null
           created_at?: string | null
           error_message?: string | null
           id?: string

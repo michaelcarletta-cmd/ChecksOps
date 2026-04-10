@@ -1,0 +1,1 @@
+ALTER TABLE public.jobnimbus_sync_queue ALTER COLUMN contractor_id DROP NOT NULL;
