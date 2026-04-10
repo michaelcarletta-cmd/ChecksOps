@@ -12,12 +12,16 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Validate CRON_SECRET for security
+  // Allow calls from pg_cron (with Authorization header) or with CRON_SECRET
   const cronSecret = Deno.env.get('CRON_SECRET');
   const providedSecret = req.headers.get('x-cron-secret');
+  const authHeader = req.headers.get('authorization');
   
-  if (cronSecret && providedSecret !== cronSecret) {
-    console.error('Invalid or missing cron secret');
+  const hasCronSecret = cronSecret && providedSecret === cronSecret;
+  const hasAuthHeader = !!authHeader; // pg_cron sends anon key
+  
+  if (!hasCronSecret && !hasAuthHeader) {
+    console.error('Invalid or missing authorization');
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -139,8 +143,7 @@ async function syncClaim(apiKey: string, claim: any, supabase: any) {
   // Check if job already exists in JobNimbus
   let jobId = claim.jobnimbus_job_id;
 
-  const jobData = {
-    record_type_name: 'Job',
+  const jobData: Record<string, any> = {
     primary: {
       name: claim.policyholder_name || 'Unknown',
     },
@@ -149,13 +152,10 @@ async function syncClaim(apiKey: string, claim: any, supabase: any) {
     location: {
       address: claim.policyholder_address || '',
     },
-    // Custom fields
-    cf_claim_number: claim.claim_number || '',
-    cf_policy_number: claim.policy_number || '',
-    cf_loss_date: claim.loss_date || '',
-    cf_loss_type: claim.loss_type || '',
-    cf_insurance_company: claim.insurance_company || '',
   };
+  
+  // Only include non-empty custom fields
+  if (claim.claim_number) jobData.number = claim.claim_number;
 
   let response;
   if (jobId) {
@@ -217,7 +217,6 @@ async function syncTask(apiKey: string, claim: any, payload: any) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      record_type_name: 'Task',
       title: taskData.title || 'Task',
       description: taskData.description || '',
       related: [{ jnid: jobId }],
@@ -253,7 +252,6 @@ async function syncNote(apiKey: string, claim: any, payload: any) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      record_type_name: 'Activity',
       note: noteData.content || '',
       related: [{ jnid: jobId }],
     }),
@@ -296,7 +294,6 @@ async function syncFile(apiKey: string, claim: any, payload: any, supabase: any)
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      record_type_name: 'Document',
       filename: fileData.file_name || 'file',
       url: signedUrl.signedUrl,
       related: [{ jnid: jobId }],
@@ -312,12 +309,12 @@ async function syncFile(apiKey: string, claim: any, payload: any, supabase: any)
 }
 
 function mapStatusToJobNimbus(status: string): string {
-  // Map your claim statuses to JobNimbus status names
   const statusMap: Record<string, string> = {
-    'open': 'New Lead',
-    'in_progress': 'In Progress',
-    'pending': 'Pending',
-    'closed': 'Completed',
+    'open': 'Lead',
+    'in_progress': 'Contract Signed',
+    'pending': 'Lead',
+    'closed': 'Job Completed',
+    'lost': 'Lost',
   };
-  return statusMap[status?.toLowerCase()] || 'New Lead';
+  return statusMap[status?.toLowerCase()] || 'Lead';
 }
