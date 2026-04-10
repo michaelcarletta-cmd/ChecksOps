@@ -11082,7 +11082,10 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
       const structuredScenarioDiagnosticsRulePackLoaded = getRulePackLoaded(structuredEnforcedScenarioForResponse);
       const structuredScenarioDiagnosticsSuppressedRulePacks = getSuppressedRulePacks(structuredEnforcedScenarioForResponse);
 
-      const finalStructuredText = analysisResult;
+      // Final suppression pass before validation to strip surviving forbidden terms
+      const finalStructuredText = lowSlopeSupportCorpusForFilters
+        ? suppressLowSlopeUnsupportedBoilerplate(analysisResult, lowSlopeSupportCorpusForFilters)
+        : analysisResult;
       let structuredViolations: string[] = [];
       let structuredValidationErrorMessage: string | null = null;
 
