@@ -255,18 +255,44 @@ const LOW_SLOPE_ALLOWED_CONTENT_BULLET_LIST = [
   'structural snow-load analysis is not membrane watertightness analysis',
 ].map((item) => `- ${item}`).join('\n');
 
-const LOW_SLOPE_FORCE_TERMS = [
+// Definitive terms: any single match forces low-slope
+const LOW_SLOPE_DEFINITIVE_TERMS = [
+  'low-slope roof covering',
+  'low slope roof covering',
+  'low-slope roof',
+  'low slope roof',
+  'cap sheet',
+  'epdm',
+  'tpo membrane',
+  'built-up roof',
+  'modified bitumen membrane',
+];
+
+// Contextual terms: require 2+ matches to force low-slope
+const LOW_SLOPE_CONTEXTUAL_TERMS = [
   'snow melt',
   'snowmelt',
   'ice melt',
   'ponding',
   'drainage obstruction',
-  'low-slope roof covering',
-  'low slope roof covering',
   'membrane',
-  'cap sheet',
   'standing water',
 ];
+
+// If these appear prominently, suppress low-slope forcing (steep-slope indicator)
+const STEEP_SLOPE_DISQUALIFIERS = [
+  'shingle',
+  'architectural shingle',
+  'asphalt shingle',
+  'three-tab',
+  '3-tab',
+  'wind uplift',
+  'seal strip',
+  'unsealed tab',
+];
+
+// Combined for backward compat in lists/display
+const LOW_SLOPE_FORCE_TERMS = [...LOW_SLOPE_DEFINITIVE_TERMS, ...LOW_SLOPE_CONTEXTUAL_TERMS];
 
 const LOW_SLOPE_STRICT_FORBIDDEN_PRE_SEND_RULES: Array<{ label: string; regex: RegExp }> = [
   { label: 'shingle', regex: /\bshingle(?:s)?\b/i },
