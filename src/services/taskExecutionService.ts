@@ -99,6 +99,18 @@ export function isOpenStatus(status: string): boolean {
   return (OPEN_STATUSES as readonly string[]).includes(status);
 }
 
+export function isActiveStatus(status: string): boolean {
+  return status === 'active';
+}
+
+export function isBacklogLikeStatus(status: string): boolean {
+  return status === 'backlog' || status === 'pending';
+}
+
+export function isBlockedStatus(status: string): boolean {
+  return status === 'blocked';
+}
+
 /** Build PostgREST-safe filter string for terminal statuses. */
 function terminalStatusFilter(): string {
   return `("${TERMINAL_STATUSES.join('","')}")`;
