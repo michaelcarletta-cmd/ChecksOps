@@ -143,6 +143,7 @@ Deno.serve(async (req) => {
         executed: executeResult,
         rdFollowUps: rdFollowUpResult,
         rdCheckTracking: rdCheckResult,
+        immediateNotifications: immediateResult,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
