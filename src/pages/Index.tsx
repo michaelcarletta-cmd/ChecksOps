@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, DollarSign, ListTodo, TrendingUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -9,6 +10,12 @@ import { DashboardNotepad } from "@/components/dashboard/DashboardNotepad";
 import { useRenderCount } from "@/hooks/useRenderCount";
 import { ExecutionQueuePanel } from "@/components/execution/ExecutionQueuePanel";
 import { DailyExecutionResetModal } from "@/components/execution/DailyExecutionResetModal";
+import { UrgentCenter } from "@/components/execution/UrgentCenter";
+import { ImmediateTaskModal } from "@/components/execution/ImmediateTaskModal";
+import { QueueFullOverrideDialog } from "@/components/execution/QueueFullOverrideDialog";
+import { useImmediateTasks } from "@/hooks/useImmediateTasks";
+import { useExecutionQueue } from "@/hooks/useExecutionQueue";
+import { ExecutionTask } from "@/services/taskExecutionService";
 
 const Index = () => {
   useRenderCount("DashboardIndex");
@@ -17,16 +24,22 @@ const Index = () => {
   const monthStart = startOfMonth(now);
   const monthEnd = endOfMonth(now);
 
+  const { immediateTasks, pendingInterrupt, hasUrgentWork, refetch: refetchImmediate, clearInterrupt, markModalOpen } = useImmediateTasks();
+  const { activeTasks, refetch: refetchQueue } = useExecutionQueue();
+  const [interruptTask, setInterruptTask] = useState<ExecutionTask | null>(null);
+  const [queueFullTask, setQueueFullTask] = useState<ExecutionTask | null>(null);
+
+  const activeInterrupt = interruptTask || pendingInterrupt;
+  const handleRefetchAll = () => { refetchQueue(); refetchImmediate(); };
+
   const { data: claims } = useQuery({
     queryKey: ["dashboard-claims"],
     queryFn: async () => {
-      const start = performance.now();
       const { data, error } = await supabase
         .from("claims")
         .select("id, claim_number, policyholder_name, status, updated_at, loss_date, created_at")
         .eq("is_closed", false)
         .order("updated_at", { ascending: false });
-      console.log(`[query] dashboard-claims: ${(performance.now() - start).toFixed(2)}ms, rows: ${data?.length ?? 0}`);
       if (error) throw error;
       return data;
     },
@@ -35,10 +48,8 @@ const Index = () => {
   const { data: tasks } = useQuery({
     queryKey: ["dashboard-tasks"],
     queryFn: async () => {
-      const start = performance.now();
       const fortyEightHoursFromNow = new Date();
       fortyEightHoursFromNow.setHours(fortyEightHoursFromNow.getHours() + 48);
-      
       const { data, error } = await supabase
         .from("tasks")
         .select("id, title, due_date, status, claim_id, claims(claim_number, policyholder_name)")
@@ -46,7 +57,6 @@ const Index = () => {
         .not("due_date", "is", null)
         .lte("due_date", fortyEightHoursFromNow.toISOString())
         .order("due_date", { ascending: true });
-      console.log(`[query] dashboard-tasks: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) throw error;
       return data;
     },
@@ -55,11 +65,9 @@ const Index = () => {
   const { data: settlements } = useQuery({
     queryKey: ["dashboard-settlements", monthStart.toISOString()],
     queryFn: async () => {
-      const start = performance.now();
       const { data, error } = await supabase
         .from("claim_settlements")
         .select("replacement_cost_value, created_at");
-      console.log(`[query] dashboard-settlements: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) throw error;
       return data;
     },
@@ -68,11 +76,9 @@ const Index = () => {
   const { data: checks } = useQuery({
     queryKey: ["dashboard-checks"],
     queryFn: async () => {
-      const start = performance.now();
       const { data, error } = await supabase
         .from("claim_checks")
         .select("amount, check_date");
-      console.log(`[query] dashboard-checks: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) throw error;
       return data;
     },
@@ -81,11 +87,9 @@ const Index = () => {
   const { data: expenses } = useQuery({
     queryKey: ["dashboard-expenses"],
     queryFn: async () => {
-      const start = performance.now();
       const { data, error } = await supabase
         .from("claim_expenses")
         .select("amount, expense_date");
-      console.log(`[query] dashboard-expenses: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) throw error;
       return data;
     },
@@ -94,11 +98,9 @@ const Index = () => {
   const { data: payments } = useQuery({
     queryKey: ["dashboard-payments"],
     queryFn: async () => {
-      const start = performance.now();
       const { data, error } = await supabase
         .from("claim_payments")
         .select("amount, payment_date");
-      console.log(`[query] dashboard-payments: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) throw error;
       return data;
     },
@@ -107,21 +109,17 @@ const Index = () => {
   const { data: fees } = useQuery({
     queryKey: ["dashboard-fees"],
     queryFn: async () => {
-      const start = performance.now();
       const { data, error } = await supabase
         .from("claim_fees")
         .select("adjuster_fee_amount");
-      console.log(`[query] dashboard-fees: ${(performance.now() - start).toFixed(2)}ms`);
       if (error) throw error;
       return data;
     },
   });
 
-  // Calculations
   const activeClaims = claims?.length || 0;
   const totalTasks = tasks?.length || 0;
 
-  // Monthly RCV
   const monthlyRCV = settlements?.reduce((sum, s) => {
     const createdAt = new Date(s.created_at);
     if (createdAt >= monthStart && createdAt <= monthEnd) {
@@ -130,7 +128,6 @@ const Index = () => {
     return sum;
   }, 0) || 0;
 
-  // Net profit calculation (checks - expenses - payments - adjuster fees)
   const totalChecks = checks?.reduce((sum, c) => sum + (c.amount || 0), 0) || 0;
   const totalExpenses = expenses?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
   const totalPayments = payments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
@@ -138,39 +135,16 @@ const Index = () => {
   const netProfit = totalChecks - totalExpenses - totalPayments - totalAdjusterFees;
 
   const formatCurrency = (amount: number) => {
-    if (amount >= 1000000) {
-      return `$${(amount / 1000000).toFixed(2)}M`;
-    } else if (amount >= 1000) {
-      return `$${(amount / 1000).toFixed(1)}K`;
-    }
+    if (amount >= 1000000) return `$${(amount / 1000000).toFixed(2)}M`;
+    if (amount >= 1000) return `$${(amount / 1000).toFixed(1)}K`;
     return `$${amount.toLocaleString()}`;
   };
 
   const stats = [
-    {
-      title: "Active Claims",
-      value: activeClaims.toString(),
-      icon: FileText,
-      color: "text-blue-500",
-    },
-    {
-      title: "Pending Tasks",
-      value: totalTasks.toString(),
-      icon: ListTodo,
-      color: "text-amber-500",
-    },
-    {
-      title: "Monthly RCV",
-      value: formatCurrency(monthlyRCV),
-      icon: TrendingUp,
-      color: "text-emerald-500",
-    },
-    {
-      title: "Net Profit",
-      value: formatCurrency(netProfit),
-      icon: DollarSign,
-      color: netProfit >= 0 ? "text-emerald-500" : "text-red-500",
-    },
+    { title: "Active Claims", value: activeClaims.toString(), icon: FileText, color: "text-blue-500" },
+    { title: "Pending Tasks", value: totalTasks.toString(), icon: ListTodo, color: "text-amber-500" },
+    { title: "Monthly RCV", value: formatCurrency(monthlyRCV), icon: TrendingUp, color: "text-emerald-500" },
+    { title: "Net Profit", value: formatCurrency(netProfit), icon: DollarSign, color: netProfit >= 0 ? "text-emerald-500" : "text-red-500" },
   ];
 
   return (
@@ -185,9 +159,7 @@ const Index = () => {
         {stats.map((stat, index) => (
           <Card key={index} className="transition-all hover:shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {stat.title}
-              </CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{stat.title}</CardTitle>
               <stat.icon className={`h-5 w-5 ${stat.color}`} />
             </CardHeader>
             <CardContent>
@@ -196,6 +168,14 @@ const Index = () => {
           </Card>
         ))}
       </div>
+
+      {/* Urgent Center - appears above execution queue when immediate tasks exist */}
+      {hasUrgentWork && (
+        <UrgentCenter
+          immediateTasks={immediateTasks}
+          onOpenInterrupt={(t) => setInterruptTask(t)}
+        />
+      )}
 
       {/* Execution Queue + Calendar */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -210,8 +190,6 @@ const Index = () => {
 
       {/* Financial Summary */}
       <div className="grid gap-6 lg:grid-cols-2">
-
-        {/* Financial Summary */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -247,6 +225,25 @@ const Index = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Immediate Task Interrupt Modal */}
+      <ImmediateTaskModal
+        task={activeInterrupt}
+        open={!!activeInterrupt}
+        onClose={() => { clearInterrupt(); setInterruptTask(null); }}
+        onRefetch={handleRefetchAll}
+        onQueueFull={(t) => setQueueFullTask(t)}
+        onModalOpen={markModalOpen}
+      />
+
+      {/* Queue Full Override Dialog */}
+      <QueueFullOverrideDialog
+        immediateTask={queueFullTask}
+        activeTasks={activeTasks}
+        open={!!queueFullTask}
+        onClose={() => setQueueFullTask(null)}
+        onRefetch={handleRefetchAll}
+      />
     </div>
   );
 };

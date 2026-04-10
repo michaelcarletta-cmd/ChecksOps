@@ -16,13 +16,12 @@ import { useQuery } from "@tanstack/react-query";
 
 const Tasks = () => {
   const { activeTasks, backlogTasks, blockedTasks, loading, refetch } = useExecutionQueue();
-  const { immediateTasks, pendingInterrupt, hasUrgentWork, refetch: refetchImmediate, clearInterrupt } = useImmediateTasks();
+  const { immediateTasks, pendingInterrupt, hasUrgentWork, refetch: refetchImmediate, clearInterrupt, markModalOpen } = useImmediateTasks();
   const [selectedTask, setSelectedTask] = useState<ExecutionTask | null>(null);
   const [interruptTask, setInterruptTask] = useState<ExecutionTask | null>(null);
   const [queueFullTask, setQueueFullTask] = useState<ExecutionTask | null>(null);
   const { toast } = useToast();
 
-  // Show pending interrupt modal
   const activeInterrupt = interruptTask || pendingInterrupt;
 
   const { data: completedTasks = [] } = useQuery({
@@ -74,7 +73,6 @@ const Tasks = () => {
 
       <TaskSearchPanel onQueueUpdated={handleRefetchAll} />
 
-      {/* Urgent Center - only appears when immediate tasks exist */}
       {hasUrgentWork && (
         <UrgentCenter
           immediateTasks={immediateTasks}
@@ -119,16 +117,15 @@ const Tasks = () => {
         onRefetch={handleRefetchAll}
       />
 
-      {/* Immediate Task Interrupt Modal */}
       <ImmediateTaskModal
         task={activeInterrupt}
         open={!!activeInterrupt}
         onClose={() => { clearInterrupt(); setInterruptTask(null); }}
         onRefetch={handleRefetchAll}
         onQueueFull={(t) => setQueueFullTask(t)}
+        onModalOpen={markModalOpen}
       />
 
-      {/* Queue Full Override Dialog */}
       <QueueFullOverrideDialog
         immediateTask={queueFullTask}
         activeTasks={activeTasks}
