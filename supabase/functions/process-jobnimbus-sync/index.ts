@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
             result = await syncTask(apiKey, claim, item.payload);
             break;
           case 'note':
-            result = await syncNote(apiKey, claim, item.payload);
+            result = await syncNote(apiKey, claim, item.payload, supabase);
             break;
           case 'file':
             result = await syncFile(apiKey, claim, item.payload, supabase);
