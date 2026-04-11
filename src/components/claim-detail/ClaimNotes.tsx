@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
-import { Plus, Send, MessageSquare, Loader2, Edit, Trash2, FileText, Phone, Mail, Users, ArrowUpRight, ArrowDownLeft, Copy, ListTodo } from "lucide-react";
+import { Plus, Send, MessageSquare, Loader2, Edit, Trash2, FileText, Phone, Mail, Users, ArrowUpRight, ArrowDownLeft, Copy, ListTodo, ExternalLink } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -86,6 +86,7 @@ export const ClaimNotes = ({ claimId, claim: claimProp, isPortalUser = false }: 
   const [taskTitle, setTaskTitle] = useState("");
   const [commEmail, setCommEmail] = useState(false);
   const [commPhone, setCommPhone] = useState(false);
+  const [syncToJobNimbus, setSyncToJobNimbus] = useState(false);
   const [taskDueDate, setTaskDueDate] = useState("");
   const [taskPriority, setTaskPriority] = useState("medium");
   const { user, userRole } = useAuth();
@@ -389,6 +390,23 @@ ${timeline}`;
       toast.success("Update added successfully");
     }
 
+    // Queue note to JobNimbus if toggled
+    if (syncToJobNimbus && update) {
+      try {
+        await supabase
+          .from('jobnimbus_sync_queue' as any)
+          .insert({
+            claim_id: claimId,
+            sync_type: 'note',
+            status: 'pending',
+            contractor_id: null,
+            payload: { data: { content: newUpdate.trim() } },
+          });
+      } catch (err) {
+        console.error('Failed to queue JN note sync:', err);
+      }
+    }
+
     setNewUpdate("");
     setUseCustomTimestamp(false);
     setCustomDate("");
@@ -403,6 +421,7 @@ ${timeline}`;
     setTaskPriority("medium");
     setCommEmail(false);
     setCommPhone(false);
+    setSyncToJobNimbus(false);
     setLoading(false);
     fetchUpdates();
   };
@@ -630,6 +649,18 @@ ${timeline}`;
                   onSelectionChange={setNotifyTeamMembers}
                   disabled={loading}
                 />
+
+                <div className="flex items-center space-x-2 pt-1">
+                  <Checkbox
+                    id="sync-jobnimbus"
+                    checked={syncToJobNimbus}
+                    onCheckedChange={(checked) => setSyncToJobNimbus(checked as boolean)}
+                  />
+                  <Label htmlFor="sync-jobnimbus" className="text-sm cursor-pointer flex items-center gap-1">
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Sync to JobNimbus
+                  </Label>
+                </div>
               </div>
             )}
           </div>
