@@ -86,6 +86,7 @@ export const ClaimNotes = ({ claimId, claim: claimProp, isPortalUser = false }: 
   const [taskTitle, setTaskTitle] = useState("");
   const [commEmail, setCommEmail] = useState(false);
   const [commPhone, setCommPhone] = useState(false);
+  const [syncToJobNimbus, setSyncToJobNimbus] = useState(false);
   const [taskDueDate, setTaskDueDate] = useState("");
   const [taskPriority, setTaskPriority] = useState("medium");
   const { user, userRole } = useAuth();
