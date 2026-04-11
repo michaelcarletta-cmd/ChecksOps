@@ -421,6 +421,7 @@ ${timeline}`;
     setTaskPriority("medium");
     setCommEmail(false);
     setCommPhone(false);
+    setSyncToJobNimbus(false);
     setLoading(false);
     fetchUpdates();
   };
