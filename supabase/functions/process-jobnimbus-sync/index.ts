@@ -540,6 +540,8 @@ async function syncInspection(apiKey: string, claim: any, payload: any, supabase
 
   if (owners.length > 0) {
     taskBody.owners = owners.map(id => ({ id }));
+    taskBody.sales_rep_ids = owners;
+    taskBody.assigned_to_ids = owners;
   }
 
   console.log('Creating JN task (inspection):', JSON.stringify(taskBody));
@@ -553,12 +555,18 @@ async function syncInspection(apiKey: string, claim: any, payload: any, supabase
     body: JSON.stringify(taskBody),
   });
 
+  const responseText = await response.text();
+  console.log(`JN inspection response [${response.status}]: ${responseText.substring(0, 500)}`);
+
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`JobNimbus inspection sync error: ${response.status} - ${errorText}`);
+    throw new Error(`JobNimbus inspection sync error: ${response.status} - ${responseText}`);
   }
 
-  return await response.json();
+  try {
+    return JSON.parse(responseText);
+  } catch {
+    return { raw: responseText };
+  }
 }
 
 function mapStatusToJobNimbus(status: string): string {
