@@ -413,6 +413,114 @@ async function syncFile(apiKey: string, claim: any, payload: any, supabase: any)
   return await response.json();
 }
 
+async function syncInspection(apiKey: string, claim: any, payload: any, supabase: any) {
+  console.log(`Syncing inspection to JobNimbus calendar for claim ${claim?.id}`);
+
+  const inspData = payload?.data;
+  if (!inspData) return { skipped: true };
+
+  const jobId = claim?.jobnimbus_job_id;
+  if (!jobId) {
+    console.log('No JobNimbus job ID, skipping inspection sync');
+    return { skipped: true, reason: 'No JobNimbus job ID' };
+  }
+
+  // Build date_start and date_end as unix timestamps for JN
+  let dateStart: number;
+  const inspDate = inspData.inspection_date; // "YYYY-MM-DD"
+  const inspTime = inspData.inspection_time; // "HH:MM:SS" or null
+
+  if (inspDate && inspTime) {
+    // Combine date + time
+    const dt = new Date(`${inspDate}T${inspTime}`);
+    dateStart = Math.floor(dt.getTime() / 1000);
+  } else if (inspDate) {
+    const dt = new Date(`${inspDate}T09:00:00`);
+    dateStart = Math.floor(dt.getTime() / 1000);
+  } else {
+    console.log('No inspection date, skipping');
+    return { skipped: true, reason: 'No inspection date' };
+  }
+
+  // Default 1 hour duration
+  const dateEnd = dateStart + 3600;
+
+  // Look up assigned contractors' JN user IDs to add as owners
+  let owners: string[] = [];
+  try {
+    const { data: staffRows } = await supabase
+      .from('claim_staff')
+      .select('staff_id')
+      .eq('claim_id', claim.id);
+
+    const { data: contractorRows } = await supabase
+      .from('claim_contractors')
+      .select('contractor_id')
+      .eq('claim_id', claim.id);
+
+    const allIds = [
+      ...(staffRows || []).map((r: any) => r.staff_id),
+      ...(contractorRows || []).map((r: any) => r.contractor_id),
+    ];
+
+    if (allIds.length > 0) {
+      const uniqueIds = [...new Set(allIds)];
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('jobnimbus_user_id')
+        .in('id', uniqueIds)
+        .not('jobnimbus_user_id', 'is', null);
+
+      if (profiles) {
+        owners = profiles.map((p: any) => p.jobnimbus_user_id).filter(Boolean);
+      }
+    }
+    console.log(`Inspection owners for JN: ${JSON.stringify(owners)}`);
+  } catch (err) {
+    console.error('Error looking up JN owners for inspection:', err);
+  }
+
+  const inspType = inspData.inspection_type || 'Inspection';
+  const title = `${inspType} - ${claim.policyholder_name || claim.claim_number || 'Claim'}`;
+  const description = [
+    inspData.inspector_name ? `Inspector: ${inspData.inspector_name}` : '',
+    claim.policyholder_address ? `Address: ${claim.policyholder_address}` : '',
+    inspData.notes || '',
+  ].filter(Boolean).join('\n');
+
+  const activityBody: Record<string, any> = {
+    record_type_name: 'Appointment',
+    title: title,
+    note: description,
+    date_start: dateStart,
+    date_end: dateEnd,
+    primary: { id: jobId, type: 'job', name: claim?.policyholder_name || '' },
+    related: [{ id: jobId, type: 'job', name: claim?.policyholder_name || '' }],
+  };
+
+  if (owners.length > 0) {
+    activityBody.owners = owners.map(id => ({ id }));
+  }
+
+  console.log('Creating JN appointment:', JSON.stringify(activityBody));
+
+  const response = await fetch(`${JOBNIMBUS_API_BASE}/activities`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(activityBody),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`JobNimbus inspection sync error: ${response.status} - ${errorText}`);
+  }
+
+  return await response.json();
+}
+
 function mapStatusToJobNimbus(status: string): string {
   const statusMap: Record<string, string> = {
     'open': 'Lead',
