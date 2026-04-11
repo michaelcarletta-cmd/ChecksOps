@@ -346,7 +346,11 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any)
 
   // Build @mention prefix for note text to trigger JN notifications
   const mentionPrefix = mentionNames.length > 0
-    ? mentionNames.map(name => `@${name.replace(/\s+/g, '').toLowerCase()}`).join(' ') + ' '
+    ? mentionNames
+        .map((name) => name.replace(/\s+/g, ' ').trim())
+        .filter(Boolean)
+        .map((name) => `@${name.split(' ').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join('')}`)
+        .join(' ') + ' '
     : '';
 
   const activityBody: Record<string, any> = {
