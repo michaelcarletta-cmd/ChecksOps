@@ -308,6 +308,7 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any)
   // Look up assigned staff AND contractors for @mention tagging
   let mentionNames: string[] = [];
   let owners: string[] = [];
+  let actorEmail: string | null = null;
   try {
     // Get staff assigned to claim
     const { data: staffRows } = await supabase
@@ -339,6 +340,21 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any)
         mentionNames = profiles.map((p: any) => p.full_name).filter(Boolean);
       }
     }
+
+    if (noteData.user_id) {
+      const { data: authorProfile } = await supabase
+        .from('profiles')
+        .select('email, full_name')
+        .eq('id', noteData.user_id)
+        .maybeSingle();
+
+      if (authorProfile?.email) {
+        actorEmail = authorProfile.email;
+      }
+
+      console.log(`Resolved JN note actor: ${JSON.stringify({ userId: noteData.user_id, actorEmail, authorName: authorProfile?.full_name || null })}`);
+    }
+
     console.log(`Note owners for JN tagging: ${JSON.stringify(owners)}, mentions: ${JSON.stringify(mentionNames)}`);
   } catch (err) {
     console.error('Error looking up JN owners, proceeding without:', err);
@@ -365,9 +381,13 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any)
     activityBody.owners = owners.map(id => ({ id }));
   }
 
-  console.log('Creating JN note activity:', JSON.stringify(activityBody));
+  const activityUrl = actorEmail
+    ? `${JOBNIMBUS_API_BASE}/activities?actor=${encodeURIComponent(actorEmail)}`
+    : `${JOBNIMBUS_API_BASE}/activities`;
 
-  const response = await fetch(`${JOBNIMBUS_API_BASE}/activities`, {
+  console.log('Creating JN note activity:', JSON.stringify({ activityUrl, activityBody }));
+
+  const response = await fetch(activityUrl, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
