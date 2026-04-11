@@ -300,20 +300,32 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any)
     return { skipped: true, reason: 'No JobNimbus job ID' };
   }
 
-  // Look up assigned staff's JN user ID to tag them
+  // Look up assigned staff AND contractors' JN user IDs to tag them
   let owners: string[] = [];
   try {
+    // Get staff assigned to claim
     const { data: staffRows } = await supabase
       .from('claim_staff')
       .select('staff_id')
       .eq('claim_id', claim.id);
 
-    if (staffRows && staffRows.length > 0) {
-      const staffIds = staffRows.map((r: any) => r.staff_id);
+    // Get contractors assigned to claim
+    const { data: contractorRows } = await supabase
+      .from('claim_contractors')
+      .select('contractor_id')
+      .eq('claim_id', claim.id);
+
+    const allIds = [
+      ...(staffRows || []).map((r: any) => r.staff_id),
+      ...(contractorRows || []).map((r: any) => r.contractor_id),
+    ];
+
+    if (allIds.length > 0) {
+      const uniqueIds = [...new Set(allIds)];
       const { data: profiles } = await supabase
         .from('profiles')
         .select('jobnimbus_user_id')
-        .in('id', staffIds)
+        .in('id', uniqueIds)
         .not('jobnimbus_user_id', 'is', null);
 
       if (profiles) {
