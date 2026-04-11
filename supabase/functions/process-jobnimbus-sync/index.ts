@@ -515,10 +515,13 @@ async function syncInspection(apiKey: string, claim: any, payload: any, supabase
     note: description,
     date_start: dateStart,
     date_end: dateEnd,
-    location: claim.policyholder_address || '',
     primary: { id: jobId, type: 'job', name: claim?.policyholder_name || '' },
     related: [{ id: jobId, type: 'job', name: claim?.policyholder_name || '' }],
   };
+
+  if (claim.policyholder_address) {
+    activityBody.location = { address: claim.policyholder_address };
+  }
 
   if (owners.length > 0) {
     activityBody.owners = owners.map(id => ({ id }));
