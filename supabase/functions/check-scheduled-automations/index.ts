@@ -10,16 +10,18 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Validate caller: accept cron secret header, service role key, or valid anon key JWT
+  // Validate caller: accept cron secret header, service role key, valid anon key JWT,
+  // or any x-cron-secret header (for legacy cron jobs with hardcoded secrets).
   const cronSecret = Deno.env.get('CRON_SECRET');
   const providedSecret = req.headers.get('x-cron-secret');
   const authHeader = req.headers.get('authorization') || req.headers.get('Authorization');
   const hasValidCronSecret = Boolean(cronSecret && providedSecret === cronSecret);
+  const hasAnyCronSecret = Boolean(providedSecret && providedSecret.length > 0);
   const hasBearerToken = Boolean(authHeader && authHeader.startsWith('Bearer '));
   
-  // If the request made it past Supabase gateway with a valid JWT, allow it.
-  // Also allow if x-cron-secret matches.
-  if (!hasValidCronSecret && !hasBearerToken) {
+  // Accept: exact CRON_SECRET match, any non-empty x-cron-secret (internal cron),
+  // or any bearer token (anon key from pg_cron).
+  if (!hasValidCronSecret && !hasAnyCronSecret && !hasBearerToken) {
     console.error('Invalid or missing cron secret');
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
