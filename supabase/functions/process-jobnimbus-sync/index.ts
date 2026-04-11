@@ -508,28 +508,30 @@ async function syncInspection(apiKey: string, claim: any, payload: any, supabase
     inspData.notes || '',
   ].filter(Boolean).join('\n');
 
-  const activityBody: Record<string, any> = {
+  // Use the Tasks endpoint so the inspection appears as a timed calendar
+  // event linked to the job — Activities are just log entries.
+  const taskBody: Record<string, any> = {
     record_type_name: 'Appointment',
     title: title,
     description: description,
-    note: description,
     date_start: dateStart,
     date_end: dateEnd,
+    is_active: true,
     primary: { id: jobId, type: 'job', name: claim?.policyholder_name || '' },
     related: [{ id: jobId, type: 'job', name: claim?.policyholder_name || '' }],
   };
 
   if (claim.policyholder_address) {
-    activityBody.location = { address: claim.policyholder_address };
+    taskBody.location = { address: claim.policyholder_address };
   }
 
   if (owners.length > 0) {
-    activityBody.owners = owners.map(id => ({ id }));
+    taskBody.owners = owners.map(id => ({ id }));
   }
 
-  console.log('Creating JN appointment:', JSON.stringify(activityBody));
+  console.log('Creating JN task (inspection):', JSON.stringify(taskBody));
 
-  const response = await fetch(`${JOBNIMBUS_API_BASE}/activities`, {
+  const response = await fetch(`${JOBNIMBUS_API_BASE}/tasks`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
