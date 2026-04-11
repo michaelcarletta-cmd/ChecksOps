@@ -305,7 +305,8 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any)
     return { skipped: true, reason: 'No JobNimbus job ID' };
   }
 
-  // Look up assigned staff AND contractors' JN user IDs to tag them
+  // Look up assigned staff AND contractors for @mention tagging
+  let mentionNames: string[] = [];
   let owners: string[] = [];
   try {
     // Get staff assigned to claim
@@ -329,32 +330,35 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any)
       const uniqueIds = [...new Set(allIds)];
       const { data: profiles } = await supabase
         .from('profiles')
-        .select('jobnimbus_user_id')
+        .select('jobnimbus_user_id, full_name')
         .in('id', uniqueIds)
         .not('jobnimbus_user_id', 'is', null);
 
       if (profiles) {
         owners = profiles.map((p: any) => p.jobnimbus_user_id).filter(Boolean);
+        mentionNames = profiles.map((p: any) => p.full_name).filter(Boolean);
       }
     }
-    console.log(`Note owners for JN tagging: ${JSON.stringify(owners)}`);
+    console.log(`Note owners for JN tagging: ${JSON.stringify(owners)}, mentions: ${JSON.stringify(mentionNames)}`);
   } catch (err) {
     console.error('Error looking up JN owners, proceeding without:', err);
   }
 
+  // Build @mention prefix for note text to trigger JN notifications
+  const mentionPrefix = mentionNames.length > 0
+    ? mentionNames.map(name => `@${name}`).join(' ') + ' '
+    : '';
+
   const activityBody: Record<string, any> = {
     record_type_name: 'Note',
-    note: noteData.content || '',
+    note: mentionPrefix + (noteData.content || ''),
     primary: { id: jobId, type: 'job', name: claim?.policyholder_name || '' },
     related: [{ id: jobId, type: 'job', name: claim?.policyholder_name || '' }],
   };
 
-  // Tag assigned users in JN using multiple field formats for compatibility
+  // Also set owners field for record ownership
   if (owners.length > 0) {
-    // Try all known JN tagging fields to ensure at least one works
     activityBody.owners = owners.map(id => ({ id }));
-    activityBody.sales_rep_ids = owners;
-    activityBody.assigned_to_ids = owners;
   }
 
   console.log('Creating JN note activity:', JSON.stringify(activityBody));
