@@ -431,33 +431,32 @@ async function syncInspection(apiKey: string, claim: any, payload: any, supabase
   const inspTime = inspData.inspection_time; // "HH:MM:SS" or null
 
   // Parse as America/New_York (Eastern) time
-  const toEasternUnix = (dateStr: string, timeStr: string): number => {
-    // Create date string with explicit Eastern timezone offset
-    // We need to determine if the date falls in EDT or EST
-    const tempDate = new Date(`${dateStr}T${timeStr}Z`);
-    const year = tempDate.getUTCFullYear();
-    const month = tempDate.getUTCMonth(); // 0-indexed
-    const day = tempDate.getUTCDate();
-    
-    // US Eastern: EDT (UTC-4) from 2nd Sunday in March to 1st Sunday in November
-    // Simple DST check for US Eastern
-    const marchSecondSunday = new Date(year, 2, 1);
-    marchSecondSunday.setDate(1 + (7 - marchSecondSunday.getDay()) % 7 + 7);
-    const novFirstSunday = new Date(year, 10, 1);
-    novFirstSunday.setDate(1 + (7 - novFirstSunday.getDay()) % 7);
-    
-    const checkDate = new Date(year, month, day);
+  // Convert a date+time meant as Eastern Time to a UTC unix timestamp
+  const easternToUnix = (dateStr: string, timeStr: string): number => {
+    // Parse date parts directly to avoid any Date constructor timezone issues
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const [hour, minute, second] = timeStr.split(':').map(Number);
+
+    // Determine EDT vs EST for this date
+    const marchSecondSunday = new Date(Date.UTC(year, 2, 1));
+    marchSecondSunday.setUTCDate(1 + (7 - marchSecondSunday.getUTCDay()) % 7 + 7);
+    const novFirstSunday = new Date(Date.UTC(year, 10, 1));
+    novFirstSunday.setUTCDate(1 + (7 - novFirstSunday.getUTCDay()) % 7);
+
+    const checkDate = new Date(Date.UTC(year, month - 1, day));
     const isDST = checkDate >= marchSecondSunday && checkDate < novFirstSunday;
     const offsetHours = isDST ? 4 : 5; // EDT = UTC-4, EST = UTC-5
-    
-    const dt = new Date(`${dateStr}T${timeStr}Z`);
-    return Math.floor(dt.getTime() / 1000) + (offsetHours * 3600);
+
+    // Build UTC date by ADDING the offset (Eastern is behind UTC)
+    const utcMs = Date.UTC(year, month - 1, day, hour + offsetHours, minute, second || 0);
+    console.log(`easternToUnix: ${dateStr} ${timeStr} ET (offset=${offsetHours}h) → UTC ${new Date(utcMs).toISOString()}`);
+    return Math.floor(utcMs / 1000);
   };
 
   if (inspDate && inspTime) {
-    dateStart = toEasternUnix(inspDate, inspTime);
+    dateStart = easternToUnix(inspDate, inspTime);
   } else if (inspDate) {
-    dateStart = toEasternUnix(inspDate, '09:00:00');
+    dateStart = easternToUnix(inspDate, '09:00:00');
   } else {
     console.log('No inspection date, skipping');
     return { skipped: true, reason: 'No inspection date' };
