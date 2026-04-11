@@ -454,9 +454,9 @@ async function syncInspection(apiKey: string, claim: any, payload: any, supabase
   };
 
   if (inspDate && inspTime) {
-    dateStart = toEasternUnix(inspDate, inspTime);
+    dateStart = easternToUnix(inspDate, inspTime);
   } else if (inspDate) {
-    dateStart = toEasternUnix(inspDate, '09:00:00');
+    dateStart = easternToUnix(inspDate, '09:00:00');
   } else {
     console.log('No inspection date, skipping');
     return { skipped: true, reason: 'No inspection date' };
