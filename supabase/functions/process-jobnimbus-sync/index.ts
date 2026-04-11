@@ -537,7 +537,7 @@ async function syncInspection(apiKey: string, claim: any, payload: any, supabase
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(activityBody),
+    body: JSON.stringify(taskBody),
   });
 
   if (!response.ok) {
