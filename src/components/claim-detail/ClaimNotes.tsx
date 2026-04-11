@@ -390,6 +390,23 @@ ${timeline}`;
       toast.success("Update added successfully");
     }
 
+    // Queue note to JobNimbus if toggled
+    if (syncToJobNimbus && update) {
+      try {
+        await supabase
+          .from('jobnimbus_sync_queue' as any)
+          .insert({
+            claim_id: claimId,
+            sync_type: 'note',
+            status: 'pending',
+            contractor_id: null,
+            payload: { data: { content: newUpdate.trim() } },
+          });
+      } catch (err) {
+        console.error('Failed to queue JN note sync:', err);
+      }
+    }
+
     setNewUpdate("");
     setUseCustomTimestamp(false);
     setCustomDate("");
