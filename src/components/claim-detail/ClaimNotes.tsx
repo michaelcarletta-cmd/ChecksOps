@@ -649,6 +649,18 @@ ${timeline}`;
                   onSelectionChange={setNotifyTeamMembers}
                   disabled={loading}
                 />
+
+                <div className="flex items-center space-x-2 pt-1">
+                  <Checkbox
+                    id="sync-jobnimbus"
+                    checked={syncToJobNimbus}
+                    onCheckedChange={(checked) => setSyncToJobNimbus(checked as boolean)}
+                  />
+                  <Label htmlFor="sync-jobnimbus" className="text-sm cursor-pointer flex items-center gap-1">
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Sync to JobNimbus
+                  </Label>
+                </div>
               </div>
             )}
           </div>
