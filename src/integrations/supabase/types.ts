@@ -11461,6 +11461,7 @@ export type Database = {
           id: string
           jobnimbus_api_key: string | null
           jobnimbus_enabled: boolean | null
+          jobnimbus_user_id: string | null
           license_number: string | null
           license_state: string | null
           logo_url: string | null
@@ -11480,6 +11481,7 @@ export type Database = {
           id: string
           jobnimbus_api_key?: string | null
           jobnimbus_enabled?: boolean | null
+          jobnimbus_user_id?: string | null
           license_number?: string | null
           license_state?: string | null
           logo_url?: string | null
@@ -11499,6 +11501,7 @@ export type Database = {
           id?: string
           jobnimbus_api_key?: string | null
           jobnimbus_enabled?: boolean | null
+          jobnimbus_user_id?: string | null
           license_number?: string | null
           license_state?: string | null
           logo_url?: string | null
