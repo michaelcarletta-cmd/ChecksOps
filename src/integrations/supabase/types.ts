@@ -10365,6 +10365,8 @@ export type Database = {
           created_at: string | null
           error_message: string | null
           id: string
+          notification_details: Json | null
+          notification_status: string | null
           payload: Json | null
           processed_at: string | null
           status: string | null
@@ -10376,6 +10378,8 @@ export type Database = {
           created_at?: string | null
           error_message?: string | null
           id?: string
+          notification_details?: Json | null
+          notification_status?: string | null
           payload?: Json | null
           processed_at?: string | null
           status?: string | null
@@ -10387,6 +10391,8 @@ export type Database = {
           created_at?: string | null
           error_message?: string | null
           id?: string
+          notification_details?: Json | null
+          notification_status?: string | null
           payload?: Json | null
           processed_at?: string | null
           status?: string | null
@@ -11461,6 +11467,7 @@ export type Database = {
           id: string
           jobnimbus_api_key: string | null
           jobnimbus_enabled: boolean | null
+          jobnimbus_notification_mode: string | null
           jobnimbus_user_id: string | null
           license_number: string | null
           license_state: string | null
@@ -11481,6 +11488,7 @@ export type Database = {
           id: string
           jobnimbus_api_key?: string | null
           jobnimbus_enabled?: boolean | null
+          jobnimbus_notification_mode?: string | null
           jobnimbus_user_id?: string | null
           license_number?: string | null
           license_state?: string | null
@@ -11501,6 +11509,7 @@ export type Database = {
           id?: string
           jobnimbus_api_key?: string | null
           jobnimbus_enabled?: boolean | null
+          jobnimbus_notification_mode?: string | null
           jobnimbus_user_id?: string | null
           license_number?: string | null
           license_state?: string | null
