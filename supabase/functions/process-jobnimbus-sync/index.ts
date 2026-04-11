@@ -430,13 +430,34 @@ async function syncInspection(apiKey: string, claim: any, payload: any, supabase
   const inspDate = inspData.inspection_date; // "YYYY-MM-DD"
   const inspTime = inspData.inspection_time; // "HH:MM:SS" or null
 
+  // Parse as America/New_York (Eastern) time
+  const toEasternUnix = (dateStr: string, timeStr: string): number => {
+    // Create date string with explicit Eastern timezone offset
+    // We need to determine if the date falls in EDT or EST
+    const tempDate = new Date(`${dateStr}T${timeStr}Z`);
+    const year = tempDate.getUTCFullYear();
+    const month = tempDate.getUTCMonth(); // 0-indexed
+    const day = tempDate.getUTCDate();
+    
+    // US Eastern: EDT (UTC-4) from 2nd Sunday in March to 1st Sunday in November
+    // Simple DST check for US Eastern
+    const marchSecondSunday = new Date(year, 2, 1);
+    marchSecondSunday.setDate(1 + (7 - marchSecondSunday.getDay()) % 7 + 7);
+    const novFirstSunday = new Date(year, 10, 1);
+    novFirstSunday.setDate(1 + (7 - novFirstSunday.getDay()) % 7);
+    
+    const checkDate = new Date(year, month, day);
+    const isDST = checkDate >= marchSecondSunday && checkDate < novFirstSunday;
+    const offsetHours = isDST ? 4 : 5; // EDT = UTC-4, EST = UTC-5
+    
+    const dt = new Date(`${dateStr}T${timeStr}Z`);
+    return Math.floor(dt.getTime() / 1000) + (offsetHours * 3600);
+  };
+
   if (inspDate && inspTime) {
-    // Combine date + time
-    const dt = new Date(`${inspDate}T${inspTime}`);
-    dateStart = Math.floor(dt.getTime() / 1000);
+    dateStart = toEasternUnix(inspDate, inspTime);
   } else if (inspDate) {
-    const dt = new Date(`${inspDate}T09:00:00`);
-    dateStart = Math.floor(dt.getTime() / 1000);
+    dateStart = toEasternUnix(inspDate, '09:00:00');
   } else {
     console.log('No inspection date, skipping');
     return { skipped: true, reason: 'No inspection date' };
