@@ -91,6 +91,9 @@ Deno.serve(async (req) => {
           case 'file':
             result = await syncFile(apiKey, claim, item.payload, supabase);
             break;
+          case 'inspection':
+            result = await syncInspection(apiKey, claim, item.payload, supabase);
+            break;
           default:
             throw new Error(`Unknown sync type: ${item.sync_type}`);
         }
