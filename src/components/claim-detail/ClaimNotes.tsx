@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useState, useEffect } from "react";
-import { Plus, Send, MessageSquare, Loader2, Edit, Trash2, FileText, Phone, Mail, Users, ArrowUpRight, ArrowDownLeft, Copy, ListTodo } from "lucide-react";
+import { Plus, Send, MessageSquare, Loader2, Edit, Trash2, FileText, Phone, Mail, Users, ArrowUpRight, ArrowDownLeft, Copy, ListTodo, ExternalLink } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
