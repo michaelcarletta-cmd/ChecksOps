@@ -512,9 +512,11 @@ async function syncInspection(apiKey: string, claim: any, payload: any, supabase
   const activityBody: Record<string, any> = {
     record_type_name: 'Appointment',
     title: title,
+    description: description,
     note: description,
     date_start: dateStart,
     date_end: dateEnd,
+    location: claim.policyholder_address || '',
     primary: { id: jobId, type: 'job', name: claim?.policyholder_name || '' },
     related: [{ id: jobId, type: 'job', name: claim?.policyholder_name || '' }],
   };
