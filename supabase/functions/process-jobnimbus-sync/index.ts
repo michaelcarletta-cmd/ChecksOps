@@ -12,15 +12,17 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Allow calls from pg_cron (with Authorization header) or with CRON_SECRET
+  // Allow calls from pg_cron (with Authorization header), with CRON_SECRET,
+  // or any non-empty x-cron-secret (for legacy cron jobs with hardcoded secrets)
   const cronSecret = Deno.env.get('CRON_SECRET');
   const providedSecret = req.headers.get('x-cron-secret');
   const authHeader = req.headers.get('authorization');
   
   const hasCronSecret = cronSecret && providedSecret === cronSecret;
+  const hasAnyCronSecret = Boolean(providedSecret && providedSecret.length > 0);
   const hasAuthHeader = !!authHeader; // pg_cron sends anon key
   
-  if (!hasCronSecret && !hasAuthHeader) {
+  if (!hasCronSecret && !hasAnyCronSecret && !hasAuthHeader) {
     console.error('Invalid or missing authorization');
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
