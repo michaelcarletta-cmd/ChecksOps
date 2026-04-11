@@ -16,29 +16,53 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Try multiple endpoints to find team/users
-    const endpoints = [
-      'https://app.jobnimbus.com/api1/users',
-      'https://app.jobnimbus.com/api1/team',
-      'https://app.jobnimbus.com/api1/members',
-      'https://app.jobnimbus.com/api1/settings/users',
-    ];
+    // Fetch recent jobs to extract unique user IDs from owners/created_by/sales_rep
+    const resp = await fetch('https://app.jobnimbus.com/api1/jobs?limit=50', {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
 
-    const results: Record<string, any> = {};
+    if (!resp.ok) {
+      return new Response(JSON.stringify({ error: `Jobs: ${resp.status}` }), {
+        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
-    for (const url of endpoints) {
-      try {
-        const resp = await fetch(url, {
-          headers: { 'Authorization': `Bearer ${apiKey}` },
-        });
-        const text = await resp.text();
-        results[url] = { status: resp.status, body: text.substring(0, 3000) };
-      } catch (e: any) {
-        results[url] = { error: e.message };
+    const data = await resp.json();
+    const userMap = new Map<string, string>();
+
+    for (const job of (data.results || [])) {
+      if (job.created_by && job.created_by_name) {
+        userMap.set(job.created_by, job.created_by_name);
+      }
+      if (job.sales_rep && job.sales_rep_name) {
+        userMap.set(job.sales_rep, job.sales_rep_name);
+      }
+      if (job.owners) {
+        for (const o of job.owners) {
+          if (o.id && o.name) userMap.set(o.id, o.name);
+        }
       }
     }
 
-    return new Response(JSON.stringify(results), {
+    // Also check contacts for more user references
+    const cResp = await fetch('https://app.jobnimbus.com/api1/contacts?limit=50', {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    if (cResp.ok) {
+      const cData = await cResp.json();
+      for (const c of (cData.results || [])) {
+        if (c.created_by && c.created_by_name) {
+          userMap.set(c.created_by, c.created_by_name);
+        }
+        if (c.sales_rep && c.sales_rep_name) {
+          userMap.set(c.sales_rep, c.sales_rep_name);
+        }
+      }
+    }
+
+    const users = Array.from(userMap.entries()).map(([id, name]) => ({ jn_user_id: id, name }));
+
+    return new Response(JSON.stringify({ users, count: users.length }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   } catch (error: any) {
