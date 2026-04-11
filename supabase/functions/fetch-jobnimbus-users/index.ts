@@ -16,33 +16,29 @@ Deno.serve(async (req) => {
       });
     }
 
-    const response = await fetch('https://app.jobnimbus.com/api1/teams', {
-      headers: { 'Authorization': `Bearer ${apiKey}` },
-    });
+    // Try multiple endpoints to find team/users
+    const endpoints = [
+      'https://app.jobnimbus.com/api1/users',
+      'https://app.jobnimbus.com/api1/team',
+      'https://app.jobnimbus.com/api1/members',
+      'https://app.jobnimbus.com/api1/settings/users',
+    ];
 
-    if (!response.ok) {
-      const text = await response.text();
-      console.log('Teams endpoint failed, trying contacts with record_type_name=User');
-      
-      // Try the users/team members endpoint
-      const usersResp = await fetch('https://app.jobnimbus.com/api1/contacts?record_type_name=User&must%5B%5D=record_type_name%3AUser', {
-        headers: { 'Authorization': `Bearer ${apiKey}` },
-      });
-      
-      const usersData = await usersResp.text();
-      console.log('Users response:', usersResp.status, usersData.substring(0, 2000));
-      
-      return new Response(JSON.stringify({ 
-        teams_error: `${response.status}: ${text.substring(0, 500)}`,
-        users_status: usersResp.status,
-        users_data: JSON.parse(usersData)
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
+    const results: Record<string, any> = {};
+
+    for (const url of endpoints) {
+      try {
+        const resp = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${apiKey}` },
+        });
+        const text = await resp.text();
+        results[url] = { status: resp.status, body: text.substring(0, 3000) };
+      } catch (e: any) {
+        results[url] = { error: e.message };
+      }
     }
 
-    const data = await response.json();
-    return new Response(JSON.stringify(data), {
+    return new Response(JSON.stringify(results), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   } catch (error: any) {
