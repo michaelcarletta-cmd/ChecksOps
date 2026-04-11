@@ -369,6 +369,9 @@ ${timeline}`;
       await supabase.from("notifications").insert(notifications);
     }
 
+    let taskCreated = false;
+    let jobNimbusQueueError: string | null = null;
+
     // Create task if toggled
     if (createTask && taskTitle.trim()) {
       const { error: taskError } = await supabase.from("tasks").insert({
@@ -384,16 +387,14 @@ ${timeline}`;
         console.error("Error creating task:", taskError);
         toast.error("Note added but failed to create task");
       } else {
-        toast.success("Note added & task created");
+        taskCreated = true;
       }
-    } else {
-      toast.success("Update added successfully");
     }
 
     // Queue note to JobNimbus if toggled
     if (syncToJobNimbus && update) {
       try {
-        await supabase
+        const { error: queueError } = await supabase
           .from('jobnimbus_sync_queue' as any)
           .insert({
             claim_id: claimId,
@@ -402,9 +403,27 @@ ${timeline}`;
             contractor_id: null,
             payload: { data: { content: newUpdate.trim() } },
           });
+
+        if (queueError) {
+          jobNimbusQueueError = queueError.message;
+          console.error('Failed to queue JN note sync:', queueError);
+        }
       } catch (err) {
+        jobNimbusQueueError = err instanceof Error ? err.message : 'Unknown error';
         console.error('Failed to queue JN note sync:', err);
       }
+    }
+
+    if (taskCreated) {
+      if (jobNimbusQueueError) {
+        toast.warning("Note added & task created, but JobNimbus sync failed to queue");
+      } else {
+        toast.success("Note added & task created");
+      }
+    } else if (jobNimbusQueueError) {
+      toast.warning("Update added, but JobNimbus sync failed to queue");
+    } else {
+      toast.success("Update added successfully");
     }
 
     setNewUpdate("");
