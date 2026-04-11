@@ -5,6 +5,40 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-claim-sync-secret',
 };
 
+function normalizeInspectionValue(value?: string | null): string {
+  return (value || '').trim().toLowerCase();
+}
+
+function findMatchingExternalInspection(
+  existingInspections: Array<{
+    id: string;
+    inspection_time: string | null;
+    inspection_type: string | null;
+    inspector_name: string | null;
+  }>,
+  incomingInspection: {
+    inspection_time?: string | null;
+    inspection_type?: string | null;
+    inspector_name?: string | null;
+  }
+) {
+  const incomingTime = normalizeInspectionValue(incomingInspection.inspection_time);
+  const incomingType = normalizeInspectionValue(incomingInspection.inspection_type);
+  const incomingInspector = normalizeInspectionValue(incomingInspection.inspector_name);
+
+  const exactMatch = existingInspections.find((inspection) => {
+    return (
+      normalizeInspectionValue(inspection.inspection_time) === incomingTime &&
+      normalizeInspectionValue(inspection.inspection_type) === incomingType &&
+      normalizeInspectionValue(inspection.inspector_name) === incomingInspector
+    );
+  });
+
+  if (exactMatch) return exactMatch;
+
+  return existingInspections.length === 1 ? existingInspections[0] : null;
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -294,12 +328,18 @@ Deno.serve(async (req) => {
       if (inspections_data && inspections_data.length > 0) {
         console.log(`Syncing ${inspections_data.length} inspections`);
         for (const inspection of inspections_data) {
-          const { data: existingInspection } = await supabase
+          const { data: existingExternalInspections, error: existingInspectionsError } = await supabase
             .from('inspections')
-            .select('id')
+            .select('id, inspection_time, inspection_type, inspector_name')
             .eq('claim_id', claimId)
             .eq('inspection_date', inspection.inspection_date)
-            .maybeSingle();
+            .is('created_by', null);
+
+          if (existingInspectionsError) {
+            throw existingInspectionsError;
+          }
+
+          const existingInspection = findMatchingExternalInspection(existingExternalInspections || [], inspection);
 
           if (!existingInspection) {
             await supabase.from('inspections').insert({
