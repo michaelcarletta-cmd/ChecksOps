@@ -349,10 +349,15 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any)
     related: [{ id: jobId, type: 'job', name: claim?.policyholder_name || '' }],
   };
 
-  // Add owners to notify them in JN
+  // Tag assigned users in JN using multiple field formats for compatibility
   if (owners.length > 0) {
+    // Try all known JN tagging fields to ensure at least one works
     activityBody.owners = owners.map(id => ({ id }));
+    activityBody.sales_rep_ids = owners;
+    activityBody.assigned_to_ids = owners;
   }
+
+  console.log('Creating JN note activity:', JSON.stringify(activityBody));
 
   const response = await fetch(`${JOBNIMBUS_API_BASE}/activities`, {
     method: 'POST',
@@ -363,12 +368,18 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any)
     body: JSON.stringify(activityBody),
   });
 
+  const responseText = await response.text();
+  console.log(`JN note response [${response.status}]: ${responseText.substring(0, 500)}`);
+
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`JobNimbus note sync error: ${response.status} - ${errorText}`);
+    throw new Error(`JobNimbus note sync error: ${response.status} - ${responseText}`);
   }
 
-  return await response.json();
+  try {
+    return JSON.parse(responseText);
+  } catch {
+    return { raw: responseText };
+  }
 }
 
 async function syncFile(apiKey: string, claim: any, payload: any, supabase: any) {
