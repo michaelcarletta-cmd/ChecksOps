@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
             result = await syncTask(apiKey, claim, item.payload);
             break;
           case 'note':
-            result = await syncNote(apiKey, claim, item.payload);
+            result = await syncNote(apiKey, claim, item.payload, supabase);
             break;
           case 'file':
             result = await syncFile(apiKey, claim, item.payload, supabase);
@@ -288,7 +288,7 @@ async function syncTask(apiKey: string, claim: any, payload: any) {
   return await response.json();
 }
 
-async function syncNote(apiKey: string, claim: any, payload: any) {
+async function syncNote(apiKey: string, claim: any, payload: any, supabase: any) {
   console.log(`Syncing note to JobNimbus for claim ${claim?.id}`);
   
   const noteData = payload?.data;
@@ -300,18 +300,50 @@ async function syncNote(apiKey: string, claim: any, payload: any) {
     return { skipped: true, reason: 'No JobNimbus job ID' };
   }
 
+  // Look up assigned staff's JN user ID to tag them
+  let owners: string[] = [];
+  try {
+    const { data: staffRows } = await supabase
+      .from('claim_staff')
+      .select('staff_id')
+      .eq('claim_id', claim.id);
+
+    if (staffRows && staffRows.length > 0) {
+      const staffIds = staffRows.map((r: any) => r.staff_id);
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('jobnimbus_user_id')
+        .in('id', staffIds)
+        .not('jobnimbus_user_id', 'is', null);
+
+      if (profiles) {
+        owners = profiles.map((p: any) => p.jobnimbus_user_id).filter(Boolean);
+      }
+    }
+    console.log(`Note owners for JN tagging: ${JSON.stringify(owners)}`);
+  } catch (err) {
+    console.error('Error looking up JN owners, proceeding without:', err);
+  }
+
+  const activityBody: Record<string, any> = {
+    record_type_name: 'Note',
+    note: noteData.content || '',
+    primary: { id: jobId, type: 'job', name: claim?.policyholder_name || '' },
+    related: [{ id: jobId, type: 'job', name: claim?.policyholder_name || '' }],
+  };
+
+  // Add owners to notify them in JN
+  if (owners.length > 0) {
+    activityBody.owners = owners.map(id => ({ id }));
+  }
+
   const response = await fetch(`${JOBNIMBUS_API_BASE}/activities`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      record_type_name: 'Note',
-      note: noteData.content || '',
-      primary: { id: jobId, type: 'job', name: claim?.policyholder_name || '' },
-      related: [{ id: jobId, type: 'job', name: claim?.policyholder_name || '' }],
-    }),
+    body: JSON.stringify(activityBody),
   });
 
   if (!response.ok) {

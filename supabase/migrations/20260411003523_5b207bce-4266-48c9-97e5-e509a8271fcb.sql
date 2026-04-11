@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ADD COLUMN jobnimbus_user_id TEXT;
