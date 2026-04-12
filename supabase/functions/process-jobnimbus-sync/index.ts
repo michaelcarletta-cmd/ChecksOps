@@ -391,7 +391,8 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any,
     console.error('Error resolving JN users:', err);
   }
 
-  // Build @mention prefix (kept for visual context in note body)
+  // Build @mention prefix (cosmetic only — treated as supplemental unless proven
+  // to trigger native JN notifications in future testing)
   const mentionNames = jnUsers.map((p: any) => p.full_name).filter(Boolean);
   const mentionPrefix = mentionNames.length > 0
     ? mentionNames
