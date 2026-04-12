@@ -441,9 +441,11 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any,
   let noteResult;
   try { noteResult = JSON.parse(responseText); } catch { noteResult = { raw: responseText }; }
 
-  // Step 2: Create fallback notification tasks for each target user
-  // JobNimbus does NOT fire notifications for @mentions in API-created notes.
-  // The reliable way to notify a user is to create a task assigned to them.
+  // Step 2: Create assigned-task notifications for each target user.
+  // Current testing indicates plain-text @mentions in API-created notes are not
+  // reliably triggering notifications in our environment, so we use assigned-task
+  // fallback for deterministic notification delivery. The "task" mode is the default;
+  // "mention" mode is available only as optional supplemental/cosmetic behavior.
   const notificationResults: Record<string, any> = {};
   let anyNotificationSent = false;
   let anyFallbackUsed = false;
