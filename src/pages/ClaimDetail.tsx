@@ -22,11 +22,12 @@ import { EditClaimDialog } from "@/components/claim-detail/EditClaimDialog";
 import { DeleteClaimDialog } from "@/components/claim-detail/DeleteClaimDialog";
 import { NotifyPortalDialog } from "@/components/claim-detail/NotifyPortalDialog";
 import { ShareClaimDialog } from "@/components/claim-detail/ShareClaimDialog";
+import { SendDocumentDialog } from "@/components/claim-detail/SendDocumentDialog";
 import { ClaimTabsDropdown } from "@/components/claim-detail/ClaimTabsDropdown";
 import { ClaimsAIAssistant } from "@/components/ClaimsAIAssistant";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ArrowLeft, Edit, Trash2, Bell, Brain, Share2, Loader2 } from "lucide-react";
+import { ArrowLeft, Edit, Trash2, Bell, Brain, Share2, Loader2, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -63,6 +64,7 @@ const ClaimDetail = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [notifyDialogOpen, setNotifyDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [sendDocDialogOpen, setSendDocDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(
     userRole === "admin" || userRole === "staff" ? "darwin" : "overview",
   );
@@ -311,6 +313,10 @@ const ClaimDetail = () => {
             <Button variant="outline" size="sm" className="h-8 text-xs md:text-sm" onClick={() => setShareDialogOpen(true)}>
               <Share2 className="h-3.5 w-3.5 mr-1.5" />
               Share
+            </Button>
+            <Button variant="outline" size="sm" className="h-8 text-xs md:text-sm" onClick={() => setSendDocDialogOpen(true)}>
+              <Send className="h-3.5 w-3.5 mr-1.5" />
+              Send Doc
             </Button>
             <Button variant="outline" size="sm" className="h-8 text-xs md:text-sm" onClick={() => setNotifyDialogOpen(true)}>
               <Bell className="h-3.5 w-3.5 mr-1.5" />
