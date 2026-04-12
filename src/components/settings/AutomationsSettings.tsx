@@ -699,7 +699,34 @@ export const AutomationsSettings = () => {
                     </div>
                   )}
 
-                  {/* Task Completed Trigger Config */}
+                  {/* Sub-Status Change Trigger Config */}
+                  {triggerType === 'sub_status_change' && (
+                    <div className="space-y-4 pl-4 border-l-2 border-muted">
+                      <div className="space-y-2">
+                        <Label>When Sub-Step Changes To</Label>
+                        <Select 
+                          value={triggerConfig.sub_status_id || '_any'} 
+                          onValueChange={(value) => setTriggerConfig({ ...triggerConfig, sub_status_id: value === '_any' ? undefined : value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Any sub-step (leave empty)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_any">Any sub-step change</SelectItem>
+                            {subStatuses?.map((sub) => {
+                              const parentStatus = statuses?.find(s => s.id === sub.parent_status_id);
+                              return (
+                                <SelectItem key={sub.id} value={sub.id}>
+                                  {parentStatus ? `${parentStatus.name} → ` : ''}{sub.name}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
+
                   {triggerType === 'task_completed' && (
                     <div className="space-y-4 pl-4 border-l-2 border-muted">
                       <div className="space-y-2">
