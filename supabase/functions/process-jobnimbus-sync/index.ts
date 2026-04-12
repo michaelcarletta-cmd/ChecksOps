@@ -7,6 +7,9 @@ const corsHeaders = {
 
 const JOBNIMBUS_API_BASE = 'https://app.jobnimbus.com/api1';
 
+// Valid JN user ID pattern (alphanumeric, typically 20+ chars)
+const JN_USER_ID_PATTERN = /^[a-z0-9]{10,}$/;
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -32,6 +35,14 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Check for test mode
+    let body: any = {};
+    try { body = await req.json(); } catch { /* no body */ }
+
+    if (body?.test_notification) {
+      return await handleNotificationTest(supabase, body);
+    }
 
     console.log('Processing JobNimbus sync queue...');
 
@@ -131,10 +142,133 @@ Deno.serve(async (req) => {
   }
 });
 
+// ─── Notification Test Mode ─────────────────────────────────────────
+
+async function handleNotificationTest(_supabase: any, body: any) {
+  const apiKey = Deno.env.get('JOBNIMBUS_API_KEY');
+  if (!apiKey) {
+    return new Response(JSON.stringify({ error: 'No JobNimbus API key' }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const targetJnUserId = body.target_jn_user_id;
+  const jobId = body.job_id; // optional — links task to a job
+
+  if (!targetJnUserId || !JN_USER_ID_PATTERN.test(targetJnUserId)) {
+    return new Response(JSON.stringify({ error: 'Invalid or missing target_jn_user_id', pattern: JN_USER_ID_PATTERN.source }), {
+      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  console.log(`[TEST MODE] Creating minimal test task for JN user: ${targetJnUserId}`);
+
+  // Minimal payload — only fields we believe trigger assignment notification
+  const taskBody: Record<string, any> = {
+    record_type_name: 'To Do',
+    title: `🔔 Darwin Notification Test — ${new Date().toISOString()}`,
+    description: 'This is an automated test to verify JobNimbus task-assignment notifications are working.',
+    date_start: Math.floor(Date.now() / 1000),
+    date_end: Math.floor(Date.now() / 1000) + 86400,
+    is_active: true,
+    owners: [{ id: targetJnUserId }],
+  };
+
+  // Optionally link to a job
+  if (jobId) {
+    taskBody.primary = { id: jobId, type: 'job' };
+    taskBody.related = [{ id: jobId, type: 'job' }];
+  }
+
+  console.log(`[TEST MODE] POST payload: ${JSON.stringify(taskBody)}`);
+
+  const createResp = await fetch(`${JOBNIMBUS_API_BASE}/tasks`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(taskBody),
+  });
+
+  const createText = await createResp.text();
+  console.log(`[TEST MODE] Create response [${createResp.status}]: ${createText.substring(0, 500)}`);
+
+  let createResult: any;
+  try { createResult = JSON.parse(createText); } catch { createResult = { raw: createText }; }
+
+  if (!createResp.ok) {
+    return new Response(JSON.stringify({
+      test: 'FAILED',
+      phase: 'task_creation',
+      status: createResp.status,
+      response: createResult,
+    }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  // Verification GET — read back the created task
+  const createdId = createResult.jnid;
+  let verification: any = null;
+
+  if (createdId) {
+    try {
+      const getResp = await fetch(`${JOBNIMBUS_API_BASE}/tasks/${createdId}`, {
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+      });
+      const getText = await getResp.text();
+      console.log(`[TEST MODE] Verification GET [${getResp.status}]: ${getText.substring(0, 500)}`);
+
+      let getResult: any;
+      try { getResult = JSON.parse(getText); } catch { getResult = { raw: getText }; }
+
+      verification = {
+        status: getResp.status,
+        owners: getResult.owners,
+        sales_rep_ids: getResult.sales_rep_ids,
+        assigned_to_ids: getResult.assigned_to_ids,
+        record_type_name: getResult.record_type_name,
+        title: getResult.title,
+        related: getResult.related,
+        primary: getResult.primary,
+        is_active: getResult.is_active,
+        target_user_found_in_owners: Array.isArray(getResult.owners)
+          ? getResult.owners.some((o: any) => o.id === targetJnUserId || o === targetJnUserId)
+          : false,
+        target_user_found_in_sales_rep_ids: Array.isArray(getResult.sales_rep_ids)
+          ? getResult.sales_rep_ids.includes(targetJnUserId)
+          : false,
+        target_user_found_in_assigned_to_ids: Array.isArray(getResult.assigned_to_ids)
+          ? getResult.assigned_to_ids.includes(targetJnUserId)
+          : false,
+      };
+    } catch (err: any) {
+      verification = { error: err.message };
+    }
+  }
+
+  return new Response(JSON.stringify({
+    test: 'COMPLETED',
+    created_task_id: createdId,
+    target_jn_user_id: targetJnUserId,
+    create_response: createResult,
+    verification,
+    recommendation: verification?.target_user_found_in_owners
+      ? 'owners field is persisted — should trigger Task Assigned notification if user has it enabled'
+      : 'WARNING: target user NOT found in owners on read-back — assignment may not have persisted',
+  }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────
 
+// Granular notification statuses
+type NotificationStatusGranular =
+  | 'synced_note_only'
+  | 'task_created_unverified'
+  | 'task_created_assignment_verified'
+  | 'task_created_assignment_mismatch'
+  | 'notification_preferences_unknown'
+  | 'notification_failed'
+  | 'none';
+
 interface NotificationResult {
-  notificationStatus: 'sent' | 'fallback_used' | 'failed' | 'none';
+  notificationStatus: string;
   details: Record<string, any>;
 }
 
@@ -150,6 +284,14 @@ async function updateNotificationStatus(supabase: any, queueId: string, result: 
   } catch (err) {
     console.error('Failed to update notification status:', err);
   }
+}
+
+/** Validate a JN user ID format */
+function validateJnUserId(jnUserId: string | null | undefined, displayName: string): { valid: boolean; reason?: string } {
+  if (!jnUserId) return { valid: false, reason: `Missing jobnimbus_user_id for ${displayName}` };
+  if (typeof jnUserId !== 'string') return { valid: false, reason: `jobnimbus_user_id is not a string for ${displayName}` };
+  if (!JN_USER_ID_PATTERN.test(jnUserId)) return { valid: false, reason: `jobnimbus_user_id '${jnUserId}' does not match expected pattern for ${displayName}` };
+  return { valid: true };
 }
 
 /** Resolve JN user IDs and profile info for all staff/contractors on a claim */
@@ -181,6 +323,46 @@ async function resolveClaimJnUsers(supabase: any, claimId: string) {
   return profiles || [];
 }
 
+/** Verify a created task by GET-ing it back and checking assignment fields */
+async function verifyCreatedTask(
+  apiKey: string,
+  taskJnId: string,
+  targetJnUserId: string,
+): Promise<{ verified: boolean; assigneeMatch: boolean; returnedOwners: any; returnedAssignedTo: any; returnedSalesReps: any; recordTypeName: string | null; raw: any }> {
+  try {
+    const resp = await fetch(`${JOBNIMBUS_API_BASE}/tasks/${taskJnId}`, {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    const text = await resp.text();
+    let data: any;
+    try { data = JSON.parse(text); } catch { data = { raw: text }; }
+
+    if (!resp.ok) {
+      console.log(`[VERIFY] GET /tasks/${taskJnId} returned ${resp.status}`);
+      return { verified: false, assigneeMatch: false, returnedOwners: null, returnedAssignedTo: null, returnedSalesReps: null, recordTypeName: null, raw: data };
+    }
+
+    const ownersMatch = Array.isArray(data.owners) && data.owners.some((o: any) => (o.id || o) === targetJnUserId);
+    const assignedMatch = Array.isArray(data.assigned_to_ids) && data.assigned_to_ids.includes(targetJnUserId);
+    const salesRepMatch = Array.isArray(data.sales_rep_ids) && data.sales_rep_ids.includes(targetJnUserId);
+
+    console.log(`[VERIFY] Task ${taskJnId} — owners match: ${ownersMatch}, assigned_to match: ${assignedMatch}, sales_rep match: ${salesRepMatch}`);
+
+    return {
+      verified: true,
+      assigneeMatch: ownersMatch || assignedMatch || salesRepMatch,
+      returnedOwners: data.owners,
+      returnedAssignedTo: data.assigned_to_ids,
+      returnedSalesReps: data.sales_rep_ids,
+      recordTypeName: data.record_type_name,
+      raw: { title: data.title, is_active: data.is_active, related: data.related },
+    };
+  } catch (err: any) {
+    console.error(`[VERIFY] Exception verifying task ${taskJnId}:`, err);
+    return { verified: false, assigneeMatch: false, returnedOwners: null, returnedAssignedTo: null, returnedSalesReps: null, recordTypeName: null, raw: { error: err.message } };
+  }
+}
+
 /** Create a follow-up task in JN assigned to a specific user to trigger a real notification */
 async function createNotificationTask(
   apiKey: string,
@@ -189,28 +371,31 @@ async function createNotificationTask(
   targetJnUserId: string,
   notePreview: string,
   authorName: string,
-): Promise<{ success: boolean; response?: any; error?: string }> {
+): Promise<{ success: boolean; response?: any; error?: string; verification?: any }> {
   const title = `📋 New note from ${authorName || 'System'}`;
   const description = notePreview.length > 300 ? notePreview.substring(0, 300) + '...' : notePreview;
   
-  // Create a task due today, assigned to the target user
   const now = Math.floor(Date.now() / 1000);
+  // Use ONLY owners — this is the field we need to verify triggers assignment notification.
+  // Do NOT scatter assignment across multiple fields until we confirm which one JN honors.
   const taskBody = {
     record_type_name: 'To Do',
     title,
     description,
     date_start: now,
-    date_end: now + 86400, // due in 24h
+    date_end: now + 86400,
     is_active: true,
     primary: { id: jobId, type: 'job', name: claimName },
     related: [{ id: jobId, type: 'job', name: claimName }],
     owners: [{ id: targetJnUserId }],
   };
 
-  console.log(`Creating JN notification task for user ${targetJnUserId}:`, JSON.stringify(taskBody).substring(0, 500));
+  const endpoint = `${JOBNIMBUS_API_BASE}/tasks`;
+  console.log(`[TASK CREATE] POST ${endpoint}`);
+  console.log(`[TASK CREATE] Payload: ${JSON.stringify(taskBody)}`);
 
   try {
-    const response = await fetch(`${JOBNIMBUS_API_BASE}/tasks`, {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -220,17 +405,23 @@ async function createNotificationTask(
     });
 
     const text = await response.text();
-    console.log(`JN notification task response [${response.status}]: ${text.substring(0, 300)}`);
+    console.log(`[TASK CREATE] Response [${response.status}]: ${text.substring(0, 500)}`);
 
     if (!response.ok) {
       return { success: false, error: `${response.status}: ${text.substring(0, 200)}` };
     }
 
-    try {
-      return { success: true, response: JSON.parse(text) };
-    } catch {
-      return { success: true, response: { raw: text } };
+    let result: any;
+    try { result = JSON.parse(text); } catch { result = { raw: text }; }
+
+    // Verification GET — confirm the task was stored with correct assignment
+    let verification = null;
+    if (result.jnid) {
+      verification = await verifyCreatedTask(apiKey, result.jnid, targetJnUserId);
+      console.log(`[TASK CREATE] Verification result: ${JSON.stringify(verification)}`);
     }
+
+    return { success: true, response: result, verification };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
@@ -373,7 +564,12 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any,
 
   try {
     jnUsers = await resolveClaimJnUsers(supabase, claim.id);
-    console.log(`Resolved ${jnUsers.length} JN users for claim ${claim.id}: ${JSON.stringify(jnUsers.map((u: any) => ({ name: u.full_name, jnId: u.jobnimbus_user_id, mode: u.jobnimbus_notification_mode })))}`);
+    
+    // Log diagnostic detail for each mapped user
+    for (const u of jnUsers) {
+      const validation = validateJnUserId(u.jobnimbus_user_id, u.full_name);
+      console.log(`[USER MAP] Internal ID: ${u.id} | Name: ${u.full_name} | JN ID: ${u.jobnimbus_user_id} | Mode: ${u.jobnimbus_notification_mode || 'task'} | Valid: ${validation.valid}${validation.reason ? ' | ' + validation.reason : ''}`);
+    }
 
     // Resolve the note author
     if (noteData.user_id) {
@@ -391,12 +587,11 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any,
     console.error('Error resolving JN users:', err);
   }
 
-  // Build @mention prefix (cosmetic only — treated as supplemental unless proven
-  // to trigger native JN notifications in future testing)
+  // Build @mention prefix (cosmetic only)
   const mentionNames = jnUsers.map((p: any) => p.full_name).filter(Boolean);
   const mentionPrefix = mentionNames.length > 0
     ? mentionNames
-        .map((name: string) => `@${name.replace(/\s+/g, '').split(' ').map((part: string) => part.charAt(0).toUpperCase() + part.slice(1)).join('')}`)
+        .map((name: string) => `@${name.replace(/\s+/g, '')}`)
         .join(' ') + ' '
     : '';
 
@@ -417,11 +612,10 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any,
     ? `${JOBNIMBUS_API_BASE}/activities?actor=${encodeURIComponent(actorEmail)}`
     : `${JOBNIMBUS_API_BASE}/activities`;
 
-  console.log(`[NOTE SYNC] Outgoing payload: ${JSON.stringify({ url: activityUrl, body: activityBody }).substring(0, 800)}`);
-  console.log(`[NOTE SYNC] Target JN users: ${JSON.stringify(owners)}`);
-  console.log(`[NOTE SYNC] Mention prefix used: "${mentionPrefix}"`);
+  console.log(`[NOTE SYNC] POST ${activityUrl}`);
+  console.log(`[NOTE SYNC] Payload: ${JSON.stringify(activityBody).substring(0, 800)}`);
 
-  // Step 1: Create the note (this is the base sync — always runs)
+  // Step 1: Create the note (base sync — always runs regardless of notification outcome)
   const response = await fetch(activityUrl, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -429,107 +623,146 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any,
   });
 
   const responseText = await response.text();
-  console.log(`[NOTE SYNC] JN API response [${response.status}]: ${responseText.substring(0, 500)}`);
+  console.log(`[NOTE SYNC] Response [${response.status}]: ${responseText.substring(0, 500)}`);
 
   if (!response.ok) {
     await updateNotificationStatus(supabase, queueId, {
-      notificationStatus: 'failed',
+      notificationStatus: 'notification_failed',
       details: { error: `Note creation failed: ${response.status}`, phase: 'note_creation' },
     });
     throw new Error(`JobNimbus note sync error: ${response.status} - ${responseText}`);
   }
 
-  let noteResult;
+  let noteResult: any;
   try { noteResult = JSON.parse(responseText); } catch { noteResult = { raw: responseText }; }
 
-  // Step 2: Create assigned-task notifications for each target user.
-  // Current testing indicates plain-text @mentions in API-created notes are not
-  // reliably triggering notifications in our environment, so we use assigned-task
-  // fallback for deterministic notification delivery. The "task" mode is the default;
-  // "mention" mode is available only as optional supplemental/cosmetic behavior.
+  // Step 2: Create assigned-task notifications for each target user
   const notificationResults: Record<string, any> = {};
-  let anyNotificationSent = false;
-  let anyFallbackUsed = false;
+  const eligibleUsers = jnUsers.filter(u => {
+    if (noteData.user_id && u.id === noteData.user_id) {
+      console.log(`[NOTE SYNC] Skipping ${u.full_name} (note author)`);
+      notificationResults[u.full_name] = { skipped: true, reason: 'note_author' };
+      return false;
+    }
+    const v = validateJnUserId(u.jobnimbus_user_id, u.full_name);
+    if (!v.valid) {
+      console.error(`[NOTE SYNC] ❌ ${v.reason}`);
+      notificationResults[u.full_name] = { skipped: true, reason: v.reason };
+      return false;
+    }
+    return true;
+  });
 
-  for (const user of jnUsers) {
+  let overallStatus: NotificationStatusGranular = 'synced_note_only';
+
+  if (eligibleUsers.length === 0 && jnUsers.length === 0) {
+    overallStatus = 'none';
+  }
+
+  for (const user of eligibleUsers) {
     const mode = user.jobnimbus_notification_mode || 'task';
     const jnId = user.jobnimbus_user_id;
-    
-    // Skip if user is the note author (don't notify yourself)
-    if (noteData.user_id && user.id === noteData.user_id) {
-      console.log(`[NOTE SYNC] Skipping notification for ${user.full_name} (note author)`);
-      notificationResults[user.full_name] = { skipped: true, reason: 'note_author' };
+    const endpoint = `${JOBNIMBUS_API_BASE}/tasks`;
+
+    if (mode === 'mention') {
+      // Mention-only: cosmetic, no task created
+      notificationResults[user.full_name] = {
+        method: 'mention_only',
+        jnUserId: jnId,
+        note: 'Plain-text @mentions not confirmed to trigger JN notifications in this environment',
+      };
+      if (overallStatus === 'synced_note_only') overallStatus = 'synced_note_only';
       continue;
     }
 
-    if (mode === 'mention' || mode === 'both') {
-      console.log(`[NOTE SYNC] @mention included for ${user.full_name} (cosmetic/supplemental — not confirmed to trigger JN notification)`);
-      console.log(`[NOTE SYNC] [VERIFICATION] Method: mention_in_note | Target JN User ID: ${jnId} | Display Name: ${user.full_name}`);
-    }
+    // mode === 'task' or 'both'
+    console.log(`[NOTE SYNC] Queue: ${queueId} | Creating task for ${user.full_name} (JN: ${jnId}) | Endpoint: ${endpoint}`);
 
-    if (mode === 'task' || mode === 'both') {
-      const endpoint = `${JOBNIMBUS_API_BASE}/tasks`;
-      console.log(`[NOTE SYNC] Queue: ${queueId} | Creating assigned-task notification for ${user.full_name} (JN ID: ${jnId}) | Endpoint: ${endpoint}`);
-      try {
-        const taskResult = await createNotificationTask(
-          apiKey,
-          jobId,
-          claim.policyholder_name || claim.claim_number || 'Claim',
-          jnId,
-          noteData.content || '',
-          authorName || 'System',
-        );
+    try {
+      const taskResult = await createNotificationTask(
+        apiKey, jobId,
+        claim.policyholder_name || claim.claim_number || 'Claim',
+        jnId, noteData.content || '', authorName || 'System',
+      );
 
-        if (taskResult.success) {
-          anyNotificationSent = true;
-          notificationResults[user.full_name] = { method: 'task', success: true, taskId: taskResult.response?.jnid, jnUserId: jnId, endpoint, responseStatus: 200 };
-          console.log(`[NOTE SYNC] ✅ Queue: ${queueId} | Task created for ${user.full_name} | Task JN ID: ${taskResult.response?.jnid}`);
+      if (taskResult.success) {
+        const v = taskResult.verification;
+        const taskId = taskResult.response?.jnid;
+        let userStatus: string;
+
+        if (v && v.verified && v.assigneeMatch) {
+          userStatus = 'task_created_assignment_verified';
+          console.log(`[NOTE SYNC] ✅ Queue: ${queueId} | Task ${taskId} VERIFIED for ${user.full_name}`);
+        } else if (v && v.verified && !v.assigneeMatch) {
+          userStatus = 'task_created_assignment_mismatch';
+          console.warn(`[NOTE SYNC] ⚠️ Queue: ${queueId} | Task ${taskId} created but assignment MISMATCH for ${user.full_name}`);
         } else {
-          anyFallbackUsed = true;
-          const status = taskResult.error?.match(/^(\d+):/)?.[1] || 'unknown';
-          notificationResults[user.full_name] = { method: 'task', success: false, error: taskResult.error, jnUserId: jnId, endpoint, responseStatus: status };
-          console.error(`[NOTE SYNC] ❌ Queue: ${queueId} | Task failed for ${user.full_name}: ${taskResult.error}`);
+          userStatus = 'task_created_unverified';
+          console.log(`[NOTE SYNC] ⚠️ Queue: ${queueId} | Task ${taskId} created, verification unavailable`);
         }
-      } catch (err: any) {
-        console.error(`[NOTE SYNC] ❌ Queue: ${queueId} | Exception for ${user.full_name}:`, err);
-        notificationResults[user.full_name] = { method: 'task', success: false, error: err.message, jnUserId: jnId, endpoint, responseStatus: 'exception' };
+
+        notificationResults[user.full_name] = {
+          method: 'task',
+          success: true,
+          taskId,
+          jnUserId: jnId,
+          endpoint,
+          responseStatus: 200,
+          verificationStatus: userStatus,
+          verification: v ? {
+            assigneeMatch: v.assigneeMatch,
+            returnedOwners: v.returnedOwners,
+            returnedAssignedTo: v.returnedAssignedTo,
+            returnedSalesReps: v.returnedSalesReps,
+            recordTypeName: v.recordTypeName,
+          } : null,
+        };
+
+        // Promote overall status
+        if (userStatus === 'task_created_assignment_verified') {
+          overallStatus = 'task_created_assignment_verified';
+        } else if (userStatus === 'task_created_assignment_mismatch' && overallStatus !== 'task_created_assignment_verified') {
+          overallStatus = 'task_created_assignment_mismatch';
+        } else if (overallStatus === 'synced_note_only') {
+          overallStatus = 'task_created_unverified';
+        }
+      } else {
+        notificationResults[user.full_name] = {
+          method: 'task', success: false, error: taskResult.error,
+          jnUserId: jnId, endpoint, responseStatus: taskResult.error?.match(/^(\d+):/)?.[1] || 'error',
+        };
+        if (overallStatus === 'synced_note_only') overallStatus = 'notification_failed';
       }
-    }
-
-    if (mode === 'mention') {
-      // Mention-only mode — no assigned task; notification is cosmetic/supplemental
-      notificationResults[user.full_name] = { method: 'mention_only', note: 'Plain-text @mentions not confirmed to trigger JN notifications in this environment' };
+    } catch (err: any) {
+      console.error(`[NOTE SYNC] ❌ Queue: ${queueId} | Exception for ${user.full_name}:`, err);
+      notificationResults[user.full_name] = { method: 'task', success: false, error: err.message, jnUserId: jnId, endpoint };
+      if (overallStatus === 'synced_note_only') overallStatus = 'notification_failed';
     }
   }
 
-  // Determine overall notification status
-  let notificationStatus: string;
-  if (jnUsers.length === 0) {
-    notificationStatus = 'none';
-  } else if (anyNotificationSent && !anyFallbackUsed) {
-    notificationStatus = 'sent';
-  } else if (anyNotificationSent) {
-    notificationStatus = 'fallback_used';
-  } else {
-    notificationStatus = 'failed';
-  }
-
-  console.log(`[NOTE SYNC] Final notification status: ${notificationStatus}`);
+  console.log(`[NOTE SYNC] Final status: ${overallStatus}`);
 
   await updateNotificationStatus(supabase, queueId, {
-    notificationStatus: notificationStatus as any,
+    notificationStatus: overallStatus,
     details: {
       queueItemId: queueId,
-      targetUsers: jnUsers.map((u: any) => ({ displayName: u.full_name, jnUserId: u.jobnimbus_user_id, mode: u.jobnimbus_notification_mode || 'task' })),
+      noteCreated: true,
+      noteJnId: noteResult?.jnid || null,
+      targetUsers: jnUsers.map((u: any) => ({
+        internalId: u.id,
+        displayName: u.full_name,
+        jnUserId: u.jobnimbus_user_id,
+        mode: u.jobnimbus_notification_mode || 'task',
+      })),
       results: notificationResults,
       authorName,
       actorEmail,
-      noteEndpoint: actorEmail ? `${JOBNIMBUS_API_BASE}/activities?actor=...` : `${JOBNIMBUS_API_BASE}/activities`,
+      noteEndpoint: activityUrl,
       noteResponseStatus: response.status,
     },
   });
 
-  return { ...noteResult, notificationStatus, notificationResults };
+  return { ...noteResult, notificationStatus: overallStatus, notificationResults };
 }
 
 async function syncFile(apiKey: string, claim: any, payload: any, supabase: any) {
@@ -572,7 +805,6 @@ async function syncInspection(apiKey: string, claim: any, payload: any, supabase
   const jobId = claim?.jobnimbus_job_id;
   if (!jobId) return { skipped: true, reason: 'No JobNimbus job ID' };
 
-  // Build date_start and date_end as unix timestamps
   let dateStart: number;
   const inspDate = inspData.inspection_date;
   const inspTime = inspData.inspection_time;
@@ -605,7 +837,6 @@ async function syncInspection(apiKey: string, claim: any, payload: any, supabase
 
   const dateEnd = dateStart + 3600;
 
-  // Resolve JN users for ownership and notification
   let jnUsers: any[] = [];
   try {
     jnUsers = await resolveClaimJnUsers(supabase, claim.id);
@@ -640,13 +871,12 @@ async function syncInspection(apiKey: string, claim: any, payload: any, supabase
   }
 
   if (owners.length > 0) {
+    // Use only owners for assignment — standardized field
     taskBody.owners = owners.map((id: string) => ({ id }));
-    taskBody.sales_rep_ids = owners;
-    taskBody.assigned_to_ids = owners;
   }
 
-  console.log(`[INSPECTION SYNC] Outgoing payload: ${JSON.stringify(taskBody).substring(0, 800)}`);
-  console.log(`[INSPECTION SYNC] Target JN users: ${JSON.stringify(owners)}`);
+  console.log(`[INSPECTION SYNC] POST ${JOBNIMBUS_API_BASE}/tasks`);
+  console.log(`[INSPECTION SYNC] Payload: ${JSON.stringify(taskBody).substring(0, 800)}`);
 
   const response = await fetch(`${JOBNIMBUS_API_BASE}/tasks`, {
     method: 'POST',
@@ -655,34 +885,53 @@ async function syncInspection(apiKey: string, claim: any, payload: any, supabase
   });
 
   const responseText = await response.text();
-  console.log(`[INSPECTION SYNC] JN response [${response.status}]: ${responseText.substring(0, 500)}`);
+  console.log(`[INSPECTION SYNC] Response [${response.status}]: ${responseText.substring(0, 500)}`);
 
   if (!response.ok) {
     await updateNotificationStatus(supabase, queueId, {
-      notificationStatus: 'failed',
+      notificationStatus: 'notification_failed',
       details: { error: `Inspection creation failed: ${response.status}`, phase: 'inspection_creation' },
     });
     throw new Error(`JobNimbus inspection sync error: ${response.status} - ${responseText}`);
   }
 
-  // Inspection tasks with owners should auto-notify via JN's task assignment
+  let inspResult: any;
+  try { inspResult = JSON.parse(responseText); } catch { inspResult = { raw: responseText }; }
+
+  // Verify assignment on the created inspection
+  let verificationStatus: NotificationStatusGranular = owners.length > 0 ? 'task_created_unverified' : 'none';
+  let verification: any = null;
+
+  if (inspResult.jnid && owners.length > 0) {
+    verification = await verifyCreatedTask(apiKey, inspResult.jnid, owners[0]);
+    if (verification.verified && verification.assigneeMatch) {
+      verificationStatus = 'task_created_assignment_verified';
+    } else if (verification.verified) {
+      verificationStatus = 'task_created_assignment_mismatch';
+    }
+  }
+
   await updateNotificationStatus(supabase, queueId, {
-    notificationStatus: owners.length > 0 ? 'sent' : 'none',
+    notificationStatus: verificationStatus,
     details: {
       queueItemId: queueId,
       method: 'task_assignment',
+      taskCreated: true,
+      taskJnId: inspResult.jnid || null,
       targetUsers: jnUsers.map((u: any) => ({ displayName: u.full_name, jnUserId: u.jobnimbus_user_id })),
       ownerIds: owners,
       endpoint: `${JOBNIMBUS_API_BASE}/tasks`,
       responseStatus: response.status,
+      verification: verification ? {
+        assigneeMatch: verification.assigneeMatch,
+        returnedOwners: verification.returnedOwners,
+        returnedAssignedTo: verification.returnedAssignedTo,
+        recordTypeName: verification.recordTypeName,
+      } : null,
     },
   });
 
-  try {
-    return JSON.parse(responseText);
-  } catch {
-    return { raw: responseText };
-  }
+  return inspResult;
 }
 
 function mapStatusToJobNimbus(status: string): string {
