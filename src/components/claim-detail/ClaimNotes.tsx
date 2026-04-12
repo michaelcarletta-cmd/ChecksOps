@@ -401,7 +401,7 @@ ${timeline}`;
             sync_type: 'note',
             status: 'pending',
             contractor_id: null,
-            payload: { data: { content: newUpdate.trim() } },
+            payload: { data: { content: newUpdate.trim(), user_id: session?.user?.id || null } },
           });
 
         if (queueError) {
