@@ -519,10 +519,13 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any,
   await updateNotificationStatus(supabase, queueId, {
     notificationStatus: notificationStatus as any,
     details: {
-      targetUsers: jnUsers.map((u: any) => u.full_name),
+      queueItemId: queueId,
+      targetUsers: jnUsers.map((u: any) => ({ displayName: u.full_name, jnUserId: u.jobnimbus_user_id, mode: u.jobnimbus_notification_mode || 'task' })),
       results: notificationResults,
       authorName,
       actorEmail,
+      noteEndpoint: actorEmail ? `${JOBNIMBUS_API_BASE}/activities?actor=...` : `${JOBNIMBUS_API_BASE}/activities`,
+      noteResponseStatus: response.status,
     },
   });
 
