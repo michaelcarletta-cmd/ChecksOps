@@ -468,8 +468,8 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any,
     }
 
     if (mode === 'task' || mode === 'both') {
-      console.log(`[NOTE SYNC] Creating assigned-task notification for ${user.full_name} (${jnId})`);
-      console.log(`[NOTE SYNC] [VERIFICATION] Method: assigned_task | Target JN User ID: ${jnId} | Display Name: ${user.full_name}`);
+      const endpoint = `${JOBNIMBUS_API_BASE}/tasks`;
+      console.log(`[NOTE SYNC] Queue: ${queueId} | Creating assigned-task notification for ${user.full_name} (JN ID: ${jnId}) | Endpoint: ${endpoint}`);
       try {
         const taskResult = await createNotificationTask(
           apiKey,
@@ -482,17 +482,17 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any,
 
         if (taskResult.success) {
           anyNotificationSent = true;
-          notificationResults[user.full_name] = { method: 'task', success: true, taskId: taskResult.response?.jnid };
-          console.log(`[NOTE SYNC] ✅ Notification task created for ${user.full_name}`);
+          notificationResults[user.full_name] = { method: 'task', success: true, taskId: taskResult.response?.jnid, jnUserId: jnId, endpoint, responseStatus: 200 };
+          console.log(`[NOTE SYNC] ✅ Queue: ${queueId} | Task created for ${user.full_name} | Task JN ID: ${taskResult.response?.jnid}`);
         } else {
           anyFallbackUsed = true;
-          notificationResults[user.full_name] = { method: 'task', success: false, error: taskResult.error };
-          console.error(`[NOTE SYNC] ❌ Notification task failed for ${user.full_name}: ${taskResult.error}`);
+          const status = taskResult.error?.match(/^(\d+):/)?.[1] || 'unknown';
+          notificationResults[user.full_name] = { method: 'task', success: false, error: taskResult.error, jnUserId: jnId, endpoint, responseStatus: status };
+          console.error(`[NOTE SYNC] ❌ Queue: ${queueId} | Task failed for ${user.full_name}: ${taskResult.error}`);
         }
       } catch (err: any) {
-        // Defensive: notification failure should NOT block note sync
-        console.error(`[NOTE SYNC] ❌ Exception creating notification task for ${user.full_name}:`, err);
-        notificationResults[user.full_name] = { method: 'task', success: false, error: err.message };
+        console.error(`[NOTE SYNC] ❌ Queue: ${queueId} | Exception for ${user.full_name}:`, err);
+        notificationResults[user.full_name] = { method: 'task', success: false, error: err.message, jnUserId: jnId, endpoint, responseStatus: 'exception' };
       }
     }
 
