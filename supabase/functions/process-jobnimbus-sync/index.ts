@@ -669,9 +669,12 @@ async function syncInspection(apiKey: string, claim: any, payload: any, supabase
   await updateNotificationStatus(supabase, queueId, {
     notificationStatus: owners.length > 0 ? 'sent' : 'none',
     details: {
+      queueItemId: queueId,
       method: 'task_assignment',
-      targetUsers: jnUsers.map((u: any) => u.full_name),
+      targetUsers: jnUsers.map((u: any) => ({ displayName: u.full_name, jnUserId: u.jobnimbus_user_id })),
       ownerIds: owners,
+      endpoint: `${JOBNIMBUS_API_BASE}/tasks`,
+      responseStatus: response.status,
     },
   });
 
