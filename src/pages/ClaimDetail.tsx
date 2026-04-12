@@ -377,7 +377,6 @@ const ClaimDetail = () => {
             claimId={claim.id}
             claimNumber={claim.claim_number}
             policyholderName={claim.policyholder_name}
-            propertyAddress={claim.property_address}
           />
         </>
       )}
