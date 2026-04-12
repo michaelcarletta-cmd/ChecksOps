@@ -117,6 +117,19 @@ export const AutomationsSettings = () => {
     },
   });
 
+  const { data: subStatuses } = useQuery({
+    queryKey: ["claim-sub-statuses-automations"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_sub_statuses")
+        .select("id, name, parent_status_id")
+        .eq("is_active", true)
+        .order("display_order");
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const { data: emailTemplates } = useQuery({
     queryKey: ["email-templates"],
     queryFn: async () => {
