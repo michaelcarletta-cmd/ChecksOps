@@ -27,6 +27,8 @@ interface TriggerConfig {
   inactivity_days?: number;
   // For status_change
   status?: string;
+  // For sub_status_change
+  sub_status_id?: string;
   // For task_completed
   task_title_pattern?: string;
   // For inbound_email / inbound_sms
@@ -108,6 +110,19 @@ export const AutomationsSettings = () => {
       const { data, error } = await supabase
         .from("claim_statuses")
         .select("*")
+        .eq("is_active", true)
+        .order("display_order");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: subStatuses } = useQuery({
+    queryKey: ["claim-sub-statuses-automations"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("claim_sub_statuses")
+        .select("id, name, parent_status_id")
         .eq("is_active", true)
         .order("display_order");
       if (error) throw error;
@@ -388,6 +403,10 @@ export const AutomationsSettings = () => {
         return `After ${config.inactivity_days || 7} days of inactivity`;
       case 'status_change':
         return config.status ? `When status changes to ${config.status}` : 'On any status change';
+      case 'sub_status_change': {
+        const subName = subStatuses?.find(s => s.id === config.sub_status_id)?.name;
+        return config.sub_status_id ? `When sub-step: ${subName || config.sub_status_id}` : 'On any sub-step change';
+      }
       case 'task_completed':
         return config.task_title_pattern 
           ? `When task containing "${config.task_title_pattern}" is completed` 
@@ -558,6 +577,7 @@ export const AutomationsSettings = () => {
                         <SelectItem value="scheduled">Scheduled (specific time after claim creation)</SelectItem>
                         <SelectItem value="inactivity">After Inactivity Period</SelectItem>
                         <SelectItem value="status_change">When Claim Status Changes</SelectItem>
+                        <SelectItem value="sub_status_change">When Sub-Step Changes</SelectItem>
                         <SelectItem value="task_completed">When Task is Completed</SelectItem>
                         <SelectItem value="inspection_scheduled">When Inspection is Scheduled</SelectItem>
                           <SelectItem value="inspection_upcoming_24h">24 Hours Before Inspection</SelectItem>
@@ -681,7 +701,34 @@ export const AutomationsSettings = () => {
                     </div>
                   )}
 
-                  {/* Task Completed Trigger Config */}
+                  {/* Sub-Status Change Trigger Config */}
+                  {triggerType === 'sub_status_change' && (
+                    <div className="space-y-4 pl-4 border-l-2 border-muted">
+                      <div className="space-y-2">
+                        <Label>When Sub-Step Changes To</Label>
+                        <Select 
+                          value={triggerConfig.sub_status_id || '_any'} 
+                          onValueChange={(value) => setTriggerConfig({ ...triggerConfig, sub_status_id: value === '_any' ? undefined : value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Any sub-step (leave empty)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_any">Any sub-step change</SelectItem>
+                            {subStatuses?.map((sub) => {
+                              const parentStatus = statuses?.find(s => s.id === sub.parent_status_id);
+                              return (
+                                <SelectItem key={sub.id} value={sub.id}>
+                                  {parentStatus ? `${parentStatus.name} → ` : ''}{sub.name}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
+
                   {triggerType === 'task_completed' && (
                     <div className="space-y-4 pl-4 border-l-2 border-muted">
                       <div className="space-y-2">
