@@ -13,9 +13,110 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Plus, Trash2, GripVertical, Loader2, Pencil } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface CustomFieldsSettingsProps {
   embedded?: boolean;
+}
+
+function SortableRow({ field, onEdit, onDelete, onToggleActive }: {
+  field: any;
+  onEdit: (field: any) => void;
+  onDelete: (id: string) => void;
+  onToggleActive: (params: { id: string; is_active: boolean }) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: field.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    scale: isDragging ? '1.02' : '1',
+  };
+
+  return (
+    <TableRow ref={setNodeRef} style={style} className={isDragging ? "bg-muted/50" : ""}>
+      <TableCell>
+        <button
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-muted transition-colors"
+        >
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
+        </button>
+      </TableCell>
+      <TableCell className="font-medium">{field.label}</TableCell>
+      <TableCell>
+        <Badge variant="outline">
+          {field.field_type === 'text' && 'Text'}
+          {field.field_type === 'textarea' && 'Text Area'}
+          {field.field_type === 'select' && 'Dropdown'}
+          {field.field_type === 'number' && 'Number'}
+          {field.field_type === 'date' && 'Date'}
+          {field.field_type === 'checkbox' && 'Checkbox'}
+        </Badge>
+      </TableCell>
+      <TableCell>
+        {(field as any).visible_on_statuses?.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {(field as any).visible_on_statuses.map((s: string) => (
+              <Badge key={s} variant="outline" className="text-xs">{s}</Badge>
+            ))}
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">All statuses</span>
+        )}
+      </TableCell>
+      <TableCell>
+        {field.is_required ? (
+          <Badge variant="destructive">Required</Badge>
+        ) : (
+          <Badge variant="secondary">Optional</Badge>
+        )}
+      </TableCell>
+      <TableCell>
+        <Switch
+          checked={field.is_active}
+          onCheckedChange={(checked) =>
+            onToggleActive({ id: field.id, is_active: checked })
+          }
+        />
+      </TableCell>
+      <TableCell className="text-right">
+        <div className="flex justify-end gap-1">
+          <Button size="sm" variant="ghost" onClick={() => onEdit(field)}>
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button size="sm" variant="destructive" onClick={() => onDelete(field.id)}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
 }
 
 export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsProps) => {
@@ -32,6 +133,11 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
     visible_on_statuses: [] as string[],
   });
   const [optionInput, setOptionInput] = useState("");
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const { data: claimStatuses } = useQuery({
     queryKey: ["claim-statuses-for-fields"],
@@ -136,6 +242,43 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
       queryClient.invalidateQueries({ queryKey: ["custom-fields"] });
     },
   });
+
+  const reorderMutation = useMutation({
+    mutationFn: async (reorderedFields: { id: string; display_order: number }[]) => {
+      for (const field of reorderedFields) {
+        const { error } = await supabase
+          .from("custom_fields")
+          .update({ display_order: field.display_order })
+          .eq("id", field.id);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["custom-fields"] });
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to save order: " + error.message);
+      queryClient.invalidateQueries({ queryKey: ["custom-fields"] });
+    },
+  });
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !customFields) return;
+
+    const oldIndex = customFields.findIndex((f) => f.id === active.id);
+    const newIndex = customFields.findIndex((f) => f.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(customFields, oldIndex, newIndex);
+
+    // Optimistic update
+    queryClient.setQueryData(["custom-fields"], reordered);
+
+    // Persist
+    const updates = reordered.map((f, i) => ({ id: f.id, display_order: i + 1 }));
+    reorderMutation.mutate(updates);
+  };
 
   const resetForm = () => {
     setFieldForm({
@@ -308,83 +451,55 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
   );
 
   const tableContent = (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="w-12"></TableHead>
-          <TableHead>Label</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead>Visible On</TableHead>
-          <TableHead>Required</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {customFields?.map((field) => (
-          <TableRow key={field.id}>
-            <TableCell>
-              <GripVertical className="h-4 w-4 text-muted-foreground" />
-            </TableCell>
-            <TableCell className="font-medium">{field.label}</TableCell>
-            <TableCell>
-              <Badge variant="outline">
-                {field.field_type === 'text' && 'Text'}
-                {field.field_type === 'textarea' && 'Text Area'}
-                {field.field_type === 'select' && 'Dropdown'}
-                {field.field_type === 'number' && 'Number'}
-                {field.field_type === 'date' && 'Date'}
-                {field.field_type === 'checkbox' && 'Checkbox'}
-              </Badge>
-            </TableCell>
-            <TableCell>
-              {(field as any).visible_on_statuses?.length > 0 ? (
-                <div className="flex flex-wrap gap-1">
-                  {(field as any).visible_on_statuses.map((s: string) => (
-                    <Badge key={s} variant="outline" className="text-xs">{s}</Badge>
-                  ))}
-                </div>
-              ) : (
-                <span className="text-xs text-muted-foreground">All statuses</span>
-              )}
-            </TableCell>
-            <TableCell>
-              {field.is_required ? (
-                <Badge variant="destructive">Required</Badge>
-              ) : (
-                <Badge variant="secondary">Optional</Badge>
-              )}
-            </TableCell>
-            <TableCell>
-              <Switch
-                checked={field.is_active}
-                onCheckedChange={(checked) =>
-                  toggleActiveMutation.mutate({ id: field.id, is_active: checked })
-                }
-              />
-            </TableCell>
-            <TableCell className="text-right">
-              <div className="flex justify-end gap-1">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => handleEditField(field)}
-                >
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => deleteMutation.mutate(field.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </TableCell>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-12"></TableHead>
+            <TableHead>Label</TableHead>
+            <TableHead>Type</TableHead>
+            <TableHead>Visible On</TableHead>
+            <TableHead>Required</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <SortableContext items={customFields?.map(f => f.id) || []} strategy={verticalListSortingStrategy}>
+          <TableBody>
+            {customFields?.map((field) => (
+              <SortableRow
+                key={field.id}
+                field={field}
+                onEdit={handleEditField}
+                onDelete={(id) => deleteMutation.mutate(id)}
+                onToggleActive={(params) => toggleActiveMutation.mutate(params)}
+              />
+            ))}
+          </TableBody>
+        </SortableContext>
+      </Table>
+    </DndContext>
+  );
+
+  const dialogs = (
+    <>
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Custom Field</DialogTitle>
+            <DialogDescription>Update the field settings</DialogDescription>
+          </DialogHeader>
+          {fieldFormContent}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
+            <Button onClick={() => updateMutation.mutate()} disabled={!fieldForm.label || updateMutation.isPending}>
+              {updateMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 
   if (embedded) {
@@ -401,16 +516,11 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
             <DialogContent className="max-w-2xl">
               <DialogHeader>
                 <DialogTitle>Create Custom Field</DialogTitle>
-                <DialogDescription>
-                  Add a new field that will appear on all claim overview pages
-                </DialogDescription>
+                <DialogDescription>Add a new field that will appear on all claim overview pages</DialogDescription>
               </DialogHeader>
               {fieldFormContent}
               <DialogFooter>
-                <Button
-                  onClick={() => createMutation.mutate()}
-                  disabled={!fieldForm.label || createMutation.isPending}
-                >
+                <Button onClick={() => createMutation.mutate()} disabled={!fieldForm.label || createMutation.isPending}>
                   {createMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   Create Field
                 </Button>
@@ -418,33 +528,8 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
             </DialogContent>
           </Dialog>
         </div>
-
         {tableContent}
-
-        {/* Edit Dialog */}
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Edit Custom Field</DialogTitle>
-              <DialogDescription>
-                Update the field settings
-              </DialogDescription>
-            </DialogHeader>
-            {fieldFormContent}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                onClick={() => updateMutation.mutate()}
-                disabled={!fieldForm.label || updateMutation.isPending}
-              >
-                {updateMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Save Changes
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {dialogs}
       </div>
     );
   }
@@ -466,16 +551,11 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Create Custom Field</DialogTitle>
-              <DialogDescription>
-                Add a new field that will appear on all claim overview pages
-              </DialogDescription>
+              <DialogDescription>Add a new field that will appear on all claim overview pages</DialogDescription>
             </DialogHeader>
             {fieldFormContent}
             <DialogFooter>
-              <Button
-                onClick={() => createMutation.mutate()}
-                disabled={!fieldForm.label || createMutation.isPending}
-              >
+              <Button onClick={() => createMutation.mutate()} disabled={!fieldForm.label || createMutation.isPending}>
                 {createMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Create Field
               </Button>
@@ -487,39 +567,12 @@ export const CustomFieldsSettings = ({ embedded = false }: CustomFieldsSettingsP
       <Card>
         <CardHeader>
           <CardTitle>Custom Fields</CardTitle>
-          <CardDescription>
-            {customFields?.length || 0} custom field(s) configured
-          </CardDescription>
+          <CardDescription>{customFields?.length || 0} custom field(s) configured — drag to reorder</CardDescription>
         </CardHeader>
-        <CardContent>
-          {tableContent}
-        </CardContent>
+        <CardContent>{tableContent}</CardContent>
       </Card>
 
-      {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Edit Custom Field</DialogTitle>
-            <DialogDescription>
-              Update the field settings
-            </DialogDescription>
-          </DialogHeader>
-          {fieldFormContent}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => updateMutation.mutate()}
-              disabled={!fieldForm.label || updateMutation.isPending}
-            >
-              {updateMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Save Changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {dialogs}
     </div>
   );
 };
