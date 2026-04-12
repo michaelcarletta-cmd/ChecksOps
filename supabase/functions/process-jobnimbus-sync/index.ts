@@ -497,8 +497,8 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any,
     }
 
     if (mode === 'mention') {
-      // Only mention mode — no task, record that notification is cosmetic only
-      notificationResults[user.full_name] = { method: 'mention_only', note: 'JN API does not fire notifications for @mentions' };
+      // Mention-only mode — no assigned task; notification is cosmetic/supplemental
+      notificationResults[user.full_name] = { method: 'mention_only', note: 'Plain-text @mentions not confirmed to trigger JN notifications in this environment' };
     }
   }
 
