@@ -391,7 +391,8 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any,
     console.error('Error resolving JN users:', err);
   }
 
-  // Build @mention prefix (kept for visual context in note body)
+  // Build @mention prefix (cosmetic only — treated as supplemental unless proven
+  // to trigger native JN notifications in future testing)
   const mentionNames = jnUsers.map((p: any) => p.full_name).filter(Boolean);
   const mentionPrefix = mentionNames.length > 0
     ? mentionNames
@@ -441,9 +442,11 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any,
   let noteResult;
   try { noteResult = JSON.parse(responseText); } catch { noteResult = { raw: responseText }; }
 
-  // Step 2: Create fallback notification tasks for each target user
-  // JobNimbus does NOT fire notifications for @mentions in API-created notes.
-  // The reliable way to notify a user is to create a task assigned to them.
+  // Step 2: Create assigned-task notifications for each target user.
+  // Current testing indicates plain-text @mentions in API-created notes are not
+  // reliably triggering notifications in our environment, so we use assigned-task
+  // fallback for deterministic notification delivery. The "task" mode is the default;
+  // "mention" mode is available only as optional supplemental/cosmetic behavior.
   const notificationResults: Record<string, any> = {};
   let anyNotificationSent = false;
   let anyFallbackUsed = false;
@@ -460,12 +463,13 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any,
     }
 
     if (mode === 'mention' || mode === 'both') {
-      // @mention is already in the note text (cosmetic only)
-      console.log(`[NOTE SYNC] @mention included for ${user.full_name} (cosmetic, no JN notification expected)`);
+      console.log(`[NOTE SYNC] @mention included for ${user.full_name} (cosmetic/supplemental — not confirmed to trigger JN notification)`);
+      console.log(`[NOTE SYNC] [VERIFICATION] Method: mention_in_note | Target JN User ID: ${jnId} | Display Name: ${user.full_name}`);
     }
 
     if (mode === 'task' || mode === 'both') {
-      console.log(`[NOTE SYNC] Creating notification task for ${user.full_name} (${jnId})`);
+      console.log(`[NOTE SYNC] Creating assigned-task notification for ${user.full_name} (${jnId})`);
+      console.log(`[NOTE SYNC] [VERIFICATION] Method: assigned_task | Target JN User ID: ${jnId} | Display Name: ${user.full_name}`);
       try {
         const taskResult = await createNotificationTask(
           apiKey,
@@ -493,8 +497,8 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any,
     }
 
     if (mode === 'mention') {
-      // Only mention mode — no task, record that notification is cosmetic only
-      notificationResults[user.full_name] = { method: 'mention_only', note: 'JN API does not fire notifications for @mentions' };
+      // Mention-only mode — no assigned task; notification is cosmetic/supplemental
+      notificationResults[user.full_name] = { method: 'mention_only', note: 'Plain-text @mentions not confirmed to trigger JN notifications in this environment' };
     }
   }
 
