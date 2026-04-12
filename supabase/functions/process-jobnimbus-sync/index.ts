@@ -468,7 +468,8 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any,
     }
 
     if (mode === 'task' || mode === 'both') {
-      console.log(`[NOTE SYNC] Creating notification task for ${user.full_name} (${jnId})`);
+      console.log(`[NOTE SYNC] Creating assigned-task notification for ${user.full_name} (${jnId})`);
+      console.log(`[NOTE SYNC] [VERIFICATION] Method: assigned_task | Target JN User ID: ${jnId} | Display Name: ${user.full_name}`);
       try {
         const taskResult = await createNotificationTask(
           apiKey,
