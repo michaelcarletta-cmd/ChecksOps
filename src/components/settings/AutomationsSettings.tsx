@@ -27,6 +27,8 @@ interface TriggerConfig {
   inactivity_days?: number;
   // For status_change
   status?: string;
+  // For sub_status_change
+  sub_status_id?: string;
   // For task_completed
   task_title_pattern?: string;
   // For inbound_email / inbound_sms
@@ -388,6 +390,8 @@ export const AutomationsSettings = () => {
         return `After ${config.inactivity_days || 7} days of inactivity`;
       case 'status_change':
         return config.status ? `When status changes to ${config.status}` : 'On any status change';
+      case 'sub_status_change':
+        return config.sub_status_id ? `When sub-step changes to ${config.sub_status_id}` : 'On any sub-step change';
       case 'task_completed':
         return config.task_title_pattern 
           ? `When task containing "${config.task_title_pattern}" is completed` 
@@ -558,6 +562,7 @@ export const AutomationsSettings = () => {
                         <SelectItem value="scheduled">Scheduled (specific time after claim creation)</SelectItem>
                         <SelectItem value="inactivity">After Inactivity Period</SelectItem>
                         <SelectItem value="status_change">When Claim Status Changes</SelectItem>
+                        <SelectItem value="sub_status_change">When Sub-Step Changes</SelectItem>
                         <SelectItem value="task_completed">When Task is Completed</SelectItem>
                         <SelectItem value="inspection_scheduled">When Inspection is Scheduled</SelectItem>
                           <SelectItem value="inspection_upcoming_24h">24 Hours Before Inspection</SelectItem>
