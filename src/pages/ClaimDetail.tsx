@@ -370,6 +370,15 @@ const ClaimDetail = () => {
             claimId={claim.id}
             claimNumber={claim.claim_number}
           />
+
+          <SendDocumentDialog
+            open={sendDocDialogOpen}
+            onOpenChange={setSendDocDialogOpen}
+            claimId={claim.id}
+            claimNumber={claim.claim_number}
+            policyholderName={claim.policyholder_name}
+            propertyAddress={claim.property_address}
+          />
         </>
       )}
 
