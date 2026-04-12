@@ -42,6 +42,7 @@ import { OrganizationSettings } from "@/components/settings/OrganizationSettings
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 import { AuditLogSettings } from "@/components/settings/AuditLogSettings";
 import { NotificationDeliveryLogView } from "@/components/settings/NotificationDeliveryLogView";
+import { JobNimbusSyncDiagnostics } from "@/components/settings/JobNimbusSyncDiagnostics";
 
 import { useQuery } from "@tanstack/react-query";
 import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
@@ -604,6 +605,9 @@ export default function Settings() {
             <TabsTrigger value="notification-logs" className="w-full md:w-auto justify-start text-base font-medium px-4">Notification Logs</TabsTrigger>
           )}
           {isAdmin && (
+            <TabsTrigger value="jn-diagnostics" className="w-full md:w-auto justify-start text-base font-medium px-4">JN Sync Diagnostics</TabsTrigger>
+          )}
+          {isAdmin && (
             <TabsTrigger value="backup" className="w-full md:w-auto justify-start text-base font-medium px-4">Backup Status</TabsTrigger>
           )}
         </TabsList>
@@ -866,6 +870,12 @@ export default function Settings() {
         {isAdmin && (
           <TabsContent value="notification-logs" className="w-full">
             <NotificationDeliveryLogView />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="jn-diagnostics" className="w-full">
+            <JobNimbusSyncDiagnostics />
           </TabsContent>
         )}
 
