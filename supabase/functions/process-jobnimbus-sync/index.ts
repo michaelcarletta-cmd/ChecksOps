@@ -440,9 +440,9 @@ async function syncClaim(apiKey: string, claim: any, supabase: any) {
   const lastName = nameParts.slice(1).join(' ') || '';
 
   if (jobId) {
+    // Do NOT send status_name on updates — it overwrites the JN user's workflow status
     const jobData: Record<string, any> = {
       name: primaryName,
-      status_name: mapStatusToJobNimbus(claim.status),
       description: claim.loss_description || '',
       location: { address: claim.policyholder_address || '' },
     };
