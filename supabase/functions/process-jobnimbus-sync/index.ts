@@ -165,7 +165,7 @@ async function handleNotificationTest(_supabase: any, body: any) {
 
   // Minimal payload — only fields we believe trigger assignment notification
   const taskBody: Record<string, any> = {
-    record_type_name: 'To Do',
+    record_type_name: 'Task',
     title: `🔔 Darwin Notification Test — ${new Date().toISOString()}`,
     description: 'This is an automated test to verify JobNimbus task-assignment notifications are working.',
     date_start: Math.floor(Date.now() / 1000),
@@ -379,7 +379,7 @@ async function createNotificationTask(
   // Use ONLY owners — this is the field we need to verify triggers assignment notification.
   // Do NOT scatter assignment across multiple fields until we confirm which one JN honors.
   const taskBody = {
-    record_type_name: 'To Do',
+    record_type_name: 'Task',
     title,
     description,
     date_start: now,
