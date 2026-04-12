@@ -463,8 +463,8 @@ async function syncNote(apiKey: string, claim: any, payload: any, supabase: any,
     }
 
     if (mode === 'mention' || mode === 'both') {
-      // @mention is already in the note text (cosmetic only)
-      console.log(`[NOTE SYNC] @mention included for ${user.full_name} (cosmetic, no JN notification expected)`);
+      console.log(`[NOTE SYNC] @mention included for ${user.full_name} (cosmetic/supplemental — not confirmed to trigger JN notification)`);
+      console.log(`[NOTE SYNC] [VERIFICATION] Method: mention_in_note | Target JN User ID: ${jnId} | Display Name: ${user.full_name}`);
     }
 
     if (mode === 'task' || mode === 'both') {
