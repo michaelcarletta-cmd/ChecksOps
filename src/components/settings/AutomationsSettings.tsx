@@ -403,8 +403,10 @@ export const AutomationsSettings = () => {
         return `After ${config.inactivity_days || 7} days of inactivity`;
       case 'status_change':
         return config.status ? `When status changes to ${config.status}` : 'On any status change';
-      case 'sub_status_change':
-        return config.sub_status_id ? `When sub-step changes to ${config.sub_status_id}` : 'On any sub-step change';
+      case 'sub_status_change': {
+        const subName = subStatuses?.find(s => s.id === config.sub_status_id)?.name;
+        return config.sub_status_id ? `When sub-step: ${subName || config.sub_status_id}` : 'On any sub-step change';
+      }
       case 'task_completed':
         return config.task_title_pattern 
           ? `When task containing "${config.task_title_pattern}" is completed` 
