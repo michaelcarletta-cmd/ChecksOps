@@ -4114,6 +4114,75 @@ export type Database = {
           },
         ]
       }
+      claim_line_item_justifications: {
+        Row: {
+          carrier_facing_text: string | null
+          claim_id: string
+          code_support: Json | null
+          confidence_score: number | null
+          created_at: string
+          estimate_line_id: string | null
+          id: string
+          inline_note: string | null
+          manufacturer_support: Json | null
+          missing_evidence_json: Json | null
+          normalized_item: string
+          output_mode: string | null
+          policy_support: Json | null
+          support_strength: string | null
+          updated_at: string
+        }
+        Insert: {
+          carrier_facing_text?: string | null
+          claim_id: string
+          code_support?: Json | null
+          confidence_score?: number | null
+          created_at?: string
+          estimate_line_id?: string | null
+          id?: string
+          inline_note?: string | null
+          manufacturer_support?: Json | null
+          missing_evidence_json?: Json | null
+          normalized_item: string
+          output_mode?: string | null
+          policy_support?: Json | null
+          support_strength?: string | null
+          updated_at?: string
+        }
+        Update: {
+          carrier_facing_text?: string | null
+          claim_id?: string
+          code_support?: Json | null
+          confidence_score?: number | null
+          created_at?: string
+          estimate_line_id?: string | null
+          id?: string
+          inline_note?: string | null
+          manufacturer_support?: Json | null
+          missing_evidence_json?: Json | null
+          normalized_item?: string
+          output_mode?: string | null
+          policy_support?: Json | null
+          support_strength?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_line_item_justifications_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_line_item_justifications_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_loss_of_use_expenses: {
         Row: {
           amount: number
@@ -10467,6 +10536,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      line_item_requirement_rules: {
+        Row: {
+          code_requirement_text: string | null
+          common_pushback: string | null
+          created_at: string
+          evidence_required: string[] | null
+          id: string
+          manufacturer_family: string | null
+          manufacturer_requirement_text: string | null
+          normalized_item: string
+          policy_theory: string | null
+          rebuttal_template: string | null
+          trade: string
+          updated_at: string
+        }
+        Insert: {
+          code_requirement_text?: string | null
+          common_pushback?: string | null
+          created_at?: string
+          evidence_required?: string[] | null
+          id?: string
+          manufacturer_family?: string | null
+          manufacturer_requirement_text?: string | null
+          normalized_item: string
+          policy_theory?: string | null
+          rebuttal_template?: string | null
+          trade?: string
+          updated_at?: string
+        }
+        Update: {
+          code_requirement_text?: string | null
+          common_pushback?: string | null
+          created_at?: string
+          evidence_required?: string[] | null
+          id?: string
+          manufacturer_family?: string | null
+          manufacturer_requirement_text?: string | null
+          normalized_item?: string
+          policy_theory?: string | null
+          rebuttal_template?: string | null
+          trade?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       linked_claims: {
         Row: {
