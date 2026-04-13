@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { ExecutionTask, getStaleStatus, isActiveStatus, isBacklogLikeStatus, isBlockedStatus } from "@/services/taskExecutionService";
 import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function useExecutionQueue() {
   const [activeTasks, setActiveTasks] = useState<ExecutionTask[]>([]);
@@ -10,8 +11,11 @@ export function useExecutionQueue() {
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const fetchTasks = useCallback(async () => {
+    // Invalidate any stale task caches
+    queryClient.invalidateQueries({ queryKey: ["tasks"] });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       setCurrentUserId(null);
