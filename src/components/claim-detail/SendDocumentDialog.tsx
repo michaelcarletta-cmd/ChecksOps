@@ -90,7 +90,10 @@ export function SendDocumentDialog({
   const [loadingContacts, setLoadingContacts] = useState(false);
   const [orgId, setOrgId] = useState<string | null>(null);
 
-  const pdfFiles = claimFiles.filter(f =>
+  const [fetchedFiles, setFetchedFiles] = useState<Array<{ id: string; file_name: string; file_path: string }>>([]);
+
+  const allFiles = claimFiles.length > 0 ? claimFiles : fetchedFiles;
+  const pdfFiles = allFiles.filter(f =>
     f.file_name?.toLowerCase().endsWith(".pdf")
   );
 
