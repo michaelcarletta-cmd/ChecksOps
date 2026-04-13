@@ -1,7 +1,7 @@
 /**
  * Central model router: routes tasks with smart model selection.
  * Default to gpt-4o-mini for cost efficiency; upgrade to gpt-4o only
- * when prompt is large (>1500 chars) or explicitly forced.
+ * for final-output strategic tasks or very large prompts.
  */
 
 export type DarwinTaskType =
@@ -40,6 +40,13 @@ const SEARCH_ELIGIBLE_TASKS: Set<DarwinTaskType> = new Set([
   "policy_qa",
 ]);
 
+/** Tasks whose final output justifies gpt-4o cost */
+const STRONG_MODEL_TASKS: Set<DarwinTaskType> = new Set([
+  "rebuttal",
+  "demand_package",
+  "war_room",
+]);
+
 /** Keywords that indicate a search-worthy query */
 const SEARCH_TRIGGER_KEYWORDS = [
   "building code", "manufacturer", "state law", "statute",
@@ -48,23 +55,16 @@ const SEARCH_TRIGGER_KEYWORDS = [
 
 /**
  * Determines if Tavily search should fire for a given task + query.
- * Skips search for low-value queries to save tokens.
  */
 export function shouldTriggerSearch(task: DarwinTaskType, query: string): boolean {
-  // Only search-eligible tasks can trigger search
   if (!SEARCH_ELIGIBLE_TASKS.has(task)) return false;
-
-  // Strategy and policy_qa always search
   if (task === "strategy_research_summary" || task === "policy_qa") return true;
-
-  // Other eligible tasks: only search if query contains relevant keywords
   const lower = query.toLowerCase();
   return SEARCH_TRIGGER_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
 /**
- * Route a task to model config.
- * All tasks default to gpt-4o-mini. Use smartRouteModel() to conditionally upgrade.
+ * Route a task to model config. Everything defaults to gpt-4o-mini.
  */
 export function routeTask(task: DarwinTaskType): ModelConfig {
   if (SEARCH_ELIGIBLE_TASKS.has(task)) {
@@ -75,7 +75,6 @@ export function routeTask(task: DarwinTaskType): ModelConfig {
       searchMode: "auto",
     };
   }
-  // Operational tasks
   return {
     model: "gpt-4o-mini",
     maxTokens: 2000,
@@ -85,14 +84,15 @@ export function routeTask(task: DarwinTaskType): ModelConfig {
 }
 
 /**
- * Upgrade model to gpt-4o when prompt is large or explicitly forced.
+ * Upgrade model to gpt-4o ONLY for final-output tasks or very large prompts.
  */
 export function smartRouteModel(
   config: ModelConfig,
+  task: DarwinTaskType,
   userPromptLength: number,
   forceStrong?: boolean,
 ): ModelConfig {
-  if (forceStrong || userPromptLength > 1500) {
+  if (forceStrong || STRONG_MODEL_TASKS.has(task) || userPromptLength > 1500) {
     return { ...config, model: "gpt-4o", maxTokens: 4000 };
   }
   return config;
