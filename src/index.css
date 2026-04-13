@@ -134,3 +134,81 @@ All colors MUST be HSL.
 .docx-preview h1 { font-size: 18pt; }
 .docx-preview h2 { font-size: 14pt; }
 .docx-preview h3 { font-size: 12pt; }
+
+/* Print styles for Line Item Justification Engine */
+@media print {
+  body {
+    background: white !important;
+    background-image: none !important;
+    color: black !important;
+  }
+
+  /* Hide everything except the justification panel */
+  body > *:not(#root) { display: none !important; }
+
+  #root > *,
+  #root * {
+    visibility: hidden;
+    position: static;
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+  }
+
+  .print-justification-panel,
+  .print-justification-panel * {
+    visibility: visible !important;
+    color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .print-justification-panel {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: white !important;
+    padding: 0.5in !important;
+  }
+
+  .print-justification-panel [data-state="closed"] > [data-radix-collapsible-content] {
+    display: block !important;
+    visibility: visible !important;
+    height: auto !important;
+  }
+
+  /* Force all collapsible content visible for print */
+  .print-justification-panel [data-radix-collapsible-content] {
+    display: block !important;
+    visibility: visible !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .print-justification-panel .bg-muted\/30 {
+    background: #f5f5f5 !important;
+    border: 1px solid #ddd !important;
+  }
+
+  .print-justification-panel .bg-destructive\/10 {
+    background: #fff0f0 !important;
+    border: 1px solid #fcc !important;
+  }
+
+  .print-justification-panel .text-muted-foreground {
+    color: #444 !important;
+  }
+
+  .print-justification-panel .text-primary {
+    color: #2563eb !important;
+  }
+
+  .print-justification-panel .text-destructive {
+    color: #dc2626 !important;
+  }
+}
