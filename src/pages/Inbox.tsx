@@ -5,10 +5,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Mail, FileSignature, ArrowRight, Clock, Bot, MessageSquare, Brain } from "lucide-react";
+import { Loader2, Mail, FileSignature, ArrowRight, Clock, MessageSquare, Brain } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
-import { PendingApprovals } from "@/components/inbox/PendingApprovals";
+import { InboxSMSQuickReply } from "@/components/inbox/InboxSMSQuickReply";
 import { InboxSMSQuickReply } from "@/components/inbox/InboxSMSQuickReply";
 import { DarwinSMSActivityLog } from "@/components/inbox/DarwinSMSActivityLog";
 
