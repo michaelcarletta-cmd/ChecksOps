@@ -357,8 +357,10 @@ function MessageBubble({ message, onRetry }: { message: CopilotMessage; onRetry?
   }
 
   const metaLabel = !isUser && message.meta?.model
-    ? `${message.meta.model}${message.meta.cached ? ' • cached' : ''}${message.meta.usedSearch ? ` • search: ${message.meta.sources?.length ? 'basic' : 'auto'}` : ''}`
+    ? `${message.meta.model}${message.meta.cached ? ' • cached' : ''}${message.meta.usedSearch ? ` • search${message.meta.searchCount && message.meta.searchCount > 1 ? ` (×${message.meta.searchCount})` : ''}` : ''}`
     : null;
+
+  const sources = !isUser && message.meta?.sources?.length ? message.meta.sources : null;
 
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
@@ -375,6 +377,16 @@ function MessageBubble({ message, onRetry }: { message: CopilotMessage; onRetry?
             <span className="text-muted-foreground italic">Generating…</span>
           )) : undefined}
         </div>
+        {sources && (
+          <div className="mt-2 pt-1.5 border-t border-border/30 space-y-0.5">
+            <p className="text-[9px] font-medium text-muted-foreground/70 mb-0.5">Sources ({sources.length})</p>
+            {sources.map((s, i) => (
+              <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="block text-[9px] text-primary/70 hover:text-primary truncate">
+                [{i + 1}] {s.title}
+              </a>
+            ))}
+          </div>
+        )}
         {message.isError && onRetry && (
           <Button variant="ghost" size="sm" className="mt-1.5 h-6 text-[10px] gap-1 text-destructive hover:text-destructive" onClick={onRetry}>
             <RefreshCw className="h-3 w-3" /> Retry
