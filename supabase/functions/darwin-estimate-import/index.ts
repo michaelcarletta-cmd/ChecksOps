@@ -322,10 +322,11 @@ Deno.serve(async (req) => {
       if (extractedText.startsWith('[BASE64_DOCUMENT:')) {
         console.warn('Rejected legacy BASE64_DOCUMENT format');
         return new Response(JSON.stringify({
+          ok: false,
           error: 'Document could not be read. Please re-upload the file.',
           extraction_confidence: 0,
           extracted_text_source: 'none',
-        }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
       textForExtraction = extractedText;
       extractedTextSource = 'plain_text';
