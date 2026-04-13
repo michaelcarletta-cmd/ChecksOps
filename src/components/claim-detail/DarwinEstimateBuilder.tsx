@@ -15,6 +15,7 @@ import {
   Info, ArrowRightLeft, Tag, BookOpen, Star, TrendingUp, Upload
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EstimateImportPreview } from "./EstimateImportPreview";
 
 const REASON_TAGS = [
   { value: "code_required", label: "Code Required", color: "bg-chart-1/20 text-chart-1 border-chart-1/30" },
