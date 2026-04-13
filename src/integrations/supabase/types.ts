@@ -9277,6 +9277,59 @@ export type Database = {
         }
         Relationships: []
       }
+      docupost_contacts: {
+        Row: {
+          address1: string
+          address2: string | null
+          city: string
+          created_at: string
+          created_by: string | null
+          id: string
+          label: string | null
+          name: string
+          org_id: string
+          state: string
+          updated_at: string
+          zip: string
+        }
+        Insert: {
+          address1: string
+          address2?: string | null
+          city: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label?: string | null
+          name: string
+          org_id: string
+          state: string
+          updated_at?: string
+          zip: string
+        }
+        Update: {
+          address1?: string
+          address2?: string | null
+          city?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label?: string | null
+          name?: string
+          org_id?: string
+          state?: string
+          updated_at?: string
+          zip?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "docupost_contacts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "orgs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_connections: {
         Row: {
           created_at: string
