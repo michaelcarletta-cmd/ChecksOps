@@ -2,14 +2,14 @@ import { useState, useEffect, Suspense, lazy } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calculator } from "lucide-react";
 
-
 const DarwinEstimateComparison = lazy(() => import("@/components/claim-detail/DarwinEstimateComparison").then(m => ({ default: m.DarwinEstimateComparison })));
 const DarwinEstimateGapAnalysis = lazy(() => import("@/components/claim-detail/DarwinEstimateGapAnalysis").then(m => ({ default: m.DarwinEstimateGapAnalysis })));
 const DarwinSupplementGenerator = lazy(() => import("@/components/claim-detail/DarwinSupplementGenerator").then(m => ({ default: m.DarwinSupplementGenerator })));
 const DarwinEstimateBuilder = lazy(() => import("@/components/claim-detail/DarwinEstimateBuilder").then(m => ({ default: m.DarwinEstimateBuilder })));
 const DarwinScopeEngine = lazy(() => import("@/components/claim-detail/DarwinScopeEngine").then(m => ({ default: m.DarwinScopeEngine })));
+const LineItemJustificationPanel = lazy(() => import("@/components/claim-detail/LineItemJustificationPanel").then(m => ({ default: m.LineItemJustificationPanel })));
 
-type SectionKey = "estimate_comparison" | "gap_analysis" | "supplement" | "estimate_builder" | "scope_engine";
+type SectionKey = "estimate_comparison" | "gap_analysis" | "supplement" | "estimate_builder" | "scope_engine" | "justification";
 
 const STORAGE_KEY = "estimate-workspace-selected-section";
 
@@ -19,6 +19,7 @@ const sectionOptions: { value: SectionKey; label: string }[] = [
   { value: "supplement", label: "Supplement Generator" },
   { value: "estimate_builder", label: "Estimate Builder" },
   { value: "scope_engine", label: "Scope Engine" },
+  { value: "justification", label: "Line Item Justification" },
 ];
 
 interface EstimateWorkspacePanelProps {
@@ -36,6 +37,9 @@ export const EstimateWorkspacePanel = ({ claimId, claim }: EstimateWorkspacePane
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, selectedSection);
   }, [selectedSection]);
+
+  // Placeholder line items from claim data - will be populated from estimate tables
+  const lineItems = claim?.estimate_items || [];
 
   return (
     <div className="space-y-4">
@@ -62,12 +66,12 @@ export const EstimateWorkspacePanel = ({ claimId, claim }: EstimateWorkspacePane
       </div>
 
       <Suspense fallback={<div className="text-xs text-muted-foreground py-4">Loading…</div>}>
-        
         {selectedSection === "estimate_comparison" && <DarwinEstimateComparison claimId={claimId} claim={claim} />}
         {selectedSection === "gap_analysis" && <DarwinEstimateGapAnalysis claimId={claimId} claim={claim} />}
         {selectedSection === "supplement" && <DarwinSupplementGenerator claimId={claimId} claim={claim} />}
         {selectedSection === "estimate_builder" && <DarwinEstimateBuilder claimId={claimId} claim={claim} />}
         {selectedSection === "scope_engine" && <DarwinScopeEngine claimId={claimId} claim={claim} />}
+        {selectedSection === "justification" && <LineItemJustificationPanel claimId={claimId} claim={claim} lineItems={lineItems} />}
       </Suspense>
     </div>
   );

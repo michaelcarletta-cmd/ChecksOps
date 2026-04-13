@@ -97,14 +97,14 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
   };
 
   const confidenceBadge = (score: number) => {
-    if (score >= 75) return <Badge variant="default" className="bg-green-600 text-white text-[10px]">{score}</Badge>;
+    if (score >= 75) return <Badge variant="default" className="text-[10px]">{score}</Badge>;
     if (score >= 45) return <Badge variant="secondary" className="text-[10px]">{score}</Badge>;
     return <Badge variant="destructive" className="text-[10px]">{score}</Badge>;
   };
 
   const strengthIcon = (s: string) => {
-    if (s === "direct") return <CheckCircle className="h-3.5 w-3.5 text-green-600" />;
-    if (s === "inferred") return <Shield className="h-3.5 w-3.5 text-yellow-600" />;
+    if (s === "direct") return <CheckCircle className="h-3.5 w-3.5 text-primary" />;
+    if (s === "inferred") return <Shield className="h-3.5 w-3.5 text-muted-foreground" />;
     return <AlertTriangle className="h-3.5 w-3.5 text-destructive" />;
   };
 
