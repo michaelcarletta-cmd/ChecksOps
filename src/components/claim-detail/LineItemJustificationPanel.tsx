@@ -21,10 +21,14 @@ import {
   FileText,
   XCircle,
   Printer,
+  BookOpen,
+  Database,
+  Building2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { justifyLineItems, type JustificationResult, type ConfidenceLabel } from "@/lib/justification/justificationEngine";
 import { supabase } from "@/integrations/supabase/client";
+
+// ── Types ───────────────────────────────────────────────────────
 
 interface LineItemJustificationPanelProps {
   claimId: string;
@@ -33,11 +37,66 @@ interface LineItemJustificationPanelProps {
 }
 
 type ViewMode = "internal" | "carrier";
+type ConfidenceLabel = "High" | "Medium" | "Low";
+type ConfidenceLevel = "direct" | "inferred" | "needs_evidence";
+
+interface SourceRef {
+  type: "kb" | "code" | "manufacturer";
+  label: string;
+  content: string;
+}
+
+interface JustificationResult {
+  normalizedItem: string;
+  trade: string;
+  system: string;
+  whyRequired: string;
+  manufacturer: {
+    text: string;
+    functionText: string;
+    failureRisk: string;
+    confidence: ConfidenceLevel;
+    sourceName?: string;
+  };
+  code: {
+    text: string;
+    confidence: ConfidenceLevel;
+    reference: string;
+    sourceName?: string;
+  };
+  policy: {
+    text: string;
+    confidence: ConfidenceLevel;
+  };
+  missingEvidence: string[];
+  confidenceScore: number;
+  confidenceLabel: ConfidenceLabel;
+  supportStrength: ConfidenceLevel;
+  inlineNote: string;
+  carrierFacingText: string;
+  sources?: SourceRef[];
+}
+
+interface JustificationMetadata {
+  kbChunksUsed: number;
+  codeCitationsUsed: number;
+  mfrSpecsUsed: number;
+  stateCode: string | null;
+  stateSupported: boolean;
+}
+
+// ── Sub-components ──────────────────────────────────────────────
 
 const CONFIDENCE_STYLES: Record<ConfidenceLabel, { color: string; bg: string }> = {
   High: { color: "text-primary", bg: "bg-primary/10 border-primary/20" },
   Medium: { color: "text-secondary-foreground", bg: "bg-secondary border-secondary" },
   Low: { color: "text-destructive", bg: "bg-destructive/10 border-destructive/20" },
+};
+
+const SOURCE_STYLES: Record<string, { icon: typeof BookOpen; color: string; bg: string; label: string }> = {
+  kb: { icon: Database, color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20", label: "Knowledge Base" },
+  code: { icon: Building2, color: "text-orange-400", bg: "bg-orange-500/10 border-orange-500/20", label: "Building Code" },
+  manufacturer: { icon: BookOpen, color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20", label: "Manufacturer" },
 };
 
 function ConfidenceBadge({ label }: { label: ConfidenceLabel }) {
@@ -55,7 +114,63 @@ function StrengthIcon({ confidence }: { confidence: string }) {
   return <XCircle className="h-3.5 w-3.5 text-destructive" />;
 }
 
-function AuthoritySection({ title, icon, text, subText }: { title: string; icon: React.ReactNode; text: string; subText?: string }) {
+function SourceBadge({ source }: { source: SourceRef }) {
+  const style = SOURCE_STYLES[source.type] || SOURCE_STYLES.kb;
+  const Icon = style.icon;
+  return (
+    <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${style.bg} ${style.color} gap-1`}>
+      <Icon className="h-2.5 w-2.5" />
+      {source.label.length > 40 ? source.label.slice(0, 40) + "…" : source.label}
+    </Badge>
+  );
+}
+
+function SourceSection({ sources }: { sources: SourceRef[] }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!sources?.length) return null;
+
+  return (
+    <div className="space-y-1.5">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {expanded ? <ChevronDown className="h-2.5 w-2.5" /> : <ChevronRight className="h-2.5 w-2.5" />}
+        View Sources ({sources.length})
+      </button>
+      <div className="flex flex-wrap gap-1">
+        {sources.map((s, i) => (
+          <SourceBadge key={i} source={s} />
+        ))}
+      </div>
+      {expanded && (
+        <div className="space-y-1.5 mt-1">
+          {sources.map((s, i) => {
+            const style = SOURCE_STYLES[s.type] || SOURCE_STYLES.kb;
+            return (
+              <div key={i} className={`p-2 rounded border text-[10px] ${style.bg}`}>
+                <p className={`font-semibold ${style.color} mb-0.5`}>{s.label}</p>
+                <p className="text-muted-foreground leading-relaxed">{s.content}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AuthoritySection({
+  title,
+  icon,
+  text,
+  subText,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  text: string;
+  subText?: string;
+}) {
   return (
     <div className="space-y-1">
       <p className="font-semibold text-[11px] flex items-center gap-1.5">
@@ -67,23 +182,50 @@ function AuthoritySection({ title, icon, text, subText }: { title: string; icon:
   );
 }
 
+function MetadataBanner({ metadata }: { metadata: JustificationMetadata | null }) {
+  if (!metadata) return null;
+  return (
+    <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground pb-2 border-b border-border mb-2">
+      <span className="flex items-center gap-1">
+        <Database className="h-3 w-3 text-blue-400" /> {metadata.kbChunksUsed} KB chunks
+      </span>
+      <span className="flex items-center gap-1">
+        <Building2 className="h-3 w-3 text-orange-400" /> {metadata.codeCitationsUsed} code refs
+      </span>
+      <span className="flex items-center gap-1">
+        <BookOpen className="h-3 w-3 text-emerald-400" /> {metadata.mfrSpecsUsed} mfr specs
+      </span>
+      {metadata.stateCode && (
+        <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+          {metadata.stateCode} codes
+        </Badge>
+      )}
+      {!metadata.stateSupported && (
+        <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-destructive/10 text-destructive border-destructive/20">
+          State not in NJ/PA/SC — codes skipped
+        </Badge>
+      )}
+    </div>
+  );
+}
+
+// ── Main Component ──────────────────────────────────────────────
+
 export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineItemJustificationPanelProps) {
   const [results, setResults] = useState<JustificationResult[]>([]);
+  const [metadata, setMetadata] = useState<JustificationMetadata | null>(null);
   const [loading, setLoading] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>("internal");
   const printRef = useRef<HTMLDivElement>(null);
 
+  const stateCode = claim?.property_state || claim?.policyholder_state || "";
+
   const handlePrint = useCallback(() => {
     if (!results.length) return;
-    // Expand all rows before printing
     setExpandedRows(new Set(results.map((_, i) => i)));
-    setTimeout(() => {
-      window.print();
-    }, 100);
+    setTimeout(() => window.print(), 100);
   }, [results]);
-
-  const stateCode = claim?.property_state || claim?.policyholder_state || "NJ";
 
   const handleJustify = useCallback(async () => {
     if (!lineItems?.length) {
@@ -91,35 +233,30 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
       return;
     }
     setLoading(true);
+    setMetadata(null);
     try {
-      const justified = justifyLineItems(lineItems, {
-        stateCode,
-        manufacturer: claim?.manufacturer || null,
-        policyText: claim?.policy_text || null,
-        lossType: claim?.loss_type || null,
+      const { data, error } = await supabase.functions.invoke("darwin-justify-line-items", {
+        body: {
+          claimId,
+          lineItems,
+          stateCode,
+          manufacturer: claim?.manufacturer || null,
+          lossType: claim?.loss_type || null,
+          viewMode,
+        },
       });
-      setResults(justified);
 
-      for (const r of justified) {
-        await supabase.from("claim_line_item_justifications" as any).upsert({
-          claim_id: claimId,
-          normalized_item: r.normalizedItem,
-          manufacturer_support: { text: r.manufacturer.text, confidence: r.manufacturer.confidence, functionText: r.manufacturer.functionText },
-          code_support: { text: r.code.text, confidence: r.code.confidence, reference: r.code.reference },
-          policy_support: { text: r.policy.text, confidence: r.policy.confidence },
-          support_strength: r.supportStrength,
-          confidence_score: r.confidenceScore,
-          missing_evidence_json: r.missingEvidence,
-          carrier_facing_text: r.carrierFacingText,
-          inline_note: r.inlineNote,
-          output_mode: viewMode,
-        } as any);
+      if (error) throw error;
+      if (!data || data.ok === false) {
+        throw new Error(data?.error || "Justification failed");
       }
 
-      toast.success(`${justified.length} line items justified.`);
-    } catch (err) {
+      setResults(data.justifications || []);
+      setMetadata(data.metadata || null);
+      toast.success(`${(data.justifications || []).length} line items justified with real source data.`);
+    } catch (err: any) {
       console.error("Justification error:", err);
-      toast.error("Failed to generate justifications.");
+      toast.error(err.message || "Failed to generate justifications.");
     } finally {
       setLoading(false);
     }
@@ -170,7 +307,7 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
             )}
             <Button size="sm" onClick={handleJustify} disabled={loading} className="h-7 text-[11px]">
               {loading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <FileText className="h-3 w-3 mr-1" />}
-              Justify Lines
+              {loading ? "Analyzing Sources…" : "Justify Lines"}
             </Button>
           </div>
         </div>
@@ -178,7 +315,11 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
 
       <CardContent>
         {loading && (
-          <div className="space-y-2">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Querying knowledge base, building codes & manufacturer specs…
+            </div>
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-10 w-full" />
             ))}
@@ -187,12 +328,13 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
 
         {!loading && results.length === 0 && (
           <p className="text-xs text-muted-foreground py-4">
-            Click "Justify Lines" to generate carrier-ready justifications for each line item using manufacturer, code, and policy authority.
+            Click "Justify Lines" to generate source-backed justifications using your knowledge base, building codes (NJ/PA/SC), and manufacturer specifications.
           </p>
         )}
 
         {!loading && results.length > 0 && (
           <div className="overflow-y-auto max-h-[calc(100vh-200px)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 pr-2">
+            <MetadataBanner metadata={metadata} />
             <div className="space-y-1">
               {results.map((r, idx) => {
                 const expanded = expandedRows.has(idx);
@@ -220,7 +362,7 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
                               <AuthoritySection
                                 title="Manufacturer"
                                 icon={<StrengthIcon confidence={r.manufacturer.confidence} />}
-                                text={r.manufacturer.functionText}
+                                text={r.manufacturer.functionText || r.manufacturer.text}
                                 subText={r.manufacturer.failureRisk}
                               />
                               <AuthoritySection
@@ -235,7 +377,11 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
                               />
                             </div>
 
-                            {r.missingEvidence.length > 0 && (
+                            {r.sources && r.sources.length > 0 && (
+                              <SourceSection sources={r.sources} />
+                            )}
+
+                            {r.missingEvidence && r.missingEvidence.length > 0 && (
                               <div className="flex items-start gap-1.5 p-2.5 bg-destructive/10 border border-destructive/20 rounded">
                                 <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
                                 <div>
@@ -248,7 +394,12 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
                             )}
                           </>
                         ) : (
-                          <p className="leading-relaxed">{r.carrierFacingText}</p>
+                          <>
+                            <p className="leading-relaxed">{r.carrierFacingText}</p>
+                            {r.sources && r.sources.length > 0 && (
+                              <SourceSection sources={r.sources} />
+                            )}
+                          </>
                         )}
                       </div>
                     </CollapsibleContent>
