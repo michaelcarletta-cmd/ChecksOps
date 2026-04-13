@@ -15,6 +15,7 @@ import {
   Info, ArrowRightLeft, Tag, BookOpen, Star, TrendingUp, Upload
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EstimateImportPreview } from "./EstimateImportPreview";
 
 const REASON_TAGS = [
   { value: "code_required", label: "Code Required", color: "bg-chart-1/20 text-chart-1 border-chart-1/30" },
@@ -78,6 +79,10 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
   const [saving, setSaving] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importPreview, setImportPreview] = useState<any>(null);
+  const [importFileName, setImportFileName] = useState("");
+  const [importConfirming, setImportConfirming] = useState(false);
+  const [importPayload, setImportPayload] = useState<any>(null);
   const [collapsedTrades, setCollapsedTrades] = useState<Set<string>>(new Set());
   const [showDepreciation, setShowDepreciation] = useState(false);
   const [showOP, setShowOP] = useState(false);
@@ -328,14 +333,13 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
     if (fileInputRef.current) fileInputRef.current.value = "";
 
     setImporting(true);
+    setImportFileName(file.name);
     try {
-      let extractedText = "";
+      const payload: any = { claimId, fileName: file.name, previewOnly: true };
 
-      // Text-based extraction for common formats
       if (file.type === "text/csv" || file.name.endsWith(".csv") || file.type === "text/plain" || file.name.endsWith(".txt")) {
-        extractedText = await file.text();
+        payload.extractedText = await file.text();
       } else if (file.type.includes("spreadsheet") || file.name.endsWith(".xlsx") || file.name.endsWith(".xls")) {
-        // Use xlsx library for spreadsheets
         const { read, utils } = await import("xlsx");
         const buffer = await file.arrayBuffer();
         const wb = read(buffer);
@@ -344,9 +348,8 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
           const ws = wb.Sheets[name];
           allText.push(utils.sheet_to_csv(ws));
         });
-        extractedText = allText.join("\n\n");
+        payload.extractedText = allText.join("\n\n");
       } else {
-        // For PDFs and other binary docs, send full base64 for multimodal vision extraction
         const buffer = await file.arrayBuffer();
         const uint8 = new Uint8Array(buffer);
         let binary = "";
@@ -354,58 +357,53 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
         for (let i = 0; i < uint8.length; i += chunkSize) {
           binary += String.fromCharCode.apply(null, Array.from(uint8.slice(i, i + chunkSize)));
         }
-        const base64 = btoa(binary);
-        
-        const { data: extractData, error: extractError } = await supabase.functions.invoke("darwin-estimate-import", {
-          body: {
-            claimId,
-            base64Data: base64,
-            mimeType: file.type || "application/pdf",
-            fileName: file.name,
-          },
-        });
-        if (extractError) throw extractError;
-        if (extractData?.error) throw new Error(extractData.error);
-
-        toast({
-          title: `${extractData?.imported || 0} line items imported`,
-          description: `From ${file.name} (${extractData?.document_type || "estimate"})`,
-        });
-        loadLines();
-        if (extractData?.document_type === "carrier_estimate") setShowCarrier(true);
-        refreshOrchestrator();
-        setImporting(false);
-        return;
+        payload.base64Data = btoa(binary);
+        payload.mimeType = file.type || "application/pdf";
       }
 
-      if (!extractedText.trim()) {
+      if (payload.extractedText && !payload.extractedText.trim()) {
         toast({ title: "No text extracted", description: "Could not read content from this file.", variant: "destructive" });
         setImporting(false);
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke("darwin-estimate-import", {
-        body: {
-          claimId,
-          extractedText,
-          fileName: file.name,
-        },
-      });
+      const { data, error } = await supabase.functions.invoke("darwin-estimate-import", { body: payload });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
+      // Show preview dialog
+      setImportPreview(data);
+      setImportPayload({ ...payload, previewOnly: false });
+    } catch (err: any) {
+      toast({ title: "Import failed", description: err.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleConfirmImport = async (items: any[]) => {
+    if (!importPayload) return;
+    setImportConfirming(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("darwin-estimate-import", {
+        body: importPayload,
+      });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
       toast({
         title: `${data?.imported || 0} line items imported`,
-        description: `From ${file.name} (${data?.document_type || "estimate"})`,
+        description: `From ${importFileName} (${data?.document_type || "estimate"})`,
       });
       loadLines();
       if (data?.document_type === "carrier_estimate") setShowCarrier(true);
       refreshOrchestrator();
+      setImportPreview(null);
+      setImportPayload(null);
     } catch (err: any) {
       toast({ title: "Import failed", description: err.message, variant: "destructive" });
     } finally {
-      setImporting(false);
+      setImportConfirming(false);
     }
   };
 
@@ -748,6 +746,17 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
           )}
         </CardContent>
       </Card>
+
+      {importPreview && (
+        <EstimateImportPreview
+          open={!!importPreview}
+          onClose={() => { setImportPreview(null); setImportPayload(null); }}
+          data={importPreview}
+          fileName={importFileName}
+          onConfirm={handleConfirmImport}
+          confirming={importConfirming}
+        />
+      )}
     </TooltipProvider>
   );
 };
