@@ -241,7 +241,7 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
                 );
               })}
             </div>
-          </ScrollArea>
+          </div>
         )}
       </CardContent>
     </Card>
