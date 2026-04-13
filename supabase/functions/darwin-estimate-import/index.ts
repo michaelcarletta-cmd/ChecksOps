@@ -305,8 +305,8 @@ Deno.serve(async (req) => {
         const errBody = await visionResp.text();
         console.error(`Vision extraction failed (${visionResp.status}):`, errBody.slice(0, 500));
         if (visionResp.status === 429 || visionResp.status === 402) {
-          return new Response(JSON.stringify({ error: visionResp.status === 429 ? 'Rate limit exceeded' : 'Credits required' }), {
-            status: visionResp.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          return new Response(JSON.stringify({ ok: false, error: visionResp.status === 429 ? 'Rate limit exceeded — please try again shortly.' : 'AI credits required — please add funds.' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
         throw new Error(`Vision extraction failed: ${visionResp.status}`);
@@ -390,8 +390,8 @@ Deno.serve(async (req) => {
 
       if (!aiResp.ok) {
         if (aiResp.status === 429 || aiResp.status === 402) {
-          return new Response(JSON.stringify({ error: aiResp.status === 429 ? 'Rate limit exceeded' : 'Credits required' }), {
-            status: aiResp.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          return new Response(JSON.stringify({ ok: false, error: aiResp.status === 429 ? 'Rate limit exceeded — please try again shortly.' : 'AI credits required — please add funds.' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
         throw new Error(`AI gateway error ${aiResp.status}`);
