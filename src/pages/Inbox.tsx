@@ -83,18 +83,6 @@ const Inbox = () => {
     },
   });
 
-  // Fetch pending AI actions count
-  const { data: pendingCount } = useQuery({
-    queryKey: ["pending-ai-actions-count"],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from("claim_ai_pending_actions")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "pending");
-      if (error) throw error;
-      return count || 0;
-    },
-  });
 
   // Count inbound SMS messages
   const inboundSmsCount = smsMessages?.filter(sms => sms.direction === 'inbound').length || 0;
