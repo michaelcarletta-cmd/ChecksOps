@@ -1,6 +1,6 @@
 /**
  * Simple in-memory response cache keyed by (taskType, claimId, model, searchMode, promptHash).
- * TTL: 5 minutes. Bounded to 200 entries (LRU eviction).
+ * TTL: 24 hours. Bounded to 200 entries (LRU eviction).
  */
 
 import type { SearchMode, DarwinTaskType } from "./modelRouter.ts";
@@ -12,7 +12,7 @@ interface CacheEntry {
 }
 
 const MAX_ENTRIES = 200;
-const TTL_MS = 5 * 60 * 1000;
+const TTL_MS = 1000 * 60 * 60 * 24; // 24 hours — claim data doesn't change frequently
 const cache = new Map<string, CacheEntry>();
 
 export function buildCacheKey(
