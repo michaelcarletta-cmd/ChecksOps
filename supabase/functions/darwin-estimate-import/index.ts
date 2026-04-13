@@ -89,6 +89,32 @@ function isDescriptionGroundedInSource(description: string, normalizedSourceText
   return tokenMatches >= Math.max(2, Math.ceil(significantTokens.length * 0.6));
 }
 
+function buildLineItemKey(item: any): string {
+  return [
+    normalizeForSourceMatch(item.description || ''),
+    normalizeForSourceMatch(item.trade || ''),
+    String(Number(item.quantity || 0).toFixed(3)),
+    String((item.unit || 'EA').toUpperCase()),
+    String(Number(item.unit_price || 0).toFixed(2)),
+    String(Number(item.depreciation_pct || 0).toFixed(2)),
+    normalizeForSourceMatch(item.code_reference || ''),
+  ].join('|');
+}
+
+function dedupeLineItems(lineItems: any[]): { items: any[]; removedCount: number } {
+  const seen = new Set<string>();
+  const items: any[] = [];
+
+  for (const item of lineItems) {
+    const key = buildLineItemKey(item);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    items.push(item);
+  }
+
+  return { items, removedCount: Math.max(0, lineItems.length - items.length) };
+}
+
 // --- Post-extraction sanity checks ---
 function postExtractionSanityCheck(lineItems: any[], textForExtraction: string): { items: any[]; warnings: string[] } {
   const warnings: string[] = [];
@@ -244,6 +270,7 @@ Deno.serve(async (req) => {
 
     let textForExtraction = '';
     let extractedTextSource = 'none';
+    let resolvedFileName = fileName || '';
 
     // Priority 1: If fileId provided, get stored text from claim_files
     if (fileId) {
@@ -253,6 +280,10 @@ Deno.serve(async (req) => {
         .select('extracted_text, clean_text, file_name')
         .eq('id', fileId)
         .maybeSingle();
+
+      if (fileRow?.file_name && !resolvedFileName) {
+        resolvedFileName = fileRow.file_name;
+      }
 
       if (fileRow?.clean_text && fileRow.clean_text.trim().length > 50) {
         textForExtraction = fileRow.clean_text;
@@ -408,7 +439,13 @@ Deno.serve(async (req) => {
     // --- Post-extraction sanity checks ---
     const sanity = postExtractionSanityCheck(lineItems, textForExtraction);
     lineItems = sanity.items;
+    const deduped = dedupeLineItems(lineItems);
+    lineItems = deduped.items;
+
     const allWarnings = [...validation.warnings, ...sanity.warnings];
+    if (deduped.removedCount > 0) {
+      allWarnings.push(`${deduped.removedCount} duplicate line items were removed`);
+    }
 
     const extractionConfidence = Math.min(validation.confidence / 100, 1);
 
@@ -443,6 +480,20 @@ Deno.serve(async (req) => {
     // --- Insert into DB ---
     const isCarrier = extracted.document_type === 'carrier_estimate';
     const importSource = source || (isCarrier ? 'carrier_import' : 'estimate_import');
+    const importRationale = `Imported from ${resolvedFileName || 'estimate document'}`;
+
+    const { data: removedExistingRows, error: removeExistingError } = await supabase
+      .from('darwin_estimate_lines')
+      .delete()
+      .eq('claim_id', claimId)
+      .eq('rationale', importRationale)
+      .in('source', ['carrier_import', 'estimate_import'])
+      .select('id');
+
+    if (removeExistingError) throw removeExistingError;
+    if ((removedExistingRows || []).length > 0) {
+      console.log(`Removed ${(removedExistingRows || []).length} previously imported rows for ${importRationale}`);
+    }
 
     const { data: existingLines } = await supabase
       .from('darwin_estimate_lines')
@@ -471,7 +522,7 @@ Deno.serve(async (req) => {
       is_accepted: true,
       code_reference: item.code_reference || null,
       notes: item.notes || null,
-      rationale: `Imported from ${fileName || 'estimate document'}`,
+      rationale: importRationale,
       reason_tag: null,
       carrier_quantity: isCarrier ? item.quantity : null,
       carrier_unit_price: isCarrier ? item.unit_price : null,
