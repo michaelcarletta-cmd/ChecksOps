@@ -81,8 +81,12 @@ interface JustificationMetadata {
   kbChunksUsed: number;
   codeCitationsUsed: number;
   mfrSpecsUsed: number;
+  itemsWithMfrData?: number;
+  itemsWithCodeData?: number;
+  totalItems?: number;
   stateCode: string | null;
   stateSupported: boolean;
+  sourcesQueried?: string[];
 }
 
 // ── Sub-components ──────────────────────────────────────────────
@@ -191,9 +195,15 @@ function MetadataBanner({ metadata }: { metadata: JustificationMetadata | null }
       </span>
       <span className="flex items-center gap-1">
         <Building2 className="h-3 w-3 text-orange-400" /> {metadata.codeCitationsUsed} code refs
+        {metadata.itemsWithCodeData !== undefined && metadata.totalItems && (
+          <span className="text-muted-foreground/60">({metadata.itemsWithCodeData}/{metadata.totalItems} items matched)</span>
+        )}
       </span>
       <span className="flex items-center gap-1">
         <BookOpen className="h-3 w-3 text-emerald-400" /> {metadata.mfrSpecsUsed} mfr specs
+        {metadata.itemsWithMfrData !== undefined && metadata.totalItems && (
+          <span className="text-muted-foreground/60">({metadata.itemsWithMfrData}/{metadata.totalItems} items matched)</span>
+        )}
       </span>
       {metadata.stateCode && (
         <Badge variant="outline" className="text-[9px] px-1.5 py-0">
