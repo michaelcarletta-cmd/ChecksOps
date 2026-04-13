@@ -5,11 +5,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, X, SearchX, Plus, Flame, Clock, ExternalLink } from "lucide-react";
+import { Search, X, SearchX, Plus, Flame, Clock, ExternalLink, Play, CheckCircle2 } from "lucide-react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { activateTask } from "@/services/taskExecutionService";
+import { activateTask, completeTask } from "@/services/taskExecutionService";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { Link } from "react-router-dom";
@@ -58,10 +58,12 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
   const [search, setSearch] = useState(() => window.localStorage.getItem(SEARCH_STORAGE_KEY) ?? "");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
+  const [actionLoading, setActionLoading] = useState<Record<string, string>>({});
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const debouncedSearch = useDebouncedValue(search, 300);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const hasSearch = search.trim().length > 0;
   const isFiltering = search !== debouncedSearch;
@@ -227,6 +229,32 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
     }
   };
 
+  const handleActivateOne = async (taskId: string) => {
+    setActionLoading((prev) => ({ ...prev, [taskId]: "activate" }));
+    const result = await activateTask(taskId);
+    setActionLoading((prev) => { const n = { ...prev }; delete n[taskId]; return n; });
+    if (result.success) {
+      toast({ title: "Task activated" });
+      onQueueUpdated();
+      queryClient.invalidateQueries({ queryKey: ["all-searchable-tasks"] });
+    } else {
+      toast({ title: "Could not activate", description: result.error, variant: "destructive" });
+    }
+  };
+
+  const handleCompleteOne = async (taskId: string) => {
+    setActionLoading((prev) => ({ ...prev, [taskId]: "complete" }));
+    const result = await completeTask(taskId);
+    setActionLoading((prev) => { const n = { ...prev }; delete n[taskId]; return n; });
+    if (result.success) {
+      toast({ title: "Task completed" });
+      onQueueUpdated();
+      queryClient.invalidateQueries({ queryKey: ["all-searchable-tasks"] });
+    } else {
+      toast({ title: "Could not complete", description: result.error, variant: "destructive" });
+    }
+  };
+
   return (
     <div className="space-y-3">
       <div className="relative">
@@ -306,13 +334,39 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
                     {task.description && <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{task.description}</p>}
                   </div>
 
-                  {task.claim_id && (
-                    <Link to={`/claims/${task.claim_id}`} onClick={(e) => e.stopPropagation()}>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
-                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                  <div className="flex items-center gap-1 shrink-0">
+                    {task.status !== "active" && task.status !== "completed" && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        disabled={!!actionLoading[task.id]}
+                        onClick={(e) => { e.stopPropagation(); handleActivateOne(task.id); }}
+                        title="Activate"
+                      >
+                        <Play className="h-3.5 w-3.5 text-primary" />
                       </Button>
-                    </Link>
-                  )}
+                    )}
+                    {task.status !== "completed" && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        disabled={!!actionLoading[task.id]}
+                        onClick={(e) => { e.stopPropagation(); handleCompleteOne(task.id); }}
+                        title="Complete"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                      </Button>
+                    )}
+                    {task.claim_id && (
+                      <Link to={`/claims/${task.claim_id}`} onClick={(e) => e.stopPropagation()}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7">
+                          <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      </Link>
+                    )}
+                  </div>
                 </div>
               </Card>
             ))}
