@@ -35,9 +35,9 @@ interface LineItemJustificationPanelProps {
 type ViewMode = "internal" | "carrier";
 
 const CONFIDENCE_STYLES: Record<ConfidenceLabel, { color: string; bg: string }> = {
-  High: { color: "text-emerald-700 dark:text-emerald-400", bg: "bg-emerald-100 dark:bg-emerald-900/40 border-emerald-200 dark:border-emerald-800" },
-  Medium: { color: "text-amber-700 dark:text-amber-400", bg: "bg-amber-100 dark:bg-amber-900/40 border-amber-200 dark:border-amber-800" },
-  Low: { color: "text-red-700 dark:text-red-400", bg: "bg-red-100 dark:bg-red-900/40 border-red-200 dark:border-red-800" },
+  High: { color: "text-primary", bg: "bg-primary/10 border-primary/20" },
+  Medium: { color: "text-secondary-foreground", bg: "bg-secondary border-secondary" },
+  Low: { color: "text-destructive", bg: "bg-destructive/10 border-destructive/20" },
 };
 
 function ConfidenceBadge({ label }: { label: ConfidenceLabel }) {
@@ -50,9 +50,9 @@ function ConfidenceBadge({ label }: { label: ConfidenceLabel }) {
 }
 
 function StrengthIcon({ confidence }: { confidence: string }) {
-  if (confidence === "direct") return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />;
-  if (confidence === "inferred") return <Shield className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />;
-  return <XCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />;
+  if (confidence === "direct") return <CheckCircle2 className="h-3.5 w-3.5 text-primary" />;
+  if (confidence === "inferred") return <Shield className="h-3.5 w-3.5 text-muted-foreground" />;
+  return <XCircle className="h-3.5 w-3.5 text-destructive" />;
 }
 
 function AuthoritySection({ title, icon, text, subText }: { title: string; icon: React.ReactNode; text: string; subText?: string }) {
@@ -221,10 +221,10 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
                             </div>
 
                             {r.missingEvidence.length > 0 && (
-                              <div className="flex items-start gap-1.5 p-2.5 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded">
-                                <AlertTriangle className="h-3.5 w-3.5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                              <div className="flex items-start gap-1.5 p-2.5 bg-destructive/10 border border-destructive/20 rounded">
+                                <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
                                 <div>
-                                  <p className="font-semibold text-red-700 dark:text-red-400 text-[11px]">Missing Evidence ({r.missingEvidence.length})</p>
+                                  <p className="font-semibold text-destructive text-[11px]">Missing Evidence ({r.missingEvidence.length})</p>
                                   {r.missingEvidence.map((e, i) => (
                                     <p key={i} className="text-muted-foreground mt-0.5">{e}</p>
                                   ))}
