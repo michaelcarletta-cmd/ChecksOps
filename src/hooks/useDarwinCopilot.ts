@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 
-type CopilotMode = 'operational' | 'rebuttal' | 'estimate' | 'war_room' | 'training' | 'strategy';
+type CopilotMode = 'operational' | 'rebuttal' | 'estimate' | 'war_room' | 'training' | 'strategy' | 'draft' | 'search_web' | 'search_argue';
 
 export interface DraftFacts {
   claim_number: string;
@@ -33,6 +33,7 @@ export interface AiMeta {
   cached?: boolean;
   sources?: Array<{ title: string; url: string }>;
   promptHash?: string;
+  searchCount?: number;
 }
 
 export interface CopilotMessage {
@@ -106,6 +107,7 @@ export function useDarwinCopilot(claimId: string) {
           cached: data.cached,
           sources: data.sources,
           promptHash: data.promptHash,
+          searchCount: data.searchCount,
         },
       };
       setMessages(prev => [...prev, assistantMsg]);

@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-type CopilotMode = 'operational' | 'rebuttal' | 'estimate' | 'war_room' | 'training' | 'strategy';
+type CopilotMode = 'operational' | 'rebuttal' | 'estimate' | 'war_room' | 'training' | 'strategy' | 'draft' | 'search_web' | 'search_argue';
 
 function getLatestUserTurn(userQuestion?: string, conversationHistory?: Array<{ role?: string; content?: string }>) {
   if (Array.isArray(conversationHistory)) {
@@ -1035,6 +1035,9 @@ When giving substantive strategic analysis, structure responses with a CARRIER P
 Only use this full structure when giving substantive strategic analysis. For quick follow-ups or drafting, respond naturally.
 
 Maintain a conversational, collaborative tone. Ask clarifying questions when the user's intent is ambiguous. Build on prior messages in this conversation. When proposing a strategy, explain WHY it works and what risks exist.`,
+      draft: `Focus on drafting content. No live web search unless explicitly forced. Use existing claim context to produce drafts efficiently.`,
+      search_web: `Search the web for relevant information. This mode is handled by a dedicated handler.`,
+      search_argue: `Search the web and build a claim-focused argument. This mode is handled by a dedicated handler.`,
     };
 
     const orchestratorBrief = intelSummary ? `
@@ -1294,6 +1297,181 @@ When the user asks you to draft an email, create a task, write a note, or plan n
 YOUR ROLE AS A COLLEAGUE:
 You are not a help desk. You are a senior colleague who happens to have perfect recall of every document, email, timeline event, and industry standard. When the adjuster asks you something, answer like you have the file open in front of you — because you do. Reference specific documents, dates, dollar amounts, and carrier positions by name. When you are uncertain, say so honestly and explain what additional information would resolve the uncertainty.`;
 
+    // ── Search + Argue / Search the Web early handler ──────────────
+    if (copilotMode === 'search_web' || copilotMode === 'search_argue') {
+      const trade = claim?.construction_trade || claim?.trade || '';
+      const materialType = claim?.roof_material || claim?.material_type || '';
+      const disputeTopic = intelSummary?.most_important_issue || '';
+
+      // Build targeted Tavily query from claim context
+      const searchTerms = [
+        latestUserTurn,
+        lossType && `${lossType} loss`,
+        stateCode && `${stateCode} state`,
+        carrier !== 'Unknown' && carrier,
+        trade && trade,
+        materialType && materialType,
+      ].filter(Boolean).join('. ');
+
+      const tavilyQuery = `Insurance claim dispute: ${searchTerms}. Focus on manufacturer standards, building codes, state regulations, technical standards.`;
+
+      let allSources: Array<{ title: string; url: string; content: string }> = [];
+      let searchAnswer = '';
+      let searchCount = 0;
+
+      try {
+        const { searchTavily } = await import("../_shared/ai/tavily.ts");
+
+        // Search 1: basic
+        const res1 = await searchTavily(tavilyQuery, "basic");
+        searchCount++;
+        if (res1) {
+          searchAnswer = res1.answer || '';
+          allSources = [...(res1.sources || [])];
+        }
+
+        // If results are weak (<2 sources or no answer), run one refined search
+        if (allSources.length < 2 || !searchAnswer) {
+          const refinedQuery = `${latestUserTurn} ${carrier !== 'Unknown' ? carrier : ''} ${stateCode} insurance regulation standard`;
+          const res2 = await searchTavily(refinedQuery, "basic");
+          searchCount++;
+          if (res2) {
+            if (!searchAnswer && res2.answer) searchAnswer = res2.answer;
+            for (const s of (res2.sources || [])) {
+              if (!allSources.some(x => x.url === s.url)) allSources.push(s);
+            }
+          }
+        }
+      } catch (searchErr) {
+        console.warn('[Search+Argue] Tavily search failed:', searchErr);
+      }
+
+      // Trim to max 5 sources
+      const trimmedSources = allSources.slice(0, 5);
+      const sourceRefs = trimmedSources.map((s, i) => ({ title: s.title, url: s.url }));
+
+      // Search the Web mode: return research summary only
+      if (copilotMode === 'search_web') {
+        let summaryText = searchAnswer || 'No relevant results found.';
+        if (trimmedSources.length > 0) {
+          summaryText += '\n\nKey findings from sources:\n' + trimmedSources.map((s, i) => `[${i + 1}] ${s.title}: ${s.content.slice(0, 150)}`).join('\n');
+        }
+        return new Response(JSON.stringify({
+          ok: true,
+          response: summaryText,
+          model: 'tavily-search',
+          usedSearch: true,
+          cached: false,
+          sources: sourceRefs,
+          searchCount,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+      }
+
+      // Search + Argue mode: build argument from claim facts + research
+      const sourcesContext = trimmedSources.map((s, i) =>
+        `[${i + 1}] ${s.title} (${s.url})\n${s.content.slice(0, 120)}`
+      ).join('\n\n');
+
+      // Detect argument style from user prompt
+      const promptLower = latestUserTurn.toLowerCase();
+      let argStyle = 'concise strategic argument';
+      if (/\brebuttal\b/.test(promptLower)) argStyle = 'rebuttal';
+      else if (/\bemail\b/.test(promptLower)) argStyle = 'professional email';
+      else if (/\bdemand\b/.test(promptLower)) argStyle = 'demand paragraph';
+      else if (/\btalking point/.test(promptLower)) argStyle = 'talking points';
+      else if (/\bstrategy\s*memo\b|\bmemo\b/.test(promptLower)) argStyle = 'strategy memo';
+
+      const isStrongOutput = ['rebuttal', 'demand paragraph', 'strategy memo'].includes(argStyle);
+
+      const argSystemPrompt = `You are Darwin Copilot — a senior claims strategist producing a ${argStyle} for an insurance claim dispute.
+
+PROMPT PRIORITY (STRICT ORDER — never let lower-priority content override higher):
+1. CLAIM FACTS (highest priority — ground truth from this claim)
+2. DECLARED POSITION (the adjuster's strategic stance)
+3. USER REQUEST
+4. EXTERNAL RESEARCH (supporting context only)
+
+=== CLAIM FACTS ===
+Carrier: ${carrier}
+Loss Type: ${lossType || 'Unknown'}
+State: ${stateCode || 'Unknown'}
+Trade: ${trade || 'Unknown'}
+Material: ${materialType || 'Unknown'}
+Denial Rationale: ${denialRationale || 'None documented'}
+${intelSummary ? `Priority Issue: ${intelSummary.most_important_issue || 'N/A'}
+Carrier Weakness: ${JSON.stringify(intelSummary.carrier_weakest_argument || {})}
+Recovery Opportunity: ${JSON.stringify(intelSummary.largest_recovery_opportunity || {})}` : ''}
+${docIntelBrief ? docIntelBrief.slice(0, 3000) : ''}
+${estimateBrief ? estimateBrief.slice(0, 1500) : ''}
+=== END CLAIM FACTS ===
+
+${claim?.declared_position ? `=== DECLARED POSITION ===\n${JSON.stringify(claim.declared_position)}\n=== END DECLARED POSITION ===` : ''}
+
+=== EXTERNAL RESEARCH (supporting context only — do not restate unless necessary) ===
+Key Findings: ${searchAnswer || 'No findings available'}
+
+Sources:
+${sourcesContext || 'No sources available'}
+=== END RESEARCH ===
+
+RULES:
+- Professional, firm, strategic tone
+- NO hallucinated statutes, policy language, or technical claims
+- Use external support ONLY if actually backed by sources above
+- Tie every argument back to THIS dispute's specific facts
+- Do NOT drift into generic educational writing
+- If sources are weak, acknowledge it and still produce the best limited argument possible
+- ${authorIdentity}
+
+OUTPUT FORMAT: Produce a JSON object with these fields:
+{
+  "answer": "short explanation of what was found in research (2-3 sentences)",
+  "argument": "the full ${argStyle} text"
+}
+Return ONLY valid JSON, no markdown fences.`;
+
+      const { generate } = await import("../_shared/ai/generate.ts");
+      const argResult = await generate({
+        task: isStrongOutput ? 'rebuttal' : 'copilot_reasoning',
+        system: argSystemPrompt,
+        user: latestUserTurn,
+        claimId,
+        forceStrong: isStrongOutput,
+        searchMode: 'off', // search already done above
+        jsonMode: true,
+        maxTokens: isStrongOutput ? 4000 : 2500,
+      });
+
+      // Parse JSON response
+      let answer = '';
+      let argument = '';
+      try {
+        const jsonText = argResult.text.replace(/```json\s*|\s*```/g, '').trim();
+        const parsed = JSON.parse(jsonText);
+        answer = parsed.answer || '';
+        argument = parsed.argument || argResult.text;
+      } catch {
+        // If JSON parse fails, use raw text
+        argument = argResult.text;
+        answer = searchAnswer;
+      }
+
+      const displayText = argument
+        ? `${answer ? answer + '\n\n---\n\n' : ''}${argument}`
+        : answer || 'Unable to generate argument from available sources.';
+
+      return new Response(JSON.stringify({
+        ok: true,
+        response: displayText,
+        model: argResult.model,
+        usedSearch: true,
+        cached: argResult.cached,
+        sources: sourceRefs,
+        searchCount,
+        promptHash: argResult.promptHash,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+    }
+
     // --- External research via Perplexity (available in ALL modes for comprehensive knowledge) ---
     let externalResearch = '';
     {
@@ -1304,7 +1482,7 @@ You are not a help desk. You are a senior colleague who happens to have perfect 
       // Determine if external research would benefit this question
       const researchKeywords = ['code', 'standard', 'regulation', 'statute', 'manufacturer', 'spec', 'requirement', 'law', 'legal', 'building code', 'IRC', 'IBC', 'ASTM', 'warranty', 'installation', 'best practice', 'industry', 'rebut', 'deny', 'denial', 'coverage', 'exclusion', 'how to', 'what does', 'is it', 'can they', 'should I', 'precedent', 'case law'];
       const msgLower = (lastUserMsg || '').toLowerCase();
-      const needsResearch = copilotMode === 'strategy' || copilotMode === 'rebuttal' || copilotMode === 'war_room' || researchKeywords.some(k => msgLower.includes(k));
+      const needsResearch = copilotMode !== 'draft' && (copilotMode === 'strategy' || copilotMode === 'rebuttal' || copilotMode === 'war_room' || researchKeywords.some(k => msgLower.includes(k)));
 
       if (lastUserMsg && needsResearch) {
         try {
