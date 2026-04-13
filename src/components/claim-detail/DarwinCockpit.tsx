@@ -205,7 +205,6 @@ export function DarwinCockpit({ claimId, claim, onNavigateSection }: DarwinCockp
   const chips = [
     { label: "View Missing Docs", section: "document-analysis", icon: FileText },
     { label: "Open Rebuttal Draft", section: "rebuttals", icon: Shield },
-    { label: "View Timeline", section: "timeline-history", icon: Clock },
     { label: "Open Package Builder", section: "package-building", icon: Sparkles },
   ];
 
