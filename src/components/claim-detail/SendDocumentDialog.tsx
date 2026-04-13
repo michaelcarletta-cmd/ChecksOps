@@ -90,18 +90,30 @@ export function SendDocumentDialog({
   const [loadingContacts, setLoadingContacts] = useState(false);
   const [orgId, setOrgId] = useState<string | null>(null);
 
-  const pdfFiles = claimFiles.filter(f =>
+  const [fetchedFiles, setFetchedFiles] = useState<Array<{ id: string; file_name: string; file_path: string }>>([]);
+
+  const allFiles = claimFiles.length > 0 ? claimFiles : fetchedFiles;
+  const pdfFiles = allFiles.filter(f =>
     f.file_name?.toLowerCase().endsWith(".pdf")
   );
 
   // Fetch org_id and saved contacts
   useEffect(() => {
     if (!open) return;
-    const fetchContacts = async () => {
+    const fetchData = async () => {
       setLoadingContacts(true);
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
+
+        // Fetch claim files if not provided via props
+        if (claimFiles.length === 0 && claimId) {
+          const { data: files } = await supabase
+            .from("claim_files")
+            .select("id, file_name, file_path")
+            .eq("claim_id", claimId);
+          setFetchedFiles(files || []);
+        }
 
         const { data: orgMember } = await supabase
           .from("org_members")
@@ -120,13 +132,13 @@ export function SendDocumentDialog({
           setSavedContacts(contacts || []);
         }
       } catch (err) {
-        console.error("Failed to load saved contacts:", err);
+        console.error("Failed to load data:", err);
       } finally {
         setLoadingContacts(false);
       }
     };
-    fetchContacts();
-  }, [open]);
+    fetchData();
+  }, [open, claimId, claimFiles.length]);
 
   const handleContactSelect = (contactId: string) => {
     setSelectedContactId(contactId);
