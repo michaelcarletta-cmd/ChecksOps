@@ -1,11 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Collapsible,
   CollapsibleContent,
@@ -21,6 +20,7 @@ import {
   Copy,
   FileText,
   XCircle,
+  Printer,
 } from "lucide-react";
 import { toast } from "sonner";
 import { justifyLineItems, type JustificationResult, type ConfidenceLabel } from "@/lib/justification/justificationEngine";
@@ -72,6 +72,16 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
   const [loading, setLoading] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>("internal");
+  const printRef = useRef<HTMLDivElement>(null);
+
+  const handlePrint = useCallback(() => {
+    if (!results.length) return;
+    // Expand all rows before printing
+    setExpandedRows(new Set(results.map((_, i) => i)));
+    setTimeout(() => {
+      window.print();
+    }, 100);
+  }, [results]);
 
   const stateCode = claim?.property_state || claim?.policyholder_state || "NJ";
 
@@ -130,14 +140,14 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
+    <Card ref={printRef} className="print-justification-panel">
+      <CardHeader className="pb-3 print:pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm flex items-center gap-2">
             <Shield className="h-4 w-4 text-primary" />
             Line Item Justification Engine
           </CardTitle>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 print:hidden">
             <div className="flex items-center gap-1.5">
               <Label htmlFor="view-toggle" className="text-[11px] text-muted-foreground">
                 {viewMode === "carrier" ? "Carrier Version" : "Internal Notes"}
@@ -151,6 +161,11 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
             {results.length > 0 && viewMode === "carrier" && (
               <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={copyAllCarrier}>
                 <Copy className="h-3 w-3 mr-1" /> Copy All
+              </Button>
+            )}
+            {results.length > 0 && (
+              <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={handlePrint}>
+                <Printer className="h-3 w-3 mr-1" /> Print
               </Button>
             )}
             <Button size="sm" onClick={handleJustify} disabled={loading} className="h-7 text-[11px]">
