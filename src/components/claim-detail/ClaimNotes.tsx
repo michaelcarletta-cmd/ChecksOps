@@ -336,8 +336,12 @@ ${timeline}`;
     if (commPhone) methods.push('phone');
 
     const updateType = isCommunication ? "communication_log" : "note";
-    const contentToSave = isCommunication
-      ? JSON.stringify({ type: 'communication', methods, text: newUpdate })
+    // Build structured communication payload
+    const commPayload = isCommunication
+      ? { type: 'communication', methods, text: newUpdate }
+      : null;
+    const contentToSave = commPayload
+      ? JSON.stringify(commPayload)
       : newUpdate;
 
     const { data: update, error: updateError } = await supabase
@@ -359,6 +363,9 @@ ${timeline}`;
       return;
     }
 
+    // ✓ Note saved locally — show immediately
+    toast.success("✓ Note saved");
+
     if (recipients.length > 0 && update) {
       const notifications = recipients.map((recipient) => ({
         user_id: recipient,
@@ -370,7 +377,6 @@ ${timeline}`;
     }
 
     let taskCreated = false;
-    let jobNimbusQueueError: string | null = null;
 
     // Create task if toggled
     if (createTask && taskTitle.trim()) {
@@ -385,47 +391,112 @@ ${timeline}`;
 
       if (taskError) {
         console.error("Error creating task:", taskError);
-        toast.error("Note added but failed to create task");
+        toast.error("Failed to create task");
       } else {
         taskCreated = true;
+        toast.success("✓ Task created");
       }
     }
 
-    // Queue note to JobNimbus if toggled
+    // Queue note to JobNimbus if toggled — separate status from local save
     if (syncToJobNimbus && update) {
+      // Build a clean payload — ensure it's a proper object, not a stringified string
+      const jnPayloadData: Record<string, any> = {
+        content: newUpdate.trim(),
+        user_id: user?.id || null,
+      };
+      if (isCommunication && commPayload) {
+        jnPayloadData.communication = commPayload;
+      }
+
+      // Validate payload is proper JSON before sending
       try {
-        const { error: queueError } = await supabase
+        JSON.stringify(jnPayloadData);
+      } catch (validationErr) {
+        console.error('[JN Sync] Invalid payload format:', jnPayloadData);
+        toast.error("JobNimbus sync failed: invalid payload format");
+        resetForm();
+        return;
+      }
+
+      console.log('[JN Sync] Sending payload:', JSON.stringify(jnPayloadData));
+
+      try {
+        const { data: queueResult, error: queueError } = await supabase
           .from('jobnimbus_sync_queue' as any)
           .insert({
             claim_id: claimId,
             sync_type: 'note',
             status: 'pending',
             contractor_id: null,
-            payload: { data: { content: newUpdate.trim(), user_id: user?.id || null } },
-          });
+            payload: { data: jnPayloadData },
+          })
+          .select()
+          .single();
 
         if (queueError) {
-          jobNimbusQueueError = queueError.message;
-          console.error('Failed to queue JN note sync:', queueError);
+          console.error('[JN Sync] Queue error:', queueError);
+          toast.error(`JobNimbus sync failed: ${queueError.message}`, {
+            action: {
+              label: "Retry",
+              onClick: () => retrySyncToJobNimbus(claimId, newUpdate.trim(), user?.id, commPayload),
+            },
+          });
+        } else {
+          console.log('[JN Sync] Queued successfully:', queueResult);
+          toast.success("✓ Queued for JobNimbus sync");
         }
       } catch (err) {
-        jobNimbusQueueError = err instanceof Error ? err.message : 'Unknown error';
-        console.error('Failed to queue JN note sync:', err);
+        const errMsg = err instanceof Error ? err.message : 'Unknown error';
+        console.error('[JN Sync] Exception:', err);
+        toast.error(`JobNimbus sync failed: ${errMsg}`, {
+          action: {
+            label: "Retry",
+            onClick: () => retrySyncToJobNimbus(claimId, newUpdate.trim(), user?.id, commPayload),
+          },
+        });
       }
     }
 
-    if (taskCreated) {
-      if (jobNimbusQueueError) {
-        toast.warning("Note added & task created, but JobNimbus sync failed to queue");
+    resetForm();
+  };
+
+  const retrySyncToJobNimbus = async (
+    claimIdVal: string,
+    content: string,
+    userId: string | undefined,
+    commPayloadVal: any
+  ) => {
+    const jnPayloadData: Record<string, any> = {
+      content,
+      user_id: userId || null,
+    };
+    if (commPayloadVal) {
+      jnPayloadData.communication = commPayloadVal;
+    }
+
+    try {
+      const { error: queueError } = await supabase
+        .from('jobnimbus_sync_queue' as any)
+        .insert({
+          claim_id: claimIdVal,
+          sync_type: 'note',
+          status: 'pending',
+          contractor_id: null,
+          payload: { data: jnPayloadData },
+        });
+
+      if (queueError) {
+        toast.error(`Retry failed: ${queueError.message}`);
       } else {
-        toast.success("Note added & task created");
+        toast.success("✓ Queued for JobNimbus sync");
       }
-    } else if (jobNimbusQueueError) {
-      toast.warning("Update added, but JobNimbus sync failed to queue");
-    } else {
-      toast.success("Update added successfully");
+    } catch (err) {
+      toast.error("Retry failed. Please try again later.");
     }
+  };
 
+  const resetForm = () => {
     setNewUpdate("");
     setUseCustomTimestamp(false);
     setCustomDate("");
