@@ -177,7 +177,7 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
         )}
 
         {!loading && results.length > 0 && (
-          <ScrollArea className="max-h-[500px]">
+          <div className="overflow-y-auto max-h-[calc(100vh-200px)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 pr-2">
             <div className="space-y-1">
               {results.map((r, idx) => {
                 const expanded = expandedRows.has(idx);
