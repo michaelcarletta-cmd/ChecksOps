@@ -480,6 +480,12 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
       case "claim-intelligence":
         return (
           <>
+            {/* War Room at the top */}
+            <div className="flex items-center gap-2 mb-2">
+              <Suspense fallback={<LoadingFallback />}>
+                <ClaimWarRoom claimId={claimId} claim={claim} />
+              </Suspense>
+            </div>
             <DarwinCockpit
               claimId={claimId}
               claim={claim}
@@ -501,7 +507,6 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
               </CardHeader>
               <CardContent className="flex flex-wrap gap-2">
                 <Suspense fallback={<LoadingFallback />}>
-                  <ClaimWarRoom claimId={claimId} claim={claim} />
                   <CarrierPlaybookDialog
                     carrierName={claim?.insurance_company}
                     stateCode={claim?.property_state}

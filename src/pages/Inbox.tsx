@@ -141,12 +141,8 @@ const Inbox = () => {
         </p>
       </div>
 
-      <Tabs defaultValue="approvals" className="space-y-4">
+      <Tabs defaultValue="sms" className="space-y-4">
         <TabsList className="flex flex-row w-full bg-muted/40 p-2 rounded-lg gap-1 overflow-x-auto scrollbar-hide">
-          <TabsTrigger value="approvals" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">
-            <Bot className="h-4 w-4 mr-2" />
-            AI Approvals {pendingCount ? `(${pendingCount})` : ""}
-          </TabsTrigger>
           <TabsTrigger value="sms" className="flex-1 md:flex-none justify-start text-base font-medium px-4 whitespace-nowrap">
             <MessageSquare className="h-4 w-4 mr-2" />
             SMS {inboundSmsCount > 0 ? `(${inboundSmsCount} inbound)` : `(${smsMessages?.length || 0})`}
@@ -164,10 +160,6 @@ const Inbox = () => {
             Darwin SMS
           </TabsTrigger>
         </TabsList>
-
-        <TabsContent value="approvals" className="space-y-4">
-          <PendingApprovals />
-        </TabsContent>
 
         <TabsContent value="sms" className="space-y-4">
           {!smsMessages || smsMessages.length === 0 ? (
