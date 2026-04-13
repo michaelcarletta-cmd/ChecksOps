@@ -13,6 +13,13 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const ALLOWED_STATES = ["NJ", "PA", "SC"];
 
+// Known manufacturer names to extract from descriptions
+const KNOWN_MANUFACTURERS = [
+  "GAF", "Owens Corning", "CertainTeed", "Tamko", "Atlas", "Malarkey",
+  "IKO", "James Hardie", "Boral", "Eagle", "Decra", "ARMA",
+  "Pinnacle", "Duration", "Timberline", "Landmark", "Heritage",
+];
+
 interface LineItem {
   description: string;
   quantity?: number;
@@ -30,146 +37,278 @@ interface RequestBody {
   viewMode?: "internal" | "carrier";
 }
 
+// ── Manufacturer Extraction ─────────────────────────────────────
+
+function extractManufacturerFromText(text: string): string | null {
+  const lower = text.toLowerCase();
+  for (const mfr of KNOWN_MANUFACTURERS) {
+    if (lower.includes(mfr.toLowerCase())) return mfr;
+  }
+  return null;
+}
+
+// Map line item descriptions to roofing component keywords for better search
+const COMPONENT_SEARCH_MAP: Record<string, string[]> = {
+  "starter": ["starter strip", "starter shingle", "starter course", "edge starter"],
+  "shingle": ["shingle installation", "laminate shingle", "architectural shingle", "nailing pattern"],
+  "ridge": ["ridge cap", "hip and ridge", "hip ridge", "ridge shingle"],
+  "drip": ["drip edge", "eave metal", "rake metal"],
+  "ice": ["ice barrier", "ice water shield", "ice dam", "ice and water"],
+  "underlayment": ["underlayment", "synthetic felt", "roof felt", "secondary barrier"],
+  "vent": ["ridge vent", "attic ventilation", "exhaust ventilation"],
+  "flashing": ["step flashing", "pipe boot", "pipe flashing", "wall flashing", "valley flashing"],
+  "valley": ["valley metal", "valley lining", "valley flashing"],
+  "decking": ["roof decking", "sheathing", "plywood", "OSB", "roof deck"],
+  "tear": ["tear off", "tear-off", "removal", "strip roof"],
+  "gutter": ["gutter", "seamless gutter", "downspout"],
+  "siding": ["vinyl siding", "fiber cement", "hardie", "exterior cladding"],
+  "soffit": ["soffit", "eave soffit", "soffit ventilation"],
+  "fascia": ["fascia", "fascia board", "rake board"],
+  "drywall": ["drywall", "sheetrock", "gypsum board"],
+  "paint": ["paint", "interior paint", "repaint", "coating"],
+  "insulation": ["insulation", "batt insulation", "blown insulation", "thermal barrier"],
+  "window": ["window", "window replacement", "glazing"],
+  "permit": ["building permit", "permit"],
+  "overhead": ["overhead and profit", "O&P", "general contractor"],
+};
+
+function getSearchTermsForItem(description: string): string[] {
+  const lower = description.toLowerCase();
+  const terms = [description]; // always include the raw description
+
+  for (const [key, synonyms] of Object.entries(COMPONENT_SEARCH_MAP)) {
+    if (lower.includes(key)) {
+      terms.push(...synonyms.slice(0, 2));
+      break;
+    }
+  }
+
+  return terms;
+}
+
 // ── Data Retrieval ──────────────────────────────────────────────
+
+async function queryManufacturerData(
+  supabase: any,
+  lineItems: LineItem[],
+  claimManufacturer?: string
+): Promise<{ perItem: Record<string, any[]>; allSpecs: any[] }> {
+  const perItem: Record<string, any[]> = {};
+  const allSpecs: any[] = [];
+  const seen = new Set<string>();
+
+  // Get ALL manufacturer-spec documents for broader matching
+  const { data: mfrDocs } = await supabase
+    .from("ai_knowledge_documents")
+    .select("id, file_name, category")
+    .eq("category", "manufacturer-specs");
+
+  const mfrDocIds = new Set((mfrDocs || []).map((d: any) => d.id));
+  const mfrDocMap = new Map((mfrDocs || []).map((d: any) => [d.id, d]));
+
+  for (const li of lineItems) {
+    const itemKey = li.description || li.code || "";
+    if (!itemKey) continue;
+    perItem[itemKey] = [];
+
+    // Extract manufacturer from this specific line item
+    const itemMfr = extractManufacturerFromText(itemKey) || claimManufacturer;
+    const searchTerms = getSearchTermsForItem(itemKey);
+
+    for (const term of searchTerms.slice(0, 3)) {
+      // Build tsquery - handle terms with special chars
+      const words = term.split(/[\s\/&\-]+/).filter((w) => w.length > 2);
+      if (!words.length) continue;
+      const tsQuery = words.join(" & ");
+
+      try {
+        const { data: chunks } = await supabase
+          .from("ai_knowledge_chunks")
+          .select("content, document_id")
+          .textSearch("content", tsQuery, { type: "plain" })
+          .limit(5);
+
+        if (!chunks?.length) continue;
+
+        for (const chunk of chunks) {
+          // Only include chunks from manufacturer-specs documents
+          if (!mfrDocIds.has(chunk.document_id)) continue;
+
+          const doc = mfrDocMap.get(chunk.document_id);
+          if (!doc) continue;
+
+          const contentKey = chunk.content.slice(0, 80);
+          if (seen.has(contentKey)) continue;
+          seen.add(contentKey);
+
+          // If we know the manufacturer, boost matching docs
+          const docNameLower = doc.file_name.toLowerCase();
+          const isManufacturerMatch = itemMfr && docNameLower.includes(itemMfr.toLowerCase());
+
+          const entry = {
+            source: doc.file_name,
+            content: chunk.content.slice(0, 600),
+            manufacturer: itemMfr || extractManufacturerFromText(doc.file_name) || "Unknown",
+            isDirectMatch: isManufacturerMatch || false,
+          };
+
+          perItem[itemKey].push(entry);
+          allSpecs.push(entry);
+        }
+      } catch (e) {
+        console.warn(`Search failed for term "${term}":`, e);
+      }
+    }
+
+    // Sort: direct manufacturer matches first
+    perItem[itemKey].sort((a: any, b: any) => (b.isDirectMatch ? 1 : 0) - (a.isDirectMatch ? 1 : 0));
+    perItem[itemKey] = perItem[itemKey].slice(0, 3);
+  }
+
+  // Deduplicate allSpecs
+  const uniqueSpecs: any[] = [];
+  const specSeen = new Set<string>();
+  for (const s of allSpecs) {
+    const k = s.content.slice(0, 80);
+    if (!specSeen.has(k)) {
+      specSeen.add(k);
+      uniqueSpecs.push(s);
+    }
+  }
+
+  return { perItem, allSpecs: uniqueSpecs.slice(0, 15) };
+}
+
+async function queryBuildingCodes(
+  supabase: any,
+  lineItems: LineItem[],
+  stateCode: string
+): Promise<{ perItem: Record<string, any[]>; allCodes: any[] }> {
+  const perItem: Record<string, any[]> = {};
+  const allCodes: any[] = [];
+
+  if (!ALLOWED_STATES.includes(stateCode.toUpperCase())) {
+    // Return empty with per-item "not applicable" markers
+    for (const li of lineItems) {
+      perItem[li.description || ""] = [];
+    }
+    return { perItem, allCodes };
+  }
+
+  // Fetch all codes for this state at once
+  const { data: allStateCodesRaw } = await supabase
+    .from("building_code_citations")
+    .select("section_number, section_title, code_source, content, keywords, state_adoptions")
+    .contains("state_adoptions", [stateCode.toUpperCase()]);
+
+  if (!allStateCodesRaw?.length) {
+    for (const li of lineItems) {
+      perItem[li.description || ""] = [];
+    }
+    return { perItem, allCodes };
+  }
+
+  const seen = new Set<string>();
+
+  for (const li of lineItems) {
+    const itemKey = li.description || li.code || "";
+    if (!itemKey) continue;
+    perItem[itemKey] = [];
+
+    const searchTerms = getSearchTermsForItem(itemKey);
+    const itemKeywords = searchTerms.flatMap((t) =>
+      t.toLowerCase().split(/[\s\/&\-]+/).filter((w) => w.length > 2)
+    );
+
+    // Score each code citation against this item
+    const scored = allStateCodesRaw.map((row: any) => {
+      const rowKeywords = (row.keywords || []).map((k: string) => k.toLowerCase());
+      const contentLower = (row.content || "").toLowerCase();
+      const titleLower = (row.section_title || "").toLowerCase();
+      let score = 0;
+
+      for (const kw of itemKeywords) {
+        if (rowKeywords.includes(kw)) score += 5;
+        if (titleLower.includes(kw)) score += 3;
+        if (contentLower.includes(kw)) score += 1;
+      }
+      return { ...row, relevanceScore: score };
+    });
+
+    const matches = scored
+      .filter((s: any) => s.relevanceScore > 0)
+      .sort((a: any, b: any) => b.relevanceScore - a.relevanceScore)
+      .slice(0, 3);
+
+    for (const m of matches) {
+      const entry = {
+        section: m.section_number,
+        title: m.section_title || "",
+        source: m.code_source,
+        content: m.content.slice(0, 600),
+        state: stateCode.toUpperCase(),
+        citation: `${stateCode.toUpperCase()} ${m.code_source} §${m.section_number}`,
+      };
+      perItem[itemKey].push(entry);
+
+      const codeKey = `${m.code_source}-${m.section_number}`;
+      if (!seen.has(codeKey)) {
+        seen.add(codeKey);
+        allCodes.push(entry);
+      }
+    }
+  }
+
+  return { perItem, allCodes: allCodes.slice(0, 20) };
+}
 
 async function queryKnowledgeBase(
   supabase: any,
-  searchTerms: string[],
-  categories: string[]
-): Promise<{ source: string; content: string; category: string; score: number }[]> {
+  searchTerms: string[]
+): Promise<{ source: string; content: string; category: string }[]> {
   const results: any[] = [];
+  const seen = new Set<string>();
 
   for (const term of searchTerms.slice(0, 5)) {
-    const { data } = await supabase
-      .from("ai_knowledge_chunks")
-      .select("content, metadata, document_id")
-      .textSearch("content", term.split(/\s+/).join(" & "), { type: "plain" })
-      .limit(3);
+    const words = term.split(/[\s\/&\-]+/).filter((w) => w.length > 2);
+    if (!words.length) continue;
 
-    if (data?.length) {
-      // Get document info for these chunks
+    try {
+      const { data } = await supabase
+        .from("ai_knowledge_chunks")
+        .select("content, document_id")
+        .textSearch("content", words.join(" & "), { type: "plain" })
+        .limit(3);
+
+      if (!data?.length) continue;
+
       const docIds = [...new Set(data.map((d: any) => d.document_id))];
       const { data: docs } = await supabase
         .from("ai_knowledge_documents")
         .select("id, file_name, category")
-        .in("id", docIds);
+        .in("id", docIds)
+        .in("category", ["building-codes", "training-materials", "other"]);
 
       const docMap = new Map((docs || []).map((d: any) => [d.id, d]));
 
       for (const chunk of data) {
         const doc = docMap.get(chunk.document_id);
-        if (doc && (categories.length === 0 || categories.includes(doc.category))) {
-          results.push({
-            source: doc.file_name,
-            content: chunk.content.slice(0, 500),
-            category: doc.category,
-            score: 0.8,
-          });
-        }
-      }
-    }
-  }
-
-  // Deduplicate by content similarity
-  const seen = new Set<string>();
-  return results.filter((r) => {
-    const key = r.content.slice(0, 100);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 10);
-}
-
-async function queryBuildingCodes(
-  supabase: any,
-  normalizedItems: string[],
-  stateCode: string
-): Promise<{ section: string; title: string; source: string; content: string; state: string }[]> {
-  if (!ALLOWED_STATES.includes(stateCode.toUpperCase())) return [];
-
-  // Build keyword list from item names
-  const keywords = normalizedItems.flatMap((item) =>
-    item.toLowerCase().split(/[\s\/&]+/).filter((w) => w.length > 2)
-  );
-
-  const { data } = await supabase
-    .from("building_code_citations")
-    .select("section_number, section_title, code_source, content, state_adoptions, keywords")
-    .contains("state_adoptions", [stateCode.toUpperCase()])
-    .limit(50);
-
-  if (!data?.length) return [];
-
-  // Score and rank by keyword relevance
-  const scored = data.map((row: any) => {
-    const rowKeywords = (row.keywords || []).map((k: string) => k.toLowerCase());
-    const contentLower = row.content.toLowerCase();
-    let score = 0;
-    for (const kw of keywords) {
-      if (rowKeywords.includes(kw)) score += 3;
-      if (contentLower.includes(kw)) score += 1;
-    }
-    return { ...row, score };
-  });
-
-  return scored
-    .filter((s: any) => s.score > 0)
-    .sort((a: any, b: any) => b.score - a.score)
-    .slice(0, 10)
-    .map((r: any) => ({
-      section: r.section_number,
-      title: r.section_title || "",
-      source: r.code_source,
-      content: r.content.slice(0, 600),
-      state: stateCode.toUpperCase(),
-    }));
-}
-
-async function queryManufacturerSpecs(
-  supabase: any,
-  searchTerms: string[],
-  manufacturer?: string
-): Promise<{ source: string; content: string; category: string }[]> {
-  const results: any[] = [];
-
-  for (const term of searchTerms.slice(0, 3)) {
-    let query = supabase
-      .from("ai_knowledge_chunks")
-      .select("content, document_id")
-      .textSearch("content", term.split(/\s+/).join(" & "), { type: "plain" })
-      .limit(3);
-
-    const { data } = await query;
-    if (!data?.length) continue;
-
-    const docIds = [...new Set(data.map((d: any) => d.document_id))];
-    const { data: docs } = await supabase
-      .from("ai_knowledge_documents")
-      .select("id, file_name, category")
-      .in("id", docIds)
-      .eq("category", "manufacturer-specs");
-
-    const docMap = new Map((docs || []).map((d: any) => [d.id, d]));
-
-    for (const chunk of data) {
-      const doc = docMap.get(chunk.document_id);
-      if (doc) {
+        if (!doc) continue;
+        const key = chunk.content.slice(0, 80);
+        if (seen.has(key)) continue;
+        seen.add(key);
         results.push({
           source: doc.file_name,
           content: chunk.content.slice(0, 500),
-          category: "manufacturer-specs",
+          category: doc.category,
         });
       }
+    } catch (e) {
+      console.warn(`KB search failed for "${term}":`, e);
     }
   }
 
-  const seen = new Set<string>();
-  return results.filter((r) => {
-    const key = r.content.slice(0, 80);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 6);
+  return results.slice(0, 8);
 }
 
 // ── AI Call ──────────────────────────────────────────────────────
@@ -187,7 +326,7 @@ async function callAI(systemPrompt: string, userPrompt: string): Promise<string>
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      temperature: 0.2,
+      temperature: 0.15,
     }),
   });
 
@@ -224,134 +363,205 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Build search terms from line items
+    // Build search terms
     const searchTerms = lineItems.map((li) => li.description || li.code || "").filter(Boolean);
     const uniqueTerms = [...new Set(searchTerms)];
 
-    // Parallel data retrieval
-    const [kbChunks, codeCitations, mfrSpecs] = await Promise.all([
-      queryKnowledgeBase(supabase, uniqueTerms, ["building-codes", "training-materials", "other"]),
-      effectiveState ? queryBuildingCodes(supabase, uniqueTerms, effectiveState) : Promise.resolve([]),
-      queryManufacturerSpecs(supabase, uniqueTerms, manufacturer),
+    // Parallel data retrieval — per-item matching for manufacturer and codes
+    const [mfrData, codeData, kbChunks] = await Promise.all([
+      queryManufacturerData(supabase, lineItems, manufacturer || undefined),
+      effectiveState ? queryBuildingCodes(supabase, lineItems, effectiveState) : Promise.resolve({ perItem: {} as Record<string, any[]>, allCodes: [] }),
+      queryKnowledgeBase(supabase, uniqueTerms),
     ]);
 
-    console.log(`Retrieved: ${kbChunks.length} KB chunks, ${codeCitations.length} code citations, ${mfrSpecs.length} mfr specs`);
+    console.log(`Retrieved: ${mfrData.allSpecs.length} mfr specs, ${codeData.allCodes.length} code citations, ${kbChunks.length} KB chunks`);
 
-    // Build context sections
+    // ── Build per-item context for the prompt ──
+    const perItemContext = lineItems.map((li, idx) => {
+      const key = li.description || li.code || "";
+      const itemMfr = extractManufacturerFromText(key) || manufacturer || null;
+      const mfrResults = mfrData.perItem[key] || [];
+      const codeResults = codeData.perItem[key] || [];
+
+      let mfrSection: string;
+      if (mfrResults.length > 0) {
+        mfrSection = mfrResults.map((m: any, i: number) =>
+          `  [Manufacturer Spec ${idx + 1}.${i + 1} - ${m.manufacturer} - ${m.source}${m.isDirectMatch ? " (DIRECT MATCH)" : ""}]:\n  ${m.content}`
+        ).join("\n");
+      } else {
+        mfrSection = `  No manufacturer data available for "${key}"${itemMfr ? ` (searched for ${itemMfr})` : ""}. Use "No manufacturer data available" in output.`;
+      }
+
+      let codeSection: string;
+      if (codeResults.length > 0) {
+        codeSection = codeResults.map((c: any, i: number) =>
+          `  [${c.citation}${c.title ? ` "${c.title}"` : ""}]:\n  ${c.content}`
+        ).join("\n");
+      } else if (effectiveState) {
+        codeSection = `  No applicable building codes found for "${key}" in ${effectiveState}. Use "No applicable codes for ${effectiveState}" in output.`;
+      } else {
+        codeSection = `  State "${stateCode || "unknown"}" is not in supported list (NJ, PA, SC). Use "Building code lookup not available for this jurisdiction" in output.`;
+      }
+
+      return `--- ITEM ${idx + 1}: ${key}${li.quantity ? ` (${li.quantity} ${li.unit || "EA"})` : ""}${li.code ? ` [Code: ${li.code}]` : ""} ---
+Detected manufacturer: ${itemMfr || "None detected"}
+MANUFACTURER DATA:
+${mfrSection}
+BUILDING CODES:
+${codeSection}`;
+    }).join("\n\n");
+
+    // KB context (general)
     const kbContext = kbChunks.length
       ? kbChunks.map((c, i) => `[KB Chunk #${i + 1} - ${c.source} (${c.category})]:\n${c.content}`).join("\n\n")
-      : "No relevant knowledge base entries found.";
+      : "No additional knowledge base entries found.";
 
-    const codeContext = codeCitations.length
-      ? codeCitations.map((c, i) => `[${c.state} Code - ${c.source} §${c.section}${c.title ? ` "${c.title}"` : ""}]:\n${c.content}`).join("\n\n")
-      : effectiveState
-        ? `No specific building code citations found for ${effectiveState}.`
-        : "State not in supported list (NJ, PA, SC). Building code lookup skipped.";
+    // ── Build AI prompt ──
+    const systemPrompt = `You are a line item justification engine for a public adjuster firm. Generate precise, source-backed justifications for insurance estimate line items.
 
-    const mfrContext = mfrSpecs.length
-      ? mfrSpecs.map((m, i) => `[Manufacturer Spec #${i + 1} - ${m.source}]:\n${m.content}`).join("\n\n")
-      : "No manufacturer-specific documentation found in knowledge base.";
+CRITICAL RULES:
+1. Every assertion MUST cite a specific source from the provided data:
+   - Manufacturer: cite as [Manufacturer Spec N.M - MANUFACTURER - FILENAME]
+   - Building code: cite as [STATE CODE §SECTION]
+   - Knowledge base: cite as [KB Chunk #N]
 
-    // Build the AI prompt
-    const systemPrompt = `You are a line item justification engine for a public adjuster firm. Your job is to generate precise, source-backed justifications for insurance estimate line items.
+2. FALLBACK HANDLING — this is mandatory:
+   - If NO manufacturer specs were provided for an item, set manufacturer.text to "No manufacturer data available" and manufacturer.confidence to "needs_evidence"
+   - If NO building codes were provided for an item, set code.text to "No applicable codes for this jurisdiction" and code.confidence to "needs_evidence"
+   - NEVER fabricate section numbers, manufacturer names, or requirements not in the provided data
 
-RULES:
-1. Every assertion MUST cite a specific source using these formats:
-   - Knowledge base: [KB Chunk #N]
-   - Building code: [${effectiveState || "State"} Code - SOURCE §SECTION]
-   - Manufacturer spec: [Manufacturer Spec #N]
-2. If no relevant source exists for a claim, state "Insufficient data - no source found for this assertion" instead of fabricating.
-3. NEVER fabricate code section numbers, manufacturer requirements, or policy language.
-4. Building codes are ONLY available for: NJ, PA, SC. Current state: ${effectiveState || "Not in supported states"}.
-5. Use function-first reasoning: explain WHAT the component does in the building system, WHY it's required, and WHAT breaks if omitted.
-6. For carrier-facing text: Use a strict 5-sentence format (function, authority, code compliance, policy tie-in, consequence of omission). No markdown, no bullets - clean prose only.
+3. For manufacturer section:
+   - manufacturer.text: The actual requirement from the spec sheet with citation
+   - manufacturer.functionText: What this component does in the system (always provide this)
+   - manufacturer.failureRisk: What happens if omitted (always provide this)
+   - manufacturer.sourceName: The source document filename, or null if none
 
-OUTPUT FORMAT: Return a JSON array. Each element must have:
+4. For code section:
+   - code.text: The actual code requirement text with citation
+   - code.reference: The specific section number (e.g., "IRC §R905.2.8.5") or "N/A" if none found
+   - code.sourceName: The code source name, or null
+
+5. Building codes are ONLY available for: NJ, PA, SC. Current state: ${effectiveState || "Not in supported states"}.
+
+6. For carrier-facing text: Strict 5-sentence format (function, manufacturer authority, code compliance, policy tie-in, consequence of omission). Clean prose only.
+
+7. The "sources" array MUST list every source actually cited in the justification. Each source needs:
+   - type: "manufacturer" | "code" | "kb"
+   - label: Human-readable label (e.g., "GAF Timberline HDZ Installation Instructions" or "NJ IRC §R905.2.8.5")
+   - content: The relevant excerpt (50-150 chars)
+
+OUTPUT: Return a JSON array with one object per line item:
 {
-  "normalizedItem": "string - canonical item name",
-  "trade": "string - roofing/siding/interior/gutters/windows/general",
-  "system": "string - functional system name (e.g., water shedding system)",
-  "whyRequired": "string - function-first explanation",
+  "normalizedItem": "string",
+  "trade": "roofing|siding|interior|gutters|windows|general",
+  "system": "string (e.g., water shedding system)",
+  "whyRequired": "string",
   "manufacturer": {
-    "text": "string - manufacturer requirement with source citation",
-    "functionText": "string - what this component does functionally",
-    "failureRisk": "string - consequence of omission",
+    "text": "string with citation OR 'No manufacturer data available'",
+    "functionText": "string - always populated",
+    "failureRisk": "string - always populated",
     "confidence": "direct|inferred|needs_evidence",
-    "sourceName": "string|null - source document name"
+    "sourceName": "string|null",
+    "manufacturer": "string|null"
   },
   "code": {
-    "text": "string - code requirement with citation",
+    "text": "string with citation OR 'No applicable codes for this jurisdiction'",
     "confidence": "direct|inferred|needs_evidence",
-    "reference": "string - specific code section",
+    "reference": "string - section number or 'N/A'",
     "sourceName": "string|null"
   },
   "policy": {
-    "text": "string - policy support statement",
+    "text": "string",
     "confidence": "direct|inferred|needs_evidence"
   },
-  "missingEvidence": ["string array - what evidence is still needed"],
-  "confidenceScore": number (0-100),
+  "missingEvidence": ["string"],
+  "confidenceScore": 0-100,
   "confidenceLabel": "High|Medium|Low",
   "supportStrength": "direct|inferred|needs_evidence",
-  "inlineNote": "string - brief note for inline display",
-  "carrierFacingText": "string - formal 5-sentence carrier-ready paragraph",
-  "sources": [{"type": "kb|code|manufacturer", "label": "string - display label", "content": "string - relevant excerpt"}]
+  "inlineNote": "string",
+  "carrierFacingText": "string",
+  "sources": [{"type": "manufacturer|code|kb", "label": "string", "content": "string"}]
 }`;
 
-    const userPrompt = `Justify the following ${lineItems.length} line items for claim in ${effectiveState || "unknown"} state.
-${manufacturer ? `Manufacturer: ${manufacturer}` : ""}
+    const userPrompt = `Justify ${lineItems.length} line items for a claim in ${effectiveState || "unknown"} state.
+${manufacturer ? `Claim-level manufacturer: ${manufacturer}` : "No claim-level manufacturer set."}
 ${lossType ? `Loss type: ${lossType}` : ""}
 View mode: ${viewMode}
 
-LINE ITEMS:
-${lineItems.map((li, i) => `${i + 1}. ${li.description}${li.quantity ? ` (${li.quantity} ${li.unit || "EA"})` : ""}${li.code ? ` [Code: ${li.code}]` : ""}`).join("\n")}
+PER-ITEM DATA (manufacturer specs and building codes matched to each item):
+${perItemContext}
 
-KNOWLEDGE BASE CONTEXT:
+GENERAL KNOWLEDGE BASE CONTEXT:
 ${kbContext}
 
-BUILDING CODE CITATIONS (${effectiveState || "N/A"}):
-${codeContext}
-
-MANUFACTURER SPECIFICATIONS:
-${mfrContext}
-
-Return ONLY a valid JSON array with one entry per line item. No markdown fences.`;
+Return ONLY a valid JSON array. No markdown fences, no commentary.`;
 
     const aiResponse = await callAI(systemPrompt, userPrompt);
 
     // Parse AI response
     let justifications: any[];
     try {
-      // Strip markdown fences if present
       const cleaned = aiResponse.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
       justifications = JSON.parse(cleaned);
       if (!Array.isArray(justifications)) {
         justifications = [justifications];
       }
     } catch (parseErr) {
-      console.error("Failed to parse AI response:", aiResponse.slice(0, 500));
+      console.error("Failed to parse AI response:", aiResponse.slice(0, 1000));
       return new Response(
         JSON.stringify({ ok: false, error: "AI returned unparseable response. Please retry." }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+    // Post-process: ensure fallback fields are never empty
+    for (const j of justifications) {
+      if (!j.manufacturer) j.manufacturer = {};
+      if (!j.manufacturer.text) j.manufacturer.text = "No manufacturer data available";
+      if (!j.manufacturer.functionText) j.manufacturer.functionText = "Component function could not be determined from available data.";
+      if (!j.manufacturer.failureRisk) j.manufacturer.failureRisk = "Risk assessment requires manufacturer documentation.";
+      if (!j.manufacturer.confidence) j.manufacturer.confidence = "needs_evidence";
+
+      if (!j.code) j.code = {};
+      if (!j.code.text) j.code.text = effectiveState ? `No applicable codes for ${effectiveState}` : "Building code lookup not available for this jurisdiction";
+      if (!j.code.reference) j.code.reference = "N/A";
+      if (!j.code.confidence) j.code.confidence = "needs_evidence";
+
+      if (!j.policy) j.policy = {};
+      if (!j.policy.text) j.policy.text = "Policy-specific support not available.";
+      if (!j.policy.confidence) j.policy.confidence = "needs_evidence";
+
+      if (!j.sources) j.sources = [];
+      if (!j.missingEvidence) j.missingEvidence = [];
+      if (!j.confidenceScore) j.confidenceScore = 30;
+      if (!j.confidenceLabel) j.confidenceLabel = "Low";
+      if (!j.supportStrength) j.supportStrength = "needs_evidence";
+    }
+
     // Persist justifications
     for (const r of justifications) {
-      await supabase.from("claim_line_item_justifications").upsert({
-        claim_id: claimId,
-        normalized_item: r.normalizedItem,
-        manufacturer_support: r.manufacturer,
-        code_support: r.code,
-        policy_support: r.policy,
-        support_strength: r.supportStrength,
-        confidence_score: r.confidenceScore,
-        missing_evidence_json: r.missingEvidence,
-        carrier_facing_text: r.carrierFacingText,
-        inline_note: r.inlineNote,
-        output_mode: viewMode,
-      }).eq("claim_id", claimId).eq("normalized_item", r.normalizedItem);
+      try {
+        await supabase.from("claim_line_item_justifications").upsert({
+          claim_id: claimId,
+          normalized_item: r.normalizedItem,
+          manufacturer_support: r.manufacturer,
+          code_support: r.code,
+          policy_support: r.policy,
+          support_strength: r.supportStrength,
+          confidence_score: r.confidenceScore,
+          missing_evidence_json: r.missingEvidence,
+          carrier_facing_text: r.carrierFacingText,
+          inline_note: r.inlineNote,
+          output_mode: viewMode,
+        }).eq("claim_id", claimId).eq("normalized_item", r.normalizedItem);
+      } catch (e) {
+        console.warn("Failed to persist justification:", r.normalizedItem, e);
+      }
     }
+
+    // Build metadata with per-item source counts
+    const itemsWithMfrData = Object.values(mfrData.perItem).filter((arr: any[]) => arr.length > 0).length;
+    const itemsWithCodeData = Object.values(codeData.perItem).filter((arr: any[]) => arr.length > 0).length;
 
     return new Response(
       JSON.stringify({
@@ -359,17 +569,24 @@ Return ONLY a valid JSON array with one entry per line item. No markdown fences.
         justifications,
         metadata: {
           kbChunksUsed: kbChunks.length,
-          codeCitationsUsed: codeCitations.length,
-          mfrSpecsUsed: mfrSpecs.length,
+          codeCitationsUsed: codeData.allCodes.length,
+          mfrSpecsUsed: mfrData.allSpecs.length,
+          itemsWithMfrData,
+          itemsWithCodeData,
+          totalItems: lineItems.length,
           stateCode: effectiveState || null,
           stateSupported: !!effectiveState,
+          sourcesQueried: [
+            "ai_knowledge_chunks (manufacturer-specs)",
+            "building_code_citations",
+            "ai_knowledge_chunks (general)",
+          ],
         },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
     console.error("Justification error:", err);
-
     const message = err instanceof Error ? err.message : "Unknown error";
     const status = message === "RATE_LIMIT" ? 429 : message === "CREDITS_EXHAUSTED" ? 402 : 200;
 
