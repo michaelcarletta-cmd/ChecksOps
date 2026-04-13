@@ -485,6 +485,7 @@ Deno.serve(async (req) => {
     console.log(`Imported ${rows.length} items (${importSource}) for claim ${claimId}`);
 
     return new Response(JSON.stringify({
+      ok: true,
       success: true,
       imported: rows.length,
       document_type: extracted.document_type,
@@ -496,8 +497,8 @@ Deno.serve(async (req) => {
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (err: any) {
     console.error('darwin-estimate-import error:', err);
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    return new Response(JSON.stringify({ ok: false, error: err.message }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });
