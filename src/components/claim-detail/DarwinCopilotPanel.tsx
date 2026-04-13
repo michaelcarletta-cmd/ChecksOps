@@ -339,7 +339,7 @@ export function DarwinCopilotPanel({ claimId, isExpanded, onToggleExpand }: Darw
   );
 }
 
-function MessageBubble({ message }: { message: CopilotMessage }) {
+function MessageBubble({ message, onRetry }: { message: CopilotMessage; onRetry?: () => void }) {
   const isUser = message.role === 'user';
 
   // If this is a draft response, render the DraftRenderer
@@ -353,19 +353,33 @@ function MessageBubble({ message }: { message: CopilotMessage }) {
     );
   }
 
+  const metaLabel = !isUser && message.meta?.model
+    ? `${message.meta.model}${message.meta.cached ? ' • cached' : ''}${message.meta.usedSearch ? ` • search: ${message.meta.sources?.length ? 'basic' : 'auto'}` : ''}`
+    : null;
+
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
       <div className={cn(
         "max-w-[95%] rounded-lg px-3 py-2 text-xs",
         isUser
           ? "bg-primary text-primary-foreground"
-          : "bg-muted/80 text-foreground"
+          : message.isError
+            ? "bg-destructive/10 text-destructive border border-destructive/20"
+            : "bg-muted/80 text-foreground"
       )}>
         <div className="whitespace-pre-wrap break-words leading-relaxed" dangerouslySetInnerHTML={isUser ? { __html: message.content } : undefined}>
           {!isUser ? (message.content || (
             <span className="text-muted-foreground italic">Generating…</span>
           )) : undefined}
         </div>
+        {message.isError && onRetry && (
+          <Button variant="ghost" size="sm" className="mt-1.5 h-6 text-[10px] gap-1 text-destructive hover:text-destructive" onClick={onRetry}>
+            <RefreshCw className="h-3 w-3" /> Retry
+          </Button>
+        )}
+        {metaLabel && (
+          <p className="text-[9px] text-muted-foreground/60 mt-1 select-none">{metaLabel}</p>
+        )}
       </div>
     </div>
   );
