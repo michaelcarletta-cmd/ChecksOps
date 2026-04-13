@@ -6,7 +6,9 @@
 import { routeTask, overrideSearchMode, smartRouteModel, shouldTriggerSearch, type DarwinTaskType, type SearchMode } from "./modelRouter.ts";
 import { callOpenAI, type OpenAIResult } from "./openaiClient.ts";
 import { searchTavily, type TavilyResult } from "./tavily.ts";
-import { buildCacheKey, hashPrompt, getCache, setCache, getClaimMemory, setClaimMemory, isSearchOnCooldown, markSearchUsed } from "./cache.ts";
+import { buildCacheKey, hashPrompt, getCache, setCache, getClaimMemory, setClaimMemory, clearClaimMemory, isSearchOnCooldown, markSearchUsed } from "./cache.ts";
+
+export { clearClaimMemory } from "./cache.ts";
 
 export interface GenerateOptions {
   task: DarwinTaskType;
@@ -22,7 +24,7 @@ export interface GenerateOptions {
   temperature?: number;
   maxTokens?: number;
   jsonMode?: boolean;
-  /** Optional data-type tag for claim-level memoization (e.g. "extracted_facts", "estimate_summary") */
+  /** Data-type tag for claim-level memoization (e.g. "extracted_facts") */
   claimDataType?: string;
 }
 
@@ -36,11 +38,18 @@ export interface GenerateResult {
 }
 
 export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
-  // ── 1. Claim memory shortcut ────────────────────────────────────
+  // ── 1. Claim memory fast-return ─────────────────────────────────
   if (opts.claimId && opts.claimDataType && !opts.skipCache) {
-    const memo = getClaimMemory<GenerateResult>(opts.claimId, opts.claimDataType);
+    const memo = getClaimMemory(opts.claimId, opts.claimDataType);
     if (memo) {
-      return { ...memo, cached: true };
+      return {
+        text: memo.text,
+        model: memo.model,
+        cached: true,
+        usedSearch: false,
+        sources: [],
+        promptHash: memo.promptHash,
+      };
     }
   }
 
@@ -84,10 +93,7 @@ export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
     !isSearchOnCooldown(claimKey)
   ) {
     try {
-      tavilyResult = await searchTavily(
-        opts.searchQuery || opts.user,
-        config.searchMode,
-      );
+      tavilyResult = await searchTavily(opts.searchQuery || opts.user, config.searchMode);
       if (!tavilyResult?.sources?.length) {
         tavilyResult = null;
       } else {
@@ -137,7 +143,7 @@ export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
   setCache(cacheKey, result);
 
   if (opts.claimId && opts.claimDataType) {
-    setClaimMemory(opts.claimId, opts.claimDataType, result);
+    setClaimMemory(opts.claimId, opts.claimDataType, aiResult.text, aiResult.model, pHash);
   }
 
   return result;
@@ -164,7 +170,6 @@ export async function callOpenAIText(opts: {
   jsonSchema?: Record<string, unknown>;
 }): Promise<{ text: string; model?: string; raw?: unknown; id?: string; meta?: GenerateResult }> {
   const forceStrong = opts.model?.includes("gpt-5.4") || opts.reasoningEffort === "high";
-
   const result = await generate({
     task: forceStrong ? "copilot_reasoning" : "copilot_drafting",
     system: opts.system,
@@ -175,7 +180,6 @@ export async function callOpenAIText(opts: {
     jsonMode: !!opts.jsonSchema,
     searchMode: "off",
   });
-
   return { text: result.text, model: result.model, meta: result };
 }
 
@@ -193,7 +197,6 @@ export async function callPerplexityResearch(opts: {
     console.error("Tavily search failed in callPerplexityResearch:", e);
     tavily = null;
   }
-
   if (!tavily) return { text: "", citations: [] };
 
   const topSources = tavily.sources.slice(0, 3);
