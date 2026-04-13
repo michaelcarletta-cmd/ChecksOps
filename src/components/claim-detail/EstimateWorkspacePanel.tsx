@@ -1,4 +1,6 @@
-import { useState, useEffect, Suspense, lazy } from "react";
+import { useState, useEffect, Suspense, lazy, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calculator } from "lucide-react";
 
@@ -38,8 +40,25 @@ export const EstimateWorkspacePanel = ({ claimId, claim }: EstimateWorkspacePane
     localStorage.setItem(STORAGE_KEY, selectedSection);
   }, [selectedSection]);
 
-  // Placeholder line items from claim data - will be populated from estimate tables
-  const lineItems = claim?.estimate_items || [];
+  const { data: lineItems = [] } = useQuery({
+    queryKey: ["darwin-estimate-lines", claimId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("darwin_estimate_lines")
+        .select("description, quantity, unit, code_reference, trade")
+        .eq("claim_id", claimId)
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return (data || []).map((row: any) => ({
+        description: row.description,
+        quantity: row.quantity,
+        unit: row.unit,
+        code: row.code_reference,
+        trade: row.trade,
+      }));
+    },
+    enabled: !!claimId,
+  });
 
   return (
     <div className="space-y-4">
