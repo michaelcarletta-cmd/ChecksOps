@@ -334,11 +334,12 @@ Deno.serve(async (req) => {
 
     if (!textForExtraction?.trim()) {
       return new Response(JSON.stringify({
+        ok: false,
         error: 'No text could be extracted from this document.',
         extraction_confidence: 0,
         extracted_text_source: extractedTextSource,
         warning_flags: ['No readable text found'],
-      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // --- Pre-extraction validation ---
