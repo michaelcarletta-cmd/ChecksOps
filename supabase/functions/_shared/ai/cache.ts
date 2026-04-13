@@ -1,13 +1,15 @@
 /**
- * Simple in-memory response cache keyed by (taskType, claimId, model, searchMode, promptHash).
- * TTL: 24 hours. Bounded to 200 entries (LRU eviction).
+ * In-memory caches for AI response deduplication and claim-level memoization.
  *
- * Also provides:
- * - CLAIM_MEMORY: per-claim extracted-facts cache (claimId:dataType → data)
- * - SEARCH_COOLDOWN: per-claim Tavily throttle (30 min cooldown)
+ * Three layers:
+ * 1. Response cache  – keyed by (task, claim, model, search, promptHash), 24h TTL
+ * 2. Claim memory    – nested Map<claimId, Map<dataType, SlimMemo>>, 4h TTL
+ * 3. Search cooldown – per-claim 30-min Tavily throttle
  */
 
 import type { SearchMode, DarwinTaskType } from "./modelRouter.ts";
+
+// ── Types ────────────────────────────────────────────────────────────
 
 interface CacheEntry {
   value: unknown;
@@ -15,67 +17,19 @@ interface CacheEntry {
   key: string;
 }
 
+/** Slim payload stored in claim memory — only what's needed to rebuild a response */
+export interface SlimMemo {
+  text: string;
+  model: string;
+  promptHash: string;
+  expiresAt: number;
+}
+
+// ── Response cache ───────────────────────────────────────────────────
+
 const MAX_ENTRIES = 200;
 const TTL_MS = 1000 * 60 * 60 * 24; // 24 hours
 const cache = new Map<string, CacheEntry>();
-
-// ── Claim memory cache ──────────────────────────────────────────────
-// Stores extracted facts, estimate summaries, photo findings per claim
-// so repeated calls for the same claim data return instantly.
-const CLAIM_MEMORY = new Map<string, CacheEntry>();
-const CLAIM_MEMORY_MAX = 500;
-const CLAIM_MEMORY_TTL = 1000 * 60 * 60 * 4; // 4 hours
-
-export function claimMemoryKey(claimId: string, dataType: string): string {
-  return `${claimId}:${dataType}`;
-}
-
-export function getClaimMemory<T>(claimId: string, dataType: string): T | null {
-  const key = claimMemoryKey(claimId, dataType);
-  const entry = CLAIM_MEMORY.get(key);
-  if (!entry) return null;
-  if (Date.now() > entry.expiresAt) {
-    CLAIM_MEMORY.delete(key);
-    return null;
-  }
-  // LRU bump
-  CLAIM_MEMORY.delete(key);
-  CLAIM_MEMORY.set(key, entry);
-  return entry.value as T;
-}
-
-export function setClaimMemory(claimId: string, dataType: string, value: unknown): void {
-  if (CLAIM_MEMORY.size >= CLAIM_MEMORY_MAX) {
-    const oldest = CLAIM_MEMORY.keys().next().value;
-    if (oldest) CLAIM_MEMORY.delete(oldest);
-  }
-  const key = claimMemoryKey(claimId, dataType);
-  CLAIM_MEMORY.set(key, { value, expiresAt: Date.now() + CLAIM_MEMORY_TTL, key });
-}
-
-// ── Search cooldown per claim ───────────────────────────────────────
-// Prevents Tavily from being called more than once per 30 min per claim.
-const SEARCH_COOLDOWN = new Map<string, number>(); // claimId → last-search timestamp
-const SEARCH_COOLDOWN_MS = 1000 * 60 * 30; // 30 minutes
-
-export function isSearchOnCooldown(claimId: string): boolean {
-  const last = SEARCH_COOLDOWN.get(claimId);
-  if (!last) return false;
-  return Date.now() - last < SEARCH_COOLDOWN_MS;
-}
-
-export function markSearchUsed(claimId: string): void {
-  SEARCH_COOLDOWN.set(claimId, Date.now());
-  // Prune old entries to prevent unbounded growth
-  if (SEARCH_COOLDOWN.size > 1000) {
-    const cutoff = Date.now() - SEARCH_COOLDOWN_MS;
-    for (const [k, v] of SEARCH_COOLDOWN) {
-      if (v < cutoff) SEARCH_COOLDOWN.delete(k);
-    }
-  }
-}
-
-// ── Response cache ──────────────────────────────────────────────────
 
 export function buildCacheKey(
   taskType: DarwinTaskType,
@@ -113,9 +67,66 @@ export function setCache(key: string, value: unknown): void {
     const oldest = cache.keys().next().value;
     if (oldest) cache.delete(oldest);
   }
-  cache.set(key, {
-    value,
-    expiresAt: Date.now() + TTL_MS,
-    key,
-  });
+  cache.set(key, { value, expiresAt: Date.now() + TTL_MS, key });
+}
+
+// ── Claim memory cache ───────────────────────────────────────────────
+// Nested Map: claimId → (dataType → SlimMemo)
+// Stores only { text, model, promptHash } to minimise memory footprint.
+
+const CLAIM_MEMORY = new Map<string, Map<string, SlimMemo>>();
+const CLAIM_MEMORY_TTL = 1000 * 60 * 60 * 4; // 4 hours
+const CLAIM_MEMORY_MAX_CLAIMS = 500;
+
+export function getClaimMemory(claimId: string, dataType: string): SlimMemo | null {
+  const inner = CLAIM_MEMORY.get(claimId);
+  if (!inner) return null;
+  const entry = inner.get(dataType);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    inner.delete(dataType);
+    if (inner.size === 0) CLAIM_MEMORY.delete(claimId);
+    return null;
+  }
+  return entry;
+}
+
+export function setClaimMemory(claimId: string, dataType: string, text: string, model: string, promptHash: string): void {
+  // Evict oldest claim if at capacity
+  if (!CLAIM_MEMORY.has(claimId) && CLAIM_MEMORY.size >= CLAIM_MEMORY_MAX_CLAIMS) {
+    const oldest = CLAIM_MEMORY.keys().next().value;
+    if (oldest) CLAIM_MEMORY.delete(oldest);
+  }
+  let inner = CLAIM_MEMORY.get(claimId);
+  if (!inner) {
+    inner = new Map();
+    CLAIM_MEMORY.set(claimId, inner);
+  }
+  inner.set(dataType, { text, model, promptHash, expiresAt: Date.now() + CLAIM_MEMORY_TTL });
+}
+
+/** Clear all cached data for a claim (call when claim is modified) */
+export function clearClaimMemory(claimId: string): void {
+  CLAIM_MEMORY.delete(claimId);
+}
+
+// ── Search cooldown per claim ────────────────────────────────────────
+
+const SEARCH_COOLDOWN = new Map<string, number>();
+const SEARCH_COOLDOWN_MS = 1000 * 60 * 30; // 30 minutes
+
+export function isSearchOnCooldown(claimId: string): boolean {
+  const last = SEARCH_COOLDOWN.get(claimId);
+  if (!last) return false;
+  return Date.now() - last < SEARCH_COOLDOWN_MS;
+}
+
+export function markSearchUsed(claimId: string): void {
+  SEARCH_COOLDOWN.set(claimId, Date.now());
+  if (SEARCH_COOLDOWN.size > 1000) {
+    const cutoff = Date.now() - SEARCH_COOLDOWN_MS;
+    for (const [k, v] of SEARCH_COOLDOWN) {
+      if (v < cutoff) SEARCH_COOLDOWN.delete(k);
+    }
+  }
 }
