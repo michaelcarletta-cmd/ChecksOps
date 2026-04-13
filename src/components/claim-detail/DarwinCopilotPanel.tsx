@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Brain, Send, Trash2, StopCircle, Maximize2, Minimize2, Bold, Italic, Underline, Type, Paperclip, X, FileText } from "lucide-react";
+import { Brain, Send, Trash2, StopCircle, Maximize2, Minimize2, Bold, Italic, Underline, Type, Paperclip, X, FileText, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useDarwinCopilot, type CopilotMessage } from "@/hooks/useDarwinCopilot";
 import { DraftRenderer } from "./copilot/DraftRenderer";
@@ -196,17 +197,19 @@ export function DarwinCopilotPanel({ claimId, isExpanded, onToggleExpand }: Darw
           </div>
         ) : (
           messages.map((msg, idx) => (
-            <MessageBubble key={idx} message={msg} />
+            <MessageBubble key={idx} message={msg} onRetry={msg.isError ? () => {
+              // Retry: resend the last user message
+              const lastUser = [...messages].reverse().find(m => m.role === 'user');
+              if (lastUser) askCopilot(lastUser.content);
+            } : undefined} />
           ))
         )}
         {loading && messages[messages.length - 1]?.role !== 'assistant' && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <div className="animate-pulse flex gap-1">
-              <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-              <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-              <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-            </div>
-            Darwin is thinking…
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="h-4 w-5/6" />
+            <p className="text-[10px] text-muted-foreground mt-1">Darwin is thinking…</p>
           </div>
         )}
       </div>
