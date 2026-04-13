@@ -348,12 +348,13 @@ Deno.serve(async (req) => {
 
     if (!validation.valid) {
       return new Response(JSON.stringify({
+        ok: false,
         error: 'Document text could not be reliably parsed into estimate line items.',
         extraction_confidence: validation.confidence / 100,
         extracted_text_source: extractedTextSource,
         warning_flags: validation.warnings,
         extracted_text_preview: textForExtraction.slice(0, 2000),
-      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // --- AI extraction ---
