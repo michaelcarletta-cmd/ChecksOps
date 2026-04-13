@@ -9,7 +9,6 @@ import { Loader2, Mail, FileSignature, ArrowRight, Clock, MessageSquare, Brain }
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { InboxSMSQuickReply } from "@/components/inbox/InboxSMSQuickReply";
-import { InboxSMSQuickReply } from "@/components/inbox/InboxSMSQuickReply";
 import { DarwinSMSActivityLog } from "@/components/inbox/DarwinSMSActivityLog";
 
 const Inbox = () => {
