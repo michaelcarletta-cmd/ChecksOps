@@ -280,24 +280,11 @@ function classifyIntentByKeywords(text: string): DarwinIntent {
 
 /** Classify intent using OpenAI when regex fails, with keyword heuristic fallback */
 async function classifyIntentWithLLM(text: string): Promise<{ intent: DarwinIntent; method: string; rawOutput?: string }> {
-  const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-  if (!OPENAI_API_KEY) {
-    console.warn('LLM fallback: OPENAI_API_KEY missing, using keyword heuristic');
-    const intent = classifyIntentByKeywords(text);
-    return { intent, method: 'keyword_heuristic' };
-  }
   try {
-    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        temperature: 0,
-        max_tokens: 20,
-        messages: [
-          {
-            role: 'system',
-            content: `Classify this SMS message into exactly one intent. Reply with ONLY the intent keyword, nothing else.
+    const { callOpenAI } = await import("../_shared/ai/openaiClient.ts");
+    const result = await callOpenAI({
+      model: 'gpt-4o-mini',
+      system: `Classify this SMS message into exactly one intent. Reply with ONLY the intent keyword, nothing else.
 Intents: analyze, operating_manual, case_study, marketing, financial_qa, create_task, send_client_sms, send_client_email, summary, unknown
 - analyze: user wants to analyze/review a claim or run analysis
 - create_task: user wants to create a task, reminder, or follow-up
@@ -309,25 +296,16 @@ Intents: analyze, operating_manual, case_study, marketing, financial_qa, create_
 - case_study: user wants a case study
 - marketing: user wants marketing content
 - unknown: none of the above`,
-          },
-          { role: 'user', content: text },
-        ],
-      }),
+      user: text,
+      temperature: 0,
+      maxTokens: 20,
     });
-    if (!resp.ok) {
-      const errText = await resp.text();
-      console.error(`LLM fallback: OpenAI returned ${resp.status}: ${errText}`);
-      const intent = classifyIntentByKeywords(text);
-      return { intent, method: 'keyword_heuristic_after_llm_error', rawOutput: errText.slice(0, 200) };
-    }
-    const data = await resp.json();
-    const raw = (data.choices?.[0]?.message?.content || '').trim().toLowerCase();
+    const raw = (result.text || '').trim().toLowerCase();
     console.log(`LLM fallback: raw output="${raw}" for text="${text.slice(0, 100)}"`);
     const valid: DarwinIntent[] = ['analyze', 'operating_manual', 'case_study', 'marketing', 'financial_qa', 'create_task', 'send_client_sms', 'send_client_email', 'summary'];
     if (valid.includes(raw as DarwinIntent)) {
       return { intent: raw as DarwinIntent, method: 'llm', rawOutput: raw };
     }
-    // LLM returned something unexpected, try keyword heuristic
     console.warn(`LLM fallback: unexpected output "${raw}", falling back to keywords`);
     const intent = classifyIntentByKeywords(text);
     return { intent, method: 'keyword_heuristic_after_llm_unknown', rawOutput: raw };

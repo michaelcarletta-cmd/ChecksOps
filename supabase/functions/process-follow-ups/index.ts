@@ -100,12 +100,8 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Generate follow-up email using AI
-      const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-      if (!openaiApiKey) {
-        console.error('OPENAI_API_KEY not configured');
-        continue;
-      }
+      // Generate follow-up email using central AI service
+      const { callOpenAI } = await import("../_shared/ai/openaiClient.ts");
 
       const followUpNumber = automation.follow_up_current_count + 1;
       
@@ -136,30 +132,19 @@ GUIDELINES:
         ? `Generate a follow-up email. The last email sent was about: "${lastEmail.subject}"`
         : `Generate a follow-up email checking on the status of this claim.`;
 
-      const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${openaiApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      let emailBody: string;
+      try {
+        const aiResult = await callOpenAI({
           model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
+          system: systemPrompt,
+          user: userPrompt,
           temperature: 0.7,
-        }),
-      });
-
-      const aiData = await aiResponse.json();
-      
-      if (!aiResponse.ok) {
-        console.error('OpenAI error:', aiData);
+        });
+        emailBody = aiResult.text;
+      } catch (aiErr) {
+        console.error('AI generation error:', aiErr);
         continue;
       }
-
-      const emailBody = aiData.choices[0].message.content;
       const subject = `${claim.claim_number || claim.id.slice(0, 8)}`;
 
       // Build claim email for CC

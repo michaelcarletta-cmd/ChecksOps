@@ -521,105 +521,17 @@ async function extractDocumentIntelligence(input: {
   summary: string;
   text: string;
 }): Promise<IntelligenceOutput> {
-  const apiKey = Deno.env.get('OPENAI_API_KEY');
-  if (!apiKey) {
-    throw new Error('Missing OPENAI_API_KEY');
-  }
+  const { callOpenAI } = await import("../_shared/ai/openaiClient.ts");
 
-  const prompt = `
-You are Darwin, a property-claim document intelligence engine.
-
-Return ONLY valid JSON with this exact structure:
-{
-  "source_summary": "string",
-  "extracted_entities": {
-    "claim_number": "string|null",
-    "policy_number": "string|null",
-    "loss_date": "string|null",
-    "document_date": "string|null",
-    "property_address": "string|null",
-    "carrier": "string|null",
-    "insured": "string|null"
-  },
-  "financial_data": {
-    "rcv": number|null,
-    "acv": number|null,
-    "net_claim": number|null,
-    "deductible": number|null,
-    "depreciation": number|null,
-    "approved_amount": number|null,
-    "denied_amount": number|null,
-    "payments_mentioned": [
-      { "type": "string", "amount": number, "date": "string|null", "description": "string" }
-    ]
-  },
-  "timeline_data": {
-    "dates": [
-      { "date": "string", "label": "string", "confidence": number }
-    ],
-    "deadlines": [
-      { "date": "string|null", "label": "string", "source_excerpt": "string" }
-    ]
-  },
-  "action_items": [
-    { "title": "string", "owner": "carrier|adjuster|insured|contractor|unknown", "priority": "high|medium|low", "deadline": "string|null", "reason": "string" }
-  ],
-  "coverage_signals": {
-    "denial_present": boolean,
-    "partial_approval_present": boolean,
-    "payment_present": boolean,
-    "reservation_of_rights_present": boolean,
-    "proof_of_loss_requested": boolean,
-    "examination_under_oath_requested": boolean,
-    "appraisal_mentioned": boolean
-  },
-  "parties": [
-    { "name": "string", "role": "string", "company": "string|null" }
-  ],
-  "confidence_score": number
-}
-
-Rules:
-- Do not invent facts.
-- Use null when unknown.
-- Keep source_summary under 80 words.
-- confidence_score must be between 0 and 1.
-`;
-
-  const content = `
-FILE NAME: ${input.fileName}
-DOCUMENT TYPE: ${input.documentType}
-DOCUMENT CLASSIFICATION: ${input.documentClassification}
-CURRENT SUMMARY: ${input.summary}
-
-DOCUMENT TEXT:
-${input.text.slice(0, 25000)}
-`;
-
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      temperature: 0.1,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: prompt },
-        { role: 'user', content },
-      ],
-    }),
+  const result = await callOpenAI({
+    model: 'gpt-4o-mini',
+    system: prompt,
+    user: content,
+    temperature: 0.1,
+    jsonMode: true,
   });
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`OpenAI extraction failed: ${response.status} ${errText}`);
-  }
-
-  const data = await response.json();
-  const raw = data?.choices?.[0]?.message?.content;
+  const raw = result.text;
   if (!raw) {
     throw new Error('No model output returned');
   }
