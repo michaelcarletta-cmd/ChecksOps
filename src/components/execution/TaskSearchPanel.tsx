@@ -229,7 +229,32 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
     }
   };
 
-  return (
+  const handleActivateOne = async (taskId: string) => {
+    setActionLoading((prev) => ({ ...prev, [taskId]: "activate" }));
+    const result = await activateTask(taskId);
+    setActionLoading((prev) => { const n = { ...prev }; delete n[taskId]; return n; });
+    if (result.success) {
+      toast({ title: "Task activated" });
+      onQueueUpdated();
+      queryClient.invalidateQueries({ queryKey: ["all-searchable-tasks"] });
+    } else {
+      toast({ title: "Could not activate", description: result.error, variant: "destructive" });
+    }
+  };
+
+  const handleCompleteOne = async (taskId: string) => {
+    setActionLoading((prev) => ({ ...prev, [taskId]: "complete" }));
+    const result = await completeTask(taskId);
+    setActionLoading((prev) => { const n = { ...prev }; delete n[taskId]; return n; });
+    if (result.success) {
+      toast({ title: "Task completed" });
+      onQueueUpdated();
+      queryClient.invalidateQueries({ queryKey: ["all-searchable-tasks"] });
+    } else {
+      toast({ title: "Could not complete", description: result.error, variant: "destructive" });
+    }
+  };
+
     <div className="space-y-3">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
