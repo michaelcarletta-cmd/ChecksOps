@@ -229,7 +229,7 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
   const [viewMode, setViewMode] = useState<ViewMode>("internal");
   const printRef = useRef<HTMLDivElement>(null);
 
-  const stateCode = claim?.property_state || claim?.policyholder_state || "";
+  const stateCode = claim?.state_code || claim?.property_state || claim?.policyholder_state || "";
 
   const handlePrint = useCallback(() => {
     if (!results.length) return;
