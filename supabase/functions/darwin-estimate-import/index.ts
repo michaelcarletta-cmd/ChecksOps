@@ -5,37 +5,127 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-const EXTRACTION_SYSTEM_PROMPT = `You are an estimate extraction engine. Given raw text from an insurance estimate document (Xactimate, Symbility, contractor bid, or similar), extract every line item into a structured JSON array.
+// --- Pre-extraction validation ---
+function validateEstimateText(text: string): { valid: boolean; confidence: number; warnings: string[] } {
+  const warnings: string[] = [];
+  const lower = text.toLowerCase();
+  const lines = text.split('\n').filter(l => l.trim().length > 0);
 
-For EACH line item, extract:
-- description (string): the line item description exactly as written
-- quantity (number): the quantity
-- unit (string): unit of measure — one of EA, SF, LF, SQ, HR, LS, CY, GAL
-- unit_price (number): price per unit
-- trade (string): the trade category — one of Roofing, Siding, Gutters, Interior, Drywall, Painting, Flooring, Electrical, Plumbing, HVAC, Windows, Doors, Framing, Insulation, General, Other
-- depreciation_pct (number): depreciation percentage if listed, else 0
-- code_reference (string|null): any Xactimate code or line code if present
-- notes (string|null): any notes or remarks on the line
+  // Check for estimate keywords
+  const estimateKeywords = ['qty', 'unit', 'replace', 'remove', 'shingle', 'flashing', 'drywall', 'paint',
+    'total', 'depreciation', 'rcv', 'acv', 'roof', 'siding', 'gutter', 'interior', 'price',
+    'cost', 'amount', 'square', 'linear', 'each', 'labor', 'material', 'subtotal', 'overhead', 'profit'];
+  const keywordHits = estimateKeywords.filter(kw => lower.includes(kw)).length;
 
-Also extract these document-level fields:
-- document_type (string): "carrier_estimate", "contractor_estimate", "pa_estimate", or "unknown"
-- total_rcv (number|null): the document total RCV if found
-- total_acv (number|null): the document total ACV if found
+  // Check for numeric/currency patterns
+  const numberPattern = /\d+[\.,]?\d*/g;
+  const currencyPattern = /\$[\d,]+\.?\d*/g;
+  const numberMatches = (text.match(numberPattern) || []).length;
+  const currencyMatches = (text.match(currencyPattern) || []).length;
 
-CRITICAL RULES:
-- Extract ONLY line items that actually appear in the document text
-- Do NOT invent, assume, or hallucinate line items that are not explicitly listed
-- If the document is a roofing estimate, only extract roofing items
-- If you cannot clearly read a line item, skip it rather than guess
-- Match descriptions as closely as possible to the original text
+  // Check for line-item-like structures (description + number on same line)
+  const lineItemPattern = /[a-zA-Z].{5,}\s+\d/;
+  const lineItemMatches = lines.filter(l => lineItemPattern.test(l)).length;
 
-Return ONLY valid JSON with this shape:
-{
-  "document_type": "...",
-  "total_rcv": null,
-  "total_acv": null,
-  "line_items": [...]
-}`;
+  // Check for garbage/binary text
+  const nonPrintable = text.replace(/[\x20-\x7E\n\r\t]/g, '').length;
+  const garbageRatio = nonPrintable / Math.max(text.length, 1);
+  if (garbageRatio > 0.15) {
+    warnings.push('High non-printable character ratio — text may be corrupted');
+  }
+
+  // Compute confidence
+  let confidence = 0;
+  confidence += Math.min(keywordHits * 5, 30); // max 30 from keywords
+  confidence += Math.min(currencyMatches * 3, 20); // max 20 from currency
+  confidence += Math.min(lineItemMatches * 2, 25); // max 25 from line structures
+  confidence += Math.min(numberMatches, 25); // max 25 from numbers
+  confidence = Math.max(0, confidence - (garbageRatio > 0.15 ? 30 : 0));
+  confidence = Math.min(confidence, 100);
+
+  if (keywordHits < 2) warnings.push('Few estimate-related keywords detected');
+  if (lineItemMatches < 3) warnings.push('Few line-item structures detected');
+  if (lines.length < 5) warnings.push('Very short document');
+
+  const valid = confidence >= 20 && keywordHits >= 1 && lineItemMatches >= 1;
+  return { valid, confidence, warnings };
+}
+
+// --- Post-extraction sanity checks ---
+function postExtractionSanityCheck(lineItems: any[], textForExtraction: string): { items: any[]; warnings: string[] } {
+  const warnings: string[] = [];
+  const lower = textForExtraction.toLowerCase();
+
+  // Detect primary document scope
+  const roofingKeywords = ['roof', 'shingle', 'ridge', 'flashing', 'drip edge', 'underlayment', 'vent', 'hip', 'valley', 'eave', 'starter'];
+  const interiorKeywords = ['cabinet', 'sink', 'faucet', 'dishwasher', 'toilet', 'vanity', 'countertop', 'appliance'];
+  const roofingHits = roofingKeywords.filter(k => lower.includes(k)).length;
+  const interiorHitsInDoc = interiorKeywords.filter(k => lower.includes(k)).length;
+
+  const isRoofingDoc = roofingHits >= 3 && interiorHitsInDoc === 0;
+
+  // Check extracted items for trades inconsistent with source
+  const trades = new Set(lineItems.map(i => (i.trade || '').toLowerCase()));
+  const suspiciousTrades = ['Plumbing', 'HVAC', 'Electrical', 'Flooring'];
+
+  if (isRoofingDoc) {
+    const suspiciousItems = lineItems.filter(item => {
+      const desc = (item.description || '').toLowerCase();
+      const trade = (item.trade || '').toLowerCase();
+      return interiorKeywords.some(k => desc.includes(k)) ||
+        suspiciousTrades.some(t => trade === t.toLowerCase());
+    });
+
+    if (suspiciousItems.length > 0) {
+      warnings.push(`${suspiciousItems.length} items appear inconsistent with roofing document scope`);
+      // Remove suspicious items
+      const cleanItems = lineItems.filter(item => {
+        const desc = (item.description || '').toLowerCase();
+        const trade = (item.trade || '').toLowerCase();
+        const isSuspicious = interiorKeywords.some(k => desc.includes(k)) ||
+          (suspiciousTrades.some(t => trade === t.toLowerCase()) && !roofingKeywords.some(k => desc.includes(k)));
+        return !isSuspicious;
+      });
+      return { items: cleanItems, warnings };
+    }
+  }
+
+  // Check for too many unrelated trades
+  if (trades.size > 8) {
+    warnings.push('Unusually high number of different trades detected — verify document scope');
+  }
+
+  return { items: lineItems, warnings };
+}
+
+const EXTRACTION_SYSTEM_PROMPT = `You are a STRICT estimate extraction engine for insurance claim documents (Xactimate, Symbility, contractor bids).
+
+CRITICAL ANTI-HALLUCINATION RULES:
+1. Extract ONLY line items that are EXPLICITLY written in the provided text
+2. Do NOT infer, invent, assume, or fabricate any line items
+3. Do NOT add plumbing, cabinets, appliances, or interior items unless they explicitly appear in the text
+4. If a line is unreadable or ambiguous, SKIP it entirely — do NOT guess
+5. Use the document's own wording for descriptions — do not rephrase or generalize
+6. If the document is clearly a roofing estimate, extract ONLY roofing items
+7. Preserve the exact scope shown — do not expand or add related items
+8. Every extracted item MUST have a clear source line in the original text
+
+For EACH line item found, extract:
+- description (string): exact text from document
+- quantity (number): as listed
+- unit (string): EA, SF, LF, SQ, HR, LS, CY, GAL
+- unit_price (number): per-unit price
+- trade (string): Roofing, Siding, Gutters, Interior, Drywall, Painting, Flooring, Electrical, Plumbing, HVAC, Windows, Doors, Framing, Insulation, General, Other
+- depreciation_pct (number): if listed, else 0
+- code_reference (string|null): Xactimate/line code if present
+- notes (string|null): any remarks
+
+Also extract:
+- document_type: "carrier_estimate", "contractor_estimate", "pa_estimate", or "unknown"
+- total_rcv (number|null)
+- total_acv (number|null)
+
+If you cannot find ANY valid line items, return an empty line_items array.`;
 
 const TOOL_SCHEMA = {
   type: 'function',
@@ -84,32 +174,43 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
-    const { claimId, extractedText, fileName, source, fileId, base64Data, mimeType } = await req.json();
+    const body = await req.json();
+    const { claimId, extractedText, fileName, source, fileId, base64Data, mimeType, previewOnly } = body;
     if (!claimId) throw new Error('claimId required');
 
     let textForExtraction = '';
+    let extractedTextSource = 'none';
 
-    // Priority 1: If fileId provided, try to get already-extracted text from claim_files
+    // Priority 1: If fileId provided, get stored text from claim_files
     if (fileId) {
-      console.log(`Attempting to read extracted text from claim_files for fileId: ${fileId}`);
+      console.log(`Looking up claim_files for fileId: ${fileId}`);
       const { data: fileRow } = await supabase
         .from('claim_files')
         .select('extracted_text, clean_text, file_name')
         .eq('id', fileId)
         .maybeSingle();
 
-      if (fileRow?.clean_text) {
+      if (fileRow?.clean_text && fileRow.clean_text.trim().length > 50) {
         textForExtraction = fileRow.clean_text;
-        console.log(`Using clean_text from claim_files (${textForExtraction.length} chars)`);
-      } else if (fileRow?.extracted_text) {
-        textForExtraction = fileRow.extracted_text;
-        console.log(`Using extracted_text from claim_files (${textForExtraction.length} chars)`);
+        extractedTextSource = 'clean_text';
+        console.log(`Using clean_text (${textForExtraction.length} chars)`);
+      } else if (fileRow?.extracted_text && fileRow.extracted_text.trim().length > 50) {
+        // Verify it's not garbage
+        const nonPrintable = fileRow.extracted_text.replace(/[\x20-\x7E\n\r\t]/g, '').length;
+        if (nonPrintable / fileRow.extracted_text.length < 0.15) {
+          textForExtraction = fileRow.extracted_text;
+          extractedTextSource = 'extracted_text';
+          console.log(`Using extracted_text (${textForExtraction.length} chars)`);
+        } else {
+          console.log('extracted_text appears to be garbage, skipping');
+        }
       }
     }
 
-    // Priority 2: If base64 PDF data provided, use Gemini vision to extract text
+    // Priority 2: Multimodal vision for PDFs/images with base64
     if (!textForExtraction && base64Data && mimeType) {
-      console.log(`Using multimodal vision extraction for ${mimeType} (${base64Data.length} base64 chars)`);
+      console.log(`Using multimodal vision for ${mimeType} (${Math.round(base64Data.length / 1024)}KB base64)`);
+      extractedTextSource = 'multimodal_vision';
 
       const visionResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
@@ -119,55 +220,79 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({
           model: 'google/gemini-2.5-flash',
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: 'Extract ALL text from this estimate document. Preserve the structure: line item descriptions, quantities, units, unit prices, and totals. Include section headers (like "Roof", "Interior", "Summary"). Output the full text exactly as it appears in the document. Do NOT summarize or skip any line items.',
-                },
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:${mimeType};base64,${base64Data}`,
-                  },
-                },
-              ],
-            },
-          ],
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Extract ALL text from this estimate document verbatim. Preserve structure: section headers, line item descriptions, quantities, units, unit prices, totals, depreciation. Output the complete text exactly as it appears. Do NOT summarize, skip, or invent any content.',
+              },
+              {
+                type: 'image_url',
+                image_url: { url: `data:${mimeType};base64,${base64Data}` },
+              },
+            ],
+          }],
           max_tokens: 16000,
         }),
       });
 
       if (!visionResp.ok) {
         const errBody = await visionResp.text();
-        console.error(`Vision extraction failed (${visionResp.status}):`, errBody);
+        console.error(`Vision extraction failed (${visionResp.status}):`, errBody.slice(0, 500));
+        if (visionResp.status === 429 || visionResp.status === 402) {
+          return new Response(JSON.stringify({ error: visionResp.status === 429 ? 'Rate limit exceeded' : 'Credits required' }), {
+            status: visionResp.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
         throw new Error(`Vision extraction failed: ${visionResp.status}`);
       }
 
       const visionData = await visionResp.json();
       textForExtraction = visionData.choices?.[0]?.message?.content || '';
-      console.log(`Vision extracted ${textForExtraction.length} chars of text`);
+      console.log(`Vision extracted ${textForExtraction.length} chars`);
     }
 
-    // Priority 3: Use provided extractedText (for CSV, XLSX, plain text)
+    // Priority 3: Plain text for CSV/XLSX/TXT
     if (!textForExtraction && extractedText) {
-      // Skip if it's the old broken base64 format
       if (extractedText.startsWith('[BASE64_DOCUMENT:')) {
-        console.warn('Received legacy BASE64_DOCUMENT format — cannot extract text from raw base64 string');
-        throw new Error('PDF text extraction failed. Please re-upload the file.');
+        console.warn('Rejected legacy BASE64_DOCUMENT format');
+        return new Response(JSON.stringify({
+          error: 'Document could not be read. Please re-upload the file.',
+          extraction_confidence: 0,
+          extracted_text_source: 'none',
+        }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
       textForExtraction = extractedText;
+      extractedTextSource = 'plain_text';
     }
 
     if (!textForExtraction?.trim()) {
-      throw new Error('No text could be extracted from this document. Please ensure the file contains readable text.');
+      return new Response(JSON.stringify({
+        error: 'No text could be extracted from this document.',
+        extraction_confidence: 0,
+        extracted_text_source: extractedTextSource,
+        warning_flags: ['No readable text found'],
+      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log(`Sending ${textForExtraction.length} chars to AI for structured extraction from ${fileName || 'estimate'}`);
+    // --- Pre-extraction validation ---
+    const validation = validateEstimateText(textForExtraction);
+    console.log(`Pre-validation: confidence=${validation.confidence}, valid=${validation.valid}, warnings=${validation.warnings.join('; ')}`);
 
-    // Use AI to extract structured line items from the clean text
+    if (!validation.valid) {
+      return new Response(JSON.stringify({
+        error: 'Document text could not be reliably parsed into estimate line items.',
+        extraction_confidence: validation.confidence / 100,
+        extracted_text_source: extractedTextSource,
+        warning_flags: validation.warnings,
+        extracted_text_preview: textForExtraction.slice(0, 2000),
+      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // --- AI extraction ---
+    console.log(`Sending ${textForExtraction.length} chars for extraction (source: ${extractedTextSource})`);
+
     const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -186,14 +311,9 @@ Deno.serve(async (req) => {
     });
 
     if (!aiResp.ok) {
-      if (aiResp.status === 429) {
-        return new Response(JSON.stringify({ error: 'Rate limit exceeded, please try again shortly.' }), {
-          status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      if (aiResp.status === 402) {
-        return new Response(JSON.stringify({ error: 'Credits required. Add funds in Settings → Workspace → Usage.' }), {
-          status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      if (aiResp.status === 429 || aiResp.status === 402) {
+        return new Response(JSON.stringify({ error: aiResp.status === 429 ? 'Rate limit exceeded' : 'Credits required' }), {
+          status: aiResp.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
       throw new Error(`AI gateway error ${aiResp.status}`);
@@ -204,19 +324,47 @@ Deno.serve(async (req) => {
     if (!toolCall) throw new Error('No structured extraction returned');
 
     const extracted = JSON.parse(toolCall.function.arguments);
-    const lineItems = extracted.line_items || [];
+    let lineItems = extracted.line_items || [];
+
+    // --- Post-extraction sanity checks ---
+    const sanity = postExtractionSanityCheck(lineItems, textForExtraction);
+    lineItems = sanity.items;
+    const allWarnings = [...validation.warnings, ...sanity.warnings];
+
+    const extractionConfidence = Math.min(validation.confidence / 100, 1);
 
     if (lineItems.length === 0) {
-      return new Response(JSON.stringify({ success: true, imported: 0, message: 'No line items detected in document.' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return new Response(JSON.stringify({
+        success: true,
+        imported: 0,
+        message: 'No valid line items detected in document.',
+        extraction_confidence: extractionConfidence,
+        extracted_text_source: extractedTextSource,
+        warning_flags: allWarnings,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Determine if this is a carrier estimate (populate carrier columns) or PA/contractor estimate (populate main columns)
+    // --- Preview mode: return items without saving ---
+    if (previewOnly) {
+      return new Response(JSON.stringify({
+        success: true,
+        preview: true,
+        line_items: lineItems,
+        document_type: extracted.document_type,
+        total_rcv: extracted.total_rcv,
+        total_acv: extracted.total_acv,
+        extraction_confidence: extractionConfidence,
+        extracted_text_source: extractedTextSource,
+        extracted_text_preview: textForExtraction.slice(0, 3000),
+        warning_flags: allWarnings,
+        imported: lineItems.length,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // --- Insert into DB ---
     const isCarrier = extracted.document_type === 'carrier_estimate';
     const importSource = source || (isCarrier ? 'carrier_import' : 'estimate_import');
 
-    // Get current max sort_order
     const { data: existingLines } = await supabase
       .from('darwin_estimate_lines')
       .select('sort_order')
@@ -255,7 +403,7 @@ Deno.serve(async (req) => {
     const { error: insertError } = await supabase.from('darwin_estimate_lines').insert(rows);
     if (insertError) throw insertError;
 
-    console.log(`Successfully imported ${rows.length} line items (${importSource}) for claim ${claimId}`);
+    console.log(`Imported ${rows.length} items (${importSource}) for claim ${claimId}`);
 
     return new Response(JSON.stringify({
       success: true,
@@ -263,9 +411,10 @@ Deno.serve(async (req) => {
       document_type: extracted.document_type,
       total_rcv: extracted.total_rcv,
       total_acv: extracted.total_acv,
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+      extraction_confidence: extractionConfidence,
+      extracted_text_source: extractedTextSource,
+      warning_flags: allWarnings,
+    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (err: any) {
     console.error('darwin-estimate-import error:', err);
     return new Response(JSON.stringify({ error: err.message }), {
