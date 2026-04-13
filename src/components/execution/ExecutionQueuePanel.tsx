@@ -17,7 +17,7 @@ import {
   MAX_ACTIVE_TASKS,
   ExecutionTask,
 } from "@/services/taskExecutionService";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface ExecutionQueuePanelProps {
   activeTasks: ExecutionTask[];
@@ -30,15 +30,15 @@ interface ExecutionQueuePanelProps {
 export function ExecutionQueuePanel({ activeTasks, backlogTasks, blockedTasks, loading, onRefetch }: ExecutionQueuePanelProps) {
   const [selectedTask, setSelectedTask] = useState<ExecutionTask | null>(null);
   const [blockingTaskId, setBlockingTaskId] = useState<string | null>(null);
-  const { toast } = useToast();
 
   const handleAction = async (action: () => Promise<{ success: boolean; error?: string }>, successMsg: string) => {
     const result = await action();
     if (result.success) {
-      toast({ title: successMsg });
+      toast.success(successMsg);
+      // Force immediate refetch to clear stale state
       await onRefetch();
     } else {
-      toast({ title: "Error", description: result.error, variant: "destructive" });
+      toast.error(result.error || "Action failed");
     }
   };
 
