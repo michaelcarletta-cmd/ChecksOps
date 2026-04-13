@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Send, AlertCircle } from "lucide-react";
+import { Loader2, Send, AlertCircle, Bookmark, Trash2, Users } from "lucide-react";
 
 const DOCUMENT_TYPES = [
   "Letter",
@@ -27,6 +28,17 @@ const MAIL_SERVICES = [
   { value: "certified", label: "Certified Mail" },
   { value: "certified_return_receipt", label: "Certified w/ Return Receipt" },
 ];
+
+interface SavedContact {
+  id: string;
+  name: string;
+  label: string | null;
+  address1: string;
+  address2: string | null;
+  city: string;
+  state: string;
+  zip: string;
+}
 
 interface SendDocumentDialogProps {
   open: boolean;
@@ -69,9 +81,115 @@ export function SendDocumentDialog({
   const [fromState, setFromState] = useState("");
   const [fromZip, setFromZip] = useState("");
 
+  // Saved contacts
+  const [savedContacts, setSavedContacts] = useState<SavedContact[]>([]);
+  const [selectedContactId, setSelectedContactId] = useState("");
+  const [saveAddress, setSaveAddress] = useState(false);
+  const [saveLabel, setSaveLabel] = useState("");
+  const [showManageContacts, setShowManageContacts] = useState(false);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [orgId, setOrgId] = useState<string | null>(null);
+
   const pdfFiles = claimFiles.filter(f =>
     f.file_name?.toLowerCase().endsWith(".pdf")
   );
+
+  // Fetch org_id and saved contacts
+  useEffect(() => {
+    if (!open) return;
+    const fetchContacts = async () => {
+      setLoadingContacts(true);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: orgMember } = await supabase
+          .from("org_members")
+          .select("org_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (orgMember?.org_id) {
+          setOrgId(orgMember.org_id);
+          const { data: contacts } = await supabase
+            .from("docupost_contacts")
+            .select("id, name, label, address1, address2, city, state, zip")
+            .eq("org_id", orgMember.org_id)
+            .order("name");
+
+          setSavedContacts(contacts || []);
+        }
+      } catch (err) {
+        console.error("Failed to load saved contacts:", err);
+      } finally {
+        setLoadingContacts(false);
+      }
+    };
+    fetchContacts();
+  }, [open]);
+
+  const handleContactSelect = (contactId: string) => {
+    setSelectedContactId(contactId);
+    if (!contactId || contactId === "__none__") {
+      return;
+    }
+    const contact = savedContacts.find(c => c.id === contactId);
+    if (contact) {
+      setToName(contact.name);
+      setToAddress1(contact.address1);
+      setToAddress2(contact.address2 || "");
+      setToCity(contact.city);
+      setToState(contact.state);
+      setToZip(contact.zip);
+    }
+  };
+
+  const handleSaveContact = async () => {
+    if (!orgId || !toName || !toAddress1 || !toCity || !toState || !toZip) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from("docupost_contacts")
+      .insert({
+        org_id: orgId,
+        name: toName,
+        label: saveLabel || null,
+        address1: toAddress1,
+        address2: toAddress2 || null,
+        city: toCity,
+        state: toState,
+        zip: toZip,
+        created_by: user.id,
+      })
+      .select("id, name, label, address1, address2, city, state, zip")
+      .single();
+
+    if (error) {
+      toast({ title: "Failed to save contact", description: error.message, variant: "destructive" });
+      return false;
+    }
+    if (data) {
+      setSavedContacts(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+      toast({ title: "Contact saved", description: `${toName} has been saved for future use.` });
+    }
+    return true;
+  };
+
+  const handleDeleteContact = async (contactId: string) => {
+    const { error } = await supabase
+      .from("docupost_contacts")
+      .delete()
+      .eq("id", contactId);
+
+    if (error) {
+      toast({ title: "Failed to delete contact", description: error.message, variant: "destructive" });
+      return;
+    }
+    setSavedContacts(prev => prev.filter(c => c.id !== contactId));
+    if (selectedContactId === contactId) setSelectedContactId("");
+    toast({ title: "Contact deleted" });
+  };
 
   const handleFileSelect = async (fileId: string) => {
     setSelectedFileId(fileId);
@@ -123,6 +241,13 @@ export function SendDocumentDialog({
 
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
+
+      // Save contact if checkbox is checked
+      if (saveAddress) {
+        await handleSaveContact();
+        setSaveAddress(false);
+        setSaveLabel("");
+      }
 
       toast({ title: "Document queued for delivery", description: `${documentType} will be mailed to ${toName} via Docupost.` });
       onOpenChange(false);
@@ -208,11 +333,83 @@ export function SendDocumentDialog({
 
           {/* Recipient */}
           <div className="space-y-2">
-            <h4 className="text-sm font-semibold text-foreground">Recipient</h4>
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-foreground">Recipient</h4>
+              <button
+                type="button"
+                onClick={() => setShowManageContacts(!showManageContacts)}
+                className="text-xs text-primary hover:underline flex items-center gap-1"
+              >
+                <Users className="h-3 w-3" />
+                {showManageContacts ? "Hide contacts" : "Manage contacts"}
+              </button>
+            </div>
+
+            {/* Saved Contacts Dropdown */}
+            {savedContacts.length > 0 && !showManageContacts && (
+              <div className="space-y-1">
+                <Label className="text-xs">Saved Contacts</Label>
+                <Select value={selectedContactId} onValueChange={handleContactSelect}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a saved contact..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Manual entry —</SelectItem>
+                    {savedContacts.map(c => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}{c.label ? ` (${c.label})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Manage Contacts List */}
+            {showManageContacts && (
+              <div className="border rounded-md p-3 space-y-2 bg-muted/30">
+                <p className="text-xs text-muted-foreground font-medium">Saved contacts ({savedContacts.length})</p>
+                {savedContacts.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No saved contacts yet. Send a document and check "Save this address" to create one.</p>
+                )}
+                {savedContacts.map(c => (
+                  <div key={c.id} className="flex items-center justify-between text-sm border-b border-border/50 pb-1.5 last:border-0 last:pb-0">
+                    <div>
+                      <span className="font-medium">{c.name}</span>
+                      {c.label && <span className="text-muted-foreground ml-1">({c.label})</span>}
+                      <p className="text-xs text-muted-foreground">{c.address1}, {c.city}, {c.state} {c.zip}</p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                      onClick={() => handleDeleteContact(c.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2 space-y-1">
                 <Label className="text-xs">Name *</Label>
-                <Input value={toName} onChange={e => setToName(e.target.value)} placeholder="Recipient name" />
+                <div className="flex gap-2">
+                  <Input value={toName} onChange={e => setToName(e.target.value)} placeholder="Recipient name" className="flex-1" />
+                  {orgId && toName && toAddress1 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 h-10"
+                      onClick={handleSaveContact}
+                      title="Save this contact"
+                    >
+                      <Bookmark className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
               <div className="col-span-2 space-y-1">
                 <Label className="text-xs">Address Line 1 *</Label>
@@ -237,6 +434,30 @@ export function SendDocumentDialog({
                 </div>
               </div>
             </div>
+
+            {/* Save Address Checkbox */}
+            {orgId && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="save-address"
+                    checked={saveAddress}
+                    onCheckedChange={(checked) => setSaveAddress(checked === true)}
+                  />
+                  <label htmlFor="save-address" className="text-xs cursor-pointer">
+                    Save this address for future mailings
+                  </label>
+                </div>
+                {saveAddress && (
+                  <Input
+                    placeholder="Label (e.g. 'Citizens - Claims Dept')"
+                    value={saveLabel}
+                    onChange={e => setSaveLabel(e.target.value)}
+                    className="text-xs h-8"
+                  />
+                )}
+              </div>
+            )}
           </div>
 
           {/* Sender (collapsed by default) */}
