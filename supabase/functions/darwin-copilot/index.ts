@@ -1479,7 +1479,7 @@ Return ONLY valid JSON, no markdown fences.`;
       // Determine if external research would benefit this question
       const researchKeywords = ['code', 'standard', 'regulation', 'statute', 'manufacturer', 'spec', 'requirement', 'law', 'legal', 'building code', 'IRC', 'IBC', 'ASTM', 'warranty', 'installation', 'best practice', 'industry', 'rebut', 'deny', 'denial', 'coverage', 'exclusion', 'how to', 'what does', 'is it', 'can they', 'should I', 'precedent', 'case law'];
       const msgLower = (lastUserMsg || '').toLowerCase();
-      const needsResearch = copilotMode === 'strategy' || copilotMode === 'rebuttal' || copilotMode === 'war_room' || researchKeywords.some(k => msgLower.includes(k));
+      const needsResearch = copilotMode !== 'draft' && (copilotMode === 'strategy' || copilotMode === 'rebuttal' || copilotMode === 'war_room' || researchKeywords.some(k => msgLower.includes(k)));
 
       if (lastUserMsg && needsResearch) {
         try {
