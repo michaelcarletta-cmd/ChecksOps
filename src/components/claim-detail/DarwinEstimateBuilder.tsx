@@ -746,6 +746,17 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
           )}
         </CardContent>
       </Card>
+
+      {importPreview && (
+        <EstimateImportPreview
+          open={!!importPreview}
+          onClose={() => { setImportPreview(null); setImportPayload(null); }}
+          data={importPreview}
+          fileName={importFileName}
+          onConfirm={handleConfirmImport}
+          confirming={importConfirming}
+        />
+      )}
     </TooltipProvider>
   );
 };
