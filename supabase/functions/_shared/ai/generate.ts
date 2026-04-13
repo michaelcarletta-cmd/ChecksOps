@@ -6,31 +6,24 @@
 import { routeTask, overrideSearchMode, smartRouteModel, shouldTriggerSearch, type DarwinTaskType, type SearchMode } from "./modelRouter.ts";
 import { callOpenAI, type OpenAIResult } from "./openaiClient.ts";
 import { searchTavily, type TavilyResult } from "./tavily.ts";
-import { buildCacheKey, hashPrompt, getCache, setCache } from "./cache.ts";
+import { buildCacheKey, hashPrompt, getCache, setCache, getClaimMemory, setClaimMemory, isSearchOnCooldown, markSearchUsed } from "./cache.ts";
 
 export interface GenerateOptions {
   task: DarwinTaskType;
   system: string;
   user: string;
   claimId?: string;
-  /** Override the default search mode for this task */
   searchMode?: SearchMode;
-  /** Search query — if omitted, user prompt is used as search query */
   searchQuery?: string;
-  /** Claim facts / declared position context to prepend before search results */
   claimContext?: string;
-  /** Skip cache for this request */
   skipCache?: boolean;
-  /** Override model */
   model?: string;
-  /** Force gpt-4o regardless of prompt length */
   forceStrong?: boolean;
-  /** Override temperature */
   temperature?: number;
-  /** Override max tokens */
   maxTokens?: number;
-  /** Request JSON mode */
   jsonMode?: boolean;
+  /** Optional data-type tag for claim-level memoization (e.g. "extracted_facts", "estimate_summary") */
+  claimDataType?: string;
 }
 
 export interface GenerateResult {
@@ -43,10 +36,17 @@ export interface GenerateResult {
 }
 
 export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
-  let config = routeTask(opts.task);
+  // ── 1. Claim memory shortcut ────────────────────────────────────
+  if (opts.claimId && opts.claimDataType && !opts.skipCache) {
+    const memo = getClaimMemory<GenerateResult>(opts.claimId, opts.claimDataType);
+    if (memo) {
+      return { ...memo, cached: true };
+    }
+  }
 
-  // Smart model upgrade based on prompt length or forceStrong
-  config = smartRouteModel(config, opts.user.length, opts.forceStrong);
+  // ── 2. Route model ─────────────────────────────────────────────
+  let config = routeTask(opts.task);
+  config = smartRouteModel(config, opts.task, opts.user.length, opts.forceStrong);
 
   if (opts.searchMode !== undefined) {
     config = overrideSearchMode(config, opts.searchMode);
@@ -58,7 +58,7 @@ export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
 
   const pHash = await hashPrompt(opts.system + opts.user);
 
-  // Check cache
+  // ── 3. Response cache ──────────────────────────────────────────
   const cacheKey = buildCacheKey(
     opts.task,
     opts.claimId || "_global",
@@ -74,17 +74,24 @@ export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
     }
   }
 
-  // Run Tavily search only if gating function approves
+  // ── 4. Tavily search (gated + cooldown) ────────────────────────
   let tavilyResult: TavilyResult | null = null;
-  if (config.searchMode !== "off" && shouldTriggerSearch(opts.task, opts.searchQuery || opts.user)) {
+  const claimKey = opts.claimId || "_global";
+
+  if (
+    config.searchMode !== "off" &&
+    shouldTriggerSearch(opts.task, opts.searchQuery || opts.user) &&
+    !isSearchOnCooldown(claimKey)
+  ) {
     try {
       tavilyResult = await searchTavily(
         opts.searchQuery || opts.user,
         config.searchMode,
       );
-      // No-search fallback: treat empty results as null
       if (!tavilyResult?.sources?.length) {
         tavilyResult = null;
+      } else {
+        markSearchUsed(claimKey);
       }
     } catch (e) {
       console.error("Tavily search failed (non-fatal):", e);
@@ -92,7 +99,7 @@ export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
     }
   }
 
-  // Build final system prompt: claim context first, then search results
+  // ── 5. Build enriched system prompt ────────────────────────────
   let enrichedSystem = opts.system;
 
   if (opts.claimContext) {
@@ -100,7 +107,6 @@ export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
   }
 
   if (tavilyResult) {
-    // Limit to 3 sources, 120 chars each to reduce token burn
     const topSources = tavilyResult.sources.slice(0, 3);
     const sourcesText = topSources
       .map((s, i) => `[${i + 1}] ${s.title}\n${s.url}\n${s.content.slice(0, 120)}`)
@@ -108,7 +114,7 @@ export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
     enrichedSystem += `\n\n=== EXTERNAL RESEARCH ===\nUse the following research only as supporting context. Do not restate it unless necessary.\nKey Findings: ${tavilyResult.answer}\n\nSources:\n${sourcesText}\n=== END RESEARCH ===`;
   }
 
-  // Call OpenAI
+  // ── 6. Call OpenAI ─────────────────────────────────────────────
   const aiResult: OpenAIResult = await callOpenAI({
     model,
     system: enrichedSystem,
@@ -127,14 +133,18 @@ export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
     promptHash: pHash,
   };
 
+  // ── 7. Persist to caches ───────────────────────────────────────
   setCache(cacheKey, result);
+
+  if (opts.claimId && opts.claimDataType) {
+    setClaimMemory(opts.claimId, opts.claimDataType, result);
+  }
 
   return result;
 }
 
-/**
- * Backward-compatible wrapper matching the old runDarwinTask signature.
- */
+// ── Backward-compatible wrappers ─────────────────────────────────
+
 export async function runDarwinTask(
   task: DarwinTaskType,
   system: string,
@@ -144,9 +154,6 @@ export async function runDarwinTask(
   return { text: result.text, model: result.model, meta: result };
 }
 
-/**
- * Backward-compatible wrapper matching the old callOpenAIText signature.
- */
 export async function callOpenAIText(opts: {
   system: string;
   user: string;
@@ -172,9 +179,6 @@ export async function callOpenAIText(opts: {
   return { text: result.text, model: result.model, meta: result };
 }
 
-/**
- * Backward-compatible wrapper for Perplexity research → now uses Tavily.
- */
 export async function callPerplexityResearch(opts: {
   system: string;
   user: string;
@@ -184,19 +188,14 @@ export async function callPerplexityResearch(opts: {
   let tavily: TavilyResult | null = null;
   try {
     tavily = await searchTavily(opts.user, "basic");
-    if (!tavily?.sources?.length) {
-      tavily = null;
-    }
+    if (!tavily?.sources?.length) tavily = null;
   } catch (e) {
     console.error("Tavily search failed in callPerplexityResearch:", e);
     tavily = null;
   }
 
-  if (!tavily) {
-    return { text: "", citations: [] };
-  }
+  if (!tavily) return { text: "", citations: [] };
 
-  // Limit sources for token efficiency
   const topSources = tavily.sources.slice(0, 3);
   const sourcesContext = topSources
     .map((s, i) => `[${i + 1}] ${s.title} (${s.url})\n${s.content.slice(0, 120)}`)
@@ -210,15 +209,9 @@ export async function callPerplexityResearch(opts: {
     maxTokens: opts.maxTokens ?? 1800,
   });
 
-  return {
-    text: aiResult.text,
-    citations: topSources.map((s) => s.url),
-  };
+  return { text: aiResult.text, citations: topSources.map((s) => s.url) };
 }
 
-/**
- * Backward-compatible getModelForTask.
- */
 export function getModelForTask(task: DarwinTaskType) {
   const config = routeTask(task);
   return {
