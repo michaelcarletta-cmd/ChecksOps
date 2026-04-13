@@ -716,12 +716,8 @@ async function processSmartCarrierFollowUp(
     return;
   }
   
-  // Generate follow-up email using AI
-  const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-  if (!openaiApiKey) {
-    console.error('OPENAI_API_KEY not configured for carrier follow-up');
-    return;
-  }
+  // Generate follow-up email using central AI service
+  const { callOpenAI } = await import("../_shared/ai/openaiClient.ts");
   
   const daysSinceLastContact = lastCarrierEmail 
     ? Math.floor((Date.now() - new Date(lastCarrierEmail.sent_at).getTime()) / (1000 * 60 * 60 * 24))
@@ -748,30 +744,14 @@ GUIDELINES:
 Do NOT include a subject line - just the email body.`;
 
   try {
-    const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openaiApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: 'Generate a carrier follow-up email requesting a status update.' }
-        ],
-        temperature: 0.7,
-      }),
+    const aiResult = await callOpenAI({
+      model: 'gpt-4o-mini',
+      system: systemPrompt,
+      user: 'Generate a carrier follow-up email requesting a status update.',
+      temperature: 0.7,
     });
 
-    const aiData = await aiResponse.json();
-    
-    if (!aiResponse.ok) {
-      console.error('OpenAI error for carrier follow-up:', aiData);
-      return;
-    }
-
-    const emailBody = aiData.choices[0].message.content;
+    const emailBody = aiResult.text;
     const subject = `Follow-Up: Claim ${claim.claim_number} - ${fullClaim?.policyholder_name || 'Status Request'}`;
 
     // Create pending action for review (or auto-send if fully autonomous)
