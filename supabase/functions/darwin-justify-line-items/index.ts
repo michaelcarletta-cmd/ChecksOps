@@ -196,10 +196,12 @@ async function queryBuildingCodes(
   }
 
   // Fetch all codes for this state at once
-  const { data: allStateCodesRaw } = await supabase
+  const { data: allStateCodesRaw, error: codeErr } = await supabase
     .from("building_code_citations")
     .select("section_number, section_title, code_source, content, keywords, state_adoptions")
     .contains("state_adoptions", [stateCode.toUpperCase()]);
+
+  console.log(`[codes] Query for state "${stateCode}": ${allStateCodesRaw?.length || 0} citations found${codeErr ? `, error: ${codeErr.message}` : ''}`);
 
   if (!allStateCodesRaw?.length) {
     for (const li of lineItems) {
@@ -367,6 +369,9 @@ serve(async (req) => {
     const searchTerms = lineItems.map((li) => li.description || li.code || "").filter(Boolean);
     const uniqueTerms = [...new Set(searchTerms)];
 
+    console.log(`[justify] State: "${stateCode}" → effectiveState: "${effectiveState}", allowed: ${ALLOWED_STATES.join(',')}`);
+    console.log(`[justify] Manufacturer: "${manufacturer || 'none'}", lineItems: ${lineItems.length}, terms: ${uniqueTerms.join(', ')}`);
+
     // Parallel data retrieval — per-item matching for manufacturer and codes
     const [mfrData, codeData, kbChunks] = await Promise.all([
       queryManufacturerData(supabase, lineItems, manufacturer || undefined),
@@ -374,7 +379,15 @@ serve(async (req) => {
       queryKnowledgeBase(supabase, uniqueTerms),
     ]);
 
-    console.log(`Retrieved: ${mfrData.allSpecs.length} mfr specs, ${codeData.allCodes.length} code citations, ${kbChunks.length} KB chunks`);
+    console.log(`[justify] Retrieved: ${mfrData.allSpecs.length} mfr specs, ${codeData.allCodes.length} code citations, ${kbChunks.length} KB chunks`);
+    
+    // Log per-item code matches for debugging
+    for (const [itemKey, codes] of Object.entries(codeData.perItem)) {
+      console.log(`[justify][codes] "${itemKey}" → ${(codes as any[]).length} matches: ${(codes as any[]).map((c: any) => c.citation).join(', ') || 'none'}`);
+    }
+    for (const [itemKey, specs] of Object.entries(mfrData.perItem)) {
+      console.log(`[justify][mfr] "${itemKey}" → ${(specs as any[]).length} matches: ${(specs as any[]).map((s: any) => s.source).join(', ') || 'none'}`);
+    }
 
     // ── Build per-item context for the prompt ──
     const perItemContext = lineItems.map((li, idx) => {
