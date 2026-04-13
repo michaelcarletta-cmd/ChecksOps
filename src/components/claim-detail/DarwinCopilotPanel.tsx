@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Brain, Send, Trash2, StopCircle, Maximize2, Minimize2, Bold, Italic, Underline, Type, Paperclip, X, FileText } from "lucide-react";
+import { Brain, Send, Trash2, StopCircle, Maximize2, Minimize2, Bold, Italic, Underline, Type, Paperclip, X, FileText, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useDarwinCopilot, type CopilotMessage } from "@/hooks/useDarwinCopilot";
 import { DraftRenderer } from "./copilot/DraftRenderer";
@@ -196,17 +197,19 @@ export function DarwinCopilotPanel({ claimId, isExpanded, onToggleExpand }: Darw
           </div>
         ) : (
           messages.map((msg, idx) => (
-            <MessageBubble key={idx} message={msg} />
+            <MessageBubble key={idx} message={msg} onRetry={msg.isError ? () => {
+              // Retry: resend the last user message
+              const lastUser = [...messages].reverse().find(m => m.role === 'user');
+              if (lastUser) askCopilot(lastUser.content);
+            } : undefined} />
           ))
         )}
         {loading && messages[messages.length - 1]?.role !== 'assistant' && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <div className="animate-pulse flex gap-1">
-              <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-              <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-              <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-            </div>
-            Darwin is thinking…
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-4 w-1/2" />
+            <Skeleton className="h-4 w-5/6" />
+            <p className="text-[10px] text-muted-foreground mt-1">Darwin is thinking…</p>
           </div>
         )}
       </div>
@@ -336,7 +339,7 @@ export function DarwinCopilotPanel({ claimId, isExpanded, onToggleExpand }: Darw
   );
 }
 
-function MessageBubble({ message }: { message: CopilotMessage }) {
+function MessageBubble({ message, onRetry }: { message: CopilotMessage; onRetry?: () => void }) {
   const isUser = message.role === 'user';
 
   // If this is a draft response, render the DraftRenderer
@@ -350,19 +353,33 @@ function MessageBubble({ message }: { message: CopilotMessage }) {
     );
   }
 
+  const metaLabel = !isUser && message.meta?.model
+    ? `${message.meta.model}${message.meta.cached ? ' • cached' : ''}${message.meta.usedSearch ? ` • search: ${message.meta.sources?.length ? 'basic' : 'auto'}` : ''}`
+    : null;
+
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
       <div className={cn(
         "max-w-[95%] rounded-lg px-3 py-2 text-xs",
         isUser
           ? "bg-primary text-primary-foreground"
-          : "bg-muted/80 text-foreground"
+          : message.isError
+            ? "bg-destructive/10 text-destructive border border-destructive/20"
+            : "bg-muted/80 text-foreground"
       )}>
         <div className="whitespace-pre-wrap break-words leading-relaxed" dangerouslySetInnerHTML={isUser ? { __html: message.content } : undefined}>
           {!isUser ? (message.content || (
             <span className="text-muted-foreground italic">Generating…</span>
           )) : undefined}
         </div>
+        {message.isError && onRetry && (
+          <Button variant="ghost" size="sm" className="mt-1.5 h-6 text-[10px] gap-1 text-destructive hover:text-destructive" onClick={onRetry}>
+            <RefreshCw className="h-3 w-3" /> Retry
+          </Button>
+        )}
+        {metaLabel && (
+          <p className="text-[9px] text-muted-foreground/60 mt-1 select-none">{metaLabel}</p>
+        )}
       </div>
     </div>
   );

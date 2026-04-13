@@ -1661,11 +1661,16 @@ CRITICAL RULES:
       );
     }
 
+    const meta = ai.meta || {};
     return new Response(
       JSON.stringify({
         ok: true,
         response: ai.text,
-        model: ai.model,
+        model: meta.model || ai.model,
+        usedSearch: meta.usedSearch || false,
+        cached: meta.cached || false,
+        sources: meta.sources || [],
+        promptHash: meta.promptHash || '',
         strategyMode: copilotMode === 'strategy',
       }),
       {

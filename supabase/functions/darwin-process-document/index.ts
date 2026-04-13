@@ -156,42 +156,23 @@ async function verifyClassification(
   initialClassification: string
 ): Promise<{ classification: DocumentClassification; confidence: number; reasons: string[] } | null> {
   try {
-    const apiKey = Deno.env.get('OPENAI_API_KEY');
-    if (!apiKey) return null;
+    const { callOpenAI } = await import("../_shared/ai/openaiClient.ts");
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        temperature: 0.1,
-        response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'system',
-            content: `Return only JSON:
+    const result = await callOpenAI({
+      model: 'gpt-4o-mini',
+      system: `Return only JSON:
 {
   "classification": "estimate|denial|approval|rfi|engineering_report|policy|correspondence|invoice|photo|other",
   "confidence": number,
   "reasons": ["string"]
 }
 Use the document text and filename. Do not invent facts.`,
-          },
-          {
-            role: 'user',
-            content: `File name: ${fileName}\nInitial classification: ${initialClassification}\nDocument text:\n${textContent.slice(0, 12000)}`,
-          },
-        ],
-      }),
+      user: `File name: ${fileName}\nInitial classification: ${initialClassification}\nDocument text:\n${textContent.slice(0, 12000)}`,
+      temperature: 0.1,
+      jsonMode: true,
     });
 
-    if (!response.ok) return null;
-
-    const data = await response.json();
-    const raw = data?.choices?.[0]?.message?.content;
+    const raw = result.text;
     if (!raw) return null;
 
     const parsed = JSON.parse(raw);

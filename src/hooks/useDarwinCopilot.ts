@@ -27,11 +27,21 @@ export interface DraftData {
   generated_at: string;
 }
 
+export interface AiMeta {
+  model?: string;
+  usedSearch?: boolean;
+  cached?: boolean;
+  sources?: Array<{ title: string; url: string }>;
+  promptHash?: string;
+}
+
 export interface CopilotMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
   draftData?: DraftData;
+  meta?: AiMeta;
+  isError?: boolean;
 }
 
 export function useDarwinCopilot(claimId: string) {
@@ -90,11 +100,18 @@ export function useDarwinCopilot(claimId: string) {
         content: data.response || data.draftData?.draft || '',
         timestamp: Date.now(),
         draftData: data.draftData || undefined,
+        meta: {
+          model: data.model,
+          usedSearch: data.usedSearch,
+          cached: data.cached,
+          sources: data.sources,
+          promptHash: data.promptHash,
+        },
       };
       setMessages(prev => [...prev, assistantMsg]);
     } catch (err: any) {
       if (err.name === 'AbortError') return;
-      const errorMsg: CopilotMessage = { role: 'assistant', content: `Error: ${err.message}`, timestamp: Date.now() };
+      const errorMsg: CopilotMessage = { role: 'assistant', content: `Error: ${err.message}`, timestamp: Date.now(), isError: true };
       setMessages(prev => [...prev, errorMsg]);
     } finally {
       setLoading(false);

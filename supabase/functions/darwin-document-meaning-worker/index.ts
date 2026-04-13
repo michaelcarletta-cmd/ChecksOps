@@ -224,10 +224,7 @@ async function extractDocumentMeaning(input: {
   sourceSummary: string;
   intelligence: any;
 }): Promise<MeaningOutput> {
-  const apiKey = Deno.env.get('OPENAI_API_KEY');
-  if (!apiKey) {
-    throw new Error('Missing OPENAI_API_KEY');
-  }
+  const { callOpenAI } = await import("../_shared/ai/openaiClient.ts");
 
   const prompt = `
 You are Darwin, a property-claim claim-strategy engine.
@@ -319,33 +316,15 @@ DOCUMENT INTELLIGENCE JSON:
 ${JSON.stringify(input.intelligence).slice(0, 25000)}
 `;
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      temperature: 0.1,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: prompt },
-        { role: 'user', content },
-      ],
-    }),
+  const result = await callOpenAI({
+    model: 'gpt-4o-mini',
+    system: prompt,
+    user: content,
+    temperature: 0.1,
+    jsonMode: true,
   });
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`OpenAI meaning extraction failed: ${response.status} ${errText}`);
-  }
-
-  const data = await response.json();
-  const raw = data?.choices?.[0]?.message?.content;
-  if (!raw) {
-    throw new Error('No model output returned');
-  }
+  const raw = result.text;
 
   const parsed = JSON.parse(raw);
 
