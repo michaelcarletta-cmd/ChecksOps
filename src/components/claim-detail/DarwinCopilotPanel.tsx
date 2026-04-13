@@ -14,7 +14,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-type CopilotMode = 'operational' | 'rebuttal' | 'estimate' | 'war_room' | 'training' | 'strategy';
+type CopilotMode = 'operational' | 'rebuttal' | 'estimate' | 'war_room' | 'training' | 'strategy' | 'draft' | 'search_web' | 'search_argue';
 
 const MODE_LABELS: Record<CopilotMode, string> = {
   strategy: "Strategy",
@@ -23,6 +23,9 @@ const MODE_LABELS: Record<CopilotMode, string> = {
   estimate: "Estimate",
   war_room: "War Room",
   training: "Training",
+  draft: "Draft",
+  search_web: "Search the Web",
+  search_argue: "Search + Argue",
 };
 
 interface ClaimFile {
