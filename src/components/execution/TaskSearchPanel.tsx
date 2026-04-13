@@ -334,13 +334,39 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
                     {task.description && <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{task.description}</p>}
                   </div>
 
-                  {task.claim_id && (
-                    <Link to={`/claims/${task.claim_id}`} onClick={(e) => e.stopPropagation()}>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
-                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                  <div className="flex items-center gap-1 shrink-0">
+                    {task.status !== "active" && task.status !== "completed" && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        disabled={!!actionLoading[task.id]}
+                        onClick={(e) => { e.stopPropagation(); handleActivateOne(task.id); }}
+                        title="Activate"
+                      >
+                        <Play className="h-3.5 w-3.5 text-primary" />
                       </Button>
-                    </Link>
-                  )}
+                    )}
+                    {task.status !== "completed" && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        disabled={!!actionLoading[task.id]}
+                        onClick={(e) => { e.stopPropagation(); handleCompleteOne(task.id); }}
+                        title="Complete"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
+                      </Button>
+                    )}
+                    {task.claim_id && (
+                      <Link to={`/claims/${task.claim_id}`} onClick={(e) => e.stopPropagation()}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7">
+                          <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      </Link>
+                    )}
+                  </div>
                 </div>
               </Card>
             ))}
