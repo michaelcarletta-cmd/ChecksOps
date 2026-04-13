@@ -66,6 +66,17 @@ interface DarwinEstimateBuilderProps {
   claim: any;
 }
 
+interface EstimateImportLineItem {
+  description: string;
+  quantity: number;
+  unit: string;
+  unit_price: number;
+  trade: string;
+  depreciation_pct?: number;
+  code_reference?: string | null;
+  notes?: string | null;
+}
+
 const TRADES = [
   "Roofing", "Siding", "Gutters", "Interior", "Drywall", "Painting",
   "Flooring", "Electrical", "Plumbing", "HVAC", "Windows", "Doors",
@@ -335,10 +346,43 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
     setImporting(true);
     setImportFileName(file.name);
     try {
-      const payload: any = { claimId, fileName: file.name, previewOnly: true };
+      let fileId: string | null = null;
+
+      const { data: { user } } = await supabase.auth.getUser();
+      const fileExt = file.name.split(".").pop();
+      const storedFilePath = `estimate-imports/${claimId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("claim-files")
+        .upload(storedFilePath, file);
+
+      if (!uploadError) {
+        const { data: storedFile, error: fileInsertError } = await supabase
+          .from("claim_files")
+          .insert({
+            claim_id: claimId,
+            file_name: file.name,
+            file_path: storedFilePath,
+            file_size: file.size,
+            file_type: file.type,
+            uploaded_by: user?.id,
+          })
+          .select("id")
+          .single();
+
+        if (!fileInsertError) {
+          fileId = storedFile.id;
+          void supabase.functions.invoke("darwin-process-document", { body: { fileId } }).catch(() => undefined);
+        }
+      }
+
+      const payload: any = { claimId, fileName: file.name, previewOnly: true, ...(fileId ? { fileId } : {}) };
 
       if (file.type === "text/csv" || file.name.endsWith(".csv") || file.type === "text/plain" || file.name.endsWith(".txt")) {
-        payload.extractedText = await file.text();
+        const text = await file.text();
+        if (text.trim() && !text.startsWith("[BASE64_DOCUMENT:")) {
+          payload.extractedText = text;
+        }
       } else if (file.type.includes("spreadsheet") || file.name.endsWith(".xlsx") || file.name.endsWith(".xls")) {
         const { read, utils } = await import("xlsx");
         const buffer = await file.arrayBuffer();
@@ -348,7 +392,10 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
           const ws = wb.Sheets[name];
           allText.push(utils.sheet_to_csv(ws));
         });
-        payload.extractedText = allText.join("\n\n");
+        const text = allText.join("\n\n");
+        if (text.trim() && !text.startsWith("[BASE64_DOCUMENT:")) {
+          payload.extractedText = text;
+        }
       } else {
         const buffer = await file.arrayBuffer();
         const uint8 = new Uint8Array(buffer);
@@ -381,12 +428,18 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
     }
   };
 
-  const handleConfirmImport = async (items: any[]) => {
+  const handleConfirmImport = async (items: EstimateImportLineItem[]) => {
     if (!importPayload) return;
     setImportConfirming(true);
     try {
       const { data, error } = await supabase.functions.invoke("darwin-estimate-import", {
-        body: importPayload,
+        body: {
+          ...importPayload,
+          lineItemsOverride: items,
+          documentTypeOverride: importPreview?.document_type,
+          totalRcvOverride: importPreview?.total_rcv,
+          totalAcvOverride: importPreview?.total_acv,
+        },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
