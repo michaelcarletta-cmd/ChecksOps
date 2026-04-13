@@ -416,7 +416,7 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
 
       const { data, error } = await supabase.functions.invoke("darwin-estimate-import", { body: payload });
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (!data || data.ok === false || data.error) throw new Error(data?.error || "Import failed");
 
       // Show preview dialog
       setImportPreview(data);
@@ -442,7 +442,7 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
         },
       });
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (!data || data.ok === false || data.error) throw new Error(data?.error || "Import failed");
 
       toast({
         title: `${data?.imported || 0} line items imported`,

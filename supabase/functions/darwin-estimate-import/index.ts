@@ -305,8 +305,8 @@ Deno.serve(async (req) => {
         const errBody = await visionResp.text();
         console.error(`Vision extraction failed (${visionResp.status}):`, errBody.slice(0, 500));
         if (visionResp.status === 429 || visionResp.status === 402) {
-          return new Response(JSON.stringify({ error: visionResp.status === 429 ? 'Rate limit exceeded' : 'Credits required' }), {
-            status: visionResp.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          return new Response(JSON.stringify({ ok: false, error: visionResp.status === 429 ? 'Rate limit exceeded — please try again shortly.' : 'AI credits required — please add funds.' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
         throw new Error(`Vision extraction failed: ${visionResp.status}`);
@@ -322,10 +322,11 @@ Deno.serve(async (req) => {
       if (extractedText.startsWith('[BASE64_DOCUMENT:')) {
         console.warn('Rejected legacy BASE64_DOCUMENT format');
         return new Response(JSON.stringify({
+          ok: false,
           error: 'Document could not be read. Please re-upload the file.',
           extraction_confidence: 0,
           extracted_text_source: 'none',
-        }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
       textForExtraction = extractedText;
       extractedTextSource = 'plain_text';
@@ -333,11 +334,12 @@ Deno.serve(async (req) => {
 
     if (!textForExtraction?.trim()) {
       return new Response(JSON.stringify({
+        ok: false,
         error: 'No text could be extracted from this document.',
         extraction_confidence: 0,
         extracted_text_source: extractedTextSource,
         warning_flags: ['No readable text found'],
-      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // --- Pre-extraction validation ---
@@ -346,12 +348,13 @@ Deno.serve(async (req) => {
 
     if (!validation.valid) {
       return new Response(JSON.stringify({
+        ok: false,
         error: 'Document text could not be reliably parsed into estimate line items.',
         extraction_confidence: validation.confidence / 100,
         extracted_text_source: extractedTextSource,
         warning_flags: validation.warnings,
         extracted_text_preview: textForExtraction.slice(0, 2000),
-      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // --- AI extraction ---
@@ -387,8 +390,8 @@ Deno.serve(async (req) => {
 
       if (!aiResp.ok) {
         if (aiResp.status === 429 || aiResp.status === 402) {
-          return new Response(JSON.stringify({ error: aiResp.status === 429 ? 'Rate limit exceeded' : 'Credits required' }), {
-            status: aiResp.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          return new Response(JSON.stringify({ ok: false, error: aiResp.status === 429 ? 'Rate limit exceeded — please try again shortly.' : 'AI credits required — please add funds.' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
         }
         throw new Error(`AI gateway error ${aiResp.status}`);
@@ -482,6 +485,7 @@ Deno.serve(async (req) => {
     console.log(`Imported ${rows.length} items (${importSource}) for claim ${claimId}`);
 
     return new Response(JSON.stringify({
+      ok: true,
       success: true,
       imported: rows.length,
       document_type: extracted.document_type,
@@ -493,8 +497,8 @@ Deno.serve(async (req) => {
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (err: any) {
     console.error('darwin-estimate-import error:', err);
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    return new Response(JSON.stringify({ ok: false, error: err.message }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 });
