@@ -1035,6 +1035,9 @@ When giving substantive strategic analysis, structure responses with a CARRIER P
 Only use this full structure when giving substantive strategic analysis. For quick follow-ups or drafting, respond naturally.
 
 Maintain a conversational, collaborative tone. Ask clarifying questions when the user's intent is ambiguous. Build on prior messages in this conversation. When proposing a strategy, explain WHY it works and what risks exist.`,
+      draft: `Focus on drafting content. No live web search unless explicitly forced. Use existing claim context to produce drafts efficiently.`,
+      search_web: `Search the web for relevant information. This mode is handled by a dedicated handler.`,
+      search_argue: `Search the web and build a claim-focused argument. This mode is handled by a dedicated handler.`,
     };
 
     const orchestratorBrief = intelSummary ? `
