@@ -51,38 +51,89 @@ function validateEstimateText(text: string): { valid: boolean; confidence: numbe
   return { valid, confidence, warnings };
 }
 
+function normalizeForSourceMatch(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getSignificantTokens(value: string): string[] {
+  const stopWords = new Set([
+    'and', 'the', 'with', 'without', 'for', 'per', 'std', 'type', 'item', 'reset', 'remove',
+    'replace', 'repair', 'install', 'detach', 'high', 'grade', 'small', 'large', 'approx',
+  ]);
+
+  return Array.from(new Set(
+    normalizeForSourceMatch(value)
+      .split(' ')
+      .filter(token => token.length >= 4 && !stopWords.has(token))
+  ));
+}
+
+function isDescriptionGroundedInSource(description: string, normalizedSourceText: string): boolean {
+  const normalizedDescription = normalizeForSourceMatch(description);
+  if (!normalizedDescription) return false;
+  if (normalizedSourceText.includes(normalizedDescription)) return true;
+
+  const significantTokens = getSignificantTokens(description);
+  if (significantTokens.length === 0) return false;
+
+  const leadingPhrase = significantTokens.slice(0, Math.min(3, significantTokens.length)).join(' ');
+  if (leadingPhrase.length >= 8 && normalizedSourceText.includes(leadingPhrase)) return true;
+
+  const tokenMatches = significantTokens.filter(token => normalizedSourceText.includes(token)).length;
+  if (significantTokens.length <= 2) return tokenMatches === significantTokens.length;
+
+  return tokenMatches >= Math.max(2, Math.ceil(significantTokens.length * 0.6));
+}
+
 // --- Post-extraction sanity checks ---
 function postExtractionSanityCheck(lineItems: any[], textForExtraction: string): { items: any[]; warnings: string[] } {
   const warnings: string[] = [];
   const lower = textForExtraction.toLowerCase();
+  const normalizedSourceText = normalizeForSourceMatch(textForExtraction);
 
   // Detect primary document scope
   const roofingKeywords = ['roof', 'shingle', 'ridge', 'flashing', 'drip edge', 'underlayment', 'vent', 'hip', 'valley', 'eave', 'starter'];
-  const interiorKeywords = ['cabinet', 'sink', 'faucet', 'dishwasher', 'toilet', 'vanity', 'countertop', 'appliance'];
+  const interiorKeywords = ['cabinet', 'sink', 'faucet', 'dishwasher', 'toilet', 'vanity', 'countertop', 'appliance', 'kitchen', 'range hood', 'refrigerator', 'oven', 'microwave', 'water heater'];
   const roofingHits = roofingKeywords.filter(k => lower.includes(k)).length;
   const interiorHitsInDoc = interiorKeywords.filter(k => lower.includes(k)).length;
 
-  const isRoofingDoc = roofingHits >= 3 && interiorHitsInDoc === 0;
+  const isRoofingDoc = roofingHits >= 3 && roofingHits >= Math.max(3, interiorHitsInDoc * 2 + 1);
+
+  const ungroundedItems = lineItems.filter(item => !isDescriptionGroundedInSource(item.description || '', normalizedSourceText));
+  if (ungroundedItems.length > 0) {
+    warnings.push(`${ungroundedItems.length} items were removed because their descriptions were not grounded in the source text`);
+    lineItems = lineItems.filter(item => isDescriptionGroundedInSource(item.description || '', normalizedSourceText));
+  }
 
   // Check extracted items for trades inconsistent with source
   const trades = new Set(lineItems.map(i => (i.trade || '').toLowerCase()));
-  const suspiciousTrades = ['Plumbing', 'HVAC', 'Electrical', 'Flooring'];
+  const suspiciousTrades = ['Plumbing', 'HVAC', 'Electrical', 'Flooring', 'Interior'];
 
   if (isRoofingDoc) {
     const suspiciousItems = lineItems.filter(item => {
       const desc = (item.description || '').toLowerCase();
       const trade = (item.trade || '').toLowerCase();
-      return interiorKeywords.some(k => desc.includes(k)) ||
-        suspiciousTrades.some(t => trade === t.toLowerCase());
+      const hasRoofingKeyword = roofingKeywords.some(k => desc.includes(k));
+      const hasInteriorKeyword = interiorKeywords.some(k => desc.includes(k));
+      const tradeIsSuspicious = suspiciousTrades.some(t => trade === t.toLowerCase());
+      const genericInteriorPattern = desc.includes('clean - kitchen') || desc.includes('clean kitchen');
+
+      return (hasInteriorKeyword || tradeIsSuspicious || genericInteriorPattern) && !hasRoofingKeyword;
     });
 
     if (suspiciousItems.length > 0) {
+      warnings.push('Output contains mixed trades inconsistent with source');
       warnings.push(`${suspiciousItems.length} items appear inconsistent with roofing document scope`);
+      warnings.push('Manual review recommended');
       // Remove suspicious items
       const cleanItems = lineItems.filter(item => {
         const desc = (item.description || '').toLowerCase();
         const trade = (item.trade || '').toLowerCase();
-        const isSuspicious = interiorKeywords.some(k => desc.includes(k)) ||
+        const isSuspicious = interiorKeywords.some(k => desc.includes(k)) || desc.includes('clean - kitchen') || desc.includes('clean kitchen') ||
           (suspiciousTrades.some(t => trade === t.toLowerCase()) && !roofingKeywords.some(k => desc.includes(k)));
         return !isSuspicious;
       });
@@ -175,7 +226,20 @@ Deno.serve(async (req) => {
     if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
     const body = await req.json();
-    const { claimId, extractedText, fileName, source, fileId, base64Data, mimeType, previewOnly } = body;
+    const {
+      claimId,
+      extractedText,
+      fileName,
+      source,
+      fileId,
+      base64Data,
+      mimeType,
+      previewOnly,
+      lineItemsOverride,
+      documentTypeOverride,
+      totalRcvOverride,
+      totalAcvOverride,
+    } = body;
     if (!claimId) throw new Error('claimId required');
 
     let textForExtraction = '';
@@ -293,38 +357,50 @@ Deno.serve(async (req) => {
     // --- AI extraction ---
     console.log(`Sending ${textForExtraction.length} chars for extraction (source: ${extractedTextSource})`);
 
-    const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: EXTRACTION_SYSTEM_PROMPT },
-          { role: 'user', content: `Extract estimate line items from this document (${fileName || 'estimate'}):\n\n${textForExtraction.slice(0, 30000)}` },
-        ],
-        tools: [TOOL_SCHEMA],
-        tool_choice: { type: 'function', function: { name: 'extract_estimate' } },
-      }),
-    });
-
-    if (!aiResp.ok) {
-      if (aiResp.status === 429 || aiResp.status === 402) {
-        return new Response(JSON.stringify({ error: aiResp.status === 429 ? 'Rate limit exceeded' : 'Credits required' }), {
-          status: aiResp.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      throw new Error(`AI gateway error ${aiResp.status}`);
-    }
-
-    const aiData = await aiResp.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) throw new Error('No structured extraction returned');
-
-    const extracted = JSON.parse(toolCall.function.arguments);
+    let extracted: any = {
+      document_type: documentTypeOverride || 'unknown',
+      total_rcv: totalRcvOverride ?? null,
+      total_acv: totalAcvOverride ?? null,
+      line_items: Array.isArray(lineItemsOverride) ? lineItemsOverride : [],
+    };
     let lineItems = extracted.line_items || [];
+
+    if (Array.isArray(lineItemsOverride)) {
+      console.log(`Using ${lineItemsOverride.length} reviewed preview items for import`);
+    } else {
+      const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            { role: 'system', content: EXTRACTION_SYSTEM_PROMPT },
+            { role: 'user', content: `Extract estimate line items from this document (${fileName || 'estimate'}):\n\n${textForExtraction.slice(0, 30000)}` },
+          ],
+          tools: [TOOL_SCHEMA],
+          tool_choice: { type: 'function', function: { name: 'extract_estimate' } },
+        }),
+      });
+
+      if (!aiResp.ok) {
+        if (aiResp.status === 429 || aiResp.status === 402) {
+          return new Response(JSON.stringify({ error: aiResp.status === 429 ? 'Rate limit exceeded' : 'Credits required' }), {
+            status: aiResp.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        throw new Error(`AI gateway error ${aiResp.status}`);
+      }
+
+      const aiData = await aiResp.json();
+      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+      if (!toolCall) throw new Error('No structured extraction returned');
+
+      extracted = JSON.parse(toolCall.function.arguments);
+      lineItems = extracted.line_items || [];
+    }
 
     // --- Post-extraction sanity checks ---
     const sanity = postExtractionSanityCheck(lineItems, textForExtraction);
