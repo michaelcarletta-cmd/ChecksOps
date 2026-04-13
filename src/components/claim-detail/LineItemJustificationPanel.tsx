@@ -16,13 +16,14 @@ import {
   ChevronDown,
   ChevronRight,
   AlertTriangle,
-  CheckCircle,
+  CheckCircle2,
   Loader2,
   Copy,
   FileText,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { justifyLineItems, type JustificationResult } from "@/lib/justification/justificationEngine";
+import { justifyLineItems, type JustificationResult, type ConfidenceLabel } from "@/lib/justification/justificationEngine";
 import { supabase } from "@/integrations/supabase/client";
 
 interface LineItemJustificationPanelProps {
@@ -32,6 +33,39 @@ interface LineItemJustificationPanelProps {
 }
 
 type ViewMode = "internal" | "carrier";
+
+const CONFIDENCE_STYLES: Record<ConfidenceLabel, { color: string; bg: string }> = {
+  High: { color: "text-emerald-700 dark:text-emerald-400", bg: "bg-emerald-100 dark:bg-emerald-900/40 border-emerald-200 dark:border-emerald-800" },
+  Medium: { color: "text-amber-700 dark:text-amber-400", bg: "bg-amber-100 dark:bg-amber-900/40 border-amber-200 dark:border-amber-800" },
+  Low: { color: "text-red-700 dark:text-red-400", bg: "bg-red-100 dark:bg-red-900/40 border-red-200 dark:border-red-800" },
+};
+
+function ConfidenceBadge({ label }: { label: ConfidenceLabel }) {
+  const style = CONFIDENCE_STYLES[label];
+  return (
+    <Badge variant="outline" className={`text-[10px] px-2 py-0.5 font-semibold ${style.bg} ${style.color}`}>
+      {label}
+    </Badge>
+  );
+}
+
+function StrengthIcon({ confidence }: { confidence: string }) {
+  if (confidence === "direct") return <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />;
+  if (confidence === "inferred") return <Shield className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />;
+  return <XCircle className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />;
+}
+
+function AuthoritySection({ title, icon, text, subText }: { title: string; icon: React.ReactNode; text: string; subText?: string }) {
+  return (
+    <div className="space-y-1">
+      <p className="font-semibold text-[11px] flex items-center gap-1.5">
+        {icon} {title}
+      </p>
+      <p className="text-muted-foreground leading-relaxed">{text}</p>
+      {subText && <p className="text-muted-foreground/70 italic text-[10px]">{subText}</p>}
+    </div>
+  );
+}
 
 export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineItemJustificationPanelProps) {
   const [results, setResults] = useState<JustificationResult[]>([]);
@@ -56,12 +90,11 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
       });
       setResults(justified);
 
-      // Persist to database
       for (const r of justified) {
         await supabase.from("claim_line_item_justifications" as any).upsert({
           claim_id: claimId,
           normalized_item: r.normalizedItem,
-          manufacturer_support: { text: r.manufacturer.text, confidence: r.manufacturer.confidence },
+          manufacturer_support: { text: r.manufacturer.text, confidence: r.manufacturer.confidence, functionText: r.manufacturer.functionText },
           code_support: { text: r.code.text, confidence: r.code.confidence, reference: r.code.reference },
           policy_support: { text: r.policy.text, confidence: r.policy.confidence },
           support_strength: r.supportStrength,
@@ -94,18 +127,6 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
     const text = results.map((r) => r.carrierFacingText).join("\n\n");
     navigator.clipboard.writeText(text);
     toast.success("Carrier-facing justifications copied.");
-  };
-
-  const confidenceBadge = (score: number) => {
-    if (score >= 75) return <Badge variant="default" className="text-[10px]">{score}</Badge>;
-    if (score >= 45) return <Badge variant="secondary" className="text-[10px]">{score}</Badge>;
-    return <Badge variant="destructive" className="text-[10px]">{score}</Badge>;
-  };
-
-  const strengthIcon = (s: string) => {
-    if (s === "direct") return <CheckCircle className="h-3.5 w-3.5 text-primary" />;
-    if (s === "inferred") return <Shield className="h-3.5 w-3.5 text-muted-foreground" />;
-    return <AlertTriangle className="h-3.5 w-3.5 text-destructive" />;
   };
 
   return (
@@ -165,44 +186,47 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
                     <CollapsibleTrigger className="w-full text-left">
                       <div className="flex items-center gap-2 p-2 rounded hover:bg-muted/50 text-xs">
                         {expanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
-                        {strengthIcon(r.supportStrength)}
+                        <StrengthIcon confidence={r.supportStrength} />
                         <span className="font-medium flex-1">{r.normalizedItem}</span>
                         <Badge variant="outline" className="text-[10px]">{r.trade}</Badge>
-                        {confidenceBadge(r.confidenceScore)}
+                        <ConfidenceBadge label={r.confidenceLabel} />
                       </div>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
-                      <div className="ml-8 mr-2 mb-2 p-3 bg-muted/30 rounded text-xs space-y-2">
+                      <div className="ml-8 mr-2 mb-2 p-3 bg-muted/30 rounded text-xs space-y-3">
                         {viewMode === "internal" ? (
                           <>
-                            <p><strong>Why Required:</strong> {r.whyRequired}</p>
-                            <div className="grid gap-2 md:grid-cols-3">
-                              <div>
-                                <p className="font-semibold text-[11px] flex items-center gap-1">
-                                  {strengthIcon(r.manufacturer.confidence)} Manufacturer
-                                </p>
-                                <p className="text-muted-foreground">{r.manufacturer.text}</p>
-                              </div>
-                              <div>
-                                <p className="font-semibold text-[11px] flex items-center gap-1">
-                                  {strengthIcon(r.code.confidence)} Code ({r.code.reference})
-                                </p>
-                                <p className="text-muted-foreground">{r.code.text}</p>
-                              </div>
-                              <div>
-                                <p className="font-semibold text-[11px] flex items-center gap-1">
-                                  {strengthIcon(r.policy.confidence)} Policy
-                                </p>
-                                <p className="text-muted-foreground">{r.policy.text}</p>
-                              </div>
+                            <div className="space-y-1">
+                              <p className="font-semibold text-[11px]">System Function</p>
+                              <p className="text-muted-foreground leading-relaxed">{r.whyRequired}</p>
                             </div>
+
+                            <div className="grid gap-3 md:grid-cols-3">
+                              <AuthoritySection
+                                title="Manufacturer"
+                                icon={<StrengthIcon confidence={r.manufacturer.confidence} />}
+                                text={r.manufacturer.functionText}
+                                subText={r.manufacturer.failureRisk}
+                              />
+                              <AuthoritySection
+                                title={`Code (${r.code.reference})`}
+                                icon={<StrengthIcon confidence={r.code.confidence} />}
+                                text={r.code.text}
+                              />
+                              <AuthoritySection
+                                title="Policy"
+                                icon={<StrengthIcon confidence={r.policy.confidence} />}
+                                text={r.policy.text}
+                              />
+                            </div>
+
                             {r.missingEvidence.length > 0 && (
-                              <div className="flex items-start gap-1.5 p-2 bg-destructive/10 rounded">
-                                <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0 mt-0.5" />
+                              <div className="flex items-start gap-1.5 p-2.5 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded">
+                                <AlertTriangle className="h-3.5 w-3.5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
                                 <div>
-                                  <p className="font-semibold text-destructive">Missing Evidence</p>
+                                  <p className="font-semibold text-red-700 dark:text-red-400 text-[11px]">Missing Evidence ({r.missingEvidence.length})</p>
                                   {r.missingEvidence.map((e, i) => (
-                                    <p key={i} className="text-muted-foreground">{e}</p>
+                                    <p key={i} className="text-muted-foreground mt-0.5">{e}</p>
                                   ))}
                                 </div>
                               </div>
