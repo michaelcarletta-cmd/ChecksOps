@@ -428,7 +428,7 @@ export const DarwinEstimateBuilder = ({ claimId, claim }: DarwinEstimateBuilderP
     }
   };
 
-  const handleConfirmImport = async (items: any[]) => {
+  const handleConfirmImport = async (items: EstimateImportLineItem[]) => {
     if (!importPayload) return;
     setImportConfirming(true);
     try {
