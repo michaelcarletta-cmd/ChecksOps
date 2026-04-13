@@ -58,10 +58,12 @@ export function TaskSearchPanel({ onQueueUpdated }: TaskSearchPanelProps) {
   const [search, setSearch] = useState(() => window.localStorage.getItem(SEARCH_STORAGE_KEY) ?? "");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
+  const [actionLoading, setActionLoading] = useState<Record<string, string>>({});
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const debouncedSearch = useDebouncedValue(search, 300);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const hasSearch = search.trim().length > 0;
   const isFiltering = search !== debouncedSearch;
