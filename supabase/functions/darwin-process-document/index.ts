@@ -1146,10 +1146,8 @@ async function extractStructuredIntelligence(
   documentType: string,
   classificationResult: ClassificationResult,
 ): Promise<StructuredIntelResult> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY) {
-    return { success: true, written: false, skippedReason: 'no_lovable_api_key' };
-  }
+  const { callWithTools } = await import("../_shared/ai/openaiClient.ts");
+  const { MODEL_CHEAP } = await import("../_shared/ai/modelRouter.ts");
 
   console.log(`[DocIntel] Starting structured extraction for ${fileId} (type: ${documentType})`);
 
@@ -1167,7 +1165,7 @@ async function extractStructuredIntelligence(
   const typeHint = docTypeContext[documentType] || 'Extract all relevant claim facts.';
 
   try {
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const toolResult = await callWithTools({
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,
@@ -1445,7 +1443,7 @@ async function ocrViaVision(bytes: Uint8Array, fileName: string): Promise<string
       fileName.toLowerCase().match(/\.(webp)$/) ? 'image/webp' :
       'image/jpeg';
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const toolResult = await callWithTools({
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,
@@ -1646,7 +1644,7 @@ For APPROVALS, also include:
 - "payment_type": "initial|supplement|final"`;
 
   try {
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const toolResult = await callWithTools({
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,

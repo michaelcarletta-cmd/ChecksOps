@@ -227,61 +227,63 @@ const pass2ToolSchema = {
   },
 };
 
-async function callAI(apiKey: string, body: any, timeoutMs = 90000): Promise<any> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+async function callAI(_apiKey: string, body: any, timeoutMs = 90000): Promise<any> {
+  const { callWithTools, callVision } = await import("../_shared/ai/openaiClient.ts");
+  const { MODEL_VISION } = await import("../_shared/ai/modelRouter.ts");
 
-  // Always set max_tokens to prevent truncation
-  if (!body.max_tokens) {
-    body.max_tokens = 16384;
-  }
+  // Map Lovable model names to OpenAI
+  const modelMap: Record<string, string> = {
+    "google/gemini-2.5-flash": "gpt-4o-mini",
+    "google/gemini-2.5-pro": "gpt-4o",
+  };
+  const resolvedModel = modelMap[body.model] || MODEL_VISION;
 
-  try {
-    console.log(`callAI: model=${body.model}, max_tokens=${body.max_tokens}, timeout=${timeoutMs}ms`);
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
+  if (!body.max_tokens) body.max_tokens = 16384;
+
+  console.log(`[photo-damage-analyzer] callAI: model=${resolvedModel}, max_tokens=${body.max_tokens}`);
+
+  if (body.tools && body.tools.length > 0) {
+    const result = await callWithTools({
+      model: resolvedModel,
+      messages: body.messages,
+      tools: body.tools,
+      toolChoice: body.tool_choice,
+      temperature: body.temperature ?? 0.3,
+      maxTokens: body.max_tokens,
     });
-
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      if (response.status === 429 || response.status === 402) {
-        throw { status: response.status, message: response.status === 429 ? "Rate limit exceeded. Please try again shortly." : "AI credits exhausted. Please add funds." };
-      }
-      throw new Error(`AI gateway error: ${response.status}`);
-    }
-
-    const text = await response.text();
-    if (!text || text.trim().length === 0) {
-      throw new Error("AI gateway returned empty response");
-    }
-
-    const parsed = JSON.parse(text);
-    console.log(`callAI response: finish_reason=${parsed.choices?.[0]?.finish_reason}, has_tool_calls=${!!parsed.choices?.[0]?.message?.tool_calls}, content_length=${parsed.choices?.[0]?.message?.content?.length || 0}`);
-    return parsed;
-  } catch (e) {
-    clearTimeout(timeout);
-    throw e;
+    return {
+      choices: [{
+        finish_reason: result.toolCalls.length > 0 ? "tool_calls" : "stop",
+        message: {
+          content: result.text,
+          tool_calls: result.toolCalls.length > 0 ? result.toolCalls : undefined,
+        },
+      }],
+    };
+  } else {
+    const result = await callVision({
+      model: resolvedModel,
+      messages: body.messages,
+      temperature: body.temperature ?? 0.3,
+      maxTokens: body.max_tokens,
+    });
+    return {
+      choices: [{
+        finish_reason: "stop",
+        message: { content: result.text },
+      }],
+    };
   }
 }
 
-async function callAIWithRetry(apiKey: string, body: any, timeoutMs = 180000, maxRetries = 2): Promise<any> {
+async function callAIWithRetry(_apiKey: string, body: any, timeoutMs = 180000, maxRetries = 2): Promise<any> {
   let lastError: any;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      // On retry, remove forced tool_choice as it can cause finish_reason: error
       const requestBody = attempt > 0 && body.tool_choice 
         ? { ...body, tool_choice: "auto" } 
         : body;
-      const aiData = await callAI(apiKey, requestBody, timeoutMs);
+      const aiData = await callAI("_unused", requestBody, timeoutMs);
       const result = extractToolResult(aiData);
       return result;
     } catch (e: any) {
@@ -348,8 +350,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    // AI routing handled by _shared/ai layer (OPENAI_API_KEY required)
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -441,7 +442,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      const result = await callAIWithRetry(LOVABLE_API_KEY, {
+      const result = await callAIWithRetry("_unused", {
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: PASS1_SYSTEM_PROMPT },
@@ -512,7 +513,7 @@ Deno.serve(async (req) => {
       const pass1Summary = JSON.stringify(pass1Data, null, 1);
       const totalItems = (pass1Data.photos || []).reduce((s: number, p: any) => s + (p.items?.length || 0), 0);
 
-      const result = await callAIWithRetry(LOVABLE_API_KEY, {
+      const result = await callAIWithRetry("_unused", {
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: PASS2_SYSTEM_PROMPT },
@@ -569,7 +570,7 @@ Deno.serve(async (req) => {
         claim?.loss_type ? `Loss type: ${claim.loss_type}` : null,
       ].filter(Boolean).join("\n");
 
-      const result = await callAIWithRetry(LOVABLE_API_KEY, {
+      const result = await callAIWithRetry("_unused", {
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: ESTIMATE_SYSTEM_PROMPT },

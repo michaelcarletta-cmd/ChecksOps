@@ -16,41 +16,27 @@ async function selectBestPhotos(
   allPhotos: { photoNumber: number; fileName: string; category: string; description: string; url: string }[],
   maxPhotos: number
 ): Promise<number[]> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  
-  if (!LOVABLE_API_KEY || allPhotos.length <= maxPhotos) {
-    // If no API key or fewer photos than max, return first N photos
+  if (allPhotos.length <= maxPhotos) {
     return allPhotos.slice(0, maxPhotos).map(p => p.photoNumber);
   }
 
   try {
-    // Build photo summary for AI
+    const { generate } = await import("../_shared/ai/generate.ts");
+
     const photoSummary = allPhotos.map(p => 
       `Photo ${p.photoNumber}: "${p.fileName}" - Category: ${p.category}${p.description ? `, Description: ${p.description}` : ''}`
     ).join('\n');
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          {
-            role: "system",
-            content: `You are a photo selection assistant for insurance claim reports. Your job is to select the most relevant photos to include in a report based on the report content. Select photos that:
+    const result = await generate({
+      task: 'classification',
+      system: `You are a photo selection assistant for insurance claim reports. Select the most relevant photos to include based on the report content. Select photos that:
 1. Are specifically referenced or discussed in the report
 2. Show the most significant damage
 3. Provide the best visual documentation of key findings
 4. Cover different aspects of the damage (variety is good)
 
-Return ONLY a JSON array of photo numbers to include, like: [1, 3, 5, 7]. Select up to ${maxPhotos} photos maximum.`
-          },
-          {
-            role: "user",
-            content: `Based on this report content, select the ${maxPhotos} most relevant photos to embed in the document.
+Return ONLY a JSON array of photo numbers to include, like: [1, 3, 5, 7]. Select up to ${maxPhotos} photos maximum.`,
+      user: `Based on this report content, select the ${maxPhotos} most relevant photos to embed in the document.
 
 REPORT CONTENT:
 ${reportContent.substring(0, 4000)}
@@ -58,22 +44,13 @@ ${reportContent.substring(0, 4000)}
 AVAILABLE PHOTOS:
 ${photoSummary}
 
-Return ONLY a JSON array of photo numbers (e.g., [1, 3, 5, 7]). No other text.`
-          }
-        ],
-        temperature: 0.1,
-      }),
+Return ONLY a JSON array of photo numbers (e.g., [1, 3, 5, 7]). No other text.`,
+      searchMode: 'off',
     });
 
-    if (!response.ok) {
-      console.error("AI selection failed:", response.status);
-      return allPhotos.slice(0, maxPhotos).map(p => p.photoNumber);
-    }
+    console.log(`[generate-photo-report-docx] model=${result.model}, cached=${result.cached}`);
 
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
-    
-    // Extract JSON array from response
+    const content = result.text;
     const match = content.match(/\[[\d,\s]+\]/);
     if (match) {
       const selectedNumbers = JSON.parse(match[0]) as number[];
@@ -81,7 +58,6 @@ Return ONLY a JSON array of photo numbers (e.g., [1, 3, 5, 7]). No other text.`
       return selectedNumbers.slice(0, maxPhotos);
     }
     
-    // Fallback to first N photos
     return allPhotos.slice(0, maxPhotos).map(p => p.photoNumber);
   } catch (error) {
     console.error("Error in AI photo selection:", error);
