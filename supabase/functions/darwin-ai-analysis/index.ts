@@ -10514,65 +10514,67 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
           console.log(`  Attempt ${attempt + 1}/${RETRIES_PER_MODEL} for ${currentModel}`);
           
           const requestBody = { ...baseRequestBody, model: currentModel };
-          const requestController = new AbortController();
-          const timeoutId = setTimeout(() => requestController.abort(), MODEL_REQUEST_TIMEOUT_MS);
-          let response: Response;
+          
           try {
-            response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(requestBody),
-              signal: requestController.signal,
-            });
-          } finally {
-            clearTimeout(timeoutId);
-          }
-
-          // Handle HTTP-level errors
-          if (!response.ok) {
-            const errorText = await response.text();
-            lastError = `HTTP ${response.status} on ${currentModel}: ${errorText.substring(0, 200)}`;
-            modelFailures += 1;
-            console.error(`  AI Gateway HTTP error:`, response.status);
-            
-            // Don't retry on client errors (4xx) except 429
-            if (response.status === 429) {
+            // Route through shared AI layer based on whether tools are needed
+            if (requestBody.tools && requestBody.tool_choice) {
+              const toolResult = await callWithTools({
+                model: currentModel,
+                messages: requestBody.messages,
+                tools: requestBody.tools,
+                toolChoice: requestBody.tool_choice,
+                temperature: requestBody.temperature ?? 0.7,
+                maxTokens: requestBody.max_tokens ?? 8000,
+              });
+              aiData = {
+                choices: [{
+                  message: {
+                    content: toolResult.text,
+                    tool_calls: toolResult.toolCalls.map(tc => ({
+                      function: tc.function,
+                      id: tc.id,
+                    })),
+                  },
+                  finish_reason: 'stop',
+                }],
+              };
+            } else {
+              const textResult = await callOpenAI({
+                model: currentModel,
+                system: requestBody.messages.find((m: any) => m.role === 'system')?.content || '',
+                user: requestBody.messages.filter((m: any) => m.role !== 'system').map((m: any) => typeof m.content === 'string' ? m.content : JSON.stringify(m.content)).join('\n\n'),
+                temperature: requestBody.temperature ?? 0.7,
+                maxTokens: requestBody.max_tokens ?? 8000,
+              });
+              aiData = {
+                choices: [{
+                  message: { content: textResult.text },
+                  finish_reason: 'stop',
+                }],
+              };
+            }
+          } catch (aiError) {
+            const errMsg = aiError instanceof Error ? aiError.message : 'Unknown error';
+            if (errMsg === 'RATE_LIMIT') {
               endStep(modelRunStep, 'error', `Rate-limited after ${modelAttempts} attempts`);
               return new Response(
                 JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
                 { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
               );
             }
-            if (response.status === 402) {
-              endStep(modelRunStep, 'error', `Credits exhausted after ${modelAttempts} attempts`);
-              return new Response(
-                JSON.stringify({ error: 'AI usage limit reached. Please add credits to continue.' }),
-                { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-              );
-            }
-            // For 4xx errors (not 429/402), try next model immediately
-            if (response.status >= 400 && response.status < 500) {
-              console.log(`  Client error ${response.status}, trying next model...`);
-              continue modelLoop;
-            }
+            lastError = `AI error on ${currentModel}: ${errMsg}`;
+            modelFailures += 1;
+            console.error(`  AI call error:`, errMsg);
             
-            // Retry on 5xx errors
             if (attempt < RETRIES_PER_MODEL - 1) {
               const delay = getRetryDelayMs(attempt);
               console.log(`  Retrying in ${delay}ms...`);
               await new Promise(resolve => setTimeout(resolve, delay));
               continue;
             }
-            // Exhausted retries for this model, try next
             console.log(`  Exhausted retries for ${currentModel}, trying next model...`);
             continue modelLoop;
           }
-          
-          // Parse the response
-          aiData = await response.json();
           
           // Log the raw response for debugging
           console.log(`  Response structure:`, JSON.stringify({
