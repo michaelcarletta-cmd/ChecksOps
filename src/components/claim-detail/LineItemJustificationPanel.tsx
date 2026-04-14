@@ -228,6 +228,7 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
   const [loading, setLoading] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>("internal");
+  const [industryStandards, setIndustryStandards] = useState("");
   const printRef = useRef<HTMLDivElement>(null);
 
   const stateCode = claim?.state_code || claim?.property_state || claim?.policyholder_state || "";
@@ -244,6 +245,7 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
       return;
     }
     setLoading(true);
+    setResults([]);
     setMetadata(null);
     try {
       const { data, error } = await supabase.functions.invoke("darwin-justify-line-items", {
@@ -254,6 +256,7 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
           manufacturer: claim?.manufacturer || null,
           lossType: claim?.loss_type || null,
           viewMode,
+          industryStandards: industryStandards.trim() || null,
         },
       });
 
@@ -271,7 +274,7 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
     } finally {
       setLoading(false);
     }
-  }, [lineItems, stateCode, claim, claimId, viewMode]);
+  }, [lineItems, stateCode, claim, claimId, viewMode, industryStandards]);
 
   const toggleRow = (idx: number) => {
     setExpandedRows((prev) => {
