@@ -290,33 +290,30 @@ Deno.serve(async (req) => {
             textContent = await fileBlob.text();
             extractionMethod = 'native_text';
           } else if (fileType.includes('pdf')) {
-            // Attempt PDF text extraction via raw bytes
             const pdfBytes = new Uint8Array(await fileBlob.arrayBuffer());
-            textContent = extractPdfText(pdfBytes);
-            extractionMethod = 'pdf_native';
-            console.log(`[TextExtract] PDF raw text extraction: ${textContent.length} chars for ${file.file_name}`);
 
-            // Check if extracted text is garbage (binary/image data from embedded photos)
-            const pdfQuality = assessTextQuality(textContent);
-            const needsOcr = textContent.length < 300 || pdfQuality.status === 'unusable' || pdfQuality.status === 'poor';
+            const pdfJsResult = await extractPdfTextWithPdfJs(pdfBytes);
+            const rawPdfText = extractPdfText(pdfBytes);
+            const pdfJsQuality = assessTextQuality(pdfJsResult.text);
+            const rawPdfQuality = assessTextQuality(rawPdfText);
 
+            const preferredPdfResult = pdfJsQuality.score >= rawPdfQuality.score
+              ? { text: pdfJsResult.text, method: 'pdfjs_native', quality: pdfJsQuality }
+              : { text: rawPdfText, method: 'pdf_raw', quality: rawPdfQuality };
+
+            textContent = preferredPdfResult.text;
+            extractionMethod = preferredPdfResult.method;
+            pageCount = pdfJsResult.pageCount;
+
+            console.log(
+              `[TextExtract] PDF extraction comparison for ${file.file_name}: pdfjs=${pdfJsResult.text.length} chars (${pdfJsQuality.status}), raw=${rawPdfText.length} chars (${rawPdfQuality.status}), selected=${extractionMethod}`
+            );
+
+            const needsOcr = textContent.length < 300 || preferredPdfResult.quality.status === 'unusable' || preferredPdfResult.quality.status === 'poor';
             if (needsOcr) {
-              console.log(`[TextExtract] PDF text needs OCR (length=${textContent.length}, quality=${pdfQuality.status}, reasons=${pdfQuality.reasons.join('; ')}), attempting OCR via vision for ${file.file_name}`);
-              const ocrText = await ocrViaVision(pdfBytes, file.file_name);
-              if (ocrText && ocrText.length > 100) {
-                // Only replace if OCR produced meaningful text
-                const ocrQuality = assessTextQuality(ocrText);
-                if (ocrQuality.score > pdfQuality.score) {
-                  textContent = ocrText;
-                  extractionMethod = 'ocr_vision';
-                  isScanned = true;
-                  console.log(`[TextExtract] OCR replaced garbage native text (ocr=${ocrText.length} chars, quality=${ocrQuality.status}) for ${file.file_name}`);
-                } else {
-                  console.log(`[TextExtract] OCR quality (${ocrQuality.status}) not better than native (${pdfQuality.status}), keeping native for ${file.file_name}`);
-                }
-              } else {
-                console.log(`[TextExtract] OCR returned insufficient text for ${file.file_name}`);
-              }
+              console.log(
+                `[TextExtract] PDF still low quality for ${file.file_name}, skipping vision OCR because the current vision provider only accepts image inputs; selected=${extractionMethod}, quality=${preferredPdfResult.quality.status}, reasons=${preferredPdfResult.quality.reasons.join('; ')}`
+              );
             }
           } else if (fileType.includes('word') || /\.(docx?)$/i.test(file.file_name)) {
             // Word document extraction
@@ -1377,7 +1374,49 @@ async function extractStructuredIntelligence(
   }
 }
 
-// === PDF TEXT EXTRACTION (raw byte parsing) ===
+let pdfjsLib: any = null;
+async function getPdfJs() {
+  if (!pdfjsLib) {
+    pdfjsLib = await import("https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.mjs");
+  }
+  return pdfjsLib;
+}
+
+async function extractPdfTextWithPdfJs(bytes: Uint8Array): Promise<{ text: string; pageCount: number | null }> {
+  try {
+    const pdfjs = await getPdfJs();
+    const pdfData = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+      ? bytes.buffer
+      : bytes.slice().buffer;
+
+    const loadingTask = pdfjs.getDocument({ data: pdfData });
+    const pdf = await loadingTask.promise;
+    const textParts: string[] = [];
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = (textContent.items || [])
+        .map((item: any) => typeof item?.str === 'string' ? item.str : '')
+        .join(' ')
+        .trim();
+
+      if (pageText) {
+        textParts.push(pageText);
+      }
+    }
+
+    return {
+      text: textParts.join('\n\n').trim(),
+      pageCount: pdf.numPages ?? null,
+    };
+  } catch (error) {
+    console.error('[TextExtract] PDF.js extraction failed:', error);
+    return { text: '', pageCount: null };
+  }
+}
+
+// === PDF TEXT EXTRACTION (raw byte parsing fallback) ===
 function extractPdfText(bytes: Uint8Array): string {
   const rawText = new TextDecoder("latin1").decode(bytes);
   const textParts: string[] = [];
