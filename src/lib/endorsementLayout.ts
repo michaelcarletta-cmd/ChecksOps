@@ -3,6 +3,7 @@ export interface EndorsementOverride {
   yPct: number;        // 0..1 relative to image height
   scale: number;       // global overlay scale multiplier
   rotationDeg: number; // optional small rotation
+  showPayToOrder: boolean;
 }
 
 export interface EndorsementLayout {
@@ -25,6 +26,7 @@ export const DEFAULT_ENDORSEMENT_OVERRIDE: EndorsementOverride = {
   yPct: 0.5,
   scale: 1,
   rotationDeg: 0,
+  showPayToOrder: false,
 };
 
 export function getEndorsementLayout(
@@ -68,5 +70,6 @@ export function clampEndorsementOverride(
     yPct: Math.min(0.95, Math.max(0.03, next.yPct)),
     scale: Math.min(2, Math.max(0.4, next.scale)),
     rotationDeg: normalizeRotation(next.rotationDeg),
+    showPayToOrder: Boolean(next.showPayToOrder),
   };
 }

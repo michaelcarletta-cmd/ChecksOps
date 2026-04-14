@@ -86,6 +86,11 @@ interface CheckItem {
   check_payees?: CheckPayee[];
 }
 
+const isFreedomAdjustmentPayee = (payeeName: string) => {
+  const normalizedName = payeeName.toLowerCase();
+  return normalizedName.includes("freedom") || normalizedName.includes("carletta");
+};
+
 interface AuditEntry {
   id: string;
   event_type: string;
@@ -813,6 +818,8 @@ function CheckDetailPanel({
       return data as CheckItem;
     },
   });
+  const savedOverride = (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null;
+  const showPayToOrder = savedOverride?.showPayToOrder ?? false;
 
   const { data: frontImageUrl } = useQuery({
     queryKey: ["check-front-img", check?.front_image_path],
@@ -1133,7 +1140,14 @@ function CheckDetailPanel({
       e.signature_image_url.trim().length > 0 &&
       (e.signature_method ?? "").toLowerCase() !== "internal",
   );
-  const endorsementText = endorsementRows.length > 0
+  const clientEndorsementRows = endorsementRows.filter((e) => !isFreedomAdjustmentPayee(e.payee_name));
+  const companyEndorsementRows = endorsementRows.filter((e) => isFreedomAdjustmentPayee(e.payee_name));
+  const visibleCompanyEndorsement = companyEndorsementRows.find((e) => {
+    const method = (e.signature_method ?? "").toLowerCase();
+    if (method === "internal" || method === "manual") return false;
+    return Boolean(e.signature_image_url?.trim());
+  });
+  const endorsementText = showPayToOrder
     ? "Pay to the Order of\nFreedom Adjustment\nFor Mobile Deposit Only\nFreedom Adjustment"
     : "";
   const signatures = endorsementRows
@@ -1151,7 +1165,6 @@ function CheckDetailPanel({
 
   const showWatermark = !isFinalDepositImage;
   // Proportional overlay coordinates — use saved override if available
-  const savedOverride = (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null;
   const overlayCoordinates = {
     topPercent: (savedOverride?.yPct ?? 0.5) * 100,
     leftPercent: (savedOverride?.xPct ?? 0.38) * 100,
@@ -1422,19 +1435,20 @@ function CheckDetailPanel({
                             <div className="endorsement-overlay absolute select-none" style={endorsementStyle}>
                               <div className="leading-tight font-semibold" style={{ lineHeight: 1.15 }}>
                                 {/* Header */}
-                                <p style={{ fontSize: f(0.022), marginBottom: g(0.008), color: "#111111", fontWeight: 600 }}>Pay to the order of</p>
-                                {/* Company payee */}
-                                <p style={{ fontSize: f(0.034), marginBottom: g(0.008), color: "#111111", fontWeight: 700 }}>Freedom Adjustment</p>
-                                {/* Mobile deposit */}
-                                <p style={{ fontSize: f(0.024), marginBottom: g(0.014), color: "#111111", fontWeight: 700 }}>For Mobile Deposit Only</p>
+                                {showPayToOrder && (
+                                  <>
+                                    <p style={{ fontSize: f(0.022), marginBottom: g(0.008), color: "#111111", fontWeight: 600 }}>Pay to the order of</p>
+                                    <p style={{ fontSize: f(0.034), marginBottom: g(0.008), color: "#111111", fontWeight: 700 }}>Freedom Adjustment</p>
+                                    <p style={{ fontSize: f(0.024), marginBottom: g(0.014), color: "#111111", fontWeight: 700 }}>For Mobile Deposit Only</p>
+                                  </>
+                                )}
 
-                                {/* Separator before signatures */}
-                                <div style={{ marginTop: g(0.006), marginBottom: g(0.006), borderTop: "1px solid #111111", opacity: 0.3 }} />
+                                {(showPayToOrder || clientEndorsementRows.length > 0 || visibleCompanyEndorsement) && (
+                                  <div style={{ marginTop: g(0.006), marginBottom: g(0.006), borderTop: "1px solid #111111", opacity: 0.3 }} />
+                                )}
 
                                 {/* Client signatures first (non-Freedom, non-Carletta) */}
-                                {endorsementRows.map((e) => {
-                                  const nameLC = e.payee_name.toLowerCase();
-                                  if (nameLC.includes("freedom") || nameLC.includes("carletta")) return null;
+                                {clientEndorsementRows.map((e) => {
                                   return (
                                     <div key={e.id} style={{ marginTop: g(0.008) }}>
                                       {e.signature_image_url?.startsWith("typed:") ? (
@@ -1452,16 +1466,10 @@ function CheckDetailPanel({
                                 })}
 
                                 {/* Freedom Adjustment signature */}
-                                {endorsementRows.some((e) => {
-                                  const n = e.payee_name.toLowerCase();
-                                  return (n.includes("freedom") || n.includes("carletta")) && e.signature_image_url;
-                                }) && (
+                                {visibleCompanyEndorsement && (
                                 <div style={{ marginTop: g(0.014) }}>
                                   <p style={{ fontSize: f(0.034), fontWeight: 700, color: "#111111" }}>Freedom Adjustment</p>
-                                  {endorsementRows.filter((e) => {
-                                    const n = e.payee_name.toLowerCase();
-                                    return (n.includes("freedom") || n.includes("carletta")) && e.signature_image_url;
-                                  }).slice(0, 1).map((e) => (
+                                  {[visibleCompanyEndorsement].map((e) => (
                                     <div key={`sig-${e.id}`} style={{ marginTop: g(0.004) }}>
                                       {e.signature_image_url?.startsWith("typed:") ? (
                                         <p style={{ fontSize: f(0.042), fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>Freedom Adjustment</p>
@@ -1617,14 +1625,64 @@ function CheckDetailPanel({
 
               {backImageUrl && backImageDimensions && (
                 <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => setShowEndorsementAdjuster((v) => !v)}
-                  >
-                    {showEndorsementAdjuster ? "Hide" : "Adjust"} Endorsement Position
-                  </Button>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => setShowEndorsementAdjuster((v) => !v)}
+                    >
+                      {showEndorsementAdjuster ? "Hide" : "Adjust"} Endorsement Position
+                    </Button>
+                    {!showPayToOrder && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={async () => {
+                          const nextOverride: EndorsementOverride = {
+                            xPct: savedOverride?.xPct ?? 0.38,
+                            yPct: savedOverride?.yPct ?? 0.5,
+                            scale: savedOverride?.scale ?? 1,
+                            rotationDeg: savedOverride?.rotationDeg ?? 0,
+                            showPayToOrder: true,
+                          };
+
+                          const { error: saveErr } = await supabase
+                            .from("check_intake_items")
+                            .update({
+                              endorsement_override: nextOverride as any,
+                              updated_at: new Date().toISOString(),
+                            })
+                            .eq("id", checkId);
+
+                          if (saveErr) {
+                            toast({ title: "Failed to add pay to order text", description: saveErr.message, variant: "destructive" });
+                            return;
+                          }
+
+                          qc.setQueryData(["check-detail", checkId], (current: CheckItem | undefined) => (
+                            current
+                              ? { ...current, endorsement_override: nextOverride as unknown as Record<string, unknown> }
+                              : current
+                          ));
+
+                          if (endorsementRows.length > 0) {
+                            try {
+                              await ensureDepositReadyBackImage();
+                            } catch (error) {
+                              console.error("[CHECK-EXPORT] regenerate after pay-to-order toggle failed", error);
+                            }
+                          }
+
+                          qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+                          toast({ title: "Pay to Order text added" });
+                        }}
+                      >
+                        Add Pay to Order Text
+                      </Button>
+                    )}
+                  </div>
 
                   {showEndorsementAdjuster && (
                     <EndorsementAdjuster
@@ -1647,6 +1705,11 @@ function CheckDetailPanel({
                           })
                           .eq("id", checkId);
                         if (saveErr) throw saveErr;
+                        qc.setQueryData(["check-detail", checkId], (current: CheckItem | undefined) => (
+                          current
+                            ? { ...current, endorsement_override: ov as unknown as Record<string, unknown> }
+                            : current
+                        ));
                         // 2) Then generate final deposit image
                         await ensureDepositReadyBackImage();
                         toast({ title: "Endorsement saved & deposit image generated" });
