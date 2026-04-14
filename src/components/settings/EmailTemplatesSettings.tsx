@@ -284,6 +284,16 @@ export const EmailTemplatesSettings = () => {
                     className="min-h-[200px]"
                   />
                 </div>
+                {(form.body || form.subject) && (
+                  <div className="space-y-3">
+                    {form.subject && (
+                      <TemplatePreview text={form.subject} label="Subject Preview" />
+                    )}
+                    {form.body && (
+                      <TemplatePreview text={form.body} label="Body Preview" />
+                    )}
+                  </div>
+                )}
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={resetForm}>

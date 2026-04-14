@@ -232,6 +232,9 @@ export default function SMSTemplatesSettings() {
                   {formData.body.length} characters (SMS limit: 160 per segment)
                 </p>
               </div>
+              {formData.body && (
+                <TemplatePreview text={formData.body} label="Message Preview" />
+              )}
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={resetForm}>
                   Cancel
