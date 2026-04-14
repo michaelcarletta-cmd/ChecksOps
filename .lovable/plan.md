@@ -1,61 +1,45 @@
 
 
-# Plan: Remove Make.com, Remove Increase, Remove Signature Field Templates
+# Fix Task Status Sync — Overdue Badge Persistence
 
-## Summary
-Three removals: (1) Replace all Make.com references with Zapier webhook integration, (2) Remove Increase banking integration from the check command center, (3) Remove Signature Field Templates from workflow management settings.
+## Problem
+After completing or editing a task, the overdue badge/styling can persist because:
+1. The `NotificationsBar` independently fetches tasks and doesn't refetch when tasks change elsewhere
+2. No visual sync indicator tells the user data is refreshing
+3. The `isPastDue` calculation in `ExecutionTaskCard` uses `Date.now()` at render time but the task object may be stale until the realtime channel fires
 
----
+## Changes
 
-## 1. Replace Make.com with Zapier
+### 1. `src/hooks/useExecutionQueue.ts` — Add sync status flag
+- Add a `synced` state that briefly flips to `true` after a successful refetch, then resets after 2 seconds
+- Expose `synced` from the hook so the UI can show a brief confirmation indicator
 
-**Files to modify:**
+### 2. `src/components/execution/ExecutionQueuePanel.tsx` — Sync indicator + skeleton
+- Accept `synced` prop from the hook
+- When `refetching` is true, show a subtle skeleton overlay or loading pulse on the card area
+- When `synced` flips true, show a small green checkmark with a 2-second fade-out near the "Execution Queue" title
+- After `handleAction` succeeds, the existing `onRefetch()` call already triggers a hard refetch — no change needed there
 
-- **`src/components/settings/MakeIntegrationSettings.tsx`** — Rename/rewrite to `ZapierIntegrationSettings.tsx`. Replace all Make.com references with Zapier webhook pattern. Change UI labels, placeholder URLs (`https://hooks.zapier.com/...`), and descriptions. Keep the same webhook-calling architecture but rebrand entirely.
+### 3. `src/components/NotificationsBar.tsx` — Subscribe to task changes
+- The realtime subscription is already present but uses its own independent query
+- After any realtime event fires and `fetchTasks()` completes, the overdue list should auto-clear — verify this path works
+- Add `console.error` logging if the fetched data still contains a task with `status = 'completed'` (indicates stale read)
 
-- **`src/components/settings/CompanyBrandingSettings.tsx`** — Replace the "SignNow Integration (via Make.com)" card (lines 634-670+) with a Zapier webhook card. Update state variable names from `signnowWebhookUrl` / `signnow_make_webhook_url` to a Zapier-oriented name. Update the save logic to use the new column name.
+### 4. `src/components/execution/ExecutionTaskCard.tsx` — Guard against stale overdue display
+- Current line 63: `const isPastDue = !!(task.due_date && new Date(task.due_date).getTime() < Date.now() && task.status !== 'completed');`
+- This is correct but the card can render before the refetch completes — the `refetching` opacity already handles this visually. No code change needed here.
 
-- **`src/components/settings/AutomationsSettings.tsx`** — Change "Call Webhook (Make.com)" label to "Call Webhook (Zapier)" and update the webhook URL placeholder/description from Make.com to Zapier.
+### 5. `src/services/taskExecutionService.ts` — Add error logging on stale returns
+- In `completeTask()`: after the update, re-select the task and `console.error` if status is not `completed`
+- In `handleSave` (TaskDetailDrawer): after update, log if the returned data still has old `due_date`
 
-- **`src/pages/Settings.tsx`** — Replace `MakeIntegrationSettings` import with `ZapierIntegrationSettings`.
+### 6. `src/pages/Tasks.tsx` — Wire synced state
+- Destructure `synced` from `useExecutionQueue()` and pass to `ExecutionQueuePanel`
 
-- **`supabase/functions/execute-automations/index.ts`** — Update comments referencing Make.com to Zapier.
-
-- **`supabase/functions/signature-webhook/index.ts`** — Update comment referencing Make.com format.
-
-- **Database migration** — Rename `signnow_make_webhook_url` column to `zapier_webhook_url` in `company_branding` table.
-
-## 2. Remove Increase from Check Command Center
-
-**Files to modify:**
-
-- **`src/components/deposit-ops/DepositOperationsConsole.tsx`** — Remove all Increase imports (`IncreaseAccountSelector`, `DepositToIncreaseButton`, `IncreaseSyncAllButton`, `IncreaseStatusBadge`). Remove the `<IncreaseAccountSelector />` section, the Increase column in the deposit items table, and all Increase-related fields from the type definition. Replace with a placeholder "Banking provider not configured" message where appropriate.
-
-- **`src/components/deposit-ops/IncreaseDeposit.tsx`** — Delete this file entirely.
-
-- **Edge functions to delete:**
-  - `supabase/functions/increase-health-check/` (including test)
-  - `supabase/functions/increase-list-accounts/`
-  - `supabase/functions/increase-create-check-deposit/`
-  - `supabase/functions/increase-sync-check-deposit-status/`
-
-- **`supabase/config.toml`** — No Increase entries exist there, so no change needed.
-
-## 3. Remove Signature Field Templates from Settings
-
-**Files to modify:**
-
-- **`src/pages/Settings.tsx`** — Remove the entire "Signature Field Templates" collapsible section (lines ~480-505). Remove the `SignatureFieldTemplatesSettings` import. Remove the `signatureTemplatesOpen` state if it exists.
-
-- **`src/components/settings/SignatureFieldTemplatesSettings.tsx`** — Delete this file.
-
-- **`src/components/settings/TemplatesSettings.tsx`** — Remove the `signature_field_templates` query, delete mutation, and update mutation related to field templates (lines ~57-165). Remove any UI referencing field templates in this file.
-
----
-
-## What stays untouched
-- The core signature request system (edge functions, signing flow, database tables)
-- The `FieldPlacementEditor` component (it queries field templates but won't break — it just returns empty results)
-- Deposit operations console will keep working for non-Increase workflows
-- All other integrations (Resend, Telnyx, QuickBooks, Outlook, Ramp)
+## Files to modify
+1. `src/hooks/useExecutionQueue.ts` — add `synced` state with auto-reset timer
+2. `src/components/execution/ExecutionQueuePanel.tsx` — sync checkmark indicator + skeleton during refetch
+3. `src/components/NotificationsBar.tsx` — stale-data console.error guard
+4. `src/services/taskExecutionService.ts` — post-mutation verification logging
+5. `src/pages/Tasks.tsx` — pass `synced` prop through
 
