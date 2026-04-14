@@ -6232,7 +6232,8 @@ Be specific, professional, and provide communications that are ready to copy and
         let engineerTextForDismantler = engineerSourceResolution.text;
 
         if (!engineerTextForDismantler || engineerTextForDismantler.trim().length < 500) {
-          throw new Error('Engineer rebuttal blocked: no usable engineer report text was found for scenario detection.');
+          console.error(`[darwin] Engineer rebuttal blocked — source resolution: origin="${engineerSourceResolution.sourceOrigin}", textLen=${engineerTextForDismantler?.length || 0}`);
+          throw new Error('Engineer rebuttal blocked: no usable engineer report text found. Please ensure the engineer report PDF has been uploaded to the claim and its text has been extracted. You can also try pasting the report content directly using the "Paste Content" tab.');
         }
 
         const dismantlerExtraction = runEngineerReportDismantler(engineerTextForDismantler);
