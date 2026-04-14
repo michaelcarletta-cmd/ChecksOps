@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { ExecutionTask, getStaleStatus, isActiveStatus, isBacklogLikeStatus, isBlockedStatus } from "@/services/taskExecutionService";
 import { useToast } from "@/hooks/use-toast";
@@ -9,13 +9,21 @@ export function useExecutionQueue() {
   const [backlogTasks, setBacklogTasks] = useState<ExecutionTask[]>([]);
   const [blockedTasks, setBlockedTasks] = useState<ExecutionTask[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refetching, setRefetching] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const fetchIdRef = useRef(0);
 
-  const fetchTasks = useCallback(async () => {
-    // Invalidate any stale task caches
+  const fetchTasks = useCallback(async (isRefetch = false) => {
+    const fetchId = ++fetchIdRef.current;
+
+    // Invalidate all stale task caches
     queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    queryClient.invalidateQueries({ queryKey: ["completed-tasks"] });
+
+    if (isRefetch) setRefetching(true);
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       setCurrentUserId(null);
@@ -23,6 +31,7 @@ export function useExecutionQueue() {
       setBacklogTasks([]);
       setBlockedTasks([]);
       setLoading(false);
+      setRefetching(false);
       return;
     }
     setCurrentUserId(user.id);
@@ -35,16 +44,23 @@ export function useExecutionQueue() {
       .order('active_rank', { ascending: true, nullsFirst: false })
       .order('gravity_score', { ascending: false });
 
+    // Stale response guard
+    if (fetchId !== fetchIdRef.current) return;
+
     if (error) {
       console.error('Error fetching execution queue:', error);
       setLoading(false);
+      setRefetching(false);
       return;
     }
 
+    const now = Date.now();
     const mapped = (data || []).map((t: any) => ({
       ...t,
       claim_number: t.claims?.claim_number,
       policyholder_name: t.claims?.policyholder_name,
+      // Recalculate past-due based on current time vs due_date
+      _isPastDue: t.due_date ? new Date(t.due_date).getTime() < now : false,
     }));
 
     const nextActiveTasks = mapped
@@ -60,12 +76,14 @@ export function useExecutionQueue() {
         acc[task.status] = (acc[task.status] || 0) + 1;
         return acc;
       }, {});
+      const pastDueCount = mapped.filter((t: any) => t._isPastDue).length;
       console.debug("[useExecutionQueue] task counts", {
         fetched: mapped.length,
         byStatus,
         active: nextActiveTasks.length,
         backlog: nextBacklogTasks.length,
         blocked: nextBlockedTasks.length,
+        pastDue: pastDueCount,
         snoozedImmediate: mapped.filter((task: ExecutionTask) => !!task.snoozed_until && new Date(task.snoozed_until).getTime() > Date.now()).length,
       });
     }
@@ -74,14 +92,15 @@ export function useExecutionQueue() {
     setBacklogTasks(nextBacklogTasks);
     setBlockedTasks(nextBlockedTasks);
     setLoading(false);
-  }, []);
+    setRefetching(false);
+  }, [queryClient]);
 
   useEffect(() => {
     fetchTasks();
 
     const channel = supabase
       .channel('execution-queue')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => fetchTasks())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => fetchTasks(true))
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -113,7 +132,8 @@ export function useExecutionQueue() {
     backlogTasks,
     blockedTasks,
     loading,
+    refetching,
     currentUserId,
-    refetch: fetchTasks,
+    refetch: () => fetchTasks(true),
   };
 }
