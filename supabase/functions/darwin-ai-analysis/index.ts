@@ -8176,7 +8176,8 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
         const autoDraftDismantlerSource = autoDraftSourceResolution.text;
 
         if (!autoDraftDismantlerSource || autoDraftDismantlerSource.trim().length < 500) {
-          throw new Error('Engineer rebuttal blocked: no usable engineer report text was found for scenario detection.');
+          console.error(`[darwin] Auto-draft engineer rebuttal blocked — source resolution: origin="${autoDraftSourceResolution.sourceOrigin}", textLen=${autoDraftDismantlerSource?.length || 0}`);
+          throw new Error('Engineer rebuttal blocked: no usable engineer report text found. Please ensure the engineer report PDF has been uploaded to the claim and its text has been extracted. You can also try pasting the report content directly.');
         }
 
         const autoDraftDismantler = runEngineerReportDismantler(autoDraftDismantlerSource);
