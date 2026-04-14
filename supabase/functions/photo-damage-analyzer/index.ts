@@ -442,7 +442,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      const result = await callAIWithRetry(LOVABLE_API_KEY, {
+      const result = await callAIWithRetry("_unused", {
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: PASS1_SYSTEM_PROMPT },
@@ -513,7 +513,7 @@ Deno.serve(async (req) => {
       const pass1Summary = JSON.stringify(pass1Data, null, 1);
       const totalItems = (pass1Data.photos || []).reduce((s: number, p: any) => s + (p.items?.length || 0), 0);
 
-      const result = await callAIWithRetry(LOVABLE_API_KEY, {
+      const result = await callAIWithRetry("_unused", {
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: PASS2_SYSTEM_PROMPT },
@@ -570,7 +570,7 @@ Deno.serve(async (req) => {
         claim?.loss_type ? `Loss type: ${claim.loss_type}` : null,
       ].filter(Boolean).join("\n");
 
-      const result = await callAIWithRetry(LOVABLE_API_KEY, {
+      const result = await callAIWithRetry("_unused", {
         model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: ESTIMATE_SYSTEM_PROMPT },
