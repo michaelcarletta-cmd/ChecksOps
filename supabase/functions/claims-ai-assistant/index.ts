@@ -6983,7 +6983,7 @@ ${knowledgeBaseContext || ''}`
                 let extracted: { phone?: string; email?: string } = {};
                 
                 try {
-                  const content = extractData.choices[0].message.content || "";
+                  const content = extractResult.text || "";
                   const jsonMatch = content.match(/\{[\s\S]*\}/);
                   if (jsonMatch) {
                     extracted = JSON.parse(jsonMatch[0]);
