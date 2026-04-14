@@ -475,6 +475,13 @@ export async function completeTask(taskId: string): Promise<{ success: boolean; 
     .eq('id', taskId);
 
   if (error) return { success: false, error: error.message };
+
+  // Post-mutation verification: re-read and warn if stale
+  const { data: verify } = await supabase.from('tasks').select('status').eq('id', taskId).single();
+  if (verify && verify.status !== 'completed') {
+    console.error(`[completeTask] Stale read after completion — task ${taskId} still has status "${verify.status}"`);
+  }
+
   await logTaskEvent(taskId, 'completed');
   if (task?.assigned_to) await normalizeActiveQueue(task.assigned_to);
   return { success: true };
