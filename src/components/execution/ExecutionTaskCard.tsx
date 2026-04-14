@@ -146,6 +146,7 @@ export function ExecutionTaskCard({
                 Due {format(new Date(task.due_date), "MMM d")}
               </span>
             )}
+            {staleStatus !== 'fresh' && !isImmediate && (
               <span className={`flex items-center gap-0.5 ${staleStatus === 'requires_decision' ? 'text-red-500' : 'text-amber-500'}`}>
                 <AlertTriangle className="h-3 w-3" />
                 {staleStatus === 'requires_decision' ? 'Action needed' : 'Stale'}
