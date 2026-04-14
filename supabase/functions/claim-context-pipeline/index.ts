@@ -1,32 +1,34 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { generate, callVision } from "../_shared/ai/generate.ts";
+import { MODEL_CHEAP, MODEL_STRONG, MODEL_VISION } from "../_shared/ai/modelRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
-
-async function callAI(apiKey: string, systemPrompt: string, userPrompt: string, model = "google/gemini-2.5-flash") {
-  const res = await fetch(GATEWAY, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      max_tokens: 16000,
-    }),
+async function callAI(systemPrompt: string, userPrompt: string, useStrong = false) {
+  const result = await generate({
+    task: "extraction",
+    system: systemPrompt,
+    user: userPrompt,
+    searchMode: "off",
+    model: useStrong ? MODEL_STRONG : MODEL_CHEAP,
+    maxTokens: 16000,
   });
-  if (!res.ok) {
-    const t = await res.text();
-    console.error("AI error", res.status, t);
-    throw new Error(`AI error ${res.status}`);
-  }
-  const d = await res.json();
-  return d.choices?.[0]?.message?.content || "";
+  console.log(`[claim-context-pipeline] AI call: model=${result.model}, cached=${result.cached}`);
+  return result.text;
+}
+
+async function callAIVision(systemPrompt: string, contentParts: any[]) {
+  const result = await callVision({
+    model: MODEL_VISION,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: contentParts },
+    ],
+  });
+  return result.text;
 }
 
 function parseJSON(text: string) {
@@ -44,8 +46,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
+    // Shared AI layer handles API keys internally
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

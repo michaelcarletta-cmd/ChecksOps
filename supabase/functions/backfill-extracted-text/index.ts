@@ -1,4 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { callVision } from "../_shared/ai/generate.ts";
+import { MODEL_VISION } from "../_shared/ai/modelRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,14 +48,8 @@ function extractPdfText(bytes: Uint8Array): string {
 const FILE_TIMEOUT_MS = 90_000; // 90 seconds per file
 
 // === OCR VIA VISION AI ===
-async function ocrViaVision(bytes: Uint8Array, fileName: string, signal?: AbortSignal): Promise<string | null> {
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
-    console.error("[OCR] LOVABLE_API_KEY not set");
-    return null;
-  }
-
-  const MAX_OCR_BYTES = 4 * 1024 * 1024; // 4 MB cap to stay within memory limits
+async function ocrViaVision(bytes: Uint8Array, fileName: string, _signal?: AbortSignal): Promise<string | null> {
+  const MAX_OCR_BYTES = 4 * 1024 * 1024;
 
   try {
     if (bytes.length > MAX_OCR_BYTES) {
@@ -61,7 +57,6 @@ async function ocrViaVision(bytes: Uint8Array, fileName: string, signal?: AbortS
       return null;
     }
 
-    // Memory-efficient base64 encoding: build string char-by-char instead of spread
     let binaryStr = "";
     for (let i = 0; i < bytes.length; i++) {
       binaryStr += String.fromCharCode(bytes[i]);
@@ -77,50 +72,30 @@ async function ocrViaVision(bytes: Uint8Array, fileName: string, signal?: AbortS
       ? "image/webp"
       : "image/jpeg";
 
-    console.log(`[OCR] Sending ${fileName} (${bytes.length} bytes, mime=${mimeType}) to vision API`);
+    console.log(`[OCR] Sending ${fileName} (${bytes.length} bytes, mime=${mimeType}) to shared AI layer, model: ${MODEL_VISION}`);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      signal,
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          {
-            role: "system",
-            content:
-              "Extract ALL text content from this document image. Return the raw text exactly as it appears, preserving dates, numbers, names, and addresses. Do not summarize or interpret.",
-          },
-          {
-            role: "user",
-            content: [
-              { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
-              { type: "text", text: "Extract all text from this document. Return only the raw text content." },
-            ],
-          },
-        ],
-        temperature: 0.1,
-      }),
+    const result = await callVision({
+      model: MODEL_VISION,
+      messages: [
+        {
+          role: "system",
+          content: "Extract ALL text content from this document image. Return the raw text exactly as it appears, preserving dates, numbers, names, and addresses. Do not summarize or interpret.",
+        },
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
+            { type: "text", text: "Extract all text from this document. Return only the raw text content." },
+          ],
+        },
+      ],
+      temperature: 0.1,
     });
 
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.error(`[OCR] Vision API error: ${response.status} - ${errBody.substring(0, 200)}`);
-      return null;
-    }
-
-    const data = await response.json();
-    const text = data.choices?.[0]?.message?.content || null;
+    const text = result.text || null;
     console.log(`[OCR] Vision returned ${text ? text.length : 0} chars for ${fileName}`);
     return text;
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      console.error(`[OCR] Aborted (timeout) for ${fileName}`);
-      return null;
-    }
     console.error("[OCR] Error:", error);
     return null;
   }
