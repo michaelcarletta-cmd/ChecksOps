@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, MessageSquare } from "lucide-react";
 import { MergeFieldButtons } from "@/components/MergeFieldButtons";
+import { TemplatePreview } from "@/components/settings/TemplatePreview";
 
 interface SMSTemplate {
   id: string;
