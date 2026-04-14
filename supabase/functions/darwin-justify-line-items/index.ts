@@ -522,12 +522,15 @@ OUTPUT: Return a JSON array with one object per line item:
 ${manufacturer ? `Claim-level manufacturer: ${manufacturer}` : "No claim-level manufacturer set."}
 ${lossType ? `Loss type: ${lossType}` : ""}
 View mode: ${viewMode}
+${industryStandards ? `\nINDUSTRY STANDARDS (user-provided, incorporate into justifications where relevant):\n${industryStandards}` : ""}
 
 PER-ITEM DATA (manufacturer specs and building codes matched to each item):
 ${perItemContext}
 
 GENERAL KNOWLEDGE BASE CONTEXT:
 ${kbContext}
+
+CRITICAL: Each item's manufacturer data and building codes are ALREADY scoped to that specific item. Do NOT use manufacturer data or building codes from one item to justify a different item. Each item must only reference the data listed under its own section.
 
 Return ONLY a valid JSON array. No markdown fences, no commentary.`;
 
