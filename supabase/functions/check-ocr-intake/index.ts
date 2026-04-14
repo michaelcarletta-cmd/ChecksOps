@@ -100,7 +100,7 @@ function normalizeAmountValue(raw: string | null): string | null {
 }
 
 async function extractAmountWithFocusedPass(
-  lovableKey: string,
+  _unused: string,
   frontImageUrl: string,
   backImageUrl: string | null,
 ): Promise<AmountFallbackResult> {
@@ -337,16 +337,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-    const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-
-    if (!supabaseUrl || !serviceKey || !anonKey) {
-      log("env_check", "MISSING env vars", { url: !!supabaseUrl, svc: !!serviceKey, anon: !!anonKey });
-      return errResponse("Missing required environment variables", 500, stage);
-    }
-    if (!lovableKey) {
-      log("env_check", "MISSING LOVABLE_API_KEY");
-      return errResponse("Missing LOVABLE_API_KEY", 500, stage);
-    }
+    const lovableKey = "_shared_layer"; // kept for signature compat; shared AI layer handles keys
     log("env_check", "All env vars present");
 
     // ---- Auth ----
@@ -493,48 +484,23 @@ Rules:
 
       log("ocr_request_sent", "Sending to AI gateway");
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), OCR_TIMEOUT_MS);
-
-      let aiResp: Response;
+      let visionResult;
       try {
-        aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${lovableKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            response_format: { type: "json_object" },
-            messages: [{ role: "user", content }],
-          }),
-          signal: controller.signal,
+        visionResult = await callVision({
+          model: MODEL_VISION,
+          messages: [{ role: "user", content }],
+          jsonMode: true,
         });
       } catch (fetchErr) {
-        clearTimeout(timeout);
         const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
-        const isTimeout = msg.includes("abort");
-        throw new Error(isTimeout ? `OCR request timed out after ${OCR_TIMEOUT_MS / 1000}s` : `OCR fetch failed: ${msg}`);
+        throw new Error(`OCR fetch failed: ${msg}`);
       }
-      clearTimeout(timeout);
 
       stage = "ocr_response_received";
-      log("ocr_response_received", "AI responded", { status: aiResp.status });
-
-      if (!aiResp.ok) {
-        const detail = await aiResp.text().catch(() => "");
-        throw new Error(`AI OCR failed [${aiResp.status}]: ${detail}`);
-      }
+      log("ocr_response_received", "AI responded via shared layer");
 
       stage = "ocr_parse";
-      let aiData: { choices?: Array<{ message?: { content?: string } }> };
-      try {
-        aiData = await aiResp.json();
-      } catch {
-        throw new Error("AI response is not valid JSON");
-      }
-      const rawText = aiData.choices?.[0]?.message?.content ?? "";
+      const rawText = visionResult.text;
 
       let rawObj: unknown;
       try {
