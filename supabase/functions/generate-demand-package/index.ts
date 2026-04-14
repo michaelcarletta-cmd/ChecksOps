@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
+import { generate } from "../_shared/ai/generate.ts";
 // Using Lovable AI gateway instead of OpenAI Responses API for reliability
 
 const corsHeaders = {
@@ -1185,38 +1186,21 @@ Deno.serve(async (req) => {
       policyMatch,
     });
 
-    // Use centralized AI router with reasoning model — higher tokens for complete demands
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          {
-            role: "system",
-            content: mode === "proven"
-              ? "You generate carrier-ready insurance claim documentation packages. Return ONLY valid JSON — no markdown, no code fences, no commentary. Every section must be thorough, expanded, and documentation-led."
-              : "You generate carrier-ready insurance demand packages. Return ONLY valid JSON — no markdown, no code fences, no commentary. Every section must be thorough, expanded, and litigation-aware.",
-          },
-          { role: "user", content: prompt },
-        ],
-      }),
+    const aiResult = await generate({
+      task: 'copilot_reasoning',
+      system: mode === "proven"
+        ? "You generate carrier-ready insurance claim documentation packages. Return ONLY valid JSON — no markdown, no code fences, no commentary. Every section must be thorough, expanded, and documentation-led."
+        : "You generate carrier-ready insurance demand packages. Return ONLY valid JSON — no markdown, no code fences, no commentary. Every section must be thorough, expanded, and litigation-aware.",
+      user: prompt,
+      claimId,
+      forceStrong: true,
+      searchMode: 'off',
+      jsonMode: true,
     });
 
-    if (!aiResp.ok) {
-      const errBody = await aiResp.text();
-      console.error("AI gateway error:", aiResp.status, errBody);
-      throw new Error(`AI generation failed (${aiResp.status})`);
-    }
+    console.log(`[generate-demand-package] model=${aiResult.model}, cached=${aiResult.cached}`);
 
-    const aiData = await aiResp.json();
-    const rawContent = aiData.choices?.[0]?.message?.content || "";
+    const rawContent = aiResult.text;
     console.log("AI response length:", rawContent.length, "chars");
 
     // Robust JSON extraction: try direct parse first, then regex fallback

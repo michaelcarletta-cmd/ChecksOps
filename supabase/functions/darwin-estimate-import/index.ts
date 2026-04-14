@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
+import { callVision, callWithTools, MODEL_VISION } from "../_shared/ai/generate.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -63,45 +64,27 @@ function getUsableStoredText(text: string | null | undefined, label: 'clean_text
   return text;
 }
 
-async function extractTextWithVision(base64Data: string, mimeType: string, apiKey: string): Promise<string> {
+async function extractTextWithVision(base64Data: string, mimeType: string, _apiKey?: string): Promise<string> {
   console.log(`Using multimodal vision for ${mimeType} (${Math.round(base64Data.length / 1024)}KB base64)`);
 
-  const visionResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: 'Extract ALL text from this estimate document verbatim. Preserve structure: section headers, line item descriptions, quantities, units, unit prices, totals, depreciation. Output the complete text exactly as it appears. Do NOT summarize, skip, or invent any content.',
-          },
-          {
-            type: 'image_url',
-            image_url: { url: `data:${mimeType};base64,${base64Data}` },
-          },
-        ],
-      }],
-      max_tokens: 16000,
-    }),
+  const visionResult = await callVision({
+    model: MODEL_VISION,
+    messages: [{
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: 'Extract ALL text from this estimate document verbatim. Preserve structure: section headers, line item descriptions, quantities, units, unit prices, totals, depreciation. Output the complete text exactly as it appears. Do NOT summarize, skip, or invent any content.',
+        },
+        {
+          type: 'image_url',
+          image_url: { url: `data:${mimeType};base64,${base64Data}` },
+        },
+      ],
+    }],
   });
 
-  if (!visionResp.ok) {
-    const errBody = await visionResp.text();
-    console.error(`Vision extraction failed (${visionResp.status}):`, errBody.slice(0, 500));
-    if (visionResp.status === 429 || visionResp.status === 402) {
-      throw new Error(visionResp.status === 429 ? 'Rate limit exceeded — please try again shortly.' : 'AI credits required — please add funds.');
-    }
-    throw new Error(`Vision extraction failed: ${visionResp.status}`);
-  }
-
-  const visionData = await visionResp.json();
-  const visionText = visionData.choices?.[0]?.message?.content || '';
+  const visionText = visionResult.text;
   console.log(`Vision extracted ${visionText.length} chars`);
   return visionText;
 }
@@ -349,8 +332,7 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
+    // AI routing handled by shared layer
 
     const body = await req.json();
     const {
@@ -403,7 +385,7 @@ Deno.serve(async (req) => {
     // Priority 2: Multimodal vision for PDFs/images with base64
     if (!textForExtraction && base64Data && mimeType) {
       extractedTextSource = 'multimodal_vision';
-      textForExtraction = await extractTextWithVision(base64Data, mimeType, LOVABLE_API_KEY);
+      textForExtraction = await extractTextWithVision(base64Data, mimeType);
     }
 
     // Priority 3: Plain text for CSV/XLSX/TXT
@@ -437,7 +419,7 @@ Deno.serve(async (req) => {
 
     if (!validation.valid && base64Data && mimeType && extractedTextSource !== 'multimodal_vision') {
       console.log(`Stored text failed validation from ${extractedTextSource}; retrying with multimodal fallback`);
-      textForExtraction = await extractTextWithVision(base64Data, mimeType, LOVABLE_API_KEY);
+      textForExtraction = await extractTextWithVision(base64Data, mimeType);
       extractedTextSource = 'multimodal_vision';
       validation = validateEstimateText(textForExtraction);
       console.log(`Fallback validation: confidence=${validation.confidence}, valid=${validation.valid}, warnings=${validation.warnings.join('; ')}`);
