@@ -41,6 +41,12 @@ export const EmailTemplatesSettings = () => {
   const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null);
   const [deleteTemplateId, setDeleteTemplateId] = useState<string | null>(null);
   const [form, setForm] = useState({
+    name: "",
+    subject: "",
+    body: "",
+    description: "",
+    category: "General",
+  });
   const emailBodyRef = useRef<HTMLTextAreaElement>(null);
   const insertBodyAtCursor = useCallback((field: string) => {
     const ta = emailBodyRef.current;
@@ -52,12 +58,6 @@ export const EmailTemplatesSettings = () => {
       requestAnimationFrame(() => { ta.focus(); const p = start + field.length; ta.setSelectionRange(p, p); });
     } else { setForm(f => ({ ...f, body: f.body + field })); }
   }, [form.body]);
-    name: "",
-    subject: "",
-    body: "",
-    description: "",
-    category: "General",
-  });
 
   const { data: templates, isLoading } = useQuery({
     queryKey: ["email-templates"],
