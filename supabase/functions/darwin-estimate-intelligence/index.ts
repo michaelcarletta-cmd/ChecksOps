@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
+import { generate } from "../_shared/ai/generate.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,8 +14,6 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
     const { claimId, carrierEstimateText, contractorEstimateText, carrierFileId, contractorFileId } = await req.json();
     if (!claimId) throw new Error('claimId required');
@@ -74,30 +73,24 @@ ${(contractorEstimateText || 'Not provided').slice(0, 15000)}
 
 Return ONLY valid JSON matching the required format.`;
 
-    const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-      }),
+    const aiResult = await generate({
+      task: 'estimate_analysis',
+      system: systemPrompt,
+      user: userPrompt,
+      claimId,
+      searchMode: 'off',
+      jsonMode: true,
     });
 
-    if (!aiResp.ok) {
-      const errText = await aiResp.text();
-      throw new Error(`AI gateway error ${aiResp.status}: ${errText}`);
-    }
+    console.log(`[darwin-estimate-intelligence] model=${aiResult.model}, usedSearch=${aiResult.usedSearch}, cached=${aiResult.cached}`);
 
-    const aiData = await aiResp.json();
-    const rawContent = aiData.choices?.[0]?.message?.content || '';
+    const rawContent = aiResult.text;
     
     // Parse JSON from response
     let parsed: any = {};
     try {
-      const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+      const cleaned = rawContent.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
     } catch { parsed = { rebuttal_narrative: rawContent }; }
 

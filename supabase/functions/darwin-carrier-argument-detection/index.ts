@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { generate } from "../_shared/ai/generate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -155,12 +156,6 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
-
-    if (!lovableApiKey) {
-      throw new Error("LOVABLE_API_KEY not configured");
-    }
-
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Step 1: Regex-based argument detection
@@ -255,30 +250,20 @@ Return JSON:
 CRITICAL: Every assertion MUST have a citation from the document text. If you cannot find a direct quote, set needs_review: true on that citation.`;
 
       try {
-        const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${lovableApiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt },
-            ],
-            temperature: 0.2,
-            max_tokens: 3000,
-          }),
+        const aiResult = await generate({
+          task: 'extraction',
+          system: systemPrompt,
+          user: userPrompt,
+          claimId,
+          searchMode: 'off',
+          temperature: 0.2,
+          maxTokens: 3000,
+          jsonMode: true,
         });
 
-        if (!aiResp.ok) {
-          console.error(`[CarrierArgDetect] AI error for ${detection.type}: ${aiResp.status}`);
-          continue;
-        }
+        console.log(`[CarrierArgDetect] model=${aiResult.model}, cached=${aiResult.cached}, type=${detection.type}`);
 
-        const aiData = await aiResp.json();
-        let content = aiData.choices?.[0]?.message?.content || "";
+        let content = aiResult.text;
 
         // Strip markdown code blocks
         content = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
