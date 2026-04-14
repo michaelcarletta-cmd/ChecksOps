@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,17 @@ export const EmailTemplatesSettings = () => {
     description: "",
     category: "General",
   });
+  const emailBodyRef = useRef<HTMLTextAreaElement>(null);
+  const insertBodyAtCursor = useCallback((field: string) => {
+    const ta = emailBodyRef.current;
+    if (ta) {
+      const start = ta.selectionStart ?? form.body.length;
+      const end = ta.selectionEnd ?? form.body.length;
+      const newBody = form.body.slice(0, start) + field + form.body.slice(end);
+      setForm(f => ({ ...f, body: newBody }));
+      requestAnimationFrame(() => { ta.focus(); const p = start + field.length; ta.setSelectionRange(p, p); });
+    } else { setForm(f => ({ ...f, body: f.body + field })); }
+  }, [form.body]);
 
   const { data: templates, isLoading } = useQuery({
     queryKey: ["email-templates"],
@@ -262,9 +273,10 @@ export const EmailTemplatesSettings = () => {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label>Email Body *</Label>
-                    <MergeFieldButtons onInsert={(field) => setForm({ ...form, body: form.body + field })} />
+                    <MergeFieldButtons onInsert={insertBodyAtCursor} />
                   </div>
                   <Textarea
+                    ref={emailBodyRef}
                     value={form.body}
                     onChange={(e) => setForm({ ...form, body: e.target.value })}
                     placeholder="Dear ${policyholder},&#10;&#10;We wanted to provide you with an update..."

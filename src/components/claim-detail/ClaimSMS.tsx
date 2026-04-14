@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -47,6 +47,17 @@ interface ClaimSMSProps {
 export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
   const [messages, setMessages] = useState<SMSMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
+  const smsTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const insertAtCursor = useCallback((field: string) => {
+    const ta = smsTextareaRef.current;
+    if (ta) {
+      const start = ta.selectionStart ?? newMessage.length;
+      const end = ta.selectionEnd ?? newMessage.length;
+      const val = newMessage.slice(0, start) + field + newMessage.slice(end);
+      setNewMessage(val);
+      requestAnimationFrame(() => { ta.focus(); const p = start + field.length; ta.setSelectionRange(p, p); });
+    } else { setNewMessage(prev => prev + field); }
+  }, [newMessage]);
   const [manualPhone, setManualPhone] = useState("");
   const [selectedRecipients, setSelectedRecipients] = useState<Contact[]>([]);
   const [availableContacts, setAvailableContacts] = useState<Contact[]>([]);
@@ -528,13 +539,14 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
             <div className="flex items-center justify-between">
               <Label htmlFor="message">Message</Label>
               <div className="flex items-center gap-2">
-                <MergeFieldButtons compact onInsert={(field) => setNewMessage(prev => prev + field)} />
+                <MergeFieldButtons compact onInsert={insertAtCursor} />
                 <span className="text-xs text-muted-foreground">
                   {newMessage.length} chars
                 </span>
               </div>
             </div>
             <Textarea
+              ref={smsTextareaRef}
               id="message"
               placeholder="Type your message here..."
               value={newMessage}

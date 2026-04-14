@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Send } from "lucide-react";
 import { MergeFieldButtons } from "@/components/MergeFieldButtons";
+import { useInsertAtCursor } from "@/hooks/useInsertAtCursor";
 
 interface InboxSMSQuickReplyProps {
   claimId: string;
@@ -16,6 +17,7 @@ export const InboxSMSQuickReply = ({ claimId, toNumber, onSent }: InboxSMSQuickR
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
   const { toast } = useToast();
+  const { textareaRef, insertAtCursor } = useInsertAtCursor(message, setMessage);
 
   const handleSend = async () => {
     if (!message.trim()) return;
@@ -51,9 +53,10 @@ export const InboxSMSQuickReply = ({ claimId, toNumber, onSent }: InboxSMSQuickR
 
   return (
     <div className="space-y-2 mt-3">
-      <MergeFieldButtons compact onInsert={(field) => setMessage(prev => prev + field)} />
+      <MergeFieldButtons compact onInsert={insertAtCursor} />
       <div className="flex gap-2">
         <Textarea
+          ref={textareaRef}
           placeholder="Type your reply..."
           value={message}
           onChange={(e) => setMessage(e.target.value)}
