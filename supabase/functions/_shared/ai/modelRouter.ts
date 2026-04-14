@@ -1,7 +1,7 @@
 /**
  * Central model router: routes tasks with smart model selection.
- * Uses Lovable AI Gateway model identifiers.
- * Default to gemini-2.5-flash for cost efficiency; upgrade to gemini-2.5-pro
+ * Uses direct OpenAI model identifiers.
+ * Default to gpt-4o-mini for cost efficiency; upgrade to gpt-4o
  * only for final-output strategic tasks or very large prompts.
  */
 
@@ -33,12 +33,12 @@ export interface ModelConfig {
   searchMode: SearchMode;
 }
 
-// ── Model constants ──────────────────────────────────────────────────
-export const MODEL_CHEAP = "google/gemini-2.5-flash";
-export const MODEL_STRONG = "google/gemini-2.5-pro";
-export const MODEL_FAST = "google/gemini-2.5-flash-lite";
-export const MODEL_VISION = "google/gemini-2.5-flash";
-export const MODEL_VISION_STRONG = "google/gemini-2.5-pro";
+// ── Model constants (direct OpenAI names) ────────────────────────────
+export const MODEL_CHEAP = "gpt-4o-mini";
+export const MODEL_STRONG = "gpt-4o";
+export const MODEL_FAST = "gpt-4o-mini";
+export const MODEL_VISION = "gpt-4o-mini";
+export const MODEL_VISION_STRONG = "gpt-4o";
 
 /** Tasks that benefit from search context */
 const SEARCH_ELIGIBLE_TASKS: Set<DarwinTaskType> = new Set([
