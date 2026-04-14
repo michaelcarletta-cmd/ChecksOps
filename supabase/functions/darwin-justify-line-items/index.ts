@@ -374,7 +374,7 @@ serve(async (req) => {
 
   try {
     const body: RequestBody = await req.json();
-    const { claimId, lineItems, stateCode, manufacturer, lossType, viewMode = "internal" } = body;
+    const { claimId, lineItems, stateCode, manufacturer, lossType, viewMode = "internal", industryStandards } = body;
 
     if (!claimId || !lineItems?.length) {
       return new Response(
