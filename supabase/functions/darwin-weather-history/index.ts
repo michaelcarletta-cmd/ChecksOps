@@ -17,10 +17,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
-    }
+    const { generate } = await import("../_shared/ai/generate.ts");
 
     const { claimId, lossDate, address, lossType }: WeatherRequest = await req.json();
     console.log(`Weather History - Claim: ${claimId}, Date: ${lossDate}, Address: ${address}`);
@@ -66,21 +63,7 @@ Deno.serve(async (req) => {
 
     const searchQuery = `Historical weather ${locationQuery} on ${formattedDate}: ${weatherFocus}, severe weather alerts, storm reports. Include specific measurements and any NWS reports.`;
 
-    console.log(`Weather search query: ${searchQuery}`);
-
-    // Use Lovable AI to search for and synthesize weather data
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a weather research assistant for insurance claims. Your task is to provide accurate historical weather data for a specific date and location.
+    const systemContent = `You are a weather research assistant for insurance claims. Your task is to provide accurate historical weather data for a specific date and location.
 
 ALWAYS respond in valid JSON format with this exact structure:
 {
@@ -101,46 +84,28 @@ ALWAYS respond in valid JSON format with this exact structure:
   "relevantEvents": ["list of specific weather events that occurred"]
 }
 
-Be accurate and cite real historical weather data. If you cannot find exact data, provide reasonable estimates based on regional weather patterns and note this in the summary. Focus on weather conditions relevant to insurance claims.`
-          },
-          {
-            role: 'user',
-            content: `Find historical weather data for:
+Be accurate and cite real historical weather data. If you cannot find exact data, provide reasonable estimates based on regional weather patterns and note this in the summary. Focus on weather conditions relevant to insurance claims.`;
+
+    const userContent = `Find historical weather data for:
 Location: ${locationQuery}
 Date: ${formattedDate}
 Loss Type (focus area): ${lossType || 'General property damage'}
 
 Search for: ${searchQuery}
 
-Provide the weather conditions in the specified JSON format.`
-          }
-        ],
-        temperature: 0.3,
-      }),
+Provide the weather conditions in the specified JSON format.`;
+
+    const aiResult = await generate({
+      task: 'extraction',
+      system: systemContent,
+      user: userContent,
+      searchMode: 'off',
+      jsonMode: true,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI Gateway error:', response.status, errorText);
-      
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: 'API credits exhausted. Please add funds.' }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      throw new Error(`AI Gateway error: ${response.status}`);
-    }
+    console.log(`[darwin-weather-history] model=${aiResult.model}, cached=${aiResult.cached}`);
 
-    const aiResponse = await response.json();
-    const content = aiResponse.choices?.[0]?.message?.content;
+    const content = aiResult.text;
 
     if (!content) {
       throw new Error('No content in AI response');
