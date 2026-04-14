@@ -86,13 +86,16 @@ export function EndorsementAdjuster({
     return lc.includes("freedom") || lc.includes("carletta");
   };
 
-  const clientEndorsements = signedEndorsements.filter((e) => !isFreedomOrCarletta(e.payee_name));
-  const companyEndorsements = signedEndorsements.filter((e) => isFreedomOrCarletta(e.payee_name));
-  const visibleCompanyEndorsement = companyEndorsements.find((endorsement) => {
+  const hasVisibleSignature = (endorsement: SignedEndorsementAsset) => {
     const method = (endorsement.signature_method ?? "").toLowerCase();
     if (method === "internal" || method === "manual") return false;
-    return Boolean(endorsement.signature_image_url);
-  });
+    return Boolean(endorsement.signature_image_url?.trim());
+  };
+
+  const visibleEndorsements = signedEndorsements.filter(hasVisibleSignature);
+  const clientEndorsements = visibleEndorsements.filter((e) => !isFreedomOrCarletta(e.payee_name));
+  const companyEndorsements = visibleEndorsements.filter((e) => isFreedomOrCarletta(e.payee_name));
+  const visibleCompanyEndorsement = companyEndorsements[0];
   const canGenerate = signedEndorsements.length > 0;
 
   useEffect(() => {

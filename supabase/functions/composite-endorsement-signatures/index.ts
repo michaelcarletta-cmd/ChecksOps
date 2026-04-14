@@ -141,6 +141,10 @@ Deno.serve(async (req) => {
 
     console.log(`[COMPOSITE] back image path: ${backImagePath}`);
 
+    const allowTextOnly = Boolean(
+      (check.endorsement_override as Partial<OverrideShape> | null)?.showPayToOrder,
+    );
+
     // ── Strict endorsement fetch ──
     const { data: fetchedEndorsements, error: endErr } = await supabase
       .from("check_endorsements")
@@ -151,10 +155,11 @@ Deno.serve(async (req) => {
       .order("created_at", { ascending: true });
 
     if (endErr) throw new Error(`Failed to load endorsements: ${endErr.message}`);
-    const endorsements = (fetchedEndorsements ?? []).filter(
-      (e: any) => (e.signature_method ?? "").toLowerCase() !== "internal",
-    );
-    if (!endorsements?.length) {
+    const endorsements = (fetchedEndorsements ?? []).filter((e: any) => {
+      const method = (e.signature_method ?? "").toLowerCase();
+      return method !== "internal" && method !== "manual";
+    });
+    if (!endorsements?.length && !allowTextOnly) {
       return jsonResp({ success: false, error: "No valid signed endorsement assets found for this check.", code: "NO_SIGNED_ENDORSEMENTS", checkId }, 400);
     }
 
@@ -229,13 +234,20 @@ Deno.serve(async (req) => {
       return lc.includes("freedom") || lc.includes("carletta");
     };
 
-    const clientEndorsements = resolvedEndorsements.filter((e) => !isFreedomOrCarletta(e.payee_name));
-    const companyEndorsements = resolvedEndorsements.filter((e) => isFreedomOrCarletta(e.payee_name));
-    const visibleCompanySignature = companyEndorsements.find((endorsement) => {
+    const hasRenderableSignature = (endorsement: EndorsementRecord) => {
       const method = (endorsement.signature_method ?? "").toLowerCase();
       if (method === "internal" || method === "manual") return false;
       return Boolean(endorsement.resolvedSignatureImageUrl || endorsement.typedSignatureText);
-    });
+    };
+
+    const renderableEndorsements = resolvedEndorsements.filter(hasRenderableSignature);
+    if (!renderableEndorsements.length && !appliedOverride.showPayToOrder) {
+      return jsonResp({ success: false, error: "No valid signed endorsement assets found for this check.", code: "NO_SIGNED_ENDORSEMENTS", checkId }, 400);
+    }
+
+    const clientEndorsements = renderableEndorsements.filter((e) => !isFreedomOrCarletta(e.payee_name));
+    const companyEndorsements = renderableEndorsements.filter((e) => isFreedomOrCarletta(e.payee_name));
+    const visibleCompanySignature = companyEndorsements[0];
 
     // ── Auto-fit layout — real bank endorsement zone ──
     const zoneTop = Math.floor(imgHeight * ZONE_TOP_PCT);
@@ -244,7 +256,7 @@ Deno.serve(async (req) => {
 
     console.log("[COMPOSITE] appliedOverride", appliedOverride);
 
-    let measured = fitLayout(endorsements.length, zoneHeight, appliedOverride.scale);
+    let measured = fitLayout(renderableEndorsements.length, zoneHeight, appliedOverride.scale);
     let blockHeight = measured.estimatedHeight;
     let blockCenterY = zoneTop + (appliedOverride.yPct * zoneHeight);
     let blockTop = Math.round(blockCenterY - blockHeight / 2);
@@ -269,7 +281,7 @@ Deno.serve(async (req) => {
     // If still overflowing, reduce scale slightly and recalc once
     if (blockBottom > zoneBottom) {
       const adjustedScale = Math.max(0.72, (measured.scale ?? 1) - 0.05);
-      measured = fitLayout(endorsements.length, zoneHeight, adjustedScale);
+      measured = fitLayout(renderableEndorsements.length, zoneHeight, adjustedScale);
       blockHeight = measured.estimatedHeight;
       blockCenterY = Math.max(
         zoneTop + blockHeight / 2,
@@ -289,7 +301,7 @@ Deno.serve(async (req) => {
       blockTop,
       blockHeight,
       blockBottom,
-      signerCount: endorsements.length,
+      signerCount: renderableEndorsements.length,
       columns: measured.columns,
       fontSize: measured.fontSize,
       signatureHeight: measured.signatureHeight,
@@ -374,9 +386,6 @@ Deno.serve(async (req) => {
           localY += fitSigHeight + fitRowGap;
         } else if (endorsement.typedSignatureText) {
           endorsementSvg += `<text x="${colCenterX}" y="${localY + byLineFont}" font-family="serif" font-size="${byLineFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(endorsement.typedSignatureText)}</text>`;
-          localY += byLineFont + fitRowGap;
-        } else {
-          endorsementSvg += svgText(colCenterX, localY + byLineFont, byLineFont, "#111111", "normal", endorsement.payee_name);
           localY += byLineFont + fitRowGap;
         }
         maxRowH = Math.max(maxRowH, localY - curY);
