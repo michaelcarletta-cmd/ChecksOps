@@ -805,8 +805,6 @@ function CheckDetailPanel({
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const savedOverride = (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null;
-  const showPayToOrder = savedOverride?.showPayToOrder ?? false;
 
    const { data: check } = useQuery({
     queryKey: ["check-detail", checkId],
@@ -820,6 +818,8 @@ function CheckDetailPanel({
       return data as CheckItem;
     },
   });
+  const savedOverride = (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null;
+  const showPayToOrder = savedOverride?.showPayToOrder ?? false;
 
   const { data: frontImageUrl } = useQuery({
     queryKey: ["check-front-img", check?.front_image_path],
@@ -1640,15 +1640,13 @@ function CheckDetailPanel({
                         size="sm"
                         className="w-full"
                         onClick={async () => {
-                          const nextOverride = {
-                            ...(savedOverride ?? {}),
-                            ...((savedOverride ?? {}) as Partial<EndorsementOverride>),
-                            showPayToOrder: true,
+                          const nextOverride: EndorsementOverride = {
                             xPct: savedOverride?.xPct ?? 0.38,
                             yPct: savedOverride?.yPct ?? 0.5,
                             scale: savedOverride?.scale ?? 1,
                             rotationDeg: savedOverride?.rotationDeg ?? 0,
-                          } satisfies EndorsementOverride;
+                            showPayToOrder: true,
+                          };
 
                           const { error: saveErr } = await supabase
                             .from("check_intake_items")
@@ -1662,6 +1660,12 @@ function CheckDetailPanel({
                             toast({ title: "Failed to add pay to order text", description: saveErr.message, variant: "destructive" });
                             return;
                           }
+
+                          qc.setQueryData(["check-detail", checkId], (current: CheckItem | undefined) => (
+                            current
+                              ? { ...current, endorsement_override: nextOverride as unknown as Record<string, unknown> }
+                              : current
+                          ));
 
                           if (endorsementRows.length > 0) {
                             try {
@@ -1701,6 +1705,11 @@ function CheckDetailPanel({
                           })
                           .eq("id", checkId);
                         if (saveErr) throw saveErr;
+                        qc.setQueryData(["check-detail", checkId], (current: CheckItem | undefined) => (
+                          current
+                            ? { ...current, endorsement_override: ov as unknown as Record<string, unknown> }
+                            : current
+                        ));
                         // 2) Then generate final deposit image
                         await ensureDepositReadyBackImage();
                         toast({ title: "Endorsement saved & deposit image generated" });

@@ -26,6 +26,7 @@ type OverrideShape = {
   yPct: number;
   scale: number;
   rotationDeg: number;
+  showPayToOrder: boolean;
 };
 
 interface EndorsementRecord {
@@ -187,6 +188,7 @@ Deno.serve(async (req) => {
       yPct: rawOverride?.yPct ?? 0.5,
       scale: rawOverride?.scale ?? 1,
       rotationDeg: rawOverride?.rotationDeg ?? 0,
+      showPayToOrder: rawOverride?.showPayToOrder ?? false,
     };
     console.log(`[COMPOSITE] applying override: ${JSON.stringify(appliedOverride)}`);
 
@@ -229,6 +231,11 @@ Deno.serve(async (req) => {
 
     const clientEndorsements = resolvedEndorsements.filter((e) => !isFreedomOrCarletta(e.payee_name));
     const companyEndorsements = resolvedEndorsements.filter((e) => isFreedomOrCarletta(e.payee_name));
+    const visibleCompanySignature = companyEndorsements.find((endorsement) => {
+      const method = (endorsement.signature_method ?? "").toLowerCase();
+      if (method === "internal" || method === "manual") return false;
+      return Boolean(endorsement.resolvedSignatureImageUrl || endorsement.typedSignatureText);
+    });
 
     // ── Auto-fit layout — real bank endorsement zone ──
     const zoneTop = Math.floor(imgHeight * ZONE_TOP_PCT);
@@ -322,22 +329,26 @@ Deno.serve(async (req) => {
     let curY = 0;
 
     // Header
-    if (compactText) {
-      endorsementSvg += svgText(localCenterX, curY + fontSize, fontSize, "#111111", "bold", "Pay to Freedom Adjustment");
-      curY += fontSize + fitLineGap;
-      endorsementSvg += svgText(localCenterX, curY + fontSize, fontSize, "#111111", "bold", "Mobile Deposit Only");
-      curY += fontSize + fitLineGap;
-    } else {
-      endorsementSvg += svgText(localCenterX, curY + fontSize, fontSize, "#111111", "bold", "Pay to the order of");
-      curY += fontSize + fitLineGap;
-      endorsementSvg += svgText(localCenterX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
-      curY += companyFont + fitLineGap;
-      endorsementSvg += svgText(localCenterX, curY + fontSize, fontSize, "#111111", "bold", "For Mobile Deposit Only");
-      curY += fontSize + fitLineGap;
+    if (appliedOverride.showPayToOrder) {
+      if (compactText) {
+        endorsementSvg += svgText(localCenterX, curY + fontSize, fontSize, "#111111", "bold", "Pay to Freedom Adjustment");
+        curY += fontSize + fitLineGap;
+        endorsementSvg += svgText(localCenterX, curY + fontSize, fontSize, "#111111", "bold", "Mobile Deposit Only");
+        curY += fontSize + fitLineGap;
+      } else {
+        endorsementSvg += svgText(localCenterX, curY + fontSize, fontSize, "#111111", "bold", "Pay to the order of");
+        curY += fontSize + fitLineGap;
+        endorsementSvg += svgText(localCenterX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
+        curY += companyFont + fitLineGap;
+        endorsementSvg += svgText(localCenterX, curY + fontSize, fontSize, "#111111", "bold", "For Mobile Deposit Only");
+        curY += fontSize + fitLineGap;
+      }
     }
 
-    endorsementSvg += `<line x1="0" y1="${curY}" x2="${blockWidth}" y2="${curY}" stroke="#111111" stroke-width="2" opacity="0.3"/>`;
-    curY += sectionGap;
+    if (appliedOverride.showPayToOrder || clientEndorsements.length > 0 || visibleCompanySignature) {
+      endorsementSvg += `<line x1="0" y1="${curY}" x2="${blockWidth}" y2="${curY}" stroke="#111111" stroke-width="2" opacity="0.3"/>`;
+      curY += sectionGap;
+    }
 
     // Client endorsements (multi-column support)
     const signerRows = chunkRows(clientEndorsements, measured.columns);
@@ -373,20 +384,23 @@ Deno.serve(async (req) => {
       curY += maxRowH;
     }
 
-    curY += sectionGap;
+    if (clientEndorsements.length > 0 && visibleCompanySignature) {
+      curY += sectionGap;
+    }
 
     // Footer: company + signature
-    endorsementSvg += svgText(localCenterX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
-    curY += companyFont + fitLineGap;
+    if (visibleCompanySignature) {
+      endorsementSvg += svgText(localCenterX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
+      curY += companyFont + fitLineGap;
+    }
 
-    const companySignature = companyEndorsements.find((e) => e.resolvedSignatureImageUrl || e.typedSignatureText);
-    if (companySignature?.resolvedSignatureImageUrl) {
+    if (visibleCompanySignature?.resolvedSignatureImageUrl) {
       const sigWidth = Math.min(blockWidth - 20, Math.round(imgHeight * 0.10));
-      const coSigFilterId = `blackInkCo_${companySignature.id.replace(/[^a-zA-Z0-9]/g, "")}`;
+      const coSigFilterId = `blackInkCo_${visibleCompanySignature.id.replace(/[^a-zA-Z0-9]/g, "")}`;
       endorsementSvg += `<defs><filter id="${coSigFilterId}"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></defs>`;
-      endorsementSvg += `<image href="${escHtml(companySignature.resolvedSignatureImageUrl)}" x="${Math.round(localCenterX - sigWidth / 2)}" y="${curY}" width="${sigWidth}" height="${fitSigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${coSigFilterId})"/>`;
+      endorsementSvg += `<image href="${escHtml(visibleCompanySignature.resolvedSignatureImageUrl)}" x="${Math.round(localCenterX - sigWidth / 2)}" y="${curY}" width="${sigWidth}" height="${fitSigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${coSigFilterId})"/>`;
       curY += fitSigHeight + fitLineGap;
-    } else if (companySignature?.typedSignatureText) {
+    } else if (visibleCompanySignature?.typedSignatureText) {
       endorsementSvg += `<text x="${localCenterX}" y="${curY + byLineFont}" font-family="serif" font-size="${byLineFont}" fill="#111111" font-style="italic" text-anchor="middle">Freedom Adjustment</text>`;
       curY += byLineFont + fitLineGap;
     }
