@@ -1146,8 +1146,7 @@ async function extractStructuredIntelligence(
   documentType: string,
   classificationResult: ClassificationResult,
 ): Promise<StructuredIntelResult> {
-  const { callWithTools } = await import("../_shared/ai/openaiClient.ts");
-  const { MODEL_CHEAP } = await import("../_shared/ai/modelRouter.ts");
+  const { callWithTools, MODEL_CHEAP } = await import("../_shared/ai/generate.ts");
 
   console.log(`[DocIntel] Starting structured extraction for ${fileId} (type: ${documentType})`);
 
@@ -1166,166 +1165,154 @@ async function extractStructuredIntelligence(
 
   try {
     const toolResult = await callWithTools({
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a document intelligence extractor for insurance claims. Extract structured facts from the document. ${typeHint} Be precise — only extract what is explicitly stated. Do not guess.`
-          },
-          {
-            role: 'user',
-            content: `Document type: ${documentType}\n\nDocument content:\n${cleanText.substring(0, 20000)}`
-          }
-        ],
-        tools: [{
-          type: 'function',
-          function: {
-            name: 'extract_document_intelligence',
-            description: 'Extract structured intelligence from a claim document',
-            parameters: {
-              type: 'object',
-              properties: {
-                document_subtype: {
-                  type: 'string',
-                  description: 'Specific subtype: full_denial, partial_denial, reservation_of_rights, carrier_estimate, pa_estimate, contractor_estimate, supplement_estimate, engineering_report, expert_report, policy_jacket, endorsement, declarations, proof_of_loss, invoice, receipt, inspection_report, mitigation_report, or other'
-                },
-                summary: {
-                  type: 'string',
-                  description: 'One-paragraph summary of the document (max 500 chars)'
-                },
-                sender: { type: 'string', description: 'Who sent/authored this document' },
-                recipient: { type: 'string', description: 'Who received this document' },
-                cause_of_loss: { type: 'string', description: 'Stated cause of loss/damage' },
-                coverage_position: {
-                  type: 'string',
-                  description: 'The coverage position stated (approved, denied, partial, under review, etc.)'
-                },
-                key_dates: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      date: { type: 'string', description: 'YYYY-MM-DD' },
-                      label: { type: 'string', description: 'What this date represents' }
-                    },
-                    required: ['date', 'label']
-                  },
-                  description: 'All significant dates found'
-                },
-                key_entities: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      name: { type: 'string' },
-                      role: { type: 'string', description: 'adjuster, engineer, contractor, carrier, insured, attorney, etc.' }
-                    },
-                    required: ['name', 'role']
-                  }
-                },
-                denial_reasons: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Specific reasons given for denial or limitation'
-                },
-                exclusions_cited: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Policy exclusions referenced'
-                },
-                testing_performed: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Tests/inspections that were performed'
-                },
-                testing_missing: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Standard tests that should have been performed but were not mentioned'
-                },
-                estimate_totals: {
+      model: MODEL_CHEAP,
+      messages: [
+        {
+          role: 'system',
+          content: `You are a document intelligence extractor for insurance claims. Extract structured facts from the document. ${typeHint} Be precise — only extract what is explicitly stated. Do not guess.`
+        },
+        {
+          role: 'user',
+          content: `Document type: ${documentType}\n\nDocument content:\n${cleanText.substring(0, 20000)}`
+        }
+      ],
+      tools: [{
+        type: 'function',
+        function: {
+          name: 'extract_document_intelligence',
+          description: 'Extract structured intelligence from a claim document',
+          parameters: {
+            type: 'object',
+            properties: {
+              document_subtype: {
+                type: 'string',
+                description: 'Specific subtype: full_denial, partial_denial, reservation_of_rights, carrier_estimate, pa_estimate, contractor_estimate, supplement_estimate, engineering_report, expert_report, policy_jacket, endorsement, declarations, proof_of_loss, invoice, receipt, inspection_report, mitigation_report, or other'
+              },
+              summary: {
+                type: 'string',
+                description: 'One-paragraph summary of the document (max 500 chars)'
+              },
+              key_dates: {
+                type: 'array',
+                items: {
                   type: 'object',
                   properties: {
-                    rcv: { type: 'number', description: 'Replacement Cost Value total' },
-                    acv: { type: 'number', description: 'Actual Cash Value total' },
-                    depreciation: { type: 'number' },
-                    deductible: { type: 'number' }
-                  }
-                },
-                scope_positions: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Specific scope items or trade categories discussed'
-                },
-                building_components: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Building components mentioned (roof, siding, HVAC, plumbing, etc.)'
-                },
-                code_references: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Building codes, standards, or regulations referenced'
-                },
-                manufacturer_references: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Manufacturer names, product names, or warranty references'
-                },
-                citations: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Legal citations, case law, or regulatory references'
-                },
-                contradictions: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Internal contradictions or inconsistencies found in the document'
-                },
+                    date: { type: 'string' },
+                    type: { type: 'string' },
+                    context: { type: 'string' }
+                  },
+                  required: ['date', 'type'],
+                  additionalProperties: false,
+                }
               },
-              required: ['summary'],
-              additionalProperties: false,
-            }
+              key_entities: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string' },
+                    role: { type: 'string' }
+                  },
+                  required: ['name', 'role'],
+                  additionalProperties: false,
+                }
+              },
+              key_amounts: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    description: { type: 'string' },
+                    amount: { type: 'number' }
+                  },
+                  required: ['description', 'amount'],
+                  additionalProperties: false,
+                }
+              },
+              coverage_position: { type: 'string', description: 'Carrier coverage position if stated' },
+              cause_of_loss: { type: 'string', description: 'Stated cause of loss' },
+              denial_reasons: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Specific denial reasons cited'
+              },
+              exclusions_cited: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Policy exclusions cited'
+              },
+              sender: { type: 'string' },
+              recipient: { type: 'string' },
+              testing_performed: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Tests or inspections that were performed'
+              },
+              testing_not_performed: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Standard tests that should have been performed but were not mentioned'
+              },
+              estimate_totals: {
+                type: 'object',
+                properties: {
+                  rcv: { type: 'number', description: 'Replacement Cost Value total' },
+                  acv: { type: 'number', description: 'Actual Cash Value total' },
+                  depreciation: { type: 'number' },
+                  deductible: { type: 'number' }
+                }
+              },
+              scope_positions: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Specific scope items or trade categories discussed'
+              },
+              building_components: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Building components mentioned (roof, siding, HVAC, plumbing, etc.)'
+              },
+              code_references: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Building codes, standards, or regulations referenced'
+              },
+              manufacturer_references: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Manufacturer names, product names, or warranty references'
+              },
+              citations: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Legal citations, case law, or regulatory references'
+              },
+              contradictions: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Internal contradictions or inconsistencies found in the document'
+              },
+            },
+            required: ['summary'],
+            additionalProperties: false,
           }
-        }],
-        tool_choice: { type: 'function', function: { name: 'extract_document_intelligence' } },
-        temperature: 0.1,
-      }),
+        }
+      }],
+      toolChoice: { type: 'function', function: { name: 'extract_document_intelligence' } },
+      temperature: 0.1,
     });
 
-    if (!response.ok) {
-      const errBody = await response.text().catch(() => '');
-      if (response.status === 402) {
-        const errMsg = 'AI credits exhausted. Please add credits at Settings > Workspace > Usage.';
-        console.error(`[DocIntel] 402 Payment Required: ${errBody}`);
-        return { success: false, written: false, error: errMsg };
-      }
-      if (response.status === 429) {
-        const errMsg = 'AI rate limit reached. File will be retried automatically.';
-        console.error(`[DocIntel] 429 Rate Limited: ${errBody}`);
-        return { success: false, written: false, error: errMsg };
-      }
-      const errMsg = `AI error: ${response.status}`;
-      console.error(`[DocIntel] ${errMsg} ${errBody}`);
-      return { success: false, written: false, error: errMsg };
-    }
+    console.log(`[DocIntel] AI call complete, model=${toolResult.model}`);
 
-    const aiResult = await response.json();
-    const toolCall = aiResult.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall?.function?.arguments) {
+    const firstToolCall = toolResult.toolCalls?.[0];
+    if (!firstToolCall?.function?.arguments) {
       console.error('[DocIntel] No tool call in response');
       return { success: true, written: false, skippedReason: 'no_tool_call_in_response' };
     }
 
     let intel: any;
     try {
-      intel = JSON.parse(toolCall.function.arguments);
+      intel = JSON.parse(firstToolCall.function.arguments);
     } catch {
       console.error('[DocIntel] Failed to parse tool call arguments');
       return { success: false, written: false, error: 'failed_to_parse_tool_call_arguments' };
