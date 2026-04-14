@@ -80,7 +80,7 @@ Use 0 or [] for missing data. Never omit a section.`;
           ]
         : [{ type: "text", text: "No PDF provided." }];
 
-      const raw = await callAI(apiKey, systemPrompt, JSON.stringify(content), "google/gemini-2.5-flash");
+      const raw = await callAIVision(systemPrompt, content);
       const parsed = parseJSON(raw);
 
       return new Response(JSON.stringify({ success: true, measurement_report: parsed }), {
@@ -297,7 +297,7 @@ Return ONLY this JSON:
       const userPrompt = `FULL CLAIM CONTEXT (ONLY generate for scopes: ${JSON.stringify(primaryScopes)}):
 ${JSON.stringify(ctx, null, 2)}`;
 
-      const raw = await callAI(apiKey, systemPrompt, userPrompt, "google/gemini-2.5-pro");
+      const raw = await callAI(systemPrompt, userPrompt, true);
       const estimateResult = parseJSON(raw);
 
       // HARD GUARDRAIL: strip any scopes not in primary_scopes (LLM may hallucinate)
@@ -381,7 +381,7 @@ Use 0 or [] for missing data. Never omit a section.`;
           { type: "image_url", image_url: { url: `data:application/pdf;base64,${fullPdfBase64}` } },
         ];
 
-        const measRaw = await callAI(apiKey, measSystemPrompt, JSON.stringify(measContent), "google/gemini-2.5-flash");
+        const measRaw = await callAIVision(measSystemPrompt, measContent);
         const measParsed = parseJSON(measRaw);
         parsedMeasurement = {
           source: measParsed.source || "other",
@@ -553,7 +553,7 @@ Return ONLY this JSON:
         user_overrides: userOverrides,
       };
 
-      const estimateRaw = await callAI(apiKey, estimateSystemPrompt, `FULL CLAIM CONTEXT (ONLY generate for scopes: ${JSON.stringify(primaryScopes)}):\n${JSON.stringify(fullCtx, null, 2)}`, "google/gemini-2.5-pro");
+      const estimateRaw = await callAI(estimateSystemPrompt, `FULL CLAIM CONTEXT (ONLY generate for scopes: ${JSON.stringify(primaryScopes)}):\n${JSON.stringify(fullCtx, null, 2)}`, true);
       const estimateResult = parseJSON(estimateRaw);
 
       // HARD GUARDRAIL: strip scopes not in primary
