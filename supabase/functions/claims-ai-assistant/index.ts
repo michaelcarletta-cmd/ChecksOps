@@ -6832,24 +6832,18 @@ ${knowledgeBaseContext || ''}`
                 ...conversationMessages.slice(1) // Skip the original system message
               ];
               
-              const followUpResponse = await fetchWithTimeout("https://ai.gateway.lovable.dev/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  model: "google/gemini-2.5-flash",
-                  messages: followUpMessages,
-                  max_tokens: 2000,
-                }),
-              }, AI_GATEWAY_FOLLOW_UP_TIMEOUT_MS);
-              
-              if (followUpResponse.ok) {
-                const followUpData = await followUpResponse.json();
-                answer = followUpData.choices[0].message.content || "";
-              } else {
-                console.error("Follow-up AI call failed:", followUpResponse.status);
+              try {
+                const followUpSys = followUpMessages.find((m: any) => m.role === 'system')?.content || '';
+                const followUpUsr = followUpMessages.filter((m: any) => m.role !== 'system').map((m: any) => typeof m.content === 'string' ? m.content : JSON.stringify(m.content)).join('\n\n');
+                const followUpResult = await callOpenAI({
+                  model: MODEL_CHEAP,
+                  system: followUpSys,
+                  user: followUpUsr,
+                  maxTokens: 2000,
+                });
+                answer = followUpResult.text || "";
+              } catch (followUpErr) {
+                console.error("Follow-up AI call failed:", followUpErr);
                 answer = `I found the claim for ${params.client_name}. ${contextResult.context.substring(0, 500)}...\n\nPlease ask your specific question about this claim.`;
               }
             } else {
@@ -6978,34 +6972,14 @@ ${knowledgeBaseContext || ''}`
                 }
                 
                 // Extract phone and email from search results using AI
-                const extractResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    model: "google/gemini-2.5-flash",
-                    messages: [
-                      {
-                        role: "system",
-                        content: "Extract the main claims phone number and email from the following text. Return ONLY a JSON object with 'phone' and 'email' fields. If not found, use null. Format phone as digits only with area code."
-                      },
-                      {
-                        role: "user",
-                        content: `Extract contact info for ${company.name} from:\n\n${searchResult}`
-                      }
-                    ],
-                    max_tokens: 200,
-                  }),
+                const extractResult = await callOpenAI({
+                  model: MODEL_CHEAP,
+                  system: "Extract the main claims phone number and email from the following text. Return ONLY a JSON object with 'phone' and 'email' fields. If not found, use null. Format phone as digits only with area code.",
+                  user: `Extract contact info for ${company.name} from:\n\n${searchResult}`,
+                  maxTokens: 200,
+                  jsonMode: true,
                 });
                 
-                if (!extractResponse.ok) {
-                  needsReview.push({ name: company.name, reason: "AI extraction failed" });
-                  continue;
-                }
-                
-                const extractData = await extractResponse.json();
                 let extracted: { phone?: string; email?: string } = {};
                 
                 try {
