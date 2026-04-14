@@ -53,6 +53,7 @@ export function NotificationsBar() {
           id,
           title,
           due_date,
+          status,
           claim_id,
           claims!inner(claim_number)
         `)
