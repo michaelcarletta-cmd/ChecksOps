@@ -2764,69 +2764,46 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
     : `${estimateLeadIn}\n\nThis estimate is in line with the damages found and the corresponding repair scope, including:\n${evidenceSummary}`;
 
   try {
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        max_tokens: 900,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a senior public-adjuster communication specialist. Rewrite emails in plain text only (no markdown). Keep professional tone, concise but specific. Include only the strongest documented damages and clearly tie them to estimate scope. NEVER mention AI, automated analysis, models, or computer vision.",
-          },
-          {
-            role: "user",
-            content: [
-              `Rewrite this email so it is professional and evidence-driven for ${carrier}.`,
-              `Claim #: ${claimNumber || "N/A"} | Policyholder: ${policyholder} | Recipient: ${recipient}`,
-              "",
-              "Original draft:",
-              trimmedBody,
-              "",
-              "Photo/estimate evidence context (use this to strengthen the draft):",
-              evidenceSummary,
-              "",
-              "Requirements:",
-              `- Include this sentence naturally near the beginning: "${estimateLeadIn}"`,
-              "- Include a sentence like: \"This estimate is in line with the damages found, such as ...\" and then list key damages.",
-              "- Keep greeting and courteous close.",
-              "- Include important property damages from the photo documentation (not every single point).",
-              "- Tie damages to estimate scope items already on file.",
-              "- Use specific, direct damage statements (example style): \"Stone wall is displaced due to vehicle impact. Wood siding and underlying plywood sustained impact damage. The impact displaced the chimney from its original position, creating gaps and exposing underlying structures.\"",
-              "- Pull details from the most severe photo condition findings and weave them naturally into the draft.",
-              "- Explain what repairs are required for those damages and why those items are included in the estimate.",
-              carrierFacing
-                ? "- This is carrier-facing: use assertive but professional claim-advocacy language. Use decisive phrasing (e.g., \"documented damage confirms,\" \"requires replacement/repair\"). Avoid hedging terms like \"might\" or \"possibly.\""
-                : "- Use collaborative but professional tone suitable for client-facing communications.",
-              carrierFacing
-                ? "- Include a direct ask for revised scope and payment alignment, with a request for written confirmation."
-                : "- Include a clear request for next steps or confirmation.",
-              "- Ask for scope/payment update based on this evidence.",
-              "- Do NOT mention AI, analysis tools, or automated photo review.",
-              "- Return only the final email body text.",
-            ].join("\n"),
-          },
-        ],
-      }),
+    const userContent = [
+      `Rewrite this email so it is professional and evidence-driven for ${carrier}.`,
+      `Claim #: ${claimNumber || "N/A"} | Policyholder: ${policyholder} | Recipient: ${recipient}`,
+      "",
+      "Original draft:",
+      trimmedBody,
+      "",
+      "Photo/estimate evidence context (use this to strengthen the draft):",
+      evidenceSummary,
+      "",
+      "Requirements:",
+      `- Include this sentence naturally near the beginning: "${estimateLeadIn}"`,
+      "- Include a sentence like: \"This estimate is in line with the damages found, such as ...\" and then list key damages.",
+      "- Keep greeting and courteous close.",
+      "- Include important property damages from the photo documentation (not every single point).",
+      "- Tie damages to estimate scope items already on file.",
+      "- Use specific, direct damage statements (example style): \"Stone wall is displaced due to vehicle impact. Wood siding and underlying plywood sustained impact damage. The impact displaced the chimney from its original position, creating gaps and exposing underlying structures.\"",
+      "- Pull details from the most severe photo condition findings and weave them naturally into the draft.",
+      "- Explain what repairs are required for those damages and why those items are included in the estimate.",
+      carrierFacing
+        ? "- This is carrier-facing: use assertive but professional claim-advocacy language. Use decisive phrasing (e.g., \"documented damage confirms,\" \"requires replacement/repair\"). Avoid hedging terms like \"might\" or \"possibly.\""
+        : "- Use collaborative but professional tone suitable for client-facing communications.",
+      carrierFacing
+        ? "- Include a direct ask for revised scope and payment alignment, with a request for written confirmation."
+        : "- Include a clear request for next steps or confirmation.",
+      "- Ask for scope/payment update based on this evidence.",
+      "- Do NOT mention AI, analysis tools, or automated photo review.",
+      "- Return only the final email body text.",
+    ].join("\n");
+
+    const aiResult = await generate({
+      task: 'copilot_drafting',
+      system: "You are a senior public-adjuster communication specialist. Rewrite emails in plain text only (no markdown). Keep professional tone, concise but specific. Include only the strongest documented damages and clearly tie them to estimate scope. NEVER mention AI, automated analysis, models, or computer vision.",
+      user: userContent,
+      searchMode: 'off',
+      maxTokens: 900,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Photo/estimate rewrite failed:", response.status, errorText);
-      return ensureConditionNarrativesInBody(
-        `${fallbackPrefix}\n\n${trimmedBody}`,
-        options?.conditionNarratives || [],
-        carrierFacing,
-      );
-    }
-
-    const data = await response.json();
-    const rewritten = String(data?.choices?.[0]?.message?.content || "").trim();
+    console.log(`[EmailRewrite] Complete, model=${aiResult.model}, cached=${aiResult.cached}`);
+    const rewritten = String(aiResult.text || "").trim();
     if (!rewritten) {
       return ensureConditionNarrativesInBody(
         `${fallbackPrefix}\n\n${trimmedBody}`,
