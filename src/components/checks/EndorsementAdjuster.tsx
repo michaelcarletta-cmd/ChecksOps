@@ -397,28 +397,37 @@ export function EndorsementAdjuster({
           )}
 
           {/* Client endorsement names from actual signed data */}
-          {clientEndorsements.map((endorsement) => (
-            <div key={endorsement.id}>
-              <div style={{ fontSize: byLineFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
-                {endorsement.payee_name}
-              </div>
-              {endorsement.signature_image_url && !endorsement.signature_image_url.startsWith("typed:") ? (
-                <img
-                  src={endorsement.signature_image_url}
-                  alt={`${endorsement.payee_name} signature`}
-                  style={{ height: sigHeightPx, marginBottom: rowGap * displayScale }}
-                  className="object-contain"
-                  draggable={false}
-                />
-              ) : (
-                <div style={{ fontSize: byLineFontPx, fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', marginBottom: rowGap * displayScale, color: "#111111" }}>
-                  {endorsement.signature_image_url?.startsWith("typed:")
-                    ? endorsement.signature_image_url.slice(6)
-                    : endorsement.payee_name}
+          {clientEndorsements.map((endorsement) => {
+            const isInternalOnly = endorsement.signature_method === "internal" || endorsement.signature_method === "manual";
+            return (
+              <div key={endorsement.id}>
+                <div style={{ fontSize: byLineFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: isInternalOnly ? rowGap * displayScale : lineGapPx, color: "#111111" }}>
+                  {endorsement.payee_name}
+                  {isInternalOnly && (
+                    <span style={{ fontSize: byLineFontPx * 0.7, fontWeight: 400, marginLeft: 4 }}>(physical)</span>
+                  )}
                 </div>
-              )}
-            </div>
-          ))}
+                {/* Only render electronic signature for portal-signed endorsements */}
+                {!isInternalOnly && (
+                  endorsement.signature_image_url && !endorsement.signature_image_url.startsWith("typed:") ? (
+                    <img
+                      src={endorsement.signature_image_url}
+                      alt={`${endorsement.payee_name} signature`}
+                      style={{ height: sigHeightPx, marginBottom: rowGap * displayScale }}
+                      className="object-contain"
+                      draggable={false}
+                    />
+                  ) : (
+                    <div style={{ fontSize: byLineFontPx, fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', marginBottom: rowGap * displayScale, color: "#111111" }}>
+                      {endorsement.signature_image_url?.startsWith("typed:")
+                        ? endorsement.signature_image_url.slice(6)
+                        : endorsement.payee_name}
+                    </div>
+                  )
+                )}
+              </div>
+            );
+          })}
 
           <div style={{ fontSize: companyFontPx, fontWeight: 700, lineHeight: 1.05, marginBottom: lineGapPx, color: "#111111" }}>
             {companyName}
