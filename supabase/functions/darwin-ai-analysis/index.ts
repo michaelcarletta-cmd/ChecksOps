@@ -1278,6 +1278,31 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
     return { text: fileDerivedText, sourceOrigin: 'file_extracted_text', usedEngineerReportText: true };
   }
 
+  // ── Broadened fallback: try ANY claim file with substantial extracted text ──
+  // This catches cases where the engineer report isn't classified/named as such
+  if (allFiles.length > 0) {
+    const anyFileWithText = allFiles
+      .map((file: any) => {
+        const cleanText = String(file?.clean_text || '').trim();
+        const rawText = String(file?.extracted_text || '').trim();
+        const bestText = cleanText.length > rawText.length ? cleanText : rawText;
+        const garbage = isGarbageText(bestText);
+        return { file, textLen: garbage ? 0 : bestText.length, bestText: garbage ? '' : bestText };
+      })
+      .filter((c) => c.textLen >= 500)
+      .sort((a, b) => b.textLen - a.textLen);
+
+    if (anyFileWithText.length > 0) {
+      const best = anyFileWithText[0];
+      console.log(`[darwin][resolveEngineerSource] Broadened fallback: using "${best.file.file_name}" (${best.textLen} chars) — file not classified as engineer report but has usable text`);
+      return {
+        text: best.bestText,
+        sourceOrigin: 'file_extracted_text_broadened',
+        usedEngineerReportText: true,
+      };
+    }
+  }
+
   if (directContent) {
     return {
       text: directContent,
