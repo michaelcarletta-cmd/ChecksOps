@@ -1,4 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
+import { callVision } from "../_shared/ai/generate.ts";
+import { MODEL_VISION, MODEL_VISION_STRONG } from "../_shared/ai/modelRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -133,29 +135,13 @@ Rules:
   const timeout = setTimeout(() => controller.abort(), 30_000);
 
   try {
-    const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${lovableKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
-        response_format: { type: "json_object" },
-        messages: [{ role: "user", content }],
-      }),
-      signal: controller.signal,
+    const visionResult = await callVision({
+      model: MODEL_VISION_STRONG,
+      messages: [{ role: "user", content }],
+      jsonMode: true,
     });
 
-    if (!aiResp.ok) {
-      const detail = await aiResp.text().catch(() => "");
-      throw new Error(`Focused amount OCR failed [${aiResp.status}]: ${detail}`);
-    }
-
-    const aiData = await aiResp.json().catch(() => ({} as Record<string, unknown>)) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    const rawText = aiData.choices?.[0]?.message?.content ?? "";
+    const rawText = visionResult.text;
 
     const rawObj = parseStrictJson(rawText) as Record<string, unknown>;
     const amount = normalizeAmountValue(typeof rawObj.amount === "string" ? rawObj.amount : null);
