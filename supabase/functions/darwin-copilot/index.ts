@@ -278,49 +278,38 @@ function isGarbageTextInline(text: string): boolean {
 
 // Download PDF from storage and OCR via vision AI — same approach as darwin-process-document
 async function inlineOcrFromStorage(supabase: any, filePath: string, fileName: string): Promise<string | null> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY) {
-    console.warn('[Copilot OCR] No LOVABLE_API_KEY available');
-    return null;
-  }
+  try {
+    const { callVision, MODEL_VISION } = await import("../_shared/ai/generate.ts");
 
-  // Download from storage
-  const { data: fileBlob, error: dlError } = await supabase.storage
-    .from('claim-files')
-    .download(filePath);
+    // Download from storage
+    const { data: fileBlob, error: dlError } = await supabase.storage
+      .from('claim-files')
+      .download(filePath);
 
-  if (dlError || !fileBlob) {
-    console.warn(`[Copilot OCR] Download failed for ${fileName}:`, dlError);
-    return null;
-  }
+    if (dlError || !fileBlob) {
+      console.warn(`[Copilot OCR] Download failed for ${fileName}:`, dlError);
+      return null;
+    }
 
-  const bytes = new Uint8Array(await fileBlob.arrayBuffer());
-  // Limit file size to avoid memory issues (10MB max)
-  if (bytes.length > 10 * 1024 * 1024) {
-    console.warn(`[Copilot OCR] File too large for inline OCR: ${fileName} (${bytes.length} bytes)`);
-    return null;
-  }
+    const bytes = new Uint8Array(await fileBlob.arrayBuffer());
+    if (bytes.length > 10 * 1024 * 1024) {
+      console.warn(`[Copilot OCR] File too large for inline OCR: ${fileName} (${bytes.length} bytes)`);
+      return null;
+    }
 
-  // Convert to base64 in chunks to avoid stack overflow
-  const chunks: string[] = [];
-  const chunkSize = 32768;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    chunks.push(String.fromCharCode(...chunk));
-  }
-  const base64 = btoa(chunks.join(''));
+    const chunks: string[] = [];
+    const chunkSize = 32768;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      chunks.push(String.fromCharCode(...chunk));
+    }
+    const base64 = btoa(chunks.join(''));
 
-  const isPdf = fileName.toLowerCase().endsWith('.pdf');
-  const mimeType = isPdf ? 'application/pdf' : 'image/jpeg';
+    const isPdf = fileName.toLowerCase().endsWith('.pdf');
+    const mimeType = isPdf ? 'application/pdf' : 'image/jpeg';
 
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
+    const result = await callVision({
+      model: MODEL_VISION,
       messages: [
         { role: 'system', content: 'Extract ALL text content from this document. Return the raw text exactly as it appears, preserving all dates, numbers, names, addresses, policy numbers, exclusion language, and legal text. Do not summarize or interpret. Preserve paragraph structure.' },
         { role: 'user', content: [
@@ -329,16 +318,14 @@ async function inlineOcrFromStorage(supabase: any, filePath: string, fileName: s
         ]}
       ],
       temperature: 0.1,
-    }),
-  });
+    });
 
-  if (!response.ok) {
-    console.error(`[Copilot OCR] Vision API error: ${response.status}`);
+    console.log(`[Copilot OCR] model=${result.model}`);
+    return result.text || null;
+  } catch (error) {
+    console.error(`[Copilot OCR] Error:`, error);
     return null;
   }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || null;
 }
 
 Deno.serve(async (req) => {
