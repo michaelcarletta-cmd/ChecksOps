@@ -239,29 +239,36 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
       return;
     }
 
-    // Replace merge fields with claim data
     let body = template.body;
+
+    // Build a lookup map for all ${...} merge fields to actual claim data
+    const fieldMap: Record<string, string> = {};
+
     if (claimData) {
-      // Standard merge field format
-      body = body.replace(/\{claim\.policyholder_name\}/g, claimData.policyholder_name || "");
-      body = body.replace(/\{claim\.claim_number\}/g, claimData.claim_number || "");
-      body = body.replace(/\{claim\.policy_number\}/g, claimData.policy_number || "");
-      body = body.replace(/\{claim\.policyholder_address\}/g, claimData.policyholder_address || "");
-      body = body.replace(/\{claim\.policyholder_phone\}/g, claimData.policyholder_phone || "");
-      body = body.replace(/\{claim\.policyholder_email\}/g, claimData.policyholder_email || "");
-      body = body.replace(/\{claim\.insurance_company\}/g, claimData.insurance_company || "");
-      body = body.replace(/\{claim\.loss_type\}/g, claimData.loss_type || "");
-      
-      // Handle legacy/alternate syntax (${address} format)
-      body = body.replace(/\$\{address\}/g, claimData.policyholder_address || "");
+      fieldMap["${policyholder}"] = claimData.policyholder_name || "";
+      fieldMap["${policyholder_phone}"] = claimData.policyholder_phone || "";
+      fieldMap["${policyholder_email}"] = claimData.policyholder_email || "";
+      fieldMap["${property_address}"] = claimData.policyholder_address || "";
+      fieldMap["${address.street}"] = claimData.policyholder_address || "";
+      fieldMap["${address.city}"] = "";
+      fieldMap["${claim.claim_number}"] = claimData.claim_number || "";
+      fieldMap["${policy}"] = claimData.policy_number || "";
+      fieldMap["${insurance_company}"] = claimData.insurance_company || "";
+      fieldMap["${claim.loss_type}"] = claimData.loss_type || "";
+      fieldMap["${claim.loss_date}"] = claimData.loss_date
+        ? format(parseLocalDate(claimData.loss_date), "MM/dd/yyyy")
+        : "";
+      fieldMap["${claim.status}"] = claimData.status || "";
+      fieldMap["${mortgage_company}"] = claimData.mortgage_company || "";
+      fieldMap["${loan_number}"] = claimData.loan_number || "";
+      fieldMap["${ssn_last_four}"] = claimData.ssn_last_four || "";
     }
-    
-    // Replace inspection fields with actual inspection data if available
+
+    // Inspection fields
     if (inspectionData) {
-      const formattedDate = inspectionData.inspection_date 
+      const formattedDate = inspectionData.inspection_date
         ? format(parseLocalDate(inspectionData.inspection_date), "MMMM d, yyyy")
         : "";
-      // Format time to 12-hour format (e.g., "2:30 PM")
       let formattedTime = "";
       if (inspectionData.inspection_time) {
         const [hours, minutes] = inspectionData.inspection_time.split(':');
@@ -270,17 +277,30 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
         const hour12 = hour % 12 || 12;
         formattedTime = `${hour12}:${minutes} ${ampm}`;
       }
-      body = body.replace(/\{inspection\.date\}/g, formattedDate);
-      body = body.replace(/\{inspection\.time\}/g, formattedTime);
-      body = body.replace(/\{inspection\.inspector\}/g, inspectionData.inspector_name || "");
-      body = body.replace(/\{inspection\.type\}/g, inspectionData.inspection_type || "");
+      fieldMap["${inspection.date}"] = formattedDate;
+      fieldMap["${inspection.time}"] = formattedTime;
+      fieldMap["${inspection.inspector}"] = inspectionData.inspector_name || "";
     } else {
-      // No inspection scheduled - leave as placeholders
-      body = body.replace(/\{inspection\.date\}/g, "[NO INSPECTION SCHEDULED]");
-      body = body.replace(/\{inspection\.time\}/g, "");
-      body = body.replace(/\{inspection\.inspector\}/g, "");
-      body = body.replace(/\{inspection\.type\}/g, "");
+      fieldMap["${inspection.date}"] = "[NO INSPECTION SCHEDULED]";
+      fieldMap["${inspection.time}"] = "";
+      fieldMap["${inspection.inspector}"] = "";
     }
+
+    // Settlement fields from claimData accounting if available
+    if (claimData) {
+      fieldMap["${settlement.total_rcv}"] = claimData.total_rcv != null ? `$${Number(claimData.total_rcv).toLocaleString()}` : "";
+      fieldMap["${settlement.total_net}"] = claimData.total_net_claim != null ? `$${Number(claimData.total_net_claim).toLocaleString()}` : "";
+      fieldMap["${settlement.total_deductible}"] = claimData.deductible != null ? `$${Number(claimData.deductible).toLocaleString()}` : "";
+      fieldMap["${settlement.prior_offer}"] = claimData.prior_offer != null ? `$${Number(claimData.prior_offer).toLocaleString()}` : "";
+      fieldMap["${settlement.total_checks}"] = claimData.total_checks_received != null ? `$${Number(claimData.total_checks_received).toLocaleString()}` : "";
+      fieldMap["${settlement.outstanding}"] = claimData.outstanding != null ? `$${Number(claimData.outstanding).toLocaleString()}` : "";
+    }
+
+    // Replace all ${...} patterns using the field map
+    body = body.replace(/\$\{[^}]+\}/g, (match) => {
+      if (match in fieldMap) return fieldMap[match];
+      return match; // leave unknown fields as-is
+    });
 
     setNewMessage(body);
   };
