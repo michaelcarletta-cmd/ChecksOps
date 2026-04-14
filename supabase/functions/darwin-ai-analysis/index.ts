@@ -6261,6 +6261,16 @@ Be specific, professional, and provide communications that are ready to copy and
         engineerRebuttalSourceTextLength = engineerTextForDismantler.length;
         engineerRebuttalSourceTextOrigin = engineerSourceResolution.sourceOrigin;
         engineerRebuttalUsedEngineerReportText = engineerSourceResolution.usedEngineerReportText;
+
+        // CRITICAL: Clear pdfContent to force text-only path for AI call.
+        // The raw base64 PDF can be 700K+ tokens which exceeds all model TPM limits.
+        // We already have the extracted+truncated text, so vision mode is unnecessary.
+        if (pdfContent) {
+          console.log(`[darwin] Clearing pdfContent (${Math.round(pdfContent.length / 1024)}KB base64) for engineer_report_rebuttal — using extracted text instead (${engineerTextForDismantler.length} chars)`);
+          pdfContent = undefined;
+          if (!additionalContext) additionalContext = {};
+          additionalContext._useTextOnly = true;
+        }
         scenarioRulePackLoaded = getRulePackLoaded(engineerRebuttalPrimaryScenario);
         scenarioSuppressedRulePacks = getSuppressedRulePacks(engineerRebuttalPrimaryScenario);
         scenarioDetectionMatchedTerms = detectLowSlopePhysicalMechanism(engineerTextForDismantler).matchedTerms;
