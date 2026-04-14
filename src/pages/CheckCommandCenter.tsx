@@ -1133,20 +1133,19 @@ function CheckDetailPanel({
   const isDepositBlocked = (endorsements.length > 0 && !allEndorsementsComplete) || check.status === "loss_draft_required";
 
   // Only include true captured signatures (exclude "marked signed" internal acknowledgements)
-  const endorsementRows = endorsements.filter(
-    (e) =>
+  const endorsementRows = endorsements.filter((e) => {
+    const method = (e.signature_method ?? "").toLowerCase();
+    return (
       e.status === "signed" &&
       typeof e.signature_image_url === "string" &&
       e.signature_image_url.trim().length > 0 &&
-      (e.signature_method ?? "").toLowerCase() !== "internal",
-  );
+      method !== "internal" &&
+      method !== "manual"
+    );
+  });
   const clientEndorsementRows = endorsementRows.filter((e) => !isFreedomAdjustmentPayee(e.payee_name));
   const companyEndorsementRows = endorsementRows.filter((e) => isFreedomAdjustmentPayee(e.payee_name));
-  const visibleCompanyEndorsement = companyEndorsementRows.find((e) => {
-    const method = (e.signature_method ?? "").toLowerCase();
-    if (method === "internal" || method === "manual") return false;
-    return Boolean(e.signature_image_url?.trim());
-  });
+  const visibleCompanyEndorsement = companyEndorsementRows.find((e) => Boolean(e.signature_image_url?.trim()));
   const endorsementText = showPayToOrder
     ? "Pay to the Order of\nFreedom Adjustment\nFor Mobile Deposit Only\nFreedom Adjustment"
     : "";
