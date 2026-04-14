@@ -6229,7 +6229,13 @@ Be specific, professional, and provide communications that are ready to copy and
           fullClaimFiles,
         });
 
+        // Truncate to ~80K chars (~20K tokens) to prevent OpenAI TPM limit errors
+        const MAX_ENGINEER_TEXT_CHARS = 80000;
         let engineerTextForDismantler = engineerSourceResolution.text;
+        if (engineerTextForDismantler && engineerTextForDismantler.length > MAX_ENGINEER_TEXT_CHARS) {
+          console.warn(`[darwin] Truncating engineer report text from ${engineerTextForDismantler.length} to ${MAX_ENGINEER_TEXT_CHARS} chars to avoid token limits`);
+          engineerTextForDismantler = engineerTextForDismantler.substring(0, MAX_ENGINEER_TEXT_CHARS) + '\n\n[... remainder of report truncated for token limits ...]';
+        }
 
         if (!engineerTextForDismantler || engineerTextForDismantler.trim().length < 500) {
           console.error(`[darwin] Engineer rebuttal blocked — source resolution: origin="${engineerSourceResolution.sourceOrigin}", textLen=${engineerTextForDismantler?.length || 0}`);
