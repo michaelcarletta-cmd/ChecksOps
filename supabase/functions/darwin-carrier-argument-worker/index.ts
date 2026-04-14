@@ -148,7 +148,6 @@ function detectArgumentTypes(text: string): Array<{ type: ArgumentType; snippets
 async function processQueueItem(
   supabase: any,
   item: any,
-  lovableApiKey: string,
 ) {
   const { claim_id: claimId, file_id: fileId, file_name: fileName, extracted_text: extractedText } = item;
 
@@ -232,30 +231,18 @@ Return JSON:
 Every assertion MUST have a citation. Set needs_review: true if no direct quote found.`;
 
     try {
-      const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${lovableApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-          temperature: 0.2,
-          max_tokens: 3000,
-        }),
+      const aiResult = await generate({
+        task: 'copilot_reasoning',
+        system: systemPrompt,
+        user: userPrompt,
+        claimId,
+        searchMode: 'off',
+        jsonMode: true,
       });
 
-      if (!aiResp.ok) {
-        console.error(`[Worker] AI error for ${detection.type}: ${aiResp.status}`);
-        continue;
-      }
+      console.log(`[Worker] model=${aiResult.model}, cached=${aiResult.cached}`);
 
-      const aiData = await aiResp.json();
-      let content = aiData.choices?.[0]?.message?.content || "";
+      let content = aiResult.text;
       content = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
 
       let parsed: any;
@@ -360,9 +347,8 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
 
-    if (!lovableApiKey) throw new Error("LOVABLE_API_KEY not configured");
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -415,7 +401,7 @@ Deno.serve(async (req) => {
               .update({ status: "processing" })
               .eq("id", item.id);
 
-            const count = await processQueueItem(supabase, item, lovableApiKey);
+            const count = await processQueueItem(supabase, item);
             totalProcessed += count;
 
             // Mark as done
