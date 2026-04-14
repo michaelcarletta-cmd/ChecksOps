@@ -1632,7 +1632,6 @@ function CheckDetailPanel({
                       imageUrl={backImageUrl}
                       imageWidth={backImageDimensions.width}
                       imageHeight={backImageDimensions.height}
-                      ownerName="Michael Carletta"
                       companyName="Freedom Adjustment"
                       initialOverride={
                         (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null
