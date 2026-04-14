@@ -1,12 +1,15 @@
 /**
- * OpenAI API wrapper for chat completions.
+ * Centralized AI client — all calls go through the Lovable AI Gateway.
+ * Supports text, vision (multimodal), and tool calling.
  */
 
-const OPENAI_API_KEY = () => {
-  const key = Deno.env.get("OPENAI_API_KEY");
-  if (!key) throw new Error("OPENAI_API_KEY is not configured");
+const LOVABLE_API_KEY = () => {
+  const key = Deno.env.get("LOVABLE_API_KEY");
+  if (!key) throw new Error("LOVABLE_API_KEY is not configured");
   return key;
 };
+
+const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
 export interface OpenAIChatOptions {
   model: string;
@@ -24,6 +27,9 @@ export interface OpenAIResult {
   completionTokens: number;
 }
 
+/**
+ * Standard text-only chat completion through the Lovable AI Gateway.
+ */
 export async function callOpenAI(opts: OpenAIChatOptions): Promise<OpenAIResult> {
   const body: Record<string, unknown> = {
     model: opts.model,
@@ -39,10 +45,10 @@ export async function callOpenAI(opts: OpenAIChatOptions): Promise<OpenAIResult>
     body.response_format = { type: "json_object" };
   }
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const res = await fetch(GATEWAY_URL, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY()}`,
+      Authorization: `Bearer ${LOVABLE_API_KEY()}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
@@ -51,8 +57,8 @@ export async function callOpenAI(opts: OpenAIChatOptions): Promise<OpenAIResult>
   const data = await res.json();
 
   if (!res.ok) {
-    console.error("OpenAI error:", JSON.stringify(data).slice(0, 500));
-    throw new Error(`OpenAI ${res.status}: ${data?.error?.message || "Unknown error"}`);
+    console.error("AI gateway error:", JSON.stringify(data).slice(0, 500));
+    throw new Error(`AI gateway ${res.status}: ${data?.error?.message || "Unknown error"}`);
   }
 
   return {
@@ -60,5 +66,123 @@ export async function callOpenAI(opts: OpenAIChatOptions): Promise<OpenAIResult>
     model: data.model || opts.model,
     promptTokens: data.usage?.prompt_tokens ?? 0,
     completionTokens: data.usage?.completion_tokens ?? 0,
+  };
+}
+
+// ── Vision / Multimodal support ──────────────────────────────────────
+
+export interface VisionMessage {
+  role: string;
+  content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+}
+
+export interface VisionChatOptions {
+  model: string;
+  messages: VisionMessage[];
+  temperature?: number;
+  maxTokens?: number;
+  jsonMode?: boolean;
+}
+
+export interface VisionResult {
+  text: string;
+  model: string;
+}
+
+/**
+ * Vision/multimodal chat completion — supports image_url content parts.
+ */
+export async function callVision(opts: VisionChatOptions): Promise<VisionResult> {
+  const body: Record<string, unknown> = {
+    model: opts.model,
+    messages: opts.messages,
+    temperature: opts.temperature ?? 0.3,
+    max_tokens: opts.maxTokens ?? 4000,
+  };
+
+  if (opts.jsonMode) {
+    body.response_format = { type: "json_object" };
+  }
+
+  const res = await fetch(GATEWAY_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    console.error("AI vision error:", JSON.stringify(data).slice(0, 500));
+    if (res.status === 429) throw new Error("RATE_LIMIT");
+    if (res.status === 402) throw new Error("CREDITS_EXHAUSTED");
+    throw new Error(`AI gateway ${res.status}: ${data?.error?.message || "Unknown error"}`);
+  }
+
+  return {
+    text: data.choices?.[0]?.message?.content || "",
+    model: data.model || opts.model,
+  };
+}
+
+// ── Tool calling support ─────────────────────────────────────────────
+
+export interface ToolCallOptions {
+  model: string;
+  messages: VisionMessage[];
+  tools: any[];
+  toolChoice?: any;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+export interface ToolCallResult {
+  text: string;
+  toolCalls: Array<{ id: string; function: { name: string; arguments: string } }>;
+  model: string;
+}
+
+/**
+ * Tool-calling chat completion through the Lovable AI Gateway.
+ */
+export async function callWithTools(opts: ToolCallOptions): Promise<ToolCallResult> {
+  const body: Record<string, unknown> = {
+    model: opts.model,
+    messages: opts.messages,
+    tools: opts.tools,
+    temperature: opts.temperature ?? 0.3,
+    max_tokens: opts.maxTokens ?? 4000,
+  };
+
+  if (opts.toolChoice) {
+    body.tool_choice = opts.toolChoice;
+  }
+
+  const res = await fetch(GATEWAY_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    console.error("AI tool call error:", JSON.stringify(data).slice(0, 500));
+    if (res.status === 429) throw new Error("RATE_LIMIT");
+    if (res.status === 402) throw new Error("CREDITS_EXHAUSTED");
+    throw new Error(`AI gateway ${res.status}: ${data?.error?.message || "Unknown error"}`);
+  }
+
+  const message = data.choices?.[0]?.message;
+  return {
+    text: message?.content || "",
+    toolCalls: message?.tool_calls || [],
+    model: data.model || opts.model,
   };
 }
