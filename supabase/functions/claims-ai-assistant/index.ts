@@ -6481,6 +6481,8 @@ Be relentlessly focused on advancing the claim toward a fair, full, and fast set
             JSON.stringify({ response: answer, tasksCreated: [], emailsSent: [], smsSent: [], communicationDrafts: [], portalNotificationsSent: [], lettersCreated: [], callsScheduled: [] }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
           );
+        } catch (retryErr) {
+          console.error('[Claims AI Guard] Retry failed:', retryErr);
         }
       }
     }
