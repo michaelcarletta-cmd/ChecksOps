@@ -52,8 +52,6 @@ export function EndorsementAdjuster({
   const [activePointerId, setActivePointerId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
-  const [showPayToOrder, setShowPayToOrder] = useState(false);
-
   // Load real signed endorsement assets for this check
   const [signedEndorsements, setSignedEndorsements] = useState<SignedEndorsementAsset[]>([]);
   const [endorsementsLoading, setEndorsementsLoading] = useState(true);
@@ -90,6 +88,11 @@ export function EndorsementAdjuster({
 
   const clientEndorsements = signedEndorsements.filter((e) => !isFreedomOrCarletta(e.payee_name));
   const companyEndorsements = signedEndorsements.filter((e) => isFreedomOrCarletta(e.payee_name));
+  const visibleCompanyEndorsement = companyEndorsements.find((endorsement) => {
+    const method = (endorsement.signature_method ?? "").toLowerCase();
+    if (method === "internal" || method === "manual") return false;
+    return Boolean(endorsement.signature_image_url);
+  });
   const canGenerate = signedEndorsements.length > 0;
 
   useEffect(() => {
@@ -372,7 +375,7 @@ export function EndorsementAdjuster({
             zIndex: 20,
           }}
         >
-          {showPayToOrder && (
+          {override.showPayToOrder && (
             compactText ? (
               <>
                 <div style={{ fontSize: payToFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
@@ -430,22 +433,26 @@ export function EndorsementAdjuster({
             );
           })}
 
-          <div style={{ fontSize: companyFontPx, fontWeight: 700, lineHeight: 1.05, marginBottom: lineGapPx, color: "#111111" }}>
-            {companyName}
-          </div>
+          {visibleCompanyEndorsement && (
+            <>
+              <div style={{ fontSize: companyFontPx, fontWeight: 700, lineHeight: 1.05, marginBottom: lineGapPx, color: "#111111" }}>
+                {companyName}
+              </div>
 
-          {companyEndorsements.length > 0 && companyEndorsements[0].signature_image_url && !companyEndorsements[0].signature_image_url.startsWith("typed:") ? (
-            <img
-              src={companyEndorsements[0].signature_image_url}
-              alt="Freedom Adjustment signature"
-              style={{ height: sigHeightPx }}
-              className="object-contain"
-              draggable={false}
-            />
-          ) : (
-            <div style={{ fontSize: byLineFontPx, fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>
-              {companyName}
-            </div>
+              {visibleCompanyEndorsement.signature_image_url?.startsWith("typed:") ? (
+                <div style={{ fontSize: byLineFontPx, fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>
+                  {companyName}
+                </div>
+              ) : (
+                <img
+                  src={visibleCompanyEndorsement.signature_image_url}
+                  alt="Freedom Adjustment signature"
+                  style={{ height: sigHeightPx }}
+                  className="object-contain"
+                  draggable={false}
+                />
+              )}
+            </>
           )}
 
           {/* resize handle */}
@@ -620,15 +627,34 @@ export function EndorsementAdjuster({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowPayToOrder(!showPayToOrder)}
-              className={showPayToOrder ? "bg-blue-500 text-white hover:bg-blue-600 hover:text-white transition-all duration-200" : "bg-gray-100 hover:bg-gray-200 text-gray-700 transition-all duration-200"}
-              title={showPayToOrder ? "Hide 'Pay to Order' text" : "Show 'Pay to Order' text"}
-            >
-              {showPayToOrder ? "Hide" : "Add"} Pay to Order
-            </Button>
+            {!override.showPayToOrder && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setOverride((prev) =>
+                    clampEndorsementOverride({ ...prev, showPayToOrder: true }),
+                  )
+                }
+                title="Show 'Pay to the Order of Freedom Adjustment' text"
+              >
+                Add Pay to Order Text
+              </Button>
+            )}
+            {override.showPayToOrder && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setOverride((prev) =>
+                    clampEndorsementOverride({ ...prev, showPayToOrder: false }),
+                  )
+                }
+                title="Remove 'Pay to the Order of Freedom Adjustment' text"
+              >
+                Remove Pay to Order Text
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={handleReset}>
               <RotateCcw className="h-3 w-3 mr-1" />
               Reset
