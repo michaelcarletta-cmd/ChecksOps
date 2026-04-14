@@ -444,9 +444,7 @@ export function EndorsementAdjuster({
             />
           ) : (
             <div style={{ fontSize: byLineFontPx, fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>
-              {companyEndorsements.length > 0 && companyEndorsements[0].signature_image_url?.startsWith("typed:")
-                ? companyEndorsements[0].signature_image_url.slice(6)
-                : companyName}
+              {companyName}
             </div>
           )}
 
