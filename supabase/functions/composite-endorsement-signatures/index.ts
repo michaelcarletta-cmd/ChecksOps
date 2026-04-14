@@ -387,7 +387,7 @@ Deno.serve(async (req) => {
       endorsementSvg += `<image href="${escHtml(companySignature.resolvedSignatureImageUrl)}" x="${Math.round(localCenterX - sigWidth / 2)}" y="${curY}" width="${sigWidth}" height="${fitSigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${coSigFilterId})"/>`;
       curY += fitSigHeight + fitLineGap;
     } else if (companySignature?.typedSignatureText) {
-      endorsementSvg += `<text x="${localCenterX}" y="${curY + byLineFont}" font-family="serif" font-size="${byLineFont}" fill="#111111" font-style="italic" text-anchor="middle">${escHtml(companySignature.typedSignatureText)}</text>`;
+      endorsementSvg += `<text x="${localCenterX}" y="${curY + byLineFont}" font-family="serif" font-size="${byLineFont}" fill="#111111" font-style="italic" text-anchor="middle">Freedom Adjustment</text>`;
       curY += byLineFont + fitLineGap;
     }
 

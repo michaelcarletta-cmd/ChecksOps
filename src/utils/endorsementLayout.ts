@@ -150,7 +150,7 @@ export function renderBackCheckEndorsementToCanvas(
     cy += L.signatureHeight;
   } else {
     ctx.font = `italic 500 ${L.signatureFont}px "Brush Script MT", cursive`;
-    ctx.fillText(sig.ownerName, L.x, cy);
+    ctx.fillText(sig.companyName, L.x, cy);
     cy += L.signatureFont;
   }
 

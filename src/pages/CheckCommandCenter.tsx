@@ -1451,7 +1451,7 @@ function CheckDetailPanel({
                                   );
                                 })}
 
-                                {/* Freedom Adjustment signature — only if a portal-captured signature exists */}
+                                {/* Freedom Adjustment signature */}
                                 {endorsementRows.some((e) => {
                                   const n = e.payee_name.toLowerCase();
                                   return (n.includes("freedom") || n.includes("carletta")) && e.signature_image_url;
@@ -1464,9 +1464,9 @@ function CheckDetailPanel({
                                   }).slice(0, 1).map((e) => (
                                     <div key={`sig-${e.id}`} style={{ marginTop: g(0.004) }}>
                                       {e.signature_image_url?.startsWith("typed:") ? (
-                                        <p style={{ fontSize: f(0.042), fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
+                                        <p style={{ fontSize: f(0.042), fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>Freedom Adjustment</p>
                                       ) : e.signature_image_url ? (
-                                        <img src={e.signature_image_url} alt="Carletta signature" style={{ height: f(0.060), margin: "0 auto", display: "block", objectFit: "contain", filter: "brightness(0)" }} />
+                                        <img src={e.signature_image_url} alt="Freedom Adjustment signature" style={{ height: f(0.060), margin: "0 auto", display: "block", objectFit: "contain", filter: "brightness(0)" }} />
                                       ) : null}
                                     </div>
                                   ))}
