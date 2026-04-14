@@ -6465,18 +6465,17 @@ Be relentlessly focused on advancing the claim toward a fair, full, and fast set
           max_tokens: 2500,
         };
         
-        const retryResponse = await fetchWithTimeout("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(retryBody),
-        }, AI_GATEWAY_REQUEST_TIMEOUT_MS);
-        
-        if (retryResponse.ok) {
-          const retryData = await retryResponse.json();
-          answer = retryData.choices?.[0]?.message?.content || answer;
+        try {
+          const retryMsgs = retryBody.messages;
+          const retrySys = retryMsgs.find((m: any) => m.role === 'system')?.content || '';
+          const retryUsr = retryMsgs.filter((m: any) => m.role !== 'system').map((m: any) => typeof m.content === 'string' ? m.content : JSON.stringify(m.content)).join('\n\n');
+          const retryResult = await callOpenAI({
+            model: MODEL_CHEAP,
+            system: retrySys,
+            user: retryUsr,
+            maxTokens: 2500,
+          });
+          answer = retryResult.text || answer;
           // Skip tool call processing
           return new Response(
             JSON.stringify({ response: answer, tasksCreated: [], emailsSent: [], smsSent: [], communicationDrafts: [], portalNotificationsSent: [], lettersCreated: [], callsScheduled: [] }),
