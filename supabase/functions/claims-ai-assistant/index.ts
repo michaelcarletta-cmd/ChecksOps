@@ -2752,7 +2752,6 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
 
   // Use shared AI layer
   const { generate } = await import("../_shared/ai/generate.ts");
-  }
 
   const claimNumber = String(claimData?.claim_number || "").trim();
   const carrier = String(claimData?.insurance_company || "the insurance carrier").trim();
