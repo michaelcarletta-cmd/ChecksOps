@@ -8201,6 +8201,14 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
           throw new Error('Engineer rebuttal blocked: no usable engineer report text found. Please ensure the engineer report PDF has been uploaded to the claim and its text has been extracted. You can also try pasting the report content directly.');
         }
 
+        // CRITICAL: Clear pdfContent to force text-only path — same as engineer_report_rebuttal
+        if (pdfContent) {
+          console.log(`[darwin] Clearing pdfContent for auto_draft_rebuttal — using extracted text instead (${autoDraftDismantlerSource.length} chars)`);
+          pdfContent = undefined;
+          if (!additionalContext) additionalContext = {};
+          additionalContext._useTextOnly = true;
+        }
+
         const autoDraftDismantler = runEngineerReportDismantler(autoDraftDismantlerSource);
         const autoDraftCausationQuote = String(
           autoDraftDismantler.engineerStatedCause
