@@ -31,6 +31,7 @@ export default function SMSTemplatesSettings() {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<SMSTemplate | null>(null);
+  const smsBodyRef = useRef<HTMLTextAreaElement>(null);
   const [formData, setFormData] = useState({
     name: "",
     body: "",
