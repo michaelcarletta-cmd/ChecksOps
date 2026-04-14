@@ -2825,6 +2825,7 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
     );
   }
 }
+
 async function resolveCommunicationClaim(
   supabase: any,
   params: any,
