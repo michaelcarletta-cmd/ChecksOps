@@ -35,9 +35,9 @@ export function ExecutionQueuePanel({ activeTasks, backlogTasks, blockedTasks, l
   const handleAction = async (action: () => Promise<{ success: boolean; error?: string }>, successMsg: string) => {
     const result = await action();
     if (result.success) {
-      toast.success(successMsg);
-      // Force immediate refetch to clear stale state
+      // Force immediate refetch to clear stale state and recalculate past-due
       await onRefetch();
+      toast.success(`${successMsg} — queue refreshed`);
     } else {
       toast.error(result.error || "Action failed");
     }
