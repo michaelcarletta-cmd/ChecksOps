@@ -1623,7 +1623,7 @@ function CheckDetailPanel({
                 onRefresh={onRefresh}
               />
 
-              {backImageUrl && backImageDimensions && (
+              {backImageUrl && (
                 <>
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <Button
