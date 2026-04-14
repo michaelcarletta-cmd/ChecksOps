@@ -54,6 +54,7 @@ export function EndorsementAdjuster({
   const [activePointerId, setActivePointerId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [showPayToOrder, setShowPayToOrder] = useState(false);
 
   // Load real signed endorsement assets for this check
   const [signedEndorsements, setSignedEndorsements] = useState<SignedEndorsementAsset[]>([]);
@@ -373,27 +374,29 @@ export function EndorsementAdjuster({
             zIndex: 20,
           }}
         >
-          {compactText ? (
-            <>
-              <div style={{ fontSize: payToFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
-                Pay to Freedom Adjustment
-              </div>
-              <div style={{ fontSize: payToFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
-                Mobile Deposit Only
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={{ fontSize: payToFontPx, fontWeight: 600, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
-                Pay to the order of
-              </div>
-              <div style={{ fontSize: companyFontPx, fontWeight: 700, lineHeight: 1.05, marginBottom: lineGapPx, color: "#111111" }}>
-                {companyName}
-              </div>
-              <div style={{ fontSize: payToFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: sectionGapPx, color: "#111111" }}>
-                For Mobile Deposit Only
-              </div>
-            </>
+          {showPayToOrder && (
+            compactText ? (
+              <>
+                <div style={{ fontSize: payToFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
+                  Pay to Freedom Adjustment
+                </div>
+                <div style={{ fontSize: payToFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
+                  Mobile Deposit Only
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: payToFontPx, fontWeight: 600, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
+                  Pay to the order of
+                </div>
+                <div style={{ fontSize: companyFontPx, fontWeight: 700, lineHeight: 1.05, marginBottom: lineGapPx, color: "#111111" }}>
+                  {companyName}
+                </div>
+                <div style={{ fontSize: payToFontPx, fontWeight: 700, lineHeight: 1.1, marginBottom: sectionGapPx, color: "#111111" }}>
+                  For Mobile Deposit Only
+                </div>
+              </>
+            )
           )}
 
           {/* Client endorsement names from actual signed data */}
@@ -625,6 +628,15 @@ export function EndorsementAdjuster({
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowPayToOrder(!showPayToOrder)}
+              className={showPayToOrder ? "bg-blue-500 text-white hover:bg-blue-600 hover:text-white transition-all duration-200" : "bg-gray-100 hover:bg-gray-200 text-gray-700 transition-all duration-200"}
+              title={showPayToOrder ? "Hide 'Pay to Order' text" : "Show 'Pay to Order' text"}
+            >
+              {showPayToOrder ? "Hide" : "Add"} Pay to Order
+            </Button>
             <Button variant="outline" size="sm" onClick={handleReset}>
               <RotateCcw className="h-3 w-3 mr-1" />
               Reset
