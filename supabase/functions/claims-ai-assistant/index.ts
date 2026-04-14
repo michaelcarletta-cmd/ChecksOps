@@ -5811,9 +5811,8 @@ If the document is ambiguous about the type of loss, ask the user to clarify rat
       }
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const { callOpenAI, callWithTools } = await import("../_shared/ai/openaiClient.ts");
+    const { MODEL_CHEAP } = await import("../_shared/ai/modelRouter.ts");
     }
 
     // Build staff list context
