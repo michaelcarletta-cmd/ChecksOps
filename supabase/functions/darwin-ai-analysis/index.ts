@@ -11218,36 +11218,26 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
               { role: 'user', content: correctionPrompt },
             ];
 
-            const correctionResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                model: modelId,
-                messages: correctionMessages,
-                max_tokens: 12000,
-              }),
+            const correctionResult = await callOpenAI({
+              model: successfulModel || MODEL_STRONG,
+              system: systemPrompt,
+              user: `Previous output:\n${analysisResult}\n\n${correctionPrompt}`,
+              maxTokens: 12000,
             });
 
-            if (correctionResp.ok) {
-              const correctionData = await correctionResp.json();
-              const correctedText = correctionData.choices?.[0]?.message?.content;
-              if (!correctedText) {
-                throw new Error('[DEMAND CORRECTION] Correction returned empty output.');
-              }
+            const correctedText = correctionResult.text;
+            if (!correctedText) {
+              throw new Error('[DEMAND CORRECTION] Correction returned empty output.');
+            }
 
-              const sanitizedCorrectedText = sanitizeForbiddenInsuranceTerms(stripExternalFormatting(correctedText));
-              const secondPassErrors = postValidateDemandPackageStrict(sanitizedCorrectedText, demandEvSummaryObj);
-              if (secondPassErrors.length === 0) {
-                console.log('[DEMAND CORRECTION] Correction pass succeeded with zero violations.');
-                analysisResult = sanitizedCorrectedText;
-              } else {
-                throw new Error(`DEMAND STRICT VALIDATION FAILED AFTER CORRECTION: ${secondPassErrors.join(' | ')}`);
-              }
+            console.log(`[DEMAND CORRECTION] Complete, model=${correctionResult.model}`);
+            const sanitizedCorrectedText = sanitizeForbiddenInsuranceTerms(stripExternalFormatting(correctedText));
+            const secondPassErrors = postValidateDemandPackageStrict(sanitizedCorrectedText, demandEvSummaryObj);
+            if (secondPassErrors.length === 0) {
+              console.log('[DEMAND CORRECTION] Correction pass succeeded with zero violations.');
+              analysisResult = sanitizedCorrectedText;
             } else {
-              throw new Error(`[DEMAND CORRECTION] Correction API call failed (${correctionResp.status}).`);
+              throw new Error(`DEMAND STRICT VALIDATION FAILED AFTER CORRECTION: ${secondPassErrors.join(' | ')}`);
             }
           } catch (corrErr) {
             console.error('[DEMAND CORRECTION] Error during correction pass:', corrErr);
