@@ -1,32 +1,34 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { generate, callVision } from "../_shared/ai/generate.ts";
+import { MODEL_CHEAP, MODEL_STRONG, MODEL_VISION } from "../_shared/ai/modelRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const GATEWAY = "https://ai.gateway.lovable.dev/v1/chat/completions";
-
-async function callAI(apiKey: string, systemPrompt: string, userPrompt: string, model = "google/gemini-2.5-flash") {
-  const res = await fetch(GATEWAY, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      max_tokens: 16000,
-    }),
+async function callAI(systemPrompt: string, userPrompt: string, useStrong = false) {
+  const result = await generate({
+    task: "extraction",
+    system: systemPrompt,
+    user: userPrompt,
+    searchMode: "off",
+    model: useStrong ? MODEL_STRONG : MODEL_CHEAP,
+    maxTokens: 16000,
   });
-  if (!res.ok) {
-    const t = await res.text();
-    console.error("AI error", res.status, t);
-    throw new Error(`AI error ${res.status}`);
-  }
-  const d = await res.json();
-  return d.choices?.[0]?.message?.content || "";
+  console.log(`[claim-context-pipeline] AI call: model=${result.model}, cached=${result.cached}`);
+  return result.text;
+}
+
+async function callAIVision(systemPrompt: string, contentParts: any[]) {
+  const result = await callVision({
+    model: MODEL_VISION,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: contentParts },
+    ],
+  });
+  return result.text;
 }
 
 function parseJSON(text: string) {
@@ -44,8 +46,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
+    // Shared AI layer handles API keys internally
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -79,7 +80,7 @@ Use 0 or [] for missing data. Never omit a section.`;
           ]
         : [{ type: "text", text: "No PDF provided." }];
 
-      const raw = await callAI(apiKey, systemPrompt, JSON.stringify(content), "google/gemini-2.5-flash");
+      const raw = await callAIVision(systemPrompt, content);
       const parsed = parseJSON(raw);
 
       return new Response(JSON.stringify({ success: true, measurement_report: parsed }), {
@@ -142,7 +143,7 @@ IMPORTANT:
         }
       }
 
-      const raw = await callAI(apiKey, systemPrompt, photoInfo || "No photo data available. Return empty array [].");
+      const raw = await callAI(systemPrompt, photoInfo || "No photo data available. Return empty array [].");
       const findings = parseJSON(raw);
 
       return new Response(JSON.stringify({ success: true, photo_findings: Array.isArray(findings) ? findings : [] }), {
@@ -198,7 +199,7 @@ Measurement sections available: ${JSON.stringify(Object.keys(ctx.measurement_rep
   return s && typeof s === "object" && Object.keys(s).length > 0 && k !== "notes";
 }))}`;
 
-      const raw = await callAI(apiKey, systemPrompt, userPrompt);
+      const raw = await callAI(systemPrompt, userPrompt);
       let classification = parseJSON(raw);
       
       // POST-PROCESSING GUARDRAIL: Force-correct scope confidence based on hard evidence
@@ -296,7 +297,7 @@ Return ONLY this JSON:
       const userPrompt = `FULL CLAIM CONTEXT (ONLY generate for scopes: ${JSON.stringify(primaryScopes)}):
 ${JSON.stringify(ctx, null, 2)}`;
 
-      const raw = await callAI(apiKey, systemPrompt, userPrompt, "google/gemini-2.5-pro");
+      const raw = await callAI(systemPrompt, userPrompt, true);
       const estimateResult = parseJSON(raw);
 
       // HARD GUARDRAIL: strip any scopes not in primary_scopes (LLM may hallucinate)
@@ -380,7 +381,7 @@ Use 0 or [] for missing data. Never omit a section.`;
           { type: "image_url", image_url: { url: `data:application/pdf;base64,${fullPdfBase64}` } },
         ];
 
-        const measRaw = await callAI(apiKey, measSystemPrompt, JSON.stringify(measContent), "google/gemini-2.5-flash");
+        const measRaw = await callAIVision(measSystemPrompt, measContent);
         const measParsed = parseJSON(measRaw);
         parsedMeasurement = {
           source: measParsed.source || "other",
@@ -443,7 +444,7 @@ IMPORTANT:
         }).join("\n\n");
       }
 
-      const findingsRaw = await callAI(apiKey, findingsSystemPrompt, photoInfo || `No photos available. Use description: "${description}". Return findings based on described damage.`);
+      const findingsRaw = await callAI(findingsSystemPrompt, photoInfo || `No photos available. Use description: "${description}". Return findings based on described damage.`);
       const photoFindings = Array.isArray(parseJSON(findingsRaw)) ? parseJSON(findingsRaw) : [];
       console.log(`Photo findings extracted: ${photoFindings.length}`);
 
@@ -480,7 +481,7 @@ Measurement sections: ${JSON.stringify(Object.keys(parsedMeasurement.sections).f
       }))}
 ${measurementRawText ? `\nMeasurement report text (first 5000 chars):\n${measurementRawText.substring(0, 5000)}` : ""}`;
 
-      const classifyRaw = await callAI(apiKey, classifySystemPrompt, classifyUserPrompt);
+      const classifyRaw = await callAI(classifySystemPrompt, classifyUserPrompt);
       let scopeClassification = parseJSON(classifyRaw);
 
       // Post-processing guardrail
@@ -552,7 +553,7 @@ Return ONLY this JSON:
         user_overrides: userOverrides,
       };
 
-      const estimateRaw = await callAI(apiKey, estimateSystemPrompt, `FULL CLAIM CONTEXT (ONLY generate for scopes: ${JSON.stringify(primaryScopes)}):\n${JSON.stringify(fullCtx, null, 2)}`, "google/gemini-2.5-pro");
+      const estimateRaw = await callAI(estimateSystemPrompt, `FULL CLAIM CONTEXT (ONLY generate for scopes: ${JSON.stringify(primaryScopes)}):\n${JSON.stringify(fullCtx, null, 2)}`, true);
       const estimateResult = parseJSON(estimateRaw);
 
       // HARD GUARDRAIL: strip scopes not in primary

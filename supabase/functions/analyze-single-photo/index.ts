@@ -1,4 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { callVision } from "../_shared/ai/generate.ts";
+import { MODEL_VISION } from "../_shared/ai/modelRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -62,14 +64,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "Lovable API key not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -126,7 +120,7 @@ Look specifically for damage patterns that would be caused by ${lossType}.
       }
     }
 
-    // Build the analysis prompt - FORENSIC SKEPTIC MODE with LOSS TYPE CORRELATION
+    // Build the analysis prompt
     const analysisPrompt = `FORENSIC DAMAGE ANALYSIS - Evaluate damage in context of REPORTED CAUSE OF LOSS.
 
 ${claimContext}
@@ -191,7 +185,7 @@ Respond with ONLY a valid JSON object in this exact format:
 Remember: This photo was taken for an insurance claim alleging ${lossType || 'property damage'}. Evaluate whether visible damage supports that claim.
 Respond with ONLY the JSON object, no additional text.`;
 
-    console.log(`Analyzing photo ${photoId}...`);
+    console.log(`[analyze-single-photo] Analyzing photo ${photoId}, model: ${MODEL_VISION}`);
 
     // Retry logic for rate limits
     const MAX_RETRIES = 3;
@@ -199,88 +193,31 @@ Respond with ONLY the JSON object, no additional text.`;
     
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        // Call Lovable AI for analysis
-        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            messages: [
-              { role: "system", content: ANALYSIS_SYSTEM_PROMPT },
-              {
-                role: "user",
-                content: [
-                  { type: "text", text: analysisPrompt },
-                  { type: "image_url", image_url: { url: signedUrlData.signedUrl } }
-                ]
-              }
-            ],
-          }),
+        const visionResult = await callVision({
+          model: MODEL_VISION,
+          messages: [
+            { role: "system", content: ANALYSIS_SYSTEM_PROMPT },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: analysisPrompt },
+                { type: "image_url", image_url: { url: signedUrlData.signedUrl } }
+              ]
+            }
+          ],
         });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`AI analysis failed (attempt ${attempt}/${MAX_RETRIES}):`, response.status, errorText);
-          
-          if (response.status === 429) {
-            // Rate limited - wait and retry
-            if (attempt < MAX_RETRIES) {
-              const waitTime = Math.pow(2, attempt) * 1000; // Exponential backoff: 2s, 4s, 8s
-              console.log(`Rate limited, waiting ${waitTime}ms before retry...`);
-              await new Promise(resolve => setTimeout(resolve, waitTime));
-              continue;
-            }
-            return new Response(
-              JSON.stringify({ error: "Rate limit exceeded. Please try again later.", details: errorText }),
-              { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-          
-          if (response.status === 402) {
-            return new Response(
-              JSON.stringify({ error: "Payment required. Please add funds to your Lovable AI workspace." }),
-              { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-          
-          lastError = { status: response.status, message: errorText };
-          
-          // For other errors, retry if we have attempts left
-          if (attempt < MAX_RETRIES) {
-            const waitTime = 1000 * attempt;
-            console.log(`Error ${response.status}, waiting ${waitTime}ms before retry...`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
-            continue;
-          }
-          
-          return new Response(
-            JSON.stringify({ error: "AI analysis failed", status: response.status, details: errorText }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        const aiResult = await response.json();
-        const content = aiResult.choices?.[0]?.message?.content || "";
+        const content = visionResult.text;
+        console.log(`[analyze-single-photo] AI responded, model: ${visionResult.model}`);
 
         // Parse the JSON response
         let analysis;
         try {
-          // Clean up the response (remove markdown code blocks if present)
           let jsonStr = content.trim();
-          if (jsonStr.startsWith("```json")) {
-            jsonStr = jsonStr.slice(7);
-          }
-          if (jsonStr.startsWith("```")) {
-            jsonStr = jsonStr.slice(3);
-          }
-          if (jsonStr.endsWith("```")) {
-            jsonStr = jsonStr.slice(0, -3);
-          }
+          if (jsonStr.startsWith("```json")) jsonStr = jsonStr.slice(7);
+          if (jsonStr.startsWith("```")) jsonStr = jsonStr.slice(3);
+          if (jsonStr.endsWith("```")) jsonStr = jsonStr.slice(0, -3);
           jsonStr = jsonStr.trim();
-          
           analysis = JSON.parse(jsonStr);
         } catch (parseError) {
           console.error("Failed to parse AI response:", content);
@@ -313,7 +250,7 @@ Respond with ONLY the JSON object, no additional text.`;
           );
         }
 
-        console.log(`Photo ${photoId} analyzed successfully`);
+        console.log(`[analyze-single-photo] Photo ${photoId} analyzed successfully`);
 
         return new Response(
           JSON.stringify({
@@ -332,9 +269,23 @@ Respond with ONLY the JSON object, no additional text.`;
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
         
-      } catch (fetchError: unknown) {
-        console.error(`Fetch error (attempt ${attempt}/${MAX_RETRIES}):`, fetchError);
-        lastError = { message: fetchError instanceof Error ? fetchError.message : String(fetchError) };
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[analyze-single-photo] Attempt ${attempt}/${MAX_RETRIES} failed:`, errMsg);
+        lastError = { message: errMsg };
+        
+        if (errMsg === "RATE_LIMIT") {
+          if (attempt < MAX_RETRIES) {
+            const waitTime = Math.pow(2, attempt) * 1000;
+            console.log(`Rate limited, waiting ${waitTime}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            continue;
+          }
+          return new Response(
+            JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
+            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
         
         if (attempt < MAX_RETRIES) {
           const waitTime = 1000 * attempt;
@@ -344,12 +295,10 @@ Respond with ONLY the JSON object, no additional text.`;
       }
     }
     
-    // All retries exhausted
     return new Response(
       JSON.stringify({ error: "AI analysis failed after retries", details: lastError?.message || "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-
 
   } catch (error) {
     console.error("Error in analyze-single-photo:", error);

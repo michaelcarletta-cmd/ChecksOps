@@ -1,4 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { callVision, generate } from "../_shared/ai/generate.ts";
+import { MODEL_VISION, MODEL_CHEAP } from "../_shared/ai/modelRouter.ts";
 
 declare const EdgeRuntime: {
   waitUntil: (promise: Promise<any>) => void;
@@ -127,70 +129,29 @@ async function processBatch(
   totalBatches: number,
   systemPrompt: string,
   basePrompt: string,
-  LOVABLE_API_KEY: string
 ): Promise<string> {
   const batchPrompt = totalBatches > 1 
     ? `${basePrompt}\n\n[BATCH ${batchNumber} of ${totalBatches}]\nThis batch contains photos ${photoDescriptions.map(d => d.split(':')[0]).join(', ')}.`
     : basePrompt;
 
-  console.log(`Processing batch ${batchNumber}/${totalBatches} with ${imageContents.length} images...`);
+  console.log(`[analyze-photos] Processing batch ${batchNumber}/${totalBatches} with ${imageContents.length} images, model: ${MODEL_VISION}`);
 
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      max_tokens: 8192,
-      messages: [
-        { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: batchPrompt + "\n\nPhoto Information:\n" + photoDescriptions.join('\n') },
-            ...imageContents
-          ]
-        }
-      ],
-    }),
+  const visionResult = await callVision({
+    model: MODEL_VISION,
+    maxTokens: 8192,
+    messages: [
+      { role: "system", content: systemPrompt },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: batchPrompt + "\n\nPhoto Information:\n" + photoDescriptions.join('\n') },
+          ...imageContents
+        ]
+      }
+    ],
   });
 
-  if (!response.ok) {
-    let errorText = '';
-    try { errorText = await response.text(); } catch (_) { errorText = 'Could not read error body'; }
-    console.error(`Batch ${batchNumber} failed:`, response.status, errorText);
-    if (response.status === 429) {
-      throw new Error(`Rate limit exceeded. Please try again later.`);
-    }
-    if (response.status === 402) {
-      throw new Error(`Payment required. Please add funds to your Lovable AI workspace.`);
-    }
-    throw new Error(`AI API error: ${response.status}`);
-  }
-
-  let responseText = '';
-  try {
-    responseText = await response.text();
-  } catch (bodyError) {
-    console.error(`Batch ${batchNumber} body read failed:`, bodyError);
-    throw new Error(`Batch ${batchNumber} response body truncated`);
-  }
-
-  let result;
-  try {
-    result = JSON.parse(responseText);
-  } catch (parseError) {
-    console.error(`Batch ${batchNumber} JSON parse failed, length: ${responseText.length}, first 200:`, responseText.substring(0, 200));
-    const contentMatch = responseText.match(/"content"\s*:\s*"([\s\S]*?)(?:"|$)/);
-    if (contentMatch) {
-      console.log(`Batch ${batchNumber}: extracted partial content (${contentMatch[1].length} chars)`);
-      return contentMatch[1];
-    }
-    throw new Error(`Batch ${batchNumber} returned invalid JSON (${responseText.length} bytes)`);
-  }
-  return result.choices?.[0]?.message?.content || '';
+  return visionResult.text;
 }
 
 // Combine batch results into a cohesive report using Lovable AI
@@ -198,13 +159,12 @@ async function combineResults(
   batchResults: string[],
   reportType: string,
   claimContext: string,
-  LOVABLE_API_KEY: string
 ): Promise<string> {
   if (batchResults.length === 1) {
     return batchResults[0];
   }
 
-  console.log(`Combining ${batchResults.length} batch results...`);
+  console.log(`[analyze-photos] Combining ${batchResults.length} batch results via shared AI layer`);
 
   const combinePrompt = `You are an expert forensic analyst. You have received analysis results from multiple batches of photos for the same insurance claim. 
 Your task is to combine these into a single, cohesive ${reportType} report. 
@@ -225,37 +185,26 @@ ${batchResults.map((r, i) => `=== BATCH ${i + 1} ANALYSIS ===\n${r}\n`).join('\n
 
 Create a single, unified report that incorporates all the above analyses.`;
 
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        { role: "system", content: "You are an expert at combining forensic analysis reports into cohesive documents." },
-        { role: "user", content: combinePrompt }
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    console.error("Combine request failed, returning concatenated results");
+  try {
+    const result = await generate({
+      task: "summary",
+      system: "You are an expert at combining forensic analysis reports into cohesive documents.",
+      user: combinePrompt,
+      searchMode: "off",
+    });
+    return result.text;
+  } catch (e) {
+    console.error("[analyze-photos] Combine request failed, returning concatenated results");
     return batchResults.join('\n\n---\n\n');
   }
-
-  const result = await response.json();
-  return result.choices?.[0]?.message?.content || batchResults.join('\n\n---\n\n');
 }
 
 // Extract referenced photo numbers and their context from the AI report
 async function extractPhotoReferences(
   reportContent: string,
   photoDescriptions: string[],
-  LOVABLE_API_KEY: string
 ): Promise<{ photoNumber: number; aiContext: string }[]> {
-  console.log("Extracting photo references from AI report...");
+  console.log("[analyze-photos] Extracting photo references via shared AI layer");
 
   const extractPrompt = `Analyze this forensic report and extract all photo references with their analysis context.
 
@@ -278,44 +227,32 @@ Return a JSON array like this:
 Only include photos that are actually referenced and analyzed in the report. Return ONLY the JSON array, no other text.`;
 
   try {
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
-        messages: [
-          { role: "system", content: "You extract photo references from forensic reports. Return only valid JSON arrays." },
-          { role: "user", content: extractPrompt }
-        ],
-      }),
+    const result = await generate({
+      task: "extraction",
+      system: "You extract photo references from forensic reports. Return only valid JSON arrays.",
+      user: extractPrompt,
+      searchMode: "off",
+      jsonMode: true,
     });
 
-    if (!response.ok) {
-      console.error("Photo reference extraction failed");
-      return [];
-    }
-
-    const result = await response.json();
-    const content = result.choices?.[0]?.message?.content || "";
+    const content = result.text;
     
-    // Parse JSON from response (handle potential markdown code blocks)
     let jsonStr = content.trim();
-    if (jsonStr.startsWith("```json")) {
-      jsonStr = jsonStr.slice(7);
-    }
-    if (jsonStr.startsWith("```")) {
-      jsonStr = jsonStr.slice(3);
-    }
-    if (jsonStr.endsWith("```")) {
-      jsonStr = jsonStr.slice(0, -3);
-    }
+    if (jsonStr.startsWith("```json")) jsonStr = jsonStr.slice(7);
+    if (jsonStr.startsWith("```")) jsonStr = jsonStr.slice(3);
+    if (jsonStr.endsWith("```")) jsonStr = jsonStr.slice(0, -3);
     jsonStr = jsonStr.trim();
 
+    // Try to find array in response
+    const arrayMatch = jsonStr.match(/\[[\s\S]*\]/);
+    if (arrayMatch) {
+      const references = JSON.parse(arrayMatch[0]);
+      console.log(`[analyze-photos] Extracted ${references.length} photo references`);
+      return references;
+    }
+
     const references = JSON.parse(jsonStr);
-    console.log(`Extracted ${references.length} photo references`);
+    console.log(`[analyze-photos] Extracted ${references.length} photo references`);
     return references;
   } catch (error) {
     console.error("Error extracting photo references:", error);
@@ -397,13 +334,7 @@ Deno.serve(async (req) => {
       console.log(`Photo count limited from ${photoIds.length} to ${MAX_PHOTOS} to prevent timeout`);
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "Lovable API key not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // Shared AI layer handles API keys internally
 
     // supabase client already initialized above
 
@@ -824,7 +755,6 @@ ${claimContext}
             totalBatches,
             systemPrompt,
             userPrompt,
-            LOVABLE_API_KEY
           );
           batchResults.push(batchResult);
           console.log(`Batch ${i + 1}/${totalBatches} complete, result length: ${batchResult.length}`);
@@ -850,7 +780,7 @@ ${claimContext}
     // Combine batch results
     let reportContent: string;
     if (batchResults.length > 1) {
-      reportContent = await combineResults(batchResults, reportType, claimContext, LOVABLE_API_KEY);
+      reportContent = await combineResults(batchResults, reportType, claimContext);
     } else {
       reportContent = batchResults[0];
     }
@@ -883,7 +813,7 @@ ${claimContext}
     }
 
     // Extract which photos the AI referenced in its analysis
-    const referencedPhotos = await extractPhotoReferences(reportContent, allPhotoDescriptions, LOVABLE_API_KEY);
+    const referencedPhotos = await extractPhotoReferences(reportContent, allPhotoDescriptions);
     
     // Map referenced photo numbers to their full photo data with AI context
     const referencedPhotoData = referencedPhotos.map(ref => {
