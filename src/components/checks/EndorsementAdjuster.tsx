@@ -436,14 +436,10 @@ export function EndorsementAdjuster({
             {companyName}
           </div>
 
-          <div style={{ fontSize: byLineFontPx, fontWeight: 600, lineHeight: 1.1, marginBottom: lineGapPx, color: "#111111" }}>
-            By: {ownerName}
-          </div>
-
           {companyEndorsements.length > 0 && companyEndorsements[0].signature_image_url && !companyEndorsements[0].signature_image_url.startsWith("typed:") ? (
             <img
               src={companyEndorsements[0].signature_image_url}
-              alt="Owner signature"
+              alt="Freedom Adjustment signature"
               style={{ height: sigHeightPx }}
               className="object-contain"
               draggable={false}

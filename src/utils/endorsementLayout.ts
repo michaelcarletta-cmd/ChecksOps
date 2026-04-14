@@ -139,11 +139,7 @@ export function renderBackCheckEndorsementToCanvas(
   // Company + owner grouped together
   ctx.font = `700 ${L.companyFont}px Arial, sans-serif`;
   ctx.fillText(sig.companyName, L.x, cy);
-  cy += L.companyFont + L.lineGap * 0.6;
-
-  ctx.font = `600 ${L.byLineFont}px Arial, sans-serif`;
-  ctx.fillText(`By: ${sig.ownerName}`, L.x, cy);
-  cy += L.byLineFont + L.sectionGap;
+  cy += L.companyFont + L.sectionGap;
 
   // Owner signature/name
   if (sig.ownerSignature) {

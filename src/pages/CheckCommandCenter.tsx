@@ -1451,7 +1451,7 @@ function CheckDetailPanel({
                                   );
                                 })}
 
-                                {/* Freedom Adjustment / By: Michael Carletta — only if a portal-captured signature exists */}
+                                {/* Freedom Adjustment signature — only if a portal-captured signature exists */}
                                 {endorsementRows.some((e) => {
                                   const n = e.payee_name.toLowerCase();
                                   return (n.includes("freedom") || n.includes("carletta")) && e.signature_image_url;
