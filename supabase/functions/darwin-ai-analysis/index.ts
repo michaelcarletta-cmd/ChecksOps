@@ -8179,7 +8179,12 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
           additionalContext,
           fullClaimFiles,
         });
-        const autoDraftDismantlerSource = autoDraftSourceResolution.text;
+        let autoDraftDismantlerSource = autoDraftSourceResolution.text;
+        // Truncate to ~80K chars to prevent OpenAI TPM limit errors
+        if (autoDraftDismantlerSource && autoDraftDismantlerSource.length > 80000) {
+          console.warn(`[darwin] Truncating auto-draft engineer text from ${autoDraftDismantlerSource.length} to 80000 chars`);
+          autoDraftDismantlerSource = autoDraftDismantlerSource.substring(0, 80000) + '\n\n[... remainder truncated for token limits ...]';
+        }
 
         if (!autoDraftDismantlerSource || autoDraftDismantlerSource.trim().length < 500) {
           console.error(`[darwin] Auto-draft engineer rebuttal blocked — source resolution: origin="${autoDraftSourceResolution.sourceOrigin}", textLen=${autoDraftDismantlerSource?.length || 0}`);
