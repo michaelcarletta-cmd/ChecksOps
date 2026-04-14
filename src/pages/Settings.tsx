@@ -240,7 +240,7 @@ function SortableStatusRow({ status, onUpdateName, onUpdateColor, onUpdateGradie
       {/* Sub-statuses panel */}
       {subStatusesOpen && (
         <div className="space-y-2 pt-2 border-t">
-          <p className="text-xs font-medium text-muted-foreground">Sub-steps for "{status.name}"</p>
+          <p className="text-xs font-medium text-muted-foreground">Sub-steps for "{status.name}" (drag to reorder)</p>
           <div className="flex gap-2">
             <Input
               placeholder="e.g. Inspection, Prepare Estimate..."
@@ -259,26 +259,12 @@ function SortableStatusRow({ status, onUpdateName, onUpdateColor, onUpdateGradie
           ) : subStatuses.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">No sub-steps yet. Add steps that happen within this status.</p>
           ) : (
-            <div className="space-y-1">
-              {subStatuses.map((sub, idx) => (
-                <div key={sub.id} className="flex items-center gap-2 bg-muted/40 rounded px-2 py-1.5">
-                  <span className="text-xs text-muted-foreground w-5 text-center">{idx + 1}.</span>
-                  <Input
-                    value={sub.name}
-                    onChange={(e) => updateSubName(sub.id, e.target.value)}
-                    className="h-7 text-xs flex-1 bg-transparent border-none focus-visible:ring-1"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={() => deleteSubStatus(sub.id)}
-                  >
-                    <Trash2 className="h-3 w-3 text-muted-foreground" />
-                  </Button>
-                </div>
-              ))}
-            </div>
+            <SubStatusSortableList
+              subStatuses={subStatuses}
+              setSubStatuses={setSubStatuses}
+              onUpdateName={updateSubName}
+              onDelete={deleteSubStatus}
+            />
           )}
         </div>
       )}
