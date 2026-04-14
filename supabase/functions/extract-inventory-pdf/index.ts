@@ -1,3 +1,5 @@
+import { callVision } from "../_shared/ai/generate.ts";
+import { MODEL_VISION } from "../_shared/ai/modelRouter.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -44,46 +46,6 @@ IMPORTANT RULES:
 
 Return ONLY a JSON array of objects. No markdown fences, no extra text, no commentary.`;
 
-async function callAI(apiKey: string, contentParts: any[], maxTokens = 65536): Promise<any> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 120000);
-
-  try {
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [{ role: 'user', content: contentParts }],
-        temperature: 0.1,
-        max_tokens: maxTokens,
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return { error: true, status: response.status, text: errorText };
-    }
-
-    const rawText = await response.text();
-    if (!rawText || rawText.trim().length === 0) {
-      return { error: true, status: 500, text: 'Empty response' };
-    }
-
-    const aiResult = JSON.parse(rawText);
-    return { error: false, content: aiResult.choices?.[0]?.message?.content || '' };
-  } catch (err: any) {
-    clearTimeout(timeoutId);
-    return { error: true, status: 504, text: err.message };
-  }
-}
-
 function parseItemsFromContent(content: string): any[] {
   content = content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
 
@@ -96,7 +58,6 @@ function parseItemsFromContent(content: string): any[] {
     const items = JSON.parse(content);
     if (Array.isArray(items)) return items;
   } catch {
-    // Try to repair truncated JSON
     const lastBrace = content.lastIndexOf("}");
     const arrayStart = content.indexOf("[");
     if (lastBrace > 0 && arrayStart >= 0) {
@@ -111,6 +72,29 @@ function parseItemsFromContent(content: string): any[] {
     }
   }
   return [];
+}
+
+async function callAI(contentParts: any[], maxTokens = 65536): Promise<{ error: boolean; content?: string; status?: number; text?: string }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+  try {
+    const result = await callVision({
+      model: MODEL_VISION,
+      messages: [{ role: 'user', content: contentParts }],
+      temperature: 0.1,
+      maxTokens,
+    });
+
+    clearTimeout(timeoutId);
+    return { error: false, content: result.text };
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.message === "RATE_LIMIT") {
+      return { error: true, status: 429, text: "Rate limited" };
+    }
+    return { error: true, status: 500, text: err.message };
+  }
 }
 
 Deno.serve(async (req) => {
@@ -130,11 +114,6 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'No file data provided' }), { status: 400, headers: corsHeaders });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: 'AI API key not configured' }), { status: 500, headers: corsHeaders });
-    }
-
     // Build content parts
     const effectiveMime = mimeType || 'application/pdf';
     const imageUrl = `data:${effectiveMime.startsWith('image/') ? effectiveMime : 'application/pdf'};base64,${fileBase64}`;
@@ -143,19 +122,17 @@ Deno.serve(async (req) => {
       { type: 'image_url', image_url: { url: imageUrl } },
     ];
 
-    console.log(`Processing inventory PDF: ${fileName}, size: ${Math.round(fileBase64.length / 1024)}KB base64`);
+    console.log(`[extract-inventory-pdf] Processing: ${fileName}, size: ${Math.round(fileBase64.length / 1024)}KB base64, model: ${MODEL_VISION}`);
 
     // === PASS 1: Initial extraction ===
-    const result1 = await callAI(LOVABLE_API_KEY, contentParts);
+    const result1 = await callAI(contentParts);
     if (result1.error) {
       console.error('AI API error:', result1.status, result1.text);
       if (result1.status === 429) return new Response(JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }), { status: 429, headers: corsHeaders });
-      if (result1.status === 402) return new Response(JSON.stringify({ error: 'AI credits exhausted. Please add funds.' }), { status: 402, headers: corsHeaders });
-      if (result1.status === 504) return new Response(JSON.stringify({ error: 'AI request timed out. Try a smaller file.' }), { status: 504, headers: corsHeaders });
       return new Response(JSON.stringify({ error: 'AI analysis failed', details: result1.text }), { status: 500, headers: corsHeaders });
     }
 
-    let items = parseItemsFromContent(result1.content);
+    let items = parseItemsFromContent(result1.content!);
     console.log(`Pass 1: Extracted ${items.length} items`);
 
     if (items.length === 0) {
@@ -165,8 +142,6 @@ Deno.serve(async (req) => {
     // === PASS 2: Find missing items by number gaps ===
     const extractedNumbers = new Set(items.map((i: any) => Number(i.item_number)).filter((n: number) => !isNaN(n) && n > 0));
     const maxNumber = Math.max(...extractedNumbers, 0);
-    
-    // Also try to detect total from the document (the AI might have seen "Objects: 175")
     const expectedTotal = maxNumber > items.length ? maxNumber : items.length;
     
     if (extractedNumbers.size > 0 && expectedTotal > 0) {
@@ -192,13 +167,12 @@ Return ONLY a JSON array. No markdown, no extra text. If you cannot find an item
           { type: 'image_url', image_url: { url: imageUrl } },
         ];
 
-        const result2 = await callAI(LOVABLE_API_KEY, pass2Parts, 16384);
+        const result2 = await callAI(pass2Parts, 16384);
         if (!result2.error) {
-          const pass2Items = parseItemsFromContent(result2.content);
+          const pass2Items = parseItemsFromContent(result2.content!);
           console.log(`Pass 2: Recovered ${pass2Items.length} additional items`);
 
           if (pass2Items.length > 0) {
-            // Merge: add only items whose numbers weren't already extracted
             for (const newItem of pass2Items) {
               const num = Number(newItem.item_number);
               if (!isNaN(num) && !extractedNumbers.has(num)) {
@@ -216,7 +190,7 @@ Return ONLY a JSON array. No markdown, no extra text. If you cannot find an item
     // Sort by item_number for consistent ordering
     items.sort((a: any, b: any) => (Number(a.item_number) || 999) - (Number(b.item_number) || 999));
 
-    console.log(`Final total: ${items.length} items extracted from PDF`);
+    console.log(`[extract-inventory-pdf] Final total: ${items.length} items extracted`);
 
     return new Response(JSON.stringify({ success: true, items }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

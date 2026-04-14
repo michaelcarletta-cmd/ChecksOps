@@ -1,4 +1,5 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callVision } from "../_shared/ai/generate.ts";
+import { MODEL_VISION } from "../_shared/ai/modelRouter.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,11 +21,6 @@ Deno.serve(async (req) => {
 
     if (!imageBase64 && (!pageImages || pageImages.length === 0)) {
       return new Response(JSON.stringify({ error: 'No image data provided' }), { status: 400, headers: corsHeaders });
-    }
-
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: 'AI API key not configured' }), { status: 500, headers: corsHeaders });
     }
 
     const prompt = `You are a receipt data extraction expert for insurance ALE (Additional Living Expense) claims. You are given one or more images. Each image may be a page from a multi-page document, or a standalone receipt photo. The pages together may contain MULTIPLE separate receipts.
@@ -76,7 +72,6 @@ If you cannot confidently determine the total for a receipt, set needs_review to
     const contentParts: any[] = [{ type: 'text', text: prompt }];
 
     if (pageImages && pageImages.length > 0) {
-      // Multiple page images from PDF
       for (const img of pageImages) {
         contentParts.push({
           type: 'image_url',
@@ -84,33 +79,22 @@ If you cannot confidently determine the total for a receipt, set needs_review to
         });
       }
     } else {
-      // Single image
       contentParts.push({
         type: 'image_url',
         image_url: { url: `data:${mimeType || 'image/jpeg'};base64,${imageBase64}` },
       });
     }
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [{ role: 'user', content: contentParts }],
-        temperature: 0.1,
-      }),
-    });
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI API error:', errorText);
-      return new Response(JSON.stringify({ error: 'AI analysis failed' }), { status: 500, headers: corsHeaders });
-    }
+    console.log("[extract-receipt] Calling shared AI layer, model:", MODEL_VISION);
 
-    const aiResult = await response.json();
-    const content = aiResult.choices?.[0]?.message?.content || '';
+    const visionResult = await callVision({
+      model: MODEL_VISION,
+      messages: [{ role: 'user', content: contentParts }],
+      temperature: 0.1,
+    });
+
+    const content = visionResult.text;
+    console.log("[extract-receipt] AI responded, model used:", visionResult.model);
 
     let extracted;
     try {
@@ -130,7 +114,6 @@ If you cannot confidently determine the total for a receipt, set needs_review to
     if (Array.isArray(extracted.receipts)) {
       receipts = extracted.receipts;
     } else if (extracted.vendor_name !== undefined || extracted.total !== undefined) {
-      // Legacy single-receipt response
       receipts = [extracted];
     } else {
       receipts = [extracted];
@@ -142,6 +125,9 @@ If you cannot confidently determine the total for a receipt, set needs_review to
   } catch (error: unknown) {
     console.error('Error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
+    if (message === "RATE_LIMIT") {
+      return new Response(JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }), { status: 429, headers: corsHeaders });
+    }
     return new Response(JSON.stringify({ error: message }), { status: 500, headers: corsHeaders });
   }
 });
