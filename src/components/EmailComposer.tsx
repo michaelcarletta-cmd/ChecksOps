@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +66,17 @@ export function EmailComposer({
   const [manualEmail, setManualEmail] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
   const [body, setBody] = useState("");
+  const bodyTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const insertBodyAtCursor = useCallback((field: string) => {
+    const ta = bodyTextareaRef.current;
+    if (ta) {
+      const start = ta.selectionStart ?? body.length;
+      const end = ta.selectionEnd ?? body.length;
+      const newBody = body.slice(0, start) + field + body.slice(end);
+      setBody(newBody);
+      requestAnimationFrame(() => { ta.focus(); const p = start + field.length; ta.setSelectionRange(p, p); });
+    } else { setBody(prev => prev + field); }
+  }, [body]);
   const [sending, setSending] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<ClaimFile[]>([]);
   const [showFileSelector, setShowFileSelector] = useState(false);

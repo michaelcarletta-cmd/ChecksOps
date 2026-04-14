@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -47,6 +47,17 @@ interface ClaimSMSProps {
 export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
   const [messages, setMessages] = useState<SMSMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
+  const smsTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const insertAtCursor = useCallback((field: string) => {
+    const ta = smsTextareaRef.current;
+    if (ta) {
+      const start = ta.selectionStart ?? newMessage.length;
+      const end = ta.selectionEnd ?? newMessage.length;
+      const val = newMessage.slice(0, start) + field + newMessage.slice(end);
+      setNewMessage(val);
+      requestAnimationFrame(() => { ta.focus(); const p = start + field.length; ta.setSelectionRange(p, p); });
+    } else { setNewMessage(prev => prev + field); }
+  }, [newMessage]);
   const [manualPhone, setManualPhone] = useState("");
   const [selectedRecipients, setSelectedRecipients] = useState<Contact[]>([]);
   const [availableContacts, setAvailableContacts] = useState<Contact[]>([]);
