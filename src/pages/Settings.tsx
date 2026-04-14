@@ -46,6 +46,59 @@ import { JobNimbusSyncDiagnostics } from "@/components/settings/JobNimbusSyncDia
 
 import { useQuery } from "@tanstack/react-query";
 import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
+function SortableSubStatusItem({ sub, index, onUpdateName, onDelete }: { sub: SubStatus; index: number; onUpdateName: (id: string, name: string) => void; onDelete: (id: string) => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: sub.id });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-center gap-2 bg-muted/40 rounded px-2 py-1.5">
+      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing flex-shrink-0">
+        <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
+      </div>
+      <span className="text-xs text-muted-foreground w-5 text-center">{index + 1}.</span>
+      <Input
+        value={sub.name}
+        onChange={(e) => onUpdateName(sub.id, e.target.value)}
+        className="h-7 text-xs flex-1 bg-transparent border-none focus-visible:ring-1"
+      />
+      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onDelete(sub.id)}>
+        <Trash2 className="h-3 w-3 text-muted-foreground" />
+      </Button>
+    </div>
+  );
+}
+
+function SubStatusSortableList({ subStatuses, setSubStatuses, onUpdateName, onDelete }: { subStatuses: SubStatus[]; setSubStatuses: React.Dispatch<React.SetStateAction<SubStatus[]>>; onUpdateName: (id: string, name: string) => void; onDelete: (id: string) => void }) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = subStatuses.findIndex(s => s.id === active.id);
+    const newIndex = subStatuses.findIndex(s => s.id === over.id);
+    const reordered = arrayMove(subStatuses, oldIndex, newIndex);
+    setSubStatuses(reordered);
+    // Persist new order
+    const updates = reordered.map((s, i) =>
+      supabase.from("claim_sub_statuses").update({ display_order: i }).eq("id", s.id)
+    );
+    await Promise.all(updates);
+  };
+
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={subStatuses.map(s => s.id)} strategy={verticalListSortingStrategy}>
+        <div className="space-y-1">
+          {subStatuses.map((sub, idx) => (
+            <SortableSubStatusItem key={sub.id} sub={sub} index={idx} onUpdateName={onUpdateName} onDelete={onDelete} />
+          ))}
+        </div>
+      </SortableContext>
+    </DndContext>
+  );
+}
 
 
 import { RDAutomationSettings } from "@/components/settings/RDAutomationSettings";
