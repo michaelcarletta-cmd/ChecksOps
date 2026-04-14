@@ -238,6 +238,8 @@ async function queryBuildingCodes(
       t.toLowerCase().split(/[\s\/&\-]+/).filter((w) => w.length > 2)
     );
 
+    console.log(`[codes-lookup] Item: "${itemKey}" → keywords: ${itemKeywords.join(', ')}`);
+
     // Score each code citation against this item
     const scored = allStateCodesRaw.map((row: any) => {
       const rowKeywords = (row.keywords || []).map((k: string) => k.toLowerCase());
@@ -253,10 +255,14 @@ async function queryBuildingCodes(
       return { ...row, relevanceScore: score };
     });
 
+    // Require a minimum relevance score to avoid cross-contamination
+    const MIN_RELEVANCE = 3;
     const matches = scored
-      .filter((s: any) => s.relevanceScore > 0)
+      .filter((s: any) => s.relevanceScore >= MIN_RELEVANCE)
       .sort((a: any, b: any) => b.relevanceScore - a.relevanceScore)
       .slice(0, 3);
+
+    console.log(`[codes-lookup] Result for "${itemKey}": ${matches.length} codes matched (min score ${MIN_RELEVANCE})`);
 
     for (const m of matches) {
       const entry = {
