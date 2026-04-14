@@ -1,3 +1,5 @@
+import { callVision, MODEL_VISION } from "../_shared/ai/generate.ts";
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -383,9 +385,6 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
-
     const body = await req.json();
     const imageBase64 = body?.imageBase64 as string | undefined;
     const mimeType = body?.mimeType as string | undefined;
@@ -459,31 +458,21 @@ Rules:
 - Return no markdown fences.
 - Return an empty observations array if the image does not clearly show property damage.`;
 
-    const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        temperature: 0.2,
-        messages: [
-          { role: 'system', content: prompt },
-          { role: 'user', content: [
-            { type: 'text', text: 'Analyze this property damage photo for estimate-building and scope mapping.' },
-            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
-          ]},
-        ],
-      }),
+    const visionResult = await callVision({
+      model: MODEL_VISION,
+      messages: [
+        { role: 'system', content: prompt },
+        { role: 'user', content: [
+          { type: 'text', text: 'Analyze this property damage photo for estimate-building and scope mapping.' },
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+        ]},
+      ],
+      temperature: 0.2,
     });
 
-    if (!aiResp.ok) {
-      const errText = await aiResp.text();
-      if (aiResp.status === 429) return new Response(JSON.stringify({ error: "Rate limit exceeded, please try again later." }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      if (aiResp.status === 402) return new Response(JSON.stringify({ error: "Payment required, please add credits." }), { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-      throw new Error(`AI gateway error ${aiResp.status}: ${errText.slice(0, 200)}`);
-    }
+    console.log(`[darwin-scope-engine] model=${MODEL_VISION}, cached=false`);
 
-    const aiData = await aiResp.json();
-    const raw = aiData.choices?.[0]?.message?.content ?? "{}";
+    const raw = visionResult.text ?? "{}";
     const jsonText = extractJson(raw);
     const parsed = JSON.parse(jsonText) as { summary?: string; observations?: DamageObservation[] };
     const observations = Array.isArray(parsed.observations) ? parsed.observations : [];
