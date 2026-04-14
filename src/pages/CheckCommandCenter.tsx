@@ -1280,9 +1280,7 @@ function CheckDetailPanel({
         )}
 
         {/* Endorsement Packet */}
-        {check.endorsement_packet_path && (
-          <EndorsementPacketCard checkId={checkId} packetPath={check.endorsement_packet_path} />
-        )}
+        <EndorsementPacketCard checkId={checkId} packetPath={check.endorsement_packet_path} />
       </CardHeader>
       <CardContent className="p-0">
         <Tabs value={detailTab} onValueChange={setDetailTab}>
@@ -1794,11 +1792,13 @@ function CheckDetailPanel({
 /*  Small sub-components                                               */
 /* ------------------------------------------------------------------ */
 
-function EndorsementPacketCard({ checkId, packetPath }: { checkId: string; packetPath: string }) {
+function EndorsementPacketCard({ checkId, packetPath }: { checkId: string; packetPath: string | null }) {
   const { toast } = useToast();
   const [generating, setGenerating] = useState(false);
+  const hasPacket = Boolean(packetPath);
 
   const handleDownload = async () => {
+    if (!packetPath) return;
     const { data } = await supabase.storage
       .from("endorsement-packets")
       .createSignedUrl(packetPath, 300);
@@ -1811,6 +1811,7 @@ function EndorsementPacketCard({ checkId, packetPath }: { checkId: string; packe
   };
 
   const handlePreview = async () => {
+    if (!packetPath) return;
     const { data } = await supabase.storage
       .from("endorsement-packets")
       .createSignedUrl(packetPath, 300);
@@ -1845,18 +1846,18 @@ function EndorsementPacketCard({ checkId, packetPath }: { checkId: string; packe
     <div className="mt-2 border border-emerald-500/30 bg-emerald-500/10 rounded-lg p-3 space-y-2">
       <div className="flex items-center gap-2 text-emerald-400 font-semibold text-sm">
         <FileImage className="h-4 w-4 shrink-0" />
-        Endorsement Packet Ready
+        {hasPacket ? "Endorsement Packet Ready" : "Generate Endorsement Packet"}
       </div>
       <div className="flex gap-1">
-        <Button size="sm" variant="outline" className="text-xs h-7 flex-1" onClick={handlePreview}>
+        <Button size="sm" variant="outline" className="text-xs h-7 flex-1" onClick={handlePreview} disabled={!hasPacket || generating}>
           <Eye className="h-3 w-3 mr-1" />Preview
         </Button>
-        <Button size="sm" variant="outline" className="text-xs h-7 flex-1" onClick={handleDownload}>
+        <Button size="sm" variant="outline" className="text-xs h-7 flex-1" onClick={handleDownload} disabled={!hasPacket || generating}>
           <Download className="h-3 w-3 mr-1" />Download
         </Button>
         <Button size="sm" variant="ghost" className="text-xs h-7" onClick={handleRegenerate} disabled={generating}>
           <RefreshCw className={`h-3 w-3 mr-1 ${generating ? "animate-spin" : ""}`} />
-          Regen
+          {hasPacket ? "Regen" : "Generate"}
         </Button>
       </div>
     </div>
