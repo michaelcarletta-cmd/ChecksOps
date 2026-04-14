@@ -1278,6 +1278,31 @@ function resolveEngineerReportSourceText(params: ResolveEngineerReportSourceText
     return { text: fileDerivedText, sourceOrigin: 'file_extracted_text', usedEngineerReportText: true };
   }
 
+  // ── Broadened fallback: try ANY claim file with substantial extracted text ──
+  // This catches cases where the engineer report isn't classified/named as such
+  if (allFiles.length > 0) {
+    const anyFileWithText = allFiles
+      .map((file: any) => {
+        const cleanText = String(file?.clean_text || '').trim();
+        const rawText = String(file?.extracted_text || '').trim();
+        const bestText = cleanText.length > rawText.length ? cleanText : rawText;
+        const garbage = isGarbageText(bestText);
+        return { file, textLen: garbage ? 0 : bestText.length, bestText: garbage ? '' : bestText };
+      })
+      .filter((c) => c.textLen >= 500)
+      .sort((a, b) => b.textLen - a.textLen);
+
+    if (anyFileWithText.length > 0) {
+      const best = anyFileWithText[0];
+      console.log(`[darwin][resolveEngineerSource] Broadened fallback: using "${best.file.file_name}" (${best.textLen} chars) — file not classified as engineer report but has usable text`);
+      return {
+        text: best.bestText,
+        sourceOrigin: 'file_extracted_text_broadened',
+        usedEngineerReportText: true,
+      };
+    }
+  }
+
   if (directContent) {
     return {
       text: directContent,
@@ -6207,7 +6232,8 @@ Be specific, professional, and provide communications that are ready to copy and
         let engineerTextForDismantler = engineerSourceResolution.text;
 
         if (!engineerTextForDismantler || engineerTextForDismantler.trim().length < 500) {
-          throw new Error('Engineer rebuttal blocked: no usable engineer report text was found for scenario detection.');
+          console.error(`[darwin] Engineer rebuttal blocked — source resolution: origin="${engineerSourceResolution.sourceOrigin}", textLen=${engineerTextForDismantler?.length || 0}`);
+          throw new Error('Engineer rebuttal blocked: no usable engineer report text found. Please ensure the engineer report PDF has been uploaded to the claim and its text has been extracted. You can also try pasting the report content directly using the "Paste Content" tab.');
         }
 
         const dismantlerExtraction = runEngineerReportDismantler(engineerTextForDismantler);
@@ -8150,7 +8176,8 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
         const autoDraftDismantlerSource = autoDraftSourceResolution.text;
 
         if (!autoDraftDismantlerSource || autoDraftDismantlerSource.trim().length < 500) {
-          throw new Error('Engineer rebuttal blocked: no usable engineer report text was found for scenario detection.');
+          console.error(`[darwin] Auto-draft engineer rebuttal blocked — source resolution: origin="${autoDraftSourceResolution.sourceOrigin}", textLen=${autoDraftDismantlerSource?.length || 0}`);
+          throw new Error('Engineer rebuttal blocked: no usable engineer report text found. Please ensure the engineer report PDF has been uploaded to the claim and its text has been extracted. You can also try pasting the report content directly.');
         }
 
         const autoDraftDismantler = runEngineerReportDismantler(autoDraftDismantlerSource);
