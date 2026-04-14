@@ -183,10 +183,16 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
       let pdfBase64 = null;
       let pdfFilePath: string | null = null;
       let fileName = null;
+      let selectedClaimFileText: string | null = null;
 
       if (selectedClaimFile) {
         pdfFilePath = selectedClaimFile.file_path;
         fileName = selectedClaimFile.file_name;
+        selectedClaimFileText = (
+          selectedClaimFile.clean_text?.trim()
+          || selectedClaimFile.extracted_text?.trim()
+          || null
+        );
       } else if (pdfFile) {
         fileName = pdfFile.name;
         try {
@@ -217,6 +223,10 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
           pdfFileName: fileName || undefined,
           additionalContext: {
             ...(additionalContext ? { userContext: additionalContext } : {}),
+            ...(selectedClaimFileText ? {
+              engineerReportText: selectedClaimFileText,
+              uploadedEngineerReportText: selectedClaimFileText,
+            } : {}),
             ...(isLocked && position ? {
               declaredPosition: {
                 primary_cause_of_loss: position.primary_cause_of_loss,
