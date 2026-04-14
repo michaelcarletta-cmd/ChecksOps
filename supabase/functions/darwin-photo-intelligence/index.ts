@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
+import { callVision, MODEL_VISION } from "../_shared/ai/generate.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,11 +14,11 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
     const { claimId, photoBase64, photoUrl, photoId, analysisContext } = await req.json();
     if (!claimId) throw new Error('claimId required');
+
+    console.log(`[darwin-photo-intelligence] claimId=${claimId}, model=${MODEL_VISION}`);
 
     const { data: claim } = await supabase.from('claims').select('*').eq('id', claimId).single();
 
@@ -81,19 +82,14 @@ Return ONLY valid JSON array. Multiple findings per photo are expected.`;
       });
     }
 
-    const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages,
-      }),
+    const aiResult = await callVision({
+      model: MODEL_VISION,
+      messages,
     });
 
-    if (!aiResp.ok) throw new Error(`AI gateway error ${aiResp.status}`);
+    console.log(`[darwin-photo-intelligence] model=${MODEL_VISION}, usedSearch=false, cached=false`);
 
-    const aiData = await aiResp.json();
-    const rawContent = aiData.choices?.[0]?.message?.content || '';
+    const rawContent = aiResult.text;
     
     let findings: any[] = [];
     try {
