@@ -2750,9 +2750,8 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
   }
   const carrierFacing = options?.carrierFacing === true;
 
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
-    return `${trimmedBody}\n\n${evidenceSummary}`;
+  // Use shared AI layer
+  const { generate } = await import("../_shared/ai/generate.ts");
   }
 
   const claimNumber = String(claimData?.claim_number || "").trim();
