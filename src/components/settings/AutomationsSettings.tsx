@@ -683,7 +683,7 @@ export const AutomationsSettings = () => {
                         <Label>When Status Changes To</Label>
                         <Select 
                           value={triggerConfig.status || '_any'} 
-                          onValueChange={(value) => setTriggerConfig({ ...triggerConfig, status: value === '_any' ? undefined : value })}
+                          onValueChange={(value) => setTriggerConfig({ ...triggerConfig, status: value === '_any' ? undefined : value, sub_status_id: undefined })}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder="Any status (leave empty)" />
@@ -698,6 +698,36 @@ export const AutomationsSettings = () => {
                           </SelectContent>
                         </Select>
                       </div>
+                      {/* Optional sub-status filter when a specific status is selected */}
+                      {triggerConfig.status && (() => {
+                        const selectedStatus = statuses?.find(s => s.name === triggerConfig.status);
+                        const availableSubs = selectedStatus 
+                          ? subStatuses?.filter(s => s.parent_status_id === selectedStatus.id) || []
+                          : [];
+                        if (availableSubs.length === 0) return null;
+                        return (
+                          <div className="space-y-2">
+                            <Label>And Sub-Step (optional)</Label>
+                            <Select 
+                              value={triggerConfig.sub_status_id || '_any'} 
+                              onValueChange={(value) => setTriggerConfig({ ...triggerConfig, sub_status_id: value === '_any' ? undefined : value })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Any sub-step" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="_any">Any sub-step</SelectItem>
+                                {availableSubs.map((sub) => (
+                                  <SelectItem key={sub.id} value={sub.id}>
+                                    {sub.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">Only fire when this specific sub-step is entered</p>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
 
