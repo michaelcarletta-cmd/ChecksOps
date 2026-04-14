@@ -1146,10 +1146,8 @@ async function extractStructuredIntelligence(
   documentType: string,
   classificationResult: ClassificationResult,
 ): Promise<StructuredIntelResult> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY) {
-    return { success: true, written: false, skippedReason: 'no_lovable_api_key' };
-  }
+  const { callWithTools } = await import("../_shared/ai/openaiClient.ts");
+  const { MODEL_CHEAP } = await import("../_shared/ai/modelRouter.ts");
 
   console.log(`[DocIntel] Starting structured extraction for ${fileId} (type: ${documentType})`);
 
