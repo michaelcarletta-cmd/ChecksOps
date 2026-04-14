@@ -434,7 +434,7 @@ Deno.serve(async (req) => {
 
       // Stage 1: Detect
       console.log(`Stage 1: Detecting objects in ${photo.file_name}`);
-      const detected = await detectObjects(LOVABLE_API_KEY, photoUrl);
+      const detected = await detectObjects("_unused", photoUrl);
       if (!detected.length) {
         console.log(`No items detected in ${photo.file_name}`);
         continue;
