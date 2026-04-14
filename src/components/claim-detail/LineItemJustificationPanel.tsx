@@ -327,7 +327,19 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
         </div>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="space-y-3">
+        <div className="space-y-1.5 print:hidden">
+          <Label htmlFor="industry-standards" className="text-xs font-medium">Industry Standards</Label>
+          <Textarea
+            id="industry-standards"
+            value={industryStandards}
+            onChange={(e) => setIndustryStandards(e.target.value)}
+            placeholder="e.g., ASTM D3737 for wood flooring, NFPA 101 for fire safety"
+            className="min-h-[60px] text-xs"
+            rows={2}
+          />
+          <p className="text-[10px] text-muted-foreground">Standards relevant to replacement/repair of this item type</p>
+        </div>
         {loading && (
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
