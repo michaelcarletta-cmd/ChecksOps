@@ -60,6 +60,7 @@ export function ExecutionTaskCard({
   const isImmediate = task.immediate_enabled || task.priority_level === 'immediate';
   const dueStatus = task.due_at ? getImmediateTaskDueStatus(task as any) : 'normal';
   const isSnoozed = isTaskSnoozed(task as any);
+  const isPastDue = !!(task.due_date && new Date(task.due_date).getTime() < Date.now() && task.status !== 'completed');
   const canSnooze = isImmediate && onSnooze && task.snooze_allowed !== false
     && (task.snooze_count || 0) < (task.max_snooze_count || 2)
     && task.status !== 'completed' && task.status !== 'dropped';
@@ -67,6 +68,7 @@ export function ExecutionTaskCard({
   return (
     <Card
       className={`p-3 transition-all hover:shadow-md cursor-pointer group ${
+        isPastDue && !isImmediate ? 'border-destructive/50 ring-1 ring-destructive/20 bg-destructive/[0.03]' :
         isImmediate ? 'border-destructive/50 ring-1 ring-destructive/20 bg-destructive/[0.02]' :
         staleStatus === 'requires_decision' ? 'border-red-500 ring-1 ring-red-500/20' :
         staleStatus === 'stale' ? 'border-amber-500/50' :
@@ -130,6 +132,18 @@ export function ExecutionTaskCard({
               }`}>
                 <Clock className="h-3 w-3" />
                 {dueStatus === 'overdue' ? 'OVERDUE' : format(new Date(task.due_at), "h:mm a")}
+              </span>
+            )}
+            {isPastDue && !isImmediate && (
+              <span className="flex items-center gap-0.5 text-destructive font-medium">
+                <Clock className="h-3 w-3" />
+                PAST DUE
+              </span>
+            )}
+            {task.due_date && !isPastDue && !isImmediate && (
+              <span className="flex items-center gap-0.5 text-muted-foreground">
+                <Clock className="h-3 w-3" />
+                Due {format(new Date(task.due_date), "MMM d")}
               </span>
             )}
             {staleStatus !== 'fresh' && !isImmediate && (

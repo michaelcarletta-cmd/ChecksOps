@@ -24,19 +24,20 @@ interface ExecutionQueuePanelProps {
   backlogTasks: ExecutionTask[];
   blockedTasks: ExecutionTask[];
   loading: boolean;
+  refetching?: boolean;
   onRefetch: () => void | Promise<void>;
 }
 
-export function ExecutionQueuePanel({ activeTasks, backlogTasks, blockedTasks, loading, onRefetch }: ExecutionQueuePanelProps) {
+export function ExecutionQueuePanel({ activeTasks, backlogTasks, blockedTasks, loading, refetching, onRefetch }: ExecutionQueuePanelProps) {
   const [selectedTask, setSelectedTask] = useState<ExecutionTask | null>(null);
   const [blockingTaskId, setBlockingTaskId] = useState<string | null>(null);
 
   const handleAction = async (action: () => Promise<{ success: boolean; error?: string }>, successMsg: string) => {
     const result = await action();
     if (result.success) {
-      toast.success(successMsg);
-      // Force immediate refetch to clear stale state
+      // Force immediate refetch to clear stale state and recalculate past-due
       await onRefetch();
+      toast.success(`${successMsg} — queue refreshed`);
     } else {
       toast.error(result.error || "Action failed");
     }
@@ -57,7 +58,7 @@ export function ExecutionQueuePanel({ activeTasks, backlogTasks, blockedTasks, l
 
   return (
     <>
-      <Card>
+      <Card className={refetching ? 'opacity-70 transition-opacity duration-200' : 'transition-opacity duration-200'}>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
