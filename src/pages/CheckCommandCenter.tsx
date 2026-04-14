@@ -1621,17 +1621,19 @@ function CheckDetailPanel({
                 onRefresh={onRefresh}
               />
 
-              {backImageUrl && (
+              {check?.back_image_path && (
                 <>
                   <div className="flex flex-col gap-2 sm:flex-row">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => setShowEndorsementAdjuster((v) => !v)}
-                    >
-                      {showEndorsementAdjuster ? "Hide" : "Adjust"} Endorsement Position
-                    </Button>
+                    {backImageUrl && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => setShowEndorsementAdjuster((v) => !v)}
+                      >
+                        {showEndorsementAdjuster ? "Hide" : "Adjust"} Endorsement Position
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -1691,7 +1693,7 @@ function CheckDetailPanel({
                     </Button>
                   </div>
 
-                  {showEndorsementAdjuster && (
+                  {showEndorsementAdjuster && backImageUrl && (
                     <EndorsementAdjuster
                       checkId={checkId}
                       imageUrl={backImageUrl}
