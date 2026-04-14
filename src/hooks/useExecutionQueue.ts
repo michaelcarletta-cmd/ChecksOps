@@ -10,10 +10,12 @@ export function useExecutionQueue() {
   const [blockedTasks, setBlockedTasks] = useState<ExecutionTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [refetching, setRefetching] = useState(false);
+  const [synced, setSynced] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fetchIdRef = useRef(0);
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchTasks = useCallback(async (isRefetch = false) => {
     const fetchId = ++fetchIdRef.current;
@@ -92,6 +94,12 @@ export function useExecutionQueue() {
     setBacklogTasks(nextBacklogTasks);
     setBlockedTasks(nextBlockedTasks);
     setLoading(false);
+    if (isRefetch) {
+      // Brief sync confirmation indicator
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+      setSynced(true);
+      syncTimerRef.current = setTimeout(() => setSynced(false), 2000);
+    }
     setRefetching(false);
   }, [queryClient]);
 
@@ -133,6 +141,7 @@ export function useExecutionQueue() {
     blockedTasks,
     loading,
     refetching,
+    synced,
     currentUserId,
     refetch: () => fetchTasks(true),
   };

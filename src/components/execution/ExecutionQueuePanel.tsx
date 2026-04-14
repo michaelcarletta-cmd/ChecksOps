@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ListTodo, Archive, AlertTriangle } from "lucide-react";
+import { ListTodo, Archive, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ExecutionTaskCard } from "./ExecutionTaskCard";
 import { TaskDetailDrawer } from "./TaskDetailDrawer";
 import { BlockTaskDialog } from "./BlockTaskDialog";
@@ -25,10 +26,11 @@ interface ExecutionQueuePanelProps {
   blockedTasks: ExecutionTask[];
   loading: boolean;
   refetching?: boolean;
+  synced?: boolean;
   onRefetch: () => void | Promise<void>;
 }
 
-export function ExecutionQueuePanel({ activeTasks, backlogTasks, blockedTasks, loading, refetching, onRefetch }: ExecutionQueuePanelProps) {
+export function ExecutionQueuePanel({ activeTasks, backlogTasks, blockedTasks, loading, refetching, synced, onRefetch }: ExecutionQueuePanelProps) {
   const [selectedTask, setSelectedTask] = useState<ExecutionTask | null>(null);
   const [blockingTaskId, setBlockingTaskId] = useState<string | null>(null);
 
@@ -64,6 +66,9 @@ export function ExecutionQueuePanel({ activeTasks, backlogTasks, blockedTasks, l
             <div className="flex items-center gap-2">
               <ListTodo className="h-5 w-5" />
               Execution Queue
+              {synced && (
+                <CheckCircle2 className="h-4 w-4 text-green-500 animate-in fade-in zoom-in duration-300" />
+              )}
             </div>
             <Badge variant={activeTasks.length >= MAX_ACTIVE_TASKS ? "destructive" : "secondary"} className="text-xs">
               {activeTasks.length} / {MAX_ACTIVE_TASKS} Active
@@ -71,6 +76,12 @@ export function ExecutionQueuePanel({ activeTasks, backlogTasks, blockedTasks, l
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
+          {refetching && (
+            <div className="space-y-2 mb-3">
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          )}
           <Tabs defaultValue="active">
             <TabsList className="w-full mb-3">
               <TabsTrigger value="active" className="flex-1 text-xs">

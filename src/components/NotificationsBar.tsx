@@ -53,6 +53,7 @@ export function NotificationsBar() {
           id,
           title,
           due_date,
+          status,
           claim_id,
           claims!inner(claim_number)
         `)
@@ -70,6 +71,15 @@ export function NotificationsBar() {
         claim_id: task.claim_id,
         claim_number: task.claims.claim_number,
       })) || [];
+
+      // Guard: log if backend returned completed tasks (stale read)
+      const stale = tasksWithClaimNumber.filter((t: any) => {
+        const orig = data?.find((d: any) => d.id === t.id);
+        return orig && orig.status === 'completed';
+      });
+      if (stale.length > 0) {
+        console.error('[NotificationsBar] Backend returned completed tasks as pending — stale read detected:', stale.map((s: any) => s.id));
+      }
 
       setTasks(tasksWithClaimNumber);
     } catch (error: any) {

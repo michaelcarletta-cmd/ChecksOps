@@ -15,7 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 
 const Tasks = () => {
-  const { activeTasks, backlogTasks, blockedTasks, loading, refetching, refetch } = useExecutionQueue();
+  const { activeTasks, backlogTasks, blockedTasks, loading, refetching, synced, refetch } = useExecutionQueue();
   const { immediateTasks, pendingInterrupt, hasUrgentWork, refetch: refetchImmediate, clearInterrupt, markModalOpen } = useImmediateTasks();
   const [selectedTask, setSelectedTask] = useState<ExecutionTask | null>(null);
   const [interruptTask, setInterruptTask] = useState<ExecutionTask | null>(null);
@@ -88,6 +88,7 @@ const Tasks = () => {
             blockedTasks={blockedTasks}
             loading={loading}
             refetching={refetching}
+            synced={synced}
             onRefetch={handleRefetchAll}
           />
         </div>
