@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { callVision, MODEL_VISION } from "../_shared/ai/generate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -216,10 +217,7 @@ Deno.serve(async (req) => {
     };
     const persistenceWarnings: string[] = [];
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY not configured");
-    }
+    // AI routing handled by shared layer
 
     const requestStep = startStep("request", "Validate estimate upload request");
     const formData = await req.formData();
@@ -315,45 +313,31 @@ Important guidelines:
 - Return ONLY the JSON object, no other text`;
 
     const aiStep = startStep("ai_extract", "Extract estimate values and line items with AI");
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `Please extract all financial data from this insurance estimate document. Focus on finding RCV, depreciation amounts, deductibles, and line items.`
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:${mimeType};base64,${base64}`
-                }
+    const aiResult = await callVision({
+      model: MODEL_VISION,
+      messages: [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Please extract all financial data from this insurance estimate document. Focus on finding RCV, depreciation amounts, deductibles, and line items.`
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:${mimeType};base64,${base64}`
               }
-            ]
-          }
-        ],
-        max_tokens: 8000,
-      }),
+            }
+          ]
+        }
+      ],
     });
 
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error("AI API error:", aiResponse.status, errorText);
-      endStep(aiStep, "error", `HTTP ${aiResponse.status}`);
-      throw new Error(`AI processing failed: ${aiResponse.status}`);
-    }
+    console.log(`[extract-estimate] model=${MODEL_VISION}, cached=false`);
 
-    const aiData = await aiResponse.json();
-    const content = aiData.choices?.[0]?.message?.content || "";
+    const content = aiResult.text;
     endStep(aiStep, "completed", `responseChars=${String(content).length}`);
     
     console.log("AI response received, parsing JSON...");

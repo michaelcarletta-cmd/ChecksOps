@@ -450,34 +450,19 @@ Deno.serve(async (req) => {
     if (Array.isArray(lineItemsOverride)) {
       console.log(`Using ${lineItemsOverride.length} reviewed preview items for import`);
     } else {
-      const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'system', content: EXTRACTION_SYSTEM_PROMPT },
-            { role: 'user', content: `Extract estimate line items from this document (${fileName || 'estimate'}):\n\n${textForExtraction.slice(0, 30000)}` },
-          ],
-          tools: [TOOL_SCHEMA],
-          tool_choice: { type: 'function', function: { name: 'extract_estimate' } },
-        }),
+      const aiResult = await callWithTools({
+        model: MODEL_VISION,
+        messages: [
+          { role: 'system', content: EXTRACTION_SYSTEM_PROMPT },
+          { role: 'user', content: `Extract estimate line items from this document (${fileName || 'estimate'}):\n\n${textForExtraction.slice(0, 30000)}` },
+        ],
+        tools: [TOOL_SCHEMA],
+        toolChoice: { type: 'function', function: { name: 'extract_estimate' } },
       });
 
-      if (!aiResp.ok) {
-        if (aiResp.status === 429 || aiResp.status === 402) {
-          return new Response(JSON.stringify({ ok: false, error: aiResp.status === 429 ? 'Rate limit exceeded — please try again shortly.' : 'AI credits required — please add funds.' }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-        throw new Error(`AI gateway error ${aiResp.status}`);
-      }
+      console.log(`[darwin-estimate-import] model=${aiResult.model}, cached=${aiResult.cached}`);
 
-      const aiData = await aiResp.json();
-      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+      const toolCall = aiResult.toolCalls?.[0];
       if (!toolCall) throw new Error('No structured extraction returned');
 
       extracted = JSON.parse(toolCall.function.arguments);
