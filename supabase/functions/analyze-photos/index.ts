@@ -813,7 +813,7 @@ ${claimContext}
     }
 
     // Extract which photos the AI referenced in its analysis
-    const referencedPhotos = await extractPhotoReferences(reportContent, allPhotoDescriptions, LOVABLE_API_KEY);
+    const referencedPhotos = await extractPhotoReferences(reportContent, allPhotoDescriptions);
     
     // Map referenced photo numbers to their full photo data with AI context
     const referencedPhotoData = referencedPhotos.map(ref => {
