@@ -134,7 +134,18 @@ export function ExecutionTaskCard({
                 {dueStatus === 'overdue' ? 'OVERDUE' : format(new Date(task.due_at), "h:mm a")}
               </span>
             )}
-            {staleStatus !== 'fresh' && !isImmediate && (
+            {isPastDue && !isImmediate && (
+              <span className="flex items-center gap-0.5 text-destructive font-medium">
+                <Clock className="h-3 w-3" />
+                PAST DUE
+              </span>
+            )}
+            {task.due_date && !isPastDue && !isImmediate && (
+              <span className="flex items-center gap-0.5 text-muted-foreground">
+                <Clock className="h-3 w-3" />
+                Due {format(new Date(task.due_date), "MMM d")}
+              </span>
+            )}
               <span className={`flex items-center gap-0.5 ${staleStatus === 'requires_decision' ? 'text-red-500' : 'text-amber-500'}`}>
                 <AlertTriangle className="h-3 w-3" />
                 {staleStatus === 'requires_decision' ? 'Action needed' : 'Stale'}
