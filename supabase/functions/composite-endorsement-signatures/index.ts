@@ -375,11 +375,9 @@ Deno.serve(async (req) => {
 
     curY += sectionGap;
 
-    // Footer: company + owner
+    // Footer: company + signature
     endorsementSvg += svgText(localCenterX, curY + companyFont, companyFont, "#111111", "bold", "Freedom Adjustment");
     curY += companyFont + fitLineGap;
-    endorsementSvg += svgText(localCenterX, curY + byLineFont, byLineFont, "#111111", "normal", "By: Michael Carletta");
-    curY += byLineFont + fitLineGap;
 
     const companySignature = companyEndorsements.find((e) => e.resolvedSignatureImageUrl || e.typedSignatureText);
     if (companySignature?.resolvedSignatureImageUrl) {
