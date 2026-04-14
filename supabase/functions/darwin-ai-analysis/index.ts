@@ -6229,7 +6229,13 @@ Be specific, professional, and provide communications that are ready to copy and
           fullClaimFiles,
         });
 
+        // Truncate to ~80K chars (~20K tokens) to prevent OpenAI TPM limit errors
+        const MAX_ENGINEER_TEXT_CHARS = 80000;
         let engineerTextForDismantler = engineerSourceResolution.text;
+        if (engineerTextForDismantler && engineerTextForDismantler.length > MAX_ENGINEER_TEXT_CHARS) {
+          console.warn(`[darwin] Truncating engineer report text from ${engineerTextForDismantler.length} to ${MAX_ENGINEER_TEXT_CHARS} chars to avoid token limits`);
+          engineerTextForDismantler = engineerTextForDismantler.substring(0, MAX_ENGINEER_TEXT_CHARS) + '\n\n[... remainder of report truncated for token limits ...]';
+        }
 
         if (!engineerTextForDismantler || engineerTextForDismantler.trim().length < 500) {
           console.error(`[darwin] Engineer rebuttal blocked — source resolution: origin="${engineerSourceResolution.sourceOrigin}", textLen=${engineerTextForDismantler?.length || 0}`);
@@ -8173,7 +8179,12 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
           additionalContext,
           fullClaimFiles,
         });
-        const autoDraftDismantlerSource = autoDraftSourceResolution.text;
+        let autoDraftDismantlerSource = autoDraftSourceResolution.text;
+        // Truncate to ~80K chars to prevent OpenAI TPM limit errors
+        if (autoDraftDismantlerSource && autoDraftDismantlerSource.length > 80000) {
+          console.warn(`[darwin] Truncating auto-draft engineer text from ${autoDraftDismantlerSource.length} to 80000 chars`);
+          autoDraftDismantlerSource = autoDraftDismantlerSource.substring(0, 80000) + '\n\n[... remainder truncated for token limits ...]';
+        }
 
         if (!autoDraftDismantlerSource || autoDraftDismantlerSource.trim().length < 500) {
           console.error(`[darwin] Auto-draft engineer rebuttal blocked — source resolution: origin="${autoDraftSourceResolution.sourceOrigin}", textLen=${autoDraftDismantlerSource?.length || 0}`);
@@ -10194,10 +10205,21 @@ Return the full revised ${docLabel} with the requested changes applied:`;
         }
       ];
     } else {
-      // Standard text-only format
+      // Standard text-only format — apply safety truncation to prevent TPM overflow
+      const MAX_PROMPT_CHARS = 100000; // ~25K tokens safety cap
+      let safeUserPrompt = userPrompt;
+      if (userPrompt.length > MAX_PROMPT_CHARS) {
+        console.warn(`[darwin] Truncating userPrompt from ${userPrompt.length} to ${MAX_PROMPT_CHARS} chars to prevent token overflow`);
+        safeUserPrompt = userPrompt.substring(0, MAX_PROMPT_CHARS) + '\n\n[... content truncated for token limits ...]';
+      }
+      let safeSystemPrompt = systemPrompt;
+      if (systemPrompt.length > MAX_PROMPT_CHARS) {
+        console.warn(`[darwin] Truncating systemPrompt from ${systemPrompt.length} to ${MAX_PROMPT_CHARS} chars`);
+        safeSystemPrompt = systemPrompt.substring(0, MAX_PROMPT_CHARS) + '\n\n[... truncated ...]';
+      }
       messages = [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
+        { role: 'system', content: safeSystemPrompt },
+        { role: 'user', content: safeUserPrompt }
       ];
     }
 
