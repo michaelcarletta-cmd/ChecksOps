@@ -48,35 +48,53 @@ const DEFAULT_DEPRECIATION: Record<string, number> = {
 };
 
 async function callAI(
-  apiKey: string,
+  _apiKey: string,
   model: string,
   messages: Array<{ role: string; content: any }>,
   tools?: any[],
   toolChoice?: any
 ) {
-  const body: any = { model, messages };
-  if (tools) {
-    body.tools = tools;
-    body.tool_choice = toolChoice;
+  const { callWithTools, callVision } = await import("../_shared/ai/openaiClient.ts");
+  const { MODEL_VISION } = await import("../_shared/ai/modelRouter.ts");
+
+  // Map Lovable model names to OpenAI model names
+  const modelMap: Record<string, string> = {
+    "google/gemini-2.5-flash": "gpt-4o-mini",
+    "google/gemini-2.5-pro": "gpt-4o",
+  };
+  const resolvedModel = modelMap[model] || MODEL_VISION;
+
+  if (tools && tools.length > 0) {
+    const result = await callWithTools({
+      model: resolvedModel,
+      messages,
+      tools,
+      toolChoice,
+      temperature: 0.3,
+      maxTokens: 4000,
+    });
+    // Return in original format for backward compat
+    return {
+      choices: [{
+        message: {
+          content: result.text,
+          tool_calls: result.toolCalls.length > 0 ? result.toolCalls : undefined,
+        },
+      }],
+    };
+  } else {
+    const result = await callVision({
+      model: resolvedModel,
+      messages,
+      temperature: 0.3,
+      maxTokens: 4000,
+    });
+    return {
+      choices: [{
+        message: { content: result.text },
+      }],
+    };
   }
-
-  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!resp.ok) {
-    const text = await resp.text();
-    console.error("AI gateway error:", resp.status, text);
-    throw new Error(`AI gateway error ${resp.status}: ${text}`);
-  }
-
-  const data = await resp.json();
-  return data;
 }
 
 // Stage 1: Object Detection
@@ -369,9 +387,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -428,11 +443,11 @@ Deno.serve(async (req) => {
 
       // Stage 2: Normalize
       console.log(`Stage 2: Normalizing ${detected.length} items`);
-      const normalized = await normalizeItems(LOVABLE_API_KEY, detected, photoUrl);
+      const normalized = await normalizeItems("_unused", detected, photoUrl);
 
       // Stage 3: Price
       console.log(`Stage 3: Pricing ${normalized.length} items`);
-      const priced = await priceItems(LOVABLE_API_KEY, normalized);
+      const priced = await priceItems("_unused", normalized);
 
       // Attach photo reference
       priced.forEach((item) => {
