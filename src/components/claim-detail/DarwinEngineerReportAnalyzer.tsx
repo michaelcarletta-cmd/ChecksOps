@@ -25,6 +25,8 @@ interface ClaimFile {
   folder_id: string | null;
   folder_name?: string;
   uploaded_at: string | null;
+  extracted_text?: string | null;
+  clean_text?: string | null;
 }
 
 interface AnalysisExecutionStep {
@@ -71,7 +73,7 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
         // Load PDF files from claim
         const { data: filesData } = await supabase
           .from('claim_files')
-          .select('id, file_name, file_path, file_type, folder_id, uploaded_at')
+          .select('id, file_name, file_path, file_type, folder_id, uploaded_at, extracted_text, clean_text')
           .eq('claim_id', claimId)
           .order('uploaded_at', { ascending: false });
 
