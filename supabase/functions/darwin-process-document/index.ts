@@ -1411,8 +1411,7 @@ function extractPdfText(bytes: Uint8Array): string {
 
 // === OCR VIA VISION AI (for scanned PDFs/images) ===
 async function ocrViaVision(bytes: Uint8Array, fileName: string): Promise<string | null> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY) return null;
+  const { callVision, MODEL_VISION } = await import("../_shared/ai/generate.ts");
 
   try {
     // Convert to base64
@@ -1430,32 +1429,20 @@ async function ocrViaVision(bytes: Uint8Array, fileName: string): Promise<string
       fileName.toLowerCase().match(/\.(webp)$/) ? 'image/webp' :
       'image/jpeg';
 
-    const toolResult = await callWithTools({
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: 'Extract ALL text content from this document image. Return the raw text exactly as it appears, preserving dates, numbers, names, and addresses. Do not summarize or interpret.' },
-          { role: 'user', content: [
-            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
-            { type: 'text', text: 'Extract all text from this document. Return only the raw text content.' }
-          ]}
-        ],
-        temperature: 0.1,
-      }),
+    const visionResult = await callVision({
+      model: MODEL_VISION,
+      messages: [
+        { role: 'system', content: 'Extract ALL text content from this document image. Return the raw text exactly as it appears, preserving dates, numbers, names, and addresses. Do not summarize or interpret.' },
+        { role: 'user', content: [
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
+          { type: 'text', text: 'Extract all text from this document. Return only the raw text content.' }
+        ]}
+      ],
+      temperature: 0.1,
     });
 
-    if (!response.ok) {
-      console.error(`[OCR] Vision API error: ${response.status}`);
-      return null;
-    }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || null;
+    console.log(`[OCR] Vision OCR complete, model=${visionResult.model}`);
+    return visionResult.text || null;
   } catch (error) {
     console.error('[OCR] Error:', error);
     return null;
