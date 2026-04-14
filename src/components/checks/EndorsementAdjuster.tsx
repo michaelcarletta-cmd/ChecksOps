@@ -29,7 +29,6 @@ type EndorsementAdjusterProps = {
   imageWidth: number;
   imageHeight: number;
   companyName: string;
-  ownerName: string;
   initialOverride?: EndorsementOverride | null;
   onSave: (override: EndorsementOverride) => Promise<void> | void;
 };
@@ -40,7 +39,6 @@ export function EndorsementAdjuster({
   imageWidth,
   imageHeight,
   companyName,
-  ownerName,
   initialOverride,
   onSave,
 }: EndorsementAdjusterProps) {
@@ -448,7 +446,7 @@ export function EndorsementAdjuster({
             <div style={{ fontSize: byLineFontPx, fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>
               {companyEndorsements.length > 0 && companyEndorsements[0].signature_image_url?.startsWith("typed:")
                 ? companyEndorsements[0].signature_image_url.slice(6)
-                : ownerName}
+                : companyName}
             </div>
           )}
 
