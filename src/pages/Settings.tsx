@@ -47,6 +47,36 @@ import { JobNimbusSyncDiagnostics } from "@/components/settings/JobNimbusSyncDia
 import { useQuery } from "@tanstack/react-query";
 import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
 
+import { RDAutomationSettings } from "@/components/settings/RDAutomationSettings";
+import { OutlookConnectionSettings } from "@/components/settings/OutlookConnectionSettings";
+import { PhoneVerificationSettings } from "@/components/settings/PhoneVerificationSettings";
+
+interface ClaimStatus {
+  id: string;
+  name: string;
+  color: string;
+  gradient: string | null;
+  display_order: number;
+  is_active: boolean;
+}
+
+interface SubStatus {
+  id: string;
+  parent_status_id: string;
+  name: string;
+  display_order: number;
+  is_active: boolean;
+}
+
+interface SortableStatusRowProps {
+  status: ClaimStatus;
+  onUpdateName: (id: string, name: string) => void;
+  onUpdateColor: (id: string, color: string) => void;
+  onUpdateGradient: (id: string, gradient: string | null) => void;
+  onDelete: (id: string) => void;
+  onRefresh: () => void;
+}
+
 function SortableSubStatusItem({ sub, index, onUpdateName, onDelete }: { sub: SubStatus; index: number; onUpdateName: (id: string, name: string) => void; onDelete: (id: string) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: sub.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
@@ -100,35 +130,6 @@ function SubStatusSortableList({ subStatuses, setSubStatuses, onUpdateName, onDe
   );
 }
 
-
-import { RDAutomationSettings } from "@/components/settings/RDAutomationSettings";
-import { OutlookConnectionSettings } from "@/components/settings/OutlookConnectionSettings";
-import { PhoneVerificationSettings } from "@/components/settings/PhoneVerificationSettings";
-interface ClaimStatus {
-  id: string;
-  name: string;
-  color: string;
-  gradient: string | null;
-  display_order: number;
-  is_active: boolean;
-}
-
-interface SubStatus {
-  id: string;
-  parent_status_id: string;
-  name: string;
-  display_order: number;
-  is_active: boolean;
-}
-
-interface SortableStatusRowProps {
-  status: ClaimStatus;
-  onUpdateName: (id: string, name: string) => void;
-  onUpdateColor: (id: string, color: string) => void;
-  onUpdateGradient: (id: string, gradient: string | null) => void;
-  onDelete: (id: string) => void;
-  onRefresh: () => void;
-}
 
 const PRESET_GRADIENTS = [
   // Blues & Purples
