@@ -35,6 +35,7 @@ interface RequestBody {
   manufacturer?: string;
   lossType?: string;
   viewMode?: "internal" | "carrier";
+  industryStandards?: string;
 }
 
 // ── Manufacturer Extraction ─────────────────────────────────────
