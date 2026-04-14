@@ -1508,25 +1508,7 @@ function validateExtractedDate(dateStr: string | null): {
 }
 
 async function classifyDocument(textContent: string, filename: string): Promise<ClassificationResult> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  
-  if (!LOVABLE_API_KEY) {
-    // Fallback to filename-based classification
-    return {
-      classification: classifyByFilename(filename),
-      confidence: 0.5,
-      metadata: {
-        date_mentioned: null,
-        deadline_mentioned: null,
-        amounts: [],
-        key_phrases: [],
-        sender: 'unknown',
-        requires_action: false,
-        urgency: 'low',
-        summary: 'Classified by filename pattern (AI unavailable)',
-      }
-    };
-  }
+  const { generate } = await import("../_shared/ai/generate.ts");
 
   // Inject current date context for accurate date extraction
   const now = new Date();
@@ -1618,28 +1600,17 @@ For APPROVALS, also include:
 - "payment_type": "initial|supplement|final"`;
 
   try {
-    const toolResult = await callWithTools({
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Filename: ${filename}\n\nDocument content:\n${textContent.substring(0, 15000)}` }
-        ],
-        temperature: 0.1,
-      }),
+    const aiResult = await generate({
+      task: 'classification',
+      system: systemPrompt,
+      user: `Filename: ${filename}\n\nDocument content:\n${textContent.substring(0, 15000)}`,
+      searchMode: 'off',
+      temperature: 0.1,
+      jsonMode: true,
     });
 
-    if (!response.ok) {
-      throw new Error(`AI API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '';
+    console.log(`[DocClassify] AI call complete, model=${aiResult.model}, cached=${aiResult.cached}`);
+    const content = aiResult.text || '';
     
     // Parse JSON from response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
