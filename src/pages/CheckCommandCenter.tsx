@@ -1632,54 +1632,63 @@ function CheckDetailPanel({
                     >
                       {showEndorsementAdjuster ? "Hide" : "Adjust"} Endorsement Position
                     </Button>
-                    {!showPayToOrder && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={async () => {
-                          const nextOverride: EndorsementOverride = {
-                            xPct: savedOverride?.xPct ?? 0.38,
-                            yPct: savedOverride?.yPct ?? 0.5,
-                            scale: savedOverride?.scale ?? 1,
-                            rotationDeg: savedOverride?.rotationDeg ?? 0,
-                            showPayToOrder: true,
-                          };
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={async () => {
+                        const nextShowPayToOrder = !showPayToOrder;
+                        const nextOverride: EndorsementOverride = {
+                          xPct: savedOverride?.xPct ?? 0.38,
+                          yPct: savedOverride?.yPct ?? 0.5,
+                          scale: savedOverride?.scale ?? 1,
+                          rotationDeg: savedOverride?.rotationDeg ?? 0,
+                          showPayToOrder: nextShowPayToOrder,
+                        };
 
-                          const { error: saveErr } = await supabase
-                            .from("check_intake_items")
-                            .update({
-                              endorsement_override: nextOverride as any,
-                              updated_at: new Date().toISOString(),
-                            })
-                            .eq("id", checkId);
+                        const { error: saveErr } = await supabase
+                          .from("check_intake_items")
+                          .update({
+                            endorsement_override: nextOverride as any,
+                            updated_at: new Date().toISOString(),
+                          })
+                          .eq("id", checkId);
 
-                          if (saveErr) {
-                            toast({ title: "Failed to add pay to order text", description: saveErr.message, variant: "destructive" });
-                            return;
+                        if (saveErr) {
+                          toast({
+                            title: nextShowPayToOrder
+                              ? "Failed to add pay to order text"
+                              : "Failed to remove pay to order text",
+                            description: saveErr.message,
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+
+                        qc.setQueryData(["check-detail", checkId], (current: CheckItem | undefined) => (
+                          current
+                            ? { ...current, endorsement_override: nextOverride as unknown as Record<string, unknown> }
+                            : current
+                        ));
+
+                        if (endorsementRows.length > 0) {
+                          try {
+                            await ensureDepositReadyBackImage();
+                          } catch (error) {
+                            console.error("[CHECK-EXPORT] regenerate after pay-to-order toggle failed", error);
                           }
+                        }
 
-                          qc.setQueryData(["check-detail", checkId], (current: CheckItem | undefined) => (
-                            current
-                              ? { ...current, endorsement_override: nextOverride as unknown as Record<string, unknown> }
-                              : current
-                          ));
-
-                          if (endorsementRows.length > 0) {
-                            try {
-                              await ensureDepositReadyBackImage();
-                            } catch (error) {
-                              console.error("[CHECK-EXPORT] regenerate after pay-to-order toggle failed", error);
-                            }
-                          }
-
-                          qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
-                          toast({ title: "Pay to Order text added" });
-                        }}
-                      >
-                        Add Pay to Order Text
-                      </Button>
-                    )}
+                        qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+                        toast({
+                          title: nextShowPayToOrder
+                            ? "Pay to Order text added"
+                            : "Pay to Order text removed",
+                        });
+                      }}
+                    >
+                      {showPayToOrder ? "Remove Pay to Order Text" : "Add Pay to Order Text"}
+                    </Button>
                   </div>
 
                   {showEndorsementAdjuster && (
