@@ -234,7 +234,7 @@ export const DarwinDenialAnalyzer = ({ claimId }: DarwinDenialAnalyzerProps) => 
       toast({
         title: "Analysis failed",
         description: isEdgeTransportError
-          ? "Darwin could not reach the analysis function. Please retry. If this persists, redeploy darwin-ai-analysis and confirm LOVABLE_API_KEY is set."
+          ? "Darwin could not reach the analysis function. Please retry. If this persists, redeploy darwin-ai-analysis and confirm OPENAI_API_KEY is set."
           : (error.message || "Failed to analyze denial letter"),
         variant: "destructive"
       });
