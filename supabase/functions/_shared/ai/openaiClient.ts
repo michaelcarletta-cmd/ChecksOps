@@ -1,15 +1,15 @@
 /**
- * Centralized AI client — all calls go through the Lovable AI Gateway.
+ * Centralized AI client — all calls go directly to OpenAI.
  * Supports text, vision (multimodal), and tool calling.
  */
 
-const LOVABLE_API_KEY = () => {
-  const key = Deno.env.get("LOVABLE_API_KEY");
-  if (!key) throw new Error("LOVABLE_API_KEY is not configured");
+const OPENAI_API_KEY = () => {
+  const key = Deno.env.get("OPENAI_API_KEY");
+  if (!key) throw new Error("OPENAI_API_KEY is not configured");
   return key;
 };
 
-const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 
 export interface OpenAIChatOptions {
   model: string;
@@ -28,7 +28,7 @@ export interface OpenAIResult {
 }
 
 /**
- * Standard text-only chat completion through the Lovable AI Gateway.
+ * Standard text-only chat completion via OpenAI directly.
  */
 export async function callOpenAI(opts: OpenAIChatOptions): Promise<OpenAIResult> {
   const body: Record<string, unknown> = {
@@ -45,10 +45,10 @@ export async function callOpenAI(opts: OpenAIChatOptions): Promise<OpenAIResult>
     body.response_format = { type: "json_object" };
   }
 
-  const res = await fetch(GATEWAY_URL, {
+  const res = await fetch(OPENAI_URL, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY()}`,
+      Authorization: `Bearer ${OPENAI_API_KEY()}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
@@ -57,8 +57,8 @@ export async function callOpenAI(opts: OpenAIChatOptions): Promise<OpenAIResult>
   const data = await res.json();
 
   if (!res.ok) {
-    console.error("AI gateway error:", JSON.stringify(data).slice(0, 500));
-    throw new Error(`AI gateway ${res.status}: ${data?.error?.message || "Unknown error"}`);
+    console.error("OpenAI error:", JSON.stringify(data).slice(0, 500));
+    throw new Error(`OpenAI ${res.status}: ${data?.error?.message || "Unknown error"}`);
   }
 
   return {
@@ -90,7 +90,7 @@ export interface VisionResult {
 }
 
 /**
- * Vision/multimodal chat completion — supports image_url content parts.
+ * Vision/multimodal chat completion via OpenAI directly.
  */
 export async function callVision(opts: VisionChatOptions): Promise<VisionResult> {
   const body: Record<string, unknown> = {
@@ -104,10 +104,10 @@ export async function callVision(opts: VisionChatOptions): Promise<VisionResult>
     body.response_format = { type: "json_object" };
   }
 
-  const res = await fetch(GATEWAY_URL, {
+  const res = await fetch(OPENAI_URL, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY()}`,
+      Authorization: `Bearer ${OPENAI_API_KEY()}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
@@ -116,10 +116,9 @@ export async function callVision(opts: VisionChatOptions): Promise<VisionResult>
   const data = await res.json();
 
   if (!res.ok) {
-    console.error("AI vision error:", JSON.stringify(data).slice(0, 500));
+    console.error("OpenAI vision error:", JSON.stringify(data).slice(0, 500));
     if (res.status === 429) throw new Error("RATE_LIMIT");
-    if (res.status === 402) throw new Error("CREDITS_EXHAUSTED");
-    throw new Error(`AI gateway ${res.status}: ${data?.error?.message || "Unknown error"}`);
+    throw new Error(`OpenAI ${res.status}: ${data?.error?.message || "Unknown error"}`);
   }
 
   return {
@@ -146,7 +145,7 @@ export interface ToolCallResult {
 }
 
 /**
- * Tool-calling chat completion through the Lovable AI Gateway.
+ * Tool-calling chat completion via OpenAI directly.
  */
 export async function callWithTools(opts: ToolCallOptions): Promise<ToolCallResult> {
   const body: Record<string, unknown> = {
@@ -161,10 +160,10 @@ export async function callWithTools(opts: ToolCallOptions): Promise<ToolCallResu
     body.tool_choice = opts.toolChoice;
   }
 
-  const res = await fetch(GATEWAY_URL, {
+  const res = await fetch(OPENAI_URL, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY()}`,
+      Authorization: `Bearer ${OPENAI_API_KEY()}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
@@ -173,10 +172,9 @@ export async function callWithTools(opts: ToolCallOptions): Promise<ToolCallResu
   const data = await res.json();
 
   if (!res.ok) {
-    console.error("AI tool call error:", JSON.stringify(data).slice(0, 500));
+    console.error("OpenAI tool call error:", JSON.stringify(data).slice(0, 500));
     if (res.status === 429) throw new Error("RATE_LIMIT");
-    if (res.status === 402) throw new Error("CREDITS_EXHAUSTED");
-    throw new Error(`AI gateway ${res.status}: ${data?.error?.message || "Unknown error"}`);
+    throw new Error(`OpenAI ${res.status}: ${data?.error?.message || "Unknown error"}`);
   }
 
   const message = data.choices?.[0]?.message;
