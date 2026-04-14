@@ -4391,10 +4391,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
-    }
+    // AI calls routed through shared layer
+    const { callOpenAI, callWithTools } = await import("../_shared/ai/openaiClient.ts");
+    const { MODEL_CHEAP, MODEL_STRONG } = await import("../_shared/ai/modelRouter.ts");
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -10417,21 +10416,9 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     const hasPdfContent = pdfContent || (pdfContents && pdfContents.length > 0) || additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf;
     const needsPdfProcessing = hasPdfContent && !additionalContext?._useTextOnly && ['denial_rebuttal', 'engineer_report_rebuttal', 'document_compilation', 'estimate_work_summary', 'supplement', 'demand_package', 'document_comparison', 'smart_extraction', 'estimate_gap_analysis', 'systematic_dismantling'].includes(analysisType);
     
-    // Model fallback chain - use only Gemini models for PDF processing (OpenAI doesn't support PDF multimodal)
-    // For text-only analysis, we can use OpenAI as fallback
-    // IMPORTANT: gemini-3-flash-preview first as it's on newer infrastructure
-    const modelFallbackChain = needsPdfProcessing ? [
-      'google/gemini-3-flash-preview', // Newest model, different infrastructure - try first
-      'google/gemini-2.5-flash',       // Fast option for PDFs
-      'google/gemini-2.5-pro',         // Most capable for PDFs
-      'google/gemini-3-pro-preview',   // Newer pro model
-    ] : [
-      'google/gemini-3-flash-preview', // Newest, fastest
-      'openai/gpt-5-mini',             // Different provider fallback
-      'google/gemini-2.5-flash',       // Fast Google fallback
-      'openai/gpt-5.2',                // Most capable OpenAI (user's preference for Darwin)
-      'openai/gpt-5-nano',             // Fast OpenAI fallback
-    ];
+    // Model fallback chain - direct OpenAI models
+    // For text-only analysis, use cheap model with strong fallback
+    const modelFallbackChain = [MODEL_CHEAP, MODEL_STRONG];
     console.log(`Model fallback chain: ${modelFallbackChain.join(' -> ')} (PDF processing: ${needsPdfProcessing})`);
     
     // For task_followup, use tool calling to get structured actions
