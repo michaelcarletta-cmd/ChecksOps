@@ -5813,7 +5813,6 @@ If the document is ambiguous about the type of loss, ask the user to clarify rat
 
     const { callOpenAI, callWithTools } = await import("../_shared/ai/openaiClient.ts");
     const { MODEL_CHEAP } = await import("../_shared/ai/modelRouter.ts");
-    }
 
     // Build staff list context
     let staffListContext = "";
