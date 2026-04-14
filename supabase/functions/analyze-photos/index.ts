@@ -203,9 +203,8 @@ Create a single, unified report that incorporates all the above analyses.`;
 async function extractPhotoReferences(
   reportContent: string,
   photoDescriptions: string[],
-  LOVABLE_API_KEY: string
 ): Promise<{ photoNumber: number; aiContext: string }[]> {
-  console.log("Extracting photo references from AI report...");
+  console.log("[analyze-photos] Extracting photo references via shared AI layer");
 
   const extractPrompt = `Analyze this forensic report and extract all photo references with their analysis context.
 
@@ -228,44 +227,32 @@ Return a JSON array like this:
 Only include photos that are actually referenced and analyzed in the report. Return ONLY the JSON array, no other text.`;
 
   try {
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
-        messages: [
-          { role: "system", content: "You extract photo references from forensic reports. Return only valid JSON arrays." },
-          { role: "user", content: extractPrompt }
-        ],
-      }),
+    const result = await generate({
+      task: "extraction",
+      system: "You extract photo references from forensic reports. Return only valid JSON arrays.",
+      user: extractPrompt,
+      searchMode: "off",
+      jsonMode: true,
     });
 
-    if (!response.ok) {
-      console.error("Photo reference extraction failed");
-      return [];
-    }
-
-    const result = await response.json();
-    const content = result.choices?.[0]?.message?.content || "";
+    const content = result.text;
     
-    // Parse JSON from response (handle potential markdown code blocks)
     let jsonStr = content.trim();
-    if (jsonStr.startsWith("```json")) {
-      jsonStr = jsonStr.slice(7);
-    }
-    if (jsonStr.startsWith("```")) {
-      jsonStr = jsonStr.slice(3);
-    }
-    if (jsonStr.endsWith("```")) {
-      jsonStr = jsonStr.slice(0, -3);
-    }
+    if (jsonStr.startsWith("```json")) jsonStr = jsonStr.slice(7);
+    if (jsonStr.startsWith("```")) jsonStr = jsonStr.slice(3);
+    if (jsonStr.endsWith("```")) jsonStr = jsonStr.slice(0, -3);
     jsonStr = jsonStr.trim();
 
+    // Try to find array in response
+    const arrayMatch = jsonStr.match(/\[[\s\S]*\]/);
+    if (arrayMatch) {
+      const references = JSON.parse(arrayMatch[0]);
+      console.log(`[analyze-photos] Extracted ${references.length} photo references`);
+      return references;
+    }
+
     const references = JSON.parse(jsonStr);
-    console.log(`Extracted ${references.length} photo references`);
+    console.log(`[analyze-photos] Extracted ${references.length} photo references`);
     return references;
   } catch (error) {
     console.error("Error extracting photo references:", error);
@@ -347,13 +334,7 @@ Deno.serve(async (req) => {
       console.log(`Photo count limited from ${photoIds.length} to ${MAX_PHOTOS} to prevent timeout`);
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "Lovable API key not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // Shared AI layer handles API keys internally
 
     // supabase client already initialized above
 
@@ -774,7 +755,6 @@ ${claimContext}
             totalBatches,
             systemPrompt,
             userPrompt,
-            LOVABLE_API_KEY
           );
           batchResults.push(batchResult);
           console.log(`Batch ${i + 1}/${totalBatches} complete, result length: ${batchResult.length}`);
@@ -800,7 +780,7 @@ ${claimContext}
     // Combine batch results
     let reportContent: string;
     if (batchResults.length > 1) {
-      reportContent = await combineResults(batchResults, reportType, claimContext, LOVABLE_API_KEY);
+      reportContent = await combineResults(batchResults, reportType, claimContext);
     } else {
       reportContent = batchResults[0];
     }
