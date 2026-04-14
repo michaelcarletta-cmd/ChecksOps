@@ -6391,37 +6391,48 @@ Be relentlessly focused on advancing the claim toward a fair, full, and fast set
       requestBody.tool_choice = "auto";
     }
 
-    const aiResponse = await fetchWithTimeout("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    }, AI_GATEWAY_REQUEST_TIMEOUT_MS);
-
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error("AI Gateway error:", aiResponse.status, errorText);
-      
-      if (aiResponse.status === 429) {
+    let aiData: any;
+    try {
+      if (!reportType && requestBody.tools) {
+        const toolResult = await callWithTools({
+          model: MODEL_CHEAP,
+          messages: conversationMessages,
+          tools: requestBody.tools,
+          toolChoice: "auto",
+          temperature: 0.7,
+          maxTokens: requestBody.max_tokens || 2500,
+        });
+        aiData = {
+          choices: [{
+            message: {
+              content: toolResult.text,
+              tool_calls: toolResult.toolCalls.map(tc => ({ function: tc.function, id: tc.id })),
+            },
+          }],
+        };
+      } else {
+        const systemMsg = conversationMessages.find((m: any) => m.role === 'system')?.content || '';
+        const userMsgs = conversationMessages.filter((m: any) => m.role !== 'system').map((m: any) => typeof m.content === 'string' ? m.content : JSON.stringify(m.content)).join('\n\n');
+        const textResult = await callOpenAI({
+          model: MODEL_CHEAP,
+          system: systemMsg,
+          user: userMsgs,
+          maxTokens: requestBody.max_tokens || 3000,
+        });
+        aiData = { choices: [{ message: { content: textResult.text } }] };
+      }
+    } catch (aiError) {
+      const errMsg = aiError instanceof Error ? aiError.message : 'Unknown';
+      if (errMsg === 'RATE_LIMIT') {
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      
-      if (aiResponse.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add credits to your workspace." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      throw new Error(`AI Gateway error: ${aiResponse.status}`);
+      throw new Error(`AI error: ${errMsg}`);
     }
 
-    const aiData = await aiResponse.json();
+    console.log(`[ClaimsAI] Main AI call complete`);
     const firstChoice = aiData.choices[0];
     let answer = firstChoice.message.content || "";
     let tasksCreated: any[] = [];
