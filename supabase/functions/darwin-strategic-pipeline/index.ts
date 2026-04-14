@@ -1,4 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { generate } from "../_shared/ai/generate.ts";
+import { searchTavily } from "../_shared/ai/tavily.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -219,41 +221,18 @@ async function decideWebSearch(
 }
 
 async function executeWebSearches(queries: string[]): Promise<Array<{ query: string; result: string }>> {
-  const PERPLEXITY_API_KEY = Deno.env.get('PERPLEXITY_API_KEY') || Deno.env.get('PERPLEXITY_API_KEY_1');
-  if (!PERPLEXITY_API_KEY) {
-    console.log('[Pipeline Step B] Perplexity API key not configured, skipping web search');
-    return [];
-  }
-
   const results: Array<{ query: string; result: string }> = [];
 
-  // Execute searches (max 3 to control cost/latency)
+  // Execute searches via shared Tavily layer (max 3 to control cost/latency)
   for (const query of queries.slice(0, 3)) {
     try {
-      const response = await fetch('https://api.perplexity.ai/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${PERPLEXITY_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'sonar',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a research assistant for insurance claims. Provide factual, citation-backed information. Focus on regulations, manufacturer specifications, and weather data.',
-            },
-            { role: 'user', content: query },
-          ],
-          max_tokens: 1500,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        results.push({ query, result: data.choices?.[0]?.message?.content || '' });
-      } else {
-        console.error(`Perplexity search failed for query: ${query}`, response.status);
+      const tavilyResult = await searchTavily(query, 'basic');
+      if (tavilyResult && tavilyResult.answer) {
+        const sourceSummary = tavilyResult.sources.slice(0, 3)
+          .map((s, i) => `[${i + 1}] ${s.title} (${s.url})`)
+          .join('\n');
+        results.push({ query, result: `${tavilyResult.answer}\n\nSources:\n${sourceSummary}` });
+        console.log(`[Pipeline Step B] Tavily search succeeded for: ${query.slice(0, 60)}...`);
       }
     } catch (error) {
       console.error(`Web search error for: ${query}`, error);
@@ -598,11 +577,6 @@ async function generateThesisViaAI(
   webSearchResults: any[],
   lossDomain: LossDomainClassification,
 ): Promise<ThesisObject> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY) {
-    throw new Error('LOVABLE_API_KEY not configured');
-  }
-
   // Build context for AI
   const filesContext = (memorySnapshot.files || [])
     .filter((f: any) => f.document_classification)
@@ -649,41 +623,20 @@ You MUST return a JSON object with these exact fields:
 
 IMPORTANT: evidence_map MUST reference actual document/photo IDs from the lists above. No fabricated IDs.`;
 
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'google/gemini-3-flash-preview',
-      messages: [
-        { role: 'system', content: 'You are a claims strategy AI. Return ONLY valid JSON, no markdown.' },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.3,
-    }),
-  });
-
-  if (!response.ok) {
-    console.error('AI thesis generation failed:', response.status);
-    // Return a minimal thesis
-    return {
-      primary_cause_of_loss: claim.loss_type || 'Unknown - requires manual input',
-      primary_coverage_theory: 'Direct physical loss from covered peril',
-      primary_carrier_error: 'Insufficient evaluation of claim evidence',
-      evidence_map: buildEvidenceMap(memorySnapshot.files, memorySnapshot.photos, claim),
-      anticipated_pushback: '',
-      pushback_counter: '',
-      loss_domain: lossDomain,
-    };
-  }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || '';
-
   try {
-    // Clean markdown code fences if present
+    const aiResult = await generate({
+      task: 'copilot_reasoning',
+      system: 'You are a claims strategy AI. Return ONLY valid JSON, no markdown.',
+      user: prompt,
+      claimId,
+      searchMode: 'off',
+      temperature: 0.3,
+      jsonMode: true,
+    });
+
+    console.log(`[Pipeline Step C] Thesis AI model=${aiResult.model}, cached=${aiResult.cached}`);
+
+    const content = aiResult.text;
     const cleaned = content.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(cleaned);
     return {
@@ -696,7 +649,7 @@ IMPORTANT: evidence_map MUST reference actual document/photo IDs from the lists 
       loss_domain: lossDomain,
     };
   } catch (e) {
-    console.error('Failed to parse AI thesis:', e, content.substring(0, 200));
+    console.error('Failed to generate/parse AI thesis:', e);
     return {
       primary_cause_of_loss: claim.loss_type || 'Unknown',
       primary_coverage_theory: 'Direct physical loss from covered peril',

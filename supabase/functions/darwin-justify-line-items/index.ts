@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { generate } from "../_shared/ai/generate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,7 +8,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
+;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -338,31 +339,17 @@ async function queryKnowledgeBase(
 // ── AI Call ──────────────────────────────────────────────────────
 
 async function callAI(systemPrompt: string, userPrompt: string): Promise<string> {
-  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.15,
-    }),
+  const result = await generate({
+    task: 'extraction',
+    system: systemPrompt,
+    user: userPrompt,
+    searchMode: 'off',
+    temperature: 0.15,
+    jsonMode: true,
   });
 
-  if (!resp.ok) {
-    const status = resp.status;
-    if (status === 429) throw new Error("RATE_LIMIT");
-    if (status === 402) throw new Error("CREDITS_EXHAUSTED");
-    throw new Error(`AI gateway error: ${status}`);
-  }
-
-  const json = await resp.json();
-  return json.choices?.[0]?.message?.content || "";
+  console.log(`[darwin-justify-line-items] model=${result.model}, usedSearch=${result.usedSearch}, cached=${result.cached}`);
+  return result.text;
 }
 
 // ── Main Handler ────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
+import { generate } from "../_shared/ai/generate.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -212,8 +213,6 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
     const body = await req.json();
     const { claimId, triggerEvent, triggerMetadata } = body;
@@ -419,26 +418,25 @@ RULES:
 
 Return ONLY valid JSON.`;
 
-    const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: 'Synthesize all intelligence layers and produce the ranked intelligence summary.' },
-        ],
-      }),
+    const aiResult = await generate({
+      task: 'copilot_reasoning',
+      system: systemPrompt,
+      user: 'Synthesize all intelligence layers and produce the ranked intelligence summary.',
+      claimId,
+      forceStrong: true,
+      searchMode: 'off',
+      jsonMode: true,
+      claimDataType: 'intelligence_summary',
     });
 
-    if (!aiResp.ok) throw new Error(`AI gateway error ${aiResp.status}`);
+    console.log(`[darwin-intelligence-orchestrator] model=${aiResult.model}, usedSearch=${aiResult.usedSearch}, cached=${aiResult.cached}`);
 
-    const aiData = await aiResp.json();
-    const rawContent = aiData.choices?.[0]?.message?.content || '';
+    const rawContent = aiResult.text;
 
     let summary: any = {};
     try {
-      const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+      const cleaned = rawContent.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
       if (jsonMatch) summary = JSON.parse(jsonMatch[0]);
     } catch { summary = {}; }
 
