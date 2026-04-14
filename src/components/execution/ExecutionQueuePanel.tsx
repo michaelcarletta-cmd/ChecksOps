@@ -24,10 +24,11 @@ interface ExecutionQueuePanelProps {
   backlogTasks: ExecutionTask[];
   blockedTasks: ExecutionTask[];
   loading: boolean;
+  refetching?: boolean;
   onRefetch: () => void | Promise<void>;
 }
 
-export function ExecutionQueuePanel({ activeTasks, backlogTasks, blockedTasks, loading, onRefetch }: ExecutionQueuePanelProps) {
+export function ExecutionQueuePanel({ activeTasks, backlogTasks, blockedTasks, loading, refetching, onRefetch }: ExecutionQueuePanelProps) {
   const [selectedTask, setSelectedTask] = useState<ExecutionTask | null>(null);
   const [blockingTaskId, setBlockingTaskId] = useState<string | null>(null);
 
@@ -57,7 +58,7 @@ export function ExecutionQueuePanel({ activeTasks, backlogTasks, blockedTasks, l
 
   return (
     <>
-      <Card>
+      <Card className={refetching ? 'opacity-70 transition-opacity duration-200' : 'transition-opacity duration-200'}>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
