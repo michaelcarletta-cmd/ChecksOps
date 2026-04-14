@@ -35,6 +35,7 @@ interface RequestBody {
   manufacturer?: string;
   lossType?: string;
   viewMode?: "internal" | "carrier";
+  industryStandards?: string;
 }
 
 // ── Manufacturer Extraction ─────────────────────────────────────
@@ -115,8 +116,12 @@ async function queryManufacturerData(
     const itemMfr = extractManufacturerFromText(itemKey) || claimManufacturer;
     const searchTerms = getSearchTermsForItem(itemKey);
 
+    console.log(`[mfr-lookup] Item: "${itemKey}" → searching terms: ${searchTerms.join(', ')}, mfr: ${itemMfr || 'none'}`);
+
+    // Track per-item seen keys to prevent cross-contamination
+    const itemSeen = new Set<string>();
+
     for (const term of searchTerms.slice(0, 3)) {
-      // Build tsquery - handle terms with special chars
       const words = term.split(/[\s\/&\-]+/).filter((w) => w.length > 2);
       if (!words.length) continue;
       const tsQuery = words.join(" & ");
@@ -131,17 +136,24 @@ async function queryManufacturerData(
         if (!chunks?.length) continue;
 
         for (const chunk of chunks) {
-          // Only include chunks from manufacturer-specs documents
           if (!mfrDocIds.has(chunk.document_id)) continue;
 
           const doc = mfrDocMap.get(chunk.document_id);
           if (!doc) continue;
 
           const contentKey = chunk.content.slice(0, 80);
-          if (seen.has(contentKey)) continue;
-          seen.add(contentKey);
+          if (itemSeen.has(contentKey)) continue;
+          itemSeen.add(contentKey);
 
-          // If we know the manufacturer, boost matching docs
+          // Relevance check: content must mention at least one item-specific keyword
+          const contentLower = chunk.content.toLowerCase();
+          const itemKeywords = itemKey.toLowerCase().split(/[\s\/&\-]+/).filter((w: string) => w.length > 2);
+          const hasItemRelevance = itemKeywords.some((kw: string) => contentLower.includes(kw));
+          if (!hasItemRelevance) {
+            console.log(`[mfr-lookup] Skipping irrelevant chunk for "${itemKey}" from ${doc.file_name}: no keyword match`);
+            continue;
+          }
+
           const docNameLower = doc.file_name.toLowerCase();
           const isManufacturerMatch = itemMfr && docNameLower.includes(itemMfr.toLowerCase());
 
@@ -153,7 +165,10 @@ async function queryManufacturerData(
           };
 
           perItem[itemKey].push(entry);
-          allSpecs.push(entry);
+          if (!seen.has(contentKey)) {
+            seen.add(contentKey);
+            allSpecs.push(entry);
+          }
         }
       } catch (e) {
         console.warn(`Search failed for term "${term}":`, e);
@@ -163,6 +178,7 @@ async function queryManufacturerData(
     // Sort: direct manufacturer matches first
     perItem[itemKey].sort((a: any, b: any) => (b.isDirectMatch ? 1 : 0) - (a.isDirectMatch ? 1 : 0));
     perItem[itemKey] = perItem[itemKey].slice(0, 3);
+    console.log(`[mfr-lookup] Result for "${itemKey}": ${perItem[itemKey].length} specs matched`);
   }
 
   // Deduplicate allSpecs
@@ -222,6 +238,8 @@ async function queryBuildingCodes(
       t.toLowerCase().split(/[\s\/&\-]+/).filter((w) => w.length > 2)
     );
 
+    console.log(`[codes-lookup] Item: "${itemKey}" → keywords: ${itemKeywords.join(', ')}`);
+
     // Score each code citation against this item
     const scored = allStateCodesRaw.map((row: any) => {
       const rowKeywords = (row.keywords || []).map((k: string) => k.toLowerCase());
@@ -237,10 +255,14 @@ async function queryBuildingCodes(
       return { ...row, relevanceScore: score };
     });
 
+    // Require a minimum relevance score to avoid cross-contamination
+    const MIN_RELEVANCE = 3;
     const matches = scored
-      .filter((s: any) => s.relevanceScore > 0)
+      .filter((s: any) => s.relevanceScore >= MIN_RELEVANCE)
       .sort((a: any, b: any) => b.relevanceScore - a.relevanceScore)
       .slice(0, 3);
+
+    console.log(`[codes-lookup] Result for "${itemKey}": ${matches.length} codes matched (min score ${MIN_RELEVANCE})`);
 
     for (const m of matches) {
       const entry = {
@@ -352,7 +374,7 @@ serve(async (req) => {
 
   try {
     const body: RequestBody = await req.json();
-    const { claimId, lineItems, stateCode, manufacturer, lossType, viewMode = "internal" } = body;
+    const { claimId, lineItems, stateCode, manufacturer, lossType, viewMode = "internal", industryStandards } = body;
 
     if (!claimId || !lineItems?.length) {
       return new Response(
@@ -500,12 +522,15 @@ OUTPUT: Return a JSON array with one object per line item:
 ${manufacturer ? `Claim-level manufacturer: ${manufacturer}` : "No claim-level manufacturer set."}
 ${lossType ? `Loss type: ${lossType}` : ""}
 View mode: ${viewMode}
+${industryStandards ? `\nINDUSTRY STANDARDS (user-provided, incorporate into justifications where relevant):\n${industryStandards}` : ""}
 
 PER-ITEM DATA (manufacturer specs and building codes matched to each item):
 ${perItemContext}
 
 GENERAL KNOWLEDGE BASE CONTEXT:
 ${kbContext}
+
+CRITICAL: Each item's manufacturer data and building codes are ALREADY scoped to that specific item. Do NOT use manufacturer data or building codes from one item to justify a different item. Each item must only reference the data listed under its own section.
 
 Return ONLY a valid JSON array. No markdown fences, no commentary.`;
 

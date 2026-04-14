@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Collapsible,
   CollapsibleContent,
@@ -227,6 +228,7 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
   const [loading, setLoading] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [viewMode, setViewMode] = useState<ViewMode>("internal");
+  const [industryStandards, setIndustryStandards] = useState("");
   const printRef = useRef<HTMLDivElement>(null);
 
   const stateCode = claim?.state_code || claim?.property_state || claim?.policyholder_state || "";
@@ -243,6 +245,7 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
       return;
     }
     setLoading(true);
+    setResults([]);
     setMetadata(null);
     try {
       const { data, error } = await supabase.functions.invoke("darwin-justify-line-items", {
@@ -253,6 +256,7 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
           manufacturer: claim?.manufacturer || null,
           lossType: claim?.loss_type || null,
           viewMode,
+          industryStandards: industryStandards.trim() || null,
         },
       });
 
@@ -270,7 +274,7 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
     } finally {
       setLoading(false);
     }
-  }, [lineItems, stateCode, claim, claimId, viewMode]);
+  }, [lineItems, stateCode, claim, claimId, viewMode, industryStandards]);
 
   const toggleRow = (idx: number) => {
     setExpandedRows((prev) => {
@@ -323,7 +327,19 @@ export function LineItemJustificationPanel({ claimId, claim, lineItems }: LineIt
         </div>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="space-y-3">
+        <div className="space-y-1.5 print:hidden">
+          <Label htmlFor="industry-standards" className="text-xs font-medium">Industry Standards</Label>
+          <Textarea
+            id="industry-standards"
+            value={industryStandards}
+            onChange={(e) => setIndustryStandards(e.target.value)}
+            placeholder="e.g., ASTM D3737 for wood flooring, NFPA 101 for fire safety"
+            className="min-h-[60px] text-xs"
+            rows={2}
+          />
+          <p className="text-[10px] text-muted-foreground">Standards relevant to replacement/repair of this item type</p>
+        </div>
         {loading && (
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
