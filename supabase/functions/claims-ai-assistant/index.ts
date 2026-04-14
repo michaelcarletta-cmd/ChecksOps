@@ -2750,10 +2750,8 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
   }
   const carrierFacing = options?.carrierFacing === true;
 
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
-    return `${trimmedBody}\n\n${evidenceSummary}`;
-  }
+  // Use shared AI layer
+  const { generate } = await import("../_shared/ai/generate.ts");
 
   const claimNumber = String(claimData?.claim_number || "").trim();
   const carrier = String(claimData?.insurance_company || "the insurance carrier").trim();
@@ -2765,69 +2763,46 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
     : `${estimateLeadIn}\n\nThis estimate is in line with the damages found and the corresponding repair scope, including:\n${evidenceSummary}`;
 
   try {
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        max_tokens: 900,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a senior public-adjuster communication specialist. Rewrite emails in plain text only (no markdown). Keep professional tone, concise but specific. Include only the strongest documented damages and clearly tie them to estimate scope. NEVER mention AI, automated analysis, models, or computer vision.",
-          },
-          {
-            role: "user",
-            content: [
-              `Rewrite this email so it is professional and evidence-driven for ${carrier}.`,
-              `Claim #: ${claimNumber || "N/A"} | Policyholder: ${policyholder} | Recipient: ${recipient}`,
-              "",
-              "Original draft:",
-              trimmedBody,
-              "",
-              "Photo/estimate evidence context (use this to strengthen the draft):",
-              evidenceSummary,
-              "",
-              "Requirements:",
-              `- Include this sentence naturally near the beginning: "${estimateLeadIn}"`,
-              "- Include a sentence like: \"This estimate is in line with the damages found, such as ...\" and then list key damages.",
-              "- Keep greeting and courteous close.",
-              "- Include important property damages from the photo documentation (not every single point).",
-              "- Tie damages to estimate scope items already on file.",
-              "- Use specific, direct damage statements (example style): \"Stone wall is displaced due to vehicle impact. Wood siding and underlying plywood sustained impact damage. The impact displaced the chimney from its original position, creating gaps and exposing underlying structures.\"",
-              "- Pull details from the most severe photo condition findings and weave them naturally into the draft.",
-              "- Explain what repairs are required for those damages and why those items are included in the estimate.",
-              carrierFacing
-                ? "- This is carrier-facing: use assertive but professional claim-advocacy language. Use decisive phrasing (e.g., \"documented damage confirms,\" \"requires replacement/repair\"). Avoid hedging terms like \"might\" or \"possibly.\""
-                : "- Use collaborative but professional tone suitable for client-facing communications.",
-              carrierFacing
-                ? "- Include a direct ask for revised scope and payment alignment, with a request for written confirmation."
-                : "- Include a clear request for next steps or confirmation.",
-              "- Ask for scope/payment update based on this evidence.",
-              "- Do NOT mention AI, analysis tools, or automated photo review.",
-              "- Return only the final email body text.",
-            ].join("\n"),
-          },
-        ],
-      }),
+    const userContent = [
+      `Rewrite this email so it is professional and evidence-driven for ${carrier}.`,
+      `Claim #: ${claimNumber || "N/A"} | Policyholder: ${policyholder} | Recipient: ${recipient}`,
+      "",
+      "Original draft:",
+      trimmedBody,
+      "",
+      "Photo/estimate evidence context (use this to strengthen the draft):",
+      evidenceSummary,
+      "",
+      "Requirements:",
+      `- Include this sentence naturally near the beginning: "${estimateLeadIn}"`,
+      "- Include a sentence like: \"This estimate is in line with the damages found, such as ...\" and then list key damages.",
+      "- Keep greeting and courteous close.",
+      "- Include important property damages from the photo documentation (not every single point).",
+      "- Tie damages to estimate scope items already on file.",
+      "- Use specific, direct damage statements (example style): \"Stone wall is displaced due to vehicle impact. Wood siding and underlying plywood sustained impact damage. The impact displaced the chimney from its original position, creating gaps and exposing underlying structures.\"",
+      "- Pull details from the most severe photo condition findings and weave them naturally into the draft.",
+      "- Explain what repairs are required for those damages and why those items are included in the estimate.",
+      carrierFacing
+        ? "- This is carrier-facing: use assertive but professional claim-advocacy language. Use decisive phrasing (e.g., \"documented damage confirms,\" \"requires replacement/repair\"). Avoid hedging terms like \"might\" or \"possibly.\""
+        : "- Use collaborative but professional tone suitable for client-facing communications.",
+      carrierFacing
+        ? "- Include a direct ask for revised scope and payment alignment, with a request for written confirmation."
+        : "- Include a clear request for next steps or confirmation.",
+      "- Ask for scope/payment update based on this evidence.",
+      "- Do NOT mention AI, analysis tools, or automated photo review.",
+      "- Return only the final email body text.",
+    ].join("\n");
+
+    const aiResult = await generate({
+      task: 'copilot_drafting',
+      system: "You are a senior public-adjuster communication specialist. Rewrite emails in plain text only (no markdown). Keep professional tone, concise but specific. Include only the strongest documented damages and clearly tie them to estimate scope. NEVER mention AI, automated analysis, models, or computer vision.",
+      user: userContent,
+      searchMode: 'off',
+      maxTokens: 900,
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Photo/estimate rewrite failed:", response.status, errorText);
-      return ensureConditionNarrativesInBody(
-        `${fallbackPrefix}\n\n${trimmedBody}`,
-        options?.conditionNarratives || [],
-        carrierFacing,
-      );
-    }
-
-    const data = await response.json();
-    const rewritten = String(data?.choices?.[0]?.message?.content || "").trim();
+    console.log(`[EmailRewrite] Complete, model=${aiResult.model}, cached=${aiResult.cached}`);
+    const rewritten = String(aiResult.text || "").trim();
     if (!rewritten) {
       return ensureConditionNarrativesInBody(
         `${fallbackPrefix}\n\n${trimmedBody}`,
@@ -2849,6 +2824,7 @@ async function rewriteEmailBodyWithPhotoEstimateEvidence(
     );
   }
 }
+
 async function resolveCommunicationClaim(
   supabase: any,
   params: any,
@@ -5835,10 +5811,8 @@ If the document is ambiguous about the type of loss, ask the user to clarify rat
       }
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
+    const { callOpenAI, callWithTools } = await import("../_shared/ai/openaiClient.ts");
+    const { MODEL_CHEAP } = await import("../_shared/ai/modelRouter.ts");
 
     // Build staff list context
     let staffListContext = "";
@@ -6416,37 +6390,48 @@ Be relentlessly focused on advancing the claim toward a fair, full, and fast set
       requestBody.tool_choice = "auto";
     }
 
-    const aiResponse = await fetchWithTimeout("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    }, AI_GATEWAY_REQUEST_TIMEOUT_MS);
-
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error("AI Gateway error:", aiResponse.status, errorText);
-      
-      if (aiResponse.status === 429) {
+    let aiData: any;
+    try {
+      if (!reportType && requestBody.tools) {
+        const toolResult = await callWithTools({
+          model: MODEL_CHEAP,
+          messages: conversationMessages,
+          tools: requestBody.tools,
+          toolChoice: "auto",
+          temperature: 0.7,
+          maxTokens: requestBody.max_tokens || 2500,
+        });
+        aiData = {
+          choices: [{
+            message: {
+              content: toolResult.text,
+              tool_calls: toolResult.toolCalls.map(tc => ({ function: tc.function, id: tc.id })),
+            },
+          }],
+        };
+      } else {
+        const systemMsg = conversationMessages.find((m: any) => m.role === 'system')?.content || '';
+        const userMsgs = conversationMessages.filter((m: any) => m.role !== 'system').map((m: any) => typeof m.content === 'string' ? m.content : JSON.stringify(m.content)).join('\n\n');
+        const textResult = await callOpenAI({
+          model: MODEL_CHEAP,
+          system: systemMsg,
+          user: userMsgs,
+          maxTokens: requestBody.max_tokens || 3000,
+        });
+        aiData = { choices: [{ message: { content: textResult.text } }] };
+      }
+    } catch (aiError) {
+      const errMsg = aiError instanceof Error ? aiError.message : 'Unknown';
+      if (errMsg === 'RATE_LIMIT') {
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      
-      if (aiResponse.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add credits to your workspace." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      throw new Error(`AI Gateway error: ${aiResponse.status}`);
+      throw new Error(`AI error: ${errMsg}`);
     }
 
-    const aiData = await aiResponse.json();
+    console.log(`[ClaimsAI] Main AI call complete`);
     const firstChoice = aiData.choices[0];
     let answer = firstChoice.message.content || "";
     let tasksCreated: any[] = [];
@@ -6479,23 +6464,24 @@ Be relentlessly focused on advancing the claim toward a fair, full, and fast set
           max_tokens: 2500,
         };
         
-        const retryResponse = await fetchWithTimeout("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(retryBody),
-        }, AI_GATEWAY_REQUEST_TIMEOUT_MS);
-        
-        if (retryResponse.ok) {
-          const retryData = await retryResponse.json();
-          answer = retryData.choices?.[0]?.message?.content || answer;
+        try {
+          const retryMsgs = retryBody.messages;
+          const retrySys = retryMsgs.find((m: any) => m.role === 'system')?.content || '';
+          const retryUsr = retryMsgs.filter((m: any) => m.role !== 'system').map((m: any) => typeof m.content === 'string' ? m.content : JSON.stringify(m.content)).join('\n\n');
+          const retryResult = await callOpenAI({
+            model: MODEL_CHEAP,
+            system: retrySys,
+            user: retryUsr,
+            maxTokens: 2500,
+          });
+          answer = retryResult.text || answer;
           // Skip tool call processing
           return new Response(
             JSON.stringify({ response: answer, tasksCreated: [], emailsSent: [], smsSent: [], communicationDrafts: [], portalNotificationsSent: [], lettersCreated: [], callsScheduled: [] }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
           );
+        } catch (retryErr) {
+          console.error('[Claims AI Guard] Retry failed:', retryErr);
         }
       }
     }
@@ -6845,24 +6831,18 @@ ${knowledgeBaseContext || ''}`
                 ...conversationMessages.slice(1) // Skip the original system message
               ];
               
-              const followUpResponse = await fetchWithTimeout("https://ai.gateway.lovable.dev/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  model: "google/gemini-2.5-flash",
-                  messages: followUpMessages,
-                  max_tokens: 2000,
-                }),
-              }, AI_GATEWAY_FOLLOW_UP_TIMEOUT_MS);
-              
-              if (followUpResponse.ok) {
-                const followUpData = await followUpResponse.json();
-                answer = followUpData.choices[0].message.content || "";
-              } else {
-                console.error("Follow-up AI call failed:", followUpResponse.status);
+              try {
+                const followUpSys = followUpMessages.find((m: any) => m.role === 'system')?.content || '';
+                const followUpUsr = followUpMessages.filter((m: any) => m.role !== 'system').map((m: any) => typeof m.content === 'string' ? m.content : JSON.stringify(m.content)).join('\n\n');
+                const followUpResult = await callOpenAI({
+                  model: MODEL_CHEAP,
+                  system: followUpSys,
+                  user: followUpUsr,
+                  maxTokens: 2000,
+                });
+                answer = followUpResult.text || "";
+              } catch (followUpErr) {
+                console.error("Follow-up AI call failed:", followUpErr);
                 answer = `I found the claim for ${params.client_name}. ${contextResult.context.substring(0, 500)}...\n\nPlease ask your specific question about this claim.`;
               }
             } else {
@@ -6991,38 +6971,18 @@ ${knowledgeBaseContext || ''}`
                 }
                 
                 // Extract phone and email from search results using AI
-                const extractResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    model: "google/gemini-2.5-flash",
-                    messages: [
-                      {
-                        role: "system",
-                        content: "Extract the main claims phone number and email from the following text. Return ONLY a JSON object with 'phone' and 'email' fields. If not found, use null. Format phone as digits only with area code."
-                      },
-                      {
-                        role: "user",
-                        content: `Extract contact info for ${company.name} from:\n\n${searchResult}`
-                      }
-                    ],
-                    max_tokens: 200,
-                  }),
+                const extractResult = await callOpenAI({
+                  model: MODEL_CHEAP,
+                  system: "Extract the main claims phone number and email from the following text. Return ONLY a JSON object with 'phone' and 'email' fields. If not found, use null. Format phone as digits only with area code.",
+                  user: `Extract contact info for ${company.name} from:\n\n${searchResult}`,
+                  maxTokens: 200,
+                  jsonMode: true,
                 });
                 
-                if (!extractResponse.ok) {
-                  needsReview.push({ name: company.name, reason: "AI extraction failed" });
-                  continue;
-                }
-                
-                const extractData = await extractResponse.json();
                 let extracted: { phone?: string; email?: string } = {};
                 
                 try {
-                  const content = extractData.choices[0].message.content || "";
+                  const content = extractResult.text || "";
                   const jsonMatch = content.match(/\{[\s\S]*\}/);
                   if (jsonMatch) {
                     extracted = JSON.parse(jsonMatch[0]);

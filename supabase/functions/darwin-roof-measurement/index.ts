@@ -1424,8 +1424,8 @@ async function estimateFootprintFromVision(
   lat: number,
   lng: number,
 ): Promise<CandidateFootprint | null> {
-  const LOVABLE_AI_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_AI_KEY || tileGrid.length === 0) return null;
+  const { callWithTools, MODEL_VISION } = await import("../_shared/ai/generate.ts");
+  if (tileGrid.length === 0) return null;
 
   try {
     const imageContent: any[] = [];
@@ -1439,15 +1439,12 @@ async function estimateFootprintFromVision(
       imageContent.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${tile.base64}` } });
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_AI_KEY}` },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          {
-            role: "system",
-            content: `You estimate building footprint dimensions from aerial/satellite imagery. You MUST provide estimates — do NOT refuse or say you cannot determine dimensions. Use visual cues like roof shadow length, comparison to driveways (~10ft wide), cars (~6x15ft), sidewalks (~4ft), and standard residential features.
+    const result = await callWithTools({
+      model: MODEL_VISION,
+      messages: [
+        {
+          role: "system",
+          content: `You estimate building footprint dimensions from aerial/satellite imagery. You MUST provide estimates — do NOT refuse or say you cannot determine dimensions. Use visual cues like roof shadow length, comparison to driveways (~10ft wide), cars (~6x15ft), sidewalks (~4ft), and standard residential features.
 
 RULES:
 - Estimate length (longer dimension) and width (shorter dimension) in feet
@@ -1456,48 +1453,43 @@ RULES:
 - Estimate bearing of the long axis in degrees (0=North, 90=East)
 - Provide confidence 0-100
 - ALWAYS provide a best estimate even if uncertain`,
-          },
-          { role: "user", content: imageContent },
-        ],
-        temperature: 0.1,
-        max_tokens: 1000,
-        tools: [{
-          type: "function",
-          function: {
-            name: "estimate_footprint",
-            description: "Estimate building footprint dimensions from satellite imagery",
-            parameters: {
-              type: "object",
-              properties: {
-                length_ft: { type: "number", description: "Longer building dimension in feet" },
-                width_ft: { type: "number", description: "Shorter building dimension in feet" },
-                bearing_deg: { type: "number", description: "Compass bearing of long axis (0-360)" },
-                confidence: { type: "number", description: "Confidence 0-100" },
-                notes: { type: "string", description: "Brief notes on estimation method" },
-              },
-              required: ["length_ft", "width_ft", "bearing_deg", "confidence", "notes"],
-              additionalProperties: false,
+        },
+        { role: "user", content: imageContent },
+      ],
+      temperature: 0.1,
+      maxTokens: 1000,
+      tools: [{
+        type: "function",
+        function: {
+          name: "estimate_footprint",
+          description: "Estimate building footprint dimensions from satellite imagery",
+          parameters: {
+            type: "object",
+            properties: {
+              length_ft: { type: "number", description: "Longer building dimension in feet" },
+              width_ft: { type: "number", description: "Shorter building dimension in feet" },
+              bearing_deg: { type: "number", description: "Compass bearing of long axis (0-360)" },
+              confidence: { type: "number", description: "Confidence 0-100" },
+              notes: { type: "string", description: "Brief notes on estimation method" },
             },
+            required: ["length_ft", "width_ft", "bearing_deg", "confidence", "notes"],
+            additionalProperties: false,
           },
-        }],
-        tool_choice: { type: "function", function: { name: "estimate_footprint" } },
-      }),
+        },
+      }],
+      toolChoice: { type: "function", function: { name: "estimate_footprint" } },
     });
 
-    if (!response.ok) {
-      console.error("[Darwin Roof] Vision footprint estimation error:", response.status);
-      return null;
-    }
+    console.log(`[Darwin Roof] Vision footprint estimation complete, model=${result.model}`);
 
-    const result = await response.json();
-    const toolCall = result.choices?.[0]?.message?.tool_calls?.[0];
     let parsed: any;
+    const toolCall = result.toolCalls?.[0];
     if (toolCall?.function?.arguments) {
       parsed = typeof toolCall.function.arguments === "string"
         ? JSON.parse(toolCall.function.arguments)
         : toolCall.function.arguments;
     } else {
-      const content = result.choices?.[0]?.message?.content || "";
+      const content = result.text || "";
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (!jsonMatch) return null;
       parsed = JSON.parse(jsonMatch[0]);
@@ -1877,8 +1869,8 @@ async function classifyRoofFromSatellite(
   address: string,
   footprintAreaSqft: number | null,
 ): Promise<SatelliteVisionResult | null> {
-  const LOVABLE_AI_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_AI_KEY || tileGrid.length === 0) return null;
+  const { callWithTools, MODEL_VISION_STRONG } = await import("../_shared/ai/generate.ts");
+  if (tileGrid.length === 0) return null;
 
   try {
     const imageContent: any[] = [];
@@ -1928,99 +1920,90 @@ RULES:
 - If tree cover >40%, abstain on pitch
 - If only 1-2 sides visible, reduce facet confidence and note rear-slope invisibility`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_AI_KEY}` },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: imageContent },
-        ],
-        temperature: 0.1,
-        max_tokens: 2000,
-        tools: [{
-          type: "function",
-          function: {
-            name: "classify_roof",
-            description: "Classify roof characteristics from satellite imagery",
-            parameters: {
-              type: "object",
-              properties: {
-                roof_form: {
-                  type: "object",
-                  properties: {
-                    value: { type: "string", enum: ["gable", "hip", "cross_gable", "cross_hip", "gambrel", "mansard", "flat", "complex", "unknown"] },
-                    confidence: { type: "number" },
-                    abstain: { type: "boolean" },
-                    reasoning: { type: "string" },
-                  },
-                  required: ["value", "confidence", "abstain", "reasoning"],
-                  additionalProperties: false,
+    const toolResult = await callWithTools({
+      model: MODEL_VISION_STRONG,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: imageContent },
+      ],
+      temperature: 0.1,
+      maxTokens: 2000,
+      tools: [{
+        type: "function",
+        function: {
+          name: "classify_roof",
+          description: "Classify roof characteristics from satellite imagery",
+          parameters: {
+            type: "object",
+            properties: {
+              roof_form: {
+                type: "object",
+                properties: {
+                  value: { type: "string", enum: ["gable", "hip", "cross_gable", "cross_hip", "gambrel", "mansard", "flat", "complex", "unknown"] },
+                  confidence: { type: "number" },
+                  abstain: { type: "boolean" },
+                  reasoning: { type: "string" },
                 },
-                pitch_band: {
-                  type: "object",
-                  properties: {
-                    value: { type: "string", enum: ["flat", "low", "moderate", "steep", "very_steep", "unknown"] },
-                    confidence: { type: "number" },
-                    abstain: { type: "boolean" },
-                    reasoning: { type: "string" },
-                  },
-                  required: ["value", "confidence", "abstain", "reasoning"],
-                  additionalProperties: false,
-                },
-                visible_facets: {
-                  type: "object",
-                  properties: {
-                    value: { type: "number" },
-                    confidence: { type: "number" },
-                    abstain: { type: "boolean" },
-                    reasoning: { type: "string" },
-                  },
-                  required: ["value", "confidence", "abstain", "reasoning"],
-                  additionalProperties: false,
-                },
-                obstructions: {
-                  type: "object",
-                  properties: {
-                    tree_cover_pct: { type: "number" },
-                    shadow_coverage: { type: "string", enum: ["none", "light", "moderate", "heavy"] },
-                    rear_slope_visible: { type: "boolean" },
-                    visible_sides: { type: "number" },
-                    obstructions: { type: "array", items: { type: "string" } },
-                    confidence: { type: "number" },
-                  },
-                  required: ["tree_cover_pct", "shadow_coverage", "rear_slope_visible", "visible_sides", "obstructions", "confidence"],
-                  additionalProperties: false,
-                },
-                roof_color: { type: "string" },
-                overall_image_quality: { type: "number" },
-                analysis_notes: { type: "string" },
+                required: ["value", "confidence", "abstain", "reasoning"],
+                additionalProperties: false,
               },
-              required: ["roof_form", "pitch_band", "visible_facets", "obstructions", "roof_color", "overall_image_quality", "analysis_notes"],
-              additionalProperties: false,
+              pitch_band: {
+                type: "object",
+                properties: {
+                  value: { type: "string", enum: ["flat", "low", "moderate", "steep", "very_steep", "unknown"] },
+                  confidence: { type: "number" },
+                  abstain: { type: "boolean" },
+                  reasoning: { type: "string" },
+                },
+                required: ["value", "confidence", "abstain", "reasoning"],
+                additionalProperties: false,
+              },
+              visible_facets: {
+                type: "object",
+                properties: {
+                  value: { type: "number" },
+                  confidence: { type: "number" },
+                  abstain: { type: "boolean" },
+                  reasoning: { type: "string" },
+                },
+                required: ["value", "confidence", "abstain", "reasoning"],
+                additionalProperties: false,
+              },
+              obstructions: {
+                type: "object",
+                properties: {
+                  tree_cover_pct: { type: "number" },
+                  shadow_coverage: { type: "string", enum: ["none", "light", "moderate", "heavy"] },
+                  rear_slope_visible: { type: "boolean" },
+                  visible_sides: { type: "number" },
+                  obstructions: { type: "array", items: { type: "string" } },
+                  confidence: { type: "number" },
+                },
+                required: ["tree_cover_pct", "shadow_coverage", "rear_slope_visible", "visible_sides", "obstructions", "confidence"],
+                additionalProperties: false,
+              },
+              roof_color: { type: "string" },
+              overall_image_quality: { type: "number" },
+              analysis_notes: { type: "string" },
             },
+            required: ["roof_form", "pitch_band", "visible_facets", "obstructions", "roof_color", "overall_image_quality", "analysis_notes"],
+            additionalProperties: false,
           },
-        }],
-        tool_choice: { type: "function", function: { name: "classify_roof" } },
-      }),
+        },
+      }],
+      toolChoice: { type: "function", function: { name: "classify_roof" } },
     });
 
-    if (!response.ok) {
-      console.error("Vision classification error:", response.status, await response.text().catch(() => ""));
-      return null;
-    }
+    console.log(`[Darwin Roof] Vision classification complete, model=${toolResult.model}`);
 
-    const result = await response.json();
-    const toolCall = result.choices?.[0]?.message?.tool_calls?.[0];
     let parsed: any;
+    const toolCall = toolResult.toolCalls?.[0];
     if (toolCall?.function?.arguments) {
       parsed = typeof toolCall.function.arguments === "string"
         ? JSON.parse(toolCall.function.arguments)
         : toolCall.function.arguments;
     } else {
-      // Fallback: parse content as JSON
-      const content = result.choices?.[0]?.message?.content || "";
+      const content = toolResult.text || "";
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (!jsonMatch) { console.warn("[Darwin Roof] Vision returned no structured output"); return null; }
       parsed = JSON.parse(jsonMatch[0]);

@@ -4391,10 +4391,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
-    }
+    // AI calls routed through shared layer
+    const { callOpenAI, callWithTools } = await import("../_shared/ai/openaiClient.ts");
+    const { MODEL_CHEAP, MODEL_STRONG } = await import("../_shared/ai/modelRouter.ts");
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -10417,21 +10416,9 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
     const hasPdfContent = pdfContent || (pdfContents && pdfContents.length > 0) || additionalContext?.ourEstimatePdf || additionalContext?.insuranceEstimatePdf;
     const needsPdfProcessing = hasPdfContent && !additionalContext?._useTextOnly && ['denial_rebuttal', 'engineer_report_rebuttal', 'document_compilation', 'estimate_work_summary', 'supplement', 'demand_package', 'document_comparison', 'smart_extraction', 'estimate_gap_analysis', 'systematic_dismantling'].includes(analysisType);
     
-    // Model fallback chain - use only Gemini models for PDF processing (OpenAI doesn't support PDF multimodal)
-    // For text-only analysis, we can use OpenAI as fallback
-    // IMPORTANT: gemini-3-flash-preview first as it's on newer infrastructure
-    const modelFallbackChain = needsPdfProcessing ? [
-      'google/gemini-3-flash-preview', // Newest model, different infrastructure - try first
-      'google/gemini-2.5-flash',       // Fast option for PDFs
-      'google/gemini-2.5-pro',         // Most capable for PDFs
-      'google/gemini-3-pro-preview',   // Newer pro model
-    ] : [
-      'google/gemini-3-flash-preview', // Newest, fastest
-      'openai/gpt-5-mini',             // Different provider fallback
-      'google/gemini-2.5-flash',       // Fast Google fallback
-      'openai/gpt-5.2',                // Most capable OpenAI (user's preference for Darwin)
-      'openai/gpt-5-nano',             // Fast OpenAI fallback
-    ];
+    // Model fallback chain - direct OpenAI models
+    // For text-only analysis, use cheap model with strong fallback
+    const modelFallbackChain = [MODEL_CHEAP, MODEL_STRONG];
     console.log(`Model fallback chain: ${modelFallbackChain.join(' -> ')} (PDF processing: ${needsPdfProcessing})`);
     
     // For task_followup, use tool calling to get structured actions
@@ -10527,65 +10514,67 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
           console.log(`  Attempt ${attempt + 1}/${RETRIES_PER_MODEL} for ${currentModel}`);
           
           const requestBody = { ...baseRequestBody, model: currentModel };
-          const requestController = new AbortController();
-          const timeoutId = setTimeout(() => requestController.abort(), MODEL_REQUEST_TIMEOUT_MS);
-          let response: Response;
+          
           try {
-            response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(requestBody),
-              signal: requestController.signal,
-            });
-          } finally {
-            clearTimeout(timeoutId);
-          }
-
-          // Handle HTTP-level errors
-          if (!response.ok) {
-            const errorText = await response.text();
-            lastError = `HTTP ${response.status} on ${currentModel}: ${errorText.substring(0, 200)}`;
-            modelFailures += 1;
-            console.error(`  AI Gateway HTTP error:`, response.status);
-            
-            // Don't retry on client errors (4xx) except 429
-            if (response.status === 429) {
+            // Route through shared AI layer based on whether tools are needed
+            if (requestBody.tools && requestBody.tool_choice) {
+              const toolResult = await callWithTools({
+                model: currentModel,
+                messages: requestBody.messages,
+                tools: requestBody.tools,
+                toolChoice: requestBody.tool_choice,
+                temperature: requestBody.temperature ?? 0.7,
+                maxTokens: requestBody.max_tokens ?? 8000,
+              });
+              aiData = {
+                choices: [{
+                  message: {
+                    content: toolResult.text,
+                    tool_calls: toolResult.toolCalls.map(tc => ({
+                      function: tc.function,
+                      id: tc.id,
+                    })),
+                  },
+                  finish_reason: 'stop',
+                }],
+              };
+            } else {
+              const textResult = await callOpenAI({
+                model: currentModel,
+                system: requestBody.messages.find((m: any) => m.role === 'system')?.content || '',
+                user: requestBody.messages.filter((m: any) => m.role !== 'system').map((m: any) => typeof m.content === 'string' ? m.content : JSON.stringify(m.content)).join('\n\n'),
+                temperature: requestBody.temperature ?? 0.7,
+                maxTokens: requestBody.max_tokens ?? 8000,
+              });
+              aiData = {
+                choices: [{
+                  message: { content: textResult.text },
+                  finish_reason: 'stop',
+                }],
+              };
+            }
+          } catch (aiError) {
+            const errMsg = aiError instanceof Error ? aiError.message : 'Unknown error';
+            if (errMsg === 'RATE_LIMIT') {
               endStep(modelRunStep, 'error', `Rate-limited after ${modelAttempts} attempts`);
               return new Response(
                 JSON.stringify({ error: 'Rate limit exceeded. Please try again in a moment.' }),
                 { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
               );
             }
-            if (response.status === 402) {
-              endStep(modelRunStep, 'error', `Credits exhausted after ${modelAttempts} attempts`);
-              return new Response(
-                JSON.stringify({ error: 'AI usage limit reached. Please add credits to continue.' }),
-                { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-              );
-            }
-            // For 4xx errors (not 429/402), try next model immediately
-            if (response.status >= 400 && response.status < 500) {
-              console.log(`  Client error ${response.status}, trying next model...`);
-              continue modelLoop;
-            }
+            lastError = `AI error on ${currentModel}: ${errMsg}`;
+            modelFailures += 1;
+            console.error(`  AI call error:`, errMsg);
             
-            // Retry on 5xx errors
             if (attempt < RETRIES_PER_MODEL - 1) {
               const delay = getRetryDelayMs(attempt);
               console.log(`  Retrying in ${delay}ms...`);
               await new Promise(resolve => setTimeout(resolve, delay));
               continue;
             }
-            // Exhausted retries for this model, try next
             console.log(`  Exhausted retries for ${currentModel}, trying next model...`);
             continue modelLoop;
           }
-          
-          // Parse the response
-          aiData = await response.json();
           
           // Log the raw response for debugging
           console.log(`  Response structure:`, JSON.stringify({
@@ -11229,36 +11218,26 @@ VIOLATION OF DOMAIN FIDELITY INVALIDATES THE OUTPUT.
               { role: 'user', content: correctionPrompt },
             ];
 
-            const correctionResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                model: modelId,
-                messages: correctionMessages,
-                max_tokens: 12000,
-              }),
+            const correctionResult = await callOpenAI({
+              model: successfulModel || MODEL_STRONG,
+              system: systemPrompt,
+              user: `Previous output:\n${analysisResult}\n\n${correctionPrompt}`,
+              maxTokens: 12000,
             });
 
-            if (correctionResp.ok) {
-              const correctionData = await correctionResp.json();
-              const correctedText = correctionData.choices?.[0]?.message?.content;
-              if (!correctedText) {
-                throw new Error('[DEMAND CORRECTION] Correction returned empty output.');
-              }
+            const correctedText = correctionResult.text;
+            if (!correctedText) {
+              throw new Error('[DEMAND CORRECTION] Correction returned empty output.');
+            }
 
-              const sanitizedCorrectedText = sanitizeForbiddenInsuranceTerms(stripExternalFormatting(correctedText));
-              const secondPassErrors = postValidateDemandPackageStrict(sanitizedCorrectedText, demandEvSummaryObj);
-              if (secondPassErrors.length === 0) {
-                console.log('[DEMAND CORRECTION] Correction pass succeeded with zero violations.');
-                analysisResult = sanitizedCorrectedText;
-              } else {
-                throw new Error(`DEMAND STRICT VALIDATION FAILED AFTER CORRECTION: ${secondPassErrors.join(' | ')}`);
-              }
+            console.log(`[DEMAND CORRECTION] Complete, model=${correctionResult.model}`);
+            const sanitizedCorrectedText = sanitizeForbiddenInsuranceTerms(stripExternalFormatting(correctedText));
+            const secondPassErrors = postValidateDemandPackageStrict(sanitizedCorrectedText, demandEvSummaryObj);
+            if (secondPassErrors.length === 0) {
+              console.log('[DEMAND CORRECTION] Correction pass succeeded with zero violations.');
+              analysisResult = sanitizedCorrectedText;
             } else {
-              throw new Error(`[DEMAND CORRECTION] Correction API call failed (${correctionResp.status}).`);
+              throw new Error(`DEMAND STRICT VALIDATION FAILED AFTER CORRECTION: ${secondPassErrors.join(' | ')}`);
             }
           } catch (corrErr) {
             console.error('[DEMAND CORRECTION] Error during correction pass:', corrErr);
