@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { generate } from "../_shared/ai/generate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -95,80 +96,39 @@ ${email.body}
 
 Draft a clear, professional response addressing their inquiry. The response should be helpful and reference the claim context where appropriate.`;
 
-      // Call Lovable AI
-      const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
-      if (!lovableApiKey) {
-        throw new Error('LOVABLE_API_KEY not configured');
-      }
-
-      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${lovableApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature: 0.7,
-        }),
+      const aiResult = await generate({
+        task: 'copilot_drafting',
+        system: systemPrompt,
+        user: userPrompt,
+        claimId,
+        temperature: 0.7,
+        searchMode: 'off',
       });
+      console.log(`[process-claim-ai-action] draft_email model=${aiResult.model}, cached=${aiResult.cached}`);
 
-      if (!aiResponse.ok) {
-        if (aiResponse.status === 429) {
-          throw new Error('Rate limit exceeded. Please try again later.');
-        }
-        if (aiResponse.status === 402) {
-          throw new Error('AI credits exhausted. Please add credits.');
-        }
-        const errorText = await aiResponse.text();
-        console.error('AI error:', aiResponse.status, errorText);
-        throw new Error('Failed to generate AI response');
-      }
-
-      const aiData = await aiResponse.json();
-
-      const draftResponse = aiData.choices[0].message.content;
+      const draftResponse = aiResult.text;
 
       // Generate suggested subject line
-      const subjectResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${lovableApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'system', content: 'Generate a brief, professional email subject line for a reply. Return only the subject line, nothing else.' },
-            { role: 'user', content: `Original subject: ${email.subject}\n\nResponse content: ${draftResponse.substring(0, 500)}` }
-          ],
-          temperature: 0.5,
-        }),
+      const subjectResult = await generate({
+        task: 'copilot_drafting',
+        system: 'Generate a brief, professional email subject line for a reply. Return only the subject line, nothing else.',
+        user: `Original subject: ${email.subject}\n\nResponse content: ${draftResponse.substring(0, 500)}`,
+        temperature: 0.5,
+        searchMode: 'off',
       });
-
-      const subjectData = await subjectResponse.json();
-      const suggestedSubject = subjectData.choices?.[0]?.message?.content || `Re: ${email.subject}`;
+      const suggestedSubject = subjectResult.text || `Re: ${email.subject}`;
 
       // Determine recipient type based on email address
       let recipientType = 'unknown';
       if (email.recipient_email) {
         const recipientLower = email.recipient_email.toLowerCase();
-        // Check if it's the policyholder
         if (claim.policyholder_email && recipientLower === claim.policyholder_email.toLowerCase()) {
           recipientType = 'policyholder';
-        }
-        // Check if it's the adjuster or insurance
-        else if (claim.adjuster_email && recipientLower === claim.adjuster_email.toLowerCase()) {
+        } else if (claim.adjuster_email && recipientLower === claim.adjuster_email.toLowerCase()) {
           recipientType = 'adjuster';
-        }
-        else if (claim.insurance_email && recipientLower === claim.insurance_email.toLowerCase()) {
+        } else if (claim.insurance_email && recipientLower === claim.insurance_email.toLowerCase()) {
           recipientType = 'insurance';
         }
-        // Could also check claim_adjusters table but keeping it simple for now
       }
 
       // Create pending action for approval
@@ -181,7 +141,7 @@ Draft a clear, professional response addressing their inquiry. The response shou
           draft_content: {
             to_email: email.recipient_email,
             to_name: email.recipient_name,
-            recipient_type: recipientType, // Include recipient type for filtering
+            recipient_type: recipientType,
             subject: suggestedSubject.trim(),
             body: draftResponse,
             original_subject: email.subject,
@@ -197,7 +157,6 @@ Draft a clear, professional response addressing their inquiry. The response shou
         throw new Error('Failed to save draft');
       }
 
-      // Also add a note to the claim activity
       await supabase
         .from('claim_updates')
         .insert({
@@ -212,10 +171,8 @@ Draft a clear, professional response addressing their inquiry. The response shou
       );
 
     } else if (action === 'draft_sms') {
-      // Draft an SMS message based on claim context
       const { recipientType, recipientPhone } = await req.json();
       
-      // Fetch claim data for context
       const { data: claim, error: claimError } = await supabase
         .from('claims')
         .select('*')
@@ -226,7 +183,6 @@ Draft a clear, professional response addressing their inquiry. The response shou
         throw new Error('Claim not found');
       }
 
-      // Get recent activity for context
       const { data: notes } = await supabase
         .from('claim_updates')
         .select('content, created_at')
@@ -234,18 +190,12 @@ Draft a clear, professional response addressing their inquiry. The response shou
         .order('created_at', { ascending: false })
         .limit(5);
 
-      // Get recent emails
       const { data: recentEmails } = await supabase
         .from('emails')
         .select('subject, body, sent_at')
         .eq('claim_id', claimId)
         .order('sent_at', { ascending: false })
         .limit(3);
-
-      const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
-      if (!lovableApiKey) {
-        throw new Error('LOVABLE_API_KEY not configured');
-      }
 
       const systemPrompt = `You are a professional public adjuster assistant for Freedom Claims. Draft a brief, professional SMS message.
 
@@ -271,39 +221,18 @@ GUIDELINES:
 
       const userPrompt = `Draft a brief SMS update for the ${recipientType || 'policyholder'} about this claim. Provide a helpful status update or next steps based on recent activity.`;
 
-      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${lovableApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature: 0.7,
-        }),
+      const aiResult = await generate({
+        task: 'copilot_drafting',
+        system: systemPrompt,
+        user: userPrompt,
+        claimId,
+        temperature: 0.7,
+        searchMode: 'off',
       });
+      console.log(`[process-claim-ai-action] draft_sms model=${aiResult.model}, cached=${aiResult.cached}`);
 
-      if (!aiResponse.ok) {
-        if (aiResponse.status === 429) {
-          throw new Error('Rate limit exceeded. Please try again later.');
-        }
-        if (aiResponse.status === 402) {
-          throw new Error('AI credits exhausted. Please add credits.');
-        }
-        const errorText = await aiResponse.text();
-        console.error('AI error:', aiResponse.status, errorText);
-        throw new Error('Failed to generate AI response');
-      }
+      const draftMessage = aiResult.text;
 
-      const aiData = await aiResponse.json();
-
-      const draftMessage = aiData.choices[0].message.content;
-
-      // Determine phone number
       let toNumber = recipientPhone;
       if (!toNumber) {
         if (recipientType === 'adjuster') {
@@ -313,7 +242,6 @@ GUIDELINES:
         }
       }
 
-      // Create pending action for approval
       const { data: pendingAction, error: insertError } = await supabase
         .from('claim_ai_pending_actions')
         .insert({
@@ -334,7 +262,6 @@ GUIDELINES:
         throw new Error('Failed to save SMS draft');
       }
 
-      // Add activity note
       await supabase
         .from('claim_updates')
         .insert({
@@ -349,7 +276,6 @@ GUIDELINES:
       );
 
     } else if (action === 'approve_and_send') {
-      // Fetch the pending action
       const { data: pendingAction, error: fetchError } = await supabase
         .from('claim_ai_pending_actions')
         .select('*')
@@ -365,20 +291,17 @@ GUIDELINES:
       if (pendingAction.action_type === 'email_response') {
         const draft = pendingAction.draft_content as any;
         
-        // Fetch claim to get policy number for CC email
         const { data: claim } = await supabase
           .from('claims')
           .select('policy_number, id')
           .eq('id', pendingAction.claim_id)
           .single();
 
-        // Build claim-specific email for CC
         const sanitizedPolicyNumber = claim?.policy_number 
           ? claim.policy_number.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
           : pendingAction.claim_id.slice(0, 8);
         const claimEmail = `claim-${sanitizedPolicyNumber}@freedomclaims.work`;
         
-        // Send the email via send-email function
         const emailPayload = {
           recipients: [{ email: draft.to_email, name: draft.to_name }],
           subject: draft.subject,
@@ -405,7 +328,6 @@ GUIDELINES:
           throw new Error('Failed to send email');
         }
 
-        // Update pending action status
         const { error: updateError } = await supabase
           .from('claim_ai_pending_actions')
           .update({
@@ -418,7 +340,6 @@ GUIDELINES:
           console.error('Failed to update pending action:', updateError);
         }
 
-        // Add activity note
         await supabase
           .from('claim_updates')
           .insert({
@@ -435,7 +356,6 @@ GUIDELINES:
       } else if (pendingAction.action_type === 'sms') {
         const draft = pendingAction.draft_content as any;
         
-        // Send SMS via send-sms function
         const smsResponse = await fetch(
           `${Deno.env.get('SUPABASE_URL')}/functions/v1/send-sms`,
           {
@@ -456,7 +376,6 @@ GUIDELINES:
           throw new Error('Failed to send SMS');
         }
 
-        // Update pending action status
         await supabase
           .from('claim_ai_pending_actions')
           .update({

@@ -1,3 +1,6 @@
+import { callWithTools } from "../_shared/ai/generate.ts";
+import { callVision } from "../_shared/ai/generate.ts";
+import { MODEL_VISION } from "../_shared/ai/modelRouter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,12 +18,10 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(chunks.join(''));
 }
 
-// Try simple text extraction for text-based files and as PDF fallback
 function extractPlainText(bytes: Uint8Array): string {
   const rawText = new TextDecoder("latin1").decode(bytes);
   const textParts: string[] = [];
   
-  // PDF BT/ET text extraction
   const btEtRegex = /BT\s([\s\S]*?)ET/g;
   let match;
   while ((match = btEtRegex.exec(rawText)) !== null) {
@@ -46,6 +47,32 @@ function extractPlainText(bytes: Uint8Array): string {
   return textParts.join(' ');
 }
 
+const extractClaimInfoTool = {
+  type: "function" as const,
+  function: {
+    name: "extract_claim_info",
+    description: "Extract structured claim information from a document",
+    parameters: {
+      type: "object",
+      properties: {
+        policyholder_name: { type: "string", description: "Full name of the policyholder/insured/claimant" },
+        street_address: { type: "string", description: "Street address only (e.g., '123 Main St'). Do NOT include city, state, or zip." },
+        city: { type: "string", description: "City name only" },
+        state: { type: "string", description: "Two-letter state abbreviation" },
+        zip_code: { type: "string", description: "ZIP code (5-digit or ZIP+4)" },
+        claim_number: { type: "string", description: "The insurance claim number" },
+        policy_number: { type: "string", description: "The insurance policy number" },
+        loss_type: { type: "string", description: "Type of loss/peril" },
+        loss_date: { type: "string", description: "Date of loss in YYYY-MM-DD format" },
+        insurance_company: { type: "string", description: "Name of the insurance company or carrier" },
+        loss_description: { type: "string", description: "Brief description of the loss under 200 characters" },
+      },
+      required: [],
+      additionalProperties: false,
+    },
+  },
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -62,25 +89,17 @@ Deno.serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
-
     const lowerName = file.name.toLowerCase();
     const arrayBuffer = await file.arrayBuffer();
     const isPdf = lowerName.endsWith(".pdf");
     const isImage = /\.(png|jpg|jpeg|webp|gif|bmp|tiff?)$/i.test(lowerName);
 
-    // Build the AI message content
     let messages: any[];
 
     if (isPdf || isImage) {
-      // Use vision/multimodal: send the file as base64 for the AI to read directly
       const base64 = arrayBufferToBase64(arrayBuffer);
       const mimeType = isPdf ? "application/pdf" : file.type || "image/jpeg";
       
-      // Also try text extraction as supplementary context
       let supplementaryText = "";
       if (isPdf) {
         supplementaryText = extractPlainText(new Uint8Array(arrayBuffer));
@@ -95,19 +114,12 @@ Deno.serve(async (req) => {
         {
           role: "user",
           content: [
-            {
-              type: "image_url",
-              image_url: { url: `data:${mimeType};base64,${base64}` }
-            },
-            {
-              type: "text",
-              text: `Extract all claim information from this document.${supplementaryText ? `\n\nAdditional extracted text for reference:\n${supplementaryText}` : ''}`
-            }
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
+            { type: "text", text: `Extract all claim information from this document.${supplementaryText ? `\n\nAdditional extracted text for reference:\n${supplementaryText}` : ''}` }
           ]
         }
       ];
     } else {
-      // Text-based files (doc, docx, txt, csv)
       let extractedText = "";
       const bytes = new Uint8Array(arrayBuffer);
       
@@ -148,122 +160,40 @@ Deno.serve(async (req) => {
       ];
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages,
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "extract_claim_info",
-              description: "Extract structured claim information from a document",
-              parameters: {
-                type: "object",
-                properties: {
-                  policyholder_name: {
-                    type: "string",
-                    description: "Full name of the policyholder/insured/claimant"
-                  },
-                  street_address: {
-                    type: "string",
-                    description: "Street address only (e.g., '123 Main St' or '456 Oak Ave Apt 2'). Do NOT include city, state, or zip."
-                  },
-                  city: {
-                    type: "string",
-                    description: "City name only (e.g., 'Houston', 'Manahawkin')"
-                  },
-                  state: {
-                    type: "string",
-                    description: "Two-letter state abbreviation (e.g., 'TX', 'NJ', 'FL')"
-                  },
-                  zip_code: {
-                    type: "string",
-                    description: "ZIP code (5-digit or ZIP+4 format, e.g., '08050' or '77001-1234')"
-                  },
-                  claim_number: {
-                    type: "string",
-                    description: "The insurance claim number"
-                  },
-                  policy_number: {
-                    type: "string",
-                    description: "The insurance policy number"
-                  },
-                  loss_type: {
-                    type: "string",
-                    description: "Type of loss/peril (e.g., wind, hail, water, fire, theft, vehicle impact)"
-                  },
-                  loss_date: {
-                    type: "string",
-                    description: "Date of loss in YYYY-MM-DD format"
-                  },
-                  insurance_company: {
-                    type: "string",
-                    description: "Name of the insurance company or carrier. Look for logos, letterheads, 'Insured By:', company names like State Farm, Allstate, USAA, Liberty Mutual, Travelers, etc. This is the company providing coverage, NOT the agent or producer."
-                  },
-                  loss_description: {
-                    type: "string",
-                    description: "Brief description of the loss or damage under 200 characters"
-                  }
-                },
-                required: [],
-                additionalProperties: false
-              }
-            }
-          }
-        ],
-        tool_choice: { type: "function", function: { name: "extract_claim_info" } },
-      }),
+    // Use callWithTools from shared layer
+    const result = await callWithTools({
+      model: MODEL_VISION,
+      messages,
+      tools: [extractClaimInfoTool],
+      toolChoice: { type: "function", function: { name: "extract_claim_info" } },
     });
+    console.log(`[extract-claim-info] model=${result.model}`);
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const errText = await response.text();
-      console.error("AI gateway error:", response.status, errText);
-      throw new Error("AI extraction failed");
-    }
-
-    const aiResult = await response.json();
-    
     let extracted: any = {};
-    const toolCall = aiResult.choices?.[0]?.message?.tool_calls?.[0];
-    if (toolCall?.function?.arguments) {
+    const toolCall = result.toolCalls?.[0];
+    if (toolCall?.arguments) {
       try {
-        extracted = JSON.parse(toolCall.function.arguments);
+        extracted = JSON.parse(toolCall.arguments);
       } catch {
         console.error("Failed to parse tool call arguments");
       }
     }
 
-    // Normalize casing helper: convert ALL CAPS to Title Case
+    // Normalize casing helper
     function normalizeCase(value: string): string {
-      // If more than half the alpha chars are uppercase, it's likely ALL CAPS
       const alphaChars = value.replace(/[^a-zA-Z]/g, '');
       if (alphaChars.length < 2) return value;
       const upperCount = (value.match(/[A-Z]/g) || []).length;
-      if (upperCount / alphaChars.length < 0.7) return value; // already mixed case
+      if (upperCount / alphaChars.length < 0.7) return value;
 
       return value
         .toLowerCase()
         .replace(/(?:^|\s|[-/])\S/g, (ch) => ch.toUpperCase());
     }
 
-    // Fields that should be normalized to title case
     const titleCaseFields = ['policyholder_name', 'street_address', 'city', 'insurance_company', 'loss_type', 'loss_description'];
-    // Fields that should stay uppercase (abbreviations, codes)
     const upperFields = ['state'];
 
-    // Clean up empty/placeholder strings and normalize casing
     for (const key of Object.keys(extracted)) {
       const val = extracted[key];
       if (!val || typeof val !== 'string' || val.trim() === "" || 
@@ -272,7 +202,6 @@ Deno.serve(async (req) => {
         delete extracted[key];
         continue;
       }
-      // Normalize casing for appropriate fields
       if (titleCaseFields.includes(key)) {
         extracted[key] = normalizeCase(val);
       } else if (upperFields.includes(key)) {
