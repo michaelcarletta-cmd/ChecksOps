@@ -6261,6 +6261,16 @@ Be specific, professional, and provide communications that are ready to copy and
         engineerRebuttalSourceTextLength = engineerTextForDismantler.length;
         engineerRebuttalSourceTextOrigin = engineerSourceResolution.sourceOrigin;
         engineerRebuttalUsedEngineerReportText = engineerSourceResolution.usedEngineerReportText;
+
+        // CRITICAL: Clear pdfContent to force text-only path for AI call.
+        // The raw base64 PDF can be 700K+ tokens which exceeds all model TPM limits.
+        // We already have the extracted+truncated text, so vision mode is unnecessary.
+        if (pdfContent) {
+          console.log(`[darwin] Clearing pdfContent (${Math.round(pdfContent.length / 1024)}KB base64) for engineer_report_rebuttal — using extracted text instead (${engineerTextForDismantler.length} chars)`);
+          pdfContent = undefined;
+          if (!additionalContext) additionalContext = {};
+          additionalContext._useTextOnly = true;
+        }
         scenarioRulePackLoaded = getRulePackLoaded(engineerRebuttalPrimaryScenario);
         scenarioSuppressedRulePacks = getSuppressedRulePacks(engineerRebuttalPrimaryScenario);
         scenarioDetectionMatchedTerms = detectLowSlopePhysicalMechanism(engineerTextForDismantler).matchedTerms;
@@ -8189,6 +8199,14 @@ CRITICAL: This is the actual text content from key documents. Use this to cite s
         if (!autoDraftDismantlerSource || autoDraftDismantlerSource.trim().length < 500) {
           console.error(`[darwin] Auto-draft engineer rebuttal blocked — source resolution: origin="${autoDraftSourceResolution.sourceOrigin}", textLen=${autoDraftDismantlerSource?.length || 0}`);
           throw new Error('Engineer rebuttal blocked: no usable engineer report text found. Please ensure the engineer report PDF has been uploaded to the claim and its text has been extracted. You can also try pasting the report content directly.');
+        }
+
+        // CRITICAL: Clear pdfContent to force text-only path — same as engineer_report_rebuttal
+        if (pdfContent) {
+          console.log(`[darwin] Clearing pdfContent for auto_draft_rebuttal — using extracted text instead (${autoDraftDismantlerSource.length} chars)`);
+          pdfContent = undefined;
+          if (!additionalContext) additionalContext = {};
+          additionalContext._useTextOnly = true;
         }
 
         const autoDraftDismantler = runEngineerReportDismantler(autoDraftDismantlerSource);
