@@ -1,11 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { generate } from "../_shared/ai/generate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
 
-// Status values that trigger RD follow-ups (requesting RD release from carrier)
 const RD_REQUEST_STATUSES = [
   'Recoverable Depreciation Requested',
   'RD Requested',
@@ -13,7 +13,6 @@ const RD_REQUEST_STATUSES = [
   'RD Pending',
 ];
 
-// Status values that indicate RD was released (check is on the way)
 const RD_RELEASED_STATUSES = [
   'Waiting on Recoverable Depreciation',
   'Waiting on RD Check',
@@ -26,7 +25,6 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Validate CRON_SECRET for security
   const cronSecret = Deno.env.get('CRON_SECRET');
   const providedSecret = req.headers.get('x-cron-secret');
   
@@ -46,7 +44,6 @@ Deno.serve(async (req) => {
 
     console.log("Processing Recoverable Depreciation follow-ups...");
 
-    // Find all automations with RD follow-ups enabled and claims in RD status
     const { data: dueFollowUps, error: fetchError } = await supabase
       .from('claim_automations')
       .select(`
@@ -74,14 +71,12 @@ Deno.serve(async (req) => {
       throw fetchError;
     }
 
-    // Filter to only claims in RD-related statuses and check for status changes
     const rdClaims: any[] = [];
     
     for (const automation of (dueFollowUps || [])) {
       const claim = (automation as any).claims;
       const claimStatus = claim?.status?.toLowerCase() || '';
       
-      // Check if claim has moved to "Waiting on RD" status (RD was released)
       const rdWasReleased = RD_RELEASED_STATUSES.some(s => 
         claimStatus.includes(s.toLowerCase()) || s.toLowerCase().includes(claimStatus)
       );
@@ -89,8 +84,6 @@ Deno.serve(async (req) => {
       if (rdWasReleased) {
         console.log(`Claim ${claim.claim_number}: Status changed to waiting on RD check - stopping RD request follow-ups`);
         
-        // Stop RD request follow-ups since RD has been released
-        // Only auto-enable check tracking if the user hasn't explicitly disabled it
         const enableCheckTracking = automation.rd_check_tracking_enabled !== false;
         await supabase
           .from('claim_automations')
@@ -103,7 +96,6 @@ Deno.serve(async (req) => {
           })
           .eq('id', automation.id);
         
-        // Add activity note
         await supabase
           .from('claim_updates')
           .insert({
@@ -115,7 +107,6 @@ Deno.serve(async (req) => {
         continue;
       }
       
-      // Check if claim is still in RD request status
       const isInRdRequestStatus = RD_REQUEST_STATUSES.some(s => 
         claimStatus.includes(s.toLowerCase()) || s.toLowerCase().includes(claimStatus)
       );
@@ -132,11 +123,9 @@ Deno.serve(async (req) => {
     for (const automation of rdClaims) {
       const claim = (automation as any).claims;
       
-      // RD follow-ups go to the adjuster, or fall back to the carrier's email
       let recipientEmail = claim.adjuster_email;
       let recipientName = claim.adjuster_name || 'Claims Department';
 
-      // If no adjuster on the claim record, check the claim_adjusters table
       if (!recipientEmail) {
         const { data: claimAdjuster } = await supabase
           .from('claim_adjusters')
@@ -149,12 +138,10 @@ Deno.serve(async (req) => {
         if (claimAdjuster?.adjuster_email) {
           recipientEmail = claimAdjuster.adjuster_email;
           recipientName = claimAdjuster.adjuster_name || 'Claims Department';
-          console.log(`Claim ${claim.claim_number}: Using adjuster from claim_adjusters: ${recipientEmail}`);
         }
       }
 
       if (!recipientEmail && claim.insurance_company) {
-        // Look up carrier email from insurance_companies table
         const { data: carrier } = await supabase
           .from('insurance_companies')
           .select('email, name')
@@ -165,19 +152,11 @@ Deno.serve(async (req) => {
         if (carrier?.email) {
           recipientEmail = carrier.email;
           recipientName = carrier.name || claim.insurance_company;
-          console.log(`Claim ${claim.claim_number}: No adjuster email, using carrier email: ${recipientEmail}`);
         }
       }
 
       if (!recipientEmail) {
         console.log(`Claim ${claim.claim_number}: No adjuster or carrier email found for RD follow-up, skipping`);
-        continue;
-      }
-
-      // Generate RD-specific follow-up email using AI
-      const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
-      if (!lovableApiKey) {
-        console.error('LOVABLE_API_KEY not configured');
         continue;
       }
 
@@ -203,10 +182,7 @@ This email is specifically about Recoverable Depreciation (RD) release. The poli
 GUIDELINES:
 1. Be professional and courteous but persistent
 2. Reference the claim number prominently
-3. Ask specifically about:
-   - Confirmation of receipt of invoices/documentation
-   - Status of RD release processing
-   - Expected timeline for RD payment
+3. Ask specifically about confirmation of receipt, RD release processing status, and expected timeline
 4. Keep it concise (under 150 words)
 5. If this is follow-up #2 or later, mention that you've previously requested this information
 6. Sign off as "Freedom Claims Team"
@@ -217,38 +193,23 @@ GUIDELINES:
         ? `Generate the first RD follow-up email requesting confirmation that invoices were received and asking when recoverable depreciation will be released.`
         : `Generate follow-up #${followUpNumber} for RD release. Previous follow-ups have not received a response. Politely but firmly request an update on the recoverable depreciation release status.`;
 
-      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${lovableApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-        }),
+      const aiResult = await generate({
+        task: 'copilot_drafting',
+        system: systemPrompt,
+        user: userPrompt,
+        claimId: claim.id,
+        searchMode: 'off',
       });
+      console.log(`[process-rd-follow-ups] model=${aiResult.model}, cached=${aiResult.cached}`);
 
-      const aiData = await aiResponse.json();
-      
-      if (!aiResponse.ok) {
-        console.error('AI gateway error:', aiData);
-        continue;
-      }
-
-      const emailBody = aiData.choices[0].message.content;
+      const emailBody = aiResult.text;
       const subject = `Recoverable Depreciation Status - Claim ${claim.claim_number || claim.id.slice(0, 8)}`;
 
-      // Build claim email for CC
       const sanitizedPolicyNumber = claim.policy_number 
         ? claim.policy_number.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
         : claim.id.slice(0, 8);
       const claimEmail = `claim-${sanitizedPolicyNumber}@freedomclaims.work`;
 
-      // Send the RD follow-up email
       const sendResponse = await fetch(
         `${Deno.env.get('SUPABASE_URL')}/functions/v1/send-email`,
         {
@@ -275,7 +236,6 @@ GUIDELINES:
 
       console.log(`RD Follow-up #${followUpNumber} sent for claim ${claim.claim_number} to ${recipientEmail}`);
 
-      // Update the automation record
       const nextFollowUpAt = new Date();
       nextFollowUpAt.setDate(nextFollowUpAt.getDate() + automation.rd_follow_up_interval_days);
 
@@ -288,7 +248,6 @@ GUIDELINES:
         })
         .eq('id', automation.id);
 
-      // Add detailed activity note to claim
       await supabase
         .from('claim_updates')
         .insert({
@@ -297,7 +256,6 @@ GUIDELINES:
           update_type: 'rd_follow_up',
         });
 
-      // Also add a note entry for easy visibility
       await supabase
         .from('claim_notes')
         .insert({
@@ -305,11 +263,9 @@ GUIDELINES:
           content: `[Darwin Auto] RD Follow-up #${followUpNumber} sent to ${recipientName} at ${claim.insurance_company || 'carrier'}. Awaiting response on invoice receipt and RD release timeline.`,
         });
 
-      // Create/update task for tracking adjuster response
       const taskDueDate = new Date();
-      taskDueDate.setDate(taskDueDate.getDate() + Math.min(automation.rd_follow_up_interval_days, 3)); // Due before next follow-up
+      taskDueDate.setDate(taskDueDate.getDate() + Math.min(automation.rd_follow_up_interval_days, 3));
       
-      // Check for existing RD tracking task
       const { data: existingTask } = await supabase
         .from('tasks')
         .select('id')
@@ -321,7 +277,6 @@ GUIDELINES:
         .single();
 
       if (existingTask) {
-        // Update existing task with new follow-up info
         await supabase
           .from('tasks')
           .update({
@@ -331,7 +286,6 @@ GUIDELINES:
           })
           .eq('id', existingTask.id);
       } else {
-        // Create new task
         await supabase
           .from('tasks')
           .insert({

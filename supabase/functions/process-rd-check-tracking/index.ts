@@ -1,11 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { generate } from "../_shared/ai/generate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
 
-// Status values indicating waiting on RD check
 const WAITING_RD_CHECK_STATUSES = [
   'Waiting on Recoverable Depreciation',
   'Waiting on RD Check',
@@ -18,7 +18,6 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Validate CRON_SECRET for security
   const cronSecret = Deno.env.get('CRON_SECRET');
   const providedSecret = req.headers.get('x-cron-secret');
   
@@ -38,7 +37,6 @@ Deno.serve(async (req) => {
 
     console.log("Processing RD check tracking...");
 
-    // Get global settings for RD check tracking
     const { data: globalSettings } = await supabase
       .from('global_automation_settings')
       .select('setting_value')
@@ -52,7 +50,6 @@ Deno.serve(async (req) => {
       rd_check_max_follow_ups: 5,
     };
 
-    // Find all claims with RD check tracking enabled that are overdue
     const { data: overdueChecks, error: fetchError } = await supabase
       .from('claim_automations')
       .select(`
@@ -88,36 +85,25 @@ Deno.serve(async (req) => {
       const releasedAt = new Date(automation.rd_check_released_at);
       const daysSinceRelease = Math.floor((now.getTime() - releasedAt.getTime()) / (1000 * 60 * 60 * 24));
       
-      // Check if we've exceeded max follow-ups
       if (automation.rd_check_follow_up_count >= rdSettings.rd_check_max_follow_ups) {
         console.log(`Claim ${claim.claim_number}: Max RD check follow-ups reached`);
         continue;
       }
 
-      // Only follow up if past expected date and it's time for next follow-up
       const expectedDays = rdSettings.rd_check_expected_days;
       if (daysSinceRelease < expectedDays) {
-        console.log(`Claim ${claim.claim_number}: Still within expected window (${daysSinceRelease}/${expectedDays} days)`);
         continue;
       }
 
-      // Check if it's time for next follow-up
       if (automation.rd_check_next_follow_up_at && new Date(automation.rd_check_next_follow_up_at) > now) {
         continue;
       }
 
-      // Determine if this is overdue (past alert threshold)
       const isOverdue = daysSinceRelease >= rdSettings.rd_check_alert_after_days;
       const followUpCount = automation.rd_check_follow_up_count + 1;
 
-      // Send notification to policyholder to check their mail
-      const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
-      if (!lovableApiKey) {
-        console.error('LOVABLE_API_KEY not configured');
-        continue;
-      }
-
-      const systemPrompt = `You are a professional public adjuster assistant for Freedom Claims. Generate a brief, friendly follow-up about the Recoverable Depreciation check status.
+      // Generate policyholder message
+      const policyholderPrompt = `You are a professional public adjuster assistant for Freedom Claims. Generate a brief, friendly follow-up about the Recoverable Depreciation check status.
 
 CLAIM CONTEXT:
 - Claim Number: ${claim.claim_number || 'N/A'}
@@ -130,7 +116,6 @@ This is check status follow-up #${followUpCount}.
 ${isOverdue ? 'NOTE: This check is now OVERDUE based on expected delivery timeframe.' : ''}
 
 PURPOSE:
-This is a follow-up to ensure the RD check has not been lost in transit.
 1. Ask if they've received the Recoverable Depreciation check
 2. If not received yet, suggest checking mail carefully
 3. If overdue, mention we can request a trace or reissue from the carrier
@@ -143,32 +128,18 @@ GUIDELINES:
 5. Sign off as "Freedom Claims Team"
 6. Use plain text only`;
 
-      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${lovableApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: isOverdue 
-              ? `Generate a follow-up asking if the RD check has been received. It's now ${daysSinceRelease} days since release - mention we can contact the carrier to trace or reissue if needed.`
-              : `Generate a friendly check-in asking if the RD check has arrived yet.` 
-            }
-          ],
-        }),
+      const policyholderResult = await generate({
+        task: 'copilot_drafting',
+        system: policyholderPrompt,
+        user: isOverdue 
+          ? `Generate a follow-up asking if the RD check has been received. It's now ${daysSinceRelease} days since release - mention we can contact the carrier to trace or reissue if needed.`
+          : `Generate a friendly check-in asking if the RD check has arrived yet.`,
+        claimId: claim.id,
+        searchMode: 'off',
       });
+      console.log(`[process-rd-check-tracking] policyholder model=${policyholderResult.model}, cached=${policyholderResult.cached}`);
 
-      const aiData = await aiResponse.json();
-      
-      if (!aiResponse.ok) {
-        console.error('AI gateway error:', aiData);
-        continue;
-      }
-
-      const messageBody = aiData.choices[0].message.content;
+      const messageBody = policyholderResult.text;
       const recipientEmail = claim.policyholder_email;
       const adjusterEmail = claim.adjuster_email;
 
@@ -202,14 +173,13 @@ GUIDELINES:
         );
 
         if (!sendResponse.ok) {
-          const errorText = await sendResponse.text();
-          console.error(`Failed to send RD check follow-up to policyholder for claim ${claim.claim_number}:`, errorText);
+          console.error(`Failed to send RD check follow-up to policyholder for claim ${claim.claim_number}:`, await sendResponse.text());
         } else {
           console.log(`RD Check follow-up #${followUpCount} sent to policyholder for claim ${claim.claim_number}`);
         }
       }
 
-      // Send to insurance adjuster if email available
+      // Send to adjuster
       if (adjusterEmail) {
         const carrierPrompt = `You are a professional public adjuster assistant. Generate a brief, professional follow-up to the insurance adjuster about the RD check status.
 
@@ -221,8 +191,7 @@ CLAIM CONTEXT:
 ${isOverdue ? 'NOTE: This check is now OVERDUE.' : ''}
 
 PURPOSE:
-Follow up with the adjuster to confirm:
-1. The RD check was mailed as expected
+1. Confirm the RD check was mailed as expected
 2. Request tracking info if available
 3. ${isOverdue ? 'Request a trace or potential reissue since the check appears lost' : 'Confirm expected delivery timeline'}
 
@@ -232,53 +201,38 @@ GUIDELINES:
 3. Keep under 100 words
 4. Sign off as "Freedom Claims Team"`;
 
-        const carrierAiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${lovableApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'google/gemini-2.5-flash',
-            messages: [
-              { role: 'system', content: carrierPrompt },
-              { role: 'user', content: isOverdue 
-                ? `Generate a professional follow-up requesting a trace or reissue for the overdue RD check.`
-                : `Generate a professional check-in confirming the RD check was mailed.`
-              }
-            ],
-          }),
+        const carrierResult = await generate({
+          task: 'copilot_drafting',
+          system: carrierPrompt,
+          user: isOverdue 
+            ? `Generate a professional follow-up requesting a trace or reissue for the overdue RD check.`
+            : `Generate a professional check-in confirming the RD check was mailed.`,
+          claimId: claim.id,
+          searchMode: 'off',
         });
 
-        const carrierAiData = await carrierAiResponse.json();
-        
-        if (carrierAiResponse.ok) {
-          const carrierMessage = carrierAiData.choices[0].message.content;
-          
-          const carrierSendResponse = await fetch(
-            `${Deno.env.get('SUPABASE_URL')}/functions/v1/send-email`,
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                recipients: [{ email: adjusterEmail, name: claim.adjuster_name || 'Adjuster', type: 'rd_check_follow_up' }],
-                subject: `RD Check Status Inquiry - Claim ${claim.claim_number}`,
-                body: carrierMessage,
-                claimId: claim.id,
-                claimEmailCc: claimEmail,
-              }),
-            }
-          );
-
-          if (!carrierSendResponse.ok) {
-            const errorText = await carrierSendResponse.text();
-            console.error(`Failed to send RD check follow-up to adjuster for claim ${claim.claim_number}:`, errorText);
-          } else {
-            console.log(`RD Check follow-up #${followUpCount} sent to adjuster for claim ${claim.claim_number}`);
+        const carrierSendResponse = await fetch(
+          `${Deno.env.get('SUPABASE_URL')}/functions/v1/send-email`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              recipients: [{ email: adjusterEmail, name: claim.adjuster_name || 'Adjuster', type: 'rd_check_follow_up' }],
+              subject: `RD Check Status Inquiry - Claim ${claim.claim_number}`,
+              body: carrierResult.text,
+              claimId: claim.id,
+              claimEmailCc: claimEmail,
+            }),
           }
+        );
+
+        if (!carrierSendResponse.ok) {
+          console.error(`Failed to send RD check follow-up to adjuster for claim ${claim.claim_number}:`, await carrierSendResponse.text());
+        } else {
+          console.log(`RD Check follow-up #${followUpCount} sent to adjuster for claim ${claim.claim_number}`);
         }
       }
 
@@ -295,7 +249,6 @@ GUIDELINES:
         })
         .eq('id', automation.id);
 
-      // Add detailed activity note
       const recipientsList = [claim.policyholder_name];
       if (adjusterEmail) recipientsList.push(claim.adjuster_name || 'Adjuster');
       
@@ -307,7 +260,6 @@ GUIDELINES:
           update_type: 'rd_check_follow_up',
         });
 
-      // Add claim note for visibility
       await supabase
         .from('claim_notes')
         .insert({
@@ -315,11 +267,9 @@ GUIDELINES:
           content: `[Darwin Auto] RD Check Follow-up #${followUpCount} sent. ${isOverdue ? 'Check is overdue (' + daysSinceRelease + ' days) - requested trace/reissue from carrier.' : 'Checking with policyholder and carrier on check receipt status.'}`,
         });
 
-      // Create/update task for tracking check receipt
       const taskDueDate = new Date();
       taskDueDate.setDate(taskDueDate.getDate() + rdSettings.rd_check_follow_up_interval_days);
       
-      // Check for existing RD check tracking task
       const { data: existingTask } = await supabase
         .from('tasks')
         .select('id')

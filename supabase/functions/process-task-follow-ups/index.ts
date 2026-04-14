@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { generate } from "../_shared/ai/generate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,7 +11,6 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Validate CRON_SECRET for security
   const cronSecret = Deno.env.get('CRON_SECRET');
   const providedSecret = req.headers.get('x-cron-secret');
   
@@ -30,7 +30,6 @@ Deno.serve(async (req) => {
 
     console.log("Processing task follow-ups...");
 
-    // Find all tasks with follow-ups due
     const { data: dueTasks, error: fetchError } = await supabase
       .from('tasks')
       .select(`
@@ -64,7 +63,6 @@ Deno.serve(async (req) => {
     for (const task of dueTasks || []) {
       const claim = (task as any).claims;
       
-      // Check if we've exceeded max follow-ups
       if (task.follow_up_current_count >= task.follow_up_max_count) {
         console.log(`Task "${task.title}": Max follow-ups reached, stopping`);
         
@@ -79,19 +77,11 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Determine recipient - prefer adjuster email
       let recipientEmail = claim.adjuster_email || claim.policyholder_email;
       let recipientName = claim.adjuster_name || claim.policyholder_name || 'there';
 
       if (!recipientEmail) {
         console.log(`Task "${task.title}": No recipient email found, skipping`);
-        continue;
-      }
-
-      // Generate follow-up email using AI
-      const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
-      if (!lovableApiKey) {
-        console.error('LOVABLE_API_KEY not configured');
         continue;
       }
 
@@ -120,38 +110,23 @@ GUIDELINES:
 6. Sign off as "Freedom Claims Team"
 7. Use plain text only - no markdown formatting`;
 
-      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${lovableApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Generate a follow-up email for the task: "${task.title}"` }
-          ],
-        }),
+      const aiResult = await generate({
+        task: 'copilot_drafting',
+        system: systemPrompt,
+        user: `Generate a follow-up email for the task: "${task.title}"`,
+        claimId: claim.id,
+        searchMode: 'off',
       });
+      console.log(`[process-task-follow-ups] model=${aiResult.model}, cached=${aiResult.cached}`);
 
-      const aiData = await aiResponse.json();
-      
-      if (!aiResponse.ok) {
-        console.error('AI gateway error:', aiData);
-        continue;
-      }
-
-      const emailBody = aiData.choices[0].message.content;
+      const emailBody = aiResult.text;
       const subject = `Follow-up: ${task.title} - Claim ${claim.claim_number || claim.id.slice(0, 8)}`;
 
-      // Build claim email for CC
       const sanitizedPolicyNumber = claim.policy_number 
         ? claim.policy_number.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
         : claim.id.slice(0, 8);
       const claimEmail = `claim-${sanitizedPolicyNumber}@freedomclaims.work`;
 
-      // Send the follow-up email
       const sendResponse = await fetch(
         `${Deno.env.get('SUPABASE_URL')}/functions/v1/send-email`,
         {
@@ -178,11 +153,9 @@ GUIDELINES:
 
       console.log(`Follow-up #${followUpNumber} sent for task "${task.title}"`);
 
-      // Update the task record - reset due_date so it doesn't show as overdue
       const nextFollowUpAt = new Date();
       nextFollowUpAt.setDate(nextFollowUpAt.getDate() + task.follow_up_interval_days);
       
-      // Reset due_date to the next follow-up date so the task doesn't appear overdue
       const newDueDate = nextFollowUpAt.toISOString().split('T')[0];
 
       await supabase
@@ -191,11 +164,10 @@ GUIDELINES:
           follow_up_current_count: followUpNumber,
           follow_up_last_sent_at: new Date().toISOString(),
           follow_up_next_at: nextFollowUpAt.toISOString(),
-          due_date: newDueDate, // Reset due date when AI sends follow-up
+          due_date: newDueDate,
         })
         .eq('id', task.id);
 
-      // Add activity note to claim
       await supabase
         .from('claim_updates')
         .insert({
@@ -204,7 +176,6 @@ GUIDELINES:
           update_type: 'task_follow_up',
         });
 
-      // Create next follow-up task if not at max
       if (followUpNumber < task.follow_up_max_count) {
         const nextTaskDueDate = new Date();
         nextTaskDueDate.setDate(nextTaskDueDate.getDate() + task.follow_up_interval_days);
