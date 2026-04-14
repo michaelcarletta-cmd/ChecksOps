@@ -1458,7 +1458,6 @@ function CheckDetailPanel({
                                 }) && (
                                 <div style={{ marginTop: g(0.014) }}>
                                   <p style={{ fontSize: f(0.034), fontWeight: 700, color: "#111111" }}>Freedom Adjustment</p>
-                                  <p style={{ fontSize: f(0.026), fontWeight: 600, color: "#111111" }}>By: Michael Carletta</p>
                                   {endorsementRows.filter((e) => {
                                     const n = e.payee_name.toLowerCase();
                                     return (n.includes("freedom") || n.includes("carletta")) && e.signature_image_url;
