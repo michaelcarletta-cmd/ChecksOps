@@ -10205,10 +10205,21 @@ Return the full revised ${docLabel} with the requested changes applied:`;
         }
       ];
     } else {
-      // Standard text-only format
+      // Standard text-only format — apply safety truncation to prevent TPM overflow
+      const MAX_PROMPT_CHARS = 100000; // ~25K tokens safety cap
+      let safeUserPrompt = userPrompt;
+      if (userPrompt.length > MAX_PROMPT_CHARS) {
+        console.warn(`[darwin] Truncating userPrompt from ${userPrompt.length} to ${MAX_PROMPT_CHARS} chars to prevent token overflow`);
+        safeUserPrompt = userPrompt.substring(0, MAX_PROMPT_CHARS) + '\n\n[... content truncated for token limits ...]';
+      }
+      let safeSystemPrompt = systemPrompt;
+      if (systemPrompt.length > MAX_PROMPT_CHARS) {
+        console.warn(`[darwin] Truncating systemPrompt from ${systemPrompt.length} to ${MAX_PROMPT_CHARS} chars`);
+        safeSystemPrompt = systemPrompt.substring(0, MAX_PROMPT_CHARS) + '\n\n[... truncated ...]';
+      }
       messages = [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
+        { role: 'system', content: safeSystemPrompt },
+        { role: 'user', content: safeUserPrompt }
       ];
     }
 
