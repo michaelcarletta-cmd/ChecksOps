@@ -143,7 +143,7 @@ IMPORTANT:
         }
       }
 
-      const raw = await callAI(apiKey, systemPrompt, photoInfo || "No photo data available. Return empty array [].");
+      const raw = await callAI(systemPrompt, photoInfo || "No photo data available. Return empty array [].");
       const findings = parseJSON(raw);
 
       return new Response(JSON.stringify({ success: true, photo_findings: Array.isArray(findings) ? findings : [] }), {
@@ -199,7 +199,7 @@ Measurement sections available: ${JSON.stringify(Object.keys(ctx.measurement_rep
   return s && typeof s === "object" && Object.keys(s).length > 0 && k !== "notes";
 }))}`;
 
-      const raw = await callAI(apiKey, systemPrompt, userPrompt);
+      const raw = await callAI(systemPrompt, userPrompt);
       let classification = parseJSON(raw);
       
       // POST-PROCESSING GUARDRAIL: Force-correct scope confidence based on hard evidence
@@ -444,7 +444,7 @@ IMPORTANT:
         }).join("\n\n");
       }
 
-      const findingsRaw = await callAI(apiKey, findingsSystemPrompt, photoInfo || `No photos available. Use description: "${description}". Return findings based on described damage.`);
+      const findingsRaw = await callAI(findingsSystemPrompt, photoInfo || `No photos available. Use description: "${description}". Return findings based on described damage.`);
       const photoFindings = Array.isArray(parseJSON(findingsRaw)) ? parseJSON(findingsRaw) : [];
       console.log(`Photo findings extracted: ${photoFindings.length}`);
 
@@ -481,7 +481,7 @@ Measurement sections: ${JSON.stringify(Object.keys(parsedMeasurement.sections).f
       }))}
 ${measurementRawText ? `\nMeasurement report text (first 5000 chars):\n${measurementRawText.substring(0, 5000)}` : ""}`;
 
-      const classifyRaw = await callAI(apiKey, classifySystemPrompt, classifyUserPrompt);
+      const classifyRaw = await callAI(classifySystemPrompt, classifyUserPrompt);
       let scopeClassification = parseJSON(classifyRaw);
 
       // Post-processing guardrail
