@@ -528,13 +528,14 @@ export function ClaimSMS({ claimId, policyholderPhone }: ClaimSMSProps) {
             <div className="flex items-center justify-between">
               <Label htmlFor="message">Message</Label>
               <div className="flex items-center gap-2">
-                <MergeFieldButtons compact onInsert={(field) => setNewMessage(prev => prev + field)} />
+                <MergeFieldButtons compact onInsert={insertAtCursor} />
                 <span className="text-xs text-muted-foreground">
                   {newMessage.length} chars
                 </span>
               </div>
             </div>
             <Textarea
+              ref={smsTextareaRef}
               id="message"
               placeholder="Type your message here..."
               value={newMessage}

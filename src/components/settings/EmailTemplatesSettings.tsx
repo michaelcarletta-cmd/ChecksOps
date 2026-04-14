@@ -262,9 +262,10 @@ export const EmailTemplatesSettings = () => {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label>Email Body *</Label>
-                    <MergeFieldButtons onInsert={(field) => setForm({ ...form, body: form.body + field })} />
+                    <MergeFieldButtons onInsert={insertBodyAtCursor} />
                   </div>
                   <Textarea
+                    ref={emailBodyRef}
                     value={form.body}
                     onChange={(e) => setForm({ ...form, body: e.target.value })}
                     placeholder="Dear ${policyholder},&#10;&#10;We wanted to provide you with an update..."

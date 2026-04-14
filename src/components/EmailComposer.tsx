@@ -607,9 +607,10 @@ export function EmailComposer({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="body">Message</Label>
-              <MergeFieldButtons compact onInsert={(field) => setBody(prev => prev + field)} />
+              <MergeFieldButtons compact onInsert={insertBodyAtCursor} />
             </div>
             <Textarea
+              ref={bodyTextareaRef}
               id="body"
               placeholder="Type your message here..."
               value={body}

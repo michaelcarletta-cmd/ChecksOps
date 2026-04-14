@@ -127,7 +127,20 @@ export default function SMSTemplatesSettings() {
   };
 
   const insertMergeField = (field: string) => {
-    setFormData((prev) => ({ ...prev, body: prev.body + field }));
+    const textarea = smsBodyRef.current;
+    if (textarea) {
+      const start = textarea.selectionStart ?? formData.body.length;
+      const end = textarea.selectionEnd ?? formData.body.length;
+      const newBody = formData.body.slice(0, start) + field + formData.body.slice(end);
+      setFormData((prev) => ({ ...prev, body: newBody }));
+      requestAnimationFrame(() => {
+        textarea.focus();
+        const newPos = start + field.length;
+        textarea.setSelectionRange(newPos, newPos);
+      });
+    } else {
+      setFormData((prev) => ({ ...prev, body: prev.body + field }));
+    }
   };
 
   const groupedTemplates = templates?.reduce((acc, template) => {
@@ -205,6 +218,7 @@ export default function SMSTemplatesSettings() {
                   <MergeFieldButtons onInsert={(field) => insertMergeField(field)} />
                 </div>
                 <Textarea
+                  ref={smsBodyRef}
                   id="body"
                   value={formData.body}
                   onChange={(e) => setFormData((prev) => ({ ...prev, body: e.target.value }))}
