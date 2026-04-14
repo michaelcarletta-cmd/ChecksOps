@@ -25,6 +25,8 @@ interface ClaimFile {
   folder_id: string | null;
   folder_name?: string;
   uploaded_at: string | null;
+  extracted_text?: string | null;
+  clean_text?: string | null;
 }
 
 interface AnalysisExecutionStep {
@@ -71,7 +73,7 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
         // Load PDF files from claim
         const { data: filesData } = await supabase
           .from('claim_files')
-          .select('id, file_name, file_path, file_type, folder_id, uploaded_at')
+          .select('id, file_name, file_path, file_type, folder_id, uploaded_at, extracted_text, clean_text')
           .eq('claim_id', claimId)
           .order('uploaded_at', { ascending: false });
 
@@ -181,10 +183,16 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
       let pdfBase64 = null;
       let pdfFilePath: string | null = null;
       let fileName = null;
+      let selectedClaimFileText: string | null = null;
 
       if (selectedClaimFile) {
         pdfFilePath = selectedClaimFile.file_path;
         fileName = selectedClaimFile.file_name;
+        selectedClaimFileText = (
+          selectedClaimFile.clean_text?.trim()
+          || selectedClaimFile.extracted_text?.trim()
+          || null
+        );
       } else if (pdfFile) {
         fileName = pdfFile.name;
         try {
@@ -215,6 +223,10 @@ export const DarwinEngineerReportAnalyzer = ({ claimId, claim }: DarwinEngineerR
           pdfFileName: fileName || undefined,
           additionalContext: {
             ...(additionalContext ? { userContext: additionalContext } : {}),
+            ...(selectedClaimFileText ? {
+              engineerReportText: selectedClaimFileText,
+              uploadedEngineerReportText: selectedClaimFileText,
+            } : {}),
             ...(isLocked && position ? {
               declaredPosition: {
                 primary_cause_of_loss: position.primary_cause_of_loss,
