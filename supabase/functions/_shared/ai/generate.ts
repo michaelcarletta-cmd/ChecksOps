@@ -4,7 +4,10 @@
  */
 
 import { routeTask, overrideSearchMode, smartRouteModel, shouldTriggerSearch, type DarwinTaskType, type SearchMode } from "./modelRouter.ts";
-import { callOpenAI, type OpenAIResult } from "./openaiClient.ts";
+import { callOpenAI, callVision, callWithTools, type OpenAIResult, type VisionChatOptions, type VisionResult, type ToolCallOptions, type ToolCallResult, type VisionMessage } from "./openaiClient.ts";
+
+export { callVision, callWithTools, type VisionChatOptions, type VisionResult, type ToolCallOptions, type ToolCallResult, type VisionMessage } from "./openaiClient.ts";
+export { MODEL_CHEAP, MODEL_STRONG, MODEL_FAST, MODEL_VISION, MODEL_VISION_STRONG } from "./modelRouter.ts";
 import { searchTavily, type TavilyResult } from "./tavily.ts";
 import { buildCacheKey, hashPrompt, getCache, setCache, getClaimMemory, setClaimMemory, clearClaimMemory, isSearchOnCooldown, markSearchUsed } from "./cache.ts";
 

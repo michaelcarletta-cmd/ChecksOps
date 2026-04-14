@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
+import { generate, callVision, MODEL_CHEAP, MODEL_STRONG } from "../_shared/ai/generate.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,11 +14,11 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
 
     const { claimId, documentText, sourceFileId, sourceFileName } = await req.json();
     if (!claimId || !documentText) throw new Error('claimId and documentText required');
+
+    console.log(`[darwin-argument-intelligence] claimId=${claimId}, model=${MODEL_CHEAP}`);
 
     const { data: claim } = await supabase.from('claims').select('*').eq('id', claimId).single();
 
@@ -75,22 +76,17 @@ OUTPUT (JSON array):
 
 Return ONLY valid JSON array.`;
 
-    const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Extract and analyze all carrier arguments from this document:\n\n${documentText.slice(0, 20000)}` },
-        ],
-      }),
+    const result = await generate({
+      task: "rebuttal",
+      system: systemPrompt,
+      user: `Extract and analyze all carrier arguments from this document:\n\n${documentText.slice(0, 20000)}`,
+      claimId,
+      searchMode: "off",
     });
 
-    if (!aiResp.ok) throw new Error(`AI gateway error ${aiResp.status}`);
+    console.log(`[darwin-argument-intelligence] model=${result.model}, usedSearch=${result.usedSearch}, cached=${result.cached}`);
 
-    const aiData = await aiResp.json();
-    const rawContent = aiData.choices?.[0]?.message?.content || '';
+    const rawContent = result.text;
     
     let arguments_found: any[] = [];
     try {

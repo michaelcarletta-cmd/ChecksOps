@@ -1,7 +1,8 @@
 /**
  * Central model router: routes tasks with smart model selection.
- * Default to gpt-4o-mini for cost efficiency; upgrade to gpt-4o only
- * for final-output strategic tasks or very large prompts.
+ * Uses Lovable AI Gateway model identifiers.
+ * Default to gemini-2.5-flash for cost efficiency; upgrade to gemini-2.5-pro
+ * only for final-output strategic tasks or very large prompts.
  */
 
 export type DarwinTaskType =
@@ -19,7 +20,9 @@ export type DarwinTaskType =
   | "estimate_analysis"
   | "note_generation"
   | "summary"
-  | "policy_qa";
+  | "policy_qa"
+  | "vision_analysis"
+  | "tool_extraction";
 
 export type SearchMode = "off" | "auto" | "basic" | "advanced";
 
@@ -29,6 +32,13 @@ export interface ModelConfig {
   temperature: number;
   searchMode: SearchMode;
 }
+
+// ── Model constants ──────────────────────────────────────────────────
+export const MODEL_CHEAP = "google/gemini-2.5-flash";
+export const MODEL_STRONG = "google/gemini-2.5-pro";
+export const MODEL_FAST = "google/gemini-2.5-flash-lite";
+export const MODEL_VISION = "google/gemini-2.5-flash";
+export const MODEL_VISION_STRONG = "google/gemini-2.5-pro";
 
 /** Tasks that benefit from search context */
 const SEARCH_ELIGIBLE_TASKS: Set<DarwinTaskType> = new Set([
@@ -40,7 +50,7 @@ const SEARCH_ELIGIBLE_TASKS: Set<DarwinTaskType> = new Set([
   "policy_qa",
 ]);
 
-/** Tasks whose final output justifies gpt-4o cost */
+/** Tasks whose final output justifies the strong model cost */
 const STRONG_MODEL_TASKS: Set<DarwinTaskType> = new Set([
   "rebuttal",
   "demand_package",
@@ -64,19 +74,19 @@ export function shouldTriggerSearch(task: DarwinTaskType, query: string): boolea
 }
 
 /**
- * Route a task to model config. Everything defaults to gpt-4o-mini.
+ * Route a task to model config. Everything defaults to the cheap model.
  */
 export function routeTask(task: DarwinTaskType): ModelConfig {
   if (SEARCH_ELIGIBLE_TASKS.has(task)) {
     return {
-      model: "gpt-4o-mini",
+      model: MODEL_CHEAP,
       maxTokens: 2500,
       temperature: 0.2,
       searchMode: "auto",
     };
   }
   return {
-    model: "gpt-4o-mini",
+    model: MODEL_CHEAP,
     maxTokens: 2000,
     temperature: 0.3,
     searchMode: "off",
@@ -84,7 +94,7 @@ export function routeTask(task: DarwinTaskType): ModelConfig {
 }
 
 /**
- * Upgrade model to gpt-4o ONLY for final-output tasks or very large prompts.
+ * Upgrade model to strong ONLY for final-output tasks or very large prompts.
  */
 export function smartRouteModel(
   config: ModelConfig,
@@ -93,7 +103,7 @@ export function smartRouteModel(
   forceStrong?: boolean,
 ): ModelConfig {
   if (forceStrong || STRONG_MODEL_TASKS.has(task) || userPromptLength > 1500) {
-    return { ...config, model: "gpt-4o", maxTokens: 4000 };
+    return { ...config, model: MODEL_STRONG, maxTokens: 4000 };
   }
   return config;
 }
