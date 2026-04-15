@@ -8,10 +8,22 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Send, CheckCircle2, Clock, AlertTriangle, XCircle,
   Users, Building2, Shield, FileCheck, Ban, RefreshCw,
-  Landmark, PenTool, Eye, ShieldCheck,
+  Landmark, PenTool, Eye, ShieldCheck, Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { format } from "date-fns";
 
 interface CheckEndorsement {
