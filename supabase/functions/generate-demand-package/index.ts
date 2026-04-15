@@ -730,6 +730,14 @@ REPORT FORMAT RULES (CRITICAL):
 - Break technical details into scannable chunks. Avoid dense paragraphs.
 - Remove redundant conclusions across sections — state a finding once.
 
+CONCISION RULES (CRITICAL — ENFORCE STRICTLY):
+- Prefer bullet points over paragraphs in EVERY section. Use paragraphs only when explaining repair rationale, code requirements, or manufacturer specs.
+- Do NOT repeat the same fact in multiple sections. If a damage observation appears in Summary of Findings, do NOT restate it in the damage assessment section — instead, expand on it with new detail (location specifics, measurements, repair implications).
+- Each section must introduce NEW VALUE. If a section would only restate content from a prior section, shorten it to a single bullet or omit the redundant content entirely.
+- The entire document must be scannable — an adjuster should understand the full claim position in under 60 seconds of reading.
+- Eliminate filler phrases: "It should be noted that", "It is important to understand", "As previously mentioned", "Upon review of the documentation".
+- Maximum 3 sentences per paragraph. If a paragraph exceeds 3 sentences, convert to bullet points.
+
 DAMAGE CHARACTERIZATION RULES (CRITICAL):
 - Do NOT simply state "distinct, demonstrable, detrimental, direct" as a list or checklist. These words alone are meaningless without evidence.
 - Each damage element must be supported by specific observations from the inspection, photos, or documentation:
