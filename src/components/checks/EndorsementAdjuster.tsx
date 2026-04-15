@@ -368,7 +368,7 @@ export function EndorsementAdjuster({
             left: override.xPct * containerWidthPx,
             top: safeZoneTopPx + (override.yPct * safeZoneHeightPx),
             width: containerWidthPx * ENDORSEMENT_WIDTH_PCT * displayScale,
-            transform: `translate(-50%, -50%) rotate(${override.rotationDeg || 0}deg) scale(${override.scale || 1})`,
+            transform: `translate(-50%, -50%) rotate(${override.rotationDeg || 0}deg)`,
             transformOrigin: "center center",
             color: "#111111",
             userSelect: "none",
