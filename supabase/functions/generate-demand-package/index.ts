@@ -1287,7 +1287,7 @@ Deno.serve(async (req) => {
         .replace(new RegExp(REQUIRED_SECTION_HEADINGS[i], "i"), "")
         .replace(/\s+/g, " ")
         .trim();
-      if (stripped.length < 60) {
+      if (stripped.length < 30) {
         console.error(`Section too short: "${REQUIRED_SECTION_HEADINGS[i]}" — ${stripped.length} chars`);
         throw new Error(`Demand package section too short or empty: ${REQUIRED_SECTION_HEADINGS[i]}`);
       }
