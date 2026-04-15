@@ -62,45 +62,44 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   }
 }
 
-// Helper function to search web using Perplexity
+// Helper function to search web using Tavily
 async function searchWeb(query: string): Promise<string> {
-  // Try both possible API key names from connector
-  const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY") || Deno.env.get("PERPLEXITY_API_KEY_1");
-  if (!PERPLEXITY_API_KEY) {
+  const TAVILY_API_KEY = Deno.env.get("TAVILY_API_KEY");
+  if (!TAVILY_API_KEY) {
     return "Web search unavailable: API key not configured";
   }
 
   try {
-    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+    const response = await fetch('https://api.tavily.com/search', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'sonar',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a research assistant for insurance claims and property restoration. Provide factual, citable information from ANY relevant source including: state statutes and insurance regulations, manufacturer bulletins and specs, building codes (IRC/IBC/ASTM), industry technical articles, contractor and engineering guidance, construction repair standards, insurance claim practice resources, case law, and general industry best practices. Do not restrict results to regulatory or manufacturer domains only. Always cite sources. Be concise and authoritative.'
-          },
-          {
-            role: 'user',
-            content: query
-          }
-        ],
-        temperature: 0.2,
-        max_tokens: 1000,
+        api_key: TAVILY_API_KEY,
+        query: query,
+        search_depth: "advanced",
+        include_answer: true,
+        max_results: 8,
+        include_raw_content: false,
       }),
     });
 
     if (!response.ok) {
-      console.error("Perplexity API error:", response.status);
+      const errText = await response.text();
+      console.error("Tavily API error:", response.status, errText.slice(0, 200));
       return "Web search temporarily unavailable";
     }
 
     const data = await response.json();
-    return data.choices[0].message.content;
+    
+    // Build a rich answer from Tavily results
+    let result = data.answer || "";
+    if (data.results && data.results.length > 0) {
+      result += "\n\nSources:\n";
+      for (const r of data.results.slice(0, 6)) {
+        result += `- ${r.title}: ${r.content?.substring(0, 300) || ''} (${r.url})\n`;
+      }
+    }
+    return result || "No relevant results found";
   } catch (error) {
     console.error("Error in web search:", error);
     return "Web search failed";
