@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import { subscribeCarrierDismantler } from "@/lib/darwinDismantlerBus";
 import { DarwinSMSActivityLog } from "@/components/inbox/DarwinSMSActivityLog";
@@ -64,7 +65,7 @@ const DarwinDeclaredPosition = lazy(() => import("@/components/claim-detail/Darw
 // New Strategic Components
 const ClaimWarRoom = lazy(() => import("@/components/claim-detail/ClaimWarRoom").then(m => ({ default: m.ClaimWarRoom })));
 const CarrierPlaybookDialog = lazy(() => import("@/components/claim-detail/CarrierPlaybookDialog").then(m => ({ default: m.CarrierPlaybookDialog })));
-const DarwinSecondBrain = lazy(() => import("@/components/claim-detail/DarwinSecondBrain").then(m => ({ default: m.DarwinSecondBrain })));
+// DarwinSecondBrain removed — nudges merged into Copilot panel
 const DarwinCommandBar = lazy(() => import("@/components/claim-detail/DarwinCommandBar").then(m => ({ default: m.DarwinCommandBar })));
 const DarwinGeneratedAssets = lazy(() => import("@/components/claim-detail/DarwinGeneratedAssets").then(m => ({ default: m.DarwinGeneratedAssets })));
 const CarrierScenarioPlaybook = lazy(() => import("@/components/claim-detail/CarrierScenarioPlaybook").then(m => ({ default: m.CarrierScenarioPlaybook })));
