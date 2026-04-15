@@ -159,6 +159,7 @@ export default function CheckCommandCenter() {
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   // Admin: allow delete at any stage
   const canDeleteAnyCheck = true;
