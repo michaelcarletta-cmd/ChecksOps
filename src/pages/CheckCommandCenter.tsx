@@ -1734,7 +1734,14 @@ function CheckDetailPanel({
                         (check?.endorsement_override as unknown as EndorsementOverride | null) ?? null
                       }
                       onSave={async (ov) => {
-                        console.log("[print-for-deposit] using override", ov);
+                        console.log("[ENDORSEMENT-DEBUG] saving override", {
+                          checkId,
+                          override: ov,
+                          userScale: ov.scale,
+                          xPct: ov.xPct,
+                          yPct: ov.yPct,
+                          rotationDeg: ov.rotationDeg,
+                        });
                         // 1) Save override to DB first
                         const { error: saveErr } = await supabase
                           .from("check_intake_items")
@@ -1749,11 +1756,14 @@ function CheckDetailPanel({
                             ? { ...current, endorsement_override: ov as unknown as Record<string, unknown> }
                             : current
                         ));
-                        // 2) Then generate final deposit image
+                        // 2) Then generate final deposit image (forces re-composite with latest override)
+                        console.log("[ENDORSEMENT-DEBUG] triggering composite regeneration");
                         await ensureDepositReadyBackImage();
+                        console.log("[ENDORSEMENT-DEBUG] composite regeneration complete, new composite generated");
                         toast({ title: "Endorsement saved & deposit image generated" });
                         setShowEndorsementAdjuster(false);
                         qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+                        qc.invalidateQueries({ queryKey: ["check-back-img"] });
                       }}
                     />
                   )}
