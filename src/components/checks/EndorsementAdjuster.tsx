@@ -173,7 +173,7 @@ export function EndorsementAdjuster({
           const overlayLeft = rect.left + override.xPct * rect.width;
           const deltaX = e.clientX - overlayLeft;
           const baseWidth = rect.width * ENDORSEMENT_WIDTH_PCT;
-          const nextScale = Math.max(0.4, Math.min(2, deltaX / baseWidth));
+          const nextScale = Math.max(0.4, Math.min(4, deltaX / baseWidth));
           setOverride((prev) =>
             clampEndorsementOverride({ ...prev, scale: nextScale }),
           );
@@ -532,10 +532,13 @@ export function EndorsementAdjuster({
           </div>
 
           <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">Scale</p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">Scale</p>
+              <span className="text-xs font-medium text-foreground">{Math.round(override.scale * 100)}%</span>
+            </div>
             <Slider
               min={0.4}
-              max={2}
+              max={4}
               step={0.05}
               value={[override.scale]}
               onValueChange={([v]) =>

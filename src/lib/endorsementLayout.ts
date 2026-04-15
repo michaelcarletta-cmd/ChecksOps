@@ -68,7 +68,7 @@ export function clampEndorsementOverride(
   return {
     xPct: Math.min(0.95, Math.max(0.05, next.xPct)),
     yPct: Math.min(0.95, Math.max(0.03, next.yPct)),
-    scale: Math.min(2, Math.max(0.4, next.scale)),
+    scale: Math.min(4, Math.max(0.4, next.scale)),
     rotationDeg: normalizeRotation(next.rotationDeg),
     showPayToOrder: Boolean(next.showPayToOrder),
   };
