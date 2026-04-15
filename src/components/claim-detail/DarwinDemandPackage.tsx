@@ -67,15 +67,15 @@ const REQUIRED_SECTIONS = [
   'Demand',
 ];
 
-const SECTION_RULES: Record<string, { type: 'bullets'; minBullets: number; maxBullets: number } | { type: 'fixed'; requiredBullets: number } | { type: 'short' } | { type: 'flexible' }> = {
+const SECTION_RULES: Record<string, { type: 'bullets'; minBullets: number; maxBullets?: number } | { type: 'fixed'; requiredBullets: number } | { type: 'short'; maxChars?: number } | { type: 'flexible' }> = {
   'Summary of Findings': { type: 'bullets', minBullets: 5, maxBullets: 10 },
   'Narrative Framing & Preemptive Clarification': { type: 'bullets', minBullets: 3, maxBullets: 5 },
-  'Roof Damage Assessment': { type: 'short' },
-  'Exterior / Siding Damage Assessment': { type: 'short' },
-  'Gutter / Downspout Assessment': { type: 'short' },
+  'Roof Damage Assessment': { type: 'short', maxChars: 600 },
+  'Exterior / Siding Damage Assessment': { type: 'short', maxChars: 600 },
+  'Gutter / Downspout Assessment': { type: 'short', maxChars: 400 },
   'Damage Characterization Analysis': { type: 'fixed', requiredBullets: 4 },
   'Scope of Repair / Justification': { type: 'flexible' },
-  'Demand': { type: 'short' },
+  'Demand': { type: 'short', maxChars: 300 },
 };
 
 const FILLER_PHRASES = [
@@ -88,6 +88,9 @@ const FILLER_PHRASES = [
   'we are submitting this claim',
   'enclosed materials include',
   'this package is intended to',
+  'it should be noted that',
+  'as previously mentioned',
+  'upon review of the documentation',
 ];
 
 function countBullets(text: string): number {
@@ -143,8 +146,9 @@ function validateDemandPackage(fullText: string): ValidationError[] {
     }
 
     if (rules.type === 'short') {
-      if (stripped.length > 500) {
-        errors.push({ section: heading, message: `${heading} is too long (must be concise)` });
+      const maxChars = (rules as any).maxChars || 500;
+      if (stripped.length > maxChars) {
+        errors.push({ section: heading, message: `${heading} is too long (max ${maxChars} chars, has ${stripped.length})` });
       }
     }
   }
