@@ -852,18 +852,15 @@ ANTI-GENERIC CONTENT RULE (MANDATORY):
 - Every statement in the report must cite specific claim data: inspection findings, estimate line items, measurements, dates, policyholder details, or property characteristics.
 - If a sentence contains no claim-specific fact, do NOT include it.
 
-OUTPUT QUALITY REQUIREMENTS:
-- Each section must contain at minimum 2–3 claim-specific paragraphs or bullet groups with actual data from the provided materials.
-- No filler sentences. Every sentence must add factual value.
-- If insufficient inspection data is available for a section, generate the most complete version possible using ALL provided materials and note limitations in "missing_evidence".
-
-SECTION RULES:
-- "Summary of Findings" = bullet points ONLY. Each bullet is one factual observation. Include negative findings. End with estimate total.
-- "Narrative Framing & Preemptive Clarification" = 3–6 bullet points defining cause of loss, preempting carrier counter-arguments, and clarifying scope boundaries. Factual and technical only.
-- Damage assessment sections = Use subheadings (e.g., "Front Slope", "East Elevation"). Short factual descriptions per component.
-- "Damage Characterization Analysis" = Evidence-based characterization of each damage element tied to specific components and the loss event. No boilerplate.
-- "Scope of Repair / Justification" = Summarize the estimate scope by trade/component. Reference code triggers, manufacturer requirements, and system interdependency. Explain why full repair/replacement is warranted.
-- "Demand" = State the amount. One paragraph maximum.
+SECTION LENGTH RULES (CRITICAL — ENFORCE STRICTLY):
+- "Summary of Findings" = 5–10 bullets ONLY. Each bullet is one factual observation. Include negative findings. End with estimate total.
+- "Narrative Framing & Preemptive Clarification" = 3–5 bullets ONLY. Cause of loss, preempting carrier counter-arguments, scope boundaries. Factual and technical only.
+- "Roof Damage Assessment" = Short section. Bullets or max 3 sentences. Use subheadings (e.g., "Front Slope", "East Elevation").
+- "Exterior / Siding Damage Assessment" = Short section. Bullets or max 3 sentences. Use subheadings per elevation.
+- "Gutter / Downspout Assessment" = Short section. Bullets or max 3 sentences.
+- "Damage Characterization Analysis" = Exactly 4 bullets ONLY (one per element: Distinct, Demonstrable, Detrimental, Direct). Each bullet must cite specific evidence.
+- "Scope of Repair / Justification" = Concise technical explanation. This is the ONLY section allowed to run longer. Reference code triggers, manufacturer requirements, and system interdependency.
+- "Demand" = Max 2–3 sentences. State the amount and basis.
 
 ${isProven
     ? `Use this opening in substance for the report introduction:
@@ -1245,7 +1242,7 @@ Deno.serve(async (req) => {
 
     demandPackage = sanitizeDemandPackageObject(demandPackage);
 
-    // ── Completion Gate: validate all 8 required sections are present ──
+    // ── Completion Gate: validate all 8 required sections are present and substantive ──
     const REQUIRED_SECTION_HEADINGS = [
       "Summary of Findings",
       "Narrative Framing & Preemptive Clarification",
@@ -1269,6 +1266,33 @@ Deno.serve(async (req) => {
     // ── Reject placeholder content ──
     if (/\[section coming\]|\[tbd\]|\[placeholder\]|\[coming soon\]/i.test(fullPackageText)) {
       throw new Error("Demand package contains placeholder text. All sections must be fully generated.");
+    }
+
+    // ── Section body length validation: reject headings with tiny filler ──
+    function extractSectionBody(fullText: string, heading: string, nextHeadings: string[]): string {
+      const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const nextPattern = nextHeadings
+        .map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+        .join("|");
+      const regex = new RegExp(`${escaped}[\\s\\S]*?(?=${nextPattern}|$)`, "i");
+      const match = fullText.match(regex);
+      return match?.[0] || "";
+    }
+
+    for (let i = 0; i < REQUIRED_SECTION_HEADINGS.length; i++) {
+      const body = extractSectionBody(
+        fullPackageText,
+        REQUIRED_SECTION_HEADINGS[i],
+        REQUIRED_SECTION_HEADINGS.slice(i + 1),
+      );
+      const stripped = body
+        .replace(new RegExp(REQUIRED_SECTION_HEADINGS[i], "i"), "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (stripped.length < 60) {
+        console.error(`Section too short: "${REQUIRED_SECTION_HEADINGS[i]}" — ${stripped.length} chars`);
+        throw new Error(`Demand package section too short or empty: ${REQUIRED_SECTION_HEADINGS[i]}`);
+      }
     }
 
     // Enforce authoritative estimate total over any AI-hallucinated amount
