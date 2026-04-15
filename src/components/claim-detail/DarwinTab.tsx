@@ -188,6 +188,7 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
   useRenderCount("DarwinTab");
   const isMobile = useIsMobile();
   const [showCopilot, setShowCopilot] = useState(true);
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [copilotExpanded, setCopilotExpanded] = useState(false);
   const [copilotView, setCopilotView] = useState<'conversation' | 'dismantler'>('conversation');
   const [activeWorkspace, setActiveWorkspace] = useState<DarwinWorkspaceKey>("claim-control-center");
