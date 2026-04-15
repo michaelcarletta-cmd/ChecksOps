@@ -91,8 +91,24 @@ export interface VisionResult {
 
 /**
  * Vision/multimodal chat completion via OpenAI directly.
+ * WARNING: OpenAI vision does NOT support application/pdf mime type.
+ * PDFs must be converted to images or text before calling this function.
  */
 export async function callVision(opts: VisionChatOptions): Promise<VisionResult> {
+  // Validate that no PDF mime types are being sent
+  for (const msg of opts.messages) {
+    if (Array.isArray(msg.content)) {
+      for (const part of msg.content) {
+        if (part.type === "image_url" && part.image_url?.url) {
+          const url = part.image_url.url;
+          if (url.startsWith("data:application/pdf")) {
+            console.warn("[callVision] WARNING: application/pdf mime type sent to vision API — this will likely fail. Use extractPdfWithOcrFallback() instead.");
+          }
+        }
+      }
+    }
+  }
+
   const body: Record<string, unknown> = {
     model: opts.model,
     messages: opts.messages,
