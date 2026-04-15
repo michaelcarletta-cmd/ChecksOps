@@ -108,80 +108,43 @@ async function searchWeb(query: string): Promise<string> {
 
 // Helper function to find leads based on recent storm activity and property records
 async function findLeads(location: string, damageType?: string): Promise<string> {
-  const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY") || Deno.env.get("PERPLEXITY_API_KEY_1");
-  if (!PERPLEXITY_API_KEY) {
-    return "Lead search unavailable: Perplexity API key not configured";
+  const TAVILY_API_KEY = Deno.env.get("TAVILY_API_KEY");
+  if (!TAVILY_API_KEY) {
+    return "Lead search unavailable: search API key not configured";
   }
 
   try {
-    // First search for recent storm events in the area
-    const stormSearchQuery = `Recent severe weather events storms hail tornado hurricane wind damage in ${location} in the last 30 days. Include specific dates, areas affected, and severity of damage. Include news reports and weather service data.`;
-    
-    const stormResponse = await fetch('https://api.perplexity.ai/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'sonar',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a research assistant helping find recent storm damage events for insurance claim lead generation. Focus on factual weather reports, news articles about property damage, and affected neighborhoods. Be specific about dates, locations, and damage types.'
-          },
-          {
-            role: 'user',
-            content: stormSearchQuery
-          }
-        ],
-        temperature: 0.2,
-        max_tokens: 2000,
-      }),
-    });
+    const stormQuery = `Recent severe weather events storms hail tornado hurricane wind damage in ${location} in the last 30 days. Dates, areas affected, severity.`;
+    const propertyQuery = `How to find property owner contact information in ${location}. County assessor websites, public property records databases.`;
 
-    if (!stormResponse.ok) {
-      console.error("Perplexity storm search error:", stormResponse.status);
-      return "Storm search temporarily unavailable";
+    const [stormRes, propertyRes] = await Promise.all([
+      fetch('https://api.tavily.com/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: TAVILY_API_KEY, query: stormQuery, search_depth: "advanced", include_answer: true, max_results: 8 }),
+      }),
+      fetch('https://api.tavily.com/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: TAVILY_API_KEY, query: propertyQuery, search_depth: "basic", include_answer: true, max_results: 5 }),
+      }),
+    ]);
+
+    let stormInfo = "Storm search temporarily unavailable";
+    let citations: string[] = [];
+    if (stormRes.ok) {
+      const stormData = await stormRes.json();
+      stormInfo = stormData.answer || "No recent storm data found.";
+      citations = (stormData.results || []).map((r: any) => r.url).filter(Boolean);
     }
-
-    const stormData = await stormResponse.json();
-    const stormInfo = stormData.choices[0].message.content;
-    const citations = stormData.citations || [];
-
-    // Second search for property owner information resources
-    const propertySearchQuery = `How to find property owner contact information in ${location}. Include county assessor websites, public property records databases, and resources for finding homeowner information in this area.`;
-    
-    const propertyResponse = await fetch('https://api.perplexity.ai/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'sonar',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a research assistant helping find public property records and homeowner contact information. Focus on legitimate public records, county assessor websites, and legal methods of finding property owner information.'
-          },
-          {
-            role: 'user',
-            content: propertySearchQuery
-          }
-        ],
-        temperature: 0.2,
-        max_tokens: 1500,
-      }),
-    });
 
     let propertyInfo = "";
-    if (propertyResponse.ok) {
-      const propertyData = await propertyResponse.json();
-      propertyInfo = propertyData.choices[0].message.content;
+    if (propertyRes.ok) {
+      const propData = await propertyRes.json();
+      propertyInfo = propData.answer || "";
     }
 
-    let result = `
+    return `
 LEAD RESEARCH RESULTS FOR: ${location}
 ${damageType ? `Damage Type Focus: ${damageType}` : ''}
 
@@ -201,8 +164,6 @@ ${propertyInfo || 'Property record search resources not available for this area.
 4. Consider door-to-door canvassing in heavily affected areas
 5. Check local news for additional damage reports and affected communities
 `;
-
-    return result;
   } catch (error) {
     console.error("Error in lead search:", error);
     return "Lead search failed. Please try again.";
@@ -211,32 +172,22 @@ ${propertyInfo || 'Property record search resources not available for this area.
 
 // Helper function to get weather for a specific date and location
 async function getWeatherReport(location: string, date: string): Promise<string> {
-  const PERPLEXITY_API_KEY = Deno.env.get("PERPLEXITY_API_KEY") || Deno.env.get("PERPLEXITY_API_KEY_1");
-  if (!PERPLEXITY_API_KEY) {
+  const TAVILY_API_KEY = Deno.env.get("TAVILY_API_KEY");
+  if (!TAVILY_API_KEY) {
     return "Weather search unavailable: API key not configured";
   }
 
   try {
-    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+    const query = `Weather in ${location} on ${date}. Temperature, precipitation, wind conditions, severe weather events or storms. Historical weather data.`;
+    const response = await fetch('https://api.tavily.com/search', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'llama-3.1-sonar-large-128k-online',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a weather research assistant. Provide detailed historical weather information including temperature, precipitation, wind speeds, and any severe weather events. Focus on facts from official weather records.'
-          },
-          {
-            role: 'user',
-            content: `What was the weather like in ${location} on ${date}? Include temperature, precipitation, wind conditions, and any severe weather events or storms that occurred. Search for historical weather data and news reports.`
-          }
-        ],
-        temperature: 0.2,
-        max_tokens: 1500,
+        api_key: TAVILY_API_KEY,
+        query,
+        search_depth: "advanced",
+        include_answer: true,
+        max_results: 5,
       }),
     });
 
@@ -246,7 +197,14 @@ async function getWeatherReport(location: string, date: string): Promise<string>
     }
 
     const data = await response.json();
-    return data.choices[0].message.content;
+    let result = data.answer || "No weather data found.";
+    if (data.results?.length) {
+      result += "\n\nSources:\n";
+      for (const r of data.results.slice(0, 3)) {
+        result += `- ${r.title} (${r.url})\n`;
+      }
+    }
+    return result;
   } catch (error) {
     console.error("Error in weather search:", error);
     return "Weather search failed";
