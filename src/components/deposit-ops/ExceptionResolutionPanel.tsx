@@ -107,7 +107,7 @@ export function ExceptionResolutionPanel() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <ScrollArea className="max-h-[500px]">
+          <div className="max-h-[400px] overflow-y-auto scroll-smooth">
             {isLoading ? (
               <div className="p-8 text-center text-muted-foreground">Loading...</div>
             ) : exceptions.length === 0 ? (
@@ -190,7 +190,7 @@ export function ExceptionResolutionPanel() {
                 </TableBody>
               </Table>
             )}
-          </ScrollArea>
+          </div>
         </CardContent>
       </Card>
 

@@ -302,7 +302,7 @@ export function DepositOperationsConsole() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <ScrollArea className="max-h-48">
+            <div className="max-h-[400px] overflow-y-auto scroll-smooth">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -329,7 +329,7 @@ export function DepositOperationsConsole() {
                   ))}
                 </TableBody>
               </Table>
-            </ScrollArea>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -359,7 +359,7 @@ export function DepositOperationsConsole() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <ScrollArea className="max-h-[500px] min-h-[300px]">
+          <div className="max-h-[400px] overflow-y-auto scroll-smooth">
             {isLoading ? (
               <div className="p-8 text-center text-muted-foreground">Loading...</div>
             ) : filteredItems.length === 0 ? (
@@ -474,7 +474,7 @@ export function DepositOperationsConsole() {
                 </TableBody>
               </Table>
             )}
-          </ScrollArea>
+          </div>
         </CardContent>
       </Card>
 

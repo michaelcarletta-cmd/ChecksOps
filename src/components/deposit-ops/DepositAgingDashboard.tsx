@@ -131,7 +131,7 @@ export function DepositAgingDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <ScrollArea className="max-h-40">
+            <div className="max-h-[400px] overflow-y-auto scroll-smooth">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -158,7 +158,7 @@ export function DepositAgingDashboard() {
                   ))}
                 </TableBody>
               </Table>
-            </ScrollArea>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -169,7 +169,7 @@ export function DepositAgingDashboard() {
           <CardTitle className="text-sm">Deposit Aging Queue ({items.length})</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <ScrollArea className="max-h-[500px] min-h-[200px]">
+          <div className="max-h-[400px] overflow-y-auto scroll-smooth">
             {isLoading ? (
               <div className="p-8 text-center text-muted-foreground">Loading...</div>
             ) : items.length === 0 ? (
@@ -240,7 +240,7 @@ export function DepositAgingDashboard() {
                 </TableBody>
               </Table>
             )}
-          </ScrollArea>
+          </div>
         </CardContent>
       </Card>
     </div>
