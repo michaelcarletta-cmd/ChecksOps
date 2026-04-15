@@ -67,15 +67,15 @@ const REQUIRED_SECTIONS = [
   'Demand',
 ];
 
-const SECTION_VALIDATION_RULES: Record<string, { minChars: number; minSentences: number }> = {
-  'Summary of Findings': { minChars: 250, minSentences: 3 },
-  'Narrative Framing & Preemptive Clarification': { minChars: 250, minSentences: 3 },
-  'Roof Damage Assessment': { minChars: 400, minSentences: 5 },
-  'Exterior / Siding Damage Assessment': { minChars: 250, minSentences: 3 },
-  'Gutter / Downspout Assessment': { minChars: 200, minSentences: 2 },
-  'Damage Characterization Analysis': { minChars: 300, minSentences: 4 },
-  'Scope of Repair / Justification': { minChars: 400, minSentences: 5 },
-  'Demand': { minChars: 150, minSentences: 2 },
+const SECTION_RULES: Record<string, { type: 'bullets'; minBullets: number; maxBullets: number } | { type: 'fixed'; requiredBullets: number } | { type: 'short' } | { type: 'flexible' }> = {
+  'Summary of Findings': { type: 'bullets', minBullets: 5, maxBullets: 10 },
+  'Narrative Framing & Preemptive Clarification': { type: 'bullets', minBullets: 3, maxBullets: 5 },
+  'Roof Damage Assessment': { type: 'short' },
+  'Exterior / Siding Damage Assessment': { type: 'short' },
+  'Gutter / Downspout Assessment': { type: 'short' },
+  'Damage Characterization Analysis': { type: 'fixed', requiredBullets: 4 },
+  'Scope of Repair / Justification': { type: 'flexible' },
+  'Demand': { type: 'short' },
 };
 
 const FILLER_PHRASES = [
@@ -85,10 +85,13 @@ const FILLER_PHRASES = [
   'this section',
   'placeholder',
   'to be determined',
+  'we are submitting this claim',
+  'enclosed materials include',
+  'this package is intended to',
 ];
 
-function countSentences(text: string): number {
-  return (text.match(/[.!?](?:\s|$)/g) || []).length;
+function countBullets(text: string): number {
+  return (text.match(/^- |\n- /g) || []).length;
 }
 
 function extractSectionBody(fullText: string, heading: string, nextHeadings: string[]): string {
@@ -117,22 +120,32 @@ function validateDemandPackage(fullText: string): ValidationError[] {
   }
   if (errors.length > 0) return errors;
 
-  // Validate each section body
+  // Structure validation per section
   for (let i = 0; i < REQUIRED_SECTIONS.length; i++) {
     const heading = REQUIRED_SECTIONS[i];
     const body = extractSectionBody(fullText, heading, REQUIRED_SECTIONS.slice(i + 1));
-    const stripped = body.replace(new RegExp(heading, 'i'), '').replace(/\s+/g, ' ').trim();
-    const rules = SECTION_VALIDATION_RULES[heading];
+    const stripped = body.replace(new RegExp(heading, 'i'), '').trim();
+    const rules = SECTION_RULES[heading];
     if (!rules) continue;
 
-    const chars = stripped.length;
-    const sentences = countSentences(stripped);
-
-    if (chars < rules.minChars) {
-      errors.push({ section: heading, message: `${heading} too short: ${chars} chars, requires ${rules.minChars}` });
+    if (rules.type === 'bullets') {
+      const bullets = countBullets(stripped);
+      if (bullets < rules.minBullets) {
+        errors.push({ section: heading, message: `${heading} needs at least ${rules.minBullets} bullet points` });
+      }
     }
-    if (sentences < rules.minSentences) {
-      errors.push({ section: heading, message: `${heading} needs ${rules.minSentences}+ sentences, found ${sentences}` });
+
+    if (rules.type === 'fixed') {
+      const bullets = countBullets(stripped);
+      if (bullets !== rules.requiredBullets) {
+        errors.push({ section: heading, message: `${heading} must have exactly ${rules.requiredBullets} bullets` });
+      }
+    }
+
+    if (rules.type === 'short') {
+      if (stripped.length > 500) {
+        errors.push({ section: heading, message: `${heading} is too long (must be concise)` });
+      }
     }
   }
 
