@@ -150,6 +150,18 @@ Deno.serve(async (req) => {
       console.log('JobNimbus sync result:', jobNimbusResult);
     }
 
+    // Process proactive warnings
+    console.log('Triggering proactive warnings scan...');
+    const { data: proactiveResult, error: proactiveError } = await supabase.functions.invoke('darwin-proactive-warnings', {
+      headers: { 'x-cron-secret': cronSecret || '' }
+    });
+
+    if (proactiveError) {
+      console.error('Error processing proactive warnings:', proactiveError);
+    } else {
+      console.log('Proactive warnings result:', proactiveResult);
+    }
+
     return new Response(
       JSON.stringify({ 
         checked: results.length, 
