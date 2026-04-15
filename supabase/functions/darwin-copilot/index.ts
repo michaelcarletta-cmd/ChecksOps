@@ -1571,7 +1571,7 @@ ${research.text}`;
                           carrier,
                           loss_type: lossType,
                           state: stateCode,
-                          source_type: 'perplexity_t1',
+                          source_type: 'tavily_t1',
                           citations: research.citations.slice(0, 5),
                           claim_id: claimId,
                         },
