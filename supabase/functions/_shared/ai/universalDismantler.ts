@@ -112,27 +112,79 @@ function chunkDocument(text: string): string[] {
 
   const chunks: string[] = [];
   let start = 0;
+  let usedHardBreak = false;
 
   while (start < text.length) {
     let end = start + CHUNK_SIZE;
 
-    if (end < text.length) {
+    if (end >= text.length) {
+      end = text.length;
+    } else {
       // Try to break on paragraph or heading boundary
-      const searchRegion = text.slice(end - 500, end + 500);
+      const searchStart = Math.max(start + 1, end - 500);
+      const searchRegion = text.slice(searchStart, end + 500);
       const breakMatch = searchRegion.match(/\n\n|\n(?=[A-Z0-9])/);
       if (breakMatch && breakMatch.index !== undefined) {
-        end = end - 500 + breakMatch.index + breakMatch[0].length;
+        const candidateEnd = searchStart + breakMatch.index + breakMatch[0].length;
+        // Only use paragraph break if it's meaningfully past start
+        if (candidateEnd > start + 500) {
+          end = candidateEnd;
+        } else {
+          // Too close to start — use hard break at CHUNK_SIZE
+          end = Math.min(start + CHUNK_SIZE, text.length);
+          usedHardBreak = true;
+        }
       }
-    } else {
-      end = text.length;
+    }
+
+    // Guarantee end is always past start
+    if (end <= start) {
+      end = Math.min(start + CHUNK_SIZE, text.length);
+      usedHardBreak = true;
     }
 
     chunks.push(text.slice(start, end));
-    start = end > start ? end - CHUNK_OVERLAP : end;
+
+    // Compute next start with overlap
+    let nextStart = end - CHUNK_OVERLAP;
+    // Guarantee forward progress: nextStart must exceed current start
+    if (nextStart <= start) {
+      nextStart = end;
+    }
+
+    start = nextStart;
     if (start >= text.length) break;
   }
 
+  console.log(`[Dismantler Chunker] input=${text.length} chars, chunks=${chunks.length}, hardBreakUsed=${usedHardBreak}`);
   return chunks;
+}
+
+/** Reconstruct a full DismantlerResult from a DB row, normalizing nulls */
+export function reconstructDismantlerFromRow(d: any): DismantlerResult {
+  return {
+    documentType: d.document_type || '',
+    reportSummary: d.report_summary || '',
+    mainPosition: d.main_position || '',
+    nonCoveredTheories: d.non_covered_theories || [],
+    limitations: d.limitations || [],
+    unsupportedAssumptions: d.unsupported_assumptions || [],
+    contradictions: d.contradictions || [],
+    omissions: d.omissions || [],
+    repairabilityOverreach: d.repairability_overreach || [],
+    coverageWeaknesses: d.coverage_weaknesses || [],
+    strongestRebuttalPoints: d.strongest_rebuttal_points || [],
+    evidenceToGatherNext: d.evidence_to_gather_next || [],
+    draftRebuttalLanguage: d.draft_rebuttal_language || '',
+    meta: {
+      chunkCount: d.chunk_count ?? 0,
+      successfulChunks: d.successful_chunks ?? 0,
+      failedChunks: d.failed_chunks ?? 0,
+      model: d.model || '',
+      cached: d.cached ?? false,
+      usedSearch: d.used_search ?? false,
+    },
+  };
 }
 
 // ── Document-specific extraction rules ───────────────────────────────
