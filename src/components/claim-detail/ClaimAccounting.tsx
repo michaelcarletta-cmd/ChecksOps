@@ -502,10 +502,19 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
               <Warehouse className="h-4 w-4" />
               Other Structures
             </TabsTrigger>
-            <TabsTrigger value="pwi" className="inline-flex items-center gap-2 whitespace-nowrap">
-              <Package className="h-4 w-4" />
-              Paid When Incurred
-            </TabsTrigger>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <TabsTrigger value="pwi" className="inline-flex items-center gap-2 whitespace-nowrap">
+                    <Package className="h-4 w-4" />
+                    Paid When Incurred
+                  </TabsTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>PWI — costs released upon job completion (Ordinance & Law)</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <TabsTrigger value="personal_property" className="inline-flex items-center gap-2 whitespace-nowrap">
               <Sofa className="h-4 w-4" />
               Personal Property
