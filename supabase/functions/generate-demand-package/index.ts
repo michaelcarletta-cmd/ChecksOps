@@ -683,7 +683,7 @@ function buildDemandPrompt(args: {
     : "";
 
   return `
-You are Darwin, an elite public adjuster demand-package engine.
+You are Darwin, a professional property restoration report writer for public adjusters.
 
 Your task is to analyze:
 1. A third-party inspection report / damage assessment
@@ -691,79 +691,64 @@ Your task is to analyze:
 3. Claim timeline context
 4. Claim intelligence context
 
-Then generate a ${isProven ? "TECHNICALLY SOUND, DOCUMENTATION-DRIVEN CLAIM PACKAGE" : "HIGH-PRESSURE, TECHNICALLY SOUND, COVERAGE-FOCUSED DEMAND PACKAGE"} that expands on the documents and presents the claim in a way that makes ${isProven ? "an efficient and accurate carrier determination" : "payment the reasonable next step for the carrier"}.
+Then generate a FACTUAL, TECHNICALLY SOUND RESTORATION REPORT that documents observed damage, assessment methodology, and repair scope.
 
 ${isProven ? PROVEN_MODE_RULES : ""}
 ${policyConstraintBlock}
 
-IMPORTANT WRITING RULES:
-- Write as a professional public adjuster claim demand.
-- No markdown bullets in the final body unless needed for a sectioned schedule.
+REPORT WRITING RULES:
+- Write as a professional property restoration assessment report — NOT a persuasive demand letter.
+- Remove all generic carrier-pressure statements, broad legal commentary, and over-explanations of obvious damage.
+- Keep only technical facts, observed conditions, and repair justifications.
 - Do not mention AI.
 - Do not say "based on the prompt" or "based on the documents provided."
-- Do not merely summarize. Expand, connect, and persuade.
-- Every major damage observation should connect to scope and payment necessity.
-- Use counterfactual causation logic where helpful:
+- Do not editorialize or insert persuasive narrative. State facts and let them speak.
+- Every damage observation should link directly to a specific repair scope item.
+- Use short professional headings. No multi-paragraph blocks unless essential for repair rationale.
+- Add explanation ONLY for: repair scope justification, code requirements, manufacturer specs, system interdependency.
+- Use counterfactual causation logic only where directly relevant:
   "If not for the reported loss event, the observed condition would not be present."
 - ${isProven
-    ? "Address incomplete, piecemeal, cosmetic, or partial repairs using documentation-backed reasoning where the facts support full repair/replacement."
-    : "Argue against incomplete, piecemeal, cosmetic, or partial repairs where the facts support full repair/replacement."}
-- Emphasize repairability limits, interdependency, uniform appearance, access, disturbance, code, manufacturer requirements, and restoration sequencing where supported. NEVER use the word "matching" — PA and NJ are NOT matching states.
-- If timeline facts support it, highlight claim-handling delay, inadequate investigation, under-scoping, or incomplete accounting of the full loss.
-- ${isProven ? "Keep it professional, neutral-but-confident, and evidence-driven." : "Keep it assertive, evidence-driven, and carrier-facing."}
-- Only analyze the selected insured-side documents provided for this demand package.
-- Do not reference carrier estimates, carrier reports, or competing scopes unless they were explicitly provided.
-- If no carrier estimate is provided, do not mention one.
-- Do not invent code citations or policy language. If not provided, refer generally to applicable policy obligations and standards of good-faith claim handling.
+    ? "Address incomplete or partial repairs using documentation-backed reasoning where facts support full repair/replacement."
+    : "State why partial or cosmetic repairs are inadequate where the facts support full repair/replacement."}
+- Emphasize repairability limits, interdependency, access requirements, code triggers, and manufacturer specs where supported. NEVER use the word "matching" — PA and NJ are NOT matching states.
+- ${isProven ? "Keep it professional, neutral, and evidence-driven." : "Keep it factual, evidence-driven, and direct."}
+- Only analyze the selected insured-side documents provided.
+- Do not reference carrier estimates unless explicitly provided.
+- Do not invent code citations or policy language.
 - You MUST use the authoritative estimate total if one is provided.
-- NEVER use "rot", "rotted", "rotting", "rotten", "decay", "decayed", or "decaying". These terms are not acceptable in demand packages. Use "compromised decking", "damaged sheathing", or "storm-damaged substrate" instead.
-- Do not infer the demand amount from stray dollar values inside narrative text when an authoritative estimate total is present.
-- If multiple dollar values appear in the estimate materials, treat the authoritative estimate total as controlling.
+- NEVER use "rot", "rotted", "rotting", "rotten", "decay", "decayed", or "decaying". Use "compromised decking", "damaged sheathing", or "storm-damaged substrate" instead.
 - Use the estimate total as the demand amount unless the materials support another specific figure.
-- If the inspection report identifies room/component-specific damage, fold that into the narrative so the estimate reads inevitable and justified.
-- If there are weak points or missing proof, identify them in the "strategic_notes" field only, not in the demand body.
+- If there are weak points or missing proof, identify them in the "strategic_notes" field only, not in the report body.
 ${isProven ? PROVEN_MODE_POLICY_RULES : ""}
 
-${isProven ? "DOCUMENTATION EXPANSION RULES (CRITICAL):" : "FORCE EXPANSION RULES (CRITICAL):"}
-- You MUST expand every section beyond what is explicitly stated in the documents by applying professional construction, insurance, and claim-handling knowledge.
-- If the estimate includes a scope item, you must explain WHY it is required, not just restate it.
-- If the inspection identifies damage, you must connect it to:
-  (a) repair necessity
-  (b) replacement implications
-  (c) system disturbance and access requirements
-- ${isProven
-    ? "Present each supported line item as technically justified and relevant to claim evaluation."
-    : "Assume the carrier is looking for reasons to underpay — your job is to remove that ability."}
-- Every line item in the estimate should feel inevitable and technically justified when read in context of the demand.
+REPORT FORMAT RULES (CRITICAL):
+- Summary of Findings MUST be bullet points ONLY — no paragraph text. Each bullet: one fact, factual/specific, tied to observed damage.
+- Include exclusion bullets (e.g., "No hail damage observed") in Summary of Findings.
+- End Summary of Findings with the total estimate amount if available.
+- Use subheadings within damage assessment sections for scannability.
+- Break technical details into scannable chunks. Avoid dense paragraphs.
+- Remove redundant conclusions across sections — state a finding once.
 
-REGULATORY PRESSURE RULES:
-- Where applicable, identify claim handling concerns such as:
-  - delay in investigation
-  - incomplete scope evaluation
-  - failure to account for full damage
-  - under-scoping or cosmetic-only repair recommendations
-- Frame these as ${isProven ? "investigation and evaluation considerations" : "risks to the carrier"} without citing specific statutes unless provided.
-- Reference the carrier's obligations under standards of good-faith claim handling.
 ${toneBlock}
 
 DECLARED POSITION ALIGNMENT:
 ${args.declaredPositionText || "No declared position provided."}
-- If a declared position is provided, align the entire demand with it and do not deviate.
-- The demand must reinforce the declared loss mechanism, coverage trigger, and requested remedy.
+- If a declared position is provided, align the report with it and do not deviate.
 
 RETURN STRICT JSON with this exact shape:
 {
   "title": "string",
   "subject_line": "string",
   "demand_amount": "string",
-  "executive_summary": "string",
-  "cause_of_loss_analysis": "string",
-  "detailed_damage_findings": "string",
-  "scope_and_repair_justification": "string",
-  "repair_vs_replacement_analysis": "string",
-  "code_and_compliance_requirements": "string",
-  "system_interdependency_analysis": "string",
-  "carrier_risk_and_exposure": "string",
+  "summary_of_findings": "string",
+  "assessment_process": "string",
+  "roof_damage_assessment": "string",
+  "exterior_siding_assessment": "string",
+  "gutter_downspout_assessment": "string",
+  "existing_conditions": "string",
+  "repairability_replacement_assessment": "string",
+  "scope_of_repairs": "string",
   "formal_demand": "string",
   "full_demand_package": "string",
   "strategic_notes": "string",
@@ -817,39 +802,35 @@ POLICY MATCH SUMMARY:
 - Rationale: ${args.policyMatch.rationale.length ? args.policyMatch.rationale.join(" | ") : "No policy-match rationale available."}
 
 FINAL REQUIREMENT:
-The "full_demand_package" field must be a polished, carrier-ready demand document with clear section headings:
-${isProven
-    ? `1. Summary of Findings
-2. Cause of Loss
-3. Damaged Components
-4. Repairability Analysis
-5. Code and Compliance Considerations
-6. Financial Summary
-7. Conclusion`
-    : `1. Executive Summary
-2. Cause of Loss Analysis
-3. Detailed Damage Findings
-4. Scope and Repair Justification
-5. Repair vs. Replacement Analysis
-6. Code and Compliance Requirements
-7. System Interdependency Analysis
-8. Carrier Risk and Exposure
-9. Formal Demand`}
+The "full_demand_package" field must be a polished, carrier-ready restoration report with these exact section headings IN THIS ORDER:
+1. Summary of Findings
+2. Assessment Process
+3. Roof Damage Assessment
+4. Exterior / Siding Damage Assessment
+5. Gutter / Downspout Assessment
+6. Existing Conditions
+7. Repairability / Replacement Assessment
+8. Scope of Repairs
+9. Demand
+
+SECTION RULES:
+- "Summary of Findings" = bullet points ONLY. Each bullet is one factual observation. Include negative findings. End with estimate total.
+- "Assessment Process" = Brief description of inspection methodology, dates, tools used.
+- Damage assessment sections = Use subheadings (e.g., "Front Slope", "East Elevation"). Short factual descriptions per component.
+- "Existing Conditions" = Pre-loss condition observations, age, prior repairs.
+- "Repairability / Replacement Assessment" = Only where repair is infeasible — explain why with code/manufacturer/system rationale.
+- "Scope of Repairs" = Summarize the estimate scope by trade/component. Reference code triggers and manufacturer requirements.
+- "Demand" = State the amount. One paragraph maximum.
 
 ${isProven
-    ? `Use this opening in substance for the demand package introduction:
+    ? `Use this opening in substance for the report introduction:
 ${PROVEN_MODE_OPENING}
-
-Use this process alignment language in substance before the conclusion:
-${PROCESS_ALIGNMENT}
 
 Use this conclusion language in substance:
 ${PROVEN_MODE_CLOSE}
 
-If policy text is present, you must explicitly tie observed facts to specific policy language and section labels where available. If policy text is absent, note the limitation in "missing_evidence".
-
-The document should read like a cooperative, documentation-led claim package intended to assist the carrier's investigation and determination.`
-    : "The document should read like something a serious public adjuster would actually send to a carrier to push payment now."}
+The document should read like a technical restoration assessment report.`
+    : "The document should read like a professional property damage restoration report that makes the repair scope self-evident."}
 `.trim();
 }
 
@@ -1189,8 +1170,8 @@ Deno.serve(async (req) => {
     const aiResult = await generate({
       task: 'copilot_reasoning',
       system: mode === "proven"
-        ? "You generate carrier-ready insurance claim documentation packages. Return ONLY valid JSON — no markdown, no code fences, no commentary. Every section must be thorough, expanded, and documentation-led."
-        : "You generate carrier-ready insurance demand packages. Return ONLY valid JSON — no markdown, no code fences, no commentary. Every section must be thorough, expanded, and litigation-aware.",
+        ? "You generate carrier-ready property restoration assessment reports. Return ONLY valid JSON — no markdown, no code fences, no commentary. Use factual, technical language. Summary of Findings must be bullet points only."
+        : "You generate carrier-ready property restoration reports with demand sections. Return ONLY valid JSON — no markdown, no code fences, no commentary. Use factual, technical language. Summary of Findings must be bullet points only.",
       user: prompt,
       claimId,
       forceStrong: true,
