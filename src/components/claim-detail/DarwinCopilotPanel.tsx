@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Brain, Send, Trash2, StopCircle, Maximize2, Minimize2, Bold, Italic, Underline, Type, Paperclip, X, FileText, RefreshCw } from "lucide-react";
+import { Brain, Send, Trash2, StopCircle, Maximize2, Minimize2, Bold, Italic, Underline, Type, Paperclip, X, FileText, RefreshCw, AlertTriangle, TrendingUp, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +48,47 @@ export function DarwinCopilotPanel({ claimId, isExpanded, onToggleExpand }: Darw
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [claimFiles, setClaimFiles] = useState<ClaimFile[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
+  const [nudges, setNudges] = useState<Array<{ id: string; severity: string; title: string; message: string; warning_type: string }>>([]);
+  const [dismissedNudgeIds, setDismissedNudgeIds] = useState<Set<string>>(new Set());
+  const [nudgesCollapsed, setNudgesCollapsed] = useState(false);
+
+  // Load active warnings/nudges for this claim
+  useEffect(() => {
+    const fetchNudges = async () => {
+      const { data } = await supabase
+        .from('claim_warnings_log')
+        .select('id, severity, title, message, warning_type')
+        .eq('claim_id', claimId)
+        .eq('is_dismissed', false)
+        .eq('is_resolved', false)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      if (data) setNudges(data);
+    };
+    fetchNudges();
+
+    const channel = supabase
+      .channel(`copilot_nudges_${claimId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'claim_warnings_log',
+        filter: `claim_id=eq.${claimId}`,
+      }, () => { fetchNudges(); })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [claimId]);
+
+  const handleDismissNudge = async (nudgeId: string) => {
+    setDismissedNudgeIds(prev => new Set([...prev, nudgeId]));
+    await supabase
+      .from('claim_warnings_log')
+      .update({ is_dismissed: true, dismissed_at: new Date().toISOString() })
+      .eq('id', nudgeId);
+  };
+
+  const visibleNudges = nudges.filter(n => !dismissedNudgeIds.has(n.id));
 
   // Auto-scroll on new messages
   useEffect(() => {
