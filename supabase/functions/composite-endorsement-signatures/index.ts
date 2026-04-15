@@ -451,7 +451,9 @@ Deno.serve(async (req) => {
     }
 
     if (visibleCompanySignature?.resolvedSignatureImageUrl) {
-      const sigWidth = Math.min(blockWidth - 20, Math.round(imgHeight * 0.10));
+      const baseSigWidth = Math.min(blockWidth - 20, Math.round(imgHeight * 0.10));
+      const sigWidth = Math.round(baseSigWidth * appliedOverride.scale);
+      console.log(`[COMPOSITE][SIG-IMG-CO] bakedSigWidth=${sigWidth} | bakedSigHeight=${fitSigHeight} | userScale=${appliedOverride.scale}`);
       const coSigFilterId = `blackInkCo_${visibleCompanySignature.id.replace(/[^a-zA-Z0-9]/g, "")}`;
       endorsementSvg += `<defs><filter id="${coSigFilterId}"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></defs>`;
       endorsementSvg += `<image href="${escHtml(visibleCompanySignature.resolvedSignatureImageUrl)}" x="${Math.round(localCenterX - sigWidth / 2)}" y="${curY}" width="${sigWidth}" height="${fitSigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${coSigFilterId})"/>`;
