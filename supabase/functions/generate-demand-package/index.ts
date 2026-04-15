@@ -124,21 +124,7 @@ PROVEN MODE POLICY UTILIZATION (CRITICAL):
 - If policy documents are missing or incomplete, state the limitation in "missing_evidence" and keep the coverage discussion appropriately qualified.
 `;
 
-const PROVEN_MODE_OPENING = `
-We are submitting this claim along with a comprehensive documentation package to assist in your investigation and evaluation of the reported loss.
-
-The enclosed materials include our findings regarding cause of loss, observed damages, and supporting documentation relevant to scope and repair considerations.
-
-We understand that your standard process may include inspection and further evaluation, and this package is intended to streamline and assist that process from the outset.
-`;
-
-const PROCESS_ALIGNMENT = `
-This documentation is provided to align with and support your standard investigation process, including inspection, evaluation, and determination. The intent is to present a clear and well-supported understanding of the loss to facilitate an efficient and accurate resolution.
-`;
-
-const PROVEN_MODE_CLOSE = `
-We respectfully request your review of the enclosed materials and look forward to your determination. Should any additional information be required to assist in your evaluation, please advise and we will promptly provide it.
-`;
+// Boilerplate opening/closing removed — report should be purely factual, no cover-letter language.
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
