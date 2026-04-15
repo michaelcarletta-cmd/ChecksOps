@@ -372,6 +372,13 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
       setDocxHtml(returnedDocxHtml);
       setLastPackageDate(new Date().toISOString());
 
+      // Run client-side validation
+      const errors = validateDemandPackage(demandText);
+      setValidationErrors(errors);
+      if (errors.length > 0) {
+        toast.warning(`Report generated with ${errors.length} quality issue(s). Review validation errors below.`);
+      }
+
       await supabase.from('darwin_analysis_results').insert({
         claim_id: claimId,
         analysis_type: 'demand_package',
