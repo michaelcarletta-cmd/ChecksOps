@@ -217,7 +217,7 @@ export function EmailComposer({
       .replace(/\{settlement\.other_structures_deductible\}/g, formatCurrency(settlement?.other_structures_deductible))
       .replace(/\{settlement\.other_structures_acv\}/g, formatCurrency(otherStructuresACV))
       .replace(/\{settlement\.other_structures_net\}/g, formatCurrency(otherStructuresNet))
-      // PWI settlement fields (support both short and long field names)
+      // Paid When Incurred settlement fields (support both short and long field names)
       .replace(/\{settlement\.pwi_rcv\}/g, formatCurrency(settlement?.pwi_rcv))
       .replace(/\{settlement\.pwi_recoverable_dep\}/g, formatCurrency(settlement?.pwi_recoverable_depreciation))
       .replace(/\{settlement\.pwi_recoverable_depreciation\}/g, formatCurrency(settlement?.pwi_recoverable_depreciation))

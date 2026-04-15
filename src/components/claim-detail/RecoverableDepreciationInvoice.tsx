@@ -263,11 +263,11 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
   };
 
   // Calculate total recoverable depreciation
-  // Note: PWI RCV is itself recoverable - it's "Paid When Incurred" (released upon job completion)
+  // Note: Paid When Incurred RCV is itself recoverable (released upon job completion)
   const getTotalRecoverableDepreciation = (): number => {
     if (!settlement) return 0;
     const dwelling = Number(settlement.recoverable_depreciation) || 0;
-    const pwiRcv = Number(settlement.pwi_rcv) || 0; // PWI RCV IS the recoverable amount
+    const pwiRcv = Number(settlement.pwi_rcv) || 0; // Paid When Incurred RCV IS the recoverable amount
     const otherStructures = Number(settlement.other_structures_recoverable_depreciation) || 0;
     const personalProperty = Number(settlement.personal_property_recoverable_depreciation) || 0;
     return dwelling + pwiRcv + otherStructures + personalProperty;
