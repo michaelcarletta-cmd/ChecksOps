@@ -859,15 +859,7 @@ ANTI-GENERIC CONTENT RULE (MANDATORY):
 - Every statement must cite specific claim data.
 - If a sentence contains no claim-specific fact, do NOT include it.
 
-${isProven
-    ? `Use this opening in substance for the report introduction:
-${PROVEN_MODE_OPENING}
-
-Use this conclusion language in substance:
-${PROVEN_MODE_CLOSE}
-
-The document should read like a technical restoration assessment report.`
-    : "The document should read like a professional property damage restoration report that makes the repair scope self-evident."}
+The document should read like a professional property damage restoration report that makes the repair scope self-evident. No cover-letter openings. No closing requests. Start directly with the findings.
 `.trim();
 }
 
