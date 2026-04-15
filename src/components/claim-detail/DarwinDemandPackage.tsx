@@ -146,8 +146,9 @@ function validateDemandPackage(fullText: string): ValidationError[] {
     }
 
     if (rules.type === 'short') {
-      if (stripped.length > 500) {
-        errors.push({ section: heading, message: `${heading} is too long (must be concise)` });
+      const maxChars = (rules as any).maxChars || 500;
+      if (stripped.length > maxChars) {
+        errors.push({ section: heading, message: `${heading} is too long (max ${maxChars} chars, has ${stripped.length})` });
       }
     }
   }
