@@ -8,9 +8,20 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   Send, CheckCircle2, Clock, AlertTriangle, XCircle,
   Users, Building2, Shield, FileCheck, Ban, RefreshCw,
-  Landmark, PenTool, Eye, ShieldCheck,
+  Landmark, PenTool, Eye, ShieldCheck, Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -72,6 +83,8 @@ export function EndorsementChecklist({ checkId, onRefresh }: EndorsementChecklis
     },
   });
 
+  const [forceCompleting, setForceCompleting] = useState(false);
+
   const allComplete = endorsements.length > 0 && endorsements.every(
     (e) => e.status === "signed" || e.status === "waived" ||
       (e.payee_type === "mortgage_company" && e.status === "manual_required"),
@@ -87,6 +100,57 @@ export function EndorsementChecklist({ checkId, onRefresh }: EndorsementChecklis
     qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
     qc.invalidateQueries({ queryKey: ["check-intake-items"] });
     onRefresh?.();
+  };
+
+  const forceCompleteAll = async () => {
+    setForceCompleting(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const userId = session.session?.user?.id ?? "unknown";
+
+      const incompleteIds = endorsements
+        .filter((e) => e.status !== "signed" && e.status !== "waived")
+        .map((e) => e.id);
+
+      if (incompleteIds.length > 0) {
+        const { error } = await supabase
+          .from("check_endorsements")
+          .update({
+            status: "signed",
+            signed_at: new Date().toISOString(),
+            notes: `Manually marked as received by staff override`,
+            signature_method: "manual_override",
+          })
+          .in("id", incompleteIds);
+
+        if (error) throw error;
+      }
+
+      // Audit log
+      await supabase.from("check_audit_log").insert({
+        check_id: checkId,
+        event_type: "endorsements_force_completed",
+        event_description: `All endorsements manually marked as received (${incompleteIds.length} updated)`,
+        actor_id: userId,
+        event_data: { overridden_ids: incompleteIds },
+      });
+
+      toast({
+        title: "Endorsements marked as complete",
+        description: `${incompleteIds.length} endorsement(s) updated at ${new Date().toLocaleTimeString()}`,
+      });
+
+      refresh();
+    } catch (e: unknown) {
+      console.error("Force complete endorsements failed:", e);
+      toast({
+        title: "Failed to update endorsements",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setForceCompleting(false);
+    }
   };
 
   if (isLoading) {
@@ -122,11 +186,43 @@ export function EndorsementChecklist({ checkId, onRefresh }: EndorsementChecklis
       </div>
 
       {!allComplete && (
-        <div className="px-1">
+        <div className="px-1 space-y-2">
           <div className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
             <AlertTriangle className="h-3 w-3 shrink-0" />
             Deposit blocked until all required endorsements are completed
           </div>
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full text-xs h-8 border-muted-foreground/30 text-muted-foreground hover:text-primary hover:border-primary"
+                disabled={forceCompleting}
+              >
+                {forceCompleting ? (
+                  <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-3 w-3 mr-1.5" />
+                )}
+                Mark All Endorsements Received
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Force Complete Endorsements</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure all endorsements have been received? This will mark {pendingCount} pending endorsement(s) as signed. This action will be logged and cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={forceCompleteAll}>
+                  Confirm
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
 
