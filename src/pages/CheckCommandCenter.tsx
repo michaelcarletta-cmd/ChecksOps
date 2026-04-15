@@ -262,20 +262,61 @@ export default function CheckCommandCenter() {
             Insurance check intake, review & deposit readiness
           </p>
         </div>
-        <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-          <DialogTrigger asChild>
-            <Button><Upload className="h-4 w-4 mr-2" />Upload Check</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader><DialogTitle>Upload Insurance Check</DialogTitle></DialogHeader>
-            <CheckUploadForm
-              onSuccess={() => {
-                setUploadDialogOpen(false);
-                qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-              }}
-            />
-          </DialogContent>
-        </Dialog>
+        <div className="flex items-center gap-2">
+          <Sheet open={helpOpen} onOpenChange={setHelpOpen}>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="icon" className="h-9 w-9">
+                <HelpCircle className="h-4 w-4" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-[320px] sm:w-[320px]">
+              <SheetHeader>
+                <SheetTitle>How to Use Check Command Center</SheetTitle>
+              </SheetHeader>
+              <div className="mt-6 space-y-6">
+                <HelpStep
+                  step={1}
+                  title="Receive Endorsement"
+                  description="When a check arrives with 'Branch Endorsement Required' status, it means all payees must sign before the check can be deposited. The endorsement checklist tracks each payee's signature status."
+                />
+                <HelpStep
+                  step={2}
+                  title="Move to Branch"
+                  description="Once endorsements are complete, the check moves to the Branch tab. A reviewer assigns the deposit path — either direct deposit, branch deposit, or loss draft if a mortgage company is involved."
+                />
+                <HelpStep
+                  step={3}
+                  title="Approve for Deposit"
+                  description="Click 'Approve for Deposit' to mark the check ready. For branch deposits, use 'Move to Deposited' once the physical deposit is complete. If stuck, use 'Force Move to Deposited'."
+                />
+                <HelpStep
+                  step={4}
+                  title="Check Deposited"
+                  description="Final state — the check has been deposited and is awaiting clearance. The accounting entry is auto-posted and the check appears in reconciliation reports."
+                />
+              </div>
+              <div className="mt-8">
+                <Button variant="outline" className="w-full" onClick={() => setHelpOpen(false)}>
+                  Dismiss
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
+          <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+            <DialogTrigger asChild>
+              <Button><Upload className="h-4 w-4 mr-2" />Upload Check</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader><DialogTitle>Upload Insurance Check</DialogTitle></DialogHeader>
+              <CheckUploadForm
+                onSuccess={() => {
+                  setUploadDialogOpen(false);
+                  qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Phase 2 Dashboard Cards */}
