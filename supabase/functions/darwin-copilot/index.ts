@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
 import { callPerplexityResearch, runDarwinTask } from "../_shared/ai-router.ts";
 import { getClaimsContextBundle, formatContextBundle } from "../_shared/ai/claimsKnowledgeEngine.ts";
-import { analyzeDocument, formatDismantlerForPrompt, type DismantlerResult } from "../_shared/ai/universalDismantler.ts";
+import { analyzeDocument, formatDismantlerForPrompt, reconstructDismantlerFromRow, type DismantlerResult } from "../_shared/ai/universalDismantler.ts";
 import { isGarbageText } from "../_shared/document-intelligence-types.ts";
 
 const corsHeaders = {
