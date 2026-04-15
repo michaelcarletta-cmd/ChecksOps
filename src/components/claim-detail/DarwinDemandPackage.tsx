@@ -57,45 +57,28 @@ const TONE_OPTIONS: { value: string; label: string; description: string; icon: s
 ];
 
 const REQUIRED_SECTIONS = [
-  'Table of Contents',
-  'Claim Overview',
-  'Policyholder and Loss Information',
   'Summary of Findings',
-  'Evidence Reviewed',
-  'Counterfactual Causation Test',
-  'Cause of Loss Analysis',
-  'Damaged Components',
-  'Weather Conditions Analysis',
-  'Condition of Damaged Components',
-  'Repairability Analysis',
-  'Why Partial Repairs Are Not Feasible',
-  'Interdependency of Building Systems',
-  'Why Damaged Areas Must Be Disturbed for Repairs',
-  'Code Requirements',
-  'Manufacturer Installation Standards',
-  'HAAG Engineering Standards and Industry Best Practices',
-  'Estimate and Scope Summary',
-  'Anticipated Carrier Defenses and Rebuttals',
-  'Formal Demand and Conclusion',
-  'Exhibit Index',
-  'Evidence Gaps Preventing Stronger Proof',
+  'Assessment Process',
+  'Roof Damage Assessment',
+  'Exterior / Siding Damage Assessment',
+  'Gutter / Downspout Assessment',
+  'Existing Conditions',
+  'Repairability / Replacement Assessment',
+  'Scope of Repairs',
+  'Demand',
 ];
 
 const GENERATION_RULES = [
-  'Use a formal, persuasive, evidence-driven tone.',
+  'Use a factual, technical, report-style tone — not persuasive narrative.',
+  'Summary of Findings must be bullet points only — no paragraph text.',
+  'Each bullet: one fact, specific, tied to observed damage.',
+  'Include exclusion bullets (e.g., "No hail damage observed").',
   'Do not invent facts not found in the provided evidence.',
-  'Tie each major conclusion to the provided evidence.',
-  'Use headings and subheadings matching the required sections.',
-  'Separate causation analysis from repairability analysis.',
-  'Separate matching arguments from direct physical damage arguments.',
-  'Identify competing explanations such as wear and tear, deterioration, foot traffic, installation defects, prior repairs, or deferred maintenance when supported by the evidence.',
-  'If the evidence does not support a confident conclusion, say so explicitly.',
-  'Identify evidence gaps and classify each as Critical, Helpful, or Optional based on its effect on proving causation, coverage, scope, or amount.',
-  'Include a dedicated Counterfactual Causation Test section.',
-  'In the Counterfactual Causation Test, ask whether the observed damage would exist in the same form, extent, and timing but for the reported loss event.',
-  'In the Counterfactual Causation Test, provide a direct answer of Yes, No, or Indeterminate and explain the basis for that answer using the evidence.',
-  'In the Counterfactual Causation Test, identify alternative non-covered explanations considered and explain whether they better account for the observed condition.',
-  'If causation cannot be established confidently from the provided materials, state that explicitly and identify the missing proof needed.',
+  'Use subheadings within damage sections for scannability.',
+  'Add explanation only for: repair scope justification, code requirements, manufacturer specs, system interdependency.',
+  'Remove redundant conclusions — state a finding once.',
+  'If evidence does not support a confident conclusion, say so explicitly.',
+  'Identify evidence gaps in strategic_notes only, not in the report body.',
 ];
 
 export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps) => {
@@ -252,7 +235,7 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
 
   const handleGenerate = async () => {
     setLoading(true);
-    toast.info('Darwin is analyzing evidence, testing causation, and assembling the demand package.');
+    toast.info('Darwin is analyzing evidence and assembling the restoration report.');
 
     try {
       // Build declared position text from position hook
@@ -324,10 +307,10 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
         } as any
       });
 
-      toast.success('Demand package generated successfully');
+      toast.success('Restoration report generated successfully');
     } catch (error: any) {
-      console.error('Error generating demand package:', error);
-      const message = await getFunctionErrorMessage(error, 'Failed to generate demand package');
+      console.error('Error generating restoration report:', error);
+      const message = await getFunctionErrorMessage(error, 'Failed to generate restoration report');
       toast.error(message);
     } finally {
       setLoading(false);
@@ -406,17 +389,17 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Briefcase className="h-5 w-5 text-primary" />
-          Causation & Demand Package Builder
+          Restoration Report Builder
         </CardTitle>
         <CardDescription>
-          Select reports, estimates, manufacturer letters, weather documents, and photos for Darwin to analyze. Darwin will organize the evidence into a formal demand package designed to prove causation, scope, repair infeasibility, code impact, and the full payment owed.
+          Select inspection reports, estimates, and photos for Darwin to analyze. Darwin will organize the evidence into a factual restoration report documenting observed damage, assessment methodology, and repair scope.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <Alert>
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            <strong>How it works:</strong> Select evidence documents and photos. Darwin will read and analyze the actual content of each document and photo to extract key information, test causation, and build a detailed demand package. If evidence is missing, Darwin will identify the gaps explicitly.
+            <strong>How it works:</strong> Select evidence documents and photos. Darwin will read and analyze the actual content to extract findings, document conditions, and build a technical restoration report. Missing evidence is identified in strategic notes.
           </AlertDescription>
         </Alert>
 
@@ -641,21 +624,21 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
           {loading ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Analyzing Evidence & Building Causation Package...
+              Analyzing Evidence & Building Restoration Report...
             </>
           ) : (
             <>
               <Briefcase className="h-4 w-4 mr-2" />
-              Build Causation & Demand Package ({selectedFiles.size} documents{selectedPhotos.size > 0 ? `, ${selectedPhotos.size} photos` : ''})
+              Build Restoration Report ({selectedFiles.size} documents{selectedPhotos.size > 0 ? `, ${selectedPhotos.size} photos` : ''})
             </>
           )}
         </Button>
 
-        {/* Generated Package */}
+        {/* Generated Report */}
         {generatedPackage && (
           <div className="space-y-3 border-t pt-4">
             <div className="flex items-center justify-between">
-              <Label className="text-base">Generated Demand Package</Label>
+              <Label className="text-base">Generated Restoration Report</Label>
               {lastPackageDate && (
                 <span className="text-xs text-muted-foreground">
                   Generated: {format(new Date(lastPackageDate), 'MMM d, yyyy h:mm a')}
@@ -663,9 +646,9 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
               )}
             </div>
             
-            <ScrollArea className="h-[400px] border rounded-md p-4 bg-muted/30">
-              <pre className="whitespace-pre-wrap text-sm font-mono">{generatedPackage}</pre>
-            </ScrollArea>
+            <div className="h-[400px] overflow-y-auto border rounded-md p-4 bg-muted/30 scroll-smooth restoration-report">
+              <pre className="whitespace-pre-wrap text-sm leading-relaxed">{generatedPackage}</pre>
+            </div>
 
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={copyToClipboard}>
