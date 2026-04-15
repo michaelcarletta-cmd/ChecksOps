@@ -1025,6 +1025,52 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
           </div>
         )}
       </div>
+
+      {/* Mobile Copilot Sheet */}
+      <Sheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen}>
+        <SheetContent side="bottom" className="h-[85vh] p-0 flex flex-col">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Darwin Copilot</SheetTitle>
+          </SheetHeader>
+          <div className="flex border-b">
+            <button
+              className={cn(
+                "flex-1 px-3 py-2 text-xs font-medium transition-colors",
+                copilotView === 'conversation'
+                  ? "bg-primary/10 text-primary border-b-2 border-primary"
+                  : "text-muted-foreground hover:bg-accent/50"
+              )}
+              onClick={() => setCopilotView('conversation')}
+            >
+              <MessageSquare className="h-3 w-3 inline mr-1" />
+              Copilot
+            </button>
+            <button
+              className={cn(
+                "flex-1 px-3 py-2 text-xs font-medium transition-colors",
+                copilotView === 'dismantler'
+                  ? "bg-primary/10 text-primary border-b-2 border-primary"
+                  : "text-muted-foreground hover:bg-accent/50"
+              )}
+              onClick={() => setCopilotView('dismantler')}
+            >
+              <Shield className="h-3 w-3 inline mr-1" />
+              Dismantler
+            </button>
+          </div>
+          {copilotView === 'conversation' ? (
+            <DarwinCopilotPanel claimId={claimId} isExpanded={false} />
+          ) : (
+            <div className="flex-1 overflow-y-auto p-3 text-xs text-muted-foreground">
+              {dismantlerText ? (
+                <div className="whitespace-pre-wrap">{dismantlerText}</div>
+              ) : (
+                <p>No dismantler output yet. Run any Darwin analysis and it will be generated automatically.</p>
+              )}
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };
