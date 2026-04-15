@@ -77,11 +77,31 @@ function measurePreset(signerCount: number, preset: LayoutPreset): MeasuredLayou
 }
 
 function fitLayout(signerCount: number, zoneHeightPx: number, requestedScale: number): MeasuredLayout {
+  const userScale = requestedScale || 1;
+
+  // Pick best-fit preset ignoring user scale (layout fit only)
+  let basePreset = PRESETS[PRESETS.length - 1];
   for (const preset of PRESETS) {
-    const measured = measurePreset(signerCount, { ...preset, scale: Math.min(preset.scale, requestedScale || 1) });
-    if (measured.estimatedHeight <= zoneHeightPx) return measured;
+    const measured = measurePreset(signerCount, preset);
+    if (measured.estimatedHeight <= zoneHeightPx) {
+      basePreset = preset;
+      break;
+    }
   }
-  return measurePreset(signerCount, { ...PRESETS[PRESETS.length - 1], scale: Math.min(PRESETS[PRESETS.length - 1].scale, requestedScale || 1) });
+
+  // Bake user scale into all dimensions (matches src/lib/endorsementFit.ts exactly)
+  const scaled: LayoutPreset = {
+    ...basePreset,
+    fontSize: Math.round(basePreset.fontSize * userScale),
+    lineGap: Math.round(basePreset.lineGap * userScale),
+    rowGap: Math.round(basePreset.rowGap * userScale),
+    signatureHeight: Math.round(basePreset.signatureHeight * userScale),
+    scale: userScale,
+  };
+
+  console.log("[COMPOSITE] fitLayout", { basePreset: basePreset.fontSize, userScale, scaledFontSize: scaled.fontSize });
+
+  return measurePreset(signerCount, scaled);
 }
 
 function chunkRows<T>(items: T[], cols: 1 | 2): T[][] {
