@@ -67,6 +67,86 @@ const REQUIRED_SECTIONS = [
   'Demand',
 ];
 
+const SECTION_VALIDATION_RULES: Record<string, { minChars: number; minSentences: number }> = {
+  'Summary of Findings': { minChars: 250, minSentences: 3 },
+  'Narrative Framing & Preemptive Clarification': { minChars: 250, minSentences: 3 },
+  'Roof Damage Assessment': { minChars: 400, minSentences: 5 },
+  'Exterior / Siding Damage Assessment': { minChars: 250, minSentences: 3 },
+  'Gutter / Downspout Assessment': { minChars: 200, minSentences: 2 },
+  'Damage Characterization Analysis': { minChars: 300, minSentences: 4 },
+  'Scope of Repair / Justification': { minChars: 400, minSentences: 5 },
+  'Demand': { minChars: 150, minSentences: 2 },
+};
+
+const FILLER_PHRASES = [
+  'in conclusion',
+  'overall',
+  'it is important to note',
+  'this section',
+  'placeholder',
+  'to be determined',
+];
+
+function countSentences(text: string): number {
+  return (text.match(/[.!?](?:\s|$)/g) || []).length;
+}
+
+function extractSectionBody(fullText: string, heading: string, nextHeadings: string[]): string {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const nextPattern = nextHeadings
+    .map(h => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
+  const regex = new RegExp(`${escaped}[\\s\\S]*?(?=${nextPattern}|$)`, 'i');
+  const match = fullText.match(regex);
+  return match?.[0] || '';
+}
+
+interface ValidationError {
+  section: string;
+  message: string;
+}
+
+function validateDemandPackage(fullText: string): ValidationError[] {
+  const errors: ValidationError[] = [];
+
+  // Check all sections present
+  for (const heading of REQUIRED_SECTIONS) {
+    if (!fullText.toLowerCase().includes(heading.toLowerCase())) {
+      errors.push({ section: heading, message: `Missing section: ${heading}` });
+    }
+  }
+  if (errors.length > 0) return errors;
+
+  // Validate each section body
+  for (let i = 0; i < REQUIRED_SECTIONS.length; i++) {
+    const heading = REQUIRED_SECTIONS[i];
+    const body = extractSectionBody(fullText, heading, REQUIRED_SECTIONS.slice(i + 1));
+    const stripped = body.replace(new RegExp(heading, 'i'), '').replace(/\s+/g, ' ').trim();
+    const rules = SECTION_VALIDATION_RULES[heading];
+    if (!rules) continue;
+
+    const chars = stripped.length;
+    const sentences = countSentences(stripped);
+
+    if (chars < rules.minChars) {
+      errors.push({ section: heading, message: `${heading} too short: ${chars} chars, requires ${rules.minChars}` });
+    }
+    if (sentences < rules.minSentences) {
+      errors.push({ section: heading, message: `${heading} needs ${rules.minSentences}+ sentences, found ${sentences}` });
+    }
+  }
+
+  // Filler detection
+  const lowerText = fullText.toLowerCase();
+  for (const phrase of FILLER_PHRASES) {
+    if (lowerText.includes(phrase)) {
+      errors.push({ section: 'Content Quality', message: `Contains filler phrase: "${phrase}"` });
+    }
+  }
+
+  return errors;
+}
+
 const GENERATION_RULES = [
   'Use a factual, technical, report-style tone — not persuasive narrative.',
   'Summary of Findings must be bullet points only — no paragraph text.',
@@ -94,6 +174,7 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
   const [generatedPackage, setGeneratedPackage] = useState<string | null>(null);
   const [docxHtml, setDocxHtml] = useState<string | null>(null);
   const [lastPackageDate, setLastPackageDate] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
 
   const { position } = useDeclaredPosition(claimId);
 
@@ -290,6 +371,13 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
       setGeneratedPackage(demandText);
       setDocxHtml(returnedDocxHtml);
       setLastPackageDate(new Date().toISOString());
+
+      // Run client-side validation
+      const errors = validateDemandPackage(demandText);
+      setValidationErrors(errors);
+      if (errors.length > 0) {
+        toast.warning(`Report generated with ${errors.length} quality issue(s). Review validation errors below.`);
+      }
 
       await supabase.from('darwin_analysis_results').insert({
         claim_id: claimId,
@@ -636,6 +724,22 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
         {/* Generated Report */}
         {generatedPackage && (
           <div className="space-y-3 border-t pt-4">
+            {/* Validation Errors Banner */}
+            {validationErrors.length > 0 && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Quality Validation Failed ({validationErrors.length} issue{validationErrors.length > 1 ? 's' : ''}):</strong>
+                  <ul className="mt-2 space-y-1 list-disc list-inside text-xs">
+                    {validationErrors.map((err, i) => (
+                      <li key={i}>{err.message}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-xs">Export is disabled until all sections pass validation. Regenerate with more evidence or adjust instructions.</p>
+                </AlertDescription>
+              </Alert>
+            )}
+
             <div className="flex items-center justify-between">
               <Label className="text-base">Generated Restoration Report</Label>
               {lastPackageDate && (
@@ -650,15 +754,15 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
             </div>
 
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={copyToClipboard}>
+              <Button variant="outline" size="sm" onClick={copyToClipboard} disabled={validationErrors.length > 0}>
                 <Copy className="h-4 w-4 mr-1" />
                 Copy
               </Button>
-              <Button variant="outline" size="sm" onClick={downloadAsText}>
+              <Button variant="outline" size="sm" onClick={downloadAsText} disabled={validationErrors.length > 0}>
                 <Download className="h-4 w-4 mr-1" />
                 Download Text
               </Button>
-              <Button variant="outline" size="sm" onClick={saveAsWord}>
+              <Button variant="outline" size="sm" onClick={saveAsWord} disabled={validationErrors.length > 0}>
                 <FileText className="h-4 w-4 mr-1" />
                 Save as Word
               </Button>
