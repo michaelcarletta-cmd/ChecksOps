@@ -1620,8 +1620,78 @@ ${research.text}`;
       console.error('[Copilot] Knowledge Engine error (non-fatal):', e);
     }
 
-    // Append external research and knowledge context to system prompt
+    // ── Universal Dismantler — retrieve existing dismantler intelligence or trigger on demand ──
+    let dismantlerContext = '';
+    try {
+      // Always check for existing dismantler results for this claim
+      const { data: dismantlerResults } = await supabase
+        .from('claim_document_dismantlers')
+        .select('document_type, report_summary, main_position, strongest_rebuttal_points, contradictions, unsupported_assumptions, limitations, coverage_weaknesses, omissions, draft_rebuttal_language, source_file_name')
+        .eq('claim_id', claimId)
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+      if (dismantlerResults && dismantlerResults.length > 0) {
+        const dismantlerDigest = dismantlerResults.map((d: any) => formatDismantlerForPrompt({
+          documentType: d.document_type,
+          reportSummary: d.report_summary || '',
+          mainPosition: d.main_position || '',
+          nonCoveredTheories: [],
+          limitations: d.limitations || [],
+          unsupportedAssumptions: d.unsupported_assumptions || [],
+          contradictions: d.contradictions || [],
+          omissions: d.omissions || [],
+          repairabilityOverreach: [],
+          coverageWeaknesses: d.coverage_weaknesses || [],
+          strongestRebuttalPoints: d.strongest_rebuttal_points || [],
+          evidenceToGatherNext: [],
+          draftRebuttalLanguage: d.draft_rebuttal_language || '',
+          meta: { chunkCount: 0, successfulChunks: 0, failedChunks: 0, model: '', cached: false, usedSearch: false },
+        })).join('\n\n');
+        dismantlerContext = dismantlerDigest;
+        console.log(`[Copilot] Dismantler intelligence injected: ${dismantlerResults.length} document analyses`);
+      }
+
+      // If user explicitly asks to dismantle and we have file text, trigger on-demand analysis
+      if (isDismantleRequest(latestUserTurn) && !dismantlerResults?.length) {
+        // Try to find the most relevant file with extracted text
+        const { data: relevantFiles } = await supabase
+          .from('claim_files')
+          .select('id, file_name, extracted_text, clean_text')
+          .eq('claim_id', claimId)
+          .order('uploaded_at', { ascending: false })
+          .limit(5);
+
+        const targetFile = (relevantFiles || []).find((f: any) => {
+          const text = (f.clean_text || f.extracted_text || '').trim();
+          return text.length >= 100;
+        });
+
+        if (targetFile) {
+          const docText = (targetFile.clean_text || targetFile.extracted_text || '').trim();
+          console.log(`[Copilot] Triggering on-demand dismantler for "${targetFile.file_name}" (${docText.length} chars)`);
+          try {
+            const result = await analyzeDocument({
+              claimId,
+              documentText: docText.slice(0, 50000),
+              fileId: targetFile.id,
+              fileName: targetFile.file_name,
+              supabase,
+            });
+            dismantlerContext = formatDismantlerForPrompt(result);
+            console.log(`[Copilot] On-demand dismantler complete: ${result.strongestRebuttalPoints.length} rebuttal points`);
+          } catch (dismantleErr) {
+            console.warn('[Copilot] On-demand dismantler failed (non-fatal):', dismantleErr);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[Copilot] Dismantler context error (non-fatal):', e);
+    }
+
+    // Append external research, knowledge context, and dismantler context to system prompt
     const finalSystemPrompt = (knowledgeContext ? knowledgeContext + '\n\n' : '') +
+      (dismantlerContext ? dismantlerContext + '\n\n' : '') +
       systemPrompt +
       (externalResearch || '');
 
