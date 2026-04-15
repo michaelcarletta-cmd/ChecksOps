@@ -174,6 +174,7 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
   const [generatedPackage, setGeneratedPackage] = useState<string | null>(null);
   const [docxHtml, setDocxHtml] = useState<string | null>(null);
   const [lastPackageDate, setLastPackageDate] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
 
   const { position } = useDeclaredPosition(claimId);
 
