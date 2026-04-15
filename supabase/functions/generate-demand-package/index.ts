@@ -124,21 +124,7 @@ PROVEN MODE POLICY UTILIZATION (CRITICAL):
 - If policy documents are missing or incomplete, state the limitation in "missing_evidence" and keep the coverage discussion appropriately qualified.
 `;
 
-const PROVEN_MODE_OPENING = `
-We are submitting this claim along with a comprehensive documentation package to assist in your investigation and evaluation of the reported loss.
-
-The enclosed materials include our findings regarding cause of loss, observed damages, and supporting documentation relevant to scope and repair considerations.
-
-We understand that your standard process may include inspection and further evaluation, and this package is intended to streamline and assist that process from the outset.
-`;
-
-const PROCESS_ALIGNMENT = `
-This documentation is provided to align with and support your standard investigation process, including inspection, evaluation, and determination. The intent is to present a clear and well-supported understanding of the loss to facilitate an efficient and accurate resolution.
-`;
-
-const PROVEN_MODE_CLOSE = `
-We respectfully request your review of the enclosed materials and look forward to your determination. Should any additional information be required to assist in your evaluation, please advise and we will promptly provide it.
-`;
+// Boilerplate opening/closing removed — report should be purely factual, no cover-letter language.
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -692,14 +678,27 @@ Your task is to analyze:
 4. Claim timeline context
 5. Claim intelligence context
 
-Then generate a CONCISE, BULLET-DRIVEN RESTORATION REPORT modeled after professional hail & wind damage restoration reports.
+Then generate a CONCISE, BULLET-DRIVEN RESTORATION REPORT modeled after professional property damage restoration reports.
 
 ${isProven ? PROVEN_MODE_RULES : ""}
 ${policyConstraintBlock}
 
+ANTI-HALLUCINATION RULES (CRITICAL — HIGHEST PRIORITY):
+- You MUST ONLY report damage that is EXPLICITLY described in the inspection report or photos provided.
+- If the inspection report says "No wind damage was found" — DO NOT claim wind damage exists.
+- If the inspection report says "No damage found" on an elevation — DO NOT invent damage for that elevation.
+- If the inspection report identifies a specific cause of loss (e.g., ice dam, tree fall, plumbing), USE THAT CAUSE — do NOT substitute a different cause of loss.
+- If a section has no damage (roof, exterior, gutters), write "No [type] damage observed per inspection findings" — do NOT fabricate damage.
+- NEVER invent damage counts, locations, or conditions not present in the source documents.
+- The Date of Loss must come from the claim facts, NOT be invented.
+- Cross-check EVERY damage claim you write against the inspection report before including it.
+- If the inspection shows interior-only damage, the report must focus on interior damage — do not pad exterior sections with invented findings.
+
 REPORT WRITING RULES:
 - Write as a professional property restoration assessment report — NOT a persuasive demand letter.
 - THIS IS A BULLET-POINT REPORT. Use bullets as the PRIMARY format. Paragraphs are the EXCEPTION, not the rule.
+- Do NOT include any cover-letter language, submission statements, or "enclosed materials" language.
+- No "We are submitting this claim" or "this package is intended to" or "enclosed materials include" or similar boilerplate.
 - Remove all generic carrier-pressure statements, broad legal commentary, and over-explanations.
 - Keep only technical facts, observed conditions, and repair justifications.
 - Do not mention AI.
@@ -860,15 +859,7 @@ ANTI-GENERIC CONTENT RULE (MANDATORY):
 - Every statement must cite specific claim data.
 - If a sentence contains no claim-specific fact, do NOT include it.
 
-${isProven
-    ? `Use this opening in substance for the report introduction:
-${PROVEN_MODE_OPENING}
-
-Use this conclusion language in substance:
-${PROVEN_MODE_CLOSE}
-
-The document should read like a technical restoration assessment report.`
-    : "The document should read like a professional property damage restoration report that makes the repair scope self-evident."}
+The document should read like a professional property damage restoration report that makes the repair scope self-evident. No cover-letter openings. No closing requests. Start directly with the findings.
 `.trim();
 }
 
