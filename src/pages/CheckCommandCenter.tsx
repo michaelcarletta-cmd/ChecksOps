@@ -1585,6 +1585,63 @@ function CheckDetailPanel({
                   {undoing ? "Reverting..." : `Undo Decision (${check.status.replace(/_/g, " ")})`}
                 </Button>
               )}
+              {/* Branch → Deposited transition */}
+              {check.status === "branch_deposit_required" && (
+                <div className="space-y-2 mt-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full border-border text-foreground hover:bg-primary hover:text-primary-foreground"
+                    onClick={() => {
+                      setBranchApprovedAt(Date.now());
+                      handleMoveToDeposited(false);
+                    }}
+                    disabled={movingToDeposited}
+                  >
+                    {movingToDeposited ? (
+                      <><Loader2Icon className="h-4 w-4 mr-2 animate-spin" />Moving...</>
+                    ) : (
+                      <><CheckCircle2 className="h-4 w-4 mr-2" />Move to Deposited</>
+                    )}
+                  </Button>
+                  {showForceMove && (
+                    <div className="border border-amber-500/30 bg-amber-500/10 rounded-lg p-3 space-y-2">
+                      <p className="text-xs text-amber-400 font-medium">
+                        ⚠ Check approval detected but not moved. Click below to force the transition.
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full border-amber-500/30 text-amber-400 hover:bg-amber-500/20"
+                        onClick={() => handleMoveToDeposited(true)}
+                        disabled={movingToDeposited}
+                      >
+                        {movingToDeposited ? (
+                          <><Loader2Icon className="h-4 w-4 mr-2 animate-spin" />Forcing...</>
+                        ) : (
+                          "Force Move to Deposited"
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {/* Approved → Deposited transition */}
+              {check.status === "approved_for_deposit" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full mt-2 border-border text-foreground hover:bg-primary hover:text-primary-foreground"
+                  onClick={() => handleMoveToDeposited(false)}
+                  disabled={movingToDeposited}
+                >
+                  {movingToDeposited ? (
+                    <><Loader2Icon className="h-4 w-4 mr-2 animate-spin" />Moving...</>
+                  ) : (
+                    <><CheckCircle2 className="h-4 w-4 mr-2" />Mark as Deposited</>
+                  )}
+                </Button>
+              )}
               {check.claim_id && (
                 <DetailRow label="Linked Claim" value={check.claim_id.slice(0, 8) + "..."} />
               )}
