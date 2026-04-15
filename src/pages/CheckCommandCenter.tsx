@@ -86,11 +86,6 @@ interface CheckItem {
   check_payees?: CheckPayee[];
 }
 
-const isFreedomAdjustmentPayee = (payeeName: string) => {
-  const normalizedName = payeeName.toLowerCase();
-  return normalizedName.includes("freedom") || normalizedName.includes("carletta");
-};
-
 interface AuditEntry {
   id: string;
   event_type: string;
@@ -1132,67 +1127,12 @@ function CheckDetailPanel({
   }
   const isDepositBlocked = (endorsements.length > 0 && !allEndorsementsComplete) || check.status === "loss_draft_required";
 
-  // Only include true captured signatures (exclude "marked signed" internal acknowledgements)
-  const endorsementRows = endorsements.filter((e) => {
-    const method = (e.signature_method ?? "").toLowerCase();
-    return (
-      e.status === "signed" &&
-      typeof e.signature_image_url === "string" &&
-      e.signature_image_url.trim().length > 0 &&
-      method !== "internal" &&
-      method !== "manual"
-    );
-  });
-  const clientEndorsementRows = endorsementRows.filter((e) => !isFreedomAdjustmentPayee(e.payee_name));
-  const companyEndorsementRows = endorsementRows.filter((e) => isFreedomAdjustmentPayee(e.payee_name));
-  const visibleCompanyEndorsement = companyEndorsementRows.find((e) => Boolean(e.signature_image_url?.trim()));
-  const endorsementText = showPayToOrder
-    ? "Pay to the Order of\nFreedom Adjustment\nFor Mobile Deposit Only\nFreedom Adjustment"
-    : "";
-  const signatures = endorsementRows
-    .map((e) => e.signature_image_url)
-    .filter((signature): signature is string => Boolean(signature));
-
-  const hasEndorsement =
-    !!endorsementText ||
-    (Array.isArray(signatures) && signatures.length > 0);
-
   const isFinalDepositImage =
     check.status === "approved_for_deposit" ||
     check.status === "deposit_ready" ||
     check.status === "endorsements_complete";
 
   const showWatermark = !isFinalDepositImage;
-  // Proportional overlay coordinates — use saved override if available
-  const overlayCoordinates = {
-    topPercent: (savedOverride?.yPct ?? 0.5) * 100,
-    leftPercent: (savedOverride?.xPct ?? 0.38) * 100,
-    widthPercent: 22 * (savedOverride?.scale ?? 1),
-  };
-  const endorsementStyle = {
-    position: "absolute" as const,
-    top: `${overlayCoordinates.topPercent}%`,
-    left: `${overlayCoordinates.leftPercent}%`,
-    width: `${overlayCoordinates.widthPercent}%`,
-    zIndex: 20,
-    color: "#111111",
-    pointerEvents: "none" as const,
-    transform: savedOverride?.rotationDeg ? `rotate(${savedOverride.rotationDeg}deg)` : undefined,
-    transformOrigin: "top left" as const,
-  };
-
-  console.log("[CHECK-RENDER] check.status:", check.status);
-  console.log("[CHECK-RENDER] endorsementData:", endorsementRows);
-  console.log("[CHECK-RENDER] hasEndorsement:", hasEndorsement);
-  console.log("[CHECK-RENDER] showWatermark:", showWatermark);
-  console.log("[CHECK-RENDER] endorsementText:", endorsementText);
-  console.log("[CHECK-RENDER] signatures:", signatures);
-  console.log("[CHECK-RENDER] overlay coordinates:", overlayCoordinates);
-  console.log("[CHECK-RENDER] image width/height:", {
-    width: backImageDimensions?.width ?? null,
-    height: backImageDimensions?.height ?? null,
-  });
-  console.log("[CHECK-RENDER] final export mode:", isFinalDepositImage ? "deposit-ready" : "preview");
 
   return (
     <>
@@ -1419,68 +1359,6 @@ function CheckDetailPanel({
                             });
                           }}
                         />
-
-                        {hasEndorsement && backImageDimensions && (() => {
-                          // Scale all sizes from image height so endorsement looks like a real check
-                          const ovScale = savedOverride?.scale ?? 1;
-                          const ar = backImageDimensions.height / backImageDimensions.width;
-                          // Font sizes as % of container width (since height = width * ar)
-                          // naturalHeight * ratio → cw-based: (ratio * ar * 100)cqw
-                          const f = (ratio: number) => `${(ratio * ovScale * ar * 100).toFixed(3)}cqw`;
-                          const g = (ratio: number) => `${(ratio * ovScale * ar * 100).toFixed(3)}cqw`; // gap
-                          return (
-                            <div className="endorsement-overlay absolute select-none" style={endorsementStyle}>
-                              <div className="leading-tight font-semibold" style={{ lineHeight: 1.15 }}>
-                                {/* Header */}
-                                {showPayToOrder && (
-                                  <>
-                                    <p style={{ fontSize: f(0.022), marginBottom: g(0.008), color: "#111111", fontWeight: 600 }}>Pay to the order of</p>
-                                    <p style={{ fontSize: f(0.034), marginBottom: g(0.008), color: "#111111", fontWeight: 700 }}>Freedom Adjustment</p>
-                                    <p style={{ fontSize: f(0.024), marginBottom: g(0.014), color: "#111111", fontWeight: 700 }}>For Mobile Deposit Only</p>
-                                  </>
-                                )}
-
-                                {(showPayToOrder || clientEndorsementRows.length > 0 || visibleCompanyEndorsement) && (
-                                  <div style={{ marginTop: g(0.006), marginBottom: g(0.006), borderTop: "1px solid #111111", opacity: 0.3 }} />
-                                )}
-
-                                {/* Client signatures first (non-Freedom, non-Carletta) */}
-                                {clientEndorsementRows.map((e) => {
-                                  return (
-                                    <div key={e.id} style={{ marginTop: g(0.008) }}>
-                                      {e.signature_image_url?.startsWith("typed:") ? (
-                                        <p style={{ fontSize: f(0.042), fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>{e.signature_image_url.slice(6)}</p>
-                                      ) : e.signature_image_url ? (
-                                        <>
-                                          <p style={{ fontSize: f(0.026), fontWeight: 500, color: "#111111" }}>{e.payee_name}</p>
-                                          <img src={e.signature_image_url} alt={`${e.payee_name} signature`} style={{ height: f(0.060), margin: "0 auto", display: "block", objectFit: "contain", filter: "brightness(0)" }} />
-                                        </>
-                                      ) : (
-                                        null
-                                      )}
-                                    </div>
-                                  );
-                                })}
-
-                                {/* Freedom Adjustment signature */}
-                                {visibleCompanyEndorsement && (
-                                <div style={{ marginTop: g(0.014) }}>
-                                  <p style={{ fontSize: f(0.034), fontWeight: 700, color: "#111111" }}>Freedom Adjustment</p>
-                                  {[visibleCompanyEndorsement].map((e) => (
-                                    <div key={`sig-${e.id}`} style={{ marginTop: g(0.004) }}>
-                                      {e.signature_image_url?.startsWith("typed:") ? (
-                                        <p style={{ fontSize: f(0.042), fontStyle: "italic", fontFamily: '"Brush Script MT", cursive', color: "#111111" }}>Freedom Adjustment</p>
-                                      ) : e.signature_image_url ? (
-                                        <img src={e.signature_image_url} alt="Freedom Adjustment signature" style={{ height: f(0.060), margin: "0 auto", display: "block", objectFit: "contain", filter: "brightness(0)" }} />
-                                      ) : null}
-                                    </div>
-                                  ))}
-                                </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })()}
 
                         {showWatermark && (
                           <div className="void-watermark absolute inset-0 flex items-center justify-center pointer-events-none select-none" style={{ transform: "rotate(-30deg)", zIndex: 30 }}>

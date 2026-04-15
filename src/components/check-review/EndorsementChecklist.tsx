@@ -83,6 +83,7 @@ export function EndorsementChecklist({ checkId, onRefresh }: EndorsementChecklis
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["check-endorsements", checkId] });
+    qc.invalidateQueries({ queryKey: ["check-endorsements-summary", checkId] });
     qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
     qc.invalidateQueries({ queryKey: ["check-intake-items"] });
     onRefresh?.();
