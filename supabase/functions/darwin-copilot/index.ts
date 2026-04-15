@@ -179,6 +179,11 @@ function isAnalysisQuestion(message: string) {
   return /\b(?:how|what|why|explain|analy[sz]e|review|assess|rebut|respond|strategy|argument|weakness|weakest|next step|next move|denial|coverage|carrier position|contradiction|pressure|should we|what do you think)\b/i.test(message);
 }
 
+function isDismantleRequest(message: string) {
+  return /\b(?:dismantle|tear apart|break down|analyze|pick apart|destroy|dissect|shred|rip apart|debunk)\b[\s\S]{0,60}\b(?:report|letter|denial|document|engineer|expert|adjuster|response|opinion|position|correspondence)\b/i.test(message)
+    || /\b(?:report|letter|denial|document|engineer|expert|adjuster|response|opinion)\b[\s\S]{0,60}\b(?:dismantle|tear apart|break down|pick apart|destroy|dissect|shred|debunk)\b/i.test(message);
+}
+
 function startsWithActionConfirmation(message: string) {
   const prefix = (message || '').slice(0, 180);
   return /\b(?:note added|added note|task created|created task|task added|email drafted|draft created|reminder created|update added|queued for review|saved to|logged to|activity added)\b/i.test(prefix);
