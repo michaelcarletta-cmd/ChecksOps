@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 type CopilotMode = 'operational' | 'rebuttal' | 'estimate' | 'war_room' | 'training' | 'strategy' | 'draft' | 'search_web' | 'search_argue';
 
@@ -119,7 +120,23 @@ export function useDarwinCopilot(claimId: string) {
       setMessages(prev => [...prev, assistantMsg]);
     } catch (err: any) {
       if (err.name === 'AbortError') return;
-      const errorMsg: CopilotMessage = { role: 'assistant', content: `Error: ${err.message}`, timestamp: Date.now(), isError: true };
+      console.error('[Darwin Copilot] Error details:', { error: err, claimId, mode: overrideMode || mode });
+
+      // Map known backend errors to user-friendly messages
+      const rawMsg = err.message || 'Unknown error';
+      let friendlyMsg: string;
+      if (/cannot access.*before initialization|initialization/i.test(rawMsg)) {
+        friendlyMsg = 'Claim data is still loading. Please wait a moment and try again.';
+      } else if (/could not load claim details for communication/i.test(rawMsg)) {
+        friendlyMsg = 'Unable to load claim details. Please refresh the page or select a claim again.';
+      } else if (/no active session/i.test(rawMsg)) {
+        friendlyMsg = 'Your session has expired. Please sign in again.';
+      } else {
+        friendlyMsg = `Something went wrong. Please try again. (${rawMsg.length > 120 ? rawMsg.slice(0, 120) + '…' : rawMsg})`;
+      }
+
+      toast.error(friendlyMsg, { duration: 5000 });
+      const errorMsg: CopilotMessage = { role: 'assistant', content: friendlyMsg, timestamp: Date.now(), isError: true };
       setMessages(prev => [...prev, errorMsg]);
     } finally {
       setLoading(false);
