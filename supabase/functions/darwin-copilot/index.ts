@@ -1675,6 +1675,34 @@ ${research.text}`;
       console.error('[Copilot] Dismantler context error (non-fatal):', e);
     }
 
+    // ── Dismantler Action Layer — detect if user wants an actionable output ──
+    const detectedAction = detectDismantlerAction(latestUserTurn);
+    if (detectedAction && dismantlerContext) {
+      try {
+        console.log(`[Copilot] Dismantler action detected: ${detectedAction}`);
+        const actionResult = await executeDismantlerAction(detectedAction, {
+          claimId,
+          userInstruction: latestUserTurn,
+          supabase,
+        });
+        console.log(`[Copilot] Dismantler action complete: ${detectedAction}, model=${actionResult.model}`);
+
+        // Return the action output directly as the copilot response
+        return new Response(
+          JSON.stringify({
+            response: actionResult.content,
+            model: actionResult.model,
+            cached: actionResult.cached,
+            dismantlerAction: detectedAction,
+            sourceDocumentType: actionResult.sourceDocumentType,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      } catch (actionErr) {
+        console.warn(`[Copilot] Dismantler action failed (falling through to normal flow):`, actionErr);
+      }
+    }
+
     // Append external research, knowledge context, and dismantler context to system prompt
     const finalSystemPrompt = (knowledgeContext ? knowledgeContext + '\n\n' : '') +
       (dismantlerContext ? dismantlerContext + '\n\n' : '') +
