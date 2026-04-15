@@ -730,6 +730,17 @@ REPORT FORMAT RULES (CRITICAL):
 - Break technical details into scannable chunks. Avoid dense paragraphs.
 - Remove redundant conclusions across sections — state a finding once.
 
+DAMAGE CHARACTERIZATION RULES (CRITICAL):
+- Do NOT simply state "distinct, demonstrable, detrimental, direct" as a list or checklist. These words alone are meaningless without evidence.
+- Each damage element must be supported by specific observations from the inspection, photos, or documentation:
+  - DISTINCT: Identify the specific component and location (e.g., "3-tab shingle creasing on the south-facing slope at ridge line").
+  - DEMONSTRABLE: Cite the observable evidence (e.g., "visible granule displacement measuring approximately 2 inches in diameter").
+  - DETRIMENTAL: Explain the functional impairment (e.g., "exposed fiberglass mat compromises waterproofing integrity of the shingle").
+  - DIRECT: Link to the specific loss event (e.g., "consistent with wind-driven debris impact from the 09/15/2024 storm event").
+- Tie each characterization element to actual damaged components identified in the inspection (roof, siding, gutters, windows, etc.).
+- Do NOT introduce damage categories that are not supported by the provided inspection reports, photos, or estimate scope.
+- Do NOT use generic or boilerplate damage characterization language. Every statement must reference a specific observation.
+
 ${toneBlock}
 
 DECLARED POSITION ALIGNMENT:
