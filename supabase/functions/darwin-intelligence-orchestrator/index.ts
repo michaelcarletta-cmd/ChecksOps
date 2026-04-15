@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
 import { generate } from "../_shared/ai/generate.ts";
 import { getClaimsContextBundle, formatContextBundle } from "../_shared/ai/claimsKnowledgeEngine.ts";
+import { formatDismantlerForPrompt, type DismantlerResult } from "../_shared/ai/universalDismantler.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -436,9 +437,42 @@ Return ONLY valid JSON.`;
       console.error('[Orchestrator] Knowledge Engine error (non-fatal):', e);
     }
 
+    // ── Universal Dismantler intelligence ──
+    let dismantlerPrefix = '';
+    try {
+      const { data: dismantlerResults } = await supabase
+        .from('claim_document_dismantlers')
+        .select('document_type, report_summary, main_position, strongest_rebuttal_points, contradictions, unsupported_assumptions, coverage_weaknesses, draft_rebuttal_language')
+        .eq('claim_id', claimId)
+        .order('created_at', { ascending: false })
+        .limit(2);
+
+      if (dismantlerResults && dismantlerResults.length > 0) {
+        dismantlerPrefix = dismantlerResults.map((d: any) => formatDismantlerForPrompt({
+          documentType: d.document_type,
+          reportSummary: d.report_summary || '',
+          mainPosition: d.main_position || '',
+          nonCoveredTheories: [],
+          limitations: [],
+          unsupportedAssumptions: d.unsupported_assumptions || [],
+          contradictions: d.contradictions || [],
+          omissions: [],
+          repairabilityOverreach: [],
+          coverageWeaknesses: d.coverage_weaknesses || [],
+          strongestRebuttalPoints: d.strongest_rebuttal_points || [],
+          evidenceToGatherNext: [],
+          draftRebuttalLanguage: d.draft_rebuttal_language || '',
+          meta: { chunkCount: 0, successfulChunks: 0, failedChunks: 0, model: '', cached: false, usedSearch: false },
+        })).join('\n\n');
+        console.log(`[Orchestrator] Dismantler intelligence injected: ${dismantlerResults.length} analyses`);
+      }
+    } catch (e) {
+      console.error('[Orchestrator] Dismantler context error (non-fatal):', e);
+    }
+
     const aiResult = await generate({
       task: 'copilot_reasoning',
-      system: (knowledgePrefix ? knowledgePrefix + '\n\n' : '') + systemPrompt,
+      system: (knowledgePrefix ? knowledgePrefix + '\n\n' : '') + (dismantlerPrefix ? dismantlerPrefix + '\n\n' : '') + systemPrompt,
       user: 'Synthesize all intelligence layers and produce the ranked intelligence summary.',
       claimId,
       forceStrong: true,

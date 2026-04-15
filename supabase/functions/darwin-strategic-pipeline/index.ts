@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { generate } from "../_shared/ai/generate.ts";
 import { searchTavily } from "../_shared/ai/tavily.ts";
 import { getClaimsContextBundle, formatContextBundle } from "../_shared/ai/claimsKnowledgeEngine.ts";
+import { formatDismantlerForPrompt, type DismantlerResult } from "../_shared/ai/universalDismantler.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -689,6 +690,7 @@ function buildPipelineContext(
   industryNotes: any[],
   webSearchResults: any[],
   validationErrors: string[],
+  dismantlerResults?: any[],
 ): string {
   let ctx = '\n\n=== STRATEGIC PIPELINE CONTEXT (MANDATORY REVIEW) ===\n';
   ctx += 'You MUST review the following before generating output.\n\n';
@@ -809,6 +811,25 @@ function buildPipelineContext(
     }
   }
 
+  // Dismantler intelligence
+  if (dismantlerResults && dismantlerResults.length > 0) {
+    ctx += '── DOCUMENT DISMANTLER INTELLIGENCE ──\n';
+    for (const d of dismantlerResults) {
+      ctx += `[${d.document_type}] ${d.source_file_name || 'Document'}\n`;
+      ctx += `Position: ${d.main_position || 'N/A'}\n`;
+      if (d.strongest_rebuttal_points?.length > 0) {
+        ctx += `Strongest Rebuttals: ${d.strongest_rebuttal_points.slice(0, 3).join('; ')}\n`;
+      }
+      if (d.contradictions?.length > 0) {
+        ctx += `Contradictions: ${d.contradictions.slice(0, 3).join('; ')}\n`;
+      }
+      if (d.coverage_weaknesses?.length > 0) {
+        ctx += `Coverage Weaknesses: ${d.coverage_weaknesses.slice(0, 3).join('; ')}\n`;
+      }
+      ctx += '\n';
+    }
+  }
+
   ctx += '=== END STRATEGIC PIPELINE CONTEXT ===\n';
   ctx += 'RULE: No rebuttal/strategic output unless thesis exists and is backed by claim anchors (doc IDs / photo IDs).\n';
 
@@ -886,10 +907,27 @@ Deno.serve(async (req) => {
       crossClaimLessons, industryNotes, webSearchResults, forceRefresh || false,
     );
 
+    // ── Dismantler intelligence ──
+    let dismantlerResults: any[] = [];
+    try {
+      const { data } = await supabase
+        .from('claim_document_dismantlers')
+        .select('document_type, source_file_name, main_position, strongest_rebuttal_points, contradictions, coverage_weaknesses')
+        .eq('claim_id', claimId)
+        .order('created_at', { ascending: false })
+        .limit(3);
+      dismantlerResults = data || [];
+      if (dismantlerResults.length > 0) {
+        console.log(`[Pipeline] Dismantler intelligence: ${dismantlerResults.length} document analyses`);
+      }
+    } catch (e) {
+      console.error('[Pipeline] Dismantler fetch error (non-fatal):', e);
+    }
+
     // ── Step D ──
     const pipelineContext = buildPipelineContext(
       thesis, memorySnapshot, deltas, crossClaimLessons,
-      industryNotes, webSearchResults, validationErrors,
+      industryNotes, webSearchResults, validationErrors, dismantlerResults,
     );
 
     console.log(`[Pipeline] Complete. Thesis ${isNew ? 'generated' : 'reused'}. ${validationErrors.length} warnings. Context: ${pipelineContext.length} chars`);

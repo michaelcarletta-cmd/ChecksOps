@@ -2864,6 +2864,102 @@ export type Database = {
           },
         ]
       }
+      claim_document_dismantlers: {
+        Row: {
+          cached: boolean | null
+          chunk_count: number | null
+          claim_id: string
+          contradictions: Json | null
+          coverage_weaknesses: Json | null
+          created_at: string
+          document_type: string
+          draft_rebuttal_language: string | null
+          evidence_to_gather_next: Json | null
+          failed_chunks: number | null
+          id: string
+          limitations: Json | null
+          main_position: string | null
+          model: string | null
+          non_covered_theories: Json | null
+          omissions: Json | null
+          repairability_overreach: Json | null
+          report_summary: string | null
+          source_file_id: string | null
+          source_file_name: string | null
+          strongest_rebuttal_points: Json | null
+          successful_chunks: number | null
+          unsupported_assumptions: Json | null
+          used_search: boolean | null
+        }
+        Insert: {
+          cached?: boolean | null
+          chunk_count?: number | null
+          claim_id: string
+          contradictions?: Json | null
+          coverage_weaknesses?: Json | null
+          created_at?: string
+          document_type?: string
+          draft_rebuttal_language?: string | null
+          evidence_to_gather_next?: Json | null
+          failed_chunks?: number | null
+          id?: string
+          limitations?: Json | null
+          main_position?: string | null
+          model?: string | null
+          non_covered_theories?: Json | null
+          omissions?: Json | null
+          repairability_overreach?: Json | null
+          report_summary?: string | null
+          source_file_id?: string | null
+          source_file_name?: string | null
+          strongest_rebuttal_points?: Json | null
+          successful_chunks?: number | null
+          unsupported_assumptions?: Json | null
+          used_search?: boolean | null
+        }
+        Update: {
+          cached?: boolean | null
+          chunk_count?: number | null
+          claim_id?: string
+          contradictions?: Json | null
+          coverage_weaknesses?: Json | null
+          created_at?: string
+          document_type?: string
+          draft_rebuttal_language?: string | null
+          evidence_to_gather_next?: Json | null
+          failed_chunks?: number | null
+          id?: string
+          limitations?: Json | null
+          main_position?: string | null
+          model?: string | null
+          non_covered_theories?: Json | null
+          omissions?: Json | null
+          repairability_overreach?: Json | null
+          report_summary?: string | null
+          source_file_id?: string | null
+          source_file_name?: string | null
+          strongest_rebuttal_points?: Json | null
+          successful_chunks?: number | null
+          unsupported_assumptions?: Json | null
+          used_search?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_document_dismantlers_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_document_dismantlers_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_document_intelligence: {
         Row: {
           building_components: Json | null
