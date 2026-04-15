@@ -2574,6 +2574,69 @@ export type Database = {
           },
         ]
       }
+      claim_contradiction_detections: {
+        Row: {
+          carrier_position_a: string | null
+          carrier_position_b: string | null
+          claim_id: string
+          contradiction_type: string
+          created_at: string
+          detected_at: string
+          document_a_id: string | null
+          document_a_name: string | null
+          document_b_id: string | null
+          document_b_name: string | null
+          id: string
+          rebuttal_value: string | null
+          severity: string
+        }
+        Insert: {
+          carrier_position_a?: string | null
+          carrier_position_b?: string | null
+          claim_id: string
+          contradiction_type: string
+          created_at?: string
+          detected_at?: string
+          document_a_id?: string | null
+          document_a_name?: string | null
+          document_b_id?: string | null
+          document_b_name?: string | null
+          id?: string
+          rebuttal_value?: string | null
+          severity?: string
+        }
+        Update: {
+          carrier_position_a?: string | null
+          carrier_position_b?: string | null
+          claim_id?: string
+          contradiction_type?: string
+          created_at?: string
+          detected_at?: string
+          document_a_id?: string | null
+          document_a_name?: string | null
+          document_b_id?: string | null
+          document_b_name?: string | null
+          id?: string
+          rebuttal_value?: string | null
+          severity?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_contradiction_detections_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_contradiction_detections_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_custom_field_values: {
         Row: {
           claim_id: string
@@ -4212,11 +4275,13 @@ export type Database = {
       }
       claim_knowledge_library: {
         Row: {
+          applicability_tags: string[] | null
           authority_level: number
           content: string
           created_at: string
           dispute_type: string | null
           id: string
+          jurisdiction: string | null
           loss_type: string | null
           material: string | null
           source_type: string
@@ -4228,11 +4293,13 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          applicability_tags?: string[] | null
           authority_level?: number
           content: string
           created_at?: string
           dispute_type?: string | null
           id?: string
+          jurisdiction?: string | null
           loss_type?: string | null
           material?: string | null
           source_type?: string
@@ -4244,11 +4311,13 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          applicability_tags?: string[] | null
           authority_level?: number
           content?: string
           created_at?: string
           dispute_type?: string | null
           id?: string
+          jurisdiction?: string | null
           loss_type?: string | null
           material?: string | null
           source_type?: string
@@ -6532,6 +6601,63 @@ export type Database = {
           },
           {
             foreignKeyName: "claim_updates_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_violation_detections: {
+        Row: {
+          claim_id: string
+          created_at: string
+          days_exceeded: number | null
+          description: string
+          detected_at: string
+          id: string
+          recommended_action: string | null
+          severity: string
+          source_event_ids: string[] | null
+          statute_reference: string | null
+          violation_type: string
+        }
+        Insert: {
+          claim_id: string
+          created_at?: string
+          days_exceeded?: number | null
+          description: string
+          detected_at?: string
+          id?: string
+          recommended_action?: string | null
+          severity?: string
+          source_event_ids?: string[] | null
+          statute_reference?: string | null
+          violation_type: string
+        }
+        Update: {
+          claim_id?: string
+          created_at?: string
+          days_exceeded?: number | null
+          description?: string
+          detected_at?: string
+          id?: string
+          recommended_action?: string | null
+          severity?: string
+          source_event_ids?: string[] | null
+          statute_reference?: string | null
+          violation_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_violation_detections_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_violation_detections_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
             referencedRelation: "claims"

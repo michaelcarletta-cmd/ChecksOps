@@ -2,8 +2,9 @@
  * Claims Knowledge Engine — additive intelligence layer for Darwin.
  *
  * Gathers claim-specific facts, declared position, internal knowledge,
- * prior claim lessons, and optional external authority support, then
- * returns a structured context bundle that can be injected into any
+ * prior claim lessons, authority knowledge, carrier behavior, trade logic,
+ * violations, contradictions, and optional external authority support,
+ * then returns a structured context bundle that can be injected into any
  * AI prompt via `formatContextBundle()`.
  *
  * Usage:
@@ -17,6 +18,11 @@ import type { DarwinTaskType } from "./modelRouter.ts";
 import { generate } from "./generate.ts";
 import { searchTavily } from "./tavily.ts";
 import { hashPrompt, getCache, setCache } from "./cache.ts";
+import { retrieveAuthorityKnowledge, formatAuthorityKnowledge, type AuthorityEntry } from "./authorityKnowledge.ts";
+import { retrieveCarrierBehavior, formatCarrierBehavior, type CarrierPattern } from "./carrierBehaviorIntel.ts";
+import { getTradeIntelligence } from "./tradeIntelligence.ts";
+import { detectViolations, formatViolations, type ViolationDetection } from "./violationEngine.ts";
+import { detectContradictions, formatContradictions, type ContradictionDetection } from "./contradictionEngine.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -49,6 +55,11 @@ export interface RetrievalMeta {
   usedSearch: boolean;
   knowledgeCount: number;
   lessonsCount: number;
+  authorityCount: number;
+  violationCount: number;
+  contradictionCount: number;
+  hasCarrierBehavior: boolean;
+  hasTradeLogic: boolean;
 }
 
 export interface ClaimsContextBundle {
@@ -59,6 +70,12 @@ export interface ClaimsContextBundle {
   authoritySupport: AuthoritySupport | null;
   disputeType: string;
   retrievalMeta: RetrievalMeta;
+  // New intelligence layers
+  authorityKnowledge: AuthorityEntry[];
+  carrierBehavior: CarrierPattern | null;
+  tradeLogic: string;
+  violations: ViolationDetection[];
+  contradictions: ContradictionDetection[];
 }
 
 export interface GetClaimsContextBundleOptions {
@@ -134,7 +151,6 @@ async function gatherClaimFacts(claimId: string, supabase: SupabaseClient): Prom
     const estimate = estimateRes.data?.[0];
     const photos = photosRes.data || [];
     const events = eventsRes.data || [];
-    const intel = intelRes.data;
 
     // Key damages from photos
     const keyDamages = photos
@@ -203,6 +219,7 @@ async function retrieveInternalKnowledge(
     let query = supabase
       .from("claim_knowledge_library")
       .select("title, content, authority_level, source_type, trade, material, state, dispute_type")
+      .not("source_type", "in", "(building_code,manufacturer_spec,statute,case_law)")
       .order("authority_level", { ascending: true })
       .limit(5);
 
@@ -298,7 +315,7 @@ async function retrieveClaimLessons(
 
 // ── Authority support (Tavily) ───────────────────────────────────────
 
-async function retrieveAuthoritySupport(
+async function retrieveExternalAuthority(
   disputeType: string,
   userQuery: string,
   state: string,
@@ -346,7 +363,7 @@ export async function getClaimsContextBundle(
     return cached;
   }
 
-  // Step 1 + 2: Claim facts (includes declared position)
+  // Step 1 + 2: Claim facts + dispute classification
   const [claimFacts, disputeType] = await Promise.all([
     gatherClaimFacts(claimId, supabase),
     classifyDispute(userQuery),
@@ -384,12 +401,27 @@ export async function getClaimsContextBundle(
     material = data?.roof_material || null;
   } catch { /* non-fatal */ }
 
-  // Steps 3-6: Parallel retrieval
-  const [internalKnowledge, claimLessons, authoritySupport] = await Promise.all([
+  // All retrieval in parallel — including new intelligence layers
+  const [
+    internalKnowledge,
+    claimLessons,
+    authoritySupport,
+    authorityKnowledge,
+    carrierBehavior,
+    violations,
+    contradictions,
+  ] = await Promise.all([
     retrieveInternalKnowledge(supabase, disputeType, state, trade, material),
     retrieveClaimLessons(supabase, carrier, lossType, state),
-    retrieveAuthoritySupport(disputeType, userQuery, state, trade, material),
+    retrieveExternalAuthority(disputeType, userQuery, state, trade, material),
+    retrieveAuthorityKnowledge(supabase, { disputeType, state, trade, material, userQuery }),
+    retrieveCarrierBehavior(supabase, carrier, lossType, state),
+    detectViolations(supabase, claimId, state),
+    detectContradictions(supabase, claimId),
   ]);
+
+  // Trade logic (synchronous — static data)
+  const tradeLogic = getTradeIntelligence(trade, disputeType);
 
   const bundle: ClaimsContextBundle = {
     claimFacts,
@@ -398,10 +430,20 @@ export async function getClaimsContextBundle(
     claimLessons,
     authoritySupport,
     disputeType,
+    authorityKnowledge,
+    carrierBehavior,
+    tradeLogic,
+    violations,
+    contradictions,
     retrievalMeta: {
       usedSearch: !!authoritySupport,
       knowledgeCount: internalKnowledge.length,
       lessonsCount: claimLessons.length,
+      authorityCount: authorityKnowledge.length,
+      violationCount: violations.length,
+      contradictionCount: contradictions.length,
+      hasCarrierBehavior: !!carrierBehavior,
+      hasTradeLogic: !!tradeLogic,
     },
   };
 
@@ -409,13 +451,25 @@ export async function getClaimsContextBundle(
   setCache(cacheKey, bundle);
 
   console.log(
-    `[ClaimsKnowledgeEngine] Bundle for ${claimId}: dispute=${disputeType}, knowledge=${internalKnowledge.length}, lessons=${claimLessons.length}, search=${!!authoritySupport}`,
+    `[ClaimsKnowledgeEngine] Bundle for ${claimId}: dispute=${disputeType}, knowledge=${internalKnowledge.length}, lessons=${claimLessons.length}, authority=${authorityKnowledge.length}, carrier=${!!carrierBehavior}, trade=${!!tradeLogic}, violations=${violations.length}, contradictions=${contradictions.length}, search=${!!authoritySupport}`,
   );
 
   return bundle;
 }
 
 // ── Format bundle into prompt sections ───────────────────────────────
+// Priority order:
+// 1. Claim facts
+// 2. Declared position
+// 3. Authority knowledge (overrides opinions)
+// 4. Dismantler intelligence (injected externally)
+// 5. Carrier behavior
+// 6. Trade logic
+// 7. Violations
+// 8. Internal knowledge
+// 9. Claim lessons
+// 10. Contradictions
+// 11. External search (last)
 
 export function formatContextBundle(bundle: ClaimsContextBundle): string {
   const sections: string[] = [];
@@ -442,14 +496,39 @@ ${bundle.declaredPosition}
 === END DECLARED POSITION ===`);
   }
 
-  // 3. Internal knowledge
+  // 3. Authority knowledge (ALWAYS ranks above internal knowledge)
+  const authorityText = formatAuthorityKnowledge(bundle.authorityKnowledge);
+  if (authorityText) {
+    sections.push(authorityText);
+  }
+
+  // 4. (Dismantler — injected externally by consumers, not here)
+
+  // 5. Carrier behavior intelligence
+  const carrierText = formatCarrierBehavior(bundle.carrierBehavior);
+  if (carrierText) {
+    sections.push(carrierText);
+  }
+
+  // 6. Trade logic
+  if (bundle.tradeLogic) {
+    sections.push(bundle.tradeLogic);
+  }
+
+  // 7. Violations
+  const violationText = formatViolations(bundle.violations);
+  if (violationText) {
+    sections.push(violationText);
+  }
+
+  // 8. Internal knowledge
   if (bundle.internalKnowledge.length > 0) {
     sections.push(`=== INTERNAL KNOWLEDGE ===
 ${bundle.internalKnowledge.join("\n\n")}
 === END INTERNAL KNOWLEDGE ===`);
   }
 
-  // 4. Claim lessons
+  // 9. Claim lessons
   if (bundle.claimLessons.length > 0) {
     const lessonsText = bundle.claimLessons.map((l, i) =>
       `[${i + 1}] ${l.carrier} | ${l.lossType} | Strategy: ${l.strategy} | Outcome: ${l.outcome}${l.recoveryPercent ? ` | Recovery: ${l.recoveryPercent}%` : ""} | What Worked: ${l.whatWorked}`
@@ -459,16 +538,22 @@ ${lessonsText}
 === END PRIOR CLAIM LESSONS ===`);
   }
 
-  // 5. Authority support
+  // 10. Contradictions
+  const contradictionText = formatContradictions(bundle.contradictions);
+  if (contradictionText) {
+    sections.push(contradictionText);
+  }
+
+  // 11. External authority support (last — web search)
   if (bundle.authoritySupport) {
     const sourcesText = bundle.authoritySupport.sources
       .map((s, i) => `[${i + 1}] ${s.title} — ${s.url}`)
       .join("\n");
-    sections.push(`=== AUTHORITY SUPPORT ===
+    sections.push(`=== EXTERNAL AUTHORITY SUPPORT ===
 ${bundle.authoritySupport.summary}
 Sources:
 ${sourcesText}
-=== END AUTHORITY SUPPORT ===`);
+=== END EXTERNAL AUTHORITY SUPPORT ===`);
   }
 
   return sections.join("\n\n");
