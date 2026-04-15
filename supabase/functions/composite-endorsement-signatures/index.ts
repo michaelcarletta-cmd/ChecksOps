@@ -160,7 +160,13 @@ Deno.serve(async (req) => {
       return method !== "internal" && method !== "manual";
     });
     if (!endorsements?.length && !allowTextOnly) {
-      return jsonResp({ success: false, error: "No valid signed endorsement assets found for this check.", code: "NO_SIGNED_ENDORSEMENTS", checkId }, 400);
+      return await restoreOriginalBackImage(
+        supabase,
+        checkId,
+        check.back_image_path,
+        backImagePath,
+        "no_visible_signatures",
+      );
     }
 
     const mismatch = endorsements.find((e: any) => e.check_id !== checkId);
@@ -242,7 +248,13 @@ Deno.serve(async (req) => {
 
     const renderableEndorsements = resolvedEndorsements.filter(hasRenderableSignature);
     if (!renderableEndorsements.length && !appliedOverride.showPayToOrder) {
-      return jsonResp({ success: false, error: "No valid signed endorsement assets found for this check.", code: "NO_SIGNED_ENDORSEMENTS", checkId }, 400);
+      return await restoreOriginalBackImage(
+        supabase,
+        checkId,
+        check.back_image_path,
+        backImagePath,
+        "no_renderable_signatures",
+      );
     }
 
     const clientEndorsements = renderableEndorsements.filter((e) => !isFreedomOrCarletta(e.payee_name));
@@ -502,6 +514,18 @@ async function uploadAndFinalize(
     throw new Error(`Failed to upload composite: ${uploadErr.message}`);
   }
 
+  const { error: updateErr } = await supabase
+    .from("check_intake_items")
+    .update({
+      back_image_path: compositePath,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", checkId);
+
+  if (updateErr) {
+    throw new Error(`Failed to update check back image path: ${updateErr.message}`);
+  }
+
   await supabase.from("check_audit_log").insert({
     check_id: checkId,
     event_type: "endorsement_signatures_composited",
@@ -526,7 +550,7 @@ async function uploadAndFinalize(
         signature_asset_loaded: e.signatureAssetLoaded,
         typed_fallback_used: Boolean(e.typedSignatureText),
       })),
-      db_path_update_committed: false,
+      db_path_update_committed: true,
     },
   });
 
@@ -550,7 +574,56 @@ async function uploadAndFinalize(
     overlay_coordinates: appliedOverride,
     image_dimensions: { width: imgWidth, height: imgHeight },
     pixel_count: pixelCount,
-    db_path_update_committed: false,
+    db_path_update_committed: true,
+  });
+}
+
+async function restoreOriginalBackImage(
+  supabase: any,
+  checkId: string,
+  currentBackImagePath: string,
+  originalBackImagePath: string,
+  reason: string,
+) {
+  const shouldUpdatePath = currentBackImagePath !== originalBackImagePath;
+
+  if (shouldUpdatePath) {
+    const { error: updateErr } = await supabase
+      .from("check_intake_items")
+      .update({
+        back_image_path: originalBackImagePath,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", checkId);
+
+    if (updateErr) {
+      throw new Error(`Failed to restore original back image path: ${updateErr.message}`);
+    }
+  }
+
+  await supabase.from("check_audit_log").insert({
+    check_id: checkId,
+    event_type: "endorsement_composite_cleared",
+    event_description: "Restored original back image because no visible endorsement signatures remained",
+    event_data: {
+      previous_back_image_path: currentBackImagePath,
+      restored_back_image_path: originalBackImagePath,
+      reason,
+      db_path_update_committed: shouldUpdatePath,
+    },
+  });
+
+  console.log(`[COMPOSITE] restored original back image path: ${originalBackImagePath}`);
+
+  return jsonResp({
+    success: true,
+    skipped: true,
+    reason,
+    original_back_image_path: originalBackImagePath,
+    endorsed_back_image_path: originalBackImagePath,
+    composited_path: originalBackImagePath,
+    output_format: "restored_original",
+    db_path_update_committed: shouldUpdatePath,
   });
 }
 
