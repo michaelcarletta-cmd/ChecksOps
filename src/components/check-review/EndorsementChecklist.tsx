@@ -84,6 +84,8 @@ export function EndorsementChecklist({ checkId, onRefresh }: EndorsementChecklis
     },
   });
 
+  const [forceCompleting, setForceCompleting] = useState(false);
+
   const allComplete = endorsements.length > 0 && endorsements.every(
     (e) => e.status === "signed" || e.status === "waived" ||
       (e.payee_type === "mortgage_company" && e.status === "manual_required"),
@@ -99,6 +101,54 @@ export function EndorsementChecklist({ checkId, onRefresh }: EndorsementChecklis
     qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
     qc.invalidateQueries({ queryKey: ["check-intake-items"] });
     onRefresh?.();
+  };
+
+  const forceCompleteAll = async () => {
+    setForceCompleting(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const userId = session.session?.user?.id ?? "unknown";
+
+      const incompleteIds = endorsements
+        .filter((e) => e.status !== "signed" && e.status !== "waived")
+        .map((e) => e.id);
+
+      if (incompleteIds.length > 0) {
+        const { error } = await supabase
+          .from("check_endorsements")
+          .update({
+            status: "signed",
+            signed_at: new Date().toISOString(),
+            notes: `Manually marked as received by staff override`,
+            signature_method: "manual_override",
+          })
+          .in("id", incompleteIds);
+
+        if (error) throw error;
+      }
+
+      // Audit log
+      await supabase.from("check_audit_log").insert({
+        check_id: checkId,
+        event_type: "endorsements_force_completed",
+        event_description: `All endorsements manually marked as received (${incompleteIds.length} updated)`,
+        actor_id: userId,
+        event_data: { overridden_ids: incompleteIds },
+      });
+
+      toast.success("Endorsements marked as complete", {
+        description: `${incompleteIds.length} endorsement(s) updated at ${new Date().toLocaleTimeString()}`,
+      });
+
+      refresh();
+    } catch (e: unknown) {
+      console.error("Force complete endorsements failed:", e);
+      toast.error("Failed to update endorsements", {
+        description: e instanceof Error ? e.message : "Unknown error",
+      });
+    } finally {
+      setForceCompleting(false);
+    }
   };
 
   if (isLoading) {
