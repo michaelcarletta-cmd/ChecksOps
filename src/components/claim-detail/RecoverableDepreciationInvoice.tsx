@@ -263,11 +263,11 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
   };
 
   // Calculate total recoverable depreciation
-  // Note: PWI RCV is itself recoverable - it's "Paid When Incurred" (released upon job completion)
+  // Note: Paid When Incurred RCV is itself recoverable (released upon job completion)
   const getTotalRecoverableDepreciation = (): number => {
     if (!settlement) return 0;
     const dwelling = Number(settlement.recoverable_depreciation) || 0;
-    const pwiRcv = Number(settlement.pwi_rcv) || 0; // PWI RCV IS the recoverable amount
+    const pwiRcv = Number(settlement.pwi_rcv) || 0; // Paid When Incurred RCV IS the recoverable amount
     const otherStructures = Number(settlement.other_structures_recoverable_depreciation) || 0;
     const personalProperty = Number(settlement.personal_property_recoverable_depreciation) || 0;
     return dwelling + pwiRcv + otherStructures + personalProperty;
@@ -396,7 +396,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
       
       if (pwiRD > 0) {
         lineItems.push({
-          description: `PWI (Property Within Insurance) Recoverable Depreciation - Claim #${claim.claim_number || 'N/A'}`,
+          description: `Paid When Incurred Recoverable Depreciation - Claim #${claim.claim_number || 'N/A'}`,
           quantity: 1,
           unitPrice: pwiRD,
         });
@@ -630,7 +630,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
                     <p className="font-semibold">{formatCurrency(settlement.other_structures_rcv)}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">PWI</p>
+                    <p className="text-muted-foreground">Paid When Incurred</p>
                     <p className="font-semibold">{formatCurrency(settlement.pwi_rcv)}</p>
                   </div>
                   <div>
@@ -662,7 +662,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
                     <p className="font-semibold text-primary">{formatCurrency(settlement.other_structures_recoverable_depreciation)}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">PWI (Paid When Incurred)</p>
+                    <p className="text-muted-foreground">Paid When Incurred</p>
                     <p className="font-semibold text-primary">{formatCurrency(settlement.pwi_rcv)}</p>
                   </div>
                   <div>

@@ -4753,7 +4753,7 @@ async function getClaimFinancialSummary(supabase: any, claimId: string): Promise
       if (rcv > 0) lines.push("  Dwelling: $" + rcv.toLocaleString("en-US", { minimumFractionDigits: 2 }));
       if (settlement?.other_structures_rcv > 0) lines.push("  Other structures: $" + Number(settlement.other_structures_rcv).toLocaleString("en-US", { minimumFractionDigits: 2 }));
       if (settlement?.personal_property_rcv > 0) lines.push("  Contents: $" + Number(settlement.personal_property_rcv).toLocaleString("en-US", { minimumFractionDigits: 2 }));
-      if (settlement?.pwi_rcv > 0) lines.push("  PWI / Ordinance: $" + Number(settlement.pwi_rcv).toLocaleString("en-US", { minimumFractionDigits: 2 }));
+      if (settlement?.pwi_rcv > 0) lines.push("  Paid When Incurred / Ordinance: $" + Number(settlement.pwi_rcv).toLocaleString("en-US", { minimumFractionDigits: 2 }));
     }
     return lines.join("\n");
   } catch (e) {

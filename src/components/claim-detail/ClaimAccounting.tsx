@@ -1,4 +1,5 @@
 import { useState, Fragment } from "react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -255,7 +256,7 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
         replacement_cost_value: settlement?.pwi_rcv || 0,
         non_recoverable_depreciation: settlement?.pwi_non_recoverable_depreciation || 0,
         recoverable_depreciation: settlement?.pwi_recoverable_depreciation || 0,
-        deductible: 0, // PWI has no deductible
+        deductible: 0, // Paid When Incurred has no deductible
       };
     } else {
       // personal_property
@@ -299,7 +300,7 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
     pwiRcv,
     Number(settlement?.pwi_recoverable_depreciation || 0),
     Number(settlement?.pwi_non_recoverable_depreciation || 0),
-    0  // PWI has no deductible
+    0  // Paid When Incurred has no deductible
   );
 
   const personalPropertyAcv = calculateAcv(
@@ -390,7 +391,7 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
   const getTypeLabel = (type: string) => {
     if (type === "dwelling") return "Dwelling";
     if (type === "other_structures") return "Other Structures";
-    if (type === "pwi") return "PWI Items";
+    if (type === "pwi") return "Paid When Incurred";
     return "Personal Property";
   };
 
@@ -501,10 +502,19 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
               <Warehouse className="h-4 w-4" />
               Other Structures
             </TabsTrigger>
-            <TabsTrigger value="pwi" className="inline-flex items-center gap-2 whitespace-nowrap">
-              <Package className="h-4 w-4" />
-              PWI Items
-            </TabsTrigger>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <TabsTrigger value="pwi" className="inline-flex items-center gap-2 whitespace-nowrap">
+                    <Package className="h-4 w-4" />
+                    Paid When Incurred
+                  </TabsTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>PWI — costs released upon job completion (Ordinance & Law)</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <TabsTrigger value="personal_property" className="inline-flex items-center gap-2 whitespace-nowrap">
               <Sofa className="h-4 w-4" />
               Personal Property
@@ -557,7 +567,7 @@ function SettlementSection({ claimId, settlement, isAdmin }: any) {
               <div className="flex justify-end mb-4">
                 <Button onClick={() => openEditDialog("pwi")}>
                   <Plus className="h-4 w-4 mr-2" />
-                  {settlement?.pwi_rcv ? "Edit" : "Add"} PWI Items
+                  {settlement?.pwi_rcv ? "Edit" : "Add"} Paid When Incurred
                 </Button>
               </div>
             )}

@@ -176,7 +176,7 @@ function generateInvoiceHtml(data: any): string {
         ` : ''}
         ${settlementBreakdown.pwiRCV > 0 || settlementBreakdown.pwiRD > 0 ? `
         <tr>
-          <td style="padding: 8px; border: 1px solid #e2e8f0;">PWI (Property Within Insurance)</td>
+          <td style="padding: 8px; border: 1px solid #e2e8f0;">Paid When Incurred</td>
           <td style="padding: 8px; text-align: right; border: 1px solid #e2e8f0;">$${settlementBreakdown.pwiRCV?.toFixed(2) || '0.00'}</td>
           <td style="padding: 8px; text-align: right; border: 1px solid #e2e8f0;">$${settlementBreakdown.pwiRD?.toFixed(2) || '0.00'}</td>
         </tr>
