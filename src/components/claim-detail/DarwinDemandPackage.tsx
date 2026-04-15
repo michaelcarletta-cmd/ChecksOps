@@ -59,13 +59,11 @@ const TONE_OPTIONS: { value: string; label: string; description: string; icon: s
 const REQUIRED_SECTIONS = [
   'Summary of Findings',
   'Narrative Framing & Preemptive Clarification',
-  'Assessment Process',
   'Roof Damage Assessment',
   'Exterior / Siding Damage Assessment',
   'Gutter / Downspout Assessment',
-  'Existing Conditions',
-  'Repairability / Replacement Assessment',
-  'Scope of Repairs',
+  'Damage Characterization Analysis',
+  'Scope of Repair / Justification',
   'Demand',
 ];
 
