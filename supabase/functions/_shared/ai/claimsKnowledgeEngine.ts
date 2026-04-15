@@ -123,7 +123,7 @@ async function gatherClaimFacts(claimId: string, supabase: SupabaseClient): Prom
     const [claimRes, eventsRes, photosRes, estimateRes, intelRes] = await Promise.all([
       supabase.from("claims").select("insurance_company, state, damage_type, loss_type, type_of_loss, denial_reason, roof_material, construction_trade, declared_position").eq("id", claimId).maybeSingle(),
       supabase.from("claim_events").select("event_type, summary, occurred_at, importance_score").eq("claim_id", claimId).order("occurred_at", { ascending: false }).limit(10),
-      supabase.from("claim_photo_findings").select("finding_type, description, evidence_strength, damage_indicators").eq("claim_id", claimId).limit(10),
+      supabase.from("claim_photo_findings").select("finding_type, damage_description, evidence_strength, damage_indicators").eq("claim_id", claimId).limit(10),
       supabase.from("claim_estimate_analysis").select("analysis_type, total_gap_amount, missing_items_summary, disputed_items_summary").eq("claim_id", claimId).order("created_at", { ascending: false }).limit(1),
       supabase.from("claim_intelligence_summary").select("most_important_issue, strongest_evidence, missing_evidence, recommended_next_steps").eq("claim_id", claimId).maybeSingle(),
     ]);
@@ -139,7 +139,7 @@ async function gatherClaimFacts(claimId: string, supabase: SupabaseClient): Prom
     // Key damages from photos
     const keyDamages = photos
       .filter((p: any) => p.evidence_strength === "strong" || p.evidence_strength === "moderate")
-      .map((p: any) => `${p.finding_type}: ${(p.description || "").slice(0, 100)}`)
+      .map((p: any) => `${p.finding_type}: ${(p.damage_description || "").slice(0, 100)}`)
       .slice(0, 5);
 
     // Disputed items from estimate
@@ -202,8 +202,8 @@ async function retrieveInternalKnowledge(
   try {
     let query = supabase
       .from("claim_knowledge_library")
-      .select("title, content, authority_level, source_type")
-      .order("authority_level", { ascending: false })
+      .select("title, content, authority_level, source_type, trade, material, state, dispute_type")
+      .order("authority_level", { ascending: true })
       .limit(5);
 
     if (disputeType && disputeType !== "general") {
