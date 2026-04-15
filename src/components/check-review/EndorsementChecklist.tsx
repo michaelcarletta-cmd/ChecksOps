@@ -24,7 +24,6 @@ import {
   Landmark, PenTool, Eye, ShieldCheck, Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
-import { format } from "date-fns";
 
 interface CheckEndorsement {
   id: string;
@@ -136,15 +135,18 @@ export function EndorsementChecklist({ checkId, onRefresh }: EndorsementChecklis
         event_data: { overridden_ids: incompleteIds },
       });
 
-      toast.success("Endorsements marked as complete", {
+      toast({
+        title: "Endorsements marked as complete",
         description: `${incompleteIds.length} endorsement(s) updated at ${new Date().toLocaleTimeString()}`,
       });
 
       refresh();
     } catch (e: unknown) {
       console.error("Force complete endorsements failed:", e);
-      toast.error("Failed to update endorsements", {
+      toast({
+        title: "Failed to update endorsements",
         description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
       });
     } finally {
       setForceCompleting(false);
