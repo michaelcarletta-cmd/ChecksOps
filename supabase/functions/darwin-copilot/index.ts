@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
 import { callPerplexityResearch, runDarwinTask } from "../_shared/ai-router.ts";
+import { getClaimsContextBundle, formatContextBundle } from "../_shared/ai/claimsKnowledgeEngine.ts";
 import { isGarbageText } from "../_shared/document-intelligence-types.ts";
 
 const corsHeaders = {
@@ -1596,10 +1597,27 @@ ${research.text}`;
       }
     }
 
-    // Append external research to system prompt if available
-    const finalSystemPrompt = externalResearch
-      ? systemPrompt + externalResearch
-      : systemPrompt;
+    // ── Claims Knowledge Engine — additive context enrichment ──
+    let knowledgeContext = '';
+    try {
+      const bundle = await getClaimsContextBundle({
+        claimId,
+        userQuery: latestUserTurn,
+        taskType: copilotMode === 'strategy' || copilotMode === 'war_room' || copilotMode === 'rebuttal' ? 'copilot_reasoning' : 'copilot_drafting',
+        supabase,
+      });
+      knowledgeContext = formatContextBundle(bundle);
+      if (knowledgeContext) {
+        console.log(`[Copilot] Knowledge Engine injected: dispute=${bundle.disputeType}, knowledge=${bundle.retrievalMeta.knowledgeCount}, lessons=${bundle.retrievalMeta.lessonsCount}, search=${bundle.retrievalMeta.usedSearch}`);
+      }
+    } catch (e) {
+      console.error('[Copilot] Knowledge Engine error (non-fatal):', e);
+    }
+
+    // Append external research and knowledge context to system prompt
+    const finalSystemPrompt = (knowledgeContext ? knowledgeContext + '\n\n' : '') +
+      systemPrompt +
+      (externalResearch || '');
 
     // Build messages: system prompt + conversation history OR single question
     const aiMessages: Array<{role: string; content: string}> = [
