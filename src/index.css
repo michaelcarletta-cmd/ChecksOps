@@ -103,6 +103,25 @@ All colors MUST be HSL.
   }
 }
 
+/* Thin subtle scrollbars for data sections */
+.overflow-y-auto {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(220 16% 28%) transparent;
+}
+.overflow-y-auto::-webkit-scrollbar {
+  width: 6px;
+}
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background-color: hsl(220 16% 28%);
+  border-radius: 3px;
+}
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(220 16% 38%);
+}
+
 /* DOCX preview styling for field placement editor */
 .docx-preview {
   font-family: 'Calibri', 'Arial', sans-serif;
