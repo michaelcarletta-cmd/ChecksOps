@@ -218,6 +218,7 @@ Deno.serve(async (req) => {
     console.log(`[COMPOSITE] detected image dimensions: ${imgWidth}x${imgHeight}`);
 
     const rawOverride = (check.endorsement_override ?? null) as Partial<OverrideShape> | null;
+    console.log("[COMPOSITE] raw endorsement_override from DB:", JSON.stringify(rawOverride));
     const appliedOverride: OverrideShape = {
       xPct: rawOverride?.xPct ?? ENDORSEMENT_LEFT_PCT,
       yPct: rawOverride?.yPct ?? 0.5,
@@ -225,7 +226,8 @@ Deno.serve(async (req) => {
       rotationDeg: rawOverride?.rotationDeg ?? 0,
       showPayToOrder: rawOverride?.showPayToOrder ?? false,
     };
-    console.log(`[COMPOSITE] applying override: ${JSON.stringify(appliedOverride)}`);
+    console.log("[COMPOSITE] applied override (with defaults):", JSON.stringify(appliedOverride));
+    console.log(`[COMPOSITE][DEBUG] checkId=${checkId} | userScale=${appliedOverride.scale} | xPct=${appliedOverride.xPct} | yPct=${appliedOverride.yPct} | rotDeg=${appliedOverride.rotationDeg}`);
 
     // ── Resolve signature assets ──
     const resolvedEndorsements = await Promise.all(
