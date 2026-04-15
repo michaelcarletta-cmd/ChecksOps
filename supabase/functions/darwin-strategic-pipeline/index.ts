@@ -907,10 +907,27 @@ Deno.serve(async (req) => {
       crossClaimLessons, industryNotes, webSearchResults, forceRefresh || false,
     );
 
+    // ── Dismantler intelligence ──
+    let dismantlerResults: any[] = [];
+    try {
+      const { data } = await supabase
+        .from('claim_document_dismantlers')
+        .select('document_type, source_file_name, main_position, strongest_rebuttal_points, contradictions, coverage_weaknesses')
+        .eq('claim_id', claimId)
+        .order('created_at', { ascending: false })
+        .limit(3);
+      dismantlerResults = data || [];
+      if (dismantlerResults.length > 0) {
+        console.log(`[Pipeline] Dismantler intelligence: ${dismantlerResults.length} document analyses`);
+      }
+    } catch (e) {
+      console.error('[Pipeline] Dismantler fetch error (non-fatal):', e);
+    }
+
     // ── Step D ──
     const pipelineContext = buildPipelineContext(
       thesis, memorySnapshot, deltas, crossClaimLessons,
-      industryNotes, webSearchResults, validationErrors,
+      industryNotes, webSearchResults, validationErrors, dismantlerResults,
     );
 
     console.log(`[Pipeline] Complete. Thesis ${isNew ? 'generated' : 'reused'}. ${validationErrors.length} warnings. Context: ${pipelineContext.length} chars`);
