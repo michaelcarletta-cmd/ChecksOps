@@ -811,6 +811,25 @@ function buildPipelineContext(
     }
   }
 
+  // Dismantler intelligence
+  if (dismantlerResults && dismantlerResults.length > 0) {
+    ctx += '── DOCUMENT DISMANTLER INTELLIGENCE ──\n';
+    for (const d of dismantlerResults) {
+      ctx += `[${d.document_type}] ${d.source_file_name || 'Document'}\n`;
+      ctx += `Position: ${d.main_position || 'N/A'}\n`;
+      if (d.strongest_rebuttal_points?.length > 0) {
+        ctx += `Strongest Rebuttals: ${d.strongest_rebuttal_points.slice(0, 3).join('; ')}\n`;
+      }
+      if (d.contradictions?.length > 0) {
+        ctx += `Contradictions: ${d.contradictions.slice(0, 3).join('; ')}\n`;
+      }
+      if (d.coverage_weaknesses?.length > 0) {
+        ctx += `Coverage Weaknesses: ${d.coverage_weaknesses.slice(0, 3).join('; ')}\n`;
+      }
+      ctx += '\n';
+    }
+  }
+
   ctx += '=== END STRATEGIC PIPELINE CONTEXT ===\n';
   ctx += 'RULE: No rebuttal/strategic output unless thesis exists and is backed by claim anchors (doc IDs / photo IDs).\n';
 
