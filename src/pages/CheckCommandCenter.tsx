@@ -44,6 +44,7 @@ import { DepositReports } from "@/components/deposit-ops/DepositReports";
 import { DepositKPIDashboard, DepositOwnerQueue } from "@/components/deposit-ops/DepositOwnerQueue";
 import { DepositManagerCommandCenter } from "@/components/deposit-ops/DepositManagerCommandCenter";
 import { ArrowDownToLine, Scale, Timer, FileBarChart, Shield as ShieldIcon, BarChart3, Users as UsersIcon, Command } from "lucide-react";
+import { CheckCenterHelpButton } from "@/components/check-review/CheckCenterHelp";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -316,6 +317,7 @@ export default function CheckCommandCenter() {
               />
             </DialogContent>
           </Dialog>
+          <CheckCenterHelpButton />
         </div>
       </div>
 
