@@ -90,20 +90,27 @@ export function fitEndorsementLayout({
   zoneHeightPx,
   requestedScale,
 }: EndorsementFitInput): EndorsementMeasuredLayout {
-  for (const preset of PRESETS) {
-    const measured = measurePreset(signerCount, {
-      ...preset,
-      scale: Math.min(preset.scale, requestedScale || 1),
-    });
+  const userScale = requestedScale || 1;
 
+  // Pick the best-fit preset ignoring user scale (layout fit only)
+  let basePreset = PRESETS[PRESETS.length - 1];
+  for (const preset of PRESETS) {
+    const measured = measurePreset(signerCount, preset);
     if (measured.estimatedHeight <= zoneHeightPx) {
-      return measured;
+      basePreset = preset;
+      break;
     }
   }
 
-  // Use smallest preset as last resort
-  return measurePreset(signerCount, {
-    ...PRESETS[PRESETS.length - 1],
-    scale: Math.min(PRESETS[PRESETS.length - 1].scale, requestedScale || 1),
-  });
+  // Apply user scale to all dimensions directly (not as CSS transform)
+  const scaled: EndorsementLayoutPreset = {
+    ...basePreset,
+    fontSize: Math.round(basePreset.fontSize * userScale),
+    lineGap: Math.round(basePreset.lineGap * userScale),
+    rowGap: Math.round(basePreset.rowGap * userScale),
+    signatureHeight: Math.round(basePreset.signatureHeight * userScale),
+    scale: userScale,
+  };
+
+  return measurePreset(signerCount, scaled);
 }
