@@ -690,6 +690,7 @@ function buildPipelineContext(
   industryNotes: any[],
   webSearchResults: any[],
   validationErrors: string[],
+  dismantlerResults?: any[],
 ): string {
   let ctx = '\n\n=== STRATEGIC PIPELINE CONTEXT (MANDATORY REVIEW) ===\n';
   ctx += 'You MUST review the following before generating output.\n\n';
