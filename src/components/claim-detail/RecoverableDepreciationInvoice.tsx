@@ -396,7 +396,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
       
       if (pwiRD > 0) {
         lineItems.push({
-          description: `PWI (Property Within Insurance) Recoverable Depreciation - Claim #${claim.claim_number || 'N/A'}`,
+          description: `Paid When Incurred Recoverable Depreciation - Claim #${claim.claim_number || 'N/A'}`,
           quantity: 1,
           unitPrice: pwiRD,
         });
@@ -630,7 +630,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
                     <p className="font-semibold">{formatCurrency(settlement.other_structures_rcv)}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">PWI</p>
+                    <p className="text-muted-foreground">Paid When Incurred</p>
                     <p className="font-semibold">{formatCurrency(settlement.pwi_rcv)}</p>
                   </div>
                   <div>
@@ -662,7 +662,7 @@ export const RecoverableDepreciationInvoice = ({ claimId, claim }: RecoverableDe
                     <p className="font-semibold text-primary">{formatCurrency(settlement.other_structures_recoverable_depreciation)}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">PWI (Paid When Incurred)</p>
+                    <p className="text-muted-foreground">Paid When Incurred</p>
                     <p className="font-semibold text-primary">{formatCurrency(settlement.pwi_rcv)}</p>
                   </div>
                   <div>
