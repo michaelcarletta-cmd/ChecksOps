@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.39.3";
 import { generate } from "../_shared/ai/generate.ts";
+import { getClaimsContextBundle, formatContextBundle } from "../_shared/ai/claimsKnowledgeEngine.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -418,9 +419,26 @@ RULES:
 
 Return ONLY valid JSON.`;
 
+    // ── Claims Knowledge Engine enrichment ──
+    let knowledgePrefix = '';
+    try {
+      const bundle = await getClaimsContextBundle({
+        claimId,
+        userQuery: 'intelligence summary synthesis',
+        taskType: 'copilot_reasoning',
+        supabase,
+      });
+      knowledgePrefix = formatContextBundle(bundle);
+      if (knowledgePrefix) {
+        console.log(`[Orchestrator] Knowledge Engine: dispute=${bundle.disputeType}, knowledge=${bundle.retrievalMeta.knowledgeCount}, lessons=${bundle.retrievalMeta.lessonsCount}`);
+      }
+    } catch (e) {
+      console.error('[Orchestrator] Knowledge Engine error (non-fatal):', e);
+    }
+
     const aiResult = await generate({
       task: 'copilot_reasoning',
-      system: systemPrompt,
+      system: (knowledgePrefix ? knowledgePrefix + '\n\n' : '') + systemPrompt,
       user: 'Synthesize all intelligence layers and produce the ranked intelligence summary.',
       claimId,
       forceStrong: true,
