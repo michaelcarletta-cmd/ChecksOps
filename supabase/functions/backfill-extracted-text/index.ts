@@ -1,6 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-import { callVision } from "../_shared/ai/generate.ts";
-import { MODEL_VISION } from "../_shared/ai/modelRouter.ts";
+import { ocrImageViaVision, extractPdfWithOcrFallback } from "../_shared/ai/pdfVisionOcr.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -49,56 +48,18 @@ const FILE_TIMEOUT_MS = 90_000; // 90 seconds per file
 
 // === OCR VIA VISION AI ===
 async function ocrViaVision(bytes: Uint8Array, fileName: string, _signal?: AbortSignal): Promise<string | null> {
-  const MAX_OCR_BYTES = 4 * 1024 * 1024;
+  const isPdf = fileName.toLowerCase().endsWith(".pdf");
 
-  try {
-    if (bytes.length > MAX_OCR_BYTES) {
-      console.warn(`[OCR] Skipping ${fileName} — ${(bytes.length / 1024 / 1024).toFixed(1)} MB exceeds ${MAX_OCR_BYTES / 1024 / 1024} MB OCR limit`);
-      return null;
-    }
-
-    let binaryStr = "";
-    for (let i = 0; i < bytes.length; i++) {
-      binaryStr += String.fromCharCode(bytes[i]);
-    }
-    const base64 = btoa(binaryStr);
-
-    const isPdf = fileName.toLowerCase().endsWith(".pdf");
-    const mimeType = isPdf
-      ? "application/pdf"
-      : fileName.toLowerCase().match(/\.(png)$/)
-      ? "image/png"
-      : fileName.toLowerCase().match(/\.(webp)$/)
-      ? "image/webp"
-      : "image/jpeg";
-
-    console.log(`[OCR] Sending ${fileName} (${bytes.length} bytes, mime=${mimeType}) to shared AI layer, model: ${MODEL_VISION}`);
-
-    const result = await callVision({
-      model: MODEL_VISION,
-      messages: [
-        {
-          role: "system",
-          content: "Extract ALL text content from this document image. Return the raw text exactly as it appears, preserving dates, numbers, names, and addresses. Do not summarize or interpret.",
-        },
-        {
-          role: "user",
-          content: [
-            { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
-            { type: "text", text: "Extract all text from this document. Return only the raw text content." },
-          ],
-        },
-      ],
-      temperature: 0.1,
-    });
-
-    const text = result.text || null;
-    console.log(`[OCR] Vision returned ${text ? text.length : 0} chars for ${fileName}`);
-    return text;
-  } catch (error) {
-    console.error("[OCR] Error:", error);
-    return null;
+  if (isPdf) {
+    const result = await extractPdfWithOcrFallback(bytes, fileName, { embeddedTextThreshold: 300 });
+    console.log(`[OCR] PDF pipeline: method=${result.method}, status=${result.diagnostics.status}, chars=${result.text.length}, failure=${result.diagnostics.failureReason || 'none'}`);
+    return result.text.length > 10 ? result.text : null;
   }
+
+  // Image files
+  const { text, diagnostics } = await ocrImageViaVision(bytes, fileName);
+  console.log(`[OCR] Image OCR: status=${diagnostics.status}, chars=${diagnostics.ocrResultLength}, failure=${diagnostics.failureReason || 'none'}`);
+  return text;
 }
 
 // === Wrap processFile with a hard timeout ===
