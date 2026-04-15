@@ -418,7 +418,7 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
           {isClaimContext ? <Brain className="h-6 w-6" /> : <Sparkles className="h-6 w-6" />}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px] h-[600px] flex flex-col p-0">
+      <DialogContent className="sm:max-w-2xl w-[calc(100vw-2rem)] h-[600px] flex flex-col p-0">
         <DialogHeader className="px-6 py-4 border-b">
           <div className="flex items-center justify-between">
             <DialogTitle className="flex items-center gap-2">
@@ -491,11 +491,12 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
                       </AvatarFallback>
                     </Avatar>
                     <div
-                      className={`flex-1 p-4 rounded-lg text-sm ${
+                      className={`max-w-[85%] p-4 rounded-lg text-sm ${
                         message.role === "user"
-                          ? "bg-primary text-primary-foreground ml-8"
-                          : "bg-muted mr-8 font-sans leading-relaxed"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted font-sans leading-relaxed"
                       }`}
+                      style={{ overflowWrap: "break-word", wordBreak: "break-word" }}
                     >
                       {message.role === "user" ? (
                         <p className="whitespace-pre-wrap">{message.content}</p>
@@ -571,7 +572,7 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
                         {isClaimContext ? <Brain className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex-1 p-3 rounded-lg bg-muted mr-8">
+                    <div className="max-w-[85%] p-3 rounded-lg bg-muted" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
                       <Loader2 className="h-4 w-4 animate-spin" />
                     </div>
                   </div>
