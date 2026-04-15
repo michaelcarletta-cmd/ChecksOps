@@ -78,6 +78,35 @@ function signerForensics(req: Request): Record<string, string | null> {
   };
 }
 
+async function refreshCompositeBackImage(checkId: string) {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    console.log(`[ENDORSEMENT] Refreshing signature composite for check ${checkId}`);
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/composite-endorsement-signatures`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({ checkId }),
+    });
+
+    const responseText = await response.text();
+    if (!response.ok) {
+      console.error(
+        `[ENDORSEMENT] Signature composite refresh failed for check ${checkId}: ${response.status} ${responseText}`,
+      );
+      return;
+    }
+
+    console.log(`[ENDORSEMENT] Signature composite refresh completed for check ${checkId}: ${responseText}`);
+  } catch (compositeErr) {
+    console.error("Auto signature composite refresh failed (non-blocking):", compositeErr);
+  }
+}
+
 async function reEvaluateAfterEndorsement(
   supabase: ReturnType<typeof createClient>,
   checkId: string,
@@ -102,6 +131,8 @@ async function reEvaluateAfterEndorsement(
     await supabase.from("check_intake_items")
       .update({ status: "needs_review" })
       .eq("id", checkId);
+
+    await refreshCompositeBackImage(checkId);
     return { allSigned: false, newStatus: "needs_review" };
   }
 
@@ -152,23 +183,7 @@ async function reEvaluateAfterEndorsement(
       console.error("Auto packet generation failed (non-blocking):", packetErr);
     }
 
-    // Auto-composite endorsement signatures onto back of check image
-    try {
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      console.log(`[ENDORSEMENT] Triggering signature composite for check ${checkId}`);
-      await fetch(`${supabaseUrl}/functions/v1/composite-endorsement-signatures`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${serviceKey}`,
-        },
-        body: JSON.stringify({ checkId }),
-      });
-      console.log(`[ENDORSEMENT] Signature composite triggered successfully`);
-    } catch (compositeErr) {
-      console.error("Auto signature composite failed (non-blocking):", compositeErr);
-    }
+    await refreshCompositeBackImage(checkId);
 
     // Trigger payment direction workflow for linked claim_checks
     try {
@@ -253,6 +268,7 @@ async function reEvaluateAfterEndorsement(
     return { allSigned: true, newStatus: check?.is_multi_payee || RESTRICTED_RECOMMENDATIONS.has(originalRec) ? "endorsements_complete" : "ready" };
   }
 
+  await refreshCompositeBackImage(checkId);
   return { allSigned: false, newStatus: null };
 }
 
