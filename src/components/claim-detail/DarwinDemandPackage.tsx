@@ -99,10 +99,15 @@ function countBullets(text: string): number {
 
 function extractSectionBody(fullText: string, heading: string, nextHeadings: string[]): string {
   const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (nextHeadings.length === 0) {
+    const regex = new RegExp(`${escaped}[\\s\\S]*`, 'i');
+    const match = fullText.match(regex);
+    return match?.[0] || '';
+  }
   const nextPattern = nextHeadings
     .map(h => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     .join('|');
-  const regex = new RegExp(`${escaped}[\\s\\S]*?(?=${nextPattern}|$)`, 'i');
+  const regex = new RegExp(`${escaped}[\\s\\S]*?(?=${nextPattern})`, 'i');
   const match = fullText.match(regex);
   return match?.[0] || '';
 }
