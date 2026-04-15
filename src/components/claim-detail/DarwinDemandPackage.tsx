@@ -58,6 +58,7 @@ const TONE_OPTIONS: { value: string; label: string; description: string; icon: s
 
 const REQUIRED_SECTIONS = [
   'Summary of Findings',
+  'Narrative Framing & Preemptive Clarification',
   'Assessment Process',
   'Roof Damage Assessment',
   'Exterior / Siding Damage Assessment',
