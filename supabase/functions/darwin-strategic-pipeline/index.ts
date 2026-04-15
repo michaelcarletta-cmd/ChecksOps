@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { generate } from "../_shared/ai/generate.ts";
 import { searchTavily } from "../_shared/ai/tavily.ts";
+import { getClaimsContextBundle, formatContextBundle } from "../_shared/ai/claimsKnowledgeEngine.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -623,10 +624,26 @@ You MUST return a JSON object with these exact fields:
 
 IMPORTANT: evidence_map MUST reference actual document/photo IDs from the lists above. No fabricated IDs.`;
 
-  try {
+    // ── Claims Knowledge Engine enrichment ──
+    let knowledgePrefix = '';
+    try {
+      const bundle = await getClaimsContextBundle({
+        claimId,
+        userQuery: `${claim.loss_type || ''} ${claim.damage_type || ''} thesis generation`,
+        taskType: 'copilot_reasoning',
+        supabase,
+      });
+      knowledgePrefix = formatContextBundle(bundle);
+      if (knowledgePrefix) {
+        console.log(`[Pipeline] Knowledge Engine: dispute=${bundle.disputeType}, knowledge=${bundle.retrievalMeta.knowledgeCount}, lessons=${bundle.retrievalMeta.lessonsCount}`);
+      }
+    } catch (e) {
+      console.error('[Pipeline] Knowledge Engine error (non-fatal):', e);
+    }
+
     const aiResult = await generate({
       task: 'copilot_reasoning',
-      system: 'You are a claims strategy AI. Return ONLY valid JSON, no markdown.',
+      system: (knowledgePrefix ? knowledgePrefix + '\n\n' : '') + 'You are a claims strategy AI. Return ONLY valid JSON, no markdown.',
       user: prompt,
       claimId,
       searchMode: 'off',

@@ -4114,6 +4114,57 @@ export type Database = {
           },
         ]
       }
+      claim_knowledge_library: {
+        Row: {
+          authority_level: number
+          content: string
+          created_at: string
+          dispute_type: string | null
+          id: string
+          loss_type: string | null
+          material: string | null
+          source_type: string
+          state: string | null
+          tags: string[] | null
+          title: string
+          topic: string
+          trade: string | null
+          updated_at: string
+        }
+        Insert: {
+          authority_level?: number
+          content: string
+          created_at?: string
+          dispute_type?: string | null
+          id?: string
+          loss_type?: string | null
+          material?: string | null
+          source_type?: string
+          state?: string | null
+          tags?: string[] | null
+          title: string
+          topic: string
+          trade?: string | null
+          updated_at?: string
+        }
+        Update: {
+          authority_level?: number
+          content?: string
+          created_at?: string
+          dispute_type?: string | null
+          id?: string
+          loss_type?: string | null
+          material?: string | null
+          source_type?: string
+          state?: string | null
+          tags?: string[] | null
+          title?: string
+          topic?: string
+          trade?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       claim_line_item_justifications: {
         Row: {
           carrier_facing_text: string | null
