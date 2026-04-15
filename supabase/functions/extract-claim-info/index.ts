@@ -1,6 +1,7 @@
 import { callWithTools } from "../_shared/ai/generate.ts";
 import { callVision } from "../_shared/ai/generate.ts";
 import { MODEL_VISION } from "../_shared/ai/modelRouter.ts";
+import { extractPdfWithOcrFallback } from "../_shared/ai/pdfVisionOcr.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -96,15 +97,46 @@ Deno.serve(async (req) => {
 
     let messages: any[];
 
-    if (isPdf || isImage) {
-      const base64 = arrayBufferToBase64(arrayBuffer);
-      const mimeType = isPdf ? "application/pdf" : file.type || "image/jpeg";
-      
-      let supplementaryText = "";
-      if (isPdf) {
-        supplementaryText = extractPlainText(new Uint8Array(arrayBuffer));
-        if (supplementaryText.length > 15000) supplementaryText = supplementaryText.substring(0, 15000);
+    if (isPdf) {
+      // Use the PDF extraction pipeline — never send application/pdf to vision API
+      const pdfResult = await extractPdfWithOcrFallback(new Uint8Array(arrayBuffer), file.name, { embeddedTextThreshold: 100 });
+      console.log(`[extract-claim-info] PDF pipeline: method=${pdfResult.method}, status=${pdfResult.diagnostics.status}, chars=${pdfResult.text.length}`);
+
+      let supplementaryText = pdfResult.text;
+      if (supplementaryText.length > 15000) supplementaryText = supplementaryText.substring(0, 15000);
+
+      if (supplementaryText.length > 50) {
+        // Got good text — use text-based extraction (more reliable than vision for PDFs)
+        messages = [
+          {
+            role: "system",
+            content: `You are a document data extractor for insurance claims. Extract key claim information from the provided document text. Be precise and extract only what is explicitly stated. Do not guess or make up values. If a field is not found, do not include it.`
+          },
+          {
+            role: "user",
+            content: `Extract claim information from this document:\n\n${supplementaryText}`
+          }
+        ];
+      } else {
+        // Fallback: send PDF bytes as image/jpeg to vision (some PDFs are image-only)
+        const base64 = arrayBufferToBase64(arrayBuffer);
+        messages = [
+          {
+            role: "system",
+            content: `You are a document data extractor for insurance claims. Extract key claim information from the provided document. Be precise and extract only what is explicitly stated. Do not guess or make up values. If a field is not found, do not include it.`
+          },
+          {
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } },
+              { type: "text", text: `Extract all claim information from this scanned document.` }
+            ]
+          }
+        ];
       }
+    } else if (isImage) {
+      const base64 = arrayBufferToBase64(arrayBuffer);
+      const mimeType = file.type || "image/jpeg";
 
       messages = [
         {
@@ -115,7 +147,7 @@ Deno.serve(async (req) => {
           role: "user",
           content: [
             { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
-            { type: "text", text: `Extract all claim information from this document.${supplementaryText ? `\n\nAdditional extracted text for reference:\n${supplementaryText}` : ''}` }
+            { type: "text", text: `Extract all claim information from this document.` }
           ]
         }
       ];
