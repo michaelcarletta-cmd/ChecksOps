@@ -94,22 +94,63 @@ const FILLER_PHRASES = [
 ];
 
 function countBullets(text: string): number {
-  return (text.match(/^- |\n- /g) || []).length;
+  return text
+    .split(/\r?\n/)
+    .filter((line) => /^\s*[-•*]\s+/.test(line))
+    .length;
 }
 
-function extractSectionBody(fullText: string, heading: string, nextHeadings: string[]): string {
+function buildSectionHeadingRegex(heading: string): RegExp {
   const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  if (nextHeadings.length === 0) {
-    const regex = new RegExp(`${escaped}[\\s\\S]*`, 'i');
-    const match = fullText.match(regex);
-    return match?.[0] || '';
+  return new RegExp(
+    `(?:^|\\n)\\s*(?:#{1,6}\\s+)?(?:\\d+\\.\\s*)?(?:\\*\\*|__)?${escaped}(?:\\*\\*|__)?\\s*:?[ \t]*(?=\\r?\\n|$)`,
+    'gi'
+  );
+}
+
+function parseDemandPackageSections(fullText: string, headings: string[]): Record<string, string> {
+  const matchesByHeading = new Map<string, Array<{ start: number; headingEnd: number }>>();
+
+  for (const heading of headings) {
+    const matches = Array.from(fullText.matchAll(buildSectionHeadingRegex(heading))).map((match) => ({
+      start: match.index ?? 0,
+      headingEnd: (match.index ?? 0) + match[0].length,
+    }));
+    matchesByHeading.set(heading, matches);
   }
-  const nextPattern = nextHeadings
-    .map(h => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-    .join('|');
-  const regex = new RegExp(`${escaped}[\\s\\S]*?(?=${nextPattern})`, 'i');
-  const match = fullText.match(regex);
-  return match?.[0] || '';
+
+  const chosen: Array<{ heading: string; start: number; headingEnd: number }> = [];
+  let minStart = -1;
+
+  for (let i = 0; i < headings.length; i++) {
+    const heading = headings[i];
+    const candidates = (matchesByHeading.get(heading) || []).filter((match) => match.start > minStart);
+    const chosenMatch = [...candidates]
+      .reverse()
+      .find((candidate) =>
+        headings.slice(i + 1).every((nextHeading) =>
+          (matchesByHeading.get(nextHeading) || []).some((nextMatch) => nextMatch.start > candidate.start)
+        )
+      ) || (i === headings.length - 1 ? candidates.at(-1) : undefined);
+
+    if (!chosenMatch) continue;
+
+    chosen.push({ heading, ...chosenMatch });
+    minStart = chosenMatch.start;
+  }
+
+  const sections: Record<string, string> = {};
+
+  for (let i = 0; i < chosen.length; i++) {
+    const current = chosen[i];
+    const next = chosen[i + 1];
+    sections[current.heading] = fullText
+      .slice(current.headingEnd, next?.start ?? fullText.length)
+      .replace(/^[:\s-]+/, '')
+      .trim();
+  }
+
+  return sections;
 }
 
 interface ValidationError {
@@ -119,20 +160,19 @@ interface ValidationError {
 
 function validateDemandPackage(fullText: string): ValidationError[] {
   const errors: ValidationError[] = [];
+  const parsedSections = parseDemandPackageSections(fullText, REQUIRED_SECTIONS);
 
   // Check all sections present
   for (const heading of REQUIRED_SECTIONS) {
-    if (!fullText.toLowerCase().includes(heading.toLowerCase())) {
+    if (!parsedSections[heading]) {
       errors.push({ section: heading, message: `Missing section: ${heading}` });
     }
   }
   if (errors.length > 0) return errors;
 
   // Structure validation per section
-  for (let i = 0; i < REQUIRED_SECTIONS.length; i++) {
-    const heading = REQUIRED_SECTIONS[i];
-    const body = extractSectionBody(fullText, heading, REQUIRED_SECTIONS.slice(i + 1));
-    const stripped = body.replace(new RegExp(heading, 'i'), '').trim();
+  for (const heading of REQUIRED_SECTIONS) {
+    const stripped = (parsedSections[heading] || '').trim();
     const rules = SECTION_RULES[heading];
     if (!rules) continue;
 
