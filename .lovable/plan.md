@@ -1,45 +1,39 @@
 
 
-# Fix Task Status Sync — Overdue Badge Persistence
+# Plan: Merge Second Brain into Copilot + Mobile Copilot Access
 
 ## Problem
-After completing or editing a task, the overdue badge/styling can persist because:
-1. The `NotificationsBar` independently fetches tasks and doesn't refetch when tasks change elsewhere
-2. No visual sync indicator tells the user data is refreshing
-3. The `isPastDue` calculation in `ExecutionTaskCard` uses `Date.now()` at render time but the task object may be stale until the realtime channel fires
+1. **Copilot is invisible on mobile** — the right drawer uses `hidden xl:block`, so screens under 1280px never see it
+2. **Second Brain is dead code** — imported but never rendered in DarwinTab
+3. **No proactive nudges** — `claim_warnings_log` is only populated during manual War Room runs
 
-## Changes
+## Solution (3 parts)
 
-### 1. `src/hooks/useExecutionQueue.ts` — Add sync status flag
-- Add a `synced` state that briefly flips to `true` after a successful refetch, then resets after 2 seconds
-- Expose `synced` from the hook so the UI can show a brief confirmation indicator
+### Part 1: Mobile Copilot Access
+On mobile/tablet (below XL), add a **full-screen slide-up sheet** for Copilot triggered by the existing "Show Assistant Panel" button:
+- Use a `Sheet` component (already in your UI library) that slides up from the bottom
+- Contains the same `DarwinCopilotPanel` with Copilot + Dismantler tabs
+- The button already exists — just change its behavior on mobile to open the sheet instead of toggling a hidden column
+- No new icons or components needed
 
-### 2. `src/components/execution/ExecutionQueuePanel.tsx` — Sync indicator + skeleton
-- Accept `synced` prop from the hook
-- When `refetching` is true, show a subtle skeleton overlay or loading pulse on the card area
-- When `synced` flips true, show a small green checkmark with a 2-second fade-out near the "Execution Queue" title
-- After `handleAction` succeeds, the existing `onRefetch()` call already triggers a hard refetch — no change needed there
+### Part 2: Proactive Warning Generator
+Create edge function `darwin-proactive-warnings` that runs on the existing 5-minute cron:
+- **Stale claims**: no activity in 7/14/21 days
+- **Deadline warnings**: state-specific carrier response windows
+- **Missing documentation**: claims without estimates, photos, or inspection reports  
+- **Payment gaps**: approved amounts with no check logged
+- Pure database queries, no AI calls. Deduplicates against existing warnings.
 
-### 3. `src/components/NotificationsBar.tsx` — Subscribe to task changes
-- The realtime subscription is already present but uses its own independent query
-- After any realtime event fires and `fetchTasks()` completes, the overdue list should auto-clear — verify this path works
-- Add `console.error` logging if the fetched data still contains a task with `status = 'completed'` (indicates stale read)
+**DB migration**: add `source` column to `claim_warnings_log` (`proactive` | `strategic_intelligence` | `manual`)
 
-### 4. `src/components/execution/ExecutionTaskCard.tsx` — Guard against stale overdue display
-- Current line 63: `const isPastDue = !!(task.due_date && new Date(task.due_date).getTime() < Date.now() && task.status !== 'completed');`
-- This is correct but the card can render before the refetch completes — the `refetching` opacity already handles this visually. No code change needed here.
+### Part 3: Merge Nudges into Copilot + Brain Icon
+- **Copilot banner**: Query `claim_warnings_log` for current claim, show dismissible alert banner above chat messages in `DarwinCopilotPanel`
+- **Brain icon (ClaimsAIAssistant)**: Keep it on claims page. Add a badge count of active warnings. Clicking a warning pre-fills Copilot context and opens the mobile sheet (or scrolls to panel on desktop)
+- **Cleanup**: Remove dead `DarwinSecondBrain` lazy import from DarwinTab
 
-### 5. `src/services/taskExecutionService.ts` — Add error logging on stale returns
-- In `completeTask()`: after the update, re-select the task and `console.error` if status is not `completed`
-- In `handleSave` (TaskDetailDrawer): after update, log if the returned data still has old `due_date`
+## Files
 
-### 6. `src/pages/Tasks.tsx` — Wire synced state
-- Destructure `synced` from `useExecutionQueue()` and pass to `ExecutionQueuePanel`
-
-## Files to modify
-1. `src/hooks/useExecutionQueue.ts` — add `synced` state with auto-reset timer
-2. `src/components/execution/ExecutionQueuePanel.tsx` — sync checkmark indicator + skeleton during refetch
-3. `src/components/NotificationsBar.tsx` — stale-data console.error guard
-4. `src/services/taskExecutionService.ts` — post-mutation verification logging
-5. `src/pages/Tasks.tsx` — pass `synced` prop through
-
+| Action | File |
+|--------|------|
+| Edit | `src/components/claim-detail/DarwinTab.tsx` — wrap Copilot in Sheet on mobile, remove SecondBrain import |
+| Edit | `src/components/claim-detail/DarwinCopilotPanel.tsx` — add nudge banner above messages |
