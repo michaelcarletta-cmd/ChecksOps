@@ -1245,6 +1245,32 @@ Deno.serve(async (req) => {
 
     demandPackage = sanitizeDemandPackageObject(demandPackage);
 
+    // ── Completion Gate: validate all 8 required sections are present ──
+    const REQUIRED_SECTION_HEADINGS = [
+      "Summary of Findings",
+      "Narrative Framing & Preemptive Clarification",
+      "Roof Damage Assessment",
+      "Exterior / Siding Damage Assessment",
+      "Gutter / Downspout Assessment",
+      "Damage Characterization Analysis",
+      "Scope of Repair / Justification",
+      "Demand",
+    ];
+
+    const fullPackageText = String(demandPackage.full_demand_package || "");
+    const missingSections = REQUIRED_SECTION_HEADINGS.filter(
+      (heading) => !fullPackageText.toLowerCase().includes(heading.toLowerCase())
+    );
+    if (missingSections.length > 0) {
+      console.error("Demand package incomplete — missing sections:", missingSections);
+      throw new Error(`Demand package incomplete — all 8 sections required. Missing: ${missingSections.join(", ")}`);
+    }
+
+    // ── Reject placeholder content ──
+    if (/\[section coming\]|\[tbd\]|\[placeholder\]|\[coming soon\]/i.test(fullPackageText)) {
+      throw new Error("Demand package contains placeholder text. All sections must be fully generated.");
+    }
+
     // Enforce authoritative estimate total over any AI-hallucinated amount
     if (explicitEstimateTotal > 0) {
       demandPackage.demand_amount = money(explicitEstimateTotal);
