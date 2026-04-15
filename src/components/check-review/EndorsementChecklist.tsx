@@ -186,11 +186,43 @@ export function EndorsementChecklist({ checkId, onRefresh }: EndorsementChecklis
       </div>
 
       {!allComplete && (
-        <div className="px-1">
+        <div className="px-1 space-y-2">
           <div className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
             <AlertTriangle className="h-3 w-3 shrink-0" />
             Deposit blocked until all required endorsements are completed
           </div>
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full text-xs h-8 border-muted-foreground/30 text-muted-foreground hover:text-primary hover:border-primary"
+                disabled={forceCompleting}
+              >
+                {forceCompleting ? (
+                  <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-3 w-3 mr-1.5" />
+                )}
+                Mark All Endorsements Received
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Force Complete Endorsements</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure all endorsements have been received? This will mark {pendingCount} pending endorsement(s) as signed. This action will be logged and cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={forceCompleteAll}>
+                  Confirm
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
 
