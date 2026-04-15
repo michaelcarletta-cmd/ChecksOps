@@ -996,6 +996,55 @@ function CheckDetailPanel({
     }
   };
 
+  // Branch deposit → Deposited transition
+  const handleMoveToDeposited = async (force = false) => {
+    if (!user?.id || !check) return;
+    setMovingToDeposited(true);
+    try {
+      const { error } = await supabase
+        .from("check_intake_items")
+        .update({ status: "deposited", updated_at: new Date().toISOString() })
+        .eq("id", checkId);
+      if (error) throw error;
+
+      await supabase.from("check_audit_log").insert({
+        check_id: checkId,
+        event_type: force ? "force_moved_to_deposited" : "moved_to_deposited",
+        actor_id: user.id,
+        event_description: force
+          ? "Check force-moved to deposited (bypassed pipeline validation)"
+          : "Check moved from branch to deposited",
+      });
+
+      sonnerToast.success("Check moved to Deposited", {
+        description: `Check #${check.check_number ?? checkId.slice(0, 8)} at ${new Date().toLocaleTimeString()}`,
+      });
+      setBranchApprovedAt(null);
+      setShowForceMove(false);
+      qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+      qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+      qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
+      onRefresh();
+    } catch (e: any) {
+      toast({ title: "Failed to move check", description: e.message, variant: "destructive" });
+    } finally {
+      setMovingToDeposited(false);
+    }
+  };
+
+  // 5-minute safeguard for branch checks
+  useEffect(() => {
+    if (check?.status !== "branch_deposit_required" || !branchApprovedAt) {
+      setShowForceMove(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setShowForceMove(true);
+    }, 5 * 60 * 1000);
+    return () => clearTimeout(timer);
+  }, [check?.status, branchApprovedAt]);
+
   const ensureDepositReadyBackImage = async () => {
     if (!check?.id || !check.back_image_path) return backImageUrl ?? null;
 
