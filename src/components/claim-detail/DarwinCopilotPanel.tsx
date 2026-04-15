@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Brain, Send, Trash2, StopCircle, Maximize2, Minimize2, Bold, Italic, Underline, Type, Paperclip, X, FileText, RefreshCw } from "lucide-react";
+import { Brain, Send, Trash2, StopCircle, Maximize2, Minimize2, Bold, Italic, Underline, Type, Paperclip, X, FileText, RefreshCw, AlertTriangle, TrendingUp, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +48,47 @@ export function DarwinCopilotPanel({ claimId, isExpanded, onToggleExpand }: Darw
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [claimFiles, setClaimFiles] = useState<ClaimFile[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
+  const [nudges, setNudges] = useState<Array<{ id: string; severity: string; title: string; message: string; warning_type: string }>>([]);
+  const [dismissedNudgeIds, setDismissedNudgeIds] = useState<Set<string>>(new Set());
+  const [nudgesCollapsed, setNudgesCollapsed] = useState(false);
+
+  // Load active warnings/nudges for this claim
+  useEffect(() => {
+    const fetchNudges = async () => {
+      const { data } = await supabase
+        .from('claim_warnings_log')
+        .select('id, severity, title, message, warning_type')
+        .eq('claim_id', claimId)
+        .eq('is_dismissed', false)
+        .eq('is_resolved', false)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      if (data) setNudges(data);
+    };
+    fetchNudges();
+
+    const channel = supabase
+      .channel(`copilot_nudges_${claimId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'claim_warnings_log',
+        filter: `claim_id=eq.${claimId}`,
+      }, () => { fetchNudges(); })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [claimId]);
+
+  const handleDismissNudge = async (nudgeId: string) => {
+    setDismissedNudgeIds(prev => new Set([...prev, nudgeId]));
+    await supabase
+      .from('claim_warnings_log')
+      .update({ is_dismissed: true, dismissed_at: new Date().toISOString() })
+      .eq('id', nudgeId);
+  };
+
+  const visibleNudges = nudges.filter(n => !dismissedNudgeIds.has(n.id));
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -177,6 +218,53 @@ export function DarwinCopilotPanel({ claimId, isExpanded, onToggleExpand }: Darw
           ))}
         </div>
       </div>
+
+      {/* Nudge Banner */}
+      {visibleNudges.length > 0 && (
+        <div className="border-b bg-accent/30 px-3 py-2">
+          <div className="flex items-center justify-between mb-1">
+            <button
+              className="flex items-center gap-1.5 text-[11px] font-medium text-foreground"
+              onClick={() => setNudgesCollapsed(!nudgesCollapsed)}
+            >
+              <AlertTriangle className="h-3 w-3 text-warning" />
+              {visibleNudges.length} active {visibleNudges.length === 1 ? 'alert' : 'alerts'}
+            </button>
+          </div>
+          {!nudgesCollapsed && (
+            <div className="space-y-1">
+              {visibleNudges.map(nudge => (
+                <div
+                  key={nudge.id}
+                  className={cn(
+                    "flex items-start gap-1.5 text-[11px] rounded px-2 py-1.5",
+                    nudge.severity === 'critical' && "bg-destructive/10 text-destructive",
+                    nudge.severity === 'high' && "bg-orange-500/10 text-orange-700 dark:text-orange-400",
+                    nudge.severity === 'medium' && "bg-warning/10 text-warning",
+                    nudge.severity === 'low' && "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {nudge.severity === 'critical' || nudge.severity === 'high' ? (
+                    <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                  ) : (
+                    <Lightbulb className="h-3 w-3 mt-0.5 shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <span className="font-medium">{nudge.title}</span>
+                    <span className="text-muted-foreground ml-1">{nudge.message}</span>
+                  </div>
+                  <button
+                    className="shrink-0 opacity-50 hover:opacity-100"
+                    onClick={() => handleDismissNudge(nudge.id)}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">

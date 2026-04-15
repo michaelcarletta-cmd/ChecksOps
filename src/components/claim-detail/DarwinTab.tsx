@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { toast } from "sonner";
 import { subscribeCarrierDismantler } from "@/lib/darwinDismantlerBus";
 import { DarwinSMSActivityLog } from "@/components/inbox/DarwinSMSActivityLog";
@@ -64,7 +65,7 @@ const DarwinDeclaredPosition = lazy(() => import("@/components/claim-detail/Darw
 // New Strategic Components
 const ClaimWarRoom = lazy(() => import("@/components/claim-detail/ClaimWarRoom").then(m => ({ default: m.ClaimWarRoom })));
 const CarrierPlaybookDialog = lazy(() => import("@/components/claim-detail/CarrierPlaybookDialog").then(m => ({ default: m.CarrierPlaybookDialog })));
-const DarwinSecondBrain = lazy(() => import("@/components/claim-detail/DarwinSecondBrain").then(m => ({ default: m.DarwinSecondBrain })));
+// DarwinSecondBrain removed — nudges merged into Copilot panel
 const DarwinCommandBar = lazy(() => import("@/components/claim-detail/DarwinCommandBar").then(m => ({ default: m.DarwinCommandBar })));
 const DarwinGeneratedAssets = lazy(() => import("@/components/claim-detail/DarwinGeneratedAssets").then(m => ({ default: m.DarwinGeneratedAssets })));
 const CarrierScenarioPlaybook = lazy(() => import("@/components/claim-detail/CarrierScenarioPlaybook").then(m => ({ default: m.CarrierScenarioPlaybook })));
@@ -187,6 +188,7 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
   useRenderCount("DarwinTab");
   const isMobile = useIsMobile();
   const [showCopilot, setShowCopilot] = useState(true);
+  const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [copilotExpanded, setCopilotExpanded] = useState(false);
   const [copilotView, setCopilotView] = useState<'conversation' | 'dismantler'>('conversation');
   const [activeWorkspace, setActiveWorkspace] = useState<DarwinWorkspaceKey>("claim-control-center");
@@ -595,12 +597,18 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
         <Button
           variant={showCopilot ? "default" : "outline"}
           size="sm"
-          onClick={() => setShowCopilot(!showCopilot)}
+          onClick={() => {
+            if (isMobile) {
+              setMobileSheetOpen(true);
+            } else {
+              setShowCopilot(!showCopilot);
+            }
+          }}
           className="gap-1.5 text-xs md:text-sm"
         >
           <MessageSquare className="h-3.5 w-3.5 md:h-4 md:w-4" />
-          <span className="hidden sm:inline">{showCopilot ? "Hide Assistant Panel" : "Show Assistant Panel"}</span>
-          <span className="sm:hidden">{showCopilot ? "Hide" : "Show"}</span>
+          <span className="hidden sm:inline">{isMobile ? "Open Copilot" : showCopilot ? "Hide Assistant Panel" : "Show Assistant Panel"}</span>
+          <span className="sm:hidden">{isMobile ? "Copilot" : showCopilot ? "Hide" : "Show"}</span>
         </Button>
       </div>
 
@@ -1017,6 +1025,52 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
           </div>
         )}
       </div>
+
+      {/* Mobile Copilot Sheet */}
+      <Sheet open={mobileSheetOpen} onOpenChange={setMobileSheetOpen}>
+        <SheetContent side="bottom" className="h-[85vh] p-0 flex flex-col">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Darwin Copilot</SheetTitle>
+          </SheetHeader>
+          <div className="flex border-b">
+            <button
+              className={cn(
+                "flex-1 px-3 py-2 text-xs font-medium transition-colors",
+                copilotView === 'conversation'
+                  ? "bg-primary/10 text-primary border-b-2 border-primary"
+                  : "text-muted-foreground hover:bg-accent/50"
+              )}
+              onClick={() => setCopilotView('conversation')}
+            >
+              <MessageSquare className="h-3 w-3 inline mr-1" />
+              Copilot
+            </button>
+            <button
+              className={cn(
+                "flex-1 px-3 py-2 text-xs font-medium transition-colors",
+                copilotView === 'dismantler'
+                  ? "bg-primary/10 text-primary border-b-2 border-primary"
+                  : "text-muted-foreground hover:bg-accent/50"
+              )}
+              onClick={() => setCopilotView('dismantler')}
+            >
+              <Shield className="h-3 w-3 inline mr-1" />
+              Dismantler
+            </button>
+          </div>
+          {copilotView === 'conversation' ? (
+            <DarwinCopilotPanel claimId={claimId} isExpanded={false} />
+          ) : (
+            <div className="flex-1 overflow-y-auto p-3 text-xs text-muted-foreground">
+              {dismantlerText ? (
+                <div className="whitespace-pre-wrap">{dismantlerText}</div>
+              ) : (
+                <p>No dismantler output yet. Run any Darwin analysis and it will be generated automatically.</p>
+              )}
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };
