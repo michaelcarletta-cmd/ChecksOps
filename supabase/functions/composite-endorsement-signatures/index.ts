@@ -131,7 +131,11 @@ Deno.serve(async (req) => {
         original_back_path?: string;
       } | null;
 
-      const recoveredOriginalPath = auditData?.original_back_image_path ?? auditData?.original_back_path ?? null;
+      const recoveredOriginalPath =
+        auditData?.original_back_image_path ??
+        auditData?.original_back_path ??
+        await recoverOriginalBackImagePath(supabase, backImagePath);
+
       if (recoveredOriginalPath) {
         backImagePath = recoveredOriginalPath;
       } else {
@@ -762,4 +766,72 @@ function inferImageContentType(path: string) {
   if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
   if (lower.endsWith(".webp")) return "image/webp";
   return "image/png";
+}
+
+async function recoverOriginalBackImagePath(supabase: any, endorsedPath: string): Promise<string | null> {
+  const { directory, fileName } = splitStoragePath(endorsedPath);
+  const originalBaseName = stripEndorsedSuffix(fileName);
+
+  if (!originalBaseName || originalBaseName === fileName) {
+    return null;
+  }
+
+  const { data: siblingFiles, error } = await supabase.storage
+    .from("claim-files")
+    .list(directory, {
+      limit: 100,
+      sortBy: { column: "name", order: "asc" },
+    });
+
+  if (error) {
+    console.warn(`[COMPOSITE] failed to inspect sibling files for original back image recovery: ${error.message}`);
+    return null;
+  }
+
+  const candidates = (siblingFiles ?? [])
+    .map((entry: { name?: string | null }) => entry.name ?? "")
+    .filter((name) => Boolean(name) && !name.includes("/") && !/_endorsed(?:_\d+)?\.[^.]+$/i.test(name))
+    .filter((name) => stripFileExtension(name) === originalBaseName)
+    .sort((a, b) => fileExtensionPriority(a) - fileExtensionPriority(b));
+
+  if (!candidates.length) {
+    console.warn(`[COMPOSITE] could not infer original back image from endorsed path: ${endorsedPath}`);
+    return null;
+  }
+
+  const recoveredPath = joinStoragePath(directory, candidates[0]);
+  console.log(`[COMPOSITE] recovered original back image path via storage listing: ${recoveredPath}`);
+  return recoveredPath;
+}
+
+function splitStoragePath(path: string) {
+  const normalized = path.replace(/^\/+/, "");
+  const lastSlashIndex = normalized.lastIndexOf("/");
+  if (lastSlashIndex === -1) {
+    return { directory: "", fileName: normalized };
+  }
+
+  return {
+    directory: normalized.slice(0, lastSlashIndex),
+    fileName: normalized.slice(lastSlashIndex + 1),
+  };
+}
+
+function joinStoragePath(directory: string, fileName: string) {
+  return directory ? `${directory}/${fileName}` : fileName;
+}
+
+function stripEndorsedSuffix(fileName: string) {
+  return fileName.replace(/_endorsed(?:_\d+)?\.[^.]+$/i, "");
+}
+
+function stripFileExtension(fileName: string) {
+  return fileName.replace(/\.[^.]+$/, "");
+}
+
+function fileExtensionPriority(fileName: string) {
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+  const priority = ["jpg", "jpeg", "png", "webp", "svg"];
+  const index = priority.indexOf(ext);
+  return index === -1 ? priority.length : index;
 }
