@@ -231,3 +231,12 @@ All colors MUST be HSL.
     color: #dc2626 !important;
   }
 }
+
+/* Restoration Report styling */
+.restoration-report pre {
+  font-family: inherit;
+}
+
+.restoration-report pre > * {
+  line-height: 1.6;
+}

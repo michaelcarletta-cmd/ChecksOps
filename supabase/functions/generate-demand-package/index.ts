@@ -1170,8 +1170,8 @@ Deno.serve(async (req) => {
     const aiResult = await generate({
       task: 'copilot_reasoning',
       system: mode === "proven"
-        ? "You generate carrier-ready insurance claim documentation packages. Return ONLY valid JSON — no markdown, no code fences, no commentary. Every section must be thorough, expanded, and documentation-led."
-        : "You generate carrier-ready insurance demand packages. Return ONLY valid JSON — no markdown, no code fences, no commentary. Every section must be thorough, expanded, and litigation-aware.",
+        ? "You generate carrier-ready property restoration assessment reports. Return ONLY valid JSON — no markdown, no code fences, no commentary. Use factual, technical language. Summary of Findings must be bullet points only."
+        : "You generate carrier-ready property restoration reports with demand sections. Return ONLY valid JSON — no markdown, no code fences, no commentary. Use factual, technical language. Summary of Findings must be bullet points only.",
       user: prompt,
       claimId,
       forceStrong: true,
