@@ -656,9 +656,14 @@ Deno.serve(async (req) => {
     }
 
     // Pattern 4: Unexplained payment gaps (payment much less than estimate)
+    // NOTE: estimateIntel is computed below after violation patterns; use raw estimate data here
+    const _estLines = estimateLinesRes.data || [];
+    const _darwinRcv = _estLines.reduce((s: number, l: any) => s + (Number(l.quantity) * Number(l.unit_price)), 0);
+    const _carrierRcv = _estLines.reduce((s: number, l: any) => s + (l.carrier_quantity != null ? Number(l.carrier_quantity) * Number(l.carrier_unit_price || 0) : 0), 0);
+    const _totalVariance = _darwinRcv - _carrierRcv;
     const paymentEvents = timelineEvents.filter((e: any) => ['payment', 'payment_received', 'payment_issued'].includes(e.event_type));
-    if (paymentEvents.length > 0 && estimateIntel.darwin_rcv > 0 && estimateIntel.carrier_rcv > 0) {
-      const gapRatio = estimateIntel.carrier_rcv / estimateIntel.darwin_rcv;
+    if (paymentEvents.length > 0 && _darwinRcv > 0 && _carrierRcv > 0) {
+      const gapRatio = _carrierRcv / _darwinRcv;
       if (gapRatio < 0.5) {
         const lowballReg = stateRegs.find((r: any) =>
           r.regulation_title?.toLowerCase().includes('settlement') || r.regulation_type === 'fair_settlement'
@@ -667,7 +672,7 @@ Deno.serve(async (req) => {
           issue: `Carrier payment represents only ${(gapRatio * 100).toFixed(0)}% of documented damage — potential lowball settlement`,
           regulation: lowballReg?.regulation_title || 'Fair settlement practices',
           citation: lowballReg?.regulation_citation || 'Unfair claims settlement — inadequate payment',
-          supporting_events: [`Darwin RCV: $${estimateIntel.darwin_rcv.toFixed(0)}`, `Carrier RCV: $${estimateIntel.carrier_rcv.toFixed(0)}`, `Gap: $${estimateIntel.total_variance.toFixed(0)}`],
+          supporting_events: [`Darwin RCV: $${_darwinRcv.toFixed(0)}`, `Carrier RCV: $${_carrierRcv.toFixed(0)}`, `Gap: $${_totalVariance.toFixed(0)}`],
           recommended_action: 'Demand itemized explanation for payment shortfall — supplement or appraisal',
           severity: 'high',
         });
