@@ -625,6 +625,7 @@ You MUST return a JSON object with these exact fields:
 
 IMPORTANT: evidence_map MUST reference actual document/photo IDs from the lists above. No fabricated IDs.`;
 
+  try {
     // ── Claims Knowledge Engine enrichment ──
     let knowledgePrefix = '';
     try {
@@ -679,7 +680,6 @@ IMPORTANT: evidence_map MUST reference actual document/photo IDs from the lists 
     };
   }
 }
-
 // ─── STEP D: Build Pipeline Context for Output ────────────────────────
 
 function buildPipelineContext(
