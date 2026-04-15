@@ -171,6 +171,7 @@ Deno.serve(async (req) => {
         rdCheckTracking: rdCheckResult,
         immediateNotifications: immediateResult,
         jobNimbusSync: jobNimbusResult,
+        proactiveWarnings: proactiveResult,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
