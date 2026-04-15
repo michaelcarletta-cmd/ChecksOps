@@ -1626,28 +1626,13 @@ ${research.text}`;
       // Always check for existing dismantler results for this claim
       const { data: dismantlerResults } = await supabase
         .from('claim_document_dismantlers')
-        .select('document_type, report_summary, main_position, strongest_rebuttal_points, contradictions, unsupported_assumptions, limitations, coverage_weaknesses, omissions, draft_rebuttal_language, source_file_name')
+        .select('document_type, source_file_name, report_summary, main_position, non_covered_theories, limitations, unsupported_assumptions, contradictions, omissions, repairability_overreach, coverage_weaknesses, strongest_rebuttal_points, evidence_to_gather_next, draft_rebuttal_language, chunk_count, successful_chunks, failed_chunks, model, cached, used_search')
         .eq('claim_id', claimId)
         .order('created_at', { ascending: false })
         .limit(3);
 
       if (dismantlerResults && dismantlerResults.length > 0) {
-        const dismantlerDigest = dismantlerResults.map((d: any) => formatDismantlerForPrompt({
-          documentType: d.document_type,
-          reportSummary: d.report_summary || '',
-          mainPosition: d.main_position || '',
-          nonCoveredTheories: [],
-          limitations: d.limitations || [],
-          unsupportedAssumptions: d.unsupported_assumptions || [],
-          contradictions: d.contradictions || [],
-          omissions: d.omissions || [],
-          repairabilityOverreach: [],
-          coverageWeaknesses: d.coverage_weaknesses || [],
-          strongestRebuttalPoints: d.strongest_rebuttal_points || [],
-          evidenceToGatherNext: [],
-          draftRebuttalLanguage: d.draft_rebuttal_language || '',
-          meta: { chunkCount: 0, successfulChunks: 0, failedChunks: 0, model: '', cached: false, usedSearch: false },
-        })).join('\n\n');
+        const dismantlerDigest = dismantlerResults.map((d: any) => formatDismantlerForPrompt(reconstructDismantlerFromRow(d))).join('\n\n');
         dismantlerContext = dismantlerDigest;
         console.log(`[Copilot] Dismantler intelligence injected: ${dismantlerResults.length} document analyses`);
       }

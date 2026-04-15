@@ -912,7 +912,7 @@ Deno.serve(async (req) => {
     try {
       const { data } = await supabase
         .from('claim_document_dismantlers')
-        .select('document_type, source_file_name, main_position, strongest_rebuttal_points, contradictions, coverage_weaknesses')
+        .select('document_type, source_file_name, report_summary, main_position, non_covered_theories, limitations, unsupported_assumptions, contradictions, omissions, repairability_overreach, coverage_weaknesses, strongest_rebuttal_points, evidence_to_gather_next, draft_rebuttal_language, chunk_count, successful_chunks, failed_chunks, model, cached, used_search')
         .eq('claim_id', claimId)
         .order('created_at', { ascending: false })
         .limit(3);
