@@ -64,7 +64,7 @@ const REQUIRED_SECTIONS = [
   'Gutter / Downspout Assessment',
   'Damage Characterization Analysis',
   'Scope of Repair / Justification',
-  'Demand',
+  'Demand Summary',
 ];
 
 const SECTION_RULES: Record<string, { type: 'bullets'; minBullets: number; maxBullets?: number } | { type: 'fixed'; requiredBullets: number } | { type: 'short'; maxChars?: number } | { type: 'flexible' }> = {
@@ -75,7 +75,7 @@ const SECTION_RULES: Record<string, { type: 'bullets'; minBullets: number; maxBu
   'Gutter / Downspout Assessment': { type: 'short', maxChars: 400 },
   'Damage Characterization Analysis': { type: 'fixed', requiredBullets: 4 },
   'Scope of Repair / Justification': { type: 'flexible' },
-  'Demand': { type: 'short', maxChars: 300 },
+  'Demand Summary': { type: 'short', maxChars: 300 },
 };
 
 const FILLER_PHRASES = [

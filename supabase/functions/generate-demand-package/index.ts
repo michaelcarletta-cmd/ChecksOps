@@ -838,7 +838,7 @@ The "full_demand_package" field must be a polished, carrier-ready restoration re
 5. Gutter / Downspout Assessment
 6. Damage Characterization Analysis
 7. Scope of Repair / Justification
-8. Demand
+8. Demand Summary
 
 SECTION LENGTH RULES (CRITICAL — ENFORCE STRICTLY):
 - "Summary of Findings" = 5–10 bullets ONLY. Each bullet is one factual observation. No paragraphs. Include negative findings. End with estimate total.
@@ -848,7 +848,7 @@ SECTION LENGTH RULES (CRITICAL — ENFORCE STRICTLY):
 - "Gutter / Downspout Assessment" = Bullets or max 3 sentences. Write "No gutter damage observed" if none.
 - "Damage Characterization Analysis" = Exactly 4 bullets (Distinct, Demonstrable, Detrimental, Direct). Each bullet MUST cite specific evidence from photos/inspection.
 - "Scope of Repair / Justification" = Concise technical explanation. This is the ONLY section allowed to run longer.
-- "Demand" = Max 2–3 sentences. State the amount and basis. Nothing else.
+- "Demand Summary" = Max 2–3 sentences. State the amount and basis. Nothing else.
 
 COMPLETION GATE (MANDATORY):
 - The demand package is INVALID if missing ANY of the 8 sections above.
@@ -1249,7 +1249,7 @@ Deno.serve(async (req) => {
       "Gutter / Downspout Assessment",
       "Damage Characterization Analysis",
       "Scope of Repair / Justification",
-      "Demand",
+      "Demand Summary",
     ];
 
     const fullPackageText = String(demandPackage.full_demand_package || "");
@@ -1287,7 +1287,8 @@ Deno.serve(async (req) => {
         .replace(new RegExp(REQUIRED_SECTION_HEADINGS[i], "i"), "")
         .replace(/\s+/g, " ")
         .trim();
-      if (stripped.length < 30) {
+      // Concise bullet-driven sections can be short — only reject truly empty ones
+      if (stripped.length < 10) {
         console.error(`Section too short: "${REQUIRED_SECTION_HEADINGS[i]}" — ${stripped.length} chars`);
         throw new Error(`Demand package section too short or empty: ${REQUIRED_SECTION_HEADINGS[i]}`);
       }
