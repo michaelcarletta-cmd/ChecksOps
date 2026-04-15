@@ -843,6 +843,9 @@ function CheckDetailPanel({
   const [openingDepositView, setOpeningDepositView] = useState(false);
   const [frontImageDimensions, setFrontImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [backImageDimensions, setBackImageDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [movingToDeposited, setMovingToDeposited] = useState(false);
+  const [branchApprovedAt, setBranchApprovedAt] = useState<number | null>(null);
+  const [showForceMove, setShowForceMove] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
