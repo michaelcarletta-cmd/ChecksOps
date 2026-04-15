@@ -1244,8 +1244,63 @@ Deno.serve(async (req) => {
     ];
 
     const fullPackageText = String(demandPackage.full_demand_package || "");
+
+    function buildSectionHeadingRegex(heading: string): RegExp {
+      const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return new RegExp(
+        `(?:^|\\n)\\s*(?:#{1,6}\\s+)?(?:\\d+\\.\\s*)?(?:\\*\\*|__)?${escaped}(?:\\*\\*|__)?\\s*:?[ \t]*(?=\\r?\\n|$)`,
+        "gi",
+      );
+    }
+
+    function parseDemandPackageSections(fullText: string, headings: string[]): Record<string, string> {
+      const matchesByHeading = new Map<string, Array<{ start: number; headingEnd: number }>>();
+
+      for (const heading of headings) {
+        const matches = Array.from(fullText.matchAll(buildSectionHeadingRegex(heading))).map((match) => ({
+          start: match.index ?? 0,
+          headingEnd: (match.index ?? 0) + match[0].length,
+        }));
+        matchesByHeading.set(heading, matches);
+      }
+
+      const chosen: Array<{ heading: string; start: number; headingEnd: number }> = [];
+      let minStart = -1;
+
+      for (let i = 0; i < headings.length; i++) {
+        const heading = headings[i];
+        const candidates = (matchesByHeading.get(heading) || []).filter((match) => match.start > minStart);
+        const chosenMatch = [...candidates]
+          .reverse()
+          .find((candidate) =>
+            headings.slice(i + 1).every((nextHeading) =>
+              (matchesByHeading.get(nextHeading) || []).some((nextMatch) => nextMatch.start > candidate.start)
+            )
+          ) || (i === headings.length - 1 ? candidates.at(-1) : undefined);
+
+        if (!chosenMatch) continue;
+
+        chosen.push({ heading, ...chosenMatch });
+        minStart = chosenMatch.start;
+      }
+
+      const sections: Record<string, string> = {};
+
+      for (let i = 0; i < chosen.length; i++) {
+        const current = chosen[i];
+        const next = chosen[i + 1];
+        sections[current.heading] = fullText
+          .slice(current.headingEnd, next?.start ?? fullText.length)
+          .replace(/^[:\s-]+/, "")
+          .trim();
+      }
+
+      return sections;
+    }
+
+    const parsedSections = parseDemandPackageSections(fullPackageText, REQUIRED_SECTION_HEADINGS);
     const missingSections = REQUIRED_SECTION_HEADINGS.filter(
-      (heading) => !fullPackageText.toLowerCase().includes(heading.toLowerCase())
+      (heading) => !parsedSections[heading]
     );
     if (missingSections.length > 0) {
       console.error("Demand package incomplete — missing sections:", missingSections);
@@ -1257,31 +1312,8 @@ Deno.serve(async (req) => {
       throw new Error("Demand package contains placeholder text. All sections must be fully generated.");
     }
 
-    // ── Section body length validation: reject headings with tiny filler ──
-    function extractSectionBody(fullText: string, heading: string, nextHeadings: string[]): string {
-      const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      if (nextHeadings.length === 0) {
-        // Last section — grab everything after the heading
-        const regex = new RegExp(`${escaped}[\\s\\S]*`, "i");
-        const match = fullText.match(regex);
-        return match?.[0] || "";
-      }
-      const nextPattern = nextHeadings
-        .map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-        .join("|");
-      const regex = new RegExp(`${escaped}[\\s\\S]*?(?=${nextPattern})`, "i");
-      const match = fullText.match(regex);
-      return match?.[0] || "";
-    }
-
     for (let i = 0; i < REQUIRED_SECTION_HEADINGS.length; i++) {
-      const body = extractSectionBody(
-        fullPackageText,
-        REQUIRED_SECTION_HEADINGS[i],
-        REQUIRED_SECTION_HEADINGS.slice(i + 1),
-      );
-      const stripped = body
-        .replace(new RegExp(REQUIRED_SECTION_HEADINGS[i], "i"), "")
+      const stripped = (parsedSections[REQUIRED_SECTION_HEADINGS[i]] || "")
         .replace(/\s+/g, " ")
         .trim();
       // Concise bullet-driven sections can be short — only reject truly empty ones
