@@ -1550,12 +1550,10 @@ function CheckDetailPanel({
                             : current
                         ));
 
-                        if (endorsementRows.length > 0) {
-                          try {
-                            await ensureDepositReadyBackImage();
-                          } catch (error) {
-                            console.error("[CHECK-EXPORT] regenerate after pay-to-order toggle failed", error);
-                          }
+                        try {
+                          await ensureDepositReadyBackImage();
+                        } catch (error) {
+                          console.error("[CHECK-EXPORT] regenerate after pay-to-order toggle failed", error);
                         }
 
                         qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
