@@ -486,7 +486,8 @@ export default function CheckCommandCenter() {
         {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "deposit_ops" && activeTab !== "reconciliation" && activeTab !== "exceptions" && activeTab !== "aging" && activeTab !== "reports" && activeTab !== "kpis" && activeTab !== "workqueue" && activeTab !== "manager" && (
           <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_26rem]">
             <Card>
-              <CardContent className="p-0">
+                <CardContent className="p-0">
+                <div className="overflow-x-auto">
                 <ScrollArea className="h-[calc(100vh-400px)]">
                   {isLoading ? (
                     <div className="p-8 text-center text-muted-foreground">Loading checks...</div>
@@ -2252,5 +2253,23 @@ function PayeeCard({
         </p>
       )}
     </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Help Step                                                          */
+/* ------------------------------------------------------------------ */
+
+function HelpStep({ step, title, description }: { step: number; title: string; description: string }) {
+  return (
+    <div className="flex gap-3">
+      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold">
+        {step}
+      </div>
+      <div>
+        <p className="text-sm font-semibold">{title}</p>
+        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{description}</p>
+      </div>
+    </div>
   );
 }
