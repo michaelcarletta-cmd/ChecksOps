@@ -454,13 +454,12 @@ Deno.serve(async (req) => {
     const blockCenterX = Math.round(appliedOverride.xPct * imgWidth);
     const finalBlockWidth = blockWidth;
     const finalBlockHeight = Math.max(blockHeight, Math.ceil(curY));
-    const scaleVal = measured.scale || 1;
+    const scaleVal = 1; // scale is baked into font/signature sizes — no SVG transform needed
     const rotDeg = appliedOverride.rotationDeg || 0;
 
     const endorsementTransform = [
       `translate(${blockCenterX} ${blockCenterY})`,
       `rotate(${rotDeg})`,
-      `scale(${scaleVal})`,
       `translate(${-Math.round(finalBlockWidth / 2)} ${-Math.round(finalBlockHeight / 2)})`,
     ].join(" ");
 
@@ -470,7 +469,8 @@ Deno.serve(async (req) => {
       finalBlockWidth,
       finalBlockHeight,
       rotationDeg: rotDeg,
-      scale: scaleVal,
+      userScale: appliedOverride.scale,
+      bakedFontSize: measured.fontSize,
       xPct: appliedOverride.xPct,
       yPct: appliedOverride.yPct,
     });
