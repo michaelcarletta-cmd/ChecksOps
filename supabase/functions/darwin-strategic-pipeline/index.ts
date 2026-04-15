@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { generate } from "../_shared/ai/generate.ts";
 import { searchTavily } from "../_shared/ai/tavily.ts";
 import { getClaimsContextBundle, formatContextBundle } from "../_shared/ai/claimsKnowledgeEngine.ts";
+import { formatDismantlerForPrompt, type DismantlerResult } from "../_shared/ai/universalDismantler.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
