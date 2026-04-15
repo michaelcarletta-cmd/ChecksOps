@@ -174,7 +174,7 @@ export function ReconciliationDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <ScrollArea className="max-h-40">
+            <div className="max-h-[400px] overflow-y-auto scroll-smooth">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -204,7 +204,7 @@ export function ReconciliationDashboard() {
                   })}
                 </TableBody>
               </Table>
-            </ScrollArea>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -215,7 +215,7 @@ export function ReconciliationDashboard() {
           <CardTitle className="text-sm">Recent Batches</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <ScrollArea className="max-h-48">
+          <div className="max-h-[400px] overflow-y-auto scroll-smooth">
             {batches.length === 0 ? (
               <p className="p-4 text-sm text-muted-foreground">No batches yet</p>
             ) : (
@@ -251,7 +251,7 @@ export function ReconciliationDashboard() {
                 </TableBody>
               </Table>
             )}
-          </ScrollArea>
+          </div>
         </CardContent>
       </Card>
 
@@ -261,7 +261,7 @@ export function ReconciliationDashboard() {
           <CardTitle className="text-sm">Item Reconciliation</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <ScrollArea className="max-h-[500px] min-h-[200px]">
+          <div className="max-h-[400px] overflow-y-auto scroll-smooth">
             {isLoading ? (
               <div className="p-8 text-center text-muted-foreground">Loading...</div>
             ) : items.length === 0 ? (
@@ -321,7 +321,7 @@ export function ReconciliationDashboard() {
                 </TableBody>
               </Table>
             )}
-          </ScrollArea>
+          </div>
         </CardContent>
       </Card>
     </div>
