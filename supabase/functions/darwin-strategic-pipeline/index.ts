@@ -678,7 +678,6 @@ IMPORTANT: evidence_map MUST reference actual document/photo IDs from the lists 
       loss_domain: lossDomain,
     };
   }
-}
 
 // ─── STEP D: Build Pipeline Context for Output ────────────────────────
 
