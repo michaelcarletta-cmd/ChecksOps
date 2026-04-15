@@ -99,7 +99,13 @@ function fitLayout(signerCount: number, zoneHeightPx: number, requestedScale: nu
     scale: userScale,
   };
 
-  console.log("[COMPOSITE] fitLayout", { basePreset: basePreset.fontSize, userScale, scaledFontSize: scaled.fontSize });
+  console.log("[COMPOSITE] fitLayout", {
+    basePreset: basePreset.fontSize,
+    userScale,
+    scaledFontSize: scaled.fontSize,
+    presetSigHeight: basePreset.signatureHeight,
+    bakedSigHeight: scaled.signatureHeight,
+  });
 
   return measurePreset(signerCount, scaled);
 }
