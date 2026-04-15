@@ -6684,6 +6684,7 @@ export type Database = {
           resolved_by: string | null
           severity: string
           shown_in_context: string | null
+          source: string
           suggested_action: string | null
           times_shown: number | null
           title: string
@@ -6708,6 +6709,7 @@ export type Database = {
           resolved_by?: string | null
           severity: string
           shown_in_context?: string | null
+          source?: string
           suggested_action?: string | null
           times_shown?: number | null
           title: string
@@ -6732,6 +6734,7 @@ export type Database = {
           resolved_by?: string | null
           severity?: string
           shown_in_context?: string | null
+          source?: string
           suggested_action?: string | null
           times_shown?: number | null
           title?: string

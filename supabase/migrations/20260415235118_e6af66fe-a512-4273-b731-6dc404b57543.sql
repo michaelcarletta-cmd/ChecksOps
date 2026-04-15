@@ -1,0 +1,1 @@
+ALTER TABLE public.claim_warnings_log ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual';
