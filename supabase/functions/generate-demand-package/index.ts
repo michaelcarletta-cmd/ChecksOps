@@ -832,26 +832,37 @@ POLICY MATCH SUMMARY:
 - Rationale: ${args.policyMatch.rationale.length ? args.policyMatch.rationale.join(" | ") : "No policy-match rationale available."}
 
 FINAL REQUIREMENT:
-The "full_demand_package" field must be a polished, carrier-ready restoration report with these exact section headings IN THIS ORDER:
+The "full_demand_package" field must be a polished, carrier-ready restoration report with these exact 8 section headings IN THIS ORDER:
 1. Summary of Findings
 2. Narrative Framing & Preemptive Clarification
-3. Assessment Process
-4. Roof Damage Assessment
-5. Exterior / Siding Damage Assessment
-6. Gutter / Downspout Assessment
-7. Existing Conditions
-8. Repairability / Replacement Assessment
-9. Scope of Repairs
-10. Demand
+3. Roof Damage Assessment
+4. Exterior / Siding Damage Assessment
+5. Gutter / Downspout Assessment
+6. Damage Characterization Analysis
+7. Scope of Repair / Justification
+8. Demand
+
+COMPLETION GATE (MANDATORY):
+- The demand package is INVALID if missing ANY of the 8 sections above.
+- Every section heading must appear as a subheading in the "full_demand_package" field.
+- Do NOT output placeholder text like "[Section Coming]" or "TBD" in any section.
+
+ANTI-GENERIC CONTENT RULE (MANDATORY):
+- Remove or rewrite any sentence that could apply to multiple claims (e.g., "We are submitting this claim...", "This package assists...", "The enclosed materials include...").
+- Every statement in the report must cite specific claim data: inspection findings, estimate line items, measurements, dates, policyholder details, or property characteristics.
+- If a sentence contains no claim-specific fact, do NOT include it.
+
+OUTPUT QUALITY REQUIREMENTS:
+- Each section must contain at minimum 2–3 claim-specific paragraphs or bullet groups with actual data from the provided materials.
+- No filler sentences. Every sentence must add factual value.
+- If insufficient inspection data is available for a section, generate the most complete version possible using ALL provided materials and note limitations in "missing_evidence".
 
 SECTION RULES:
 - "Summary of Findings" = bullet points ONLY. Each bullet is one factual observation. Include negative findings. End with estimate total.
 - "Narrative Framing & Preemptive Clarification" = 3–6 bullet points defining cause of loss, preempting carrier counter-arguments, and clarifying scope boundaries. Factual and technical only.
-- "Assessment Process" = Brief description of inspection methodology, dates, tools used.
 - Damage assessment sections = Use subheadings (e.g., "Front Slope", "East Elevation"). Short factual descriptions per component.
-- "Existing Conditions" = Pre-loss condition observations, age, prior repairs.
-- "Repairability / Replacement Assessment" = Only where repair is infeasible — explain why with code/manufacturer/system rationale.
-- "Scope of Repairs" = Summarize the estimate scope by trade/component. Reference code triggers and manufacturer requirements.
+- "Damage Characterization Analysis" = Evidence-based characterization of each damage element tied to specific components and the loss event. No boilerplate.
+- "Scope of Repair / Justification" = Summarize the estimate scope by trade/component. Reference code triggers, manufacturer requirements, and system interdependency. Explain why full repair/replacement is warranted.
 - "Demand" = State the amount. One paragraph maximum.
 
 ${isProven
