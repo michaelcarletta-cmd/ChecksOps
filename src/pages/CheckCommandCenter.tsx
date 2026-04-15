@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,8 +21,10 @@ import {
   Upload, FileCheck, Clock, AlertTriangle, CheckCircle2,
   Send, Eye, Users, Building2, Shield, ChevronRight,
   RefreshCw, Banknote, ClipboardCheck, RotateCcw, Printer, Landmark, Trash2, Search,
-  Download, FileImage, Undo2,
+  Download, FileImage, Undo2, HelpCircle, X as XIcon, Loader2 as Loader2Icon,
 } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { toast as sonnerToast } from "sonner";
 import { Pencil, Check as CheckIcon, X, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
@@ -157,6 +159,7 @@ export default function CheckCommandCenter() {
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [reviewCheckId, setReviewCheckId] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   // Admin: allow delete at any stage
   const canDeleteAnyCheck = true;
@@ -259,20 +262,61 @@ export default function CheckCommandCenter() {
             Insurance check intake, review & deposit readiness
           </p>
         </div>
-        <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-          <DialogTrigger asChild>
-            <Button><Upload className="h-4 w-4 mr-2" />Upload Check</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader><DialogTitle>Upload Insurance Check</DialogTitle></DialogHeader>
-            <CheckUploadForm
-              onSuccess={() => {
-                setUploadDialogOpen(false);
-                qc.invalidateQueries({ queryKey: ["check-intake-items"] });
-              }}
-            />
-          </DialogContent>
-        </Dialog>
+        <div className="flex items-center gap-2">
+          <Sheet open={helpOpen} onOpenChange={setHelpOpen}>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="icon" className="h-9 w-9">
+                <HelpCircle className="h-4 w-4" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-[320px] sm:w-[320px]">
+              <SheetHeader>
+                <SheetTitle>How to Use Check Command Center</SheetTitle>
+              </SheetHeader>
+              <div className="mt-6 space-y-6">
+                <HelpStep
+                  step={1}
+                  title="Receive Endorsement"
+                  description="When a check arrives with 'Branch Endorsement Required' status, it means all payees must sign before the check can be deposited. The endorsement checklist tracks each payee's signature status."
+                />
+                <HelpStep
+                  step={2}
+                  title="Move to Branch"
+                  description="Once endorsements are complete, the check moves to the Branch tab. A reviewer assigns the deposit path — either direct deposit, branch deposit, or loss draft if a mortgage company is involved."
+                />
+                <HelpStep
+                  step={3}
+                  title="Approve for Deposit"
+                  description="Click 'Approve for Deposit' to mark the check ready. For branch deposits, use 'Move to Deposited' once the physical deposit is complete. If stuck, use 'Force Move to Deposited'."
+                />
+                <HelpStep
+                  step={4}
+                  title="Check Deposited"
+                  description="Final state — the check has been deposited and is awaiting clearance. The accounting entry is auto-posted and the check appears in reconciliation reports."
+                />
+              </div>
+              <div className="mt-8">
+                <Button variant="outline" className="w-full" onClick={() => setHelpOpen(false)}>
+                  Dismiss
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
+          <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+            <DialogTrigger asChild>
+              <Button><Upload className="h-4 w-4 mr-2" />Upload Check</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader><DialogTitle>Upload Insurance Check</DialogTitle></DialogHeader>
+              <CheckUploadForm
+                onSuccess={() => {
+                  setUploadDialogOpen(false);
+                  qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Phase 2 Dashboard Cards */}
@@ -442,7 +486,8 @@ export default function CheckCommandCenter() {
         {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "deposit_ops" && activeTab !== "reconciliation" && activeTab !== "exceptions" && activeTab !== "aging" && activeTab !== "reports" && activeTab !== "kpis" && activeTab !== "workqueue" && activeTab !== "manager" && (
           <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_26rem]">
             <Card>
-              <CardContent className="p-0">
+                <CardContent className="p-0">
+                <div className="overflow-x-auto">
                 <ScrollArea className="h-[calc(100vh-400px)]">
                   {isLoading ? (
                     <div className="p-8 text-center text-muted-foreground">Loading checks...</div>
@@ -528,6 +573,7 @@ export default function CheckCommandCenter() {
                     </Table>
                   )}
                 </ScrollArea>
+                </div>
               </CardContent>
             </Card>
 
@@ -797,6 +843,9 @@ function CheckDetailPanel({
   const [openingDepositView, setOpeningDepositView] = useState(false);
   const [frontImageDimensions, setFrontImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [backImageDimensions, setBackImageDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [movingToDeposited, setMovingToDeposited] = useState(false);
+  const [branchApprovedAt, setBranchApprovedAt] = useState<number | null>(null);
+  const [showForceMove, setShowForceMove] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -946,6 +995,55 @@ function CheckDetailPanel({
       setUndoing(false);
     }
   };
+
+  // Branch deposit → Deposited transition
+  const handleMoveToDeposited = async (force = false) => {
+    if (!user?.id || !check) return;
+    setMovingToDeposited(true);
+    try {
+      const { error } = await supabase
+        .from("check_intake_items")
+        .update({ status: "deposited", updated_at: new Date().toISOString() })
+        .eq("id", checkId);
+      if (error) throw error;
+
+      await supabase.from("check_audit_log").insert({
+        check_id: checkId,
+        event_type: force ? "force_moved_to_deposited" : "moved_to_deposited",
+        actor_id: user.id,
+        event_description: force
+          ? "Check force-moved to deposited (bypassed pipeline validation)"
+          : "Check moved from branch to deposited",
+      });
+
+      sonnerToast.success("Check moved to Deposited", {
+        description: `Check #${check.check_number ?? checkId.slice(0, 8)} at ${new Date().toLocaleTimeString()}`,
+      });
+      setBranchApprovedAt(null);
+      setShowForceMove(false);
+      qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-intake-items"] });
+      qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
+      qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
+      onRefresh();
+    } catch (e: any) {
+      toast({ title: "Failed to move check", description: e.message, variant: "destructive" });
+    } finally {
+      setMovingToDeposited(false);
+    }
+  };
+
+  // 5-minute safeguard for branch checks
+  useEffect(() => {
+    if (check?.status !== "branch_deposit_required" || !branchApprovedAt) {
+      setShowForceMove(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setShowForceMove(true);
+    }, 5 * 60 * 1000);
+    return () => clearTimeout(timer);
+  }, [check?.status, branchApprovedAt]);
 
   const ensureDepositReadyBackImage = async () => {
     if (!check?.id || !check.back_image_path) return backImageUrl ?? null;
@@ -1485,6 +1583,63 @@ function CheckDetailPanel({
                 >
                   <Undo2 className="h-4 w-4 mr-2" />
                   {undoing ? "Reverting..." : `Undo Decision (${check.status.replace(/_/g, " ")})`}
+                </Button>
+              )}
+              {/* Branch → Deposited transition */}
+              {check.status === "branch_deposit_required" && (
+                <div className="space-y-2 mt-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full border-border text-foreground hover:bg-primary hover:text-primary-foreground"
+                    onClick={() => {
+                      setBranchApprovedAt(Date.now());
+                      handleMoveToDeposited(false);
+                    }}
+                    disabled={movingToDeposited}
+                  >
+                    {movingToDeposited ? (
+                      <><Loader2Icon className="h-4 w-4 mr-2 animate-spin" />Moving...</>
+                    ) : (
+                      <><CheckCircle2 className="h-4 w-4 mr-2" />Move to Deposited</>
+                    )}
+                  </Button>
+                  {showForceMove && (
+                    <div className="border border-amber-500/30 bg-amber-500/10 rounded-lg p-3 space-y-2">
+                      <p className="text-xs text-amber-400 font-medium">
+                        ⚠ Check approval detected but not moved. Click below to force the transition.
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full border-amber-500/30 text-amber-400 hover:bg-amber-500/20"
+                        onClick={() => handleMoveToDeposited(true)}
+                        disabled={movingToDeposited}
+                      >
+                        {movingToDeposited ? (
+                          <><Loader2Icon className="h-4 w-4 mr-2 animate-spin" />Forcing...</>
+                        ) : (
+                          "Force Move to Deposited"
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {/* Approved → Deposited transition */}
+              {check.status === "approved_for_deposit" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full mt-2 border-border text-foreground hover:bg-primary hover:text-primary-foreground"
+                  onClick={() => handleMoveToDeposited(false)}
+                  disabled={movingToDeposited}
+                >
+                  {movingToDeposited ? (
+                    <><Loader2Icon className="h-4 w-4 mr-2 animate-spin" />Moving...</>
+                  ) : (
+                    <><CheckCircle2 className="h-4 w-4 mr-2" />Mark as Deposited</>
+                  )}
                 </Button>
               )}
               {check.claim_id && (
@@ -2208,5 +2363,23 @@ function PayeeCard({
         </p>
       )}
     </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Help Step                                                          */
+/* ------------------------------------------------------------------ */
+
+function HelpStep({ step, title, description }: { step: number; title: string; description: string }) {
+  return (
+    <div className="flex gap-3">
+      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold">
+        {step}
+      </div>
+      <div>
+        <p className="text-sm font-semibold">{title}</p>
+        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{description}</p>
+      </div>
+    </div>
   );
 }
