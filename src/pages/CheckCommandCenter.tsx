@@ -573,6 +573,7 @@ export default function CheckCommandCenter() {
                     </Table>
                   )}
                 </ScrollArea>
+                </div>
               </CardContent>
             </Card>
 
