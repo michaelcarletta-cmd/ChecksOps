@@ -753,6 +753,7 @@ RETURN STRICT JSON with this exact shape:
   "subject_line": "string",
   "demand_amount": "string",
   "summary_of_findings": "string",
+  "narrative_framing": "string",
   "assessment_process": "string",
   "roof_damage_assessment": "string",
   "exterior_siding_assessment": "string",
@@ -766,6 +767,18 @@ RETURN STRICT JSON with this exact shape:
   "missing_evidence": ["string"],
   "confidence_score": 0
 }
+
+NARRATIVE FRAMING & PREEMPTIVE CLARIFICATION RULES:
+- The "narrative_framing" field contains 3–6 bullet points positioned AFTER Summary of Findings and BEFORE Assessment Process.
+- Each bullet must be concise (1–2 lines), factual, and technical. No emotional tone, no accusations, no bad faith references, no delay references unless directly supported by documentation.
+- Required bullet topics (include only those relevant to the claim):
+  1. Clear definition of the cause of loss (e.g., "Wind event on 09/15/2024 producing sustained winds of 60+ mph").
+  2. Preemptive distinction between storm damage and wear/tear/maintenance (e.g., "Observed damage is mechanically distinct from gradual deterioration").
+  3. Repair vs. replacement rationale (e.g., "Partial repair is not feasible due to system interdependency and manufacturer discontinuation").
+  4. Scope boundaries — what IS and IS NOT being claimed (e.g., "This report does not include interior contents or landscaping").
+  5. Code or manufacturer requirements that may expand scope.
+  6. Any other factual clarification that preempts common carrier objections for this loss type.
+- Do NOT include bullets that are generic boilerplate. Every bullet must reference specific claim facts.
 
 CLAIM FACTS:
 Insured Name: ${insuredName}
@@ -815,17 +828,19 @@ POLICY MATCH SUMMARY:
 FINAL REQUIREMENT:
 The "full_demand_package" field must be a polished, carrier-ready restoration report with these exact section headings IN THIS ORDER:
 1. Summary of Findings
-2. Assessment Process
-3. Roof Damage Assessment
-4. Exterior / Siding Damage Assessment
-5. Gutter / Downspout Assessment
-6. Existing Conditions
-7. Repairability / Replacement Assessment
-8. Scope of Repairs
-9. Demand
+2. Narrative Framing & Preemptive Clarification
+3. Assessment Process
+4. Roof Damage Assessment
+5. Exterior / Siding Damage Assessment
+6. Gutter / Downspout Assessment
+7. Existing Conditions
+8. Repairability / Replacement Assessment
+9. Scope of Repairs
+10. Demand
 
 SECTION RULES:
 - "Summary of Findings" = bullet points ONLY. Each bullet is one factual observation. Include negative findings. End with estimate total.
+- "Narrative Framing & Preemptive Clarification" = 3–6 bullet points defining cause of loss, preempting carrier counter-arguments, and clarifying scope boundaries. Factual and technical only.
 - "Assessment Process" = Brief description of inspection methodology, dates, tools used.
 - Damage assessment sections = Use subheadings (e.g., "Front Slope", "East Elevation"). Short factual descriptions per component.
 - "Existing Conditions" = Pre-loss condition observations, age, prior repairs.
