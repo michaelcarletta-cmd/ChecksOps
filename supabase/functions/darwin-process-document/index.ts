@@ -312,8 +312,15 @@ Deno.serve(async (req) => {
             const needsOcr = textContent.length < 300 || preferredPdfResult.quality.status === 'unusable' || preferredPdfResult.quality.status === 'poor';
             if (needsOcr) {
               console.log(
-                `[TextExtract] PDF still low quality for ${file.file_name}, skipping vision OCR because the current vision provider only accepts image inputs; selected=${extractionMethod}, quality=${preferredPdfResult.quality.status}, reasons=${preferredPdfResult.quality.reasons.join('; ')}`
+                `[TextExtract] PDF needs OCR for ${file.file_name}, attempting vision OCR fallback; selected=${extractionMethod}, quality=${preferredPdfResult.quality.status}, reasons=${preferredPdfResult.quality.reasons.join('; ')}`
               );
+              const ocrText = await ocrViaVision(pdfBytes, file.file_name);
+              if (ocrText && ocrText.length > textContent.length) {
+                textContent = ocrText;
+                extractionMethod = 'ocr_vision';
+                isScanned = true;
+                console.log(`[TextExtract] OCR improved text: ${textContent.length} chars for ${file.file_name}`);
+              }
             }
           } else if (fileType.includes('word') || /\.(docx?)$/i.test(file.file_name)) {
             // Word document extraction
@@ -1450,42 +1457,20 @@ function extractPdfText(bytes: Uint8Array): string {
 
 // === OCR VIA VISION AI (for scanned PDFs/images) ===
 async function ocrViaVision(bytes: Uint8Array, fileName: string): Promise<string | null> {
-  const { callVision, MODEL_VISION } = await import("../_shared/ai/generate.ts");
+  const { ocrImageViaVision, extractPdfWithOcrFallback } = await import("../_shared/ai/pdfVisionOcr.ts");
 
-  try {
-    // Convert to base64
-    const chunks: string[] = [];
-    const chunkSize = 32768;
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      const chunk = bytes.subarray(i, i + chunkSize);
-      chunks.push(String.fromCharCode(...chunk));
-    }
-    const base64 = btoa(chunks.join(''));
-    
-    const isPdf = fileName.toLowerCase().endsWith('.pdf');
-    const mimeType = isPdf ? 'application/pdf' : 
-      fileName.toLowerCase().match(/\.(png)$/) ? 'image/png' :
-      fileName.toLowerCase().match(/\.(webp)$/) ? 'image/webp' :
-      'image/jpeg';
-
-    const visionResult = await callVision({
-      model: MODEL_VISION,
-      messages: [
-        { role: 'system', content: 'Extract ALL text content from this document image. Return the raw text exactly as it appears, preserving dates, numbers, names, and addresses. Do not summarize or interpret.' },
-        { role: 'user', content: [
-          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
-          { type: 'text', text: 'Extract all text from this document. Return only the raw text content.' }
-        ]}
-      ],
-      temperature: 0.1,
-    });
-
-    console.log(`[OCR] Vision OCR complete, model=${visionResult.model}`);
-    return visionResult.text || null;
-  } catch (error) {
-    console.error('[OCR] Error:', error);
-    return null;
+  const isPdf = fileName.toLowerCase().endsWith('.pdf');
+  if (isPdf) {
+    // Use the full PDF extraction pipeline with OCR fallback
+    const result = await extractPdfWithOcrFallback(bytes, fileName, { embeddedTextThreshold: 150 });
+    console.log(`[OCR] PDF pipeline: method=${result.method}, status=${result.diagnostics.status}, chars=${result.text.length}, fallback=${result.diagnostics.fallbackPath}, failure=${result.diagnostics.failureReason || 'none'}`);
+    return result.text.length > 10 ? result.text : null;
   }
+
+  // Image files: direct OCR
+  const { text, diagnostics } = await ocrImageViaVision(bytes, fileName);
+  console.log(`[OCR] Image OCR: status=${diagnostics.status}, chars=${diagnostics.ocrResultLength}, failure=${diagnostics.failureReason || 'none'}`);
+  return text;
 }
 
 function classifyByFilename(filename: string): DocumentClassification {
