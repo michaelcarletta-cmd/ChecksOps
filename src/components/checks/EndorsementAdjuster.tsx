@@ -531,22 +531,24 @@ export function EndorsementAdjuster({
             </Button>
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-1 max-w-[200px]">
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">Scale</p>
               <span className="text-xs font-medium text-foreground">{Math.round(override.scale * 100)}%</span>
             </div>
-            <Slider
-              min={0.4}
-              max={4}
-              step={0.05}
-              value={[override.scale]}
-              onValueChange={([v]) =>
-                setOverride((prev) =>
-                  clampEndorsementOverride({ ...prev, scale: v }),
-                )
-              }
-            />
+            <div className="overflow-hidden">
+              <Slider
+                min={0.4}
+                max={4}
+                step={0.05}
+                value={[override.scale]}
+                onValueChange={([v]) =>
+                  setOverride((prev) =>
+                    clampEndorsementOverride({ ...prev, scale: v }),
+                  )
+                }
+              />
+            </div>
           </div>
 
           {/* Quick rotation buttons */}
