@@ -99,7 +99,13 @@ function fitLayout(signerCount: number, zoneHeightPx: number, requestedScale: nu
     scale: userScale,
   };
 
-  console.log("[COMPOSITE] fitLayout", { basePreset: basePreset.fontSize, userScale, scaledFontSize: scaled.fontSize });
+  console.log("[COMPOSITE] fitLayout", {
+    basePreset: basePreset.fontSize,
+    userScale,
+    scaledFontSize: scaled.fontSize,
+    presetSigHeight: basePreset.signatureHeight,
+    bakedSigHeight: scaled.signatureHeight,
+  });
 
   return measurePreset(signerCount, scaled);
 }
@@ -417,7 +423,10 @@ Deno.serve(async (req) => {
         localY += byLineFont + fitLineGap;
 
         if (endorsement.resolvedSignatureImageUrl) {
-          const sigWidth = Math.min(colWidth - 20, Math.round(imgHeight * 0.10));
+          // Bake userScale into signature width (fitSigHeight is already baked)
+          const baseSigWidth = Math.min(colWidth - 20, Math.round(imgHeight * 0.10));
+          const sigWidth = Math.round(baseSigWidth * appliedOverride.scale);
+          console.log(`[COMPOSITE][SIG-IMG] payee=${endorsement.payee_name} | baseSigWidth=${baseSigWidth} | bakedSigWidth=${sigWidth} | bakedSigHeight=${fitSigHeight} | userScale=${appliedOverride.scale}`);
           const sigFilterId = `blackInk_${endorsement.id.replace(/[^a-zA-Z0-9]/g, "")}`;
           endorsementSvg += `<defs><filter id="${sigFilterId}"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></defs>`;
           endorsementSvg += `<image href="${escHtml(endorsement.resolvedSignatureImageUrl)}" x="${Math.round(colCenterX - sigWidth / 2)}" y="${localY}" width="${sigWidth}" height="${fitSigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${sigFilterId})"/>`;
@@ -442,7 +451,9 @@ Deno.serve(async (req) => {
     }
 
     if (visibleCompanySignature?.resolvedSignatureImageUrl) {
-      const sigWidth = Math.min(blockWidth - 20, Math.round(imgHeight * 0.10));
+      const baseSigWidth = Math.min(blockWidth - 20, Math.round(imgHeight * 0.10));
+      const sigWidth = Math.round(baseSigWidth * appliedOverride.scale);
+      console.log(`[COMPOSITE][SIG-IMG-CO] bakedSigWidth=${sigWidth} | bakedSigHeight=${fitSigHeight} | userScale=${appliedOverride.scale}`);
       const coSigFilterId = `blackInkCo_${visibleCompanySignature.id.replace(/[^a-zA-Z0-9]/g, "")}`;
       endorsementSvg += `<defs><filter id="${coSigFilterId}"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></defs>`;
       endorsementSvg += `<image href="${escHtml(visibleCompanySignature.resolvedSignatureImageUrl)}" x="${Math.round(localCenterX - sigWidth / 2)}" y="${curY}" width="${sigWidth}" height="${fitSigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${coSigFilterId})"/>`;
