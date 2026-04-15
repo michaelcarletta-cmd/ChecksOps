@@ -423,7 +423,10 @@ Deno.serve(async (req) => {
         localY += byLineFont + fitLineGap;
 
         if (endorsement.resolvedSignatureImageUrl) {
-          const sigWidth = Math.min(colWidth - 20, Math.round(imgHeight * 0.10));
+          // Bake userScale into signature width (fitSigHeight is already baked)
+          const baseSigWidth = Math.min(colWidth - 20, Math.round(imgHeight * 0.10));
+          const sigWidth = Math.round(baseSigWidth * appliedOverride.scale);
+          console.log(`[COMPOSITE][SIG-IMG] payee=${endorsement.payee_name} | baseSigWidth=${baseSigWidth} | bakedSigWidth=${sigWidth} | bakedSigHeight=${fitSigHeight} | userScale=${appliedOverride.scale}`);
           const sigFilterId = `blackInk_${endorsement.id.replace(/[^a-zA-Z0-9]/g, "")}`;
           endorsementSvg += `<defs><filter id="${sigFilterId}"><feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"/></filter></defs>`;
           endorsementSvg += `<image href="${escHtml(endorsement.resolvedSignatureImageUrl)}" x="${Math.round(colCenterX - sigWidth / 2)}" y="${localY}" width="${sigWidth}" height="${fitSigHeight}" preserveAspectRatio="xMidYMid meet" filter="url(#${sigFilterId})"/>`;
