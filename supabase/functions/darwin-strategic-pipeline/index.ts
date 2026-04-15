@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { generate } from "../_shared/ai/generate.ts";
 import { searchTavily } from "../_shared/ai/tavily.ts";
 import { getClaimsContextBundle, formatContextBundle } from "../_shared/ai/claimsKnowledgeEngine.ts";
-import { formatDismantlerForPrompt, type DismantlerResult } from "../_shared/ai/universalDismantler.ts";
+import { formatDismantlerForPrompt, reconstructDismantlerFromRow, type DismantlerResult } from "../_shared/ai/universalDismantler.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -815,17 +815,8 @@ function buildPipelineContext(
   if (dismantlerResults && dismantlerResults.length > 0) {
     ctx += '── DOCUMENT DISMANTLER INTELLIGENCE ──\n';
     for (const d of dismantlerResults) {
-      ctx += `[${d.document_type}] ${d.source_file_name || 'Document'}\n`;
-      ctx += `Position: ${d.main_position || 'N/A'}\n`;
-      if (d.strongest_rebuttal_points?.length > 0) {
-        ctx += `Strongest Rebuttals: ${d.strongest_rebuttal_points.slice(0, 3).join('; ')}\n`;
-      }
-      if (d.contradictions?.length > 0) {
-        ctx += `Contradictions: ${d.contradictions.slice(0, 3).join('; ')}\n`;
-      }
-      if (d.coverage_weaknesses?.length > 0) {
-        ctx += `Coverage Weaknesses: ${d.coverage_weaknesses.slice(0, 3).join('; ')}\n`;
-      }
+      const full = reconstructDismantlerFromRow(d);
+      ctx += formatDismantlerForPrompt(full);
       ctx += '\n';
     }
   }
