@@ -307,8 +307,6 @@ export default function CheckCommandCenter() {
             <DialogTrigger asChild>
               <Button><Upload className="h-4 w-4 mr-2" />Upload Check</Button>
             </DialogTrigger>
-          </Dialog>
-          <CheckCenterHelpButton />
             <DialogContent className="max-w-lg">
               <DialogHeader><DialogTitle>Upload Insurance Check</DialogTitle></DialogHeader>
               <CheckUploadForm
@@ -319,6 +317,7 @@ export default function CheckCommandCenter() {
               />
             </DialogContent>
           </Dialog>
+          <CheckCenterHelpButton />
         </div>
       </div>
 
