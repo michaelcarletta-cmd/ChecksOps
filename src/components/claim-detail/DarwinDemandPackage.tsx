@@ -724,6 +724,22 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
         {/* Generated Report */}
         {generatedPackage && (
           <div className="space-y-3 border-t pt-4">
+            {/* Validation Errors Banner */}
+            {validationErrors.length > 0 && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Quality Validation Failed ({validationErrors.length} issue{validationErrors.length > 1 ? 's' : ''}):</strong>
+                  <ul className="mt-2 space-y-1 list-disc list-inside text-xs">
+                    {validationErrors.map((err, i) => (
+                      <li key={i}>{err.message}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-xs">Export is disabled until all sections pass validation. Regenerate with more evidence or adjust instructions.</p>
+                </AlertDescription>
+              </Alert>
+            )}
+
             <div className="flex items-center justify-between">
               <Label className="text-base">Generated Restoration Report</Label>
               {lastPackageDate && (
@@ -738,15 +754,15 @@ export const DarwinDemandPackage = ({ claimId, claim }: DarwinDemandPackageProps
             </div>
 
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={copyToClipboard}>
+              <Button variant="outline" size="sm" onClick={copyToClipboard} disabled={validationErrors.length > 0}>
                 <Copy className="h-4 w-4 mr-1" />
                 Copy
               </Button>
-              <Button variant="outline" size="sm" onClick={downloadAsText}>
+              <Button variant="outline" size="sm" onClick={downloadAsText} disabled={validationErrors.length > 0}>
                 <Download className="h-4 w-4 mr-1" />
                 Download Text
               </Button>
-              <Button variant="outline" size="sm" onClick={saveAsWord}>
+              <Button variant="outline" size="sm" onClick={saveAsWord} disabled={validationErrors.length > 0}>
                 <FileText className="h-4 w-4 mr-1" />
                 Save as Word
               </Button>
