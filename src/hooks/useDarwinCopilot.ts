@@ -135,6 +135,7 @@ export function useDarwinCopilot(claimId: string) {
         friendlyMsg = `Something went wrong. Please try again. (${rawMsg.length > 120 ? rawMsg.slice(0, 120) + '…' : rawMsg})`;
       }
 
+      toast.error(friendlyMsg, { duration: 5000 });
       const errorMsg: CopilotMessage = { role: 'assistant', content: friendlyMsg, timestamp: Date.now(), isError: true };
       setMessages(prev => [...prev, errorMsg]);
     } finally {
