@@ -394,11 +394,18 @@ export function EstimateUploadDialog({
             </p>
           </div>
 
-          {/* Error Alert */}
+          {/* Error Alert with Retry */}
           {error && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription className="space-y-2">
+                <p>{error}</p>
+                <div className="flex gap-2 pt-1">
+                  <Button variant="outline" size="sm" onClick={handleExtract} disabled={isProcessing || !file}>
+                    Retry Extraction
+                  </Button>
+                </div>
+              </AlertDescription>
             </Alert>
           )}
 
