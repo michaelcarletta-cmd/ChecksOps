@@ -445,28 +445,6 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
     };
   }, [dismantlerText, dismantlerStructured, dismantlerFull]);
 
-  const handleCopyFullDismantler = async () => {
-    if (!dismantlerText) return;
-    await navigator.clipboard.writeText(dismantlerText);
-    toast.success("Dismantler output copied");
-  };
-
-  const handleCopyRequestedResolution = async () => {
-    if (!parsedDismantler.resolution.length) return;
-    const text = parsedDismantler.resolution.map((r, i) => `${i + 1}. ${r}`).join("\n");
-    await navigator.clipboard.writeText(text);
-    toast.success("Requested Resolution copied");
-  };
-
-  const handleCopyRequestDocsTemplate = async () => {
-    const reqs = parsedDismantler.missingDocRequests ?? [];
-    const lines = reqs.length > 0
-      ? reqs.map((r) => `- ${r.title}${r.whyNeeded ? ` (${r.whyNeeded})` : ""}`)
-      : parsedDismantler.missingDocs.map((d) => `- ${d}`);
-    const template = `Subject: Request for missing claim documentation\n\nHello,\n\nTo complete a defensible review and respond appropriately, please provide the following documents/information:\n${lines.join("\n")}\n\nThank you,\n`;
-    await navigator.clipboard.writeText(template);
-    toast.success("Request docs template copied");
-  };
 
   const renderActiveWorkspace = () => {
     switch (activeWorkspace) {
