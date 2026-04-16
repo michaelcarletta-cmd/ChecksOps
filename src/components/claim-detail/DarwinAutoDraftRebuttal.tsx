@@ -386,6 +386,7 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
           lockStatus={position?.lock_status || "draft"}
           loading={positionLoading}
           onProceedProvisional={() => setProvisionalOverride(true)}
+        />
         <DarwinModeToggle value={mode} onChange={setMode} />
         {/* Data Sources Summary */}
         <div className="space-y-2">
