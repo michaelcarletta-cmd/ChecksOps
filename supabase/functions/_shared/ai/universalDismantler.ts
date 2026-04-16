@@ -13,7 +13,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.39.3";
 import { generate } from "./generate.ts";
 import { getClaimsContextBundle, formatContextBundle } from "./claimsKnowledgeEngine.ts";
-import { analyzeDocumentWithRules, buildLightweightDismantler } from "./preDismantlerRules.ts";
+import { analyzeDocumentWithRules, buildLightweightDismantler, augmentWithLearnedRules } from "./preDismantlerRules.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -512,14 +512,32 @@ export async function analyzeDocument(opts: DismantlerOptions): Promise<Dismantl
   console.log(`[UniversalDismantler] Starting analysis for claim ${claimId}, file=${fileName || "inline"}, textLen=${documentText.length}`);
 
   // ── Pre-AI rules pass (cheap, deterministic) ──────────────────────
-  const ruleResult = analyzeDocumentWithRules(documentText);
+  const baseRuleResult = analyzeDocumentWithRules(documentText);
+
+  // Augment with active learned rules (additive, non-breaking)
+  let claimCtx: { carrier?: string | null; state?: string | null; trade?: string | null; material?: string | null } = {};
+  try {
+    const { data: cl } = await supabase
+      .from("claims")
+      .select("insurance_company, state, construction_trade, roof_material")
+      .eq("id", claimId)
+      .maybeSingle();
+    claimCtx = {
+      carrier: cl?.insurance_company || null,
+      state: cl?.state || null,
+      trade: cl?.construction_trade || null,
+      material: cl?.roof_material || null,
+    };
+  } catch { /* non-fatal */ }
+
+  const ruleResult = await augmentWithLearnedRules(documentText, baseRuleResult, supabase, claimCtx);
   console.log(
-    `[UniversalDismantler] Pre-AI rules: score=${ruleResult.weaknessScore}, flags=[${Object.entries(ruleResult.flags).filter(([, v]) => v).map(([k]) => k).join(",")}], escalate=${ruleResult.shouldEscalateToAI}${ruleResult.escalationReason ? ` (${ruleResult.escalationReason})` : ""}`,
+    `[UniversalDismantler] Pre-AI rules: score=${ruleResult.weaknessScore} (base=${baseRuleResult.weaknessScore}, learned=+${ruleResult.learnedScoreBump}), flags=[${Object.entries(ruleResult.flags).filter(([, v]) => v).map(([k]) => k).join(",")}], learnedHits=${ruleResult.learnedRuleHits.length}, escalate=${ruleResult.shouldEscalateToAI}${ruleResult.escalationReason ? ` (${ruleResult.escalationReason})` : ""}`,
   );
 
   if (!ruleResult.shouldEscalateToAI) {
-    console.log(`[UniversalDismantler] AI SKIPPED — using lightweight rule-based output (score=${ruleResult.weaknessScore})`);
-    const lite = buildLightweightDismantler(documentText, ruleResult);
+    console.log(`[UniversalDismantler] AI SKIPPED — using lightweight rule-based output (score=${ruleResult.weaknessScore}, learnedHits=${ruleResult.learnedRuleHits.length})`);
+    const lite = buildLightweightDismantler(documentText, ruleResult, undefined, ruleResult.learnedRuleHits);
     const finalResult: DismantlerResult = {
       documentType: lite.documentType,
       reportSummary: lite.reportSummary,
