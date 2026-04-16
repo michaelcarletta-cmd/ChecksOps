@@ -139,7 +139,7 @@ async function classifyDispute(userQuery: string): Promise<string> {
 async function gatherClaimFacts(claimId: string, supabase: SupabaseClient): Promise<ClaimFacts | null> {
   try {
     const [claimRes, eventsRes, photosRes, estimateRes, intelRes] = await Promise.all([
-      supabase.from("claims").select("insurance_company, state, damage_type, loss_type, type_of_loss, denial_reason, roof_material, construction_trade, declared_position").eq("id", claimId).maybeSingle(),
+      supabase.from("claims").select("insurance_company, state, damage_type, loss_type, type_of_loss, denial_reason, roof_material, construction_trade").eq("id", claimId).maybeSingle(),
       supabase.from("claim_events").select("event_type, summary, occurred_at, importance_score").eq("claim_id", claimId).order("occurred_at", { ascending: false }).limit(10),
       supabase.from("claim_photo_findings").select("finding_type, damage_description, evidence_strength, damage_indicators").eq("claim_id", claimId).limit(10),
       supabase.from("claim_estimate_analysis").select("analysis_type, total_gap_amount, missing_items_summary, disputed_items_summary").eq("claim_id", claimId).order("created_at", { ascending: false }).limit(1),
