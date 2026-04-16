@@ -269,8 +269,6 @@ export function analyzeDocumentWithRules(text: string): PreDismantlerRuleResult 
 // into an existing PreDismantlerRuleResult. Non-breaking: original sync
 // `analyzeDocumentWithRules` is unchanged. Callers may opt in.
 
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2.39.3";
-import { getActiveLearnedRules, type ActiveLearnedRule } from "./ruleLearningEngine.ts";
 
 export interface LearnedRuleHit {
   ruleId: string;
