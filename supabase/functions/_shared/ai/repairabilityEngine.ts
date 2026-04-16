@@ -9,6 +9,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.39.3";
 import { generate } from "./generate.ts";
 import { retrieveAuthorityKnowledge, formatAuthorityKnowledge, type AuthorityEntry } from "./authorityKnowledge.ts";
+import { withClaimCache } from "./intelligenceCache.ts";
 
 export interface RepairabilityDecision {
   repairability: "repairable" | "not_repairable";
@@ -17,7 +18,34 @@ export interface RepairabilityDecision {
   authoritySupport: string[];
 }
 
+/**
+ * Version-aware cache wrapper. Reuses prior decision per
+ * (claim, material, trade, damageType) until claim version bumps
+ * (new file/dismantler/argument/declared-position).
+ */
 export async function determineRepairability(
+  supabase: SupabaseClient,
+  opts: {
+    claimId: string;
+    material: string | null;
+    trade: string | null;
+    damageType: string;
+    state: string;
+    claimFactsSummary: string;
+    dismantlerFindings?: string;
+  },
+): Promise<RepairabilityDecision | null> {
+  const subkey = `${opts.material || "_"}|${opts.trade || "_"}|${opts.damageType || "_"}`;
+  return withClaimCache<RepairabilityDecision | null>(
+    supabase,
+    opts.claimId,
+    "repairability",
+    subkey,
+    () => determineRepairabilityUncached(supabase, opts),
+  );
+}
+
+async function determineRepairabilityUncached(
   supabase: SupabaseClient,
   opts: {
     claimId: string;

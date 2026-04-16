@@ -72,21 +72,25 @@ const CHUNK_OVERLAP = 500;
 async function classifyDocumentType(text: string): Promise<string[]> {
   const snippet = text.slice(0, 3000);
 
-  // Fast keyword detection
+  // Rules-first: comprehensive keyword/regex detection.
+  // AI is reserved for genuinely ambiguous cases.
   const lower = snippet.toLowerCase();
-  const detected: string[] = [];
+  const detected = new Set<string>();
 
-  if (/\b(engineer|structural|professional engineer|p\.?e\.?|licensed engineer)\b/.test(lower)) detected.push("engineer_report");
-  if (/\b(deni(al|ed)|coverage decision|not covered|we are unable to|we must respectfully decline)\b/.test(lower)) detected.push("carrier_denial");
-  if (/\b(adjuster|field report|inspection report|re-inspection|reinspection)\b/.test(lower)) detected.push("adjuster_response");
-  if (/\b(independent|third.?party|forensic|consulting)\b/.test(lower)) detected.push("independent_report");
-  if (/\b(expert opinion|expert report|technical opinion)\b/.test(lower)) detected.push("expert_opinion");
-  if (/\b(scope reduction|reduced scope|scope.?change|line item remov)\b/.test(lower)) detected.push("scope_reduction");
-  if (/\b(coverage position|reservation of rights|policy exclusion|endorsement applicab)\b/.test(lower)) detected.push("coverage_position");
+  if (/\b(engineer|structural|professional engineer|p\.?e\.?\b|licensed engineer|forensic engineer|consulting engineer)\b/.test(lower)) detected.add("engineer_report");
+  if (/\b(deni(al|ed)|coverage decision|not covered|we are unable to|we must respectfully decline|claim is closed|partial denial)\b/.test(lower)) detected.add("carrier_denial");
+  if (/\b(adjuster|field report|inspection report|re-?inspection|loss notice|adjuster.?'?s report)\b/.test(lower)) detected.add("adjuster_response");
+  if (/\b(independent|third.?party|forensic|consulting firm|hired expert)\b/.test(lower)) detected.add("independent_report");
+  if (/\b(expert opinion|expert report|technical opinion|expert disclosure)\b/.test(lower)) detected.add("expert_opinion");
+  if (/\b(scope reduction|reduced scope|scope.?change|line item remov|removed from scope|reduced estimate)\b/.test(lower)) detected.add("scope_reduction");
+  if (/\b(coverage position|reservation of rights|policy exclusion|endorsement applicab|cited exclusion)\b/.test(lower)) detected.add("coverage_position");
 
-  if (detected.length > 0) return detected;
+  if (detected.size > 0) return Array.from(detected);
 
-  // AI fallback
+  // Only escalate to AI if rules produced nothing AND text is substantial.
+  // Short / trivial documents fall through as general correspondence.
+  if (snippet.length < 500) return ["general_claim_correspondence"];
+
   try {
     const result = await generate({
       task: "classification",
