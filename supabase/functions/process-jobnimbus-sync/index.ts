@@ -783,10 +783,13 @@ async function syncFile(apiKey: string, claim: any, payload: any, supabase: any)
   const fileName = fileData.file_name || 'file';
   const contentType = fileData.file_type || fileBlob.type || 'application/octet-stream';
 
-  // JobNimbus /files endpoint requires multipart/form-data with `related` JSON + file
+  // JobNimbus /files endpoint requires multipart/form-data with the job relationship serialized
   const form = new FormData();
-  form.append('related', JSON.stringify([jobId]));
+  form.append('related', JSON.stringify([{ id: jobId, type: 'job' }]));
+  form.append('primary', JSON.stringify({ id: jobId, type: 'job' }));
   form.append('file', new Blob([await fileBlob.arrayBuffer()], { type: contentType }), fileName);
+
+  console.log(`[FILE SYNC] Uploading ${fileName} (${contentType}) for job ${jobId}`);
 
   const response = await fetch(`${JOBNIMBUS_API_BASE}/files`, {
     method: 'POST',
