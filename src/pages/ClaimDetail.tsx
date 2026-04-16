@@ -24,7 +24,7 @@ import { NotifyPortalDialog } from "@/components/claim-detail/NotifyPortalDialog
 import { ShareClaimDialog } from "@/components/claim-detail/ShareClaimDialog";
 import { SendDocumentDialog } from "@/components/claim-detail/SendDocumentDialog";
 import { ClaimTabsDropdown } from "@/components/claim-detail/ClaimTabsDropdown";
-import { ClaimsAIAssistant } from "@/components/ClaimsAIAssistant";
+
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ArrowLeft, Edit, Trash2, Bell, Brain, Share2, Loader2, Send } from "lucide-react";
@@ -469,14 +469,6 @@ const ClaimDetail = () => {
         </div>
       )}
       
-      {/* Floating AI Assistant Button - claim-aware (staff only) */}
-      {isStaffOrAdmin && (
-        <ClaimsAIAssistant 
-          claimId={claim.id} 
-          claimNumber={claim.claim_number} 
-          policyholderName={claim.policyholder_name}
-        />
-      )}
     </div>
   );
 };
