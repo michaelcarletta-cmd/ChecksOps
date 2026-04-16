@@ -773,21 +773,25 @@ async function syncFile(apiKey: string, claim: any, payload: any, supabase: any)
   const jobId = claim?.jobnimbus_job_id;
   if (!jobId) return { skipped: true, reason: 'No JobNimbus job ID' };
 
-  const { data: signedUrl } = await supabase.storage
+  // Download file binary from storage
+  const { data: fileBlob, error: dlErr } = await supabase.storage
     .from('claim-files')
-    .createSignedUrl(fileData.file_path, 3600);
+    .download(fileData.file_path);
 
-  if (!signedUrl?.signedUrl) throw new Error('Could not get signed URL for file');
+  if (dlErr || !fileBlob) throw new Error(`Could not download file from storage: ${dlErr?.message || 'no data'}`);
 
-  const response = await fetch(`${JOBNIMBUS_API_BASE}/documents`, {
+  const fileName = fileData.file_name || 'file';
+  const contentType = fileData.file_type || fileBlob.type || 'application/octet-stream';
+
+  // JobNimbus /files endpoint requires multipart/form-data with `related` JSON + file
+  const form = new FormData();
+  form.append('related', JSON.stringify([jobId]));
+  form.append('file', new Blob([await fileBlob.arrayBuffer()], { type: contentType }), fileName);
+
+  const response = await fetch(`${JOBNIMBUS_API_BASE}/files`, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      filename: fileData.file_name || 'file',
-      url: signedUrl.signedUrl,
-      primary: { id: jobId, type: 'job', name: claim?.policyholder_name || '' },
-      related: [{ id: jobId, type: 'job', name: claim?.policyholder_name || '' }],
-    }),
+    headers: { 'Authorization': `Bearer ${apiKey}` }, // do NOT set Content-Type — let fetch add boundary
+    body: form,
   });
 
   if (!response.ok) {
