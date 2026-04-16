@@ -6,7 +6,7 @@
 import { callVision } from "./openaiClient.ts";
 import { MODEL_VISION } from "./modelRouter.ts";
 
-const MAX_OCR_BYTES = 4 * 1024 * 1024; // 4MB per file
+const MAX_OCR_BYTES = 25 * 1024 * 1024; // 25MB per file (OpenAI Files API supports up to 32MB)
 const PAGES_PER_BATCH = 3;
 const MAX_CUMULATIVE_CHARS = 50000;
 
