@@ -407,6 +407,7 @@ export function buildLightweightDismantler(
   text: string,
   ruleResult: PreDismantlerRuleResult,
   docTypeHint?: string,
+  learnedHits: LearnedRuleHit[] = [],
 ): LightweightDismantlerOutput {
   const rebuttalPoints: string[] = [];
   const evidence: string[] = [];
@@ -422,9 +423,20 @@ export function buildLightweightDismantler(
     if (issue.flag === "speculativeLanguage" || issue.flag === "causationWithoutSupport") assumptions.push(issue.label);
   }
 
-  const summary = ruleResult.issues.length === 0
+  // Fold learned-rule hits into rebuttal/evidence stacks (deduped, additive)
+  for (const h of learnedHits) {
+    if (h.rebuttal_strategy && !rebuttalPoints.includes(h.rebuttal_strategy)) {
+      rebuttalPoints.push(`[learned] ${h.rebuttal_strategy}`);
+    }
+    if (h.evidence_request && !evidence.includes(h.evidence_request)) {
+      evidence.push(`[learned] ${h.evidence_request}`);
+    }
+  }
+
+  const totalIssues = ruleResult.issues.length + learnedHits.length;
+  const summary = totalIssues === 0
     ? "Rule-based scan found no significant weaknesses; document appears procedurally compliant on its face."
-    : `Rule-based scan flagged ${ruleResult.issues.length} weakness${ruleResult.issues.length === 1 ? "" : "es"} (score ${ruleResult.weaknessScore}): ${ruleResult.issues.map((i) => i.flag).join(", ")}.`;
+    : `Rule-based scan flagged ${ruleResult.issues.length} handcrafted weakness${ruleResult.issues.length === 1 ? "" : "es"}${learnedHits.length ? ` plus ${learnedHits.length} learned-rule hit${learnedHits.length === 1 ? "" : "s"}` : ""} (score ${ruleResult.weaknessScore}): ${[...ruleResult.issues.map((i) => i.flag), ...learnedHits.map((h) => h.rule_type)].join(", ")}.`;
 
   const mainPosition = ruleResult.flags.denialLanguage
     ? "Document advances a denial / exclusion position."
