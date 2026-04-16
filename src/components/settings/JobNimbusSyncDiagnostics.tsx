@@ -36,7 +36,7 @@ export function JobNimbusSyncDiagnostics() {
       const { data, error } = await supabase
         .from("jobnimbus_sync_queue" as any)
         .select("*")
-        .in("sync_type", ["note", "inspection"])
+        .in("sync_type", ["note", "inspection", "file"])
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
