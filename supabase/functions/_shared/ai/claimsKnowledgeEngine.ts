@@ -24,6 +24,7 @@ import { getTradeIntelligence } from "./tradeIntelligence.ts";
 import { detectViolations, formatViolations, type ViolationDetection } from "./violationEngine.ts";
 import { detectContradictions, formatContradictions, type ContradictionDetection } from "./contradictionEngine.ts";
 import { getActiveLearnedRules, formatLearnedRulesForPrompt, type ActiveLearnedRule } from "./ruleLearningEngine.ts";
+import { withClaimCache } from "./intelligenceCache.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -106,33 +107,31 @@ const SEARCH_TRIGGER_TERMS = [
 async function classifyDispute(userQuery: string): Promise<string> {
   if (!userQuery || userQuery.length < 10) return "general";
 
-  // Fast keyword-based classification before burning an AI call
+  // Rules-first: comprehensive keyword classifier (no AI fallback by default).
+  // AI is reserved for high-value reasoning, not classification.
   const lower = userQuery.toLowerCase();
-  if (/\b(code|irc|ibc|nfpa|building code|ordinance)\b/.test(lower)) return "code";
-  if (/\b(cause|causation|proximate|peril|storm|hail|wind)\b/.test(lower)) return "causation";
-  if (/\b(scope|missing|omit|left out|not included)\b/.test(lower)) return "scope";
-  if (/\b(repair|replace|patch|repairability)\b/.test(lower)) return "repairability";
-  if (/\b(price|pricing|unit cost|line item cost|rate)\b/.test(lower)) return "pricing";
-  if (/\b(engineer|report|expert|inspection report)\b/.test(lower)) return "engineer_report";
-  if (/\b(delay|timeline|days|overdue|prompt pay)\b/.test(lower)) return "delay";
-  if (/\b(continuity|match|aesthetic|uniform)\b/.test(lower)) return "continuity";
-  if (/\b(policy|coverage|exclusion|endorsement|deductible)\b/.test(lower)) return "policy_interpretation";
 
-  // Fallback: cheap AI classification
-  try {
-    const result = await generate({
-      task: "classification",
-      system: `Classify the following insurance claim query into exactly ONE of these dispute types: ${DISPUTE_TYPES.join(", ")}. Return ONLY the dispute type word, nothing else.`,
-      user: userQuery.slice(0, 500),
-      temperature: 0,
-      maxTokens: 20,
-      searchMode: "off",
-    });
-    const classified = result.text.trim().toLowerCase().replace(/[^a-z_]/g, "");
-    return (DISPUTE_TYPES as readonly string[]).includes(classified) ? classified : "general";
-  } catch {
-    return "general";
+  // Score each dispute type by keyword hits — pick the highest, fall back to "general".
+  const scores: Record<string, number> = {};
+  const bump = (k: string, n = 1) => { scores[k] = (scores[k] || 0) + n; };
+
+  if (/\b(code|irc|ibc|nfpa|building code|ordinance|adopted edition)\b/.test(lower)) bump("code", 3);
+  if (/\b(cause|causation|proximate|peril|storm|hail|wind|hurricane|tornado|lightning)\b/.test(lower)) bump("causation", 2);
+  if (/\b(scope|missing|omit|left out|not included|incomplete|short paid)\b/.test(lower)) bump("scope", 2);
+  if (/\b(repair|replace|patch|repairability|like[- ]kind|matching|discontinued)\b/.test(lower)) bump("repairability", 2);
+  if (/\b(price|pricing|unit cost|line item cost|rate|o&p|overhead and profit|xactimate)\b/.test(lower)) bump("pricing", 2);
+  if (/\b(engineer|engineer.?report|expert|inspection report|forensic report|p\.?e\.?)\b/.test(lower)) bump("engineer_report", 2);
+  if (/\b(delay|timeline|days|overdue|prompt pay|response.?time|sla)\b/.test(lower)) bump("delay", 2);
+  if (/\b(continuity|match|aesthetic|uniform|appearance|line of sight)\b/.test(lower)) bump("continuity", 2);
+  if (/\b(policy|coverage|exclusion|endorsement|deductible|reservation of rights|provision)\b/.test(lower)) bump("policy_interpretation", 2);
+  if (/\b(deni(al|ed)|adverse|wrongful)\b/.test(lower)) bump("policy_interpretation", 1);
+
+  let best = "general";
+  let bestScore = 0;
+  for (const [k, v] of Object.entries(scores)) {
+    if (v > bestScore) { best = k; bestScore = v; }
   }
+  return bestScore > 0 ? best : "general";
 }
 
 // ── Claim facts gathering ────────────────────────────────────────────
