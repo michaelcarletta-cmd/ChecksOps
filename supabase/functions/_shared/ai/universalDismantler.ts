@@ -67,6 +67,9 @@ const DOCUMENT_TYPES = [
 const CHUNK_SIZE = 10000;
 const CHUNK_OVERLAP = 500;
 
+const FULL_DISMANTLER_SELECT =
+  "document_type, source_file_name, report_summary, main_position, non_covered_theories, limitations, unsupported_assumptions, contradictions, omissions, repairability_overreach, coverage_weaknesses, strongest_rebuttal_points, evidence_to_gather_next, draft_rebuttal_language, chunk_count, successful_chunks, failed_chunks, model, cached, used_search";
+
 // ── Document type detection ──────────────────────────────────────────
 
 async function classifyDocumentType(text: string): Promise<string[]> {
