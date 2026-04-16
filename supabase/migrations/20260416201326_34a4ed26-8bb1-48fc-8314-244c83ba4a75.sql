@@ -1,0 +1,1 @@
+UPDATE public.jobnimbus_sync_queue SET status='pending', error_message=NULL, processed_at=NULL WHERE id='27c1de8d-c5fe-46a7-a275-91c8a4a4df97';

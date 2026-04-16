@@ -782,26 +782,41 @@ async function syncFile(apiKey: string, claim: any, payload: any, supabase: any)
 
   const fileName = fileData.file_name || 'file';
   const contentType = fileData.file_type || fileBlob.type || 'application/octet-stream';
+  const fileBuffer = await fileBlob.arrayBuffer();
+  const fileBytes = new Blob([fileBuffer], { type: contentType });
 
-  // JobNimbus /files endpoint requires multipart/form-data with the job relationship serialized
+  // JobNimbus /files expects multipart/form-data. Per the JN public API contract used by
+  // working integrations, the field name is "file" with filename, "related[0]" supplies the
+  // job jnid as a plain string (not JSON), and "filename" must also be sent as a separate field.
   const form = new FormData();
-  form.append('related', JSON.stringify([{ id: jobId, type: 'job' }]));
-  form.append('primary', JSON.stringify({ id: jobId, type: 'job' }));
-  form.append('file', new Blob([await fileBlob.arrayBuffer()], { type: contentType }), fileName);
+  form.append('file', fileBytes, fileName);
+  form.append('filename', fileName);
+  form.append('related[0]', jobId);
+  if (fileData.description) {
+    form.append('description', fileData.description);
+  }
 
-  console.log(`[FILE SYNC] Uploading ${fileName} (${contentType}) for job ${jobId}`);
+  const url = `${JOBNIMBUS_API_BASE}/files`;
+  console.log(`[FILE SYNC] POST ${url}`);
+  console.log(`[FILE SYNC] Uploading ${fileName} (${contentType}, ${fileBuffer.byteLength} bytes) for job ${jobId}`);
 
-  const response = await fetch(`${JOBNIMBUS_API_BASE}/files`, {
+  const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}` }, // do NOT set Content-Type — let fetch add boundary
+    headers: { 'Authorization': `Bearer ${apiKey}` }, // let fetch set Content-Type with boundary
     body: form,
   });
 
+  const responseText = await response.text();
+  console.log(`[FILE SYNC] Response [${response.status}]: ${responseText.substring(0, 1500)}`);
+
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`JobNimbus file sync error: ${response.status} - ${errorText}`);
+    throw new Error(`JobNimbus file sync error: ${response.status} - ${responseText}`);
   }
-  return await response.json();
+  try {
+    return JSON.parse(responseText);
+  } catch {
+    return { raw: responseText };
+  }
 }
 
 async function syncInspection(apiKey: string, claim: any, payload: any, supabase: any, queueId: string) {
