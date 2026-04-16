@@ -23,6 +23,7 @@ import { retrieveCarrierBehavior, formatCarrierBehavior, type CarrierPattern } f
 import { getTradeIntelligence } from "./tradeIntelligence.ts";
 import { detectViolations, formatViolations, type ViolationDetection } from "./violationEngine.ts";
 import { detectContradictions, formatContradictions, type ContradictionDetection } from "./contradictionEngine.ts";
+import { getActiveLearnedRules, formatLearnedRulesForPrompt, type ActiveLearnedRule } from "./ruleLearningEngine.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
