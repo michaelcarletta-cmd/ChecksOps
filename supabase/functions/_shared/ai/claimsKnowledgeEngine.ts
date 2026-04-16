@@ -77,6 +77,7 @@ export interface ClaimsContextBundle {
   tradeLogic: string;
   violations: ViolationDetection[];
   contradictions: ContradictionDetection[];
+  learnedRules: ActiveLearnedRule[];
 }
 
 export interface GetClaimsContextBundleOptions {
@@ -411,6 +412,7 @@ export async function getClaimsContextBundle(
     carrierBehavior,
     violations,
     contradictions,
+    learnedRules,
   ] = await Promise.all([
     retrieveInternalKnowledge(supabase, disputeType, state, trade, material),
     retrieveClaimLessons(supabase, carrier, lossType, state),
@@ -419,6 +421,7 @@ export async function getClaimsContextBundle(
     retrieveCarrierBehavior(supabase, carrier, lossType, state),
     detectViolations(supabase, claimId, state),
     detectContradictions(supabase, claimId),
+    getActiveLearnedRules(supabase, { carrier, state, trade, material, disputeType, limit: 10 }),
   ]);
 
   // Trade logic (synchronous — static data)
@@ -436,6 +439,7 @@ export async function getClaimsContextBundle(
     tradeLogic,
     violations,
     contradictions,
+    learnedRules,
     retrievalMeta: {
       usedSearch: !!authoritySupport,
       knowledgeCount: internalKnowledge.length,
