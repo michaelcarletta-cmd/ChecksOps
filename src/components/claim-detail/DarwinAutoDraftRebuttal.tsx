@@ -386,7 +386,7 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
           lockStatus={position?.lock_status || "draft"}
           loading={positionLoading}
           onProceedProvisional={() => setProvisionalOverride(true)}
-        />
+        <DarwinModeToggle value={mode} onChange={setMode} />
         {/* Data Sources Summary */}
         <div className="space-y-2">
           <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
