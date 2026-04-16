@@ -507,6 +507,12 @@ ${bundle.declaredPosition}
     sections.push(authorityText);
   }
 
+  // 3b. Learned rules (auto-discovered, additive — after authority, before lessons)
+  const learnedText = formatLearnedRulesForPrompt(bundle.learnedRules);
+  if (learnedText) {
+    sections.push(learnedText);
+  }
+
   // 4. (Dismantler — injected externally by consumers, not here)
 
   // 5. Carrier behavior intelligence
