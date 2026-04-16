@@ -263,6 +263,93 @@ export function analyzeDocumentWithRules(text: string): PreDismantlerRuleResult 
   };
 }
 
+// ── Learned-rule augmentation (additive) ─────────────────────────────
+//
+// Async helper that fetches active learned rules and folds matching ones
+// into an existing PreDismantlerRuleResult. Non-breaking: original sync
+// `analyzeDocumentWithRules` is unchanged. Callers may opt in.
+
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2.39.3";
+import { getActiveLearnedRules, type ActiveLearnedRule } from "./ruleLearningEngine.ts";
+
+export interface LearnedRuleHit {
+  ruleId: string;
+  rule_type: string;
+  trigger_pattern: string;
+  weakness_category: string | null;
+  rebuttal_strategy: string | null;
+  evidence_request: string | null;
+  confidence_score: number;
+}
+
+export interface AugmentedRuleResult extends PreDismantlerRuleResult {
+  learnedRuleHits: LearnedRuleHit[];
+  learnedScoreBump: number;
+}
+
+export async function augmentWithLearnedRules(
+  text: string,
+  baseResult: PreDismantlerRuleResult,
+  supabase: SupabaseClient,
+  ctx: { carrier?: string | null; state?: string | null; trade?: string | null; material?: string | null; disputeType?: string | null } = {},
+): Promise<AugmentedRuleResult> {
+  const safe = (text || "").toLowerCase();
+  let hits: LearnedRuleHit[] = [];
+  let bump = 0;
+
+  try {
+    const rules = await getActiveLearnedRules(supabase, {
+      carrier: ctx.carrier,
+      state: ctx.state,
+      trade: ctx.trade,
+      material: ctx.material,
+      disputeType: ctx.disputeType,
+      limit: 30,
+    });
+
+    for (const r of rules) {
+      const needle = (r.normalized_pattern || r.trigger_pattern || "").toLowerCase().trim();
+      if (!needle || needle.length < 4) continue;
+      if (!safe.includes(needle)) continue;
+
+      hits.push({
+        ruleId: r.id,
+        rule_type: r.rule_type,
+        trigger_pattern: r.trigger_pattern,
+        weakness_category: r.weakness_category,
+        rebuttal_strategy: r.rebuttal_strategy,
+        evidence_request: r.evidence_request,
+        confidence_score: r.confidence_score,
+      });
+
+      // Modest score bump per hit, capped to avoid runaway escalation
+      bump += Math.min(2, Math.max(1, Math.round(r.confidence_score / 6)));
+    }
+    bump = Math.min(bump, 8);
+
+    if (hits.length > 0) {
+      console.log(`[PreDismantlerRules] Learned rules matched: ${hits.length} hits, bump=+${bump}`);
+    }
+  } catch (e) {
+    console.error("[PreDismantlerRules] learned rules fetch failed (non-fatal):", (e as Error).message);
+  }
+
+  const newScore = baseResult.weaknessScore + bump;
+  const newEscalate =
+    baseResult.shouldEscalateToAI ||
+    newScore >= ESCALATE_SCORE_THRESHOLD ||
+    hits.some((h) => h.rule_type === "escalation_rule");
+
+  return {
+    ...baseResult,
+    weaknessScore: newScore,
+    shouldEscalateToAI: newEscalate,
+    escalationReason: baseResult.escalationReason ?? (hits.length > 0 && newEscalate ? `learned-rule hits=${hits.length}` : null),
+    learnedRuleHits: hits,
+    learnedScoreBump: bump,
+  };
+}
+
 // ── Lightweight rebuttal output (used when AI is skipped) ───────────
 
 export interface LightweightDismantlerOutput {
