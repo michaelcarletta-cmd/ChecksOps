@@ -48,7 +48,7 @@ const DarwinWeatherHistory = lazy(() => import("@/components/claim-detail/Darwin
 const DarwinOneClickPackage = lazy(() => import("@/components/claim-detail/DarwinOneClickPackage").then(m => ({ default: m.DarwinOneClickPackage })));
 const DarwinAutoDraftRebuttal = lazy(() => import("@/components/claim-detail/DarwinAutoDraftRebuttal").then(m => ({ default: m.DarwinAutoDraftRebuttal })));
 const DarwinAutoSummary = lazy(() => import("@/components/claim-detail/DarwinAutoSummary").then(m => ({ default: m.DarwinAutoSummary })));
-const DarwinSmartDocumentSort = lazy(() => import("@/components/claim-detail/DarwinSmartDocumentSort").then(m => ({ default: m.DarwinSmartDocumentSort })));
+
 const DarwinEstimateGapAnalysis = lazy(() => import("@/components/claim-detail/DarwinEstimateGapAnalysis").then(m => ({ default: m.DarwinEstimateGapAnalysis })));
 const DarwinEstimateComparison = lazy(() => import("@/components/claim-detail/DarwinEstimateComparison").then(m => ({ default: m.DarwinEstimateComparison })));
 const DarwinDocumentTimeline = lazy(() => import("@/components/claim-detail/DarwinDocumentTimeline").then(m => ({ default: m.DarwinDocumentTimeline })));
@@ -590,10 +590,6 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
           <span className="sm:hidden">{isMobile ? "Copilot" : showCopilot ? "Hide" : "Show"}</span>
         </Button>
       </div>
-
-      <Suspense fallback={<LoadingFallback />}>
-        <DarwinSmartDocumentSort claimId={claimId} claim={claim} />
-      </Suspense>
 
       {/* Auto-Analysis Ready Banner */}
       {visibleAnalyses.length > 0 && (
