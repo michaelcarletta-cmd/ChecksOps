@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -409,27 +409,22 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
         <Button
           className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-50"
           size="icon"
         >
-          {isClaimContext ? <Brain className="h-6 w-6" /> : <Sparkles className="h-6 w-6" />}
+          <Sparkles className="h-6 w-6" />
         </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl w-[calc(100vw-2rem)] h-[600px] flex flex-col p-0">
-        <DialogHeader className="px-6 py-4 border-b">
+      </SheetTrigger>
+      <SheetContent side="bottom" className="h-[85vh] p-0 flex flex-col">
+        <SheetHeader className="px-6 py-4 border-b">
           <div className="flex items-center justify-between">
-            <DialogTitle className="flex items-center gap-2">
+            <SheetTitle className="flex items-center gap-2">
               {getIcon()}
               {getTitle()}
-              {isClaimContext && claimNumber && (
-                <span className="text-xs font-normal text-muted-foreground">
-                  ({claimNumber})
-                </span>
-              )}
-            </DialogTitle>
+            </SheetTitle>
             <div className="flex items-center gap-1">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -462,7 +457,7 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
               )}
             </div>
           </div>
-        </DialogHeader>
+        </SheetHeader>
 
         <div className="flex-1 flex flex-col overflow-hidden">
           {aiMessages.length === 0 ? (
@@ -487,7 +482,7 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
                             : "bg-muted"
                         }
                       >
-                        {message.role === "user" ? "U" : isClaimContext ? <Brain className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                        {message.role === "user" ? "U" : <Bot className="h-4 w-4" />}
                       </AvatarFallback>
                     </Avatar>
                     <div
@@ -569,7 +564,7 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
                   <div className="flex gap-3">
                     <Avatar className="h-8 w-8">
                       <AvatarFallback className="bg-muted">
-                        {isClaimContext ? <Brain className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                        <Bot className="h-4 w-4" />
                       </AvatarFallback>
                     </Avatar>
                     <div className="max-w-[85%] p-3 rounded-lg bg-muted" style={{ overflowWrap: "break-word", wordBreak: "break-word" }}>
@@ -606,7 +601,7 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
             </div>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 };
