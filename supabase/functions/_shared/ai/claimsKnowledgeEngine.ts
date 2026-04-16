@@ -355,33 +355,60 @@ export async function getClaimsContextBundle(
 ): Promise<ClaimsContextBundle> {
   const { claimId, userQuery, taskType, supabase } = opts;
 
-  // Cache check: claimId + query hash
+  // Rules-first dispute classification (no AI, no DB) — used as cache subkey
+  const disputeType = await classifyDispute(userQuery);
+
+  // L1: in-memory hot cache (per-process), keyed by claim+query+task
   const queryHash = await hashPrompt(`${claimId}:${userQuery}:${taskType}`);
-  const cacheKey = `cke:${queryHash}`;
-  const cached = getCache<ClaimsContextBundle>(cacheKey);
-  if (cached) {
-    console.log(`[ClaimsKnowledgeEngine] Cache hit for ${claimId}`);
-    return cached;
+  const memCacheKey = `cke:${queryHash}`;
+  const memHit = getCache<ClaimsContextBundle>(memCacheKey);
+  if (memHit) {
+    console.log(`[ClaimsKnowledgeEngine] L1 mem hit ${claimId}`);
+    return memHit;
   }
 
-  // Step 1 + 2: Claim facts + dispute classification
-  const [claimFacts, disputeType] = await Promise.all([
-    gatherClaimFacts(claimId, supabase),
-    classifyDispute(userQuery),
-  ]);
+  // L2: DB-backed versioned cache, keyed by claim+disputeType.
+  // Stale on file/dismantler/argument/declared-position changes (DB triggers bump version).
+  const bundle = await withClaimCache<ClaimsContextBundle>(
+    supabase,
+    claimId,
+    "knowledge_bundle",
+    `dispute:${disputeType}`,
+    () => buildBundleUncached(claimId, userQuery, disputeType, supabase),
+  );
 
-  // Extract declared position from claim
+  setCache(memCacheKey, bundle);
+  return bundle;
+}
+
+async function buildBundleUncached(
+  claimId: string,
+  userQuery: string,
+  disputeType: string,
+  supabase: SupabaseClient,
+): Promise<ClaimsContextBundle> {
+  // Step 1: Claim facts
+  const claimFacts = await gatherClaimFacts(claimId, supabase);
+
+  // Step 2: Declared position (from darwin_declared_positions, latest)
   let declaredPosition: string | null = null;
   try {
     const { data } = await supabase
-      .from("claims")
-      .select("declared_position")
-      .eq("id", claimId)
+      .from("darwin_declared_positions")
+      .select("master_position_statement, primary_cause_of_loss, primary_coverage_theory, primary_carrier_error, requested_remedy")
+      .eq("claim_id", claimId)
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
-    if (data?.declared_position) {
-      declaredPosition = typeof data.declared_position === "string"
-        ? data.declared_position
-        : JSON.stringify(data.declared_position);
+    if (data) {
+      const parts = [
+        data.master_position_statement,
+        data.primary_cause_of_loss && `Primary cause: ${data.primary_cause_of_loss}`,
+        data.primary_coverage_theory && `Coverage theory: ${data.primary_coverage_theory}`,
+        data.primary_carrier_error && `Carrier error: ${data.primary_carrier_error}`,
+        data.requested_remedy && `Requested remedy: ${data.requested_remedy}`,
+      ].filter(Boolean);
+      if (parts.length) declaredPosition = parts.join("\n");
     }
   } catch { /* non-fatal */ }
 
@@ -389,7 +416,7 @@ export async function getClaimsContextBundle(
   const state = claimFacts?.state || "";
   const lossType = claimFacts?.lossType || "";
 
-  // Get trade/material from claim for knowledge matching
+  // Trade/material from claim
   let trade: string | null = null;
   let material: string | null = null;
   try {
@@ -402,7 +429,8 @@ export async function getClaimsContextBundle(
     material = data?.roof_material || null;
   } catch { /* non-fatal */ }
 
-  // All retrieval in parallel — including new intelligence layers
+  // All retrieval in parallel — including new intelligence layers.
+  // Note: detectContradictions is itself wrapped in versioned cache internally.
   const [
     internalKnowledge,
     claimLessons,
@@ -423,7 +451,6 @@ export async function getClaimsContextBundle(
     getActiveLearnedRules(supabase, { carrier, state, trade, material, disputeType, limit: 10 }),
   ]);
 
-  // Trade logic (synchronous — static data)
   const tradeLogic = getTradeIntelligence(trade, disputeType);
 
   const bundle: ClaimsContextBundle = {
@@ -451,11 +478,8 @@ export async function getClaimsContextBundle(
     },
   };
 
-  // Cache for reuse
-  setCache(cacheKey, bundle);
-
   console.log(
-    `[ClaimsKnowledgeEngine] Bundle for ${claimId}: dispute=${disputeType}, knowledge=${internalKnowledge.length}, lessons=${claimLessons.length}, authority=${authorityKnowledge.length}, carrier=${!!carrierBehavior}, trade=${!!tradeLogic}, violations=${violations.length}, contradictions=${contradictions.length}, search=${!!authoritySupport}`,
+    `[ClaimsKnowledgeEngine] Built bundle for ${claimId}: dispute=${disputeType}, knowledge=${internalKnowledge.length}, lessons=${claimLessons.length}, authority=${authorityKnowledge.length}, carrier=${!!carrierBehavior}, trade=${!!tradeLogic}, violations=${violations.length}, contradictions=${contradictions.length}, search=${!!authoritySupport}`,
   );
 
   return bundle;
