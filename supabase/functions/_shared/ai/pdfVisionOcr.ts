@@ -225,49 +225,15 @@ export async function extractPdfWithOcrFallback(
     return { text: "", method: "none", diagnostics: diag };
   }
 
-  // OCR the whole PDF as a single image (OpenAI doesn't support PDF mime type)
-  // We send it as image/jpeg — the vision model can still read document images
+  // OCR via OpenAI's native PDF support (Files API + file content type)
+  // OpenAI vision models can read PDFs natively when uploaded via the Files API.
   diag.ocrAttempted = true;
-  diag.fallbackPath = "pdf_ocr_vision";
+  diag.fallbackPath = "pdf_ocr_openai_files";
 
-  console.log(`[OCR-DIAG] ${fileName}: embedded text insufficient (${embeddedText.length} chars < ${threshold}), attempting vision OCR`);
+  console.log(`[OCR-DIAG] ${fileName}: embedded text insufficient (${embeddedText.length} chars < ${threshold}), uploading to OpenAI Files API for native PDF OCR`);
 
   try {
-    const base64 = bytesToBase64(bytes);
-    // CRITICAL: Send as image/jpeg, NOT application/pdf — OpenAI vision doesn't support PDF mime
-    // The model can still interpret the visual content of the document
-    const ocrParts: string[] = [];
-
-    // For multi-page PDFs, we still send the whole thing as one request
-    // since we can't render individual pages in Deno without a canvas library.
-    // The vision model handles multi-page documents well as single images.
-    const result = await callVision({
-      model: MODEL_VISION,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Extract ALL text content from this scanned document. Return the raw text exactly as it appears, preserving dates, numbers, names, addresses, and formatting. Separate different pages with '---PAGE BREAK---'. Do not summarize or interpret.",
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "image_url",
-              image_url: { url: `data:image/jpeg;base64,${base64}` },
-            },
-            {
-              type: "text",
-              text: `This is a scanned PDF document${pageCount ? ` with ${pageCount} pages` : ""}. Extract all text content from every page.`,
-            },
-          ],
-        },
-      ],
-      temperature: 0.1,
-      maxTokens: 8000,
-    });
-
-    const ocrText = result.text || "";
+    const ocrText = await ocrPdfViaOpenAIFiles(bytes, fileName, pageCount);
     diag.ocrResultLength = ocrText.length;
 
     if (ocrText.length > 10) {
