@@ -490,6 +490,23 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
           )}
         </Button>
 
+        {/* Error with retry */}
+        {generationError && !isGenerating && !rebuttal && (
+          <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-destructive mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-destructive">Generation Failed</p>
+                <p className="text-xs text-muted-foreground mt-1">{generationError}</p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleGenerate} className="gap-1.5">
+              <RefreshCw className="h-3.5 w-3.5" />
+              Retry
+            </Button>
+          </div>
+        )}
+
         {rebuttal && (
           <div className="space-y-3 pt-4 border-t">
             <DarwinCitationWatchdog watchdog={citationWatchdog} jurisdiction={jurisdiction} />
