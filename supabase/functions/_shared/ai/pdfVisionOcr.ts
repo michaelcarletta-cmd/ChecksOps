@@ -6,7 +6,7 @@
 import { callVision } from "./openaiClient.ts";
 import { MODEL_VISION } from "./modelRouter.ts";
 
-const MAX_OCR_BYTES = 4 * 1024 * 1024; // 4MB per file
+const MAX_OCR_BYTES = 25 * 1024 * 1024; // 25MB per file (OpenAI Files API supports up to 32MB)
 const PAGES_PER_BATCH = 3;
 const MAX_CUMULATIVE_CHARS = 50000;
 
@@ -56,6 +56,106 @@ function getImageMimeType(fileName: string): string {
   if (lower.endsWith(".gif")) return "image/gif";
   if (lower.endsWith(".bmp")) return "image/bmp";
   return "image/jpeg";
+}
+
+/**
+ * OCR a PDF using OpenAI's native PDF support via the Files API.
+ * Uploads the PDF to OpenAI Files, references it via file_id in a vision call,
+ * then deletes the uploaded file.
+ *
+ * This is the ONLY reliable way to OCR PDFs through OpenAI — sending PDF bytes
+ * inline as data:image/jpeg fails because OpenAI vision rejects non-image bytes.
+ */
+async function ocrPdfViaOpenAIFiles(
+  bytes: Uint8Array,
+  fileName: string,
+  pageCount: number | null,
+): Promise<string> {
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured");
+  }
+
+  // Step 1: Upload the PDF to OpenAI Files API
+  const uploadForm = new FormData();
+  const safeName = fileName.toLowerCase().endsWith(".pdf") ? fileName : `${fileName}.pdf`;
+  uploadForm.append("file", new Blob([bytes], { type: "application/pdf" }), safeName);
+  uploadForm.append("purpose", "user_data");
+
+  console.log(`[OCR-DIAG] ${fileName}: uploading ${Math.round(bytes.length / 1024)}KB to OpenAI Files API`);
+
+  const uploadRes = await fetch("https://api.openai.com/v1/files", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: uploadForm,
+  });
+
+  const uploadData = await uploadRes.json();
+  if (!uploadRes.ok) {
+    const errMsg = uploadData?.error?.message || "Unknown upload error";
+    console.error(`[OCR-DIAG] ${fileName}: OpenAI Files upload failed: ${errMsg}`);
+    throw new Error(`OpenAI Files upload failed: ${errMsg}`);
+  }
+
+  const fileId: string = uploadData.id;
+  console.log(`[OCR-DIAG] ${fileName}: uploaded as file_id=${fileId}`);
+
+  try {
+    // Step 2: Send a chat completion request that references the uploaded PDF
+    const chatRes = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0.1,
+        max_tokens: 8000,
+        messages: [
+          {
+            role: "system",
+            content:
+              "Extract ALL text content from this PDF document. Return the raw text exactly as it appears, preserving dates, numbers, names, addresses, line items, and formatting. Separate different pages with '---PAGE BREAK---'. Do not summarize or interpret.",
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "file",
+                file: { file_id: fileId },
+              },
+              {
+                type: "text",
+                text: `This is a PDF document${pageCount ? ` with ${pageCount} pages` : ""}. Extract all text content from every page verbatim.`,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+
+    const chatData = await chatRes.json();
+    if (!chatRes.ok) {
+      const errMsg = chatData?.error?.message || "Unknown chat error";
+      console.error(`[OCR-DIAG] ${fileName}: OpenAI vision (file) failed: ${errMsg}`);
+      throw new Error(`OpenAI vision (file) failed: ${errMsg}`);
+    }
+
+    const text: string = chatData.choices?.[0]?.message?.content || "";
+    console.log(`[OCR-DIAG] ${fileName}: OpenAI Files OCR returned ${text.length} chars`);
+    return text;
+  } finally {
+    // Step 3: Best-effort delete the uploaded file
+    try {
+      await fetch(`https://api.openai.com/v1/files/${fileId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+    } catch (delErr) {
+      console.warn(`[OCR-DIAG] ${fileName}: failed to delete file_id=${fileId}: ${delErr instanceof Error ? delErr.message : String(delErr)}`);
+    }
+  }
 }
 
 /**
@@ -225,49 +325,15 @@ export async function extractPdfWithOcrFallback(
     return { text: "", method: "none", diagnostics: diag };
   }
 
-  // OCR the whole PDF as a single image (OpenAI doesn't support PDF mime type)
-  // We send it as image/jpeg — the vision model can still read document images
+  // OCR via OpenAI's native PDF support (Files API + file content type)
+  // OpenAI vision models can read PDFs natively when uploaded via the Files API.
   diag.ocrAttempted = true;
-  diag.fallbackPath = "pdf_ocr_vision";
+  diag.fallbackPath = "pdf_ocr_openai_files";
 
-  console.log(`[OCR-DIAG] ${fileName}: embedded text insufficient (${embeddedText.length} chars < ${threshold}), attempting vision OCR`);
+  console.log(`[OCR-DIAG] ${fileName}: embedded text insufficient (${embeddedText.length} chars < ${threshold}), uploading to OpenAI Files API for native PDF OCR`);
 
   try {
-    const base64 = bytesToBase64(bytes);
-    // CRITICAL: Send as image/jpeg, NOT application/pdf — OpenAI vision doesn't support PDF mime
-    // The model can still interpret the visual content of the document
-    const ocrParts: string[] = [];
-
-    // For multi-page PDFs, we still send the whole thing as one request
-    // since we can't render individual pages in Deno without a canvas library.
-    // The vision model handles multi-page documents well as single images.
-    const result = await callVision({
-      model: MODEL_VISION,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Extract ALL text content from this scanned document. Return the raw text exactly as it appears, preserving dates, numbers, names, addresses, and formatting. Separate different pages with '---PAGE BREAK---'. Do not summarize or interpret.",
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "image_url",
-              image_url: { url: `data:image/jpeg;base64,${base64}` },
-            },
-            {
-              type: "text",
-              text: `This is a scanned PDF document${pageCount ? ` with ${pageCount} pages` : ""}. Extract all text content from every page.`,
-            },
-          ],
-        },
-      ],
-      temperature: 0.1,
-      maxTokens: 8000,
-    });
-
-    const ocrText = result.text || "";
+    const ocrText = await ocrPdfViaOpenAIFiles(bytes, fileName, pageCount);
     diag.ocrResultLength = ocrText.length;
 
     if (ocrText.length > 10) {
