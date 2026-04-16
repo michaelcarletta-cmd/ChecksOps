@@ -785,25 +785,29 @@ async function syncFile(apiKey: string, claim: any, payload: any, supabase: any)
   const fileBuffer = await fileBlob.arrayBuffer();
   const fileBytes = new Blob([fileBuffer], { type: contentType });
 
-  // JobNimbus /files endpoint expects multipart/form-data.
-  // Field name MUST be "file" with filename, and "related" as a JSON-encoded array of IDs (strings, NOT objects).
-  // Reference: working community examples and JN support tickets.
+  // JobNimbus /files expects multipart/form-data. Per the JN public API contract used by
+  // working integrations, the field name is "file" with filename, "related[0]" supplies the
+  // job jnid as a plain string (not JSON), and "filename" must also be sent as a separate field.
   const form = new FormData();
-  form.append('related', JSON.stringify([jobId]));
-  form.append('description', fileData.description || fileName);
   form.append('file', fileBytes, fileName);
+  form.append('filename', fileName);
+  form.append('related[0]', jobId);
+  if (fileData.description) {
+    form.append('description', fileData.description);
+  }
 
+  const url = `${JOBNIMBUS_API_BASE}/files`;
+  console.log(`[FILE SYNC] POST ${url}`);
   console.log(`[FILE SYNC] Uploading ${fileName} (${contentType}, ${fileBuffer.byteLength} bytes) for job ${jobId}`);
-  console.log(`[FILE SYNC] related=${JSON.stringify([jobId])}`);
 
-  const response = await fetch(`${JOBNIMBUS_API_BASE}/files`, {
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}` }, // let fetch set Content-Type with boundary
     body: form,
   });
 
   const responseText = await response.text();
-  console.log(`[FILE SYNC] Response [${response.status}]: ${responseText.substring(0, 1000)}`);
+  console.log(`[FILE SYNC] Response [${response.status}]: ${responseText.substring(0, 1500)}`);
 
   if (!response.ok) {
     throw new Error(`JobNimbus file sync error: ${response.status} - ${responseText}`);
