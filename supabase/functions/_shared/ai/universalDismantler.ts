@@ -511,6 +511,44 @@ export async function analyzeDocument(opts: DismantlerOptions): Promise<Dismantl
 
   console.log(`[UniversalDismantler] Starting analysis for claim ${claimId}, file=${fileName || "inline"}, textLen=${documentText.length}`);
 
+  // ── Pre-AI rules pass (cheap, deterministic) ──────────────────────
+  const ruleResult = analyzeDocumentWithRules(documentText);
+  console.log(
+    `[UniversalDismantler] Pre-AI rules: score=${ruleResult.weaknessScore}, flags=[${Object.entries(ruleResult.flags).filter(([, v]) => v).map(([k]) => k).join(",")}], escalate=${ruleResult.shouldEscalateToAI}${ruleResult.escalationReason ? ` (${ruleResult.escalationReason})` : ""}`,
+  );
+
+  if (!ruleResult.shouldEscalateToAI) {
+    console.log(`[UniversalDismantler] AI SKIPPED — using lightweight rule-based output (score=${ruleResult.weaknessScore})`);
+    const lite = buildLightweightDismantler(documentText, ruleResult);
+    const finalResult: DismantlerResult = {
+      documentType: lite.documentType,
+      reportSummary: lite.reportSummary,
+      mainPosition: lite.mainPosition,
+      nonCoveredTheories: lite.nonCoveredTheories,
+      limitations: lite.limitations,
+      unsupportedAssumptions: lite.unsupportedAssumptions,
+      contradictions: lite.contradictions,
+      omissions: lite.omissions,
+      repairabilityOverreach: lite.repairabilityOverreach,
+      coverageWeaknesses: lite.coverageWeaknesses,
+      strongestRebuttalPoints: lite.strongestRebuttalPoints,
+      evidenceToGatherNext: lite.evidenceToGatherNext,
+      draftRebuttalLanguage: lite.draftRebuttalLanguage,
+      meta: {
+        chunkCount: 0,
+        successfulChunks: 0,
+        failedChunks: 0,
+        model: "rules-only",
+        cached: false,
+        usedSearch: false,
+      },
+    };
+    await storeDismantlerResult(supabase, claimId, finalResult, fileId, fileName);
+    return finalResult;
+  }
+
+  console.log(`[UniversalDismantler] AI USED — escalating: ${ruleResult.escalationReason}`);
+
   // Step 1: Document type detection
   const docTypes = await classifyDocumentType(documentText);
   console.log(`[UniversalDismantler] Detected types: ${docTypes.join(", ")}`);
