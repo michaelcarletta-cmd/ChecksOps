@@ -335,36 +335,10 @@ export const ClaimsAIAssistant = ({ claimId, claimNumber, policyholderName }: Cl
   };
 
   const getIcon = () => {
-    if (isClaimContext) {
-      return <Brain className="h-5 w-5 text-primary" />;
-    }
     return <Bot className="h-5 w-5 text-primary" />;
   };
 
   const getHelpContent = () => {
-    if (isClaimContext) {
-      return (
-        <Card className="p-6 bg-primary/5 border-primary/20 max-w-sm">
-          <div className="text-center space-y-3">
-            <Brain className="h-12 w-12 text-primary mx-auto" />
-            <h3 className="font-semibold">Darwin — Claims Operations Assistant</h3>
-            <p className="text-sm text-muted-foreground">
-              Document-aware intelligence for <strong>{policyholderName || claimNumber}</strong>
-            </p>
-            <ul className="text-sm text-muted-foreground space-y-1 text-left">
-              <li>• Upload a document for structured analysis</li>
-              <li>• "Does this denial hold up?"</li>
-              <li>• "What evidence do we need?"</li>
-              <li>• "How do we rebut this?"</li>
-              <li>• "Is this repair feasible?"</li>
-              <li>• Coverage-first strategic guidance</li>
-              <li>• Every response ends with a next step</li>
-            </ul>
-          </div>
-        </Card>
-      );
-    }
-
     return (
       <Card className="p-6 bg-primary/5 border-primary/20 max-w-sm">
         <div className="text-center space-y-3">
