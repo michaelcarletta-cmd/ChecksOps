@@ -4164,6 +4164,54 @@ export type Database = {
           },
         ]
       }
+      claim_intelligence_cache: {
+        Row: {
+          cache_type: string
+          claim_id: string
+          created_at: string
+          id: string
+          payload: Json
+          subkey: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          cache_type: string
+          claim_id: string
+          created_at?: string
+          id?: string
+          payload: Json
+          subkey?: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          cache_type?: string
+          claim_id?: string
+          created_at?: string
+          id?: string
+          payload?: Json
+          subkey?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_intelligence_cache_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_intelligence_cache_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_intelligence_summary: {
         Row: {
           carrier_weakest_argument: Json | null
@@ -4269,6 +4317,42 @@ export type Database = {
             columns: ["previous_summary_id"]
             isOneToOne: false
             referencedRelation: "claim_intelligence_summary"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_intelligence_version: {
+        Row: {
+          claim_id: string
+          last_bumped_reason: string | null
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          claim_id: string
+          last_bumped_reason?: string | null
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          claim_id?: string
+          last_bumped_reason?: string | null
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_intelligence_version_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_intelligence_version_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
+            referencedRelation: "claims"
             referencedColumns: ["id"]
           },
         ]
@@ -14489,6 +14573,10 @@ export type Database = {
       bulk_sync_deposit_accounting: {
         Args: { p_actor_id: string; p_deposit_item_ids: string[] }
         Returns: Json
+      }
+      bump_claim_intelligence_version: {
+        Args: { _claim_id: string; _reason: string }
+        Returns: undefined
       }
       can_manage_roles: { Args: { _user_id: string }; Returns: boolean }
       create_claim_for_staff:

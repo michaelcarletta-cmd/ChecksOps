@@ -24,6 +24,7 @@ import { getTradeIntelligence } from "./tradeIntelligence.ts";
 import { detectViolations, formatViolations, type ViolationDetection } from "./violationEngine.ts";
 import { detectContradictions, formatContradictions, type ContradictionDetection } from "./contradictionEngine.ts";
 import { getActiveLearnedRules, formatLearnedRulesForPrompt, type ActiveLearnedRule } from "./ruleLearningEngine.ts";
+import { withClaimCache } from "./intelligenceCache.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -106,33 +107,31 @@ const SEARCH_TRIGGER_TERMS = [
 async function classifyDispute(userQuery: string): Promise<string> {
   if (!userQuery || userQuery.length < 10) return "general";
 
-  // Fast keyword-based classification before burning an AI call
+  // Rules-first: comprehensive keyword classifier (no AI fallback by default).
+  // AI is reserved for high-value reasoning, not classification.
   const lower = userQuery.toLowerCase();
-  if (/\b(code|irc|ibc|nfpa|building code|ordinance)\b/.test(lower)) return "code";
-  if (/\b(cause|causation|proximate|peril|storm|hail|wind)\b/.test(lower)) return "causation";
-  if (/\b(scope|missing|omit|left out|not included)\b/.test(lower)) return "scope";
-  if (/\b(repair|replace|patch|repairability)\b/.test(lower)) return "repairability";
-  if (/\b(price|pricing|unit cost|line item cost|rate)\b/.test(lower)) return "pricing";
-  if (/\b(engineer|report|expert|inspection report)\b/.test(lower)) return "engineer_report";
-  if (/\b(delay|timeline|days|overdue|prompt pay)\b/.test(lower)) return "delay";
-  if (/\b(continuity|match|aesthetic|uniform)\b/.test(lower)) return "continuity";
-  if (/\b(policy|coverage|exclusion|endorsement|deductible)\b/.test(lower)) return "policy_interpretation";
 
-  // Fallback: cheap AI classification
-  try {
-    const result = await generate({
-      task: "classification",
-      system: `Classify the following insurance claim query into exactly ONE of these dispute types: ${DISPUTE_TYPES.join(", ")}. Return ONLY the dispute type word, nothing else.`,
-      user: userQuery.slice(0, 500),
-      temperature: 0,
-      maxTokens: 20,
-      searchMode: "off",
-    });
-    const classified = result.text.trim().toLowerCase().replace(/[^a-z_]/g, "");
-    return (DISPUTE_TYPES as readonly string[]).includes(classified) ? classified : "general";
-  } catch {
-    return "general";
+  // Score each dispute type by keyword hits — pick the highest, fall back to "general".
+  const scores: Record<string, number> = {};
+  const bump = (k: string, n = 1) => { scores[k] = (scores[k] || 0) + n; };
+
+  if (/\b(code|irc|ibc|nfpa|building code|ordinance|adopted edition)\b/.test(lower)) bump("code", 3);
+  if (/\b(cause|causation|proximate|peril|storm|hail|wind|hurricane|tornado|lightning)\b/.test(lower)) bump("causation", 2);
+  if (/\b(scope|missing|omit|left out|not included|incomplete|short paid)\b/.test(lower)) bump("scope", 2);
+  if (/\b(repair|replace|patch|repairability|like[- ]kind|matching|discontinued)\b/.test(lower)) bump("repairability", 2);
+  if (/\b(price|pricing|unit cost|line item cost|rate|o&p|overhead and profit|xactimate)\b/.test(lower)) bump("pricing", 2);
+  if (/\b(engineer|engineer.?report|expert|inspection report|forensic report|p\.?e\.?)\b/.test(lower)) bump("engineer_report", 2);
+  if (/\b(delay|timeline|days|overdue|prompt pay|response.?time|sla)\b/.test(lower)) bump("delay", 2);
+  if (/\b(continuity|match|aesthetic|uniform|appearance|line of sight)\b/.test(lower)) bump("continuity", 2);
+  if (/\b(policy|coverage|exclusion|endorsement|deductible|reservation of rights|provision)\b/.test(lower)) bump("policy_interpretation", 2);
+  if (/\b(deni(al|ed)|adverse|wrongful)\b/.test(lower)) bump("policy_interpretation", 1);
+
+  let best = "general";
+  let bestScore = 0;
+  for (const [k, v] of Object.entries(scores)) {
+    if (v > bestScore) { best = k; bestScore = v; }
   }
+  return bestScore > 0 ? best : "general";
 }
 
 // ── Claim facts gathering ────────────────────────────────────────────
@@ -140,7 +139,7 @@ async function classifyDispute(userQuery: string): Promise<string> {
 async function gatherClaimFacts(claimId: string, supabase: SupabaseClient): Promise<ClaimFacts | null> {
   try {
     const [claimRes, eventsRes, photosRes, estimateRes, intelRes] = await Promise.all([
-      supabase.from("claims").select("insurance_company, state, damage_type, loss_type, type_of_loss, denial_reason, roof_material, construction_trade, declared_position").eq("id", claimId).maybeSingle(),
+      supabase.from("claims").select("insurance_company, state, damage_type, loss_type, type_of_loss, denial_reason, roof_material, construction_trade").eq("id", claimId).maybeSingle(),
       supabase.from("claim_events").select("event_type, summary, occurred_at, importance_score").eq("claim_id", claimId).order("occurred_at", { ascending: false }).limit(10),
       supabase.from("claim_photo_findings").select("finding_type, damage_description, evidence_strength, damage_indicators").eq("claim_id", claimId).limit(10),
       supabase.from("claim_estimate_analysis").select("analysis_type, total_gap_amount, missing_items_summary, disputed_items_summary").eq("claim_id", claimId).order("created_at", { ascending: false }).limit(1),
@@ -356,33 +355,60 @@ export async function getClaimsContextBundle(
 ): Promise<ClaimsContextBundle> {
   const { claimId, userQuery, taskType, supabase } = opts;
 
-  // Cache check: claimId + query hash
+  // Rules-first dispute classification (no AI, no DB) — used as cache subkey
+  const disputeType = await classifyDispute(userQuery);
+
+  // L1: in-memory hot cache (per-process), keyed by claim+query+task
   const queryHash = await hashPrompt(`${claimId}:${userQuery}:${taskType}`);
-  const cacheKey = `cke:${queryHash}`;
-  const cached = getCache<ClaimsContextBundle>(cacheKey);
-  if (cached) {
-    console.log(`[ClaimsKnowledgeEngine] Cache hit for ${claimId}`);
-    return cached;
+  const memCacheKey = `cke:${queryHash}`;
+  const memHit = getCache<ClaimsContextBundle>(memCacheKey);
+  if (memHit) {
+    console.log(`[ClaimsKnowledgeEngine] L1 mem hit ${claimId}`);
+    return memHit;
   }
 
-  // Step 1 + 2: Claim facts + dispute classification
-  const [claimFacts, disputeType] = await Promise.all([
-    gatherClaimFacts(claimId, supabase),
-    classifyDispute(userQuery),
-  ]);
+  // L2: DB-backed versioned cache, keyed by claim+disputeType.
+  // Stale on file/dismantler/argument/declared-position changes (DB triggers bump version).
+  const bundle = await withClaimCache<ClaimsContextBundle>(
+    supabase,
+    claimId,
+    "knowledge_bundle",
+    `dispute:${disputeType}`,
+    () => buildBundleUncached(claimId, userQuery, disputeType, supabase),
+  );
 
-  // Extract declared position from claim
+  setCache(memCacheKey, bundle);
+  return bundle;
+}
+
+async function buildBundleUncached(
+  claimId: string,
+  userQuery: string,
+  disputeType: string,
+  supabase: SupabaseClient,
+): Promise<ClaimsContextBundle> {
+  // Step 1: Claim facts
+  const claimFacts = await gatherClaimFacts(claimId, supabase);
+
+  // Step 2: Declared position (from darwin_declared_positions, latest)
   let declaredPosition: string | null = null;
   try {
     const { data } = await supabase
-      .from("claims")
-      .select("declared_position")
-      .eq("id", claimId)
+      .from("darwin_declared_positions")
+      .select("master_position_statement, primary_cause_of_loss, primary_coverage_theory, primary_carrier_error, requested_remedy")
+      .eq("claim_id", claimId)
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
-    if (data?.declared_position) {
-      declaredPosition = typeof data.declared_position === "string"
-        ? data.declared_position
-        : JSON.stringify(data.declared_position);
+    if (data) {
+      const parts = [
+        data.master_position_statement,
+        data.primary_cause_of_loss && `Primary cause: ${data.primary_cause_of_loss}`,
+        data.primary_coverage_theory && `Coverage theory: ${data.primary_coverage_theory}`,
+        data.primary_carrier_error && `Carrier error: ${data.primary_carrier_error}`,
+        data.requested_remedy && `Requested remedy: ${data.requested_remedy}`,
+      ].filter(Boolean);
+      if (parts.length) declaredPosition = parts.join("\n");
     }
   } catch { /* non-fatal */ }
 
@@ -390,7 +416,7 @@ export async function getClaimsContextBundle(
   const state = claimFacts?.state || "";
   const lossType = claimFacts?.lossType || "";
 
-  // Get trade/material from claim for knowledge matching
+  // Trade/material from claim
   let trade: string | null = null;
   let material: string | null = null;
   try {
@@ -403,7 +429,8 @@ export async function getClaimsContextBundle(
     material = data?.roof_material || null;
   } catch { /* non-fatal */ }
 
-  // All retrieval in parallel — including new intelligence layers
+  // All retrieval in parallel — including new intelligence layers.
+  // Note: detectContradictions is itself wrapped in versioned cache internally.
   const [
     internalKnowledge,
     claimLessons,
@@ -424,7 +451,6 @@ export async function getClaimsContextBundle(
     getActiveLearnedRules(supabase, { carrier, state, trade, material, disputeType, limit: 10 }),
   ]);
 
-  // Trade logic (synchronous — static data)
   const tradeLogic = getTradeIntelligence(trade, disputeType);
 
   const bundle: ClaimsContextBundle = {
@@ -452,11 +478,8 @@ export async function getClaimsContextBundle(
     },
   };
 
-  // Cache for reuse
-  setCache(cacheKey, bundle);
-
   console.log(
-    `[ClaimsKnowledgeEngine] Bundle for ${claimId}: dispute=${disputeType}, knowledge=${internalKnowledge.length}, lessons=${claimLessons.length}, authority=${authorityKnowledge.length}, carrier=${!!carrierBehavior}, trade=${!!tradeLogic}, violations=${violations.length}, contradictions=${contradictions.length}, search=${!!authoritySupport}`,
+    `[ClaimsKnowledgeEngine] Built bundle for ${claimId}: dispute=${disputeType}, knowledge=${internalKnowledge.length}, lessons=${claimLessons.length}, authority=${authorityKnowledge.length}, carrier=${!!carrierBehavior}, trade=${!!tradeLogic}, violations=${violations.length}, contradictions=${contradictions.length}, search=${!!authoritySupport}`,
   );
 
   return bundle;

@@ -7,6 +7,7 @@
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.39.3";
 import { generate } from "./generate.ts";
+import { withClaimCache } from "./intelligenceCache.ts";
 
 export interface ContradictionDetection {
   contradictionType: string;
@@ -18,7 +19,52 @@ export interface ContradictionDetection {
   rebuttalValue: string;
 }
 
+/**
+ * Public entry — version-aware cache wrapper.
+ *
+ * Reads stored `claim_contradiction_detections` first; only invokes AI when
+ * (a) no stored results AND (b) cache version is stale or empty.
+ * Re-runs only when the claim's intelligence version changes (new file,
+ * new dismantler, new argument map entry, declared-position change).
+ */
 export async function detectContradictions(
+  supabase: SupabaseClient,
+  claimId: string,
+): Promise<ContradictionDetection[]> {
+  return withClaimCache<ContradictionDetection[]>(
+    supabase,
+    claimId,
+    "contradictions",
+    "",
+    async () => {
+      // Stored-intelligence-first: reuse persisted detections if any
+      try {
+        const { data: stored } = await supabase
+          .from("claim_contradiction_detections")
+          .select("contradiction_type, document_a_name, document_b_name, carrier_position_a, carrier_position_b, severity, rebuttal_value")
+          .eq("claim_id", claimId)
+          .order("detected_at", { ascending: false })
+          .limit(10);
+        if (stored && stored.length > 0) {
+          console.log(`[ContradictionEngine] Reusing ${stored.length} stored detections (no AI)`);
+          return stored.map((s: any) => ({
+            contradictionType: s.contradiction_type,
+            documentAName: s.document_a_name,
+            documentBName: s.document_b_name,
+            positionA: s.carrier_position_a,
+            positionB: s.carrier_position_b,
+            severity: s.severity,
+            rebuttalValue: s.rebuttal_value,
+          }));
+        }
+      } catch { /* fall through to fresh detection */ }
+
+      return detectContradictionsUncached(supabase, claimId);
+    },
+  );
+}
+
+async function detectContradictionsUncached(
   supabase: SupabaseClient,
   claimId: string,
 ): Promise<ContradictionDetection[]> {
