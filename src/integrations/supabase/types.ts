@@ -10813,6 +10813,149 @@ export type Database = {
           },
         ]
       }
+      learned_rule_candidates: {
+        Row: {
+          activation_status: string
+          carrier: string | null
+          confidence_score: number
+          created_at: string
+          created_from_claim_ids: string[]
+          dispute_type: string | null
+          evidence_request: string | null
+          id: string
+          loss_count: number
+          material: string | null
+          normalized_pattern: string
+          notes: string | null
+          rebuttal_strategy: string | null
+          rule_type: string
+          source_document_type: string | null
+          source_phrase: string | null
+          state: string | null
+          supporting_claim_count: number
+          trade: string | null
+          trigger_pattern: string
+          updated_at: string
+          weakness_category: string | null
+          win_count: number
+        }
+        Insert: {
+          activation_status?: string
+          carrier?: string | null
+          confidence_score?: number
+          created_at?: string
+          created_from_claim_ids?: string[]
+          dispute_type?: string | null
+          evidence_request?: string | null
+          id?: string
+          loss_count?: number
+          material?: string | null
+          normalized_pattern: string
+          notes?: string | null
+          rebuttal_strategy?: string | null
+          rule_type: string
+          source_document_type?: string | null
+          source_phrase?: string | null
+          state?: string | null
+          supporting_claim_count?: number
+          trade?: string | null
+          trigger_pattern: string
+          updated_at?: string
+          weakness_category?: string | null
+          win_count?: number
+        }
+        Update: {
+          activation_status?: string
+          carrier?: string | null
+          confidence_score?: number
+          created_at?: string
+          created_from_claim_ids?: string[]
+          dispute_type?: string | null
+          evidence_request?: string | null
+          id?: string
+          loss_count?: number
+          material?: string | null
+          normalized_pattern?: string
+          notes?: string | null
+          rebuttal_strategy?: string | null
+          rule_type?: string
+          source_document_type?: string | null
+          source_phrase?: string | null
+          state?: string | null
+          supporting_claim_count?: number
+          trade?: string | null
+          trigger_pattern?: string
+          updated_at?: string
+          weakness_category?: string | null
+          win_count?: number
+        }
+        Relationships: []
+      }
+      learned_rules_active: {
+        Row: {
+          candidate_id: string
+          carrier: string | null
+          confidence_score: number
+          created_at: string
+          dispute_type: string | null
+          evidence_request: string | null
+          id: string
+          is_enabled: boolean
+          material: string | null
+          normalized_pattern: string
+          rebuttal_strategy: string | null
+          rule_type: string
+          state: string | null
+          trade: string | null
+          trigger_pattern: string
+          weakness_category: string | null
+        }
+        Insert: {
+          candidate_id: string
+          carrier?: string | null
+          confidence_score?: number
+          created_at?: string
+          dispute_type?: string | null
+          evidence_request?: string | null
+          id?: string
+          is_enabled?: boolean
+          material?: string | null
+          normalized_pattern: string
+          rebuttal_strategy?: string | null
+          rule_type: string
+          state?: string | null
+          trade?: string | null
+          trigger_pattern: string
+          weakness_category?: string | null
+        }
+        Update: {
+          candidate_id?: string
+          carrier?: string | null
+          confidence_score?: number
+          created_at?: string
+          dispute_type?: string | null
+          evidence_request?: string | null
+          id?: string
+          is_enabled?: boolean
+          material?: string | null
+          normalized_pattern?: string
+          rebuttal_strategy?: string | null
+          rule_type?: string
+          state?: string | null
+          trade?: string | null
+          trigger_pattern?: string
+          weakness_category?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learned_rules_active_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "learned_rule_candidates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       line_item_requirement_rules: {
         Row: {
           code_requirement_text: string | null

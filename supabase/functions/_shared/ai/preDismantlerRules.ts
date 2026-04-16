@@ -12,6 +12,9 @@
  * NON-BREAKING: Additive only. Does not modify or remove the AI dismantler.
  */
 
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2.39.3";
+import { getActiveLearnedRules } from "./ruleLearningEngine.ts";
+
 export type RuleFlag =
   | "speculativeLanguage"
   | "noTesting"
@@ -263,6 +266,91 @@ export function analyzeDocumentWithRules(text: string): PreDismantlerRuleResult 
   };
 }
 
+// ── Learned-rule augmentation (additive) ─────────────────────────────
+//
+// Async helper that fetches active learned rules and folds matching ones
+// into an existing PreDismantlerRuleResult. Non-breaking: original sync
+// `analyzeDocumentWithRules` is unchanged. Callers may opt in.
+
+
+export interface LearnedRuleHit {
+  ruleId: string;
+  rule_type: string;
+  trigger_pattern: string;
+  weakness_category: string | null;
+  rebuttal_strategy: string | null;
+  evidence_request: string | null;
+  confidence_score: number;
+}
+
+export interface AugmentedRuleResult extends PreDismantlerRuleResult {
+  learnedRuleHits: LearnedRuleHit[];
+  learnedScoreBump: number;
+}
+
+export async function augmentWithLearnedRules(
+  text: string,
+  baseResult: PreDismantlerRuleResult,
+  supabase: SupabaseClient,
+  ctx: { carrier?: string | null; state?: string | null; trade?: string | null; material?: string | null; disputeType?: string | null } = {},
+): Promise<AugmentedRuleResult> {
+  const safe = (text || "").toLowerCase();
+  let hits: LearnedRuleHit[] = [];
+  let bump = 0;
+
+  try {
+    const rules = await getActiveLearnedRules(supabase, {
+      carrier: ctx.carrier,
+      state: ctx.state,
+      trade: ctx.trade,
+      material: ctx.material,
+      disputeType: ctx.disputeType,
+      limit: 30,
+    });
+
+    for (const r of rules) {
+      const needle = (r.normalized_pattern || r.trigger_pattern || "").toLowerCase().trim();
+      if (!needle || needle.length < 4) continue;
+      if (!safe.includes(needle)) continue;
+
+      hits.push({
+        ruleId: r.id,
+        rule_type: r.rule_type,
+        trigger_pattern: r.trigger_pattern,
+        weakness_category: r.weakness_category,
+        rebuttal_strategy: r.rebuttal_strategy,
+        evidence_request: r.evidence_request,
+        confidence_score: r.confidence_score,
+      });
+
+      // Modest score bump per hit, capped to avoid runaway escalation
+      bump += Math.min(2, Math.max(1, Math.round(r.confidence_score / 6)));
+    }
+    bump = Math.min(bump, 8);
+
+    if (hits.length > 0) {
+      console.log(`[PreDismantlerRules] Learned rules matched: ${hits.length} hits, bump=+${bump}`);
+    }
+  } catch (e) {
+    console.error("[PreDismantlerRules] learned rules fetch failed (non-fatal):", (e as Error).message);
+  }
+
+  const newScore = baseResult.weaknessScore + bump;
+  const newEscalate =
+    baseResult.shouldEscalateToAI ||
+    newScore >= ESCALATE_SCORE_THRESHOLD ||
+    hits.some((h) => h.rule_type === "escalation_rule");
+
+  return {
+    ...baseResult,
+    weaknessScore: newScore,
+    shouldEscalateToAI: newEscalate,
+    escalationReason: baseResult.escalationReason ?? (hits.length > 0 && newEscalate ? `learned-rule hits=${hits.length}` : null),
+    learnedRuleHits: hits,
+    learnedScoreBump: bump,
+  };
+}
+
 // ── Lightweight rebuttal output (used when AI is skipped) ───────────
 
 export interface LightweightDismantlerOutput {
@@ -320,6 +408,7 @@ export function buildLightweightDismantler(
   text: string,
   ruleResult: PreDismantlerRuleResult,
   docTypeHint?: string,
+  learnedHits: LearnedRuleHit[] = [],
 ): LightweightDismantlerOutput {
   const rebuttalPoints: string[] = [];
   const evidence: string[] = [];
@@ -335,9 +424,20 @@ export function buildLightweightDismantler(
     if (issue.flag === "speculativeLanguage" || issue.flag === "causationWithoutSupport") assumptions.push(issue.label);
   }
 
-  const summary = ruleResult.issues.length === 0
+  // Fold learned-rule hits into rebuttal/evidence stacks (deduped, additive)
+  for (const h of learnedHits) {
+    if (h.rebuttal_strategy && !rebuttalPoints.includes(h.rebuttal_strategy)) {
+      rebuttalPoints.push(`[learned] ${h.rebuttal_strategy}`);
+    }
+    if (h.evidence_request && !evidence.includes(h.evidence_request)) {
+      evidence.push(`[learned] ${h.evidence_request}`);
+    }
+  }
+
+  const totalIssues = ruleResult.issues.length + learnedHits.length;
+  const summary = totalIssues === 0
     ? "Rule-based scan found no significant weaknesses; document appears procedurally compliant on its face."
-    : `Rule-based scan flagged ${ruleResult.issues.length} weakness${ruleResult.issues.length === 1 ? "" : "es"} (score ${ruleResult.weaknessScore}): ${ruleResult.issues.map((i) => i.flag).join(", ")}.`;
+    : `Rule-based scan flagged ${ruleResult.issues.length} handcrafted weakness${ruleResult.issues.length === 1 ? "" : "es"}${learnedHits.length ? ` plus ${learnedHits.length} learned-rule hit${learnedHits.length === 1 ? "" : "s"}` : ""} (score ${ruleResult.weaknessScore}): ${[...ruleResult.issues.map((i) => i.flag), ...learnedHits.map((h) => h.rule_type)].join(", ")}.`;
 
   const mainPosition = ruleResult.flags.denialLanguage
     ? "Document advances a denial / exclusion position."

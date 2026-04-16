@@ -23,6 +23,7 @@ import { retrieveCarrierBehavior, formatCarrierBehavior, type CarrierPattern } f
 import { getTradeIntelligence } from "./tradeIntelligence.ts";
 import { detectViolations, formatViolations, type ViolationDetection } from "./violationEngine.ts";
 import { detectContradictions, formatContradictions, type ContradictionDetection } from "./contradictionEngine.ts";
+import { getActiveLearnedRules, formatLearnedRulesForPrompt, type ActiveLearnedRule } from "./ruleLearningEngine.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -76,6 +77,7 @@ export interface ClaimsContextBundle {
   tradeLogic: string;
   violations: ViolationDetection[];
   contradictions: ContradictionDetection[];
+  learnedRules: ActiveLearnedRule[];
 }
 
 export interface GetClaimsContextBundleOptions {
@@ -410,6 +412,7 @@ export async function getClaimsContextBundle(
     carrierBehavior,
     violations,
     contradictions,
+    learnedRules,
   ] = await Promise.all([
     retrieveInternalKnowledge(supabase, disputeType, state, trade, material),
     retrieveClaimLessons(supabase, carrier, lossType, state),
@@ -418,6 +421,7 @@ export async function getClaimsContextBundle(
     retrieveCarrierBehavior(supabase, carrier, lossType, state),
     detectViolations(supabase, claimId, state),
     detectContradictions(supabase, claimId),
+    getActiveLearnedRules(supabase, { carrier, state, trade, material, disputeType, limit: 10 }),
   ]);
 
   // Trade logic (synchronous — static data)
@@ -435,6 +439,7 @@ export async function getClaimsContextBundle(
     tradeLogic,
     violations,
     contradictions,
+    learnedRules,
     retrievalMeta: {
       usedSearch: !!authoritySupport,
       knowledgeCount: internalKnowledge.length,
@@ -500,6 +505,12 @@ ${bundle.declaredPosition}
   const authorityText = formatAuthorityKnowledge(bundle.authorityKnowledge);
   if (authorityText) {
     sections.push(authorityText);
+  }
+
+  // 3b. Learned rules (auto-discovered, additive — after authority, before lessons)
+  const learnedText = formatLearnedRulesForPrompt(bundle.learnedRules);
+  if (learnedText) {
+    sections.push(learnedText);
   }
 
   // 4. (Dismantler — injected externally by consumers, not here)
