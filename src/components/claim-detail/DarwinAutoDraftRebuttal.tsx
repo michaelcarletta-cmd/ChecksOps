@@ -8,13 +8,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { 
   Sparkles, Loader2, Copy, Download, FileText, 
-  Brain, Target, Shield, AlertTriangle, CheckCircle2
+  Brain, Target, Shield, AlertTriangle, CheckCircle2, RefreshCw
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useDeclaredPosition } from "@/hooks/useDeclaredPosition";
 import { PositionGateBanner } from "./PositionGateBanner";
 import { publishCarrierDismantler } from "@/lib/darwinDismantlerBus";
 import { DarwinRefinementChat } from "./DarwinRefinementChat";
+import { DarwinModeToggle } from "@/components/darwin/DarwinModeToggle";
+import type { DarwinMode } from "@/components/darwin/types";
 import { DarwinCitationWatchdog } from "./DarwinCitationWatchdog";
 import { getFunctionErrorDetails } from "@/lib/edgeFunctionError";
 
@@ -31,6 +33,8 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
   const [provisionalOverride, setProvisionalOverride] = useState(false);
   const [citationWatchdog, setCitationWatchdog] = useState<any>(null);
   const [jurisdiction, setJurisdiction] = useState<any>(null);
+  const [mode, setMode] = useState<DarwinMode>("rebuttal");
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const { position, isLocked, loading: positionLoading } = useDeclaredPosition(claimId);
 
   // Fetch all strategic intelligence data
@@ -222,11 +226,13 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
     setEditableRebuttal("");
     setCitationWatchdog(null);
     setJurisdiction(null);
+    setGenerationError(null);
     try {
       const { data, error } = await supabase.functions.invoke("darwin-ai-analysis", {
         body: {
           claimId,
           analysisType: "auto_draft_rebuttal",
+          mode,
           additionalContext: {
             strategicInsights,
             darwinAnalyses: darwinAnalyses?.map(a => ({
@@ -335,6 +341,7 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
       });
     } catch (error: any) {
       console.error("Error generating rebuttal:", error);
+      setGenerationError(error.message || "Failed to generate rebuttal");
       toast({
         title: "Generation failed",
         description: error.message || "Failed to generate rebuttal",
@@ -380,6 +387,7 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
           loading={positionLoading}
           onProceedProvisional={() => setProvisionalOverride(true)}
         />
+        <DarwinModeToggle value={mode} onChange={setMode} />
         {/* Data Sources Summary */}
         <div className="space-y-2">
           <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
@@ -481,6 +489,23 @@ export const DarwinAutoDraftRebuttal = ({ claimId, claim }: DarwinAutoDraftRebut
             </>
           )}
         </Button>
+
+        {/* Error with retry */}
+        {generationError && !isGenerating && !rebuttal && (
+          <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-destructive mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-destructive">Generation Failed</p>
+                <p className="text-xs text-muted-foreground mt-1">{generationError}</p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleGenerate} className="gap-1.5">
+              <RefreshCw className="h-3.5 w-3.5" />
+              Retry
+            </Button>
+          </div>
+        )}
 
         {rebuttal && (
           <div className="space-y-3 pt-4 border-t">
