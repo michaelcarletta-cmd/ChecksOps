@@ -17,6 +17,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { toast } from "sonner";
 import { subscribeCarrierDismantler } from "@/lib/darwinDismantlerBus";
 import { DarwinSMSActivityLog } from "@/components/inbox/DarwinSMSActivityLog";
+import { DismantlerOutput } from "./DismantlerOutput";
 import type { DismantlerResult, ClaimFactsPack, DecisionCard, MissingDocRequest } from "@/lib/darwinContracts";
 
 // Lazy load all Darwin components
@@ -786,240 +787,24 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
             {copilotView === 'conversation' ? (
               <DarwinCopilotPanel claimId={claimId} isExpanded={copilotExpanded} onToggleExpand={() => setCopilotExpanded(e => !e)} />
             ) : (
-            <>
-            <CardHeader className="py-3 border-b bg-gradient-to-r from-primary/5 to-transparent">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Shield className="h-4 w-4 text-primary" />
-                    Dismantler Output
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    Prefers fresh API output; falls back to latest saved result.
-                  </CardDescription>
+            <div className="flex-1 overflow-y-auto">
+              <CardHeader className="py-3 border-b bg-gradient-to-r from-primary/5 to-transparent">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-primary" />
+                  <CardTitle className="text-sm">Dismantler Output</CardTitle>
                 </div>
-                <div className="flex gap-1">
-                  <Button variant="outline" size="sm" className="h-7 px-2 text-xs gap-1" onClick={handleCopyFullDismantler} disabled={!dismantlerText}>
-                    <Clipboard className="h-3 w-3" />
-                    Copy
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-
-            <CardContent className="flex-1 p-3 overflow-y-auto space-y-3">
-              {(!dismantlerText || dismantlerText.trim().length === 0) ? (
-                <div className="text-xs text-muted-foreground">
-                  No dismantler output yet. Run any Darwin analysis and it will be generated automatically.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {liveCarrierDismantler?.claimFactsPack?.evidenceIndexSummary?.byFolderKey && Object.keys(liveCarrierDismantler.claimFactsPack.evidenceIndexSummary.byFolderKey).length > 0 && (
-                    <div className="text-[10px] text-muted-foreground flex flex-wrap gap-x-2 gap-y-0.5">
-                      <span className="font-medium">Evidence ledger:</span>
-                      {Object.entries(liveCarrierDismantler.claimFactsPack.evidenceIndexSummary.byFolderKey).map(([k, v]) => (
-                        <span key={k}>{k.replace(/_/g, " ")} {v}</span>
-                      ))}
-                      {(liveCarrierDismantler.claimFactsPack.evidenceIndexSummary.totalPagesKnownAcrossDocs ?? liveCarrierDismantler.claimFactsPack.evidenceIndexSummary.totalPagesKnown) != null && (
-                        <span>· {liveCarrierDismantler.claimFactsPack.evidenceIndexSummary.totalPagesKnownAcrossDocs ?? liveCarrierDismantler.claimFactsPack.evidenceIndexSummary.totalPagesKnown} pages</span>
-                      )}
-                    </div>
-                  )}
-                  {(parsedDismantler.estimatedConfidence < 0.5 || parsedDismantler.evidenceLines.length === 0) && (
-                    <Alert className="border-warning/50 bg-warning/10">
-                      <AlertCircle className="h-4 w-4 text-warning" />
-                      <AlertTitle>Needs more documentation to be fully defensible</AlertTitle>
-                      <AlertDescription className="text-xs mt-1 space-y-2">
-                        {parsedDismantler.estimatedConfidence < 0.5 && (
-                          <p className="text-muted-foreground">
-                            Low confidence: {parsedDismantler.missingDocRequests?.length
-                              ? parsedDismantler.missingDocRequests.slice(0, 3).map((r) => r.title).join("; ")
-                              : parsedDismantler.missingDocs.slice(0, 3).join("; ")}.
-                          </p>
-                        )}
-                        <div>
-                          Missing docs to strengthen defensibility:
-                          <ul className="list-disc ml-4 mt-1">
-                            {parsedDismantler.missingDocs.map((d) => (
-                              <li key={d}>{d}</li>
-                            ))}
-                          </ul>
-                        </div>
-                        <Button variant="outline" size="sm" className="h-7 px-2 text-xs gap-1" onClick={handleCopyRequestDocsTemplate}>
-                          <Send className="h-3 w-3" />
-                          Copy request docs template
-                        </Button>
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  {parsedDismantler.missingDocRequests && parsedDismantler.missingDocRequests.length > 0 && (
-                    <div className="space-y-1">
-                      <div className="text-xs font-semibold text-muted-foreground">Upload checklist</div>
-                      <ul className="space-y-0.5 text-[11px]">
-                        {(["high", "med", "low"] as const).map((priority) => {
-                          const items = parsedDismantler.missingDocRequests!.filter((r) => r.priority === priority);
-                          if (items.length === 0) return null;
-                          return (
-                            <li key={priority} className="text-muted-foreground">
-                              <span className="capitalize font-medium">{priority}:</span> {items.map((r) => r.title).join("; ")}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  )}
-
-                  {parsedDismantler.notesForUser.length > 0 && (
-                    <div className="space-y-1">
-                      <div className="text-xs font-semibold text-muted-foreground">Notes for you</div>
-                      <ul className="list-disc ml-4 text-xs text-muted-foreground space-y-0.5">
-                        {parsedDismantler.notesForUser.map((n, i) => (
-                          <li key={i}>{n}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Objections */}
-                  <div className="space-y-2">
-                    <div className="text-xs font-semibold text-muted-foreground">Objections</div>
-                    {parsedDismantler.isStructured && parsedDismantler.objections.length > 0 ? (
-                      <div className="space-y-2">
-                        {parsedDismantler.objections.map((obj, idx) => (
-                          <Card key={idx} className="border-border/50">
-                            <CardContent className="p-2 text-xs space-y-1.5">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                {obj.type && (
-                                  <span className="text-[10px] uppercase tracking-wide text-primary">{obj.type}</span>
-                                )}
-                                {"evidenceStrength" in obj && obj.evidenceStrength && (
-                                  <span className={cn(
-                                    "text-[10px] px-1 rounded",
-                                    obj.evidenceStrength === "strong" && "bg-green-500/20 text-green-700 dark:text-green-400",
-                                    obj.evidenceStrength === "ok" && "bg-muted text-muted-foreground",
-                                    obj.evidenceStrength === "weak" && "bg-amber-500/20 text-amber-700 dark:text-amber-400"
-                                  )}>
-                                    {obj.evidenceStrength}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="font-medium line-clamp-2">{obj.verbatim}</div>
-                              <div className="text-muted-foreground">{obj.whyItFails}</div>
-                              {obj.evidence.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-1">
-                                  {obj.evidence.map((e, i) => (
-                                    <span
-                                      key={i}
-                                      className="px-1.5 py-0.5 rounded bg-muted text-[10px]"
-                                      title={[e.quote || e.docName, e.evidenceMethod ? `Method: ${e.evidenceMethod}` : null, e.spanHint ? `Lines: ${e.spanHint.startLine ?? "?"}-${e.spanHint.endLine ?? "?"}` : null, e.evidenceMethod === "inference" && e.basis ? `Basis: ${e.basis}` : null].filter(Boolean).join(" · ")}
-                                    >
-                                      {e.docName}{e.quote ? `: "${e.quote.slice(0, 20)}…"` : ""}
-                                      {e.evidenceMethod && <span className="opacity-70"> ({e.evidenceMethod})</span>}
-                                      {e.evidenceMethod === "inference" && e.basis && <span className="block mt-0.5 text-[9px] opacity-80">— {e.basis.slice(0, 60)}{e.basis.length > 60 ? "…" : ""}</span>}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                              {obj.requestedResolution && (
-                                <div className="pt-1 border-t border-border/50 text-muted-foreground">
-                                  Request: {obj.requestedResolution}
-                                </div>
-                              )}
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
-                    ) : parsedDismantler.weaknesses.length > 0 ? (
-                      <div className="space-y-2">
-                        {parsedDismantler.weaknesses.map((w, idx) => (
-                          <Card key={idx} className="border-border/50">
-                            <CardContent className="p-2 text-xs">
-                              <div className="font-medium">Objection #{idx + 1}</div>
-                              <div className="text-muted-foreground mt-1">{w}</div>
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-xs text-muted-foreground">No objections parsed.</div>
-                    )}
-                  </div>
-
-                  {parsedDismantler.decisionCards?.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="text-xs font-semibold text-muted-foreground">Decision cards</div>
-                      <div className="space-y-2">
-                        {parsedDismantler.decisionCards.map((card, idx) => (
-                          <Card key={"key" in card && card.key ? card.key : idx} className="border-border/50">
-                            <CardContent className="p-2 text-xs space-y-1">
-                              <div className="font-medium">{card.decision}</div>
-                              {card.requiredFacts?.length > 0 && (
-                                <div>Facts: {card.requiredFacts.join("; ")}</div>
-                              )}
-                              {card.requiredDocs?.length > 0 && (
-                                <div>Docs: {card.requiredDocs.join("; ")}</div>
-                              )}
-                              <div className="pt-1 border-t border-border/50 grid grid-cols-2 gap-1 text-[10px]">
-                                <div><span className="text-muted-foreground">If true:</span> {card.ifTrue}</div>
-                                <div><span className="text-muted-foreground">If false:</span> {card.ifFalse}</div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Evidence chips */}
-                  <div className="space-y-2">
-                    <div className="text-xs font-semibold text-muted-foreground">Evidence</div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {parsedDismantler.evidenceLines.length > 0 ? (
-                        parsedDismantler.evidenceLines.map((e, idx) => (
-                          <span
-                            key={idx}
-                            className="px-2 py-1 rounded-full bg-muted text-muted-foreground text-[11px]"
-                            title={e}
-                          >
-                            {e}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-xs text-muted-foreground">No evidence references parsed.</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Requested Resolution */}
-                  <div className="pt-2 border-t space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs font-semibold text-muted-foreground">Requested Resolution</div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs gap-1"
-                        onClick={handleCopyRequestedResolution}
-                        disabled={parsedDismantler.resolution.length === 0}
-                      >
-                        <Clipboard className="h-3 w-3" />
-                        Copy
-                      </Button>
-                    </div>
-                    {parsedDismantler.resolution.length > 0 ? (
-                      <ol className="list-decimal ml-4 text-xs space-y-1">
-                        {parsedDismantler.resolution.map((r, idx) => (
-                          <li key={idx} className="text-muted-foreground">{r}</li>
-                        ))}
-                      </ol>
-                    ) : (
-                      <div className="text-xs text-muted-foreground">No requested resolution parsed.</div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-            </>
+                <CardDescription className="text-xs">
+                  Prefers fresh API output; falls back to latest saved result.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-3">
+                <DismantlerOutput
+                  parsed={parsedDismantler}
+                  dismantlerText={dismantlerText}
+                  claimFactsPack={liveCarrierDismantler?.claimFactsPack}
+                />
+              </CardContent>
+            </div>
             )}
             </Card>
           </div>
@@ -1061,12 +846,13 @@ export const DarwinTab = ({ claimId, claim, userRole, isStaffOrAdmin, onClaimUpd
           {copilotView === 'conversation' ? (
             <DarwinCopilotPanel claimId={claimId} isExpanded={false} />
           ) : (
-            <div className="flex-1 overflow-y-auto p-3 text-xs text-muted-foreground">
-              {dismantlerText ? (
-                <div className="whitespace-pre-wrap">{dismantlerText}</div>
-              ) : (
-                <p>No dismantler output yet. Run any Darwin analysis and it will be generated automatically.</p>
-              )}
+            <div className="flex-1 overflow-y-auto p-3">
+              <DismantlerOutput
+                parsed={parsedDismantler}
+                dismantlerText={dismantlerText}
+                claimFactsPack={liveCarrierDismantler?.claimFactsPack}
+                compact
+              />
             </div>
           )}
         </SheetContent>
