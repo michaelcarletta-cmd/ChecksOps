@@ -7,6 +7,7 @@
 
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.39.3";
 import { generate } from "./generate.ts";
+import { withClaimCache } from "./intelligenceCache.ts";
 
 export interface ContradictionDetection {
   contradictionType: string;
