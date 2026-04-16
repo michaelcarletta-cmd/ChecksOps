@@ -515,6 +515,26 @@ export async function analyzeDocument(opts: DismantlerOptions): Promise<Dismantl
 
   console.log(`[UniversalDismantler] Starting analysis for claim ${claimId}, file=${fileName || "inline"}, textLen=${documentText.length}`);
 
+  // ── Reuse stored dismantler if available for this file (cache-first) ──
+  // Re-run only if no stored result OR caller bypasses via opts.forceRefresh.
+  if (fileId && !(opts as any).forceRefresh) {
+    try {
+      const { data: existing } = await supabase
+        .from("claim_document_dismantlers")
+        .select(FULL_DISMANTLER_SELECT)
+        .eq("claim_id", claimId)
+        .eq("source_file_id", fileId)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (existing && existing.length > 0) {
+        console.log(`[UniversalDismantler] REUSING stored dismantler for file ${fileId} (no AI)`);
+        return reconstructDismantlerFromRow(existing[0]);
+      }
+    } catch (e) {
+      console.warn("[UniversalDismantler] stored-result lookup failed (non-fatal):", (e as Error).message);
+    }
+  }
+
   // ── Pre-AI rules pass (cheap, deterministic) ──────────────────────
   const baseRuleResult = analyzeDocumentWithRules(documentText);
 
