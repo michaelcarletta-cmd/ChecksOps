@@ -23,6 +23,33 @@ export type RuleFlag =
   | "causationWithoutSupport"
   | "scopeMinimization";
 
+// Peril / loss-type taxonomy (rules-first, no AI).
+// Order matters for tie-breaks: more specific perils win over generic ones.
+export type LossType =
+  | "pipe_leak"
+  | "water_damage"
+  | "sewer_backup"
+  | "appliance_leak"
+  | "fire"
+  | "smoke"
+  | "wind"
+  | "hail"
+  | "tree_impact"
+  | "lightning"
+  | "freeze"
+  | "mold"
+  | "theft_vandalism"
+  | "vehicle_impact"
+  | "unknown";
+
+export interface LossTypeDetection {
+  primary: LossType;
+  secondary: LossType[];
+  scores: Partial<Record<LossType, number>>;
+  evidence: Partial<Record<LossType, string[]>>; // verbatim phrases that triggered each peril
+  confidence: "high" | "medium" | "low";
+}
+
 export interface RuleIssue {
   flag: RuleFlag;
   label: string;
@@ -36,6 +63,7 @@ export interface PreDismantlerRuleResult {
   flags: Record<RuleFlag, boolean>;
   shouldEscalateToAI: boolean;
   escalationReason: string | null;
+  lossType: LossTypeDetection;
   meta: {
     textLength: number;
     matchCount: number;
@@ -153,6 +181,242 @@ function hasAny(text: string, patterns: RegExp[]): boolean {
   return patterns.some((p) => p.test(text));
 }
 
+// ── Loss-type / peril detection (rules-first) ───────────────────────
+//
+// Each peril has positive evidence patterns and (where useful) anti-patterns
+// that subtract score. We score every peril, then choose the dominant one.
+// Confidence is "high" when the leader beats the runner-up by a clear margin
+// AND has at least 3 distinct evidence hits; otherwise "medium" or "low".
+
+interface PerilDef {
+  type: LossType;
+  patterns: RegExp[];
+  // Penalty patterns: phrases like "no wind damage observed" subtract score.
+  antiPatterns?: RegExp[];
+  weight: number;
+}
+
+const LOSS_TYPE_DEFS: PerilDef[] = [
+  {
+    type: "pipe_leak",
+    weight: 3,
+    patterns: [
+      /\bpipe\s+leak\b/gi,
+      /\bpipe\s+burst\b/gi,
+      /\bburst\s+pipe\b/gi,
+      /\bplumbing\s+leak\b/gi,
+      /\bsupply\s+line\s+(failure|leak|rupture)\b/gi,
+      /\bfailed\s+(pex|copper|cpvc|polybutylene)\b/gi,
+      /\bcrawlspace\s+(pipe|leak|plumbing)\b/gi,
+      /\bremoved\s+and\s+replaced\s+pipe\b/gi,
+      /\b(toilet|sink|tub|shower)\s+(leak|overflow|supply)\b/gi,
+      /\bplumber\b/gi,
+    ],
+    antiPatterns: [/\bno\s+plumbing\s+(leak|failure)\b/gi, /\bno\s+evidence\s+of\s+a?\s*pipe\s+leak\b/gi],
+  },
+  {
+    type: "appliance_leak",
+    weight: 3,
+    patterns: [
+      /\b(washer|washing\s+machine|dishwasher|refrigerator|ice\s+maker|water\s+heater)\s+(leak|failure|hose|line)\b/gi,
+      /\bappliance\s+(leak|failure|supply)\b/gi,
+    ],
+  },
+  {
+    type: "sewer_backup",
+    weight: 3,
+    patterns: [
+      /\bsewer\s+backup\b/gi,
+      /\bsewage\s+(backup|intrusion)\b/gi,
+      /\bdrain\s+backup\b/gi,
+      /\bback\s+up\s+through\s+(drain|toilet)\b/gi,
+    ],
+  },
+  {
+    type: "water_damage",
+    weight: 2,
+    patterns: [
+      /\bwater\s+damage\b/gi,
+      /\bwater\s+intrusion\b/gi,
+      /\bwater\s+infiltration\b/gi,
+      /\bsaturated\s+(drywall|insulation|sheathing|carpet|flooring)\b/gi,
+      /\bstained\s+(drywall|ceiling|sheathing)\b/gi,
+      /\bmoisture\s+content\b/gi,
+      /\bdrying\s+(equipment|fans|process)\b/gi,
+      /\bfans\s+(installed|removed)\b/gi,
+    ],
+  },
+  {
+    type: "freeze",
+    weight: 3,
+    patterns: [
+      /\bfrozen\s+pipe(s)?\b/gi,
+      /\bfreeze\s+(loss|damage|event)\b/gi,
+      /\bsub-?freezing\s+temperatures?\b/gi,
+      /\bpipe\s+froze\b/gi,
+    ],
+  },
+  {
+    type: "wind",
+    weight: 3,
+    patterns: [
+      /\bwind\s+damage\b/gi,
+      /\bwind\s+event\b/gi,
+      /\bwind\s+uplift\b/gi,
+      /\bhigh\s+winds?\b/gi,
+      /\bwind\s+speeds?\b/gi,
+      /\bwind-?driven\b/gi,
+      /\bblown\s+off\b/gi,
+      /\bcreased\s+shingles?\b/gi,
+      /\btab\s+(lift|seal\s+failure)\b/gi,
+    ],
+    antiPatterns: [
+      /\bno\s+wind\s+damage\b/gi,
+      /\bno\s+evidence\s+of\s+wind\b/gi,
+      /\bwind\s+is\s+not\s+the\s+cause\b/gi,
+    ],
+  },
+  {
+    type: "hail",
+    weight: 3,
+    patterns: [
+      /\bhail\s+damage\b/gi,
+      /\bhail\s+impact(s)?\b/gi,
+      /\bhail\s+strike(s)?\b/gi,
+      /\bhail\s+stones?\b/gi,
+      /\bspatter\s+marks?\b/gi,
+      /\bbruising\b/gi,
+    ],
+    antiPatterns: [/\bno\s+hail\s+damage\b/gi, /\bno\s+evidence\s+of\s+hail\b/gi],
+  },
+  {
+    type: "fire",
+    weight: 3,
+    patterns: [
+      /\bfire\s+(damage|loss|origin)\b/gi,
+      /\bcombustion\b/gi,
+      /\bcharring\b/gi,
+      /\bsoot\s+(deposit|residue)\b/gi,
+      /\bburn\s+pattern\b/gi,
+    ],
+  },
+  {
+    type: "smoke",
+    weight: 2,
+    patterns: [/\bsmoke\s+(damage|residue|odor|deposit)\b/gi, /\bsoot\s+(damage|cleaning)\b/gi],
+  },
+  {
+    type: "lightning",
+    weight: 3,
+    patterns: [/\blightning\s+(strike|damage|event)\b/gi, /\bsurge\s+from\s+lightning\b/gi],
+  },
+  {
+    type: "tree_impact",
+    weight: 3,
+    patterns: [/\btree\s+(fell|fall|impact|strike)\b/gi, /\bfallen\s+tree\b/gi, /\blimb\s+(fell|impact|strike)\b/gi],
+  },
+  {
+    type: "vehicle_impact",
+    weight: 3,
+    patterns: [/\bvehicle\s+(impact|struck|collision)\b/gi, /\bcar\s+(struck|hit)\s+(the\s+)?(house|garage|wall)\b/gi],
+  },
+  {
+    type: "theft_vandalism",
+    weight: 3,
+    patterns: [/\btheft\b/gi, /\bvandalism\b/gi, /\bforced\s+entry\b/gi, /\bbroken\s+window\b/gi],
+  },
+  {
+    type: "mold",
+    weight: 2,
+    patterns: [/\bmold\s+(growth|damage|remediation)\b/gi, /\bmould\b/gi, /\bbiological\s+growth\b/gi],
+  },
+];
+
+function countMatches(text: string, patterns: RegExp[]): number {
+  let total = 0;
+  for (const p of patterns) {
+    const m = text.match(p);
+    if (m) total += m.length;
+  }
+  return total;
+}
+
+export function detectLossType(text: string): LossTypeDetection {
+  const safe = (text || "").toString();
+  const scores: Partial<Record<LossType, number>> = {};
+  const evidence: Partial<Record<LossType, string[]>> = {};
+
+  for (const def of LOSS_TYPE_DEFS) {
+    const positive = countMatches(safe, def.patterns);
+    if (positive === 0) continue;
+
+    const phrases = collectMatches(safe, def.patterns);
+    const antiPhrases = def.antiPatterns ? collectMatches(safe, def.antiPatterns) : [];
+    const antiCount = def.antiPatterns ? countMatches(safe, def.antiPatterns) : 0;
+
+    // Anti-patterns can fully neutralize OR penalize.
+    // Heavy penalty: each anti-hit subtracts ~2x the per-hit weight, capped at +0.
+    let raw = positive * def.weight - antiCount * def.weight * 2;
+    if (raw < 0) raw = 0;
+
+    if (raw > 0) {
+      scores[def.type] = raw;
+      // Evidence excludes anti-phrases so the user sees the supporting language only
+      evidence[def.type] = phrases.filter((p) => !antiPhrases.includes(p)).slice(0, 6);
+    }
+  }
+
+  const ranked = Object.entries(scores)
+    .map(([type, score]) => ({ type: type as LossType, score: score as number }))
+    .sort((a, b) => b.score - a.score);
+
+  if (ranked.length === 0) {
+    return { primary: "unknown", secondary: [], scores, evidence, confidence: "low" };
+  }
+
+  const leader = ranked[0];
+  const runnerUp = ranked[1];
+  const margin = runnerUp ? leader.score - runnerUp.score : leader.score;
+  const evidenceCount = (evidence[leader.type] || []).length;
+
+  let confidence: "high" | "medium" | "low";
+  if (leader.score >= 6 && evidenceCount >= 3 && margin >= 3) confidence = "high";
+  else if (leader.score >= 3 && evidenceCount >= 2) confidence = "medium";
+  else confidence = "low";
+
+  // Secondary perils only if they are at least 50% of the leader (multi-peril claims)
+  const secondary = ranked
+    .slice(1)
+    .filter((r) => r.score >= leader.score * 0.5)
+    .map((r) => r.type);
+
+  return { primary: leader.type, secondary, scores, evidence, confidence };
+}
+
+const LOSS_TYPE_LABELS: Record<LossType, string> = {
+  pipe_leak: "pipe leak / plumbing failure",
+  water_damage: "water damage",
+  sewer_backup: "sewer / drain backup",
+  appliance_leak: "appliance-supply leak",
+  fire: "fire",
+  smoke: "smoke",
+  wind: "wind",
+  hail: "hail",
+  tree_impact: "tree / limb impact",
+  lightning: "lightning",
+  freeze: "freeze / frozen pipe",
+  mold: "mold / biological growth",
+  theft_vandalism: "theft / vandalism",
+  vehicle_impact: "vehicle impact",
+  unknown: "unspecified",
+};
+
+export function describeLossType(d: LossTypeDetection): string {
+  if (d.primary === "unknown") return "unspecified loss type";
+  const sec = d.secondary.length > 0 ? ` (with secondary: ${d.secondary.map((s) => LOSS_TYPE_LABELS[s]).join(", ")})` : "";
+  return `${LOSS_TYPE_LABELS[d.primary]}${sec} [confidence: ${d.confidence}]`;
+}
+
 // ── Main entry point ────────────────────────────────────────────────
 
 export function analyzeDocumentWithRules(text: string): PreDismantlerRuleResult {
@@ -242,6 +506,9 @@ export function analyzeDocumentWithRules(text: string): PreDismantlerRuleResult 
   const matchCount = issues.reduce((sum, i) => sum + i.matches.length, 0);
   const contradictionsSuspected = hasAny(safe, CONTRADICTION_PATTERNS);
 
+  // Loss-type detection (rules-first, no AI).
+  const lossType = detectLossType(safe);
+
   // Escalation logic
   let escalationReason: string | null = null;
   if (weaknessScore >= ESCALATE_SCORE_THRESHOLD) {
@@ -250,6 +517,9 @@ export function analyzeDocumentWithRules(text: string): PreDismantlerRuleResult 
     escalationReason = "contradictions suspected";
   } else if (length > ESCALATE_LENGTH_THRESHOLD) {
     escalationReason = `documentLength=${length} > ${ESCALATE_LENGTH_THRESHOLD}`;
+  } else if (length > 1500 && lossType.primary === "unknown") {
+    // Substantial document we couldn't classify — let AI decide rather than mislabel.
+    escalationReason = "loss type unknown on substantial document";
   }
 
   return {
@@ -258,6 +528,7 @@ export function analyzeDocumentWithRules(text: string): PreDismantlerRuleResult 
     flags,
     shouldEscalateToAI: escalationReason !== null,
     escalationReason,
+    lossType,
     meta: {
       textLength: length,
       matchCount,
@@ -435,18 +706,23 @@ export function buildLightweightDismantler(
   }
 
   const totalIssues = ruleResult.issues.length + learnedHits.length;
+  const perilLabel = LOSS_TYPE_LABELS[ruleResult.lossType.primary];
+  const perilPrefix = ruleResult.lossType.primary !== "unknown"
+    ? `Loss type detected: ${perilLabel} (${ruleResult.lossType.confidence} confidence). `
+    : "";
   const summary = totalIssues === 0
-    ? "Rule-based scan found no significant weaknesses; document appears procedurally compliant on its face."
-    : `Rule-based scan flagged ${ruleResult.issues.length} handcrafted weakness${ruleResult.issues.length === 1 ? "" : "es"}${learnedHits.length ? ` plus ${learnedHits.length} learned-rule hit${learnedHits.length === 1 ? "" : "s"}` : ""} (score ${ruleResult.weaknessScore}): ${[...ruleResult.issues.map((i) => i.flag), ...learnedHits.map((h) => h.rule_type)].join(", ")}.`;
+    ? `${perilPrefix}Rule-based scan found no significant weaknesses; document appears procedurally compliant on its face.`
+    : `${perilPrefix}Rule-based scan flagged ${ruleResult.issues.length} handcrafted weakness${ruleResult.issues.length === 1 ? "" : "es"}${learnedHits.length ? ` plus ${learnedHits.length} learned-rule hit${learnedHits.length === 1 ? "" : "s"}` : ""} (score ${ruleResult.weaknessScore}): ${[...ruleResult.issues.map((i) => i.flag), ...learnedHits.map((h) => h.rule_type)].join(", ")}.`;
 
+  const positionPeril = ruleResult.lossType.primary !== "unknown" ? ` regarding the ${perilLabel} loss` : "";
   const mainPosition = ruleResult.flags.denialLanguage
-    ? "Document advances a denial / exclusion position."
+    ? `Document advances a denial / exclusion position${positionPeril}.`
     : ruleResult.flags.scopeMinimization
-    ? "Document advances a reduced-scope position."
-    : "Document advances a coverage / scope position requiring closer review.";
+    ? `Document advances a reduced-scope position${positionPeril}.`
+    : `Document advances a coverage / scope position${positionPeril} requiring closer review.`;
 
   const draft = rebuttalPoints.length > 0
-    ? `We respectfully challenge the conclusions of this report on the following grounds:\n\n${rebuttalPoints.map((r, i) => `${i + 1}. ${r}`).join("\n\n")}\n\nWe request a corrected position supported by the evidence outlined above.`
+    ? `We respectfully challenge the conclusions of this ${perilLabel !== "unspecified" ? perilLabel + " " : ""}report on the following grounds:\n\n${rebuttalPoints.map((r, i) => `${i + 1}. ${r}`).join("\n\n")}\n\nWe request a corrected position supported by the evidence outlined above.`
     : "No automated rebuttal generated — document did not trigger rule-based weaknesses.";
 
   return {
