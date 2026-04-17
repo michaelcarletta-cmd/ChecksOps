@@ -560,6 +560,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                   />
                 </TableHead>
                 <TableHead className="whitespace-nowrap">Claim #</TableHead>
+                <TableHead className="whitespace-nowrap w-[110px]">Nudges</TableHead>
                 <TableHead className="whitespace-nowrap">Client Name</TableHead>
                 <TableHead className="whitespace-nowrap">Property Address</TableHead>
                 <TableHead className="whitespace-nowrap">Loss Type</TableHead>
