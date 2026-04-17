@@ -552,9 +552,13 @@ Return ONLY a valid JSON array. No markdown fences, no commentary.`;
     } catch (parseErr) {
       console.error("Failed to parse AI response:", aiResponse.slice(0, 1000));
       return new Response(
-        JSON.stringify({ ok: false, error: "AI returned unparseable response. Please retry." }),
+        JSON.stringify({ ok: false, error: "AI returned unparseable response. The model likely truncated output — try fewer line items at once, or retry." }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    if (justifications.length < lineItems.length) {
+      console.warn(`[justify] AI returned ${justifications.length} items but ${lineItems.length} were requested. Output may have been truncated.`);
     }
 
     // Post-process: ensure fallback fields are never empty
