@@ -22,16 +22,16 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ status: "error", message: "Method not allowed" }, 405);
 
   try {
+    // Optional secret check — only enforced if both a configured secret exists
+    // AND the caller actually provided one. This lets 1ESX call the plain URL
+    // without a secret while still allowing secret-based auth if you add it later.
     const expectedSecret = Deno.env.get("ONESX_WEBHOOK_SECRET");
-    if (!expectedSecret) return json({ status: "error", message: "Webhook not configured" }, 500);
-
-    // Accept secret either via query param or X-Webhook-Secret header
     const url = new URL(req.url);
     const querySecret = url.searchParams.get("secret");
     const headerSecret = req.headers.get("x-webhook-secret");
     const provided = querySecret ?? headerSecret;
-    if (provided !== expectedSecret) {
-      console.warn("[onesx-webhook] secret mismatch");
+    if (expectedSecret && provided && provided !== expectedSecret) {
+      console.warn("[onesx-webhook] secret mismatch (provided but wrong)");
       return json({ status: "error", message: "Forbidden" }, 403);
     }
 
