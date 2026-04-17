@@ -128,6 +128,17 @@ async function updateClaimMasterStateDocIntelSummary(
   }
 }
 
+function isTemporaryIntelligenceError(message: string | null | undefined): boolean {
+  const normalized = (message || '').toLowerCase();
+  return (
+    normalized === 'rate_limit' ||
+    normalized.includes('rate limit') ||
+    normalized.includes('too many requests') ||
+    normalized.includes('http 429') ||
+    normalized.includes('429')
+  );
+}
+
 function mapDocumentType(classification: string, documentSubtype?: string | null): string {
   // If we have a specific subtype for estimates, use it instead of defaulting to carrier_estimate
   if (classification === 'estimate' && documentSubtype) {
@@ -1376,6 +1387,10 @@ async function extractStructuredIntelligence(
 
   } catch (err: any) {
     const errMsg = err?.message || String(err);
+    if (isTemporaryIntelligenceError(errMsg)) {
+      console.warn('[DocIntel] Temporary AI limit hit, deferring to queue:', errMsg);
+      return { success: true, written: false, skippedReason: 'rate_limit_deferred' };
+    }
     console.error('[DocIntel] Extraction failed:', errMsg);
     return { success: false, written: false, error: errMsg };
   }
