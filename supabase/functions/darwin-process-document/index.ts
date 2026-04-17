@@ -727,6 +727,14 @@ Deno.serve(async (req) => {
             processing_error: null,
             needs_reprocessing: false,
           }).eq('id', fileId);
+        } else if ((intelResult as any).skippedReason === 'rate_limit_deferred') {
+          intelligenceSkippedReason = 'rate_limit_deferred';
+          intelligenceError = null;
+          console.warn(`[DocIntel] deferred file_id=${fileId} reason=rate_limit_deferred`);
+          await supabase.from('claim_files').update({
+            processing_error: null,
+            needs_reprocessing: false,
+          }).eq('id', fileId);
         } else if (!intelResult.success) {
           intelligenceError = (intelResult as any).error || 'unknown_error';
           console.error(`[DocIntel] failed file_id=${fileId} error=${intelligenceError}`);
@@ -743,10 +751,19 @@ Deno.serve(async (req) => {
       } catch (intelErr: any) {
         intelligenceError = intelErr?.message || String(intelErr);
         console.error('[DocIntel] Inline extraction failed:', intelligenceError);
-        await supabase.from('claim_files').update({
-          processing_error: `intelligence_extraction_exception: ${intelligenceError}`,
-          needs_reprocessing: true,
-        }).eq('id', fileId);
+        if (isTemporaryIntelligenceError(intelligenceError)) {
+          intelligenceSkippedReason = 'rate_limit_deferred';
+          intelligenceError = null;
+          await supabase.from('claim_files').update({
+            processing_error: null,
+            needs_reprocessing: false,
+          }).eq('id', fileId);
+        } else {
+          await supabase.from('claim_files').update({
+            processing_error: `intelligence_extraction_exception: ${intelligenceError}`,
+            needs_reprocessing: true,
+          }).eq('id', fileId);
+        }
       }
     } else {
       intelligenceSkippedReason = 'missing_claim_or_file_or_text';
