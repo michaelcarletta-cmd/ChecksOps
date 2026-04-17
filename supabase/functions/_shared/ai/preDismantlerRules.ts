@@ -506,6 +506,9 @@ export function analyzeDocumentWithRules(text: string): PreDismantlerRuleResult 
   const matchCount = issues.reduce((sum, i) => sum + i.matches.length, 0);
   const contradictionsSuspected = hasAny(safe, CONTRADICTION_PATTERNS);
 
+  // Loss-type detection (rules-first, no AI).
+  const lossType = detectLossType(safe);
+
   // Escalation logic
   let escalationReason: string | null = null;
   if (weaknessScore >= ESCALATE_SCORE_THRESHOLD) {
@@ -514,6 +517,9 @@ export function analyzeDocumentWithRules(text: string): PreDismantlerRuleResult 
     escalationReason = "contradictions suspected";
   } else if (length > ESCALATE_LENGTH_THRESHOLD) {
     escalationReason = `documentLength=${length} > ${ESCALATE_LENGTH_THRESHOLD}`;
+  } else if (length > 1500 && lossType.primary === "unknown") {
+    // Substantial document we couldn't classify — let AI decide rather than mislabel.
+    escalationReason = "loss type unknown on substantial document";
   }
 
   return {
@@ -522,6 +528,7 @@ export function analyzeDocumentWithRules(text: string): PreDismantlerRuleResult 
     flags,
     shouldEscalateToAI: escalationReason !== null,
     escalationReason,
+    lossType,
     meta: {
       textLength: length,
       matchCount,
