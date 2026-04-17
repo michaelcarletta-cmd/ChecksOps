@@ -75,3 +75,6 @@ verify_jwt = false
 
 [functions.inbound-email]
 verify_jwt = false
+
+[functions.onesx-webhook]
+verify_jwt = false
