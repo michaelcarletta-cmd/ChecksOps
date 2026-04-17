@@ -10,8 +10,9 @@ const DarwinSupplementGenerator = lazy(() => import("@/components/claim-detail/D
 const DarwinEstimateBuilder = lazy(() => import("@/components/claim-detail/DarwinEstimateBuilder").then(m => ({ default: m.DarwinEstimateBuilder })));
 const DarwinScopeEngine = lazy(() => import("@/components/claim-detail/DarwinScopeEngine").then(m => ({ default: m.DarwinScopeEngine })));
 const LineItemJustificationPanel = lazy(() => import("@/components/claim-detail/LineItemJustificationPanel").then(m => ({ default: m.LineItemJustificationPanel })));
+const OneEsxOrdersPanel = lazy(() => import("@/components/claim-detail/OneEsxOrdersPanel").then(m => ({ default: m.OneEsxOrdersPanel })));
 
-type SectionKey = "estimate_comparison" | "gap_analysis" | "supplement" | "estimate_builder" | "scope_engine" | "justification";
+type SectionKey = "estimate_comparison" | "gap_analysis" | "supplement" | "estimate_builder" | "scope_engine" | "justification" | "onesx_reports";
 
 const STORAGE_KEY = "estimate-workspace-selected-section";
 
@@ -22,6 +23,7 @@ const sectionOptions: { value: SectionKey; label: string }[] = [
   { value: "estimate_builder", label: "Estimate Builder" },
   { value: "scope_engine", label: "Scope Engine" },
   { value: "justification", label: "Line Item Justification" },
+  { value: "onesx_reports", label: "1ESX Roof Reports" },
 ];
 
 interface EstimateWorkspacePanelProps {
@@ -91,6 +93,7 @@ export const EstimateWorkspacePanel = ({ claimId, claim }: EstimateWorkspacePane
         {selectedSection === "estimate_builder" && <DarwinEstimateBuilder claimId={claimId} claim={claim} />}
         {selectedSection === "scope_engine" && <DarwinScopeEngine claimId={claimId} claim={claim} />}
         {selectedSection === "justification" && <LineItemJustificationPanel claimId={claimId} claim={claim} lineItems={lineItems} />}
+        {selectedSection === "onesx_reports" && <OneEsxOrdersPanel claimId={claimId} claim={claim} />}
       </Suspense>
     </div>
   );

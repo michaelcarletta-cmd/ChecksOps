@@ -11803,6 +11803,111 @@ export type Database = {
           },
         ]
       }
+      onesx_orders: {
+        Row: {
+          address: string | null
+          callback_payload: Json | null
+          claim_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          expedited_delivery: boolean
+          id: string
+          last_error: string | null
+          last_status_at: string | null
+          latitude: number | null
+          longitude: number | null
+          meta_data: Json
+          notes: string | null
+          number_of_facets: number | null
+          onesx_order_id: string | null
+          payment_message: string | null
+          payment_status: string | null
+          primary_pitch: string | null
+          report_files: Json
+          report_types: string[]
+          request_payload: Json | null
+          response_payload: Json | null
+          secondary_pitch: string | null
+          status: string
+          total: number | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          callback_payload?: Json | null
+          claim_id: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          expedited_delivery?: boolean
+          id?: string
+          last_error?: string | null
+          last_status_at?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          meta_data?: Json
+          notes?: string | null
+          number_of_facets?: number | null
+          onesx_order_id?: string | null
+          payment_message?: string | null
+          payment_status?: string | null
+          primary_pitch?: string | null
+          report_files?: Json
+          report_types?: string[]
+          request_payload?: Json | null
+          response_payload?: Json | null
+          secondary_pitch?: string | null
+          status?: string
+          total?: number | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          callback_payload?: Json | null
+          claim_id?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          expedited_delivery?: boolean
+          id?: string
+          last_error?: string | null
+          last_status_at?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          meta_data?: Json
+          notes?: string | null
+          number_of_facets?: number | null
+          onesx_order_id?: string | null
+          payment_message?: string | null
+          payment_status?: string | null
+          primary_pitch?: string | null
+          report_files?: Json
+          report_types?: string[]
+          request_payload?: Json | null
+          response_payload?: Json | null
+          secondary_pitch?: string | null
+          status?: string
+          total?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "onesx_orders_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "onesx_orders_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_members: {
         Row: {
           created_at: string
