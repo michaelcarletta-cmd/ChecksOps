@@ -1004,27 +1004,85 @@ function CheckDetailPanel({
   };
 
   // Branch deposit → Deposited transition
+  // Routes through the deposit pipeline so the check appears in Deposit Operations
+  // and reconciliation reports (creates a deposit_items row).
   const handleMoveToDeposited = async (force = false) => {
     if (!user?.id || !check) return;
     setMovingToDeposited(true);
     try {
-      const { error } = await supabase
-        .from("check_intake_items")
-        .update({ status: "deposited", updated_at: new Date().toISOString() })
-        .eq("id", checkId);
-      if (error) throw error;
+      // 1. Check if a deposit_items row already exists for this check
+      const { data: existingItem } = await supabase
+        .from("deposit_items")
+        .select("id, status")
+        .eq("check_id", checkId)
+        .maybeSingle();
+
+      let depositItemId = existingItem?.id ?? null;
+
+      // 2. If not, we need check.status = 'approved_for_deposit' to call prepare_deposit.
+      //    If we're force-moving from branch_deposit_required (or some other state),
+      //    flip it to approved_for_deposit first so the RPC accepts it.
+      if (!depositItemId) {
+        if (check.status !== "approved_for_deposit") {
+          const { error: flipErr } = await supabase
+            .from("check_intake_items")
+            .update({ status: "approved_for_deposit", updated_at: new Date().toISOString() })
+            .eq("id", checkId);
+          if (flipErr) throw flipErr;
+        }
+
+        const { data: prepData, error: prepErr } = await supabase.rpc("deposit_action", {
+          p_action: "prepare_deposit",
+          p_actor_id: user.id,
+          p_check_id: checkId,
+          p_notes: force ? "Force-moved from Check Command Center" : "Moved to deposit pipeline from Check Command Center",
+        });
+        if (prepErr) throw prepErr;
+        depositItemId = (prepData as any)?.deposit_item_id ?? null;
+        if (!depositItemId) throw new Error("prepare_deposit did not return a deposit_item_id");
+      }
+
+      // 3. Assign manual_branch provider if still pending
+      const { data: itemAfterPrep } = await supabase
+        .from("deposit_items")
+        .select("status, provider")
+        .eq("id", depositItemId)
+        .single();
+
+      if (itemAfterPrep?.status === "pending_assignment") {
+        const { error: assignErr } = await supabase.rpc("deposit_action", {
+          p_action: "assign_provider",
+          p_actor_id: user.id,
+          p_deposit_item_id: depositItemId,
+          p_provider: "manual_branch",
+          p_notes: "Auto-assigned manual_branch from Check Command Center",
+        });
+        if (assignErr) throw assignErr;
+      }
+
+      // 4. Mark as manually deposited (sets check_intake_items.status = 'deposited' too)
+      if (itemAfterPrep?.status !== "succeeded" && itemAfterPrep?.status !== "reconciled") {
+        const { error: markErr } = await supabase.rpc("deposit_action", {
+          p_action: "mark_manual_deposit",
+          p_actor_id: user.id,
+          p_deposit_item_id: depositItemId,
+          p_notes: force ? "Force-marked deposited from Check Command Center" : "Marked deposited from Check Command Center",
+        });
+        if (markErr) throw markErr;
+      }
 
       await supabase.from("check_audit_log").insert({
         check_id: checkId,
         event_type: force ? "force_moved_to_deposited" : "moved_to_deposited",
         actor_id: user.id,
         event_description: force
-          ? "Check force-moved to deposited (bypassed pipeline validation)"
-          : "Check moved from branch to deposited",
+          ? "Check force-moved to deposited via deposit pipeline"
+          : "Check moved to deposited via deposit pipeline",
+        event_data: { deposit_item_id: depositItemId },
       });
 
       sonnerToast.success("Check moved to Deposited", {
-        description: `Check #${check.check_number ?? checkId.slice(0, 8)} at ${new Date().toLocaleTimeString()}`,
+        description: `Check #${check.check_number ?? checkId.slice(0, 8)} now visible in Deposit Operations.`,
       });
       setBranchApprovedAt(null);
       setShowForceMove(false);
@@ -1032,6 +1090,8 @@ function CheckDetailPanel({
       qc.invalidateQueries({ queryKey: ["check-intake-items"] });
       qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
       qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
+      qc.invalidateQueries({ queryKey: ["deposit-items"] });
+      qc.invalidateQueries({ queryKey: ["deposit-recon-summary"] });
       onRefresh();
     } catch (e: any) {
       toast({ title: "Failed to move check", description: e.message, variant: "destructive" });
