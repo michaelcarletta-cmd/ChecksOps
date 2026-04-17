@@ -1,5 +1,6 @@
-import { callVision } from "../_shared/ai/generate.ts";
+import { callVision, generate } from "../_shared/ai/generate.ts";
 import { MODEL_VISION } from "../_shared/ai/modelRouter.ts";
+import { extractPdfNative, isNativeExtractionUsable, base64ToBytes } from "../_shared/pdfNativeExtract.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -116,6 +117,39 @@ Deno.serve(async (req) => {
 
     // Build content parts
     const effectiveMime = mimeType || 'application/pdf';
+
+    // ── NATIVE-FIRST EXTRACTION (pdf.js) ─────────────────────────────────────
+    // Inventory PDFs from carriers/contractors are typically text-based tables.
+    // Try pdf.js first ($0). Vision only kicks in when the PDF is scanned.
+    if (effectiveMime === 'application/pdf') {
+      try {
+        const bytes = base64ToBytes(fileBase64);
+        const native = await extractPdfNative(bytes, { fileName: fileName || 'inventory.pdf' });
+        if (isNativeExtractionUsable(native)) {
+          console.log(`[extract-inventory-pdf] Using native pdf.js (${native.charCount} chars, ${native.pageCount} pages) — skipping AI vision`);
+          const textResult = await generate({
+            task: "extraction",
+            system: BASE_PROMPT,
+            user: `Extract every inventory line item from the following text. Preserve item numbers and room headers.\n\nFILENAME: ${fileName || 'inventory.pdf'}\n\n=== INVENTORY TEXT ===\n${native.text.slice(0, 180000)}`,
+            searchMode: "off",
+          });
+          const items = parseItemsFromContent(textResult.text);
+          if (items.length > 0) {
+            items.sort((a: any, b: any) => (Number(a.item_number) || 999) - (Number(b.item_number) || 999));
+            console.log(`[extract-inventory-pdf] Native+text extraction: ${items.length} items, model=${textResult.model}`);
+            return new Response(JSON.stringify({ success: true, items, extraction_mode: 'native_pdfjs' }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          console.log('[extract-inventory-pdf] Native text yielded zero items — falling back to vision pipeline');
+        } else {
+          console.log(`[extract-inventory-pdf] Native extraction insufficient (status=${native.status}, chars=${native.charCount}) — using vision`);
+        }
+      } catch (nativeErr) {
+        console.warn('[extract-inventory-pdf] Native extraction failed, falling back to vision:', nativeErr);
+      }
+    }
+
     const imageUrl = `data:${effectiveMime.startsWith('image/') ? effectiveMime : 'application/pdf'};base64,${fileBase64}`;
     const contentParts: any[] = [
       { type: 'text', text: BASE_PROMPT },
