@@ -2056,6 +2056,133 @@ function EditableAmount({ checkId, currentAmount, onSave }: { checkId: string; c
 }
 
 /* ------------------------------------------------------------------ */
+/*  Editable Field — generic inline editor for any check_intake_items column */
+/* ------------------------------------------------------------------ */
+
+function EditableField({
+  label,
+  checkId,
+  field,
+  value,
+  inputType = "text",
+  multiline = false,
+  displayFormatter,
+  onSave,
+}: {
+  label: string;
+  checkId: string;
+  field: string;
+  value: string | null;
+  inputType?: "text" | "date" | "boolean";
+  multiline?: boolean;
+  displayFormatter?: (v: string | null) => string | null;
+  onSave: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<string>(value ?? "");
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (!editing) setDraft(value ?? "");
+  }, [value, editing]);
+
+  const persist = async () => {
+    setSaving(true);
+    try {
+      let outValue: any;
+      if (inputType === "boolean") {
+        outValue = draft === "true";
+      } else if (inputType === "date") {
+        outValue = draft ? draft : null;
+      } else {
+        const trimmed = draft.trim();
+        outValue = trimmed === "" ? null : trimmed;
+      }
+
+      const { error } = await supabase
+        .from("check_intake_items")
+        .update({ [field]: outValue, updated_at: new Date().toISOString() })
+        .eq("id", checkId);
+      if (error) throw error;
+
+      toast({ title: `${label} updated` });
+      setEditing(false);
+      onSave();
+    } catch (e: any) {
+      toast({ title: `Failed to update ${label}`, description: e.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const display = displayFormatter ? displayFormatter(value) : value;
+
+  if (editing) {
+    return (
+      <div className="space-y-1.5">
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <div className="flex items-start gap-1.5">
+          {inputType === "boolean" ? (
+            <Select value={draft || "false"} onValueChange={setDraft}>
+              <SelectTrigger className="h-8 text-sm flex-1"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="true">Yes</SelectItem>
+                <SelectItem value="false">No</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : multiline ? (
+            <textarea
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              className="flex-1 min-h-[60px] rounded-md border border-input bg-background px-2 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          ) : (
+            <Input
+              autoFocus
+              type={inputType === "date" ? "date" : "text"}
+              value={inputType === "date" && draft ? draft.slice(0, 10) : draft}
+              onChange={(e) => setDraft(e.target.value)}
+              className="h-8 text-sm flex-1"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") persist();
+                if (e.key === "Escape") setEditing(false);
+              }}
+            />
+          )}
+          <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={persist} disabled={saving}>
+            <CheckIcon className="h-4 w-4 text-emerald-400" />
+          </Button>
+          <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={() => { setDraft(value ?? ""); setEditing(false); }}>
+            <X className="h-4 w-4 text-muted-foreground" />
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex justify-between gap-2 text-sm group items-start">
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <div className="flex items-start gap-1.5 min-w-0">
+        <span className={`font-medium text-right break-words min-w-0 ${!display ? "text-destructive italic" : ""}`}>
+          {display ?? "Missing"}
+        </span>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+          onClick={() => setEditing(true)}
+        >
+          <Pencil className="h-3 w-3" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Payee Manager — add / edit / remove                                */
 /* ------------------------------------------------------------------ */
 
