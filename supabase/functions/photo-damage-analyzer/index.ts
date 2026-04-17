@@ -555,15 +555,14 @@ Deno.serve(async (req) => {
       // Get claim location
       const { data: claim } = await supabase
         .from("claims")
-        .select("loss_description, loss_type, policyholder_address, policyholder_city, policyholder_state, policyholder_zip")
+        .select("loss_description, loss_type, policyholder_address, state_code")
         .eq("id", claimId)
         .maybeSingle();
 
       const location = [
-        claim?.policyholder_city,
-        claim?.policyholder_state,
-        claim?.policyholder_zip,
-      ].filter(Boolean).join(", ") || claim?.policyholder_address || "Unknown US location";
+        claim?.policyholder_address,
+        claim?.state_code,
+      ].filter(Boolean).join(", ") || "Unknown US location";
 
       const desc = [
         claim?.loss_description || "No description",
