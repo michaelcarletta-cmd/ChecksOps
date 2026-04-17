@@ -500,10 +500,17 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
           ) : (
             filteredClaims.map((claim) => {
               const hasNotification = claimsWithNotifications.has(claim.id);
+              const nudge = nudgesByClaim.get(claim.id);
+              const isCritical = nudge?.topSeverity === "critical";
               return (
                 <div
                   key={claim.id}
-                  className={`rounded-lg border p-3 cursor-pointer transition-colors active:bg-muted/70 ${hasNotification ? 'bg-primary/5 border-l-4 border-l-primary' : 'bg-card'}`}
+                  className={cn(
+                    "rounded-lg border p-3 cursor-pointer transition-colors active:bg-muted/70",
+                    hasNotification && "bg-primary/5 border-l-4 border-l-primary",
+                    !hasNotification && isCritical && "bg-destructive/5 border-l-4 border-l-destructive",
+                    !hasNotification && !isCritical && "bg-card"
+                  )}
                   onClick={() => handleClaimClick(claim.id)}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -514,13 +521,23 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                         onClick={(e) => e.stopPropagation()}
                       />
                       <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           {hasNotification && (
                             <Badge variant="destructive" className="h-4 w-4 p-0 flex items-center justify-center shrink-0">
                               <Bell className="h-2.5 w-2.5" />
                             </Badge>
                           )}
                           <span className="text-sm font-semibold text-foreground">{claim.claim_number || "—"}</span>
+                          {nudge && (
+                            <span className={cn(
+                              "inline-flex items-center gap-1 px-1.5 py-0 rounded-full text-[10px] font-medium border",
+                              severityBadgeClasses(nudge.topSeverity)
+                            )}>
+                              <AlertTriangle className="h-2 w-2" />
+                              {severityLabel(nudge.topSeverity)}
+                              {nudge.count > 1 && <span className="opacity-70">·{nudge.count}</span>}
+                            </span>
+                          )}
                         </div>
                         <p className="text-sm text-foreground mt-0.5">{claim.policyholder_name || "—"}</p>
                       </div>
