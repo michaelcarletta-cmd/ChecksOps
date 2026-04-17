@@ -405,6 +405,44 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
             />
           )}
           
+          {/* Nudge severity chips - one-click triage filter */}
+          {(nudgeTotals.critical > 0 || nudgeTotals.high > 0 || nudgeTotals.medium > 0) && (
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" /> Needs attention:
+              </span>
+              {(["critical", "high", "medium"] as NudgeSeverity[]).map((sev) => {
+                const count = nudgeTotals[sev];
+                if (count === 0) return null;
+                const active = severityFilter === sev;
+                return (
+                  <button
+                    key={sev}
+                    type="button"
+                    onClick={() => setSeverityFilter(active ? null : sev)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors",
+                      severityBadgeClasses(sev),
+                      active && "ring-2 ring-offset-1 ring-offset-background ring-current"
+                    )}
+                  >
+                    <span className="font-semibold">{count}</span>
+                    <span>{severityLabel(sev)}</span>
+                  </button>
+                );
+              })}
+              {severityFilter && (
+                <button
+                  type="button"
+                  onClick={() => setSeverityFilter(null)}
+                  className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
