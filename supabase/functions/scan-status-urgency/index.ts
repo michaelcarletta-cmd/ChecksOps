@@ -230,8 +230,20 @@ async function processBreach(
   let title = "";
   let message = "";
   if (rule.trigger_kind === "inactivity") {
-    title = `${rule.display_label}: no activity in ${rule.threshold_days}+ ${rule.count_mode === "business" ? "business " : ""}days`;
-    message = `${ref} has been in "${claim.status}" with no updates for at least ${rule.threshold_days} ${rule.count_mode === "business" ? "business " : ""}days. Take action to avoid stalling.`;
+    // Compute actual days since last activity for a precise, human-readable reason
+    const lastActivityIso = claim.last_activity_at;
+    const daysSince = lastActivityIso
+      ? Math.max(
+          rule.threshold_days,
+          Math.floor((Date.now() - new Date(lastActivityIso).getTime()) / 86400000),
+        )
+      : rule.threshold_days;
+    const unit = rule.count_mode === "business" ? "business days" : "days";
+    const lastTs = lastActivityIso
+      ? new Date(lastActivityIso).toISOString().slice(0, 10)
+      : "unknown";
+    title = `No updates for ${daysSince} ${unit} — ${ref}`;
+    message = `${ref} has been in "${claim.status}" with no updates for ${daysSince} ${unit} (last activity ${lastTs}). Take action to avoid stalling.`;
   } else if (rule.trigger_kind === "inspection_morning_of") {
     title = `Inspection scheduled today — ${ref}`;
     message = `${ref} has an inspection scheduled today. Confirm attendance and prep.`;

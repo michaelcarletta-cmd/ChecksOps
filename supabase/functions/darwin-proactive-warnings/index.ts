@@ -90,53 +90,10 @@ Deno.serve(async (req) => {
         });
       }
 
-      // 2. MISSING DOCUMENTATION — no estimate uploaded
-      const { count: estimateCount } = await supabase
-        .from("claim_files")
-        .select("id", { count: "exact", head: true })
-        .eq("claim_id", claim.id)
-        .or("document_type.eq.estimate,document_type.eq.carrier_estimate,document_type.eq.contractor_estimate");
-
-      if ((estimateCount ?? 0) === 0) {
-        const claimAgeDays = Math.floor(
-          (Date.now() - new Date(claim.created_at).getTime()) / (1000 * 60 * 60 * 24)
-        );
-        if (claimAgeDays >= 3) {
-          warnings.push({
-            claim_id: claim.id,
-            warning_type: "missing_estimate",
-            severity: claimAgeDays >= 14 ? "high" : "medium",
-            title: "No estimate on file",
-            message: `Claim is ${claimAgeDays} days old with no estimate uploaded. This weakens your negotiation position.`,
-            source: "proactive",
-            trigger_context: "files",
-          });
-        }
-      }
-
-      // 3. MISSING PHOTOS
-      const { count: photoCount } = await supabase
-        .from("claim_files")
-        .select("id", { count: "exact", head: true })
-        .eq("claim_id", claim.id)
-        .or("document_type.eq.photo,document_type.eq.inspection_photo,file_type.ilike.image%");
-
-      if ((photoCount ?? 0) === 0) {
-        const claimAgeDays = Math.floor(
-          (Date.now() - new Date(claim.created_at).getTime()) / (1000 * 60 * 60 * 24)
-        );
-        if (claimAgeDays >= 5) {
-          warnings.push({
-            claim_id: claim.id,
-            warning_type: "missing_photos",
-            severity: "medium",
-            title: "No photos uploaded",
-            message: `No damage photos found for ${claim.claim_number || "this claim"}. Visual documentation is critical.`,
-            source: "proactive",
-            trigger_context: "files",
-          });
-        }
-      }
+      // NOTE: "missing estimate" / "missing photos" warnings were intentionally
+      // removed. Document-completeness checks live in their own validation surface,
+      // not in the urgency/notification stream. Urgency only fires for time-based
+      // signals (stale activity, overdue tasks, payment gaps).
 
       // 4. PAYMENT GAP — has approved amount but no check logged
       const { data: moneyData } = await supabase
