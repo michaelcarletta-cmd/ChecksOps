@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_proactive_warning ON public.claim_warnings_log (claim_id, warning_type) WHERE is_dismissed = false AND is_resolved = false AND source = 'proactive';
