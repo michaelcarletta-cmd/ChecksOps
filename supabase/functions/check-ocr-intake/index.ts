@@ -486,10 +486,15 @@ Rules:
 
       let visionResult;
       try {
+        // Use the STRONG vision model for check OCR. The cheap model
+        // (gpt-4o-mini) frequently returns blank/incorrect fields on dense
+        // check images (amount box, payee line, MICR check number).
         visionResult = await callVision({
-          model: MODEL_VISION,
+          model: MODEL_VISION_STRONG,
           messages: [{ role: "user", content }],
           jsonMode: true,
+          temperature: 0,
+          maxTokens: 1500,
         });
       } catch (fetchErr) {
         const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
