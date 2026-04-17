@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { extractPdfNative, isNativeExtractionUsable } from "../_shared/pdfNativeExtract.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -4585,6 +4586,68 @@ Deno.serve(async (req) => {
         console.warn('Some pdfFilePaths could not be resolved:', failedPaths);
       }
       pdfContents = resolvedPdfs;
+    }
+
+    // ── NATIVE-FIRST EXTRACTION (pdf.js) ─────────────────────────────────────
+    // Letters, denials, engineer reports, contractor estimates are virtually
+    // always text PDFs. Pull the embedded text via pdf.js BEFORE shipping bytes
+    // to a vision model. AI vision is only invoked when pages are genuinely
+    // scanned/image-only.
+    //
+    // Cost impact: typical denial/letter/report = $0 native instead of vision.
+    if (pdfContent) {
+      try {
+        const native = await extractPdfNative(pdfContent, {
+          fileName: pdfFileName || 'document.pdf',
+        });
+        if (isNativeExtractionUsable(native)) {
+          console.log(
+            `[darwin] Native pdf.js extracted ${native.charCount} chars (status=${native.status}, scannedPages=${native.pagesNeedingOcr.length}/${native.pageCount}) — switching to text-only mode (no vision call needed)`
+          );
+          const block = `=== ${pdfFileName || 'Document'} ===\n${native.text.substring(0, 100000)}`;
+          content = [content, block].filter(Boolean).join('\n\n');
+          additionalContext._useTextOnly = true;
+          if (!additionalContext.pdfExtractedText && native.text.trim().length > 200) {
+            additionalContext.pdfExtractedText = native.text;
+          }
+          pdfContent = undefined;
+        } else {
+          console.log(
+            `[darwin] Native extraction insufficient for ${pdfFileName || 'document'} (status=${native.status}, chars=${native.charCount}) — will fall back to vision pipeline`
+          );
+        }
+      } catch (nativeFirstErr) {
+        console.warn(
+          '[darwin] Native-first pdf.js extraction failed, continuing to legacy path:',
+          nativeFirstErr instanceof Error ? nativeFirstErr.message : nativeFirstErr,
+        );
+      }
+    }
+
+    // Multi-PDF native-first pass: same logic for the array path used by
+    // systematic dismantling and document comparison.
+    if (Array.isArray(pdfContents) && pdfContents.length > 0) {
+      const remainingPdfs: Array<{ name: string; content: string; folder?: string }> = [];
+      const extractedBlocks: string[] = [];
+      for (const pdf of pdfContents) {
+        try {
+          const native = await extractPdfNative(pdf.content, { fileName: pdf.name });
+          if (isNativeExtractionUsable(native)) {
+            extractedBlocks.push(`=== ${pdf.name} ===\n${native.text.substring(0, 70000)}`);
+          } else {
+            remainingPdfs.push(pdf);
+          }
+        } catch (multiNativeErr) {
+          console.warn(`[darwin] Native extraction failed for ${pdf.name}:`, multiNativeErr);
+          remainingPdfs.push(pdf);
+        }
+      }
+      if (extractedBlocks.length > 0) {
+        console.log(`[darwin] Native pdf.js handled ${extractedBlocks.length}/${pdfContents.length} PDFs, ${remainingPdfs.length} need vision fallback`);
+        content = [content, ...extractedBlocks].filter(Boolean).join('\n\n');
+        additionalContext._useTextOnly = remainingPdfs.length === 0 ? true : additionalContext._useTextOnly;
+      }
+      pdfContents = remainingPdfs;
     }
 
     // For large PDFs, force text-only analysis to avoid multimodal gateway

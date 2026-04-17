@@ -1,5 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { callVision, MODEL_VISION } from "../_shared/ai/generate.ts";
+import { generate } from "../_shared/ai/generate.ts";
+import { extractPdfNative, isNativeExtractionUsable } from "../_shared/pdfNativeExtract.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -312,33 +314,68 @@ Important guidelines:
 - The deductible is usually shown separately from depreciation
 - Return ONLY the JSON object, no other text`;
 
-    const aiStep = startStep("ai_extract", "Extract estimate values and line items with AI");
-    const aiResult = await callVision({
-      model: MODEL_VISION,
-      messages: [
-        { role: "system", content: systemPrompt },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Please extract all financial data from this insurance estimate document. Focus on finding RCV, depreciation amounts, deductibles, and line items.`
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:${mimeType};base64,${base64}`
-              }
-            }
-          ]
+    // ── NATIVE-FIRST EXTRACTION (pdf.js) ───────────────────────────────────
+    // Most contractor/Xactimate/Symbility estimates are text PDFs. Try native
+    // text extraction first ($0). Fall back to AI vision only if the PDF is
+    // genuinely scanned/image-only (or it's not a PDF).
+    let aiResult: { text: string; model?: string };
+    let extractionMode: "native_pdfjs" | "ai_vision" = "ai_vision";
+
+    if (mimeType === "application/pdf") {
+      const nativeStep = startStep("native_extract", "Native PDF text extraction (pdf.js)");
+      try {
+        const native = await extractPdfNative(uint8Array, { fileName: file.name });
+        if (isNativeExtractionUsable(native)) {
+          endStep(nativeStep, "completed", `chars=${native.charCount}, status=${native.status}`);
+          extractionMode = "native_pdfjs";
+          console.log(`[extract-estimate] Using native pdf.js text (${native.charCount} chars) — skipping AI vision`);
+
+          const textStep = startStep("ai_extract", "Extract estimate fields from native text (text-only model)");
+          const textResult = await generate({
+            task: "extraction",
+            system: systemPrompt,
+            user: `Extract estimate financial data from the following text.\n\nFILENAME: ${file.name}\n\n=== ESTIMATE TEXT ===\n${native.text.slice(0, 120000)}`,
+            searchMode: "off",
+          });
+          aiResult = { text: textResult.text, model: textResult.model };
+          endStep(textStep, "completed", `responseChars=${String(textResult.text).length}, model=${textResult.model}`);
+        } else {
+          endStep(nativeStep, "completed", `insufficient (status=${native.status}, chars=${native.charCount}) — falling back to vision`);
         }
-      ],
-    });
+      } catch (nativeErr) {
+        endStep(nativeStep, "error", nativeErr instanceof Error ? nativeErr.message : String(nativeErr));
+      }
+    }
 
-    console.log(`[extract-estimate] model=${MODEL_VISION}, cached=false`);
+    if (extractionMode === "ai_vision") {
+      const aiStep = startStep("ai_extract", "Extract estimate values and line items with AI vision");
+      aiResult = await callVision({
+        model: MODEL_VISION,
+        messages: [
+          { role: "system", content: systemPrompt },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Please extract all financial data from this insurance estimate document. Focus on finding RCV, depreciation amounts, deductibles, and line items.`
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:${mimeType};base64,${base64}`
+                }
+              }
+            ]
+          }
+        ],
+      });
+      endStep(aiStep, "completed", `responseChars=${String(aiResult.text).length}`);
+    }
 
-    const content = aiResult.text;
-    endStep(aiStep, "completed", `responseChars=${String(content).length}`);
+    console.log(`[extract-estimate] mode=${extractionMode}, model=${aiResult!.model ?? MODEL_VISION}`);
+
+    const content = aiResult!.text;
     
     console.log("AI response received, parsing JSON...");
 
