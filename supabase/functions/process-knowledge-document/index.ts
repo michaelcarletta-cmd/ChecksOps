@@ -355,12 +355,24 @@ Deno.serve(async (req) => {
     const isPdf = fileType === 'application/pdf' || document.file_name.toLowerCase().endsWith('.pdf');
 
     if (isPdf) {
-      if (fileSize > AI_EXTRACTION_LIMIT) {
-        throw new Error(`PDF too large (${Math.round(fileSize / 1024 / 1024)}MB). Maximum size for PDFs is 5MB.`);
+      // 1. Try native text extraction first (free, fast, reliable for text-based PDFs).
+      //    This handles the vast majority of uploads — research PDFs, reports, etc.
+      const nativeText = await extractPdfTextNative(fileUrl, document.file_name);
+      if (nativeText && nativeText.trim().length > 0) {
+        extractedText = nativeText;
+      } else {
+        // 2. Fallback to vision OCR for scanned PDFs (rare, expensive).
+        if (fileSize > AI_EXTRACTION_LIMIT) {
+          throw new Error(
+            `PDF appears to be scanned and is too large for OCR (${Math.round(fileSize / 1024 / 1024)}MB, max ${AI_EXTRACTION_LIMIT / 1024 / 1024}MB). ` +
+            `Please split into smaller sections or convert to a text-based PDF.`
+          );
+        }
+        console.log(`[ocr-fallback] Native returned no text, using vision OCR for ${document.file_name}`);
+        const fileData = await downloadAndEncodeFile(fileUrl, mimeType, fileSize);
+        extractedText = await extractTextFromDocument(fileData.url, document.file_name);
       }
-      const fileData = await downloadAndEncodeFile(fileUrl, mimeType, fileSize);
-      extractedText = await extractTextFromDocument(fileData.url, document.file_name);
-    } else if (
+    }
       fileType.includes('video') || fileType.includes('audio') ||
       document.file_name.match(/\.(mp4|mov|avi|mkv|mp3|wav|m4a|webm)$/i)
     ) {
