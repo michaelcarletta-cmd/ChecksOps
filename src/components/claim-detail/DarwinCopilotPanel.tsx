@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Brain, Send, Trash2, StopCircle, Maximize2, Minimize2, Bold, Italic, Underline, Type, Paperclip, X, FileText, RefreshCw, AlertTriangle, TrendingUp, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -41,6 +42,7 @@ interface DarwinCopilotPanelProps {
 }
 
 export function DarwinCopilotPanel({ claimId, isExpanded, onToggleExpand }: DarwinCopilotPanelProps) {
+  const queryClient = useQueryClient();
   const { messages, loading, mode, setMode, askCopilot, clearConversation, stopGeneration } = useDarwinCopilot(claimId);
   const scrollRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -82,10 +84,22 @@ export function DarwinCopilotPanel({ claimId, isExpanded, onToggleExpand }: Darw
 
   const handleDismissNudge = async (nudgeId: string) => {
     setDismissedNudgeIds(prev => new Set([...prev, nudgeId]));
-    await supabase
+    const { error } = await supabase
       .from('claim_warnings_log')
       .update({ is_dismissed: true, dismissed_at: new Date().toISOString() })
       .eq('id', nudgeId);
+
+    if (error) {
+      setDismissedNudgeIds(prev => {
+        const next = new Set(prev);
+        next.delete(nudgeId);
+        return next;
+      });
+      return;
+    }
+
+    setNudges(prev => prev.filter((nudge) => nudge.id !== nudgeId));
+    queryClient.invalidateQueries({ queryKey: ["claim-nudges-summary"] });
   };
 
   const visibleNudges = nudges.filter(n => !dismissedNudgeIds.has(n.id));
