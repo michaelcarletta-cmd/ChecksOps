@@ -338,7 +338,12 @@ async function queryKnowledgeBase(
 
 // ── AI Call ──────────────────────────────────────────────────────
 
-async function callAI(systemPrompt: string, userPrompt: string): Promise<string> {
+async function callAI(systemPrompt: string, userPrompt: string, itemCount: number): Promise<string> {
+  // Allocate ~700 tokens per justification item, with a generous floor and ceiling.
+  // Bumps to the strong model when many items are requested so we don't truncate.
+  const dynamicMax = Math.min(16000, Math.max(4000, itemCount * 700));
+  const forceStrong = itemCount > 4 || (systemPrompt.length + userPrompt.length) > 6000;
+
   const result = await generate({
     task: 'extraction',
     system: systemPrompt,
@@ -346,9 +351,11 @@ async function callAI(systemPrompt: string, userPrompt: string): Promise<string>
     searchMode: 'off',
     temperature: 0.15,
     jsonMode: true,
+    maxTokens: dynamicMax,
+    forceStrong,
   });
 
-  console.log(`[darwin-justify-line-items] model=${result.model}, usedSearch=${result.usedSearch}, cached=${result.cached}`);
+  console.log(`[darwin-justify-line-items] model=${result.model}, items=${itemCount}, maxTokens=${dynamicMax}, forceStrong=${forceStrong}, cached=${result.cached}`);
   return result.text;
 }
 
