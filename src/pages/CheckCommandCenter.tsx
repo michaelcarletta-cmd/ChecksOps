@@ -1395,7 +1395,7 @@ function CheckDetailPanel({
                 field="is_multi_payee"
                 value={check.is_multi_payee ? "true" : "false"}
                 inputType="boolean"
-                displayFormatter={(v) => (v === "true" || v === true ? "Yes" : "No")}
+                displayFormatter={(v) => (v === "true" ? "Yes" : "No")}
                 onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
               <DetailRow label="OCR Status" value={check.ocr_status} />
