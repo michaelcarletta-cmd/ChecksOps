@@ -372,10 +372,12 @@ Deno.serve(async (req) => {
         const fileData = await downloadAndEncodeFile(fileUrl, mimeType, fileSize);
         extractedText = await extractTextFromDocument(fileData.url, document.file_name);
       }
-    }
+    } else if (
       fileType.includes('video') || fileType.includes('audio') ||
       document.file_name.match(/\.(mp4|mov|avi|mkv|mp3|wav|m4a|webm)$/i)
     ) {
+      const fileData = await downloadAndEncodeFile(fileUrl, mimeType, fileSize);
+      extractedText = await transcribeMedia(fileData.url, document.file_name);
       const fileData = await downloadAndEncodeFile(fileUrl, mimeType, fileSize);
       extractedText = await transcribeMedia(fileData.url, document.file_name);
     } else if (
