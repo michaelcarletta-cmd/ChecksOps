@@ -1342,15 +1342,62 @@ function CheckDetailPanel({
 
           <ScrollArea className="h-[calc(100vh-520px)]">
             <TabsContent value="overview" className="p-4 space-y-3 mt-0">
-              <DetailRow label="Check #" value={check.check_number} />
-              <DetailRow label="Carrier" value={check.carrier_name} />
-              <DetailRow
-                label="Issue Date"
-                value={check.issue_date ? format(new Date(check.issue_date), "MMM d, yyyy") : null}
+              {check.ocr_status !== "complete" && (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <AlertTriangle className="h-3 w-3" />
+                    OCR not complete — fields below are editable
+                  </div>
+                  <p className="mt-1 text-amber-300/70">Hover any field and click the pencil to enter or correct it manually.</p>
+                </div>
+              )}
+              <EditableField
+                label="Check #"
+                checkId={checkId}
+                field="check_number"
+                value={check.check_number}
+                onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
               />
-              <DetailRow label="Detected Claim #" value={check.detected_claim_number} />
-              <DetailRow label="Payee Line" value={check.payee_line} />
-              <DetailRow label="Multi-Payee" value={check.is_multi_payee ? "Yes" : "No"} />
+              <EditableField
+                label="Carrier"
+                checkId={checkId}
+                field="carrier_name"
+                value={check.carrier_name}
+                onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
+              />
+              <EditableField
+                label="Issue Date"
+                checkId={checkId}
+                field="issue_date"
+                value={check.issue_date}
+                inputType="date"
+                displayFormatter={(v) => (v ? format(new Date(v), "MMM d, yyyy") : null)}
+                onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
+              />
+              <EditableField
+                label="Detected Claim #"
+                checkId={checkId}
+                field="detected_claim_number"
+                value={check.detected_claim_number}
+                onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
+              />
+              <EditableField
+                label="Payee Line"
+                checkId={checkId}
+                field="payee_line"
+                value={check.payee_line}
+                multiline
+                onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
+              />
+              <EditableField
+                label="Multi-Payee"
+                checkId={checkId}
+                field="is_multi_payee"
+                value={check.is_multi_payee ? "true" : "false"}
+                inputType="boolean"
+                displayFormatter={(v) => (v === "true" || v === true ? "Yes" : "No")}
+                onSave={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }}
+              />
               <DetailRow label="OCR Status" value={check.ocr_status} />
               <RerunOcrButton checkId={checkId} onSuccess={() => { qc.invalidateQueries({ queryKey: ["check-detail", checkId] }); onRefresh(); }} />
               <Separator />
