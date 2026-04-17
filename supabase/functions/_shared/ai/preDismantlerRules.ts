@@ -23,6 +23,33 @@ export type RuleFlag =
   | "causationWithoutSupport"
   | "scopeMinimization";
 
+// Peril / loss-type taxonomy (rules-first, no AI).
+// Order matters for tie-breaks: more specific perils win over generic ones.
+export type LossType =
+  | "pipe_leak"
+  | "water_damage"
+  | "sewer_backup"
+  | "appliance_leak"
+  | "fire"
+  | "smoke"
+  | "wind"
+  | "hail"
+  | "tree_impact"
+  | "lightning"
+  | "freeze"
+  | "mold"
+  | "theft_vandalism"
+  | "vehicle_impact"
+  | "unknown";
+
+export interface LossTypeDetection {
+  primary: LossType;
+  secondary: LossType[];
+  scores: Partial<Record<LossType, number>>;
+  evidence: Partial<Record<LossType, string[]>>; // verbatim phrases that triggered each peril
+  confidence: "high" | "medium" | "low";
+}
+
 export interface RuleIssue {
   flag: RuleFlag;
   label: string;
