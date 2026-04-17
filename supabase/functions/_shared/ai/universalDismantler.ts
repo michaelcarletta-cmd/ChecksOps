@@ -390,6 +390,7 @@ async function synthesize(
   docTypes: string[],
   claimContext: string,
   docSpecificRules: string,
+  lossTypeBlock: string,
 ): Promise<Omit<DismantlerResult, "meta">> {
   const findingsBlock = `=== EXTRACTED DOCUMENT FINDINGS ===
 Main Position: ${aggregated.main_position || "Not identified"}
@@ -410,6 +411,8 @@ Rebuttal Targets: ${aggregated.rebuttal_targets.join("; ") || "None"}
   const result = await generate({
     task: "rebuttal",
     system: `${claimContext}
+
+${lossTypeBlock}
 
 ${findingsBlock}
 
