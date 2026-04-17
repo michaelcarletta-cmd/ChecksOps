@@ -450,17 +450,10 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
           ) : (
             filteredClaims.map((claim) => {
               const hasNotification = claimsWithNotifications.has(claim.id);
-              const nudge = nudgesByClaim.get(claim.id);
-              const isCritical = nudge?.topSeverity === "critical";
               return (
                 <div
                   key={claim.id}
-                  className={cn(
-                    "rounded-lg border p-3 cursor-pointer transition-colors active:bg-muted/70",
-                    hasNotification && "bg-primary/5 border-l-4 border-l-primary",
-                    !hasNotification && isCritical && "bg-destructive/5 border-l-4 border-l-destructive",
-                    !hasNotification && !isCritical && "bg-card"
-                  )}
+                  className={`rounded-lg border p-3 cursor-pointer transition-colors active:bg-muted/70 ${hasNotification ? "bg-primary/5 border-l-4 border-l-primary" : "bg-card"}`}
                   onClick={() => handleClaimClick(claim.id)}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -478,16 +471,6 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                             </Badge>
                           )}
                           <span className="text-sm font-semibold text-foreground">{claim.claim_number || "—"}</span>
-                          {nudge && (
-                            <span className={cn(
-                              "inline-flex items-center gap-1 px-1.5 py-0 rounded-full text-[10px] font-medium border",
-                              severityBadgeClasses(nudge.topSeverity)
-                            )}>
-                              <AlertTriangle className="h-2 w-2" />
-                              {severityLabel(nudge.topSeverity)}
-                              {nudge.count > 1 && <span className="opacity-70">·{nudge.count}</span>}
-                            </span>
-                          )}
                         </div>
                         <p className="text-sm text-foreground mt-0.5">{claim.policyholder_name || "—"}</p>
                       </div>
@@ -527,7 +510,6 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                   />
                 </TableHead>
                 <TableHead className="whitespace-nowrap">Claim #</TableHead>
-                <TableHead className="whitespace-nowrap w-[110px]">Nudges</TableHead>
                 <TableHead className="whitespace-nowrap">Client Name</TableHead>
                 <TableHead className="whitespace-nowrap">Property Address</TableHead>
                 <TableHead className="whitespace-nowrap">Loss Type</TableHead>
@@ -537,24 +519,18 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
             </TableHeader>
             <TableBody>
               {filteredClaims.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground">
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground">
                     No claims found
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredClaims.map((claim) => {
                   const hasNotification = claimsWithNotifications.has(claim.id);
-                  const nudge = nudgesByClaim.get(claim.id);
-                  const isCritical = nudge?.topSeverity === "critical";
                   return (
                     <TableRow
                       key={claim.id}
-                      className={cn(
-                        "hover:bg-muted/50 transition-colors cursor-pointer",
-                        hasNotification && "bg-primary/5 border-l-4 border-l-primary",
-                        !hasNotification && isCritical && "bg-destructive/5 border-l-4 border-l-destructive"
-                      )}
+                        className={`hover:bg-muted/50 transition-colors cursor-pointer ${hasNotification ? "bg-primary/5 border-l-4 border-l-primary" : ""}`}
                       onClick={() => handleClaimClick(claim.id)}
                     >
                       <TableCell onClick={(e) => e.stopPropagation()} className={hasNotification ? 'bg-primary/5' : 'bg-background'}>
@@ -572,23 +548,6 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                           )}
                           <span className="text-sm">{claim.claim_number || "—"}</span>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        {nudge ? (
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border",
-                              severityBadgeClasses(nudge.topSeverity)
-                            )}
-                            title={`${nudge.count} active ${nudge.count === 1 ? 'nudge' : 'nudges'}`}
-                          >
-                            <AlertTriangle className="h-2.5 w-2.5" />
-                            {severityLabel(nudge.topSeverity)}
-                            {nudge.count > 1 && <span className="opacity-70">·{nudge.count}</span>}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
                       </TableCell>
                       <TableCell>
                         <span className="text-sm">{claim.policyholder_name || "—"}</span>
