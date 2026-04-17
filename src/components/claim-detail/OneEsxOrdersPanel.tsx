@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 import {
   FileBarChart,
   Plus,
@@ -85,7 +85,8 @@ function asValue(item: unknown): string {
 export const OneEsxOrdersPanel = ({ claimId, claim }: OneEsxOrdersPanelProps) => {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const { isAdmin } = useUserRole();
+  const { userRole } = useAuth();
+  const isAdmin = userRole === "admin";
 
   const [open, setOpen] = useState(false);
   const [reportType, setReportType] = useState<string>("");
