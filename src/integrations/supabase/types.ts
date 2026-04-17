@@ -6882,6 +6882,7 @@ export type Database = {
           insurance_phone: string | null
           is_closed: boolean
           jobnimbus_job_id: string | null
+          last_activity_at: string | null
           latest_signature_request_id: string | null
           latitude: number | null
           loan_number: string | null
@@ -6954,6 +6955,7 @@ export type Database = {
           insurance_phone?: string | null
           is_closed?: boolean
           jobnimbus_job_id?: string | null
+          last_activity_at?: string | null
           latest_signature_request_id?: string | null
           latitude?: number | null
           loan_number?: string | null
@@ -7026,6 +7028,7 @@ export type Database = {
           insurance_phone?: string | null
           is_closed?: boolean
           jobnimbus_job_id?: string | null
+          last_activity_at?: string | null
           latest_signature_request_id?: string | null
           latitude?: number | null
           loan_number?: string | null
@@ -13028,6 +13031,110 @@ export type Database = {
         }
         Relationships: []
       }
+      status_urgency_notifications_log: {
+        Row: {
+          claim_id: string
+          created_at: string
+          first_breached_at: string
+          id: string
+          inspection_id: string | null
+          is_resolved: boolean
+          last_notified_at: string
+          notification_kind: string
+          resolved_at: string | null
+          rule_id: string
+          sms_recipient_count: number
+          status_at_breach: string
+          total_sent: number
+          updated_at: string
+          warning_id: string | null
+        }
+        Insert: {
+          claim_id: string
+          created_at?: string
+          first_breached_at?: string
+          id?: string
+          inspection_id?: string | null
+          is_resolved?: boolean
+          last_notified_at?: string
+          notification_kind?: string
+          resolved_at?: string | null
+          rule_id: string
+          sms_recipient_count?: number
+          status_at_breach: string
+          total_sent?: number
+          updated_at?: string
+          warning_id?: string | null
+        }
+        Update: {
+          claim_id?: string
+          created_at?: string
+          first_breached_at?: string
+          id?: string
+          inspection_id?: string | null
+          is_resolved?: boolean
+          last_notified_at?: string
+          notification_kind?: string
+          resolved_at?: string | null
+          rule_id?: string
+          sms_recipient_count?: number
+          status_at_breach?: string
+          total_sent?: number
+          updated_at?: string
+          warning_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "status_urgency_notifications_log_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "status_urgency_rules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      status_urgency_rules: {
+        Row: {
+          count_mode: string
+          created_at: string
+          display_label: string
+          id: string
+          is_enabled: boolean
+          notes: string | null
+          rule_key: string
+          status_names: string[]
+          threshold_days: number
+          trigger_kind: string
+          updated_at: string
+        }
+        Insert: {
+          count_mode?: string
+          created_at?: string
+          display_label: string
+          id?: string
+          is_enabled?: boolean
+          notes?: string | null
+          rule_key: string
+          status_names: string[]
+          threshold_days: number
+          trigger_kind?: string
+          updated_at?: string
+        }
+        Update: {
+          count_mode?: string
+          created_at?: string
+          display_label?: string
+          id?: string
+          is_enabled?: boolean
+          notes?: string | null
+          rule_key?: string
+          status_names?: string[]
+          threshold_days?: number
+          trigger_kind?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       storage_backup_log: {
         Row: {
           backup_bucket: string
@@ -13436,6 +13543,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      urgency_sms_recipients: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          display_name: string
+          id: string
+          is_active: boolean
+          phone_number: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          display_name: string
+          id?: string
+          is_active?: boolean
+          phone_number: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          display_name?: string
+          id?: string
+          is_active?: boolean
+          phone_number?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       user_licenses: {
         Row: {
@@ -14636,6 +14773,7 @@ export type Database = {
               insurance_phone: string | null
               is_closed: boolean
               jobnimbus_job_id: string | null
+              last_activity_at: string | null
               latest_signature_request_id: string | null
               latitude: number | null
               loan_number: string | null
@@ -14733,6 +14871,7 @@ export type Database = {
               insurance_phone: string | null
               is_closed: boolean
               jobnimbus_job_id: string | null
+              last_activity_at: string | null
               latest_signature_request_id: string | null
               latitude: number | null
               loan_number: string | null
