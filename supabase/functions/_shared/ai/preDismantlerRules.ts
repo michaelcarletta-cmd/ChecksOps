@@ -706,18 +706,23 @@ export function buildLightweightDismantler(
   }
 
   const totalIssues = ruleResult.issues.length + learnedHits.length;
+  const perilLabel = LOSS_TYPE_LABELS[ruleResult.lossType.primary];
+  const perilPrefix = ruleResult.lossType.primary !== "unknown"
+    ? `Loss type detected: ${perilLabel} (${ruleResult.lossType.confidence} confidence). `
+    : "";
   const summary = totalIssues === 0
-    ? "Rule-based scan found no significant weaknesses; document appears procedurally compliant on its face."
-    : `Rule-based scan flagged ${ruleResult.issues.length} handcrafted weakness${ruleResult.issues.length === 1 ? "" : "es"}${learnedHits.length ? ` plus ${learnedHits.length} learned-rule hit${learnedHits.length === 1 ? "" : "s"}` : ""} (score ${ruleResult.weaknessScore}): ${[...ruleResult.issues.map((i) => i.flag), ...learnedHits.map((h) => h.rule_type)].join(", ")}.`;
+    ? `${perilPrefix}Rule-based scan found no significant weaknesses; document appears procedurally compliant on its face.`
+    : `${perilPrefix}Rule-based scan flagged ${ruleResult.issues.length} handcrafted weakness${ruleResult.issues.length === 1 ? "" : "es"}${learnedHits.length ? ` plus ${learnedHits.length} learned-rule hit${learnedHits.length === 1 ? "" : "s"}` : ""} (score ${ruleResult.weaknessScore}): ${[...ruleResult.issues.map((i) => i.flag), ...learnedHits.map((h) => h.rule_type)].join(", ")}.`;
 
+  const positionPeril = ruleResult.lossType.primary !== "unknown" ? ` regarding the ${perilLabel} loss` : "";
   const mainPosition = ruleResult.flags.denialLanguage
-    ? "Document advances a denial / exclusion position."
+    ? `Document advances a denial / exclusion position${positionPeril}.`
     : ruleResult.flags.scopeMinimization
-    ? "Document advances a reduced-scope position."
-    : "Document advances a coverage / scope position requiring closer review.";
+    ? `Document advances a reduced-scope position${positionPeril}.`
+    : `Document advances a coverage / scope position${positionPeril} requiring closer review.`;
 
   const draft = rebuttalPoints.length > 0
-    ? `We respectfully challenge the conclusions of this report on the following grounds:\n\n${rebuttalPoints.map((r, i) => `${i + 1}. ${r}`).join("\n\n")}\n\nWe request a corrected position supported by the evidence outlined above.`
+    ? `We respectfully challenge the conclusions of this ${perilLabel !== "unspecified" ? perilLabel + " " : ""}report on the following grounds:\n\n${rebuttalPoints.map((r, i) => `${i + 1}. ${r}`).join("\n\n")}\n\nWe request a corrected position supported by the evidence outlined above.`
     : "No automated rebuttal generated — document did not trigger rule-based weaknesses.";
 
   return {
