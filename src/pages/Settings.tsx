@@ -42,6 +42,7 @@ import { OrganizationSettings } from "@/components/settings/OrganizationSettings
 import { CompanyBrandingSettings } from "@/components/settings/CompanyBrandingSettings";
 import { AuditLogSettings } from "@/components/settings/AuditLogSettings";
 import { NotificationDeliveryLogView } from "@/components/settings/NotificationDeliveryLogView";
+import StatusUrgencyNotificationsSettings from "@/components/settings/StatusUrgencyNotificationsSettings";
 import { JobNimbusSyncDiagnostics } from "@/components/settings/JobNimbusSyncDiagnostics";
 
 import { useQuery } from "@tanstack/react-query";
