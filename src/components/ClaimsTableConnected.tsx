@@ -43,6 +43,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [lossTypeFilter, setLossTypeFilter] = useState<string>("all");
+  const [severityFilter, setSeverityFilter] = useState<NudgeSeverity | null>(null);
   // Show closed claims by default for client/contractor portals for tracking purposes
   const [showClosed, setShowClosed] = useState(portalType === "client" || portalType === "contractor" || portalType === "referrer");
   const [selectedClaims, setSelectedClaims] = useState<Set<string>>(new Set());
@@ -52,6 +53,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { nudgesByClaim, totals: nudgeTotals } = useClaimNudges();
 
   // Fetch unread notifications with claim IDs
   const { data: claimNotifications = [], refetch: refetchNotifications } = useQuery({
