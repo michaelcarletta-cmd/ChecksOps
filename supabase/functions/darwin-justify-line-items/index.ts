@@ -449,10 +449,13 @@ ${codeSection}`;
     const systemPrompt = `You are a line item justification engine for a public adjuster firm. Generate precise, source-backed justifications for insurance estimate line items.
 
 CRITICAL RULES:
+0. YOU MUST RETURN EXACTLY ONE JUSTIFICATION OBJECT FOR EVERY LINE ITEM PROVIDED — no skipping, no merging, no summarizing. The output array length MUST equal the input item count (${lineItems.length}). Items appear in the same order as the input.
+
 1. Every assertion MUST cite a specific source from the provided data:
    - Manufacturer: cite as [Manufacturer Spec N.M - MANUFACTURER - FILENAME]
    - Building code: cite as [STATE CODE §SECTION]
    - Knowledge base: cite as [KB Chunk #N]
+   - Industry standard: cite the standard name verbatim (e.g., "ASTM D3737", "NFPA 101", "ARMA TAB-R-2014")
 
 2. FALLBACK HANDLING — this is mandatory:
    - If NO manufacturer specs were provided for an item, set manufacturer.text to "No manufacturer data available" and manufacturer.confidence to "needs_evidence"
@@ -472,11 +475,16 @@ CRITICAL RULES:
 
 5. Building codes are ONLY available for: NJ, PA, SC. Current state: ${effectiveState || "Not in supported states"}.
 
-6. For carrier-facing text: Strict 5-sentence format (function, manufacturer authority, code compliance, policy tie-in, consequence of omission). Clean prose only.
+6. INDUSTRY STANDARDS (mandatory when provided):
+   - When the user supplies industry standards, you MUST explicitly name and apply at least one relevant standard inside whyRequired AND inside carrierFacingText for every applicable line item.
+   - Add the standard to the "sources" array with type "kb" and label = the standard's name (e.g., "ASTM D3737").
+   - If a provided standard genuinely does not apply to a particular item, briefly state why in inlineNote — do not silently omit it.
 
-7. The "sources" array MUST list every source actually cited in the justification. Each source needs:
+7. For carrier-facing text: Strict 5-sentence format (function, manufacturer authority, code compliance, industry standard / policy tie-in, consequence of omission). Clean prose only.
+
+8. The "sources" array MUST list every source actually cited in the justification. Each source needs:
    - type: "manufacturer" | "code" | "kb"
-   - label: Human-readable label (e.g., "GAF Timberline HDZ Installation Instructions" or "NJ IRC §R905.2.8.5")
+   - label: Human-readable label (e.g., "GAF Timberline HDZ Installation Instructions" or "NJ IRC §R905.2.8.5" or "ASTM D3737")
    - content: The relevant excerpt (50-150 chars)
 
 OUTPUT: Return a JSON array with one object per line item:
@@ -512,11 +520,11 @@ OUTPUT: Return a JSON array with one object per line item:
   "sources": [{"type": "manufacturer|code|kb", "label": "string", "content": "string"}]
 }`;
 
-    const userPrompt = `Justify ${lineItems.length} line items for a claim in ${effectiveState || "unknown"} state.
+    const userPrompt = `Justify ALL ${lineItems.length} line items below for a claim in ${effectiveState || "unknown"} state. Return exactly ${lineItems.length} objects in the JSON array — one per item, same order.
 ${manufacturer ? `Claim-level manufacturer: ${manufacturer}` : "No claim-level manufacturer set."}
 ${lossType ? `Loss type: ${lossType}` : ""}
 View mode: ${viewMode}
-${industryStandards ? `\nINDUSTRY STANDARDS (user-provided, incorporate into justifications where relevant):\n${industryStandards}` : ""}
+${industryStandards ? `\n=== INDUSTRY STANDARDS (USER-PROVIDED — MUST be explicitly named and applied in every applicable item) ===\n${industryStandards}\n=== END INDUSTRY STANDARDS ===` : "\n(No industry standards supplied by user.)"}
 
 PER-ITEM DATA (manufacturer specs and building codes matched to each item):
 ${perItemContext}
@@ -524,11 +532,14 @@ ${perItemContext}
 GENERAL KNOWLEDGE BASE CONTEXT:
 ${kbContext}
 
-CRITICAL: Each item's manufacturer data and building codes are ALREADY scoped to that specific item. Do NOT use manufacturer data or building codes from one item to justify a different item. Each item must only reference the data listed under its own section.
+CRITICAL:
+- Each item's manufacturer data and building codes are ALREADY scoped to that specific item. Do NOT use manufacturer data or building codes from one item to justify a different item.
+- Output array length MUST equal ${lineItems.length}. Do not skip items, even if data is sparse — use the fallback strings.
+${industryStandards ? `- Every applicable item must explicitly name at least one of the supplied industry standards in whyRequired AND carrierFacingText AND sources.` : ""}
 
 Return ONLY a valid JSON array. No markdown fences, no commentary.`;
 
-    const aiResponse = await callAI(systemPrompt, userPrompt);
+    const aiResponse = await callAI(systemPrompt, userPrompt, lineItems.length);
 
     // Parse AI response
     let justifications: any[];
