@@ -707,7 +707,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       if (insErr || !check) throw new Error(insErr?.message ?? "Insert failed");
 
       const { data: session } = await supabase.auth.getSession();
-      const { error: fnErr } = await supabase.functions.invoke("check-ocr-intake", {
+      const { data: ocrResult, error: fnErr } = await supabase.functions.invoke("check-ocr-intake", {
         body: { checkId: check.id },
         headers: { Authorization: `Bearer ${session.session?.access_token}` },
       });
@@ -715,6 +715,11 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       if (fnErr) {
         console.error("OCR invoke error:", fnErr);
         toast({ title: "Check uploaded but OCR may have failed", description: fnErr.message });
+      } else if (ocrResult && typeof ocrResult === "object" && "ocr_success" in ocrResult && !ocrResult.ocr_success) {
+        toast({
+          title: "Check uploaded but OCR failed",
+          description: "The check was linked to the claim. Please complete the details manually.",
+        });
       } else {
         toast({ title: "Check uploaded & OCR started" });
       }
