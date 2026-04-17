@@ -378,8 +378,6 @@ Deno.serve(async (req) => {
     ) {
       const fileData = await downloadAndEncodeFile(fileUrl, mimeType, fileSize);
       extractedText = await transcribeMedia(fileData.url, document.file_name);
-      const fileData = await downloadAndEncodeFile(fileUrl, mimeType, fileSize);
-      extractedText = await transcribeMedia(fileData.url, document.file_name);
     } else if (
       fileType.includes('powerpoint') || fileType.includes('presentation') ||
       document.file_name.match(/\.(pptx|ppt)$/i)
