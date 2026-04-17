@@ -628,6 +628,19 @@ export async function analyzeDocument(opts: DismantlerOptions): Promise<Dismantl
   // Step 4: Document-specific rules
   const docSpecificRules = getDocumentSpecificRules(docTypes);
 
+  // Step 4b: Loss-type framing block (forces AI to anchor to detected peril)
+  const lt = ruleResult.lossType;
+  const lossTypeBlock = lt.primary !== "unknown"
+    ? `=== LOSS TYPE / PERIL CONTEXT (deterministic, rules-based) ===
+Primary peril detected: ${lt.primary} — ${describeLossType(lt)}
+Supporting evidence phrases from the document: ${(lt.evidence[lt.primary] || []).join("; ") || "n/a"}
+${lt.secondary.length > 0 ? `Secondary perils: ${lt.secondary.join(", ")}\n` : ""}HARD RULE: Frame ALL analysis, summary, main position, and rebuttal language around the detected peril (${lt.primary}). Do NOT default to wind/hail framing unless the evidence above explicitly supports it. If the carrier's document tries to recharacterize the loss as a different peril, treat that as a position to challenge — not as the established peril.
+=== END LOSS TYPE / PERIL CONTEXT ===`
+    : `=== LOSS TYPE / PERIL CONTEXT ===
+Primary peril could not be determined deterministically. Read the document carefully to identify the actual peril before framing rebuttals. Do NOT default to wind/hail.
+=== END LOSS TYPE / PERIL CONTEXT ===`;
+  console.log(`[UniversalDismantler] Loss type: ${describeLossType(lt)}`);
+
   // Step 5: Extract from all chunks (sequential to manage token budget)
   const extractions: (ChunkExtraction | null)[] = [];
   for (let i = 0; i < chunks.length; i++) {
@@ -638,6 +651,7 @@ export async function analyzeDocument(opts: DismantlerOptions): Promise<Dismantl
       docTypes,
       claimContext,
       docSpecificRules,
+      lossTypeBlock,
     );
     extractions.push(ext);
   }
@@ -654,7 +668,7 @@ export async function analyzeDocument(opts: DismantlerOptions): Promise<Dismantl
   const aggregated = aggregateChunks(extractions);
 
   // Step 7: Final synthesis
-  const synthesized = await synthesize(aggregated, docTypes, claimContext, docSpecificRules);
+  const synthesized = await synthesize(aggregated, docTypes, claimContext, docSpecificRules, lossTypeBlock);
 
   const finalResult: DismantlerResult = {
     ...synthesized,
