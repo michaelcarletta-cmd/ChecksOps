@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import JSZip from "https://esm.sh/jszip@3.10.1";
+import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@0.12.1";
 import { callVision, type VisionMessage } from "../_shared/ai/generate.ts";
 import { MODEL_VISION } from "../_shared/ai/modelRouter.ts";
 
@@ -10,8 +11,12 @@ const corsHeaders = {
 };
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
+// Native PDF extraction (unpdf) handles up to MAX_FILE_SIZE.
+// Only the vision OCR fallback is constrained by AI_EXTRACTION_LIMIT.
 const AI_EXTRACTION_LIMIT = 5 * 1024 * 1024;
 const IMAGE_DIRECT_URL_THRESHOLD = 4 * 1024 * 1024;
+// Minimum chars per page to consider a PDF "text-based" (vs. scanned needing OCR)
+const MIN_TEXT_PER_PAGE = 50;
 
 function splitIntoChunks(text: string, chunkSize = 600, overlap = 100): string[] {
   const sections = text.split(/(?=^#{1,6}\s|^\[Slide |^\[Image:|^\[Title:|^---)/m);
@@ -109,7 +114,7 @@ async function downloadAndEncodeFile(fileUrl: string, mimeType: string, fileSize
 }
 
 async function extractTextFromDocument(dataUrl: string, fileName: string): Promise<string> {
-  console.log(`Extracting text from document: ${fileName}`);
+  console.log(`[ai-fallback] Extracting text via vision from: ${fileName}`);
 
   const result = await callVision({
     model: MODEL_VISION,
@@ -125,8 +130,49 @@ async function extractTextFromDocument(dataUrl: string, fileName: string): Promi
     temperature: 0.1,
   });
 
-  console.log(`Extracted ${result.text.length} characters`);
+  console.log(`[ai-fallback] Extracted ${result.text.length} characters`);
   return result.text;
+}
+
+/**
+ * Native PDF text extraction using unpdf (PDF.js wrapper).
+ * Returns null if the PDF appears to be scanned (no extractable text).
+ * Costs $0 — runs entirely in the edge function.
+ */
+async function extractPdfTextNative(fileUrl: string, fileName: string): Promise<string | null> {
+  try {
+    console.log(`[native] Trying native PDF extraction for: ${fileName}`);
+    const response = await fetch(fileUrl);
+    if (!response.ok) throw new Error(`Failed to download PDF: ${response.status}`);
+
+    const buffer = new Uint8Array(await response.arrayBuffer());
+    const pdf = await getDocumentProxy(buffer);
+    const numPages = pdf.numPages;
+
+    const { text } = await extractText(pdf, { mergePages: false });
+    const pages = Array.isArray(text) ? text : [text];
+    const totalChars = pages.reduce((sum: number, p: string) => sum + (p?.length || 0), 0);
+    const avgPerPage = totalChars / Math.max(1, numPages);
+
+    console.log(`[native] ${fileName}: ${numPages} pages, ${totalChars} chars (${Math.round(avgPerPage)}/page)`);
+
+    // If avg < threshold, likely a scanned PDF — return null to trigger OCR fallback
+    if (avgPerPage < MIN_TEXT_PER_PAGE) {
+      console.log(`[native] ${fileName} appears scanned (low text density), falling back to OCR`);
+      return null;
+    }
+
+    // Format with page markers for better chunking
+    const formatted = pages
+      .map((p: string, i: number) => p?.trim() ? `[Page ${i + 1}]\n${p.trim()}` : '')
+      .filter(Boolean)
+      .join('\n\n');
+
+    return formatted;
+  } catch (err) {
+    console.warn(`[native] PDF extraction failed for ${fileName}:`, err instanceof Error ? err.message : err);
+    return null;
+  }
 }
 
 async function analyzeImage(dataUrl: string, fileName: string): Promise<string> {
@@ -309,11 +355,23 @@ Deno.serve(async (req) => {
     const isPdf = fileType === 'application/pdf' || document.file_name.toLowerCase().endsWith('.pdf');
 
     if (isPdf) {
-      if (fileSize > AI_EXTRACTION_LIMIT) {
-        throw new Error(`PDF too large (${Math.round(fileSize / 1024 / 1024)}MB). Maximum size for PDFs is 5MB.`);
+      // 1. Try native text extraction first (free, fast, reliable for text-based PDFs).
+      //    This handles the vast majority of uploads — research PDFs, reports, etc.
+      const nativeText = await extractPdfTextNative(fileUrl, document.file_name);
+      if (nativeText && nativeText.trim().length > 0) {
+        extractedText = nativeText;
+      } else {
+        // 2. Fallback to vision OCR for scanned PDFs (rare, expensive).
+        if (fileSize > AI_EXTRACTION_LIMIT) {
+          throw new Error(
+            `PDF appears to be scanned and is too large for OCR (${Math.round(fileSize / 1024 / 1024)}MB, max ${AI_EXTRACTION_LIMIT / 1024 / 1024}MB). ` +
+            `Please split into smaller sections or convert to a text-based PDF.`
+          );
+        }
+        console.log(`[ocr-fallback] Native returned no text, using vision OCR for ${document.file_name}`);
+        const fileData = await downloadAndEncodeFile(fileUrl, mimeType, fileSize);
+        extractedText = await extractTextFromDocument(fileData.url, document.file_name);
       }
-      const fileData = await downloadAndEncodeFile(fileUrl, mimeType, fileSize);
-      extractedText = await extractTextFromDocument(fileData.url, document.file_name);
     } else if (
       fileType.includes('video') || fileType.includes('audio') ||
       document.file_name.match(/\.(mp4|mov|avi|mkv|mp3|wav|m4a|webm)$/i)
