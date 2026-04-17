@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, X, ArrowRight, Lightbulb, XCircle, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ export const DarwinInlineNudges = ({
   maxNudges = 2,
   className 
 }: DarwinInlineNudgesProps) => {
+  const queryClient = useQueryClient();
   const [nudges, setNudges] = useState<DarwinNudge[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
@@ -79,13 +81,25 @@ export const DarwinInlineNudges = ({
     setDismissed(prev => new Set([...prev, nudgeId]));
     
     // Update in database
-    await supabase
+    const { error } = await supabase
       .from('claim_warnings_log')
       .update({ 
         is_dismissed: true, 
         dismissed_at: new Date().toISOString() 
       })
       .eq('id', nudgeId);
+
+    if (error) {
+      setDismissed(prev => {
+        const next = new Set(prev);
+        next.delete(nudgeId);
+        return next;
+      });
+      return;
+    }
+
+    setNudges(prev => prev.filter((nudge) => nudge.id !== nudgeId));
+    queryClient.invalidateQueries({ queryKey: ["claim-nudges-summary"] });
   };
 
   const getSeverityStyles = (severity: string) => {

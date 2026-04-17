@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 export type NudgeSeverity = "critical" | "high" | "medium" | "low";
 
@@ -9,6 +10,13 @@ export interface ClaimNudgeSummary {
   topSeverity: NudgeSeverity;
   count: number;
 }
+
+const EMPTY_TOTALS = {
+  critical: 0,
+  high: 0,
+  medium: 0,
+  low: 0,
+} satisfies Record<NudgeSeverity, number>;
 
 const SEVERITY_RANK: Record<string, number> = {
   critical: 4,
@@ -23,10 +31,15 @@ const SEVERITY_RANK: Record<string, number> = {
  */
 export function useClaimNudges() {
   const queryClient = useQueryClient();
+  const { user, loading } = useAuth();
 
   const query = useQuery({
-    queryKey: ["claim-nudges-summary"],
+    queryKey: ["claim-nudges-summary", user?.id],
     queryFn: async () => {
+      if (!user?.id) {
+        return { byClaim: new Map<string, ClaimNudgeSummary>(), totals: EMPTY_TOTALS };
+      }
+
       const { data, error } = await supabase
         .from("claim_warnings_log")
         .select("claim_id, severity")
@@ -51,18 +64,22 @@ export function useClaimNudges() {
       }
 
       // Totals by severity for the chip filters
-      const totals = { critical: 0, high: 0, medium: 0, low: 0 };
+      const totals = { ...EMPTY_TOTALS };
       for (const summary of byClaim.values()) {
         totals[summary.topSeverity] += 1;
       }
 
       return { byClaim, totals };
     },
+    enabled: !loading && !!user?.id,
+    refetchOnMount: "always",
     staleTime: 30_000,
   });
 
   // Refresh when warnings change
   useEffect(() => {
+    if (loading || !user?.id) return;
+
     const channel = supabase
       .channel("claim-nudges-summary")
       .on(
@@ -79,7 +96,7 @@ export function useClaimNudges() {
 
   return {
     nudgesByClaim: query.data?.byClaim ?? new Map<string, ClaimNudgeSummary>(),
-    totals: query.data?.totals ?? { critical: 0, high: 0, medium: 0, low: 0 },
+      totals: query.data?.totals ?? EMPTY_TOTALS,
     isLoading: query.isLoading,
   };
 }
