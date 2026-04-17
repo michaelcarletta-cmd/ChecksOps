@@ -270,12 +270,21 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
       filtered = filtered.filter((claim) => claim.loss_type === lossTypeFilter);
     }
 
-    // Pin claims with notifications to the top
-    const claimsWithNotifs = filtered.filter(claim => claimsWithNotifications.has(claim.id));
-    const claimsWithoutNotifs = filtered.filter(claim => !claimsWithNotifications.has(claim.id));
-    
-    return [...claimsWithNotifs, ...claimsWithoutNotifs];
-  }, [claims, searchQuery, statusFilter, lossTypeFilter, showClosed, claimsWithNotifications]);
+    // Nudge severity filter (chip)
+    if (severityFilter) {
+      filtered = filtered.filter((claim) => nudgesByClaim.get(claim.id)?.topSeverity === severityFilter);
+    }
+
+    // Sort: notifications > critical nudge > high nudge > medium > rest (preserve original order within tier)
+    const tier = (claim: Claim): number => {
+      if (claimsWithNotifications.has(claim.id)) return 100;
+      const nudge = nudgesByClaim.get(claim.id);
+      if (!nudge) return 0;
+      return severityRank(nudge.topSeverity) * 10;
+    };
+
+    return filtered.sort((a, b) => tier(b) - tier(a));
+  }, [claims, searchQuery, statusFilter, lossTypeFilter, severityFilter, showClosed, claimsWithNotifications, nudgesByClaim]);
 
   const toggleClaimSelection = (claimId: string) => {
     const newSelected = new Set(selectedClaims);
