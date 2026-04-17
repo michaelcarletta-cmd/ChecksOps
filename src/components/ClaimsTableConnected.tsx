@@ -571,17 +571,23 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
             <TableBody>
               {filteredClaims.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground">
                     No claims found
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredClaims.map((claim) => {
                   const hasNotification = claimsWithNotifications.has(claim.id);
+                  const nudge = nudgesByClaim.get(claim.id);
+                  const isCritical = nudge?.topSeverity === "critical";
                   return (
                     <TableRow
                       key={claim.id}
-                      className={`hover:bg-muted/50 transition-colors cursor-pointer ${hasNotification ? 'bg-primary/5 border-l-4 border-l-primary' : ''}`}
+                      className={cn(
+                        "hover:bg-muted/50 transition-colors cursor-pointer",
+                        hasNotification && "bg-primary/5 border-l-4 border-l-primary",
+                        !hasNotification && isCritical && "bg-destructive/5 border-l-4 border-l-destructive"
+                      )}
                       onClick={() => handleClaimClick(claim.id)}
                     >
                       <TableCell onClick={(e) => e.stopPropagation()} className={hasNotification ? 'bg-primary/5' : 'bg-background'}>
@@ -599,6 +605,23 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                           )}
                           <span className="text-sm">{claim.claim_number || "—"}</span>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {nudge ? (
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border",
+                              severityBadgeClasses(nudge.topSeverity)
+                            )}
+                            title={`${nudge.count} active ${nudge.count === 1 ? 'nudge' : 'nudges'}`}
+                          >
+                            <AlertTriangle className="h-2.5 w-2.5" />
+                            {severityLabel(nudge.topSeverity)}
+                            {nudge.count > 1 && <span className="opacity-70">·{nudge.count}</span>}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <span className="text-sm">{claim.policyholder_name || "—"}</span>
