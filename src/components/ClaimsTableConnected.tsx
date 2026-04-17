@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, Bell } from "lucide-react";
+import { Search, Bell, AlertTriangle } from "lucide-react";
 import { ClaimStatusSelect } from "./ClaimStatusSelect";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
@@ -18,6 +18,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BulkClaimActions } from "./BulkClaimActions";
 import { Badge } from "@/components/ui/badge";
+import { useClaimNudges, severityRank, severityBadgeClasses, severityLabel, type NudgeSeverity } from "@/hooks/useClaimNudges";
+import { cn } from "@/lib/utils";
 
 
 interface Claim {
