@@ -645,6 +645,9 @@ export default function Settings() {
             <TabsTrigger value="notification-logs" className="w-full md:w-auto justify-start text-base font-medium px-4">Notification Logs</TabsTrigger>
           )}
           {isAdmin && (
+            <TabsTrigger value="urgency-alerts" className="w-full md:w-auto justify-start text-base font-medium px-4">Urgency Alerts</TabsTrigger>
+          )}
+          {isAdmin && (
             <TabsTrigger value="jn-diagnostics" className="w-full md:w-auto justify-start text-base font-medium px-4">JN Sync Diagnostics</TabsTrigger>
           )}
           {isAdmin && (
@@ -910,6 +913,12 @@ export default function Settings() {
         {isAdmin && (
           <TabsContent value="notification-logs" className="w-full">
             <NotificationDeliveryLogView />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="urgency-alerts" className="w-full">
+            <StatusUrgencyNotificationsSettings />
           </TabsContent>
         )}
 
