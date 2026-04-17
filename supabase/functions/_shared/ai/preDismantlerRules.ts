@@ -63,6 +63,7 @@ export interface PreDismantlerRuleResult {
   flags: Record<RuleFlag, boolean>;
   shouldEscalateToAI: boolean;
   escalationReason: string | null;
+  lossType: LossTypeDetection;
   meta: {
     textLength: number;
     matchCount: number;
