@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import JSZip from "https://esm.sh/jszip@3.10.1";
+import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@0.12.1";
 import { callVision, type VisionMessage } from "../_shared/ai/generate.ts";
 import { MODEL_VISION } from "../_shared/ai/modelRouter.ts";
 
@@ -10,8 +11,12 @@ const corsHeaders = {
 };
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
+// Native PDF extraction (unpdf) handles up to MAX_FILE_SIZE.
+// Only the vision OCR fallback is constrained by AI_EXTRACTION_LIMIT.
 const AI_EXTRACTION_LIMIT = 5 * 1024 * 1024;
 const IMAGE_DIRECT_URL_THRESHOLD = 4 * 1024 * 1024;
+// Minimum chars per page to consider a PDF "text-based" (vs. scanned needing OCR)
+const MIN_TEXT_PER_PAGE = 50;
 
 function splitIntoChunks(text: string, chunkSize = 600, overlap = 100): string[] {
   const sections = text.split(/(?=^#{1,6}\s|^\[Slide |^\[Image:|^\[Title:|^---)/m);
