@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Search, Bell, AlertTriangle } from "lucide-react";
+import { Search, Bell } from "lucide-react";
 import { ClaimStatusSelect } from "./ClaimStatusSelect";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
@@ -18,8 +18,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BulkClaimActions } from "./BulkClaimActions";
 import { Badge } from "@/components/ui/badge";
-import { useClaimNudges, severityRank, severityBadgeClasses, severityLabel, type NudgeSeverity } from "@/hooks/useClaimNudges";
-import { cn } from "@/lib/utils";
 
 
 interface Claim {
@@ -43,7 +41,6 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [lossTypeFilter, setLossTypeFilter] = useState<string>("all");
-  const [severityFilter, setSeverityFilter] = useState<NudgeSeverity | null>(null);
   // Show closed claims by default for client/contractor portals for tracking purposes
   const [showClosed, setShowClosed] = useState(portalType === "client" || portalType === "contractor" || portalType === "referrer");
   const [selectedClaims, setSelectedClaims] = useState<Set<string>>(new Set());
@@ -53,7 +50,6 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { nudgesByClaim, totals: nudgeTotals } = useClaimNudges();
 
   // Fetch unread notifications with claim IDs
   const { data: claimNotifications = [], refetch: refetchNotifications } = useQuery({
@@ -270,21 +266,12 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
       filtered = filtered.filter((claim) => claim.loss_type === lossTypeFilter);
     }
 
-    // Nudge severity filter (chip)
-    if (severityFilter) {
-      filtered = filtered.filter((claim) => nudgesByClaim.get(claim.id)?.topSeverity === severityFilter);
-    }
-
-    // Sort: notifications > critical nudge > high nudge > medium > rest (preserve original order within tier)
-    const tier = (claim: Claim): number => {
-      if (claimsWithNotifications.has(claim.id)) return 100;
-      const nudge = nudgesByClaim.get(claim.id);
-      if (!nudge) return 0;
-      return severityRank(nudge.topSeverity) * 10;
-    };
-
-    return filtered.sort((a, b) => tier(b) - tier(a));
-  }, [claims, searchQuery, statusFilter, lossTypeFilter, severityFilter, showClosed, claimsWithNotifications, nudgesByClaim]);
+    return filtered.sort((a, b) => {
+      const aHasNotification = claimsWithNotifications.has(a.id) ? 1 : 0;
+      const bHasNotification = claimsWithNotifications.has(b.id) ? 1 : 0;
+      return bHasNotification - aHasNotification;
+    });
+  }, [claims, searchQuery, statusFilter, lossTypeFilter, showClosed, claimsWithNotifications]);
 
   const toggleClaimSelection = (claimId: string) => {
     const newSelected = new Set(selectedClaims);
@@ -405,43 +392,6 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
             />
           )}
           
-          {/* Nudge severity chips - one-click triage filter */}
-          {(nudgeTotals.critical > 0 || nudgeTotals.high > 0 || nudgeTotals.medium > 0) && (
-            <div className="flex flex-wrap gap-2 items-center">
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <AlertTriangle className="h-3 w-3" /> Needs attention:
-              </span>
-              {(["critical", "high", "medium"] as NudgeSeverity[]).map((sev) => {
-                const count = nudgeTotals[sev];
-                if (count === 0) return null;
-                const active = severityFilter === sev;
-                return (
-                  <button
-                    key={sev}
-                    type="button"
-                    onClick={() => setSeverityFilter(active ? null : sev)}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors",
-                      severityBadgeClasses(sev),
-                      active && "ring-2 ring-offset-1 ring-offset-background ring-current"
-                    )}
-                  >
-                    <span className="font-semibold">{count}</span>
-                    <span>{severityLabel(sev)}</span>
-                  </button>
-                );
-              })}
-              {severityFilter && (
-                <button
-                  type="button"
-                  onClick={() => setSeverityFilter(null)}
-                  className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          )}
 
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
