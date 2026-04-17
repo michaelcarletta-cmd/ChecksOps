@@ -128,6 +128,17 @@ async function updateClaimMasterStateDocIntelSummary(
   }
 }
 
+function isTemporaryIntelligenceError(message: string | null | undefined): boolean {
+  const normalized = (message || '').toLowerCase();
+  return (
+    normalized === 'rate_limit' ||
+    normalized.includes('rate limit') ||
+    normalized.includes('too many requests') ||
+    normalized.includes('http 429') ||
+    normalized.includes('429')
+  );
+}
+
 function mapDocumentType(classification: string, documentSubtype?: string | null): string {
   // If we have a specific subtype for estimates, use it instead of defaulting to carrier_estimate
   if (classification === 'estimate' && documentSubtype) {
@@ -716,6 +727,14 @@ Deno.serve(async (req) => {
             processing_error: null,
             needs_reprocessing: false,
           }).eq('id', fileId);
+        } else if ((intelResult as any).skippedReason === 'rate_limit_deferred') {
+          intelligenceSkippedReason = 'rate_limit_deferred';
+          intelligenceError = null;
+          console.warn(`[DocIntel] deferred file_id=${fileId} reason=rate_limit_deferred`);
+          await supabase.from('claim_files').update({
+            processing_error: null,
+            needs_reprocessing: false,
+          }).eq('id', fileId);
         } else if (!intelResult.success) {
           intelligenceError = (intelResult as any).error || 'unknown_error';
           console.error(`[DocIntel] failed file_id=${fileId} error=${intelligenceError}`);
@@ -732,10 +751,19 @@ Deno.serve(async (req) => {
       } catch (intelErr: any) {
         intelligenceError = intelErr?.message || String(intelErr);
         console.error('[DocIntel] Inline extraction failed:', intelligenceError);
-        await supabase.from('claim_files').update({
-          processing_error: `intelligence_extraction_exception: ${intelligenceError}`,
-          needs_reprocessing: true,
-        }).eq('id', fileId);
+        if (isTemporaryIntelligenceError(intelligenceError)) {
+          intelligenceSkippedReason = 'rate_limit_deferred';
+          intelligenceError = null;
+          await supabase.from('claim_files').update({
+            processing_error: null,
+            needs_reprocessing: false,
+          }).eq('id', fileId);
+        } else {
+          await supabase.from('claim_files').update({
+            processing_error: `intelligence_extraction_exception: ${intelligenceError}`,
+            needs_reprocessing: true,
+          }).eq('id', fileId);
+        }
       }
     } else {
       intelligenceSkippedReason = 'missing_claim_or_file_or_text';
@@ -1376,6 +1404,10 @@ async function extractStructuredIntelligence(
 
   } catch (err: any) {
     const errMsg = err?.message || String(err);
+    if (isTemporaryIntelligenceError(errMsg)) {
+      console.warn('[DocIntel] Temporary AI limit hit, deferring to queue:', errMsg);
+      return { success: true, written: false, skippedReason: 'rate_limit_deferred' };
+    }
     console.error('[DocIntel] Extraction failed:', errMsg);
     return { success: false, written: false, error: errMsg };
   }
