@@ -1,5 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { callVision, MODEL_VISION } from "../_shared/ai/generate.ts";
+import { generate } from "../_shared/ai/generate.ts";
+import { extractPdfNative, isNativeExtractionUsable } from "../_shared/pdfNativeExtract.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
