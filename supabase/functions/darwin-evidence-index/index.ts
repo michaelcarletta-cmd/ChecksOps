@@ -79,6 +79,52 @@ type ClaimFactsPack = {
   invoiceScopeBuckets?: Partial<Record<InvoiceScopeBucket, { label: string; amount?: number; evidence: Array<{ docId: string; docName: string }> }[]>>;
 };
 
+function isEstimateDoc(f: any): boolean {
+  const classification = (f.document_classification || '').toLowerCase();
+  const documentType = (f.document_type || '').toLowerCase();
+  const subtype = (f.document_subtype || '').toLowerCase();
+  const folderName = ((f as any).claim_folders?.name || '').toLowerCase();
+  const name = (f.file_name || '').toLowerCase();
+  const summary = (f.document_summary || '').toLowerCase();
+
+  if (classification === 'estimate') return true;
+  if (documentType === 'estimate' || documentType === 'carrier_estimate') return true;
+  if (subtype.includes('estimate')) return true;
+  if (folderName.includes('estimate') || folderName.includes('scope') || folderName.includes('supplement')) return true;
+
+  return [
+    'estimate',
+    'xactimate',
+    'symbility',
+    'scope',
+    'rcv',
+    'acv',
+    'loss sheet',
+    'repair list',
+    'line item',
+  ].some((token) => name.includes(token) || summary.includes(token));
+}
+
+function inferEstimateSource(f: any): 'carrier' | 'shop' | 'unknown' {
+  const subtype = (f.document_subtype || '').toLowerCase();
+  const documentType = (f.document_type || '').toLowerCase();
+  const folderName = ((f as any).claim_folders?.name || '').toLowerCase();
+  const name = (f.file_name || '').toLowerCase();
+
+  if (subtype === 'carrier_estimate' || documentType === 'carrier_estimate' || name.includes('carrier')) return 'carrier';
+  if (
+    subtype === 'pa_estimate' ||
+    subtype === 'contractor_estimate' ||
+    subtype === 'supplement_estimate' ||
+    folderName.includes('supplement') ||
+    name.includes('supplement')
+  ) {
+    return 'shop';
+  }
+
+  return 'unknown';
+}
+
 function mapFolderToKey(folderName: string): FolderKey {
   const f = folderName.toLowerCase();
   if (f.includes("policy")) return "policy";
@@ -143,7 +189,7 @@ Deno.serve(async (req) => {
       supabase.from("claims").select("id, claim_number, policyholder_address, insurance_company, loss_type").eq("id", claimId).single(),
       supabase
         .from("claim_files")
-        .select("id, file_name, document_classification, classification_metadata, uploaded_at, extracted_text, claim_folders(name)")
+        .select("id, file_name, document_classification, document_type, document_subtype, document_summary, classification_metadata, uploaded_at, extracted_text, claim_folders(name)")
         .eq("claim_id", claimId),
       supabase.from("claim_photos").select("id, file_name, category").eq("claim_id", claimId),
     ]);
@@ -258,25 +304,25 @@ Deno.serve(async (req) => {
       pack.evidenceGaps.push("Policy jacket");
     }
 
-    const estimateDocs = files.filter((f: any) => {
-      const c = (f.document_classification || "").toLowerCase();
-      const n = (f.file_name || "").toLowerCase();
-      return c === "estimate" || n.includes("estimate") || n.includes("xactimate") || n.includes("scope");
-    });
+    const estimateDocs = files.filter((f: any) => isEstimateDoc(f));
 
     if (estimateDocs.length > 0) {
+      const primaryEstimateDoc =
+        estimateDocs.find((f: any) => inferEstimateSource(f) === 'shop') ||
+        estimateDocs.find((f: any) => (f.document_subtype || '').toLowerCase() === 'pa_estimate') ||
+        estimateDocs[0];
       pack.estimate = {
-        source: "unknown",
+        source: inferEstimateSource(primaryEstimateDoc),
         lineItemHighlights: [],
         missingDocs: [],
       };
-      const meta = estimateDocs[0].classification_metadata as any;
+      const meta = primaryEstimateDoc.classification_metadata as any;
       if (meta?.amounts && Array.isArray(meta.amounts)) {
         for (const a of meta.amounts.slice(0, 15)) {
           pack.estimate!.lineItemHighlights.push({
             label: (a as any).description || (a as any).category || "Line item",
             amount: (a as any).amount ?? (a as any).total,
-            evidence: [{ docId: estimateDocs[0].id, docName: estimateDocs[0].file_name, lineHint: (a as any).line }].filter((e) => e.docId),
+            evidence: [{ docId: primaryEstimateDoc.id, docName: primaryEstimateDoc.file_name, lineHint: (a as any).line }].filter((e) => e.docId),
           });
         }
       }
@@ -287,7 +333,7 @@ Deno.serve(async (req) => {
       pack.evidenceGaps.push("Our estimate / scope");
     }
 
-    const hasCarrierEstimate = files.some((f: any) => (f.file_name || "").toLowerCase().includes("carrier") && mapToCategory(f, mapFolderToKey((f as any).claim_folders?.name || "")) === "estimate");
+    const hasCarrierEstimate = files.some((f: any) => isEstimateDoc(f) && inferEstimateSource(f) === 'carrier');
     if (!hasCarrierEstimate) pack.evidenceGaps.push("Carrier estimate");
 
     const objectionDocs = files.filter((f: any) => {
