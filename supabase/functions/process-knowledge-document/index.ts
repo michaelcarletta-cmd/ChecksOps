@@ -114,7 +114,7 @@ async function downloadAndEncodeFile(fileUrl: string, mimeType: string, fileSize
 }
 
 async function extractTextFromDocument(dataUrl: string, fileName: string): Promise<string> {
-  console.log(`Extracting text from document: ${fileName}`);
+  console.log(`[ai-fallback] Extracting text via vision from: ${fileName}`);
 
   const result = await callVision({
     model: MODEL_VISION,
@@ -130,8 +130,49 @@ async function extractTextFromDocument(dataUrl: string, fileName: string): Promi
     temperature: 0.1,
   });
 
-  console.log(`Extracted ${result.text.length} characters`);
+  console.log(`[ai-fallback] Extracted ${result.text.length} characters`);
   return result.text;
+}
+
+/**
+ * Native PDF text extraction using unpdf (PDF.js wrapper).
+ * Returns null if the PDF appears to be scanned (no extractable text).
+ * Costs $0 — runs entirely in the edge function.
+ */
+async function extractPdfTextNative(fileUrl: string, fileName: string): Promise<string | null> {
+  try {
+    console.log(`[native] Trying native PDF extraction for: ${fileName}`);
+    const response = await fetch(fileUrl);
+    if (!response.ok) throw new Error(`Failed to download PDF: ${response.status}`);
+
+    const buffer = new Uint8Array(await response.arrayBuffer());
+    const pdf = await getDocumentProxy(buffer);
+    const numPages = pdf.numPages;
+
+    const { text } = await extractText(pdf, { mergePages: false });
+    const pages = Array.isArray(text) ? text : [text];
+    const totalChars = pages.reduce((sum: number, p: string) => sum + (p?.length || 0), 0);
+    const avgPerPage = totalChars / Math.max(1, numPages);
+
+    console.log(`[native] ${fileName}: ${numPages} pages, ${totalChars} chars (${Math.round(avgPerPage)}/page)`);
+
+    // If avg < threshold, likely a scanned PDF — return null to trigger OCR fallback
+    if (avgPerPage < MIN_TEXT_PER_PAGE) {
+      console.log(`[native] ${fileName} appears scanned (low text density), falling back to OCR`);
+      return null;
+    }
+
+    // Format with page markers for better chunking
+    const formatted = pages
+      .map((p: string, i: number) => p?.trim() ? `[Page ${i + 1}]\n${p.trim()}` : '')
+      .filter(Boolean)
+      .join('\n\n');
+
+    return formatted;
+  } catch (err) {
+    console.warn(`[native] PDF extraction failed for ${fileName}:`, err instanceof Error ? err.message : err);
+    return null;
+  }
 }
 
 async function analyzeImage(dataUrl: string, fileName: string): Promise<string> {
