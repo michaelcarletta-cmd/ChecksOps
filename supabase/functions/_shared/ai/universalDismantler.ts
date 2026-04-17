@@ -13,7 +13,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.39.3";
 import { generate } from "./generate.ts";
 import { getClaimsContextBundle, formatContextBundle } from "./claimsKnowledgeEngine.ts";
-import { analyzeDocumentWithRules, buildLightweightDismantler, augmentWithLearnedRules } from "./preDismantlerRules.ts";
+import { analyzeDocumentWithRules, buildLightweightDismantler, augmentWithLearnedRules, describeLossType, type LossTypeDetection } from "./preDismantlerRules.ts";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -270,11 +270,14 @@ async function extractFromChunk(
   docTypes: string[],
   claimContext: string,
   docSpecificRules: string,
+  lossTypeBlock: string,
 ): Promise<ChunkExtraction | null> {
   try {
     const result = await generate({
       task: "extraction",
       system: `${claimContext}
+
+${lossTypeBlock}
 
 You are a forensic document dismantler for insurance claim disputes. You work for the policyholder's public adjuster.
 
