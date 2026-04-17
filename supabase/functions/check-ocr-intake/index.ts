@@ -318,6 +318,71 @@ function errResponse(message: string, status: number, stage?: string) {
   );
 }
 
+function deriveFallbackCheckDate(issueDate: unknown, createdAt: unknown): string {
+  if (typeof issueDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(issueDate)) {
+    return issueDate;
+  }
+
+  const parsedCreatedAt = typeof createdAt === "string" && !isNaN(Date.parse(createdAt))
+    ? new Date(createdAt)
+    : new Date();
+
+  return parsedCreatedAt.toISOString().split("T")[0];
+}
+
+async function ensureClaimCheckLinkOnFailure(
+  supabase: ReturnType<typeof createClient>,
+  check: Record<string, unknown>,
+  userId: string,
+  reason: string,
+) {
+  const checkId = typeof check.id === "string" ? check.id : null;
+  const claimId = typeof check.claim_id === "string" && check.claim_id ? check.claim_id : null;
+
+  if (!checkId || !claimId) return;
+
+  const { data: existingCheck, error: existingErr } = await supabase
+    .from("claim_checks")
+    .select("id")
+    .eq("check_intake_item_id", checkId)
+    .maybeSingle();
+
+  if (existingErr) {
+    log("claim_check_link_fallback", "Lookup failed", { checkId, claimId, error: existingErr.message });
+    return;
+  }
+
+  if (existingCheck) {
+    log("claim_check_link_fallback", "Linked claim check already exists", {
+      checkId,
+      claimId,
+      claimCheckId: existingCheck.id,
+    });
+    return;
+  }
+
+  const { error: insertErr } = await supabase.from("claim_checks").insert({
+    claim_id: claimId,
+    check_intake_item_id: checkId,
+    check_date: deriveFallbackCheckDate(check.issue_date, check.created_at),
+    amount: typeof check.amount === "number" && Number.isFinite(check.amount) ? check.amount : 0,
+    check_type: "initial",
+    created_by: userId,
+    check_number: typeof check.check_number === "string" ? check.check_number : null,
+    carrier_name: typeof check.carrier_name === "string" ? check.carrier_name : null,
+    payee_line: typeof check.payee_line === "string" ? check.payee_line : null,
+    source: "check_center_upload",
+    notes: reason,
+  });
+
+  if (insertErr) {
+    log("claim_check_link_fallback", "Insert failed", { checkId, claimId, error: insertErr.message });
+    return;
+  }
+
+  log("claim_check_link_fallback", "Created linked claim check placeholder", { checkId, claimId });
+}
+
 /* ------------------------------------------------------------------ */
 /*  Main handler                                                       */
 /* ------------------------------------------------------------------ */
@@ -520,6 +585,14 @@ Rules:
             raw_ocr_front: { raw: rawText.substring(0, 2000), parse_error: (parseErr as Error).message },
           })
           .eq("id", checkId);
+
+        await ensureClaimCheckLinkOnFailure(
+          supabase,
+          check as Record<string, unknown>,
+          userId,
+          "OCR failed before extraction. Complete the check details manually from the claim.",
+        );
+
         return errResponse("Could not parse OCR output as valid JSON", 500, stage);
       }
 
@@ -586,6 +659,14 @@ Rules:
           raw_ocr_front: { ocr_error: ocrError, stage },
         })
         .eq("id", checkId);
+
+      await ensureClaimCheckLinkOnFailure(
+        supabase,
+        check as Record<string, unknown>,
+        userId,
+        "OCR failed before extraction. Complete the check details manually from the claim.",
+      );
+
       await logAudit(supabase, checkId, "ocr_failed",
         `OCR failed at ${stage}: ${ocrError}`,
         { error: ocrError, stage }, userId);
