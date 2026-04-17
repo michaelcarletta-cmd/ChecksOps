@@ -7932,7 +7932,7 @@ Include: overview, then for each scenario: trigger signals, goals, step-by-step 
       case 'compliance_check': {
         // Compliance-aware messaging checker
         const textToCheck = additionalContext?.text || content || '';
-        const state = claim?.policyholder_state || stateInfo.state;
+        const state = claim?.state_code || stateInfo.state;
         
         systemPrompt = `You are Darwin, an expert public adjuster compliance advisor for ${stateInfo.stateName}. 
 You analyze communications for compliance issues, risky language, and professional best practices.

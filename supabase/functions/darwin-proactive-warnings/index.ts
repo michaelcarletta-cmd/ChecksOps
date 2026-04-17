@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
     // Get active (non-closed) claims
     const { data: claims, error: claimsError } = await supabase
       .from("claims")
-      .select("id, claim_number, status, created_at, updated_at, insurance_company, loss_type, policyholder_state, property_state")
+      .select("id, claim_number, status, created_at, updated_at, insurance_company, loss_type, state_code")
       .eq("is_closed", false)
       .limit(500);
 
