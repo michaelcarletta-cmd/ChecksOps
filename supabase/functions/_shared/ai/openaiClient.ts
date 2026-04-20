@@ -48,6 +48,16 @@ function fallbackOpenAIModel(model: string): string {
   return "gpt-4o-mini";
 }
 
+/**
+ * Pick the correct token-limit parameter name for the target model.
+ * GPT-5 / o1 / o3 reasoning models reject `max_tokens` and require
+ * `max_completion_tokens`. Gemini and legacy gpt-4o still accept `max_tokens`.
+ */
+function tokenLimitKey(model: string): "max_tokens" | "max_completion_tokens" {
+  if (/^openai\/(gpt-5|o[13])/i.test(model)) return "max_completion_tokens";
+  return "max_tokens";
+}
+
 interface RequestConfig {
   url: string;
   headers: Record<string, string>;
@@ -106,13 +116,20 @@ async function executeChat(
       `[aiClient] ${contextLabel}: Lovable gateway returned ${res.status} for ${model}. Falling back to OpenAI ${fbModel}.`,
     );
     try {
+      // Legacy OpenAI endpoint (gpt-4o/gpt-4o-mini) uses `max_tokens`,
+      // not `max_completion_tokens`. Rewrite the body for the fallback.
+      const fbBody: Record<string, unknown> = { ...body, model: fbModel };
+      if ("max_completion_tokens" in fbBody) {
+        fbBody.max_tokens = fbBody.max_completion_tokens;
+        delete fbBody.max_completion_tokens;
+      }
       const fbRes = await fetch(OPENAI_URL, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${openAIKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ ...body, model: fbModel }),
+        body: JSON.stringify(fbBody),
       });
       const fbData = await fbRes.json();
       if (!fbRes.ok) {
@@ -170,7 +187,7 @@ export interface OpenAIResult {
 export async function callOpenAI(opts: OpenAIChatOptions): Promise<OpenAIResult> {
   const body: Record<string, unknown> = {
     temperature: opts.temperature ?? 0.3,
-    max_tokens: opts.maxTokens ?? 2000,
+    [tokenLimitKey(opts.model)]: opts.maxTokens ?? 2000,
     messages: [
       { role: "system", content: opts.system },
       { role: "user", content: opts.user },
@@ -228,7 +245,7 @@ export async function callVision(opts: VisionChatOptions): Promise<VisionResult>
   const body: Record<string, unknown> = {
     messages: opts.messages,
     temperature: opts.temperature ?? 0.3,
-    max_tokens: opts.maxTokens ?? 4000,
+    [tokenLimitKey(opts.model)]: opts.maxTokens ?? 4000,
   };
   if (opts.jsonMode) {
     body.response_format = { type: "json_object" };
@@ -263,7 +280,7 @@ export async function callWithTools(opts: ToolCallOptions): Promise<ToolCallResu
     messages: opts.messages,
     tools: opts.tools,
     temperature: opts.temperature ?? 0.3,
-    max_tokens: opts.maxTokens ?? 4000,
+    [tokenLimitKey(opts.model)]: opts.maxTokens ?? 4000,
   };
   if (opts.toolChoice) {
     body.tool_choice = opts.toolChoice;
