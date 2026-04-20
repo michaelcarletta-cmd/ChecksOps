@@ -13464,6 +13464,8 @@ export type Database = {
           is_active: boolean | null
           priority: string | null
           title: string
+          trigger_check_field: string | null
+          trigger_check_value: string | null
           trigger_status: string | null
           trigger_sub_status_id: string | null
           trigger_type: string
@@ -13477,6 +13479,8 @@ export type Database = {
           is_active?: boolean | null
           priority?: string | null
           title: string
+          trigger_check_field?: string | null
+          trigger_check_value?: string | null
           trigger_status?: string | null
           trigger_sub_status_id?: string | null
           trigger_type: string
@@ -13490,6 +13494,8 @@ export type Database = {
           is_active?: boolean | null
           priority?: string | null
           title?: string
+          trigger_check_field?: string | null
+          trigger_check_value?: string | null
           trigger_status?: string | null
           trigger_sub_status_id?: string | null
           trigger_type?: string
