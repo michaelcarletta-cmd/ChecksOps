@@ -23,7 +23,6 @@ export function useClaimControlBoard() {
           policyholder_address,
           insurance_company,
           status,
-          sub_status,
           claim_operational_state (*)
         `)
         .not("status", "eq", "closed")
