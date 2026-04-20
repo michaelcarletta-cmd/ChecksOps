@@ -10,6 +10,7 @@ export { callVision, callWithTools, type VisionChatOptions, type VisionResult, t
 export { MODEL_CHEAP, MODEL_STRONG, MODEL_FAST, MODEL_VISION, MODEL_VISION_STRONG } from "./modelRouter.ts";
 import { searchTavily, type TavilyResult } from "./tavily.ts";
 import { buildCacheKey, hashPrompt, getCache, setCache, getClaimMemory, setClaimMemory, clearClaimMemory, isSearchOnCooldown, markSearchUsed } from "./cache.ts";
+import { readDbResponseCache, writeDbResponseCache } from "./dbResponseCache.ts";
 
 export { clearClaimMemory } from "./cache.ts";
 
@@ -80,9 +81,19 @@ export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
   );
 
   if (!opts.skipCache) {
+    // L1: in-memory (per function instance)
     const cached = getCache<GenerateResult>(cacheKey);
     if (cached) {
+      console.log(`[generate] L1 HIT ${opts.task} model=${model}`);
       return { ...cached, cached: true };
+    }
+    // L2: DB-backed 24h cache (cross-instance, survives cold starts)
+    const dbCached = await readDbResponseCache<GenerateResult>(cacheKey);
+    if (dbCached) {
+      console.log(`[generate] L2 (DB) HIT ${opts.task} model=${model}`);
+      // Promote into in-memory for next call on this instance
+      setCache(cacheKey, dbCached);
+      return { ...dbCached, cached: true };
     }
   }
 
@@ -144,6 +155,20 @@ export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
 
   // ── 7. Persist to caches ───────────────────────────────────────
   setCache(cacheKey, result);
+  // Best-effort DB write (non-blocking on success path; await for correctness in Deno isolates)
+  if (!opts.skipCache) {
+    await writeDbResponseCache(
+      cacheKey,
+      {
+        task: opts.task,
+        claimId: opts.claimId || null,
+        model,
+        searchMode: config.searchMode,
+        promptHash: pHash,
+      },
+      result,
+    );
+  }
 
   if (opts.claimId && opts.claimDataType) {
     setClaimMemory(opts.claimId, opts.claimDataType, aiResult.text, aiResult.model, pHash);
