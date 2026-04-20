@@ -850,6 +850,7 @@ Deno.serve(async (req) => {
 
     // ── FALLBACK: When document intelligence is empty/unusable, extract text from claim files ──
     // Uses garbage detection + inline OCR via vision AI as last resort
+    // Wrapped in a 12-second timeout to prevent the entire function from timing out
     let rawTextFallbackBrief = '';
     if (docIntelligence.length === 0 && claimFiles.length > 0) {
       console.log(`[Copilot Fallback] No usable document intelligence — attempting text extraction for ${claimFiles.length} files`);
@@ -862,6 +863,10 @@ Deno.serve(async (req) => {
       console.log(`[Copilot Fallback] Fetching text for ${fileIdsToFetch.length} files (${priorityFileIds.length} priority)`);
 
       if (fileIdsToFetch.length > 0) {
+        // Hard timeout: abort entire fallback block after 12s so the AI call can still run
+        const fallbackStart = Date.now();
+        const FALLBACK_TIMEOUT_MS = 12000;
+
         const { data: rawTextRows, error: rawTextError } = await supabase
           .from('claim_files')
           .select('id, file_name, file_path, file_type, extracted_text, clean_text, text_quality_status')
@@ -874,6 +879,12 @@ Deno.serve(async (req) => {
         const textEntries: string[] = [];
 
         for (const r of (rawTextRows || [])) {
+          // Check timeout before each file
+          if (Date.now() - fallbackStart > FALLBACK_TIMEOUT_MS) {
+            console.warn('[Copilot Fallback] Timeout reached — skipping remaining files');
+            break;
+          }
+
           const bestText = (r.clean_text || r.extracted_text || '').trim();
           const isGarbage = !bestText || bestText.length < 50 || isGarbageTextInline(bestText) || r.text_quality_status === 'unusable';
           console.log(`[Copilot Fallback] File "${r.file_name}": textLen=${bestText.length}, quality=${r.text_quality_status}, isGarbage=${isGarbage}`);
@@ -884,6 +895,11 @@ Deno.serve(async (req) => {
             textEntries.push(`--- FILE: ${r.file_name} ---\n${truncated}${bestText.length > 5000 ? '\n[...truncated]' : ''}`);
           } else if (r.file_path && (r.file_type?.includes('pdf') || r.file_name?.toLowerCase().endsWith('.pdf'))) {
             // Text is garbage or missing — attempt inline OCR via vision AI
+            // But only if we have enough time budget left (need >=5s for OCR)
+            if (Date.now() - fallbackStart > FALLBACK_TIMEOUT_MS - 5000) {
+              console.warn(`[Copilot Fallback] Skipping OCR for "${r.file_name}" — insufficient time budget`);
+              continue;
+            }
             console.log(`[Copilot Fallback] Attempting inline OCR for "${r.file_name}"`);
             try {
               const ocrText = await inlineOcrFromStorage(supabase, r.file_path, r.file_name);
@@ -906,7 +922,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        console.log(`[Copilot Fallback] Final text entries: ${textEntries.length}`);
+        console.log(`[Copilot Fallback] Final text entries: ${textEntries.length} (elapsed ${Date.now() - fallbackStart}ms)`);
 
         if (textEntries.length > 0) {
           rawTextFallbackBrief = `
@@ -1934,8 +1950,8 @@ CRITICAL RULES:
     );
   } catch (err: any) {
     console.error('darwin-copilot error:', err);
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
+    return new Response(JSON.stringify({ ok: false, error: err.message || 'Unknown copilot error' }), {
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
