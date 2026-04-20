@@ -31,6 +31,27 @@ async function callAIVision(systemPrompt: string, contentParts: any[]) {
   return result.text;
 }
 
+/**
+ * Try native pdf.js text extraction first; only fall back to vision OCR
+ * if the PDF is genuinely scanned/image-only. Cuts cost ~95% on digital PDFs.
+ * Returns the native text if usable, otherwise null (caller does vision).
+ */
+async function tryNativePdfText(base64Pdf: string, fileName: string): Promise<string | null> {
+  try {
+    const { extractPdfNative, isNativeExtractionUsable } = await import("../_shared/pdfNativeExtract.ts");
+    const native = await extractPdfNative(base64Pdf, { fileName });
+    if (isNativeExtractionUsable(native)) {
+      console.log(`[claim-context-pipeline] native PDF OK: ${fileName} chars=${native.charCount} status=${native.status}`);
+      return native.text;
+    }
+    console.log(`[claim-context-pipeline] native PDF unusable (status=${native.status}) for ${fileName}, vision fallback`);
+    return null;
+  } catch (e) {
+    console.warn(`[claim-context-pipeline] native PDF failed for ${fileName}:`, (e as Error).message);
+    return null;
+  }
+}
+
 function parseJSON(text: string) {
   // Try raw parse first
   try { return JSON.parse(text); } catch {}
