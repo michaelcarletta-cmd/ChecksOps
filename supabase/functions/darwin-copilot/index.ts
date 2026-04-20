@@ -3,7 +3,6 @@ import { callPerplexityResearch, runDarwinTask } from "../_shared/ai-router.ts";
 import { getClaimsContextBundle, formatContextBundle } from "../_shared/ai/claimsKnowledgeEngine.ts";
 import { analyzeDocument, formatDismantlerForPrompt, reconstructDismantlerFromRow, type DismantlerResult } from "../_shared/ai/universalDismantler.ts";
 import { detectDismantlerAction, executeDismantlerAction } from "../_shared/ai/dismantlerActions.ts";
-import { isGarbageText } from "../_shared/document-intelligence-types.ts";
 import {
   COPILOT_ABSOLUTE_RULE,
   COPILOT_DATA_INTERPRETATION,
@@ -19,6 +18,34 @@ import {
   copilotExternalWritingRules,
   copilotModeTail,
 } from "../_shared/ai/copilotPromptBlocks.ts";
+import {
+  getLatestUserTurn,
+  isExplicitDraftOrActionRequest,
+  isSmsDraftRequest,
+  isEmailDraftRequest,
+  humanizeClaimText,
+  summarizeStructuredValue,
+  isDraftClarificationResponse,
+  isAskingForClarification,
+  containsForbiddenDraftPhrase,
+  buildDeterministicClientDraft,
+  isAnalysisQuestion,
+  isDismantleRequest,
+  startsWithActionConfirmation,
+  looksLikeToolStyleFailure,
+  shouldExcludeAssistantHistory,
+  hasUsableDocumentIntel,
+  asksForDocumentReupload,
+  givesGenericFrameworkResponse,
+  isGarbageTextInline,
+  inlineOcrFromStorage,
+  getClientFirstName,
+  stripLeadingDateTag,
+  collapseWhitespace,
+  hasMeaningfulValue,
+  isLikelyTechnicalPdfSummary,
+  type DraftFacts,
+} from "../_shared/ai/copilotHelpers.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,347 +53,6 @@ const corsHeaders = {
 };
 
 type CopilotMode = 'operational' | 'rebuttal' | 'estimate' | 'war_room' | 'training' | 'strategy' | 'draft' | 'search_web' | 'search_argue';
-
-function getLatestUserTurn(userQuestion?: string, conversationHistory?: Array<{ role?: string; content?: string }>) {
-  if (Array.isArray(conversationHistory)) {
-    for (let i = conversationHistory.length - 1; i >= 0; i -= 1) {
-      const msg = conversationHistory[i];
-      if (msg?.role === 'user' && typeof msg.content === 'string' && msg.content.trim()) {
-        return msg.content.trim();
-      }
-    }
-  }
-
-  return (userQuestion || '').trim();
-}
-
-function isExplicitDraftOrActionRequest(message: string) {
-  return /\b(?:draft|write|compose|prepare|generate|create|add|make|log)\b[\s\S]{0,40}\b(?:email|letter|message|note|task|todo|reminder|update|timeline entry|activity|sms|text message)\b|\b(?:email|letter|message|note|task|todo|reminder|update|timeline entry|activity|sms|text message)\b[\s\S]{0,20}\b(?:draft|write|compose|prepare|generate|create|add|make|log)\b/i.test(message);
-}
-
-function isSmsDraftRequest(message: string) {
-  return /\b(?:draft|write|compose|prepare|generate|create|send)\b[\s\S]{0,60}\b(?:sms|text message|text msg|text update|text the client|text the homeowner|text the insured)\b|\b(?:sms|text message|text msg|text update)\b[\s\S]{0,30}\b(?:draft|write|compose|prepare|generate|create)\b|\bdraft\b[\s\S]{0,30}\bsms\b/i.test(message);
-}
-
-function isEmailDraftRequest(message: string) {
-  return /\b(?:draft|write|compose|prepare|generate|create|send)\b[\s\S]{0,60}\b(?:email|e-mail|client update email|update email|client email)\b|\b(?:email|e-mail|client update email)\b[\s\S]{0,30}\b(?:draft|write|compose|prepare|generate|create)\b|\bdraft\b[\s\S]{0,30}\b(?:email|e-mail)\b/i.test(message);
-}
-
-function humanizeClaimText(value: string | null | undefined, fallback = 'Unknown') {
-  const text = (value || '').trim();
-  if (!text) return fallback;
-  return text
-    .replace(/[\-_]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function summarizeStructuredValue(value: unknown, fallback = 'N/A') {
-  if (!value) return fallback;
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    return trimmed || fallback;
-  }
-
-  if (Array.isArray(value)) {
-    const parts = value
-      .map((item) => summarizeStructuredValue(item, ''))
-      .filter(Boolean);
-    return parts.length > 0 ? parts.join('; ') : fallback;
-  }
-
-  if (typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    for (const key of ['action', 'summary', 'description', 'label', 'title', 'next_step', 'recommended_action']) {
-      const candidate = record[key];
-      if (typeof candidate === 'string' && candidate.trim()) {
-        return candidate.trim();
-      }
-    }
-
-    const entries = Object.entries(record)
-      .filter(([, entryValue]) => entryValue != null && String(entryValue).trim())
-      .slice(0, 3)
-      .map(([key, entryValue]) => `${humanizeClaimText(key, key)}: ${String(entryValue).trim()}`);
-
-    return entries.length > 0 ? entries.join('; ') : fallback;
-  }
-
-  return String(value);
-}
-
-function getClientFirstName(name?: string | null) {
-  const cleaned = (name || '').trim();
-  if (!cleaned || cleaned.toLowerCase() === 'the client') return '';
-  return cleaned.split(/\s+/)[0]?.replace(/[^A-Za-z'’-]/g, '') || '';
-}
-
-function stripLeadingDateTag(value: string | null | undefined) {
-  return (value || '').replace(/^\[[^\]]+\]\s*/, '').trim();
-}
-
-function collapseWhitespace(value: string) {
-  return value.replace(/\s+/g, ' ').trim();
-}
-
-function isDraftClarificationResponse(message: string) {
-  const text = (message || '').trim().toLowerCase();
-  if (!text) return true;
-
-  return /need more information|could you please specify|once i have these details|once i have this information|what was the content of the recent note|what was the nature of the recent communication|who was the communication with|what was discussed or decided|need a bit more clarification|please specify which|could you clarify|what information you'd like|what would you like me to include|can you tell me more about/.test(text);
-}
-
-function isAskingForClarification(message: string) {
-  const text = (message || '').trim().toLowerCase();
-  if (!text) return false;
-  return /\b(?:need (?:more|a bit more) (?:information|clarification|details|context)|could you (?:please )?(?:specify|clarify|provide|tell me)|once i have (?:these|this|the) (?:details|information)|what (?:information|details|specifics) (?:would you|do you|should i)|please (?:specify|clarify|provide)|which (?:recent )?(?:note|communication|email|update) (?:are you|you are|you're) referring|i need to understand|can you (?:provide|share|give) more)\b/.test(text);
-}
-
-function containsForbiddenDraftPhrase(message: string) {
-  return /reviewing your claim details|updated your claim file|we will be in touch shortly|will be in touch shortly|check the portal for details|please check the portal/i.test(message || '');
-}
-
-function buildDeterministicClientDraft({
-  draftType,
-  clientName,
-  facts,
-}: {
-  draftType: 'sms' | 'email';
-  clientName?: string | null;
-  facts: {
-    claim_number: string;
-    carrier: string;
-    claim_status: string;
-    property_address: string;
-    last_contact_date: string;
-    last_contact_with: string;
-    last_contact_subject: string;
-    latest_note: string;
-    latest_update: string;
-    next_action: string;
-    has_correspondence: boolean;
-    has_notes: boolean;
-  };
-}) {
-  const firstName = getClientFirstName(clientName);
-  const noteText = stripLeadingDateTag(facts.latest_note);
-  const updateText = stripLeadingDateTag(facts.latest_update);
-  const safeStatus = facts.claim_status && facts.claim_status !== 'Unknown' ? facts.claim_status : 'in progress';
-  const safeAction = facts.next_action && facts.next_action !== 'N/A'
-    ? stripLeadingDateTag(facts.next_action)
-    : 'review the next documented claim step';
-
-  const activitySentence = facts.has_correspondence
-    ? `${facts.carrier} communication was logged on ${facts.last_contact_date}${facts.last_contact_subject !== 'N/A' ? ` regarding ${facts.last_contact_subject}` : ''}.`
-    : facts.has_notes && noteText
-      ? `Our latest file note says ${noteText}.`
-      : updateText && updateText !== 'No updates'
-        ? `Our latest claim update says ${updateText}.`
-        : `We do not have a recent insurance-company communication or claim note logged in the file yet.`;
-
-  const nextStepSentence = safeAction
-    ? `Next step: ${safeAction.charAt(0).toLowerCase() + safeAction.slice(1)}.`
-    : '';
-
-  if (draftType === 'sms') {
-    const prefix = firstName ? `${firstName}, ` : '';
-    const sms = collapseWhitespace(`${prefix}${activitySentence} Your claim is currently ${safeStatus.toLowerCase()}. ${nextStepSentence}`);
-    return sms.length <= 320 ? sms : `${sms.slice(0, 317).trimEnd()}...`;
-  }
-
-  const greeting = firstName ? `Hi ${firstName},` : 'Hello,';
-  const subjectLine = `Subject: Claim update for ${facts.claim_number !== 'N/A' ? facts.claim_number : facts.property_address}`;
-  return [
-    subjectLine,
-    '',
-    greeting,
-    '',
-    `I wanted to share a current update on your claim. ${activitySentence}`,
-    '',
-    `Your claim is currently ${safeStatus.toLowerCase()}. ${nextStepSentence}`,
-    '',
-    'We will keep the file updated as new carrier activity is logged.',
-    '',
-    'Regards,',
-  ].join('\n');
-}
-
-function isAnalysisQuestion(message: string) {
-  return /\b(?:how|what|why|explain|analy[sz]e|review|assess|rebut|respond|strategy|argument|weakness|weakest|next step|next move|denial|coverage|carrier position|contradiction|pressure|should we|what do you think)\b/i.test(message);
-}
-
-function isDismantleRequest(message: string) {
-  return /\b(?:dismantle|tear apart|break down|analyze|pick apart|destroy|dissect|shred|rip apart|debunk)\b[\s\S]{0,60}\b(?:report|letter|denial|document|engineer|expert|adjuster|response|opinion|position|correspondence)\b/i.test(message)
-    || /\b(?:report|letter|denial|document|engineer|expert|adjuster|response|opinion)\b[\s\S]{0,60}\b(?:dismantle|tear apart|break down|pick apart|destroy|dissect|shred|debunk)\b/i.test(message);
-}
-
-function startsWithActionConfirmation(message: string) {
-  const prefix = (message || '').slice(0, 180);
-  return /\b(?:note added|added note|task created|created task|task added|email drafted|draft created|reminder created|update added|queued for review|saved to|logged to|activity added)\b/i.test(prefix);
-}
-
-function looksLikeToolStyleFailure(message: string) {
-  const prefix = (message || '').slice(0, 240);
-  return /\b(?:no communications found matching|no emails found matching|no notes found matching|no tasks found matching|no activity found matching|no results found(?: matching)?|could not find any communications|searched .* but found nothing)\b/i.test(prefix);
-}
-
-function shouldExcludeAssistantHistory(message: string) {
-  const trimmed = (message || '').trim();
-  if (!trimmed) return true;
-  return startsWithActionConfirmation(trimmed) || looksLikeToolStyleFailure(trimmed);
-}
-
-function hasMeaningfulValue(value: unknown) {
-  if (Array.isArray(value)) return value.length > 0;
-  if (value && typeof value === 'object') return Object.keys(value as Record<string, unknown>).length > 0;
-  return typeof value === 'string' ? value.trim().length > 0 : Boolean(value);
-}
-
-function isLikelyTechnicalPdfSummary(summary: string) {
-  return /technical pdf file|metadata and structural information|fonts?, images?, and page stru|page structure|font resources|cross-reference|xref|object stream|pdf itself/i.test(summary || '');
-}
-
-function hasUsableDocumentIntel(row: Record<string, unknown>) {
-  const summary = String(row.summary || '').trim();
-  const hasStructuredEvidence = [
-    row.coverage_position,
-    row.denial_reasons,
-    row.exclusions,
-    row.testing_done,
-    row.testing_missing,
-    row.estimate_totals,
-    row.scope_positions,
-    row.contradictions,
-    row.cause_of_loss,
-    row.extracted_facts,
-    row.code_refs,
-    row.manufacturer_refs,
-    row.from,
-    row.to,
-  ].some(hasMeaningfulValue);
-
-  if (hasStructuredEvidence) return true;
-  if (!summary) return false;
-  return summary.length >= 80 && !isLikelyTechnicalPdfSummary(summary);
-}
-
-function asksForDocumentReupload(message: string) {
-  const prefix = (message || '').slice(0, 800);
-  return /(?:please|can you|could you)\s+(?:provide|paste|send|share|upload)\b[\s\S]{0,140}\b(?:content|text|copy|document|letter|pdf|file|documents|letters)\b/i.test(prefix)
-    || /once i have reviewed\b[\s\S]{0,120}\b(?:document|letter|pdf|file|documents|letters)\b/i.test(prefix)
-    || /i need to understand the specific reasons[\s\S]{0,140}\b(?:provide|paste|send|share|upload)\b/i.test(prefix);
-}
-
-// Detect when AI gives a generic "framework" response instead of analyzing actual claim data
-function givesGenericFrameworkResponse(message: string) {
-  const text = (message || '').slice(0, 2000);
-  // Specific data markers — if present, the response is grounded in claim facts
-  const citesSpecificData = /\$[\d,]+|\bpolicy\s+(?:number|#|no\.?)\s*\w|exclusion\s+(?:section|clause|provision)\s+\w|\bcited\s+(?:section|exclusion|provision)|specific(?:ally)?\s+(?:states?|cites?|quotes?|references?)\b|\b(?:Section|Exclusion|Condition|Endorsement)\s+[A-Z0-9]/i.test(text);
-  if (citesSpecificData) return false; // Has substance — not generic
-
-  // Pattern 1: "I/we need to/must" + action verb — AI defers instead of answering
-  const defersToAnalysis = /\b(?:i need to|we need to|need to|we must|let's start by|first.{0,30}need to|to proceed.{0,30}need to)\s+(?:analyze|review|examine|read|look at|go through|study|assess|check|inspect|focus|establish|determine|show|demonstrate|scrutinize|understand|see how|identify|pinpoint)\b/i.test(text);
-
-  // Pattern 2: Numbered steps OR bullet lists without specific data
-  const hasNumberedSteps = (text.match(/^\s*\d+\.\s+/gm) || []).length >= 3;
-  const hasBulletList = (text.match(/^\s*[\*\-•]\s+/gm) || []).length >= 3;
-  const isGenericFramework = hasNumberedSteps || hasBulletList;
-
-  // Pattern 3: "Here's the plan" / "Here's a strategic approach" without actual analysis
-  const planWithoutSubstance = /\b(?:here'?s?\s+(?:a |the )?(?:plan|framework|approach|strategy|roadmap|step-by-step))\b/i.test(text);
-
-  // Pattern 4: Conditional evasion — "if they are citing...", "if the carrier is denying..."
-  const conditionalCount = (text.match(/\bif\s+(?:they(?:'re| are)|the carrier is|those|there'?s?\s+an?)\s+/gi) || []).length;
-  const hasConditionalEvasion = conditionalCount >= 3;
-
-  // Pattern 5: Icon placeholder tokens that should never appear
-  const hasIconTokens = /\[(?:Scales|Arrow|Magnifying Glass|Receipt|Document|Warning|Evidence|Clock|Shield|Flag|Lightbulb|Check)\s*Icon\]/i.test(text);
-
-  // Pattern 6: "We also need to" / "We must review" / "We need to determine" repeated
-  const actionDeferCount = (text.match(/\b(?:we (?:need to|must|should|also need to)|need to)\s+(?:review|analyze|determine|establish|understand|identify|examine|see|check|look)\b/gi) || []).length;
-  const heavyDeferral = actionDeferCount >= 2;
-
-  return defersToAnalysis || isGenericFramework || planWithoutSubstance || hasConditionalEvasion || hasIconTokens || heavyDeferral;
-}
-
-// Quick inline garbage check — lightweight version for copilot fallback
-function isGarbageTextInline(text: string): boolean {
-  if (!text || text.length < 50) return true;
-  // Check first 500 chars for PDF binary markers
-  const prefix = text.substring(0, 500);
-  if (/^%?PDF-\d|^\s*\d+\s+\d+\s+obj\b|\/FlateDecode|\/XRef|endobj|endstream|startxref/i.test(prefix)) return true;
-  // Use the shared utility for deeper checks
-  return isGarbageText(text);
-}
-
-// Download PDF from storage and OCR via vision AI — same approach as darwin-process-document
-// Native-first: pull embedded PDF text via pdf.js before falling back to vision OCR.
-async function inlineOcrFromStorage(supabase: any, filePath: string, fileName: string): Promise<string | null> {
-  try {
-    const { callVision, MODEL_VISION } = await import("../_shared/ai/generate.ts");
-
-    // Download from storage
-    const { data: fileBlob, error: dlError } = await supabase.storage
-      .from('claim-files')
-      .download(filePath);
-
-    if (dlError || !fileBlob) {
-      console.warn(`[Copilot OCR] Download failed for ${fileName}:`, dlError);
-      return null;
-    }
-
-    const bytes = new Uint8Array(await fileBlob.arrayBuffer());
-    if (bytes.length > 10 * 1024 * 1024) {
-      console.warn(`[Copilot OCR] File too large for inline OCR: ${fileName} (${bytes.length} bytes)`);
-      return null;
-    }
-
-    const isPdf = fileName.toLowerCase().endsWith('.pdf');
-
-    // Native-first PDF extraction (pdf.js) — skips vision entirely for digital PDFs.
-    if (isPdf) {
-      try {
-        const { extractPdfNative, isNativeExtractionUsable } = await import("../_shared/pdfNativeExtract.ts");
-        const native = await extractPdfNative(bytes, { fileName });
-        if (isNativeExtractionUsable(native)) {
-          console.log(`[Copilot OCR] native PDF extract OK: ${fileName} chars=${native.charCount} status=${native.status}`);
-          return native.text;
-        }
-        console.log(`[Copilot OCR] native PDF unusable (status=${native.status}), falling back to vision OCR for ${fileName}`);
-      } catch (nativeErr) {
-        console.warn(`[Copilot OCR] native PDF extract failed for ${fileName}, falling back to vision:`, nativeErr);
-      }
-    }
-
-    const chunks: string[] = [];
-    const chunkSize = 32768;
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      const chunk = bytes.subarray(i, i + chunkSize);
-      chunks.push(String.fromCharCode(...chunk));
-    }
-    const base64 = btoa(chunks.join(''));
-
-    const mimeType = isPdf ? 'application/pdf' : 'image/jpeg';
-
-    const result = await callVision({
-      model: MODEL_VISION,
-      messages: [
-        { role: 'system', content: 'Extract ALL text content from this document. Return the raw text exactly as it appears, preserving all dates, numbers, names, addresses, policy numbers, exclusion language, and legal text. Do not summarize or interpret. Preserve paragraph structure.' },
-        { role: 'user', content: [
-          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } },
-          { type: 'text', text: 'Extract all text from this document. Return only the raw text content, preserving structure and legal language.' }
-        ]}
-      ],
-      temperature: 0.1,
-    });
-
-    console.log(`[Copilot OCR] model=${result.model}`);
-    return result.text || null;
-  } catch (error) {
-    console.error(`[Copilot OCR] Error:`, error);
-    return null;
-  }
-}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
