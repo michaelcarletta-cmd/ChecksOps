@@ -1,4 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,7 +32,18 @@ interface ClaimWarRoomProps {
 }
 
 export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [isOpen, setIsOpen] = useState(() => searchParams.get("tab") === "warroom");
+
+  // Auto-open when navigated with ?tab=warroom
+  useEffect(() => {
+    if (searchParams.get("tab") === "warroom") {
+      setIsOpen(true);
+      // Clean up the query param
+      searchParams.delete("tab");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   const [insights, setInsights] = useState<any>(null);
   const [deadlines, setDeadlines] = useState<any[]>([]);
   const [strategySimulations, setStrategySimulations] = useState<any[]>([]);
