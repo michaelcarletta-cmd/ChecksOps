@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { extractPdfNative, isNativeExtractionUsable } from "../_shared/pdfNativeExtract.ts";
+import { PLAIN_PROSE_RULE, PLAIN_PROSE_RULE_COMPACT } from "../_shared/ai/analysisPromptBlocks.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
@@ -7965,7 +7966,7 @@ Return ONLY valid JSON.`;
       }
 
       case 'claim_analysis': {
-        systemPrompt = `You are Darwin, an expert public adjuster AI. Produce a clear, structured claim analysis. Write in plain prose: no markdown symbols, no bullet asterisks, no hash headers. Use normal paragraphs and clear section breaks.
+        systemPrompt = `You are Darwin, an expert public adjuster AI. Produce a clear, structured claim analysis. ${PLAIN_PROSE_RULE}
 
 Include: executive summary, timeline of key events, strengths, issues, root causes, missed opportunities, recommended process changes, and metrics to track. Write in a clean, professional tone.`;
         userPrompt = `${claimSummary}\n\n${claimFactsPackContext}\n\nGenerate the claim analysis in plain paragraphs.`;
@@ -7973,7 +7974,7 @@ Include: executive summary, timeline of key events, strengths, issues, root caus
       }
 
       case 'operating_manual': {
-        systemPrompt = `You are Darwin. Turn this claim's handling into an operating manual with scenarios and mini trainings. Write in plain prose: no markdown symbols, no bullet asterisks. Use normal paragraphs.
+        systemPrompt = `You are Darwin. Turn this claim's handling into an operating manual with scenarios and mini trainings. ${PLAIN_PROSE_RULE_COMPACT}
 
 Include: overview, then for each scenario: trigger signals, goals, step-by-step actions, communication scripts, escalation rules, and a short mini-training. Write in a clean, professional tone.`;
         userPrompt = `${claimSummary}\n\n${claimFactsPackContext}\n\nGenerate the operating manual in plain paragraphs.`;
@@ -7981,13 +7982,13 @@ Include: overview, then for each scenario: trigger signals, goals, step-by-step 
       }
 
       case 'case_study': {
-        systemPrompt = `You are Darwin. Write a case study from this claim. Use generic terms only: do NOT include real names, addresses, emails, phone numbers, claim numbers, or policy numbers. Use "the policyholder", "the carrier", "the adjuster". Write in plain prose: no markdown symbols. Use normal paragraphs.`;
+        systemPrompt = `You are Darwin. Write a case study from this claim. Use generic terms only: do NOT include real names, addresses, emails, phone numbers, claim numbers, or policy numbers. Use "the policyholder", "the carrier", "the adjuster". ${PLAIN_PROSE_RULE_COMPACT}`;
         userPrompt = `${claimSummary}\n\n${claimFactsPackContext}\n\nGenerate the case study in plain paragraphs. Omit all identifying details.`;
         break;
       }
 
       case 'marketing_assets': {
-        systemPrompt = `You are Darwin. Turn the claim summary into marketing assets: blog title and body, Facebook post, Instagram caption, TikTok script. No PII. Write in plain prose with clear section labels; no markdown symbols.`;
+        systemPrompt = `You are Darwin. Turn the claim summary into marketing assets: blog title and body, Facebook post, Instagram caption, TikTok script. No PII. ${PLAIN_PROSE_RULE_COMPACT} Use clear section labels.`;
         userPrompt = `${claimSummary}\n\n${claimFactsPackContext}\n\nGenerate marketing assets in plain text. No identifying details.`;
         break;
       }
