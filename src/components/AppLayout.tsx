@@ -1,6 +1,7 @@
 import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { QuickTaskBar } from "./QuickTaskBar";
+import { UrgentAlertsBell } from "./UrgentAlertsBell";
 import { ReactNode, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 
