@@ -3967,6 +3967,51 @@ export type Database = {
           },
         ]
       }
+      claim_followup_log: {
+        Row: {
+          claim_id: string
+          id: string
+          notes: string | null
+          resolved_at: string | null
+          status: string
+          trigger_reason: string
+          triggered_at: string
+        }
+        Insert: {
+          claim_id: string
+          id?: string
+          notes?: string | null
+          resolved_at?: string | null
+          status?: string
+          trigger_reason: string
+          triggered_at?: string
+        }
+        Update: {
+          claim_id?: string
+          id?: string
+          notes?: string | null
+          resolved_at?: string | null
+          status?: string
+          trigger_reason?: string
+          triggered_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_followup_log_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_followup_log_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_hidden_loss_checks: {
         Row: {
           checked_at: string | null
@@ -4642,6 +4687,75 @@ export type Database = {
           },
         ]
       }
+      claim_microtasks: {
+        Row: {
+          assigned_to: string | null
+          claim_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          due_at: string | null
+          id: string
+          is_blocking: boolean
+          priority: string
+          status: string
+          surfaced_on_board: boolean
+          task_type: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          claim_id: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_at?: string | null
+          id?: string
+          is_blocking?: boolean
+          priority?: string
+          status?: string
+          surfaced_on_board?: boolean
+          task_type?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          claim_id?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_at?: string | null
+          id?: string
+          is_blocking?: boolean
+          priority?: string
+          status?: string
+          surfaced_on_board?: boolean
+          task_type?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_microtasks_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_microtasks_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claim_normal_bills: {
         Row: {
           category: string
@@ -4688,6 +4802,75 @@ export type Database = {
             foreignKeyName: "claim_normal_bills_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claim_operational_state: {
+        Row: {
+          blocking_task_count: number
+          claim_id: string
+          contradiction_flag: boolean
+          days_since_last_activity: number | null
+          follow_up_status: string
+          high_exposure_flag: boolean
+          immediate_task_count: number
+          last_activity_at: string | null
+          lifecycle_stage: string
+          next_best_action: string | null
+          next_best_action_confidence: number | null
+          pressure_score: number | null
+          priority_rank: number | null
+          stale_flag: boolean
+          updated_at: string
+        }
+        Insert: {
+          blocking_task_count?: number
+          claim_id: string
+          contradiction_flag?: boolean
+          days_since_last_activity?: number | null
+          follow_up_status?: string
+          high_exposure_flag?: boolean
+          immediate_task_count?: number
+          last_activity_at?: string | null
+          lifecycle_stage?: string
+          next_best_action?: string | null
+          next_best_action_confidence?: number | null
+          pressure_score?: number | null
+          priority_rank?: number | null
+          stale_flag?: boolean
+          updated_at?: string
+        }
+        Update: {
+          blocking_task_count?: number
+          claim_id?: string
+          contradiction_flag?: boolean
+          days_since_last_activity?: number | null
+          follow_up_status?: string
+          high_exposure_flag?: boolean
+          immediate_task_count?: number
+          last_activity_at?: string | null
+          lifecycle_stage?: string
+          next_best_action?: string | null
+          next_best_action_confidence?: number | null
+          pressure_score?: number | null
+          priority_rank?: number | null
+          stale_flag?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claim_operational_state_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_operational_state_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
             referencedRelation: "claims"
             referencedColumns: ["id"]
           },

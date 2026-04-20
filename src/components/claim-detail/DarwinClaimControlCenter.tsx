@@ -6,6 +6,7 @@ import { ClaimAssigned } from "@/components/claim-detail/ClaimAssigned";
 import { ClaimActivity } from "@/components/claim-detail/ClaimActivity";
 import { ClaimTasks } from "@/components/claim-detail/ClaimTasks";
 import { ClaimInspections } from "@/components/claim-detail/ClaimInspections";
+import { ClaimMicrotaskPanel } from "@/components/control-board/ClaimMicrotaskPanel";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -37,7 +38,8 @@ const controlTabs: ControlTab[] = [
   { value: "overview", label: "Overview" },
   { value: "assigned", label: "Assigned", staffOnly: true },
   { value: "activity", label: "Notes & Activity" },
-  { value: "tasks", label: "Tasks", staffOnly: true },
+  { value: "microtasks", label: "Microtasks" },
+  { value: "tasks", label: "Tasks (Legacy)", staffOnly: true },
   { value: "inspections", label: "Inspections" },
   { value: "access", label: "Portal Access", staffOnly: true },
 ];
@@ -119,6 +121,10 @@ export function DarwinClaimControlCenter({
 
         <TabsContent value="activity" className="mt-6">
           <ClaimActivity claimId={claimId} claim={claim} isPortalUser={false} />
+        </TabsContent>
+
+        <TabsContent value="microtasks" className="mt-6">
+          <ClaimMicrotaskPanel claimId={claimId} />
         </TabsContent>
 
         {isStaffOrAdmin && (
