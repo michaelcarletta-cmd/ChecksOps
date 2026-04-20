@@ -58,6 +58,15 @@ function tokenLimitKey(model: string): "max_tokens" | "max_completion_tokens" {
   return "max_tokens";
 }
 
+/**
+ * GPT-5 / o1 / o3 via the Lovable gateway only support the default
+ * temperature behavior, so omit the parameter entirely for those models.
+ */
+function temperatureField(model: string, temperature?: number): Record<string, number> {
+  if (/^openai\/(gpt-5|o[13])/i.test(model)) return {};
+  return { temperature: temperature ?? 0.3 };
+}
+
 interface RequestConfig {
   url: string;
   headers: Record<string, string>;
@@ -186,7 +195,7 @@ export interface OpenAIResult {
 
 export async function callOpenAI(opts: OpenAIChatOptions): Promise<OpenAIResult> {
   const body: Record<string, unknown> = {
-    temperature: opts.temperature ?? 0.3,
+    ...temperatureField(opts.model, opts.temperature),
     [tokenLimitKey(opts.model)]: opts.maxTokens ?? 2000,
     messages: [
       { role: "system", content: opts.system },
@@ -244,7 +253,7 @@ export async function callVision(opts: VisionChatOptions): Promise<VisionResult>
 
   const body: Record<string, unknown> = {
     messages: opts.messages,
-    temperature: opts.temperature ?? 0.3,
+    ...temperatureField(opts.model, opts.temperature),
     [tokenLimitKey(opts.model)]: opts.maxTokens ?? 4000,
   };
   if (opts.jsonMode) {
@@ -279,7 +288,7 @@ export async function callWithTools(opts: ToolCallOptions): Promise<ToolCallResu
   const body: Record<string, unknown> = {
     messages: opts.messages,
     tools: opts.tools,
-    temperature: opts.temperature ?? 0.3,
+    ...temperatureField(opts.model, opts.temperature),
     [tokenLimitKey(opts.model)]: opts.maxTokens ?? 4000,
   };
   if (opts.toolChoice) {
