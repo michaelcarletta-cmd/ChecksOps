@@ -48,6 +48,16 @@ function fallbackOpenAIModel(model: string): string {
   return "gpt-4o-mini";
 }
 
+/**
+ * Pick the correct token-limit parameter name for the target model.
+ * GPT-5 / o1 / o3 reasoning models reject `max_tokens` and require
+ * `max_completion_tokens`. Gemini and legacy gpt-4o still accept `max_tokens`.
+ */
+function tokenLimitKey(model: string): "max_tokens" | "max_completion_tokens" {
+  if (/^openai\/(gpt-5|o[13])/i.test(model)) return "max_completion_tokens";
+  return "max_tokens";
+}
+
 interface RequestConfig {
   url: string;
   headers: Record<string, string>;
