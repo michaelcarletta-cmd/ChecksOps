@@ -187,7 +187,7 @@ export interface OpenAIResult {
 export async function callOpenAI(opts: OpenAIChatOptions): Promise<OpenAIResult> {
   const body: Record<string, unknown> = {
     temperature: opts.temperature ?? 0.3,
-    max_tokens: opts.maxTokens ?? 2000,
+    [tokenLimitKey(opts.model)]: opts.maxTokens ?? 2000,
     messages: [
       { role: "system", content: opts.system },
       { role: "user", content: opts.user },
