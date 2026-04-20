@@ -1,66 +1,75 @@
 
 
-The user wants to add a 7th item to the cost optimization plan: **stop auto-analyzing every photo upload**. Instead, photo analysis should only run on explicit user request. This is a real win — `darwin-photo-intelligence`, `photo-damage-analyzer`, and `analyze-single-photo` likely fire on every upload right now, and a single claim can have 20+ photos.
+## Fix: GPT-5 `max_tokens` → `max_completion_tokens`
 
-Let me check what currently triggers auto-analysis so the plan is accurate.
+**Root cause.** After Phase 4 routing, Copilot calls `openai/gpt-5*` models via the Lovable AI Gateway. GPT-5 (and newer reasoning models) reject the legacy `max_tokens` parameter and require `max_completion_tokens`. Our centralized `openaiClient.ts` unconditionally sends `max_tokens` → gateway returns 400 → user sees the toast.
 
-I'll inspect: `ClaimPhotoUploader`, `useClaimPhotos`, and any auto-trigger in `ClaimPhotosTab` / inventory pipeline.
+This is a one-file fix in the shared AI client. Every edge function (Copilot, war room, rebuttal, vision, tools) benefits automatically.
 
-Based on the file excerpt I already have (`ClaimPhotosTab.tsx`), no auto-analysis is wired in the tab itself, but the uploader or a downstream trigger likely calls it. I'll add a quick search step in the plan, but the core direction is clear: gate photo AI behind explicit user action.
+### What I'll change
 
-# Updated Cost Optimization Plan — adding Phase 7
+**File:** `supabase/functions/_shared/ai/openaiClient.ts`
 
-## Phase 7 — On-demand photo analysis (NEW)
+Add a tiny helper that picks the right token-limit key based on the target model, then use it in all three body builders:
 
-**Problem:** Every uploaded photo currently triggers automatic AI vision analysis via `darwin-photo-intelligence` / `photo-damage-analyzer`. A claim with 20 photos = 20 vision calls before the user has even decided what matters. Most photos never get reviewed strategically — they're just file storage.
+```text
+Model pattern                              → Key
+─────────────────────────────────────────────────────────────
+openai/gpt-5*        (Lovable gateway)     → max_completion_tokens
+openai/gpt-5.2       (Lovable gateway)     → max_completion_tokens
+openai/o1* / o3*     (if ever used)        → max_completion_tokens
+google/*             (Lovable gateway)     → max_tokens   (accepted)
+gpt-4o / gpt-4o-mini (direct OpenAI fbck)  → max_tokens   (accepted)
+```
 
-**Fix:** Make photo AI analysis **opt-in per photo or per batch**, never automatic.
+Apply in three places:
+1. `callOpenAI` (line ~170) — text chat body
+2. `callVision` (line ~217) — vision body
+3. `callWithTools` (line ~261) — tool-call body
+4. `executeChat` fallback branch (line ~115) — when we fall back from `openai/gpt-5*` to `gpt-4o`, strip `max_completion_tokens` and re-add as `max_tokens` so the legacy OpenAI endpoint accepts it.
 
-### Changes
+### Helper sketch
 
-1. **Remove auto-trigger on upload**
-   - Audit `ClaimPhotoUploader` and any post-upload hooks (`useClaimPhotos`, `inventory-photo-pipeline`, claim-master-state-hub triggers)
-   - Strip the automatic `darwin-photo-intelligence` / `photo-damage-analyzer` invocation
-   - Photos still upload, get thumbnails, get stored — just no AI call
+```ts
+function tokenLimitKey(model: string): "max_tokens" | "max_completion_tokens" {
+  if (/^openai\/(gpt-5|o[13])/i.test(model)) return "max_completion_tokens";
+  return "max_tokens";
+}
 
-2. **Add explicit "Analyze" controls in `ClaimPhotoGrid`**
-   - Per-photo: small "Analyze" button on hover/select → fires single-photo analysis
-   - Bulk: "Analyze Selected (N)" button when photos are multi-selected → batches them
-   - "Analyze All Unanalyzed" button at the top of the photos tab (with count + estimated cost preview)
+function withTokenLimit(body: Record<string, unknown>, model: string, limit: number) {
+  body[tokenLimitKey(model)] = limit;
+  return body;
+}
+```
 
-3. **Visual indicator of analysis status**
-   - Photos already analyzed show a small badge (✓ Analyzed)
-   - Unanalyzed photos show neutral state — no "pending" spinner that implies it's coming
-   - Use existing `claim_photo_findings` table to determine status (presence of rows = analyzed)
+In the fallback branch, rewrite the body before calling OpenAI directly:
+```ts
+const fbBody = { ...body };
+delete fbBody.max_completion_tokens;
+fbBody.max_tokens = opts.maxTokens ?? 2000; // legacy key for gpt-4o
+```
 
-4. **Background pipelines that auto-analyze**
-   - `inventory-photo-pipeline` (receipts/inventory) → keep auto since user explicitly uploads to that flow
-   - `claim-master-state-hub` photo enrichment → switch to lazy: only analyze photos when state hub actually needs them for a war room / rebuttal build, not on every refresh
-   - Carrier argument detection / rule learning → only consume already-analyzed photos; don't trigger new analysis
+### Also sweep
 
-5. **One-tap Darwin chat hook**
-   - In Darwin copilot, when user references a photo ("look at the roof photo from 3/12"), copilot can invoke analysis on demand if not yet analyzed — keeps the magic without the automatic burn
+Two other call sites pass the raw `max_tokens` field in ad-hoc payloads — quick audit while I'm in there:
 
-### Estimated savings
+- `supabase/functions/claims-ai-assistant/index.ts` lines 6342, 6421 — uses `google/gemini-2.5-flash`, so `max_tokens` stays correct. No change.
+- `supabase/functions/darwin-ai-analysis/index.ts` line 10560 — payload is then forwarded into the shared helpers via `maxTokens` (lines 10658/10678), which will pick up the fix automatically. No change needed.
+- `supabase/functions/photo-damage-analyzer/index.ts` line 241 — same story, forwards into `callVision`/`callWithTools`. Fix propagates.
+- `supabase/functions/_shared/ai/pdfVisionOcr.ts` line 114 — uses `gpt-4o-mini` direct, `max_tokens` is correct there. No change.
 
-If average claim has 20 photos and only ~4 are strategically relevant, this alone cuts photo vision spend by **~80%** — and photo vision is currently one of the top 3 cost drivers alongside document processing and check OCR.
+So only **one file** actually needs editing.
+
+### Deploy
+
+Redeploy the functions that re-bundle the shared module:
+`darwin-copilot`, `darwin-ai-analysis`, `darwin-photo-intelligence`, `photo-damage-analyzer`, `analyze-single-photo`, `darwin-process-document`, `darwin-estimate-import`, `claims-ai-assistant`.
+
+### Verification
+
+After deploy, reproduce in Copilot with a normal chat message. Then tail edge logs for `darwin-copilot` — should return `choices[0].message.content` cleanly, no 400.
 
 ### Risk
 
-- Users may forget to analyze photos before war room runs → mitigate with a one-click "Analyze all unanalyzed (12 photos)" prompt inside War Room and Rebuttal builders before they generate output
-- No data loss: photos always upload + store, only the AI step is deferred
-
----
-
-## Updated rollout order
-
-1. Phase 1 — provider-aware AI client
-2. Phase 4 — flip route table to Gemini / GPT-5
-3. **Phase 7 — kill photo auto-analysis** (NEW, slot here for fast win)
-4. Phase 2 — native PDF extraction in remaining 5 functions
-5. Phase 3 — image optimizer for the photos that *do* get analyzed
-6. Phase 5 — DB-backed response cache
-7. Phase 6 — prompt slimming
-
-Phases 1, 4, and 7 together should land **~70%+ cost reduction** before we even touch caching or prompt trimming.
+Low. The only behavioral change is the JSON key name for the token cap, gated by the model prefix. Gemini and legacy OpenAI paths are untouched.
 
