@@ -1950,8 +1950,8 @@ CRITICAL RULES:
     );
   } catch (err: any) {
     console.error('darwin-copilot error:', err);
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
+    return new Response(JSON.stringify({ ok: false, error: err.message || 'Unknown copilot error' }), {
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
