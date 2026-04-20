@@ -208,7 +208,7 @@ export async function callPerplexityResearch(opts: {
     .join("\n\n");
 
   const aiResult = await callOpenAI({
-    model: "gpt-4o-mini",
+    model: "google/gemini-3-flash-preview",
     system: opts.system,
     user: `Use the following research as supporting context. Do not restate it unless necessary.\n\nKey Findings: ${tavily.answer}\n\nSources:\n${sourcesContext}\n\nOriginal request: ${opts.user}`,
     temperature: opts.temperature ?? 0.2,
