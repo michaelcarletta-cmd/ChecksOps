@@ -29,6 +29,7 @@ const AppLayoutContent = ({ children }: AppLayoutProps) => {
           <div className="ml-4 flex items-center gap-4 flex-1">
             <span className="text-sm text-muted-foreground">Freedom Claims CRM</span>
           </div>
+          <UrgentAlertsBell />
           <QuickTaskBar />
         </header>
         <main className="flex-1 p-3 md:p-6 animate-fade-in">
