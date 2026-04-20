@@ -218,6 +218,45 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_response_cache: {
+        Row: {
+          cache_key: string
+          claim_id: string
+          created_at: string
+          expires_at: string
+          hits: number
+          model: string
+          payload: Json
+          prompt_hash: string
+          search_mode: string
+          task: string
+        }
+        Insert: {
+          cache_key: string
+          claim_id?: string
+          created_at?: string
+          expires_at?: string
+          hits?: number
+          model: string
+          payload: Json
+          prompt_hash: string
+          search_mode?: string
+          task: string
+        }
+        Update: {
+          cache_key?: string
+          claim_id?: string
+          created_at?: string
+          expires_at?: string
+          hits?: number
+          model?: string
+          payload?: Json
+          prompt_hash?: string
+          search_mode?: string
+          task?: string
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string
@@ -14821,6 +14860,7 @@ export type Database = {
         Returns: undefined
       }
       can_manage_roles: { Args: { _user_id: string }; Returns: boolean }
+      cleanup_expired_ai_response_cache: { Args: never; Returns: number }
       create_claim_for_staff:
         | {
             Args: {
