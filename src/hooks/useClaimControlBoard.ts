@@ -63,7 +63,7 @@ export function useClaimControlBoard() {
         property_address: c.policyholder_address,
         insurance_carrier: c.insurance_company,
         status: c.status,
-        sub_status: c.sub_status,
+        sub_status: null,
         ops: c.claim_operational_state?.[0] || c.claim_operational_state || null,
         immediate_microtasks: microtaskCounts[c.id]?.immediate || 0,
         blocking_microtasks: microtaskCounts[c.id]?.blocking || 0,
