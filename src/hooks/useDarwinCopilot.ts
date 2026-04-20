@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 type CopilotMode = 'operational' | 'rebuttal' | 'estimate' | 'war_room' | 'training' | 'strategy' | 'draft' | 'search_web' | 'search_argue';
+const COPILOT_REQUEST_TIMEOUT_MS = 50000;
 
 export interface DraftFacts {
   claim_number: string;
@@ -56,6 +57,7 @@ export function useDarwinCopilot(claimId: string) {
   const askCopilot = useCallback(async (question?: string, overrideMode?: CopilotMode, extra?: { htmlContent?: string; attachedFileIds?: string[] }) => {
     const userContent = question || `Give me the full Darwin Copilot briefing for this claim in ${overrideMode || mode} mode.`;
     const userMsg: CopilotMessage = { role: 'user', content: userContent, timestamp: Date.now() };
+    let timeoutId: number | undefined;
 
     setMessages(prev => [...prev, userMsg]);
     setLoading(true);
@@ -69,6 +71,7 @@ export function useDarwinCopilot(claimId: string) {
     try {
       abortRef.current?.abort();
       abortRef.current = new AbortController();
+      timeoutId = window.setTimeout(() => abortRef.current?.abort(), COPILOT_REQUEST_TIMEOUT_MS);
 
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData?.session?.access_token;
@@ -135,6 +138,8 @@ export function useDarwinCopilot(claimId: string) {
         friendlyMsg = 'Unable to load claim details. Please refresh the page or select a claim again.';
       } else if (/no active session/i.test(rawMsg)) {
         friendlyMsg = 'Your session has expired. Please sign in again.';
+      } else if (/timed out/i.test(rawMsg) || /abort/i.test(rawMsg)) {
+        friendlyMsg = 'Copilot took too long to respond. Please try again.';
       } else {
         friendlyMsg = `Something went wrong. Please try again. (${rawMsg.length > 120 ? rawMsg.slice(0, 120) + '…' : rawMsg})`;
       }
@@ -143,6 +148,7 @@ export function useDarwinCopilot(claimId: string) {
       const errorMsg: CopilotMessage = { role: 'assistant', content: friendlyMsg, timestamp: Date.now(), isError: true };
       setMessages(prev => [...prev, errorMsg]);
     } finally {
+      if (timeoutId) window.clearTimeout(timeoutId);
       setLoading(false);
     }
   }, [claimId, mode, messages]);

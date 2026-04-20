@@ -16,6 +16,14 @@ export interface TavilyResult {
   query: string;
 }
 
+const MAX_TAVILY_QUERY_LENGTH = 380;
+
+function normalizeQuery(query: string): string {
+  const compact = query.replace(/\s+/g, " ").trim();
+  if (compact.length <= MAX_TAVILY_QUERY_LENGTH) return compact;
+  return `${compact.slice(0, MAX_TAVILY_QUERY_LENGTH - 1).trimEnd()}…`;
+}
+
 export async function searchTavily(
   query: string,
   mode: SearchMode,
@@ -23,13 +31,14 @@ export async function searchTavily(
   if (mode === "off") return null;
 
   const searchDepth = mode === "advanced" ? "advanced" : "basic";
+  const normalizedQuery = normalizeQuery(query);
 
   const res = await fetch("https://api.tavily.com/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       api_key: TAVILY_API_KEY(),
-      query,
+      query: normalizedQuery,
       search_depth: searchDepth,
       include_answer: true,
       max_results: mode === "advanced" ? 10 : 5,
@@ -51,6 +60,6 @@ export async function searchTavily(
       url: r.url || "",
       content: r.content || "",
     })),
-    query,
+    query: normalizedQuery,
   };
 }
