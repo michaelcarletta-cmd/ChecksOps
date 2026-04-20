@@ -57,6 +57,7 @@ export function useDarwinCopilot(claimId: string) {
   const askCopilot = useCallback(async (question?: string, overrideMode?: CopilotMode, extra?: { htmlContent?: string; attachedFileIds?: string[] }) => {
     const userContent = question || `Give me the full Darwin Copilot briefing for this claim in ${overrideMode || mode} mode.`;
     const userMsg: CopilotMessage = { role: 'user', content: userContent, timestamp: Date.now() };
+    let timeoutId: number | undefined;
 
     setMessages(prev => [...prev, userMsg]);
     setLoading(true);
@@ -70,7 +71,7 @@ export function useDarwinCopilot(claimId: string) {
     try {
       abortRef.current?.abort();
       abortRef.current = new AbortController();
-      const timeoutId = window.setTimeout(() => abortRef.current?.abort(), COPILOT_REQUEST_TIMEOUT_MS);
+      timeoutId = window.setTimeout(() => abortRef.current?.abort(), COPILOT_REQUEST_TIMEOUT_MS);
 
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData?.session?.access_token;
@@ -124,7 +125,6 @@ export function useDarwinCopilot(claimId: string) {
         },
       };
       setMessages(prev => [...prev, assistantMsg]);
-      window.clearTimeout(timeoutId);
     } catch (err: any) {
       if (err.name === 'AbortError') return;
       console.error('[Darwin Copilot] Error details:', { error: err, claimId, mode: overrideMode || mode });
@@ -148,6 +148,7 @@ export function useDarwinCopilot(claimId: string) {
       const errorMsg: CopilotMessage = { role: 'assistant', content: friendlyMsg, timestamp: Date.now(), isError: true };
       setMessages(prev => [...prev, errorMsg]);
     } finally {
+      if (timeoutId) window.clearTimeout(timeoutId);
       setLoading(false);
     }
   }, [claimId, mode, messages]);
