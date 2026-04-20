@@ -13,13 +13,48 @@ import { Plus, Trash2, Edit } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 
+type TriggerType = "on_claim_creation" | "on_status_change" | "on_sub_status_change" | "on_check_status_change";
+
+const CHECK_FIELDS = [
+  { value: "endorsement_status", label: "Endorsement Status" },
+  { value: "payment_direction_status", label: "Payment Direction Status" },
+  { value: "deposit_status", label: "Deposit Status" },
+  { value: "cleared_status", label: "Cleared Status" },
+] as const;
+
+const CHECK_FIELD_VALUES: Record<string, { value: string; label: string }[]> = {
+  endorsement_status: [
+    { value: "pending", label: "Pending" },
+    { value: "requested", label: "Requested" },
+    { value: "signed", label: "Signed" },
+    { value: "rejected", label: "Rejected" },
+  ],
+  payment_direction_status: [
+    { value: "not_requested", label: "Not Requested" },
+    { value: "pending", label: "Pending" },
+    { value: "answered", label: "Answered" },
+    { value: "expired", label: "Expired" },
+  ],
+  deposit_status: [
+    { value: "pending", label: "Pending" },
+    { value: "deposited", label: "Deposited" },
+    { value: "cleared", label: "Cleared" },
+  ],
+  cleared_status: [
+    { value: "pending", label: "Pending" },
+    { value: "cleared", label: "Cleared" },
+  ],
+};
+
 interface TaskAutomation {
   id: string;
   title: string;
   description: string | null;
-  trigger_type: "on_claim_creation" | "on_status_change" | "on_sub_status_change";
+  trigger_type: TriggerType;
   trigger_status: string | null;
   trigger_sub_status_id: string | null;
+  trigger_check_field: string | null;
+  trigger_check_value: string | null;
   priority: "low" | "medium" | "high";
   due_date_offset: number;
   is_active: boolean;
@@ -46,9 +81,11 @@ export function TaskAutomationsSettings() {
   const [formData, setFormData] = useState({
     title: "",
     description: "",
-    trigger_type: "on_claim_creation" as "on_claim_creation" | "on_status_change" | "on_sub_status_change",
+    trigger_type: "on_claim_creation" as TriggerType,
     trigger_status: "",
     trigger_sub_status_id: "",
+    trigger_check_field: "",
+    trigger_check_value: "",
     priority: "medium" as "low" | "medium" | "high",
     due_date_offset: 0,
     is_active: true,
@@ -118,6 +155,8 @@ export function TaskAutomationsSettings() {
         trigger_type: formData.trigger_type,
         trigger_status: formData.trigger_type === "on_status_change" ? formData.trigger_status : null,
         trigger_sub_status_id: formData.trigger_type === "on_sub_status_change" ? (formData.trigger_sub_status_id || null) : null,
+        trigger_check_field: formData.trigger_type === "on_check_status_change" ? (formData.trigger_check_field || null) : null,
+        trigger_check_value: formData.trigger_type === "on_check_status_change" ? (formData.trigger_check_value || null) : null,
         priority: formData.priority,
         due_date_offset: formData.due_date_offset,
         is_active: formData.is_active,
@@ -154,6 +193,8 @@ export function TaskAutomationsSettings() {
       trigger_type: automation.trigger_type,
       trigger_status: automation.trigger_status || "",
       trigger_sub_status_id: automation.trigger_sub_status_id || "",
+      trigger_check_field: automation.trigger_check_field || "",
+      trigger_check_value: automation.trigger_check_value || "",
       priority: automation.priority,
       due_date_offset: automation.due_date_offset,
       is_active: automation.is_active,
@@ -194,6 +235,8 @@ export function TaskAutomationsSettings() {
       trigger_type: "on_claim_creation",
       trigger_status: "",
       trigger_sub_status_id: "",
+      trigger_check_field: "",
+      trigger_check_value: "",
       priority: "medium",
       due_date_offset: 0,
       is_active: true,
@@ -212,6 +255,10 @@ export function TaskAutomationsSettings() {
     if (automation.trigger_type === "on_claim_creation") return "When claim is created";
     if (automation.trigger_type === "on_sub_status_change") {
       return `When sub-step: ${getSubStatusName(automation.trigger_sub_status_id)}`;
+    }
+    if (automation.trigger_type === "on_check_status_change") {
+      const fieldLabel = CHECK_FIELDS.find(f => f.value === automation.trigger_check_field)?.label || automation.trigger_check_field;
+      return `When check ${fieldLabel} → ${automation.trigger_check_value}`;
     }
     return `When status → ${automation.trigger_status}`;
   };
@@ -280,8 +327,8 @@ export function TaskAutomationsSettings() {
                   <Label htmlFor="trigger_type">Trigger Type</Label>
                   <Select
                     value={formData.trigger_type}
-                    onValueChange={(value: "on_claim_creation" | "on_status_change" | "on_sub_status_change") =>
-                      setFormData({ ...formData, trigger_type: value, trigger_status: "", trigger_sub_status_id: "" })
+                    onValueChange={(value: TriggerType) =>
+                      setFormData({ ...formData, trigger_type: value, trigger_status: "", trigger_sub_status_id: "", trigger_check_field: "", trigger_check_value: "" })
                     }
                   >
                     <SelectTrigger id="trigger_type">
@@ -291,6 +338,7 @@ export function TaskAutomationsSettings() {
                       <SelectItem value="on_claim_creation">When claim is created</SelectItem>
                       <SelectItem value="on_status_change">When status changes</SelectItem>
                       <SelectItem value="on_sub_status_change">When sub-step is entered</SelectItem>
+                      <SelectItem value="on_check_status_change">When check status changes</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -344,6 +392,44 @@ export function TaskAutomationsSettings() {
                         )}
                       </SelectContent>
                     </Select>
+                  </div>
+                )}
+
+                {formData.trigger_type === "on_check_status_change" && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="trigger_check_field">Check Status Field</Label>
+                      <Select
+                        value={formData.trigger_check_field}
+                        onValueChange={(value) => setFormData({ ...formData, trigger_check_field: value, trigger_check_value: "" })}
+                      >
+                        <SelectTrigger id="trigger_check_field">
+                          <SelectValue placeholder="Select field" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CHECK_FIELDS.map((f) => (
+                            <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="trigger_check_value">Target Value</Label>
+                      <Select
+                        value={formData.trigger_check_value}
+                        onValueChange={(value) => setFormData({ ...formData, trigger_check_value: value })}
+                        disabled={!formData.trigger_check_field}
+                      >
+                        <SelectTrigger id="trigger_check_value">
+                          <SelectValue placeholder="Select value" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(CHECK_FIELD_VALUES[formData.trigger_check_field] || []).map((v) => (
+                            <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 )}
 
