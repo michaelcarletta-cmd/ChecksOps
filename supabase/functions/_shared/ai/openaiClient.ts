@@ -245,7 +245,7 @@ export async function callVision(opts: VisionChatOptions): Promise<VisionResult>
   const body: Record<string, unknown> = {
     messages: opts.messages,
     temperature: opts.temperature ?? 0.3,
-    max_tokens: opts.maxTokens ?? 4000,
+    [tokenLimitKey(opts.model)]: opts.maxTokens ?? 4000,
   };
   if (opts.jsonMode) {
     body.response_format = { type: "json_object" };
