@@ -95,32 +95,41 @@ async function executeChat(
   });
 
   // Auto-fallback: gateway out-of-credits or rate-limited -> hit OpenAI directly.
+  // Only fall back when an OpenAI key is configured; otherwise surface the
+  // original gateway error so callers see the real cause (and we don't mask it
+  // with a misleading 401 from a stale OpenAI key).
   const isLovable = pickProvider(model) === "lovable";
-  if (isLovable && (res.status === 402 || res.status === 429)) {
+  const openAIKey = Deno.env.get("OPENAI_API_KEY");
+  if (isLovable && (res.status === 402 || res.status === 429) && openAIKey) {
     const fbModel = fallbackOpenAIModel(model);
     console.warn(
       `[aiClient] ${contextLabel}: Lovable gateway returned ${res.status} for ${model}. Falling back to OpenAI ${fbModel}.`,
     );
     try {
-      const fbCfg = {
-        url: OPENAI_URL,
+      const fbRes = await fetch(OPENAI_URL, {
+        method: "POST",
         headers: {
-          Authorization: `Bearer ${getOpenAIKey()}`,
+          Authorization: `Bearer ${openAIKey}`,
           "Content-Type": "application/json",
         },
-      };
-      res = await fetch(fbCfg.url, {
-        method: "POST",
-        headers: fbCfg.headers,
         body: JSON.stringify({ ...body, model: fbModel }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        console.error(`[aiClient] ${contextLabel} fallback failed:`, JSON.stringify(data).slice(0, 500));
-        if (res.status === 429) throw new Error("RATE_LIMIT");
-        throw new Error(`OpenAI fallback ${res.status}: ${data?.error?.message || "Unknown error"}`);
+      const fbData = await fbRes.json();
+      if (!fbRes.ok) {
+        // If the fallback key is invalid/expired (401/403), don't mask the
+        // gateway's original failure — re-raise the gateway condition instead.
+        if (fbRes.status === 401 || fbRes.status === 403) {
+          console.error(
+            `[aiClient] ${contextLabel}: OpenAI fallback key rejected (${fbRes.status}). Re-raising original gateway ${res.status}.`,
+          );
+          if (res.status === 429) throw new Error("RATE_LIMIT");
+          if (res.status === 402) throw new Error("AI_CREDITS_EXHAUSTED");
+        }
+        console.error(`[aiClient] ${contextLabel} fallback failed:`, JSON.stringify(fbData).slice(0, 500));
+        if (fbRes.status === 429) throw new Error("RATE_LIMIT");
+        throw new Error(`OpenAI fallback ${fbRes.status}: ${fbData?.error?.message || "Unknown error"}`);
       }
-      return { data, resolvedModel: data.model || fbModel };
+      return { data: fbData, resolvedModel: fbData.model || fbModel };
     } catch (err) {
       console.error(`[aiClient] ${contextLabel} fallback threw:`, err);
       throw err;
