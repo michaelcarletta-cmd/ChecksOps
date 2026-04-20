@@ -715,10 +715,12 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
       if (fnErr) {
         console.error("OCR invoke error:", fnErr);
         toast({ title: "Check uploaded but OCR may have failed", description: fnErr.message });
-      } else if (ocrResult && typeof ocrResult === "object" && "ocr_success" in ocrResult && !ocrResult.ocr_success) {
+      } else if (ocrResult && typeof ocrResult === "object" && (("success" in ocrResult && !ocrResult.success) || ("ocr_success" in ocrResult && !ocrResult.ocr_success))) {
         toast({
           title: "Check uploaded but OCR failed",
-          description: "The check was linked to the claim. Please complete the details manually.",
+          description: typeof ocrResult.error === "string"
+            ? ocrResult.error
+            : "The check was linked to the claim. Please complete the details manually.",
         });
       } else {
         toast({ title: "Check uploaded & OCR started" });
@@ -807,11 +809,14 @@ function RerunOcrButton({ checkId, onSuccess }: { checkId: string; onSuccess: ()
     setRunning(true);
     try {
       const { data: session } = await supabase.auth.getSession();
-      const { error } = await supabase.functions.invoke("check-ocr-intake", {
+      const { data, error } = await supabase.functions.invoke("check-ocr-intake", {
         body: { checkId },
         headers: { Authorization: `Bearer ${session.session?.access_token}` },
       });
       if (error) throw new Error(error.message);
+      if (data && typeof data === "object" && (("success" in data && !data.success) || ("ocr_success" in data && !data.ocr_success))) {
+        throw new Error(typeof data.error === "string" ? data.error : "OCR failed");
+      }
       toast({ title: "OCR re-run complete" });
       onSuccess();
     } catch (e: unknown) {

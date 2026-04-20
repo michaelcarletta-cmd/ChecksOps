@@ -307,15 +307,17 @@ function parseStrictJson(rawText: string): unknown {
 function okResponse(body: Record<string, unknown>) {
   return new Response(
     JSON.stringify(body),
-    { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
   );
 }
 
 function errResponse(message: string, status: number, stage?: string) {
-  return new Response(
-    JSON.stringify({ success: false, error: message, stage: stage ?? null }),
-    { status, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-  );
+  return okResponse({
+    success: false,
+    error: message,
+    stage: stage ?? null,
+    http_status: status,
+  });
 }
 
 function deriveFallbackCheckDate(issueDate: unknown, createdAt: unknown): string {
