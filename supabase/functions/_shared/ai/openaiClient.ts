@@ -280,7 +280,7 @@ export async function callWithTools(opts: ToolCallOptions): Promise<ToolCallResu
     messages: opts.messages,
     tools: opts.tools,
     temperature: opts.temperature ?? 0.3,
-    max_tokens: opts.maxTokens ?? 4000,
+    [tokenLimitKey(opts.model)]: opts.maxTokens ?? 4000,
   };
   if (opts.toolChoice) {
     body.tool_choice = opts.toolChoice;
