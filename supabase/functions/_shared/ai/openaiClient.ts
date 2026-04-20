@@ -13,6 +13,7 @@
 
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const LOVABLE_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
+const AI_REQUEST_TIMEOUT_MS = 45_000;
 
 type Provider = "openai" | "lovable";
 
@@ -106,12 +107,25 @@ async function executeChat(
 ): Promise<{ data: any; resolvedModel: string }> {
   const cfg = buildRequestConfig(model);
   const payload = { ...body, model: cfg.bodyModel };
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
 
-  let res = await fetch(cfg.url, {
-    method: "POST",
-    headers: cfg.headers,
-    body: JSON.stringify(payload),
-  });
+  let res: Response;
+  try {
+    res = await fetch(cfg.url, {
+      method: "POST",
+      headers: cfg.headers,
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`AI request timed out after ${Math.round(AI_REQUEST_TIMEOUT_MS / 1000)}s`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   // Auto-fallback: gateway out-of-credits or rate-limited -> hit OpenAI directly.
   // Only fall back when an OpenAI key is configured; otherwise surface the
