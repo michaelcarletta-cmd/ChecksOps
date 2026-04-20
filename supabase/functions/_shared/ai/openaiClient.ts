@@ -116,13 +116,20 @@ async function executeChat(
       `[aiClient] ${contextLabel}: Lovable gateway returned ${res.status} for ${model}. Falling back to OpenAI ${fbModel}.`,
     );
     try {
+      // Legacy OpenAI endpoint (gpt-4o/gpt-4o-mini) uses `max_tokens`,
+      // not `max_completion_tokens`. Rewrite the body for the fallback.
+      const fbBody: Record<string, unknown> = { ...body, model: fbModel };
+      if ("max_completion_tokens" in fbBody) {
+        fbBody.max_tokens = fbBody.max_completion_tokens;
+        delete fbBody.max_completion_tokens;
+      }
       const fbRes = await fetch(OPENAI_URL, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${openAIKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ ...body, model: fbModel }),
+        body: JSON.stringify(fbBody),
       });
       const fbData = await fbRes.json();
       if (!fbRes.ok) {
