@@ -31,6 +31,27 @@ async function callAIVision(systemPrompt: string, contentParts: any[]) {
   return result.text;
 }
 
+/**
+ * Try native pdf.js text extraction first; only fall back to vision OCR
+ * if the PDF is genuinely scanned/image-only. Cuts cost ~95% on digital PDFs.
+ * Returns the native text if usable, otherwise null (caller does vision).
+ */
+async function tryNativePdfText(base64Pdf: string, fileName: string): Promise<string | null> {
+  try {
+    const { extractPdfNative, isNativeExtractionUsable } = await import("../_shared/pdfNativeExtract.ts");
+    const native = await extractPdfNative(base64Pdf, { fileName });
+    if (isNativeExtractionUsable(native)) {
+      console.log(`[claim-context-pipeline] native PDF OK: ${fileName} chars=${native.charCount} status=${native.status}`);
+      return native.text;
+    }
+    console.log(`[claim-context-pipeline] native PDF unusable (status=${native.status}) for ${fileName}, vision fallback`);
+    return null;
+  } catch (e) {
+    console.warn(`[claim-context-pipeline] native PDF failed for ${fileName}:`, (e as Error).message);
+    return null;
+  }
+}
+
 function parseJSON(text: string) {
   // Try raw parse first
   try { return JSON.parse(text); } catch {}
@@ -73,14 +94,26 @@ Return ONLY this JSON (no other text):
 }
 Use 0 or [] for missing data. Never omit a section.`;
 
-      const content = measurementPdfBase64
-        ? [
-            { type: "text", text: `Parse this measurement report (${measurementPdfName || "report.pdf"}). Extract every measurement.` },
-            { type: "image_url", image_url: { url: `data:application/pdf;base64,${measurementPdfBase64}` } },
-          ]
-        : [{ type: "text", text: "No PDF provided." }];
-
-      const raw = await callAIVision(systemPrompt, content);
+      // Try native PDF text extraction first (skips vision entirely for digital PDFs)
+      let raw: string | null = null;
+      if (measurementPdfBase64) {
+        const nativeText = await tryNativePdfText(measurementPdfBase64, measurementPdfName || "report.pdf");
+        if (nativeText) {
+          // Send native text instead of the PDF image
+          raw = await callAIVision(systemPrompt, [
+            { type: "text", text: `Parse this measurement report (${measurementPdfName || "report.pdf"}). Extract every measurement.\n\nDOCUMENT TEXT:\n${nativeText}` },
+          ]);
+        }
+      }
+      if (raw === null) {
+        const content = measurementPdfBase64
+          ? [
+              { type: "text", text: `Parse this measurement report (${measurementPdfName || "report.pdf"}). Extract every measurement.` },
+              { type: "image_url", image_url: { url: `data:application/pdf;base64,${measurementPdfBase64}` } },
+            ]
+          : [{ type: "text", text: "No PDF provided." }];
+        raw = await callAIVision(systemPrompt, content);
+      }
       const parsed = parseJSON(raw);
 
       return new Response(JSON.stringify({ success: true, measurement_report: parsed }), {
@@ -376,12 +409,20 @@ Return ONLY this JSON (no other text):
 CRITICAL: The "raw_text" field MUST contain the COMPLETE text from ALL pages. Do NOT summarize or truncate.
 Use 0 or [] for missing data. Never omit a section.`;
 
-        const measContent = [
-          { type: "text", text: `Parse this measurement report (${fullPdfName || "report.pdf"}). Extract every measurement from ALL pages. Include full raw text.` },
-          { type: "image_url", image_url: { url: `data:application/pdf;base64,${fullPdfBase64}` } },
-        ];
-
-        const measRaw = await callAIVision(measSystemPrompt, measContent);
+        // Native-first: pull pdf.js text and pass as plain text instead of expensive vision OCR.
+        const nativeFullText = await tryNativePdfText(fullPdfBase64, fullPdfName || "report.pdf");
+        let measRaw: string;
+        if (nativeFullText) {
+          measRaw = await callAIVision(measSystemPrompt, [
+            { type: "text", text: `Parse this measurement report (${fullPdfName || "report.pdf"}). Extract every measurement from ALL pages. Include full raw text.\n\nDOCUMENT TEXT (already extracted, all pages):\n${nativeFullText}` },
+          ]);
+        } else {
+          const measContent = [
+            { type: "text", text: `Parse this measurement report (${fullPdfName || "report.pdf"}). Extract every measurement from ALL pages. Include full raw text.` },
+            { type: "image_url", image_url: { url: `data:application/pdf;base64,${fullPdfBase64}` } },
+          ];
+          measRaw = await callAIVision(measSystemPrompt, measContent);
+        }
         const measParsed = parseJSON(measRaw);
         parsedMeasurement = {
           source: measParsed.source || "other",

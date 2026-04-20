@@ -66,13 +66,17 @@ OUTPUT (JSON array):
 Return ONLY valid JSON array. Multiple findings per photo are expected.`;
 
     const messages: any[] = [{ role: 'system', content: systemPrompt }];
-    
+
     if (photoBase64) {
+      // Resize for forensic mode (≤2048px, JPEG q88, detail=high) — cuts vision tokens
+      // dramatically on phone photos without losing damage detail.
+      const { optimizeForVision, buildOptimizedImagePart } = await import("../_shared/ai/imageOptimizer.ts");
+      const optimized = await optimizeForVision(photoBase64, 'image/jpeg', 'forensic');
       messages.push({
         role: 'user',
         content: [
           { type: 'text', text: `Analyze this claim photo forensically. Context: ${analysisContext || 'Property damage claim photo'}` },
-          { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${photoBase64}` } },
+          buildOptimizedImagePart(optimized),
         ],
       });
     } else {

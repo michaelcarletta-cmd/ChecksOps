@@ -285,6 +285,7 @@ function isGarbageTextInline(text: string): boolean {
 }
 
 // Download PDF from storage and OCR via vision AI — same approach as darwin-process-document
+// Native-first: pull embedded PDF text via pdf.js before falling back to vision OCR.
 async function inlineOcrFromStorage(supabase: any, filePath: string, fileName: string): Promise<string | null> {
   try {
     const { callVision, MODEL_VISION } = await import("../_shared/ai/generate.ts");
@@ -305,6 +306,23 @@ async function inlineOcrFromStorage(supabase: any, filePath: string, fileName: s
       return null;
     }
 
+    const isPdf = fileName.toLowerCase().endsWith('.pdf');
+
+    // Native-first PDF extraction (pdf.js) — skips vision entirely for digital PDFs.
+    if (isPdf) {
+      try {
+        const { extractPdfNative, isNativeExtractionUsable } = await import("../_shared/pdfNativeExtract.ts");
+        const native = await extractPdfNative(bytes, { fileName });
+        if (isNativeExtractionUsable(native)) {
+          console.log(`[Copilot OCR] native PDF extract OK: ${fileName} chars=${native.charCount} status=${native.status}`);
+          return native.text;
+        }
+        console.log(`[Copilot OCR] native PDF unusable (status=${native.status}), falling back to vision OCR for ${fileName}`);
+      } catch (nativeErr) {
+        console.warn(`[Copilot OCR] native PDF extract failed for ${fileName}, falling back to vision:`, nativeErr);
+      }
+    }
+
     const chunks: string[] = [];
     const chunkSize = 32768;
     for (let i = 0; i < bytes.length; i += chunkSize) {
@@ -313,7 +331,6 @@ async function inlineOcrFromStorage(supabase: any, filePath: string, fileName: s
     }
     const base64 = btoa(chunks.join(''));
 
-    const isPdf = fileName.toLowerCase().endsWith('.pdf');
     const mimeType = isPdf ? 'application/pdf' : 'image/jpeg';
 
     const result = await callVision({
