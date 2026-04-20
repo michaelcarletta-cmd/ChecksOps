@@ -99,7 +99,11 @@ export function useDarwinCopilot(claimId: string) {
 
       const data = await resp.json();
 
-      if (!data.ok || (!data.response && !data.draftData)) {
+      if (data.ok === false) {
+        throw new Error(data.error || 'Copilot returned an error');
+      }
+
+      if (data.response == null && !data.draftData) {
         throw new Error(data.error || 'Empty response from Copilot');
       }
 
