@@ -13,7 +13,7 @@
 
 const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 const LOVABLE_GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const AI_REQUEST_TIMEOUT_MS = 45_000;
+const AI_REQUEST_TIMEOUT_MS = 90_000;
 
 type Provider = "openai" | "lovable";
 

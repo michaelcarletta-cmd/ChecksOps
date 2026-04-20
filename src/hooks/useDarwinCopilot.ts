@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 type CopilotMode = 'operational' | 'rebuttal' | 'estimate' | 'war_room' | 'training' | 'strategy' | 'draft' | 'search_web' | 'search_argue';
-const COPILOT_REQUEST_TIMEOUT_MS = 50000;
+const COPILOT_REQUEST_TIMEOUT_MS = 100_000;
 
 export interface DraftFacts {
   claim_number: string;
