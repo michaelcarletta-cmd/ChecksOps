@@ -33,17 +33,24 @@ interface ClaimWarRoomProps {
 
 export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [isOpen, setIsOpen] = useState(() => searchParams.get("tab") === "warroom");
+  const shouldAutoOpen = searchParams.get("tab") === "warroom";
+  const [isOpen, setIsOpen] = useState(shouldAutoOpen);
 
-  // Auto-open when navigated with ?tab=warroom
+  // Auto-open when navigated with ?tab=warroom (handles lazy-load timing)
   useEffect(() => {
-    if (searchParams.get("tab") === "warroom") {
+    if (searchParams.get("tab") === "warroom" && !isOpen) {
       setIsOpen(true);
-      // Clean up the query param
-      searchParams.delete("tab");
-      setSearchParams(searchParams, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams]);
+
+  // Clean up query param after dialog is opened
+  useEffect(() => {
+    if (isOpen && searchParams.get("tab") === "warroom") {
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("tab");
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [isOpen]);
   const [insights, setInsights] = useState<any>(null);
   const [deadlines, setDeadlines] = useState<any[]>([]);
   const [strategySimulations, setStrategySimulations] = useState<any[]>([]);
