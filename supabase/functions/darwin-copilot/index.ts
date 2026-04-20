@@ -4,6 +4,21 @@ import { getClaimsContextBundle, formatContextBundle } from "../_shared/ai/claim
 import { analyzeDocument, formatDismantlerForPrompt, reconstructDismantlerFromRow, type DismantlerResult } from "../_shared/ai/universalDismantler.ts";
 import { detectDismantlerAction, executeDismantlerAction } from "../_shared/ai/dismantlerActions.ts";
 import { isGarbageText } from "../_shared/document-intelligence-types.ts";
+import {
+  COPILOT_ABSOLUTE_RULE,
+  COPILOT_DATA_INTERPRETATION,
+  COPILOT_ROLE_PREAMBLE,
+  COPILOT_ACTION_PROHIBITION,
+  COPILOT_LEARNING_RULES,
+  COPILOT_CROSS_SURFACE_LINKAGE,
+  COPILOT_SOURCE_PRIORITY,
+  COPILOT_FORMATTING_RULES,
+  COPILOT_TASK_AND_NOTE_CREATION,
+  COPILOT_COLLEAGUE_ROLE,
+  COPILOT_REMINDER_AND_CITATIONS,
+  copilotExternalWritingRules,
+  copilotModeTail,
+} from "../_shared/ai/copilotPromptBlocks.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
