@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 type CopilotMode = 'operational' | 'rebuttal' | 'estimate' | 'war_room' | 'training' | 'strategy' | 'draft' | 'search_web' | 'search_argue';
+const COPILOT_REQUEST_TIMEOUT_MS = 50000;
 
 export interface DraftFacts {
   claim_number: string;
@@ -69,6 +70,7 @@ export function useDarwinCopilot(claimId: string) {
     try {
       abortRef.current?.abort();
       abortRef.current = new AbortController();
+      const timeoutId = window.setTimeout(() => abortRef.current?.abort(), COPILOT_REQUEST_TIMEOUT_MS);
 
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData?.session?.access_token;
@@ -122,6 +124,7 @@ export function useDarwinCopilot(claimId: string) {
         },
       };
       setMessages(prev => [...prev, assistantMsg]);
+      window.clearTimeout(timeoutId);
     } catch (err: any) {
       if (err.name === 'AbortError') return;
       console.error('[Darwin Copilot] Error details:', { error: err, claimId, mode: overrideMode || mode });
@@ -135,6 +138,8 @@ export function useDarwinCopilot(claimId: string) {
         friendlyMsg = 'Unable to load claim details. Please refresh the page or select a claim again.';
       } else if (/no active session/i.test(rawMsg)) {
         friendlyMsg = 'Your session has expired. Please sign in again.';
+      } else if (/timed out/i.test(rawMsg) || /abort/i.test(rawMsg)) {
+        friendlyMsg = 'Copilot took too long to respond. Please try again.';
       } else {
         friendlyMsg = `Something went wrong. Please try again. (${rawMsg.length > 120 ? rawMsg.slice(0, 120) + '…' : rawMsg})`;
       }
