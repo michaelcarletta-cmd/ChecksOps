@@ -347,18 +347,6 @@ export function ClaimPhotos({ claimId, claim, isPortalUser = false }: ClaimPhoto
       setUploadDescription("");
       setUploadBeforeAfter(null);
       fetchPhotos();
-
-      // Trigger AI analysis for each uploaded photo (in background)
-      for (const photoId of uploadedPhotoIds) {
-        analyzePhoto(photoId);
-      }
-      
-      if (uploadedPhotoIds.length > 0) {
-        toast({ 
-          title: "Darwin is analyzing photos", 
-          description: "AI analysis will appear shortly for each photo."
-        });
-      }
     } catch (error: any) {
       console.error("Upload error:", error);
       toast({ title: "Error uploading photos", description: error.message, variant: "destructive" });
@@ -505,15 +493,6 @@ export function ClaimPhotos({ claimId, claim, isPortalUser = false }: ClaimPhoto
         
         toast({ title: "Photo captured successfully" });
         fetchPhotos();
-
-        // Trigger AI analysis in background
-        if (insertedPhoto) {
-          analyzePhoto(insertedPhoto.id);
-          toast({ 
-            title: "Darwin is analyzing photo", 
-            description: "AI analysis will appear shortly."
-          });
-        }
       } catch (error: any) {
         toast({ title: "Error saving photo", description: error.message, variant: "destructive" });
       } finally {
