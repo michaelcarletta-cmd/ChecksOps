@@ -60,7 +60,7 @@ export function ClaimBoardCard({ entry }: ClaimBoardCardProps) {
     setSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from("claim_events").insert({
+      await (supabase.from("claim_events") as any).insert({
         claim_id: entry.claim_id,
         event_type: "note",
         summary: noteText.trim(),
@@ -81,7 +81,7 @@ export function ClaimBoardCard({ entry }: ClaimBoardCardProps) {
     setSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from("claim_events").insert({
+      await (supabase.from("claim_events") as any).insert({
         claim_id: entry.claim_id,
         event_type: "communication",
         summary: "Contacted carrier — status check",
