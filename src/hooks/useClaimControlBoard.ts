@@ -138,7 +138,7 @@ export function useClaimControlBoard() {
       }
 
       // Fetch microtask counts per claim
-      const claimIds = (claims || []).map((c: any) => c.id);
+      const claimIds = activeClaims.map((c: any) => c.id);
       let microtaskCounts: Record<string, { immediate: number; blocking: number; overdue: number }> = {};
       let taskCounts: Record<string, { open: number; overdue: number; immediate: number; blocking: number }> = {};
 
