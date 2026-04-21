@@ -116,6 +116,13 @@ export type Database = {
             foreignKeyName: "ai_generated_tasks_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "ai_generated_tasks_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -348,6 +355,13 @@ export type Database = {
             foreignKeyName: "automation_executions_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "automation_executions_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -437,6 +451,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "autopilot_action_feedback_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "autopilot_action_feedback_claim_id_fkey"
             columns: ["claim_id"]
@@ -690,6 +711,13 @@ export type Database = {
             foreignKeyName: "carrier_argument_queue_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "carrier_argument_queue_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -789,6 +817,13 @@ export type Database = {
           why_different?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "carrier_argument_rebuttals_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "carrier_argument_rebuttals_claim_id_fkey"
             columns: ["claim_id"]
@@ -1460,6 +1495,13 @@ export type Database = {
             foreignKeyName: "check_intake_items_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "check_intake_items_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -1735,6 +1777,13 @@ export type Database = {
             foreignKeyName: "claim_additional_contacts_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_additional_contacts_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -1799,6 +1848,13 @@ export type Database = {
             foreignKeyName: "claim_adjusters_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_adjusters_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -1846,6 +1902,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_ai_conversations_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_ai_conversations_claim_id_fkey"
             columns: ["claim_id"]
@@ -1909,6 +1972,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_ai_pending_actions_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_ai_pending_actions_claim_id_fkey"
             columns: ["claim_id"]
@@ -1994,6 +2064,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_argument_map_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_argument_map_claim_id_fkey"
             columns: ["claim_id"]
@@ -2146,6 +2223,13 @@ export type Database = {
             foreignKeyName: "claim_automations_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_automations_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -2223,6 +2307,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_carrier_deadlines_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_carrier_deadlines_claim_id_fkey"
             columns: ["claim_id"]
@@ -2336,6 +2427,13 @@ export type Database = {
             foreignKeyName: "claim_causation_tests_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_causation_tests_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -2430,6 +2528,13 @@ export type Database = {
             foreignKeyName: "claim_checks_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_checks_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -2514,6 +2619,13 @@ export type Database = {
             foreignKeyName: "claim_communications_diary_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_communications_diary_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -2565,6 +2677,13 @@ export type Database = {
             foreignKeyName: "claim_context_pipelines_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_context_pipelines_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -2597,6 +2716,13 @@ export type Database = {
           id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_contractors_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_contractors_claim_id_fkey"
             columns: ["claim_id"]
@@ -2664,6 +2790,13 @@ export type Database = {
             foreignKeyName: "claim_contradiction_detections_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_contradiction_detections_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -2702,6 +2835,13 @@ export type Database = {
           value?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_custom_field_values_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_custom_field_values_claim_id_fkey"
             columns: ["claim_id"]
@@ -2769,6 +2909,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_deadlines_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_deadlines_claim_id_fkey"
             columns: ["claim_id"]
@@ -2947,6 +3094,13 @@ export type Database = {
             foreignKeyName: "claim_document_chunks_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_document_chunks_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -3046,6 +3200,13 @@ export type Database = {
           used_search?: boolean | null
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_document_dismantlers_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_document_dismantlers_claim_id_fkey"
             columns: ["claim_id"]
@@ -3168,6 +3329,13 @@ export type Database = {
             foreignKeyName: "claim_document_intelligence_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_document_intelligence_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -3267,6 +3435,13 @@ export type Database = {
           urgency?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_document_meaning_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_document_meaning_claim_id_fkey"
             columns: ["claim_id"]
@@ -3379,6 +3554,13 @@ export type Database = {
             foreignKeyName: "claim_estimate_analysis_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_estimate_analysis_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -3476,6 +3658,13 @@ export type Database = {
             foreignKeyName: "claim_events_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_events_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -3542,6 +3731,13 @@ export type Database = {
             foreignKeyName: "claim_expenses_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_expenses_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -3604,6 +3800,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_fees_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_fees_claim_id_fkey"
             columns: ["claim_id"]
@@ -3688,6 +3891,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_file_segments_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_file_segments_claim_id_fkey"
             columns: ["claim_id"]
@@ -3879,6 +4089,13 @@ export type Database = {
             foreignKeyName: "claim_files_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_files_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -3948,6 +4165,13 @@ export type Database = {
             foreignKeyName: "claim_folders_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_folders_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -3996,6 +4220,13 @@ export type Database = {
           triggered_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_followup_log_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_followup_log_claim_id_fkey"
             columns: ["claim_id"]
@@ -4068,6 +4299,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "hidden_loss_checklist_items"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claim_hidden_loss_checks_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
           },
           {
             foreignKeyName: "claim_hidden_loss_checks_claim_id_fkey"
@@ -4229,6 +4467,13 @@ export type Database = {
             foreignKeyName: "claim_home_inventory_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_home_inventory_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -4280,6 +4525,13 @@ export type Database = {
           version?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_intelligence_cache_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_intelligence_cache_claim_id_fkey"
             columns: ["claim_id"]
@@ -4386,6 +4638,13 @@ export type Database = {
             foreignKeyName: "claim_intelligence_summary_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_intelligence_summary_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -4425,6 +4684,13 @@ export type Database = {
           version?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_intelligence_version_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_intelligence_version_claim_id_fkey"
             columns: ["claim_id"]
@@ -4555,6 +4821,13 @@ export type Database = {
             foreignKeyName: "claim_line_item_justifications_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_line_item_justifications_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -4642,6 +4915,13 @@ export type Database = {
             foreignKeyName: "claim_loss_of_use_expenses_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_loss_of_use_expenses_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -4671,6 +4951,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_master_state_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_master_state_claim_id_fkey"
             columns: ["claim_id"]
@@ -4744,6 +5031,13 @@ export type Database = {
             foreignKeyName: "claim_microtasks_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_microtasks_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -4791,6 +5085,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_normal_bills_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_normal_bills_claim_id_fkey"
             columns: ["claim_id"]
@@ -4860,6 +5161,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_operational_state_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_operational_state_claim_id_fkey"
             columns: ["claim_id"]
@@ -4941,6 +5249,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_outcome_events_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_outcome_events_claim_id_fkey"
             columns: ["claim_id"]
@@ -5029,6 +5344,13 @@ export type Database = {
             foreignKeyName: "claim_outcome_learning_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_outcome_learning_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -5091,6 +5413,13 @@ export type Database = {
           settlement_probability?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_outcome_predictions_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_outcome_predictions_claim_id_fkey"
             columns: ["claim_id"]
@@ -5209,6 +5538,13 @@ export type Database = {
             foreignKeyName: "claim_outcomes_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: true
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_outcomes_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -5253,6 +5589,13 @@ export type Database = {
           sales_rep_name?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_partner_assignments_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_partner_assignments_claim_id_fkey"
             columns: ["claim_id"]
@@ -5337,6 +5680,13 @@ export type Database = {
             foreignKeyName: "claim_payments_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_payments_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -5402,6 +5752,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_performance_attribution_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_performance_attribution_claim_id_fkey"
             columns: ["claim_id"]
@@ -5480,6 +5837,13 @@ export type Database = {
           structured_data?: Json | null
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_photo_findings_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_photo_findings_claim_id_fkey"
             columns: ["claim_id"]
@@ -5577,6 +5941,13 @@ export type Database = {
             foreignKeyName: "claim_photos_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_photos_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -5630,6 +6001,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_policy_analysis_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_policy_analysis_claim_id_fkey"
             columns: ["claim_id"]
@@ -5700,6 +6078,13 @@ export type Database = {
           was_accurate?: boolean | null
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_predictive_analysis_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_predictive_analysis_claim_id_fkey"
             columns: ["claim_id"]
@@ -5982,6 +6367,13 @@ export type Database = {
           vision_classifications?: Json | null
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_roof_measurements_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_roof_measurements_claim_id_fkey"
             columns: ["claim_id"]
@@ -6291,6 +6683,13 @@ export type Database = {
             foreignKeyName: "claim_scenario_simulations_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_scenario_simulations_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -6390,6 +6789,13 @@ export type Database = {
             foreignKeyName: "claim_settlements_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_settlements_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -6422,6 +6828,13 @@ export type Database = {
           staff_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_staff_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_staff_claim_id_fkey"
             columns: ["claim_id"]
@@ -6594,6 +7007,13 @@ export type Database = {
             foreignKeyName: "claim_strategic_insights_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: true
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_strategic_insights_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -6653,6 +7073,13 @@ export type Database = {
           wsi?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_strategic_snapshots_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_strategic_snapshots_claim_id_fkey"
             columns: ["claim_id"]
@@ -6728,6 +7155,13 @@ export type Database = {
           strategy_type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_strategy_simulations_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_strategy_simulations_claim_id_fkey"
             columns: ["claim_id"]
@@ -6857,6 +7291,13 @@ export type Database = {
             foreignKeyName: "claim_thesis_objects_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: true
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "claim_thesis_objects_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -6898,6 +7339,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_updates_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_updates_claim_id_fkey"
             columns: ["claim_id"]
@@ -6955,6 +7403,13 @@ export type Database = {
           violation_type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_violation_detections_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_violation_detections_claim_id_fkey"
             columns: ["claim_id"]
@@ -7048,6 +7503,13 @@ export type Database = {
           warning_type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "claim_warnings_log_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "claim_warnings_log_claim_id_fkey"
             columns: ["claim_id"]
@@ -7408,6 +7870,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "clawdbot_message_log_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "clawdbot_message_log_claim_id_fkey"
             columns: ["claim_id"]
@@ -7795,6 +8264,13 @@ export type Database = {
             foreignKeyName: "darwin_action_log_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "darwin_action_log_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -7842,6 +8318,13 @@ export type Database = {
           result?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "darwin_analysis_results_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "darwin_analysis_results_claim_id_fkey"
             columns: ["claim_id"]
@@ -7999,6 +8482,13 @@ export type Database = {
             foreignKeyName: "darwin_declared_positions_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "darwin_declared_positions_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -8125,6 +8615,13 @@ export type Database = {
             foreignKeyName: "darwin_estimate_lines_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "darwin_estimate_lines_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -8182,6 +8679,13 @@ export type Database = {
             foreignKeyName: "darwin_feedback_events_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "darwin_feedback_events_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -8220,6 +8724,13 @@ export type Database = {
           status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "darwin_health_checks_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "darwin_health_checks_claim_id_fkey"
             columns: ["claim_id"]
@@ -8499,6 +9010,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "darwin_sms_activity_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "darwin_sms_activity_claim_id_fkey"
             columns: ["claim_id"]
@@ -9685,6 +10203,13 @@ export type Database = {
             foreignKeyName: "document_analysis_results_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "document_analysis_results_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -9763,6 +10288,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "document_intelligence_queue_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "document_intelligence_queue_claim_id_fkey"
             columns: ["claim_id"]
@@ -9855,6 +10387,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "document_meaning_queue_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "document_meaning_queue_claim_id_fkey"
             columns: ["claim_id"]
@@ -10116,6 +10655,13 @@ export type Database = {
             foreignKeyName: "emails_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "emails_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -10335,6 +10881,13 @@ export type Database = {
             foreignKeyName: "escalation_actions_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "escalation_actions_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -10473,6 +11026,13 @@ export type Database = {
             foreignKeyName: "esign_event_logs_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "esign_event_logs_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -10546,6 +11106,13 @@ export type Database = {
           was_cited_in_settlement?: boolean | null
         }
         Relationships: [
+          {
+            foreignKeyName: "evidence_effectiveness_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "evidence_effectiveness_claim_id_fkey"
             columns: ["claim_id"]
@@ -10685,6 +11252,13 @@ export type Database = {
             foreignKeyName: "extracted_document_data_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "extracted_document_data_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -10767,6 +11341,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "generated_assets_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "generated_assets_claim_id_fkey"
             columns: ["claim_id"]
@@ -10966,6 +11547,13 @@ export type Database = {
             foreignKeyName: "inspections_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "inspections_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -11053,6 +11641,13 @@ export type Database = {
             foreignKeyName: "inventory_scan_runs_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "inventory_scan_runs_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -11106,6 +11701,13 @@ export type Database = {
           sync_type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "jobnimbus_sync_queue_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "jobnimbus_sync_queue_claim_id_fkey"
             columns: ["claim_id"]
@@ -11345,6 +11947,13 @@ export type Database = {
           sync_status?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "linked_claims_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "linked_claims_claim_id_fkey"
             columns: ["claim_id"]
@@ -11694,6 +12303,13 @@ export type Database = {
             foreignKeyName: "loss_draft_tracking_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "loss_draft_tracking_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -11890,6 +12506,13 @@ export type Database = {
             foreignKeyName: "mortgage_releases_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "mortgage_releases_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -12006,6 +12629,13 @@ export type Database = {
             foreignKeyName: "notifications_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "notifications_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -12118,6 +12748,13 @@ export type Database = {
             foreignKeyName: "onesx_orders_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "onesx_orders_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -12197,6 +12834,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "org_sales_commissions_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "org_sales_commissions_claim_id_fkey"
             columns: ["claim_id"]
@@ -12432,6 +13076,13 @@ export type Database = {
           resolved_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "prediction_accuracy_metrics_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "prediction_accuracy_metrics_claim_id_fkey"
             columns: ["claim_id"]
@@ -12716,6 +13367,13 @@ export type Database = {
             foreignKeyName: "scenario_accuracy_metrics_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "scenario_accuracy_metrics_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -12974,6 +13632,13 @@ export type Database = {
             foreignKeyName: "signature_requests_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "signature_requests_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -13126,6 +13791,13 @@ export type Database = {
             foreignKeyName: "smart_follow_up_recommendations_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "smart_follow_up_recommendations_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -13187,6 +13859,13 @@ export type Database = {
             foreignKeyName: "sms_conversation_state_active_claim_id_fkey"
             columns: ["active_claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "sms_conversation_state_active_claim_id_fkey"
+            columns: ["active_claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -13240,6 +13919,13 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "sms_messages_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "sms_messages_claim_id_fkey"
             columns: ["claim_id"]
@@ -13591,6 +14277,13 @@ export type Database = {
             foreignKeyName: "strategy_outcome_tracking_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "strategy_outcome_tracking_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -13861,6 +14554,13 @@ export type Database = {
           urgent_reason?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "tasks_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
           {
             foreignKeyName: "tasks_claim_id_fkey"
             columns: ["claim_id"]
@@ -14290,6 +14990,13 @@ export type Database = {
             foreignKeyName: "workspace_threads_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "workspace_threads_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -14358,6 +15065,24 @@ export type Database = {
           total_checks: number | null
           total_deposited: number | null
           total_deposited_value: number | null
+        }
+        Relationships: []
+      }
+      claim_last_activity: {
+        Row: {
+          claim_id: string | null
+          days_inactive: number | null
+          last_activity_at: string | null
+        }
+        Insert: {
+          claim_id?: string | null
+          days_inactive?: never
+          last_activity_at?: never
+        }
+        Update: {
+          claim_id?: string | null
+          days_inactive?: never
+          last_activity_at?: never
         }
         Relationships: []
       }
@@ -14771,6 +15496,13 @@ export type Database = {
             foreignKeyName: "loss_draft_tracking_claim_id_fkey"
             columns: ["claim_id"]
             isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "loss_draft_tracking_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
             referencedRelation: "claim_money_snapshot"
             referencedColumns: ["claim_id"]
           },
@@ -14866,6 +15598,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "check_intake_items"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "check_intake_items_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
           },
           {
             foreignKeyName: "check_intake_items_claim_id_fkey"
@@ -15028,6 +15767,7 @@ export type Database = {
         }
         Returns: Json
       }
+      auto_generate_claim_microtasks: { Args: never; Returns: number }
       bulk_deposit_closeout: {
         Args: { p_actor_id: string; p_deposit_item_ids: string[] }
         Returns: Json
@@ -15050,6 +15790,10 @@ export type Database = {
       }
       can_manage_roles: { Args: { _user_id: string }; Returns: boolean }
       cleanup_expired_ai_response_cache: { Args: never; Returns: number }
+      compute_claim_last_activity: {
+        Args: { p_claim_id: string }
+        Returns: string
+      }
       create_claim_for_staff:
         | {
             Args: {

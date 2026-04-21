@@ -104,6 +104,21 @@ export function useClaimControlBoard() {
         return [];
       }
 
+      // Fetch real last activity from the view
+      const { data: activityData } = await supabase
+        .from("claim_last_activity" as any)
+        .select("claim_id, last_activity_at, days_inactive");
+
+      const activityMap: Record<string, { last_activity_at: string; days_inactive: number }> = {};
+      if (activityData) {
+        for (const row of activityData as any[]) {
+          activityMap[row.claim_id] = {
+            last_activity_at: row.last_activity_at,
+            days_inactive: row.days_inactive ?? 0,
+          };
+        }
+      }
+
       // Fetch microtask counts per claim
       const claimIds = (claims || []).map((c: any) => c.id);
       let microtaskCounts: Record<string, { immediate: number; blocking: number; overdue: number }> = {};
@@ -150,7 +165,8 @@ export function useClaimControlBoard() {
       return (claims || []).map((c: any) => {
         const storedOps = c.claim_operational_state?.[0] || c.claim_operational_state || null;
         const normalizedStatus = normalizeStatus(c.status);
-        const daysInactive = daysBetween(c.updated_at || c.created_at);
+        const activity = activityMap[c.id];
+        const daysInactive = activity?.days_inactive ?? daysBetween(c.updated_at || c.created_at);
         const microtaskSummary = microtaskCounts[c.id] || { immediate: 0, blocking: 0, overdue: 0 };
         const taskSummary = taskCounts[c.id] || { open: 0, overdue: 0, immediate: 0, blocking: 0 };
         const immediateCount = microtaskSummary.immediate + taskSummary.immediate;
@@ -192,7 +208,7 @@ export function useClaimControlBoard() {
           next_best_action: nextAction.action,
           next_best_action_confidence: nextAction.confidence,
           follow_up_status: followUpStatus,
-          last_activity_at: c.updated_at || c.created_at,
+          last_activity_at: activity?.last_activity_at || c.updated_at || c.created_at,
           days_since_last_activity: daysInactive,
           pressure_score: Math.round(pressureScore * 10) / 10,
           priority_rank: computePriorityRank(pressureScore, followUpStatus, {

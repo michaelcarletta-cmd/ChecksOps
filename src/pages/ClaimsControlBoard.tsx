@@ -3,43 +3,92 @@ import { useClaimControlBoard } from "@/hooks/useClaimControlBoard";
 import { useGlobalImmediateMicrotasks } from "@/hooks/useGlobalImmediateMicrotasks";
 import { ClaimBoardCard } from "@/components/control-board/ClaimBoardCard";
 import { NeedsActionStrip } from "@/components/control-board/NeedsActionStrip";
-import { ClaimBoardEntry, FollowUpStatus } from "@/services/claimOperationsService";
+import { BoardSummaryBar } from "@/components/control-board/BoardSummaryBar";
+import { ClaimBoardEntry } from "@/services/claimOperationsService";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, SlidersHorizontal } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Loader2, Search, SlidersHorizontal, ChevronDown, ChevronRight } from "lucide-react";
 
 type SortField = "priority_rank" | "days_since_activity" | "pressure_score" | "follow_up_status";
+
+interface LaneConfig {
+  key: string;
+  label: string;
+  filter: (c: ClaimBoardEntry) => boolean;
+  accentClass: string;
+  defaultOpen: boolean;
+}
+
+const LANES: LaneConfig[] = [
+  {
+    key: "needs_action",
+    label: "Needs Action Now",
+    filter: (c) =>
+      c.ops?.follow_up_status === "escalation" ||
+      c.ops?.follow_up_status === "overdue" ||
+      c.immediate_microtasks > 0 ||
+      c.blocking_microtasks > 0 ||
+      (c.overdue_tasks || 0) > 0,
+    accentClass: "border-l-red-500",
+    defaultOpen: true,
+  },
+  {
+    key: "due_soon",
+    label: "Due Soon",
+    filter: (c) => c.ops?.follow_up_status === "due",
+    accentClass: "border-l-amber-500",
+    defaultOpen: true,
+  },
+  {
+    key: "carrier_waiting",
+    label: "Waiting on Carrier",
+    filter: (c) => {
+      const status = c.status || "";
+      return [
+        "Carrier Review",
+        "Funding from Insurance",
+        "Recoverable Depreciation Requested",
+        "Waiting on ACV Funds",
+        "Waiting on Insurance Funds (ACV)",
+        "Waiting on Mortgage Check",
+      ].includes(status);
+    },
+    accentClass: "border-l-muted-foreground",
+    defaultOpen: false,
+  },
+  {
+    key: "on_track",
+    label: "On Track",
+    filter: () => true, // catch-all
+    accentClass: "border-l-green-500",
+    defaultOpen: false,
+  },
+];
 
 const ClaimsControlBoard = () => {
   const { data: claims = [], isLoading } = useClaimControlBoard();
   const { data: immediateTasks = [] } = useGlobalImmediateMicrotasks();
   const [sortBy, setSortBy] = useState<SortField>("priority_rank");
   const [search, setSearch] = useState("");
-  const [filterFollowUp, setFilterFollowUp] = useState<string>("all");
 
+  // Apply search filter
   const filtered = useMemo(() => {
-    let result = [...claims];
-
-    // Search filter
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      result = result.filter(c =>
+    if (!search.trim()) return claims;
+    const q = search.toLowerCase();
+    return claims.filter(
+      (c) =>
         c.claim_number?.toLowerCase().includes(q) ||
         c.policyholder_name?.toLowerCase().includes(q) ||
         c.insurance_carrier?.toLowerCase().includes(q) ||
         c.property_address?.toLowerCase().includes(q)
-      );
-    }
+    );
+  }, [claims, search]);
 
-    // Follow-up filter
-    if (filterFollowUp !== "all") {
-      result = result.filter(c => c.ops?.follow_up_status === filterFollowUp);
-    }
-
-    // Sort
-    result.sort((a, b) => {
+  // Sort function
+  const sortClaims = (list: ClaimBoardEntry[]) => {
+    return [...list].sort((a, b) => {
       const opsA = a.ops;
       const opsB = b.ops;
       switch (sortBy) {
@@ -57,16 +106,24 @@ const ClaimsControlBoard = () => {
           return 0;
       }
     });
+  };
 
-    return result;
-  }, [claims, search, filterFollowUp, sortBy]);
-
-  // Stats
-  const escalationCount = claims.filter(c => c.ops?.follow_up_status === "escalation").length;
-  const overdueCount = claims.filter(c => c.ops?.follow_up_status === "overdue").length;
-  const staleCount = claims.filter(c => c.ops?.stale_flag).length;
-  const highExposureCount = claims.filter(c => c.ops?.high_exposure_flag).length;
-  const outstandingTaskCount = claims.filter(c => c.immediate_microtasks > 0 || c.blocking_microtasks > 0 || c.ops?.follow_up_status === "overdue" || c.ops?.follow_up_status === "escalation").length;
+  // Distribute claims into lanes (each claim goes to first matching lane)
+  const laneData = useMemo(() => {
+    const assigned = new Set<string>();
+    return LANES.map((lane) => {
+      const laneClaims = filtered.filter((c) => {
+        if (assigned.has(c.claim_id)) return false;
+        if (lane.key === "on_track") {
+          // catch-all: anything not assigned yet
+          return !assigned.has(c.claim_id);
+        }
+        return lane.filter(c);
+      });
+      laneClaims.forEach((c) => assigned.add(c.claim_id));
+      return { ...lane, claims: sortClaims(laneClaims) };
+    });
+  }, [filtered, sortBy]);
 
   if (isLoading) {
     return (
@@ -88,40 +145,17 @@ const ClaimsControlBoard = () => {
       <div>
         <h1 className="text-2xl md:text-3xl font-bold text-foreground">Claims Control Board</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          {claims.length} active claims • {outstandingTaskCount > 0 
-            ? `${outstandingTaskCount} claims with outstanding tasks` 
-            : "All current claims on track"}
+          {claims.length} active claims
         </p>
       </div>
+
+      {/* Daily pulse summary */}
+      <BoardSummaryBar claims={claims} />
 
       {/* Needs Action Now strip */}
       {immediateTasks.length > 0 && (
         <NeedsActionStrip tasks={immediateTasks} />
       )}
-
-      {/* Stats badges */}
-      <div className="flex flex-wrap gap-2">
-        {escalationCount > 0 && (
-          <Badge variant="destructive" className="cursor-pointer" onClick={() => setFilterFollowUp("escalation")}>
-            {escalationCount} Escalation
-          </Badge>
-        )}
-        {overdueCount > 0 && (
-          <Badge variant="destructive" className="cursor-pointer" onClick={() => setFilterFollowUp("overdue")}>
-            {overdueCount} Overdue
-          </Badge>
-        )}
-        {staleCount > 0 && (
-          <Badge variant="secondary" className="cursor-pointer">
-            {staleCount} Stale
-          </Badge>
-        )}
-        {highExposureCount > 0 && (
-          <Badge variant="outline" className="cursor-pointer border-amber-500 text-amber-600 dark:text-amber-400">
-            {highExposureCount} High Exposure
-          </Badge>
-        )}
-      </div>
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
@@ -130,22 +164,10 @@ const ClaimsControlBoard = () => {
           <Input
             placeholder="Search claims..."
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
           />
         </div>
-        <Select value={filterFollowUp} onValueChange={setFilterFollowUp}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Follow-up" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="escalation">Escalation</SelectItem>
-            <SelectItem value="overdue">Overdue</SelectItem>
-            <SelectItem value="due">Due</SelectItem>
-            <SelectItem value="on_track">On Track</SelectItem>
-          </SelectContent>
-        </Select>
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortField)}>
           <SelectTrigger className="w-[180px]">
             <SlidersHorizontal className="h-4 w-4 mr-2" />
@@ -160,27 +182,45 @@ const ClaimsControlBoard = () => {
         </Select>
       </div>
 
-      {/* Claims list */}
+      {/* Grouped lanes */}
       {claims.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <p className="text-lg">All claims are closed.</p>
-          <Button variant="link" onClick={() => window.location.href = "/claims"}>
-            View archived claims →
-          </Button>
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <p className="text-lg">No claims match your filters</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map(claim => (
-            <ClaimBoardCard key={claim.claim_id} entry={claim} />
+          {laneData.map((lane) => (
+            <LaneSection key={lane.key} lane={lane} />
           ))}
         </div>
       )}
     </div>
   );
 };
+
+function LaneSection({ lane }: { lane: LaneConfig & { claims: ClaimBoardEntry[] } }) {
+  const [open, setOpen] = useState(lane.defaultOpen || lane.claims.length > 0 && lane.key === "needs_action");
+
+  if (lane.claims.length === 0) return null;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger className={`flex items-center gap-2 w-full p-3 rounded-lg border border-l-4 ${lane.accentClass} bg-card hover:bg-accent/50 transition-colors`}>
+        {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        <span className="font-semibold text-sm text-foreground">{lane.label}</span>
+        <Badge variant={lane.key === "needs_action" ? "destructive" : lane.key === "due_soon" ? "secondary" : "outline"} className="text-xs">
+          {lane.claims.length}
+        </Badge>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="space-y-2 mt-2 ml-2">
+          {lane.claims.map((claim) => (
+            <ClaimBoardCard key={claim.claim_id} entry={claim} />
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 export default ClaimsControlBoard;
