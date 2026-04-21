@@ -56,16 +56,23 @@ const deriveLifecycleStage = (status?: string | null) => {
 export function useClaimControlBoard() {
   const queryClient = useQueryClient();
 
-  // Realtime subscription: refetch when microtasks change
+  // Realtime subscription: refetch when microtasks or claim statuses change
   useEffect(() => {
     const channel = supabase
-      .channel("control-board-microtasks")
+      .channel("control-board-realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "claim_microtasks" },
         () => {
           queryClient.invalidateQueries({ queryKey: ["claim-control-board"] });
           queryClient.invalidateQueries({ queryKey: ["global-immediate-microtasks"] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "claims" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["claim-control-board"] });
         }
       )
       .subscribe();
