@@ -144,14 +144,14 @@ export function smartRouteModel(
   forceStrong?: boolean,
 ): ModelConfig {
   if (forceStrong || STRONG_MODEL_TASKS.has(task)) {
-    return { ...config, model: MODEL_GPT5, maxTokens: 8000 };
+    return { ...config, model: MODEL_GPT5, maxTokens: 4000 };
   }
   if (REASONING_MODEL_TASKS.has(task)) {
-    return { ...config, model: MODEL_GPT5_MINI, maxTokens: 6000 };
+    return { ...config, model: MODEL_GPT5_MINI, maxTokens: 3000 };
   }
   if (userPromptLength > 4000) {
-    // Large prompt — bump up one tier from default Flash to GPT-5-mini for quality
-    return { ...config, model: MODEL_GPT5_MINI, maxTokens: 6000 };
+    // Large prompt — bump up one tier from default Flash to Flash (not GPT-5-mini)
+    return { ...config, model: MODEL_FLASH, maxTokens: 3000 };
   }
   return config;
 }
