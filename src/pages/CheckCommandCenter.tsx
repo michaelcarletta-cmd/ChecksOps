@@ -486,10 +486,14 @@ export default function CheckCommandCenter() {
 
         {/* All other tabs — only render the active one */}
         {activeTab !== "review" && activeTab !== "lossdraft" && activeTab !== "deposit_ops" && activeTab !== "reconciliation" && activeTab !== "exceptions" && activeTab !== "aging" && activeTab !== "reports" && activeTab !== "kpis" && activeTab !== "workqueue" && activeTab !== "manager" && (
-          <div className="mt-3 grid gap-4 lg:grid-cols-[1fr_26rem]">
-            <Card>
-                <CardContent className="p-0">
-                <div className="overflow-x-auto">
+          <div className="mt-3 flex gap-4" style={{ minHeight: "calc(100vh - 400px)" }}>
+            {/* Check list — grows when no check selected */}
+            <Card
+              className="overflow-hidden transition-all duration-300 ease-in-out flex-shrink-0"
+              style={{ width: selectedCheck ? "40%" : "80%" }}
+            >
+              <CardContent className="p-0 h-full">
+                <div className="overflow-x-auto h-full">
                 <ScrollArea className="h-[calc(100vh-400px)]">
                   {isLoading ? (
                     <div className="p-8 text-center text-muted-foreground">Loading checks...</div>
@@ -515,11 +519,12 @@ export default function CheckCommandCenter() {
                             : null;
                           const RecIcon = rec?.icon ?? null;
                           const canDelete = canDeleteAnyCheck;
+                          const isSelected = selectedCheck === check.id;
                           return (
                             <TableRow
                               key={check.id}
-                              className={`cursor-pointer transition-colors ${selectedCheck === check.id ? "bg-accent/50" : ""}`}
-                              onClick={() => setSelectedCheck(check.id)}
+                              className={`cursor-pointer transition-colors ${isSelected ? "bg-blue-50 dark:bg-blue-950/30" : ""}`}
+                              onClick={() => setSelectedCheck(isSelected ? null : check.id)}
                             >
                               <TableCell className="font-mono text-sm">
                                 #{check.check_number || "—"}
@@ -579,19 +584,26 @@ export default function CheckCommandCenter() {
               </CardContent>
             </Card>
 
-            {selectedCheck ? (
-              <CheckDetailPanel
-                checkId={selectedCheck}
-                onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
-              />
-            ) : (
-              <Card className="flex items-center justify-center h-[calc(100vh-400px)]">
-                <div className="text-center text-muted-foreground">
-                  <Banknote className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                  <p className="text-sm">Select a check to view details</p>
-                </div>
-              </Card>
-            )}
+            {/* Detail panel — collapsed (20%) or expanded (60%) */}
+            <div
+              className="transition-all duration-300 ease-in-out flex-shrink-0 overflow-hidden"
+              style={{ width: selectedCheck ? "60%" : "20%" }}
+            >
+              {selectedCheck ? (
+                <CheckDetailPanel
+                  checkId={selectedCheck}
+                  onRefresh={() => qc.invalidateQueries({ queryKey: ["check-intake-items"] })}
+                />
+              ) : (
+                <Card className="flex flex-col items-center justify-center h-full">
+                  <div className="text-center text-muted-foreground">
+                    <Banknote className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                    <Badge variant="outline" className="mb-3">{checks.length} checks</Badge>
+                    <p className="text-sm">Select a check to begin</p>
+                  </div>
+                </Card>
+              )}
+            </div>
           </div>
         )}
       </Tabs>
