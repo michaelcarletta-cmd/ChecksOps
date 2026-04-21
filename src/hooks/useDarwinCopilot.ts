@@ -106,8 +106,8 @@ export function useDarwinCopilot(claimId: string) {
         throw new Error(data.error || 'Copilot returned an error');
       }
 
-      if (data.response == null && !data.draftData) {
-        throw new Error(data.error || 'Empty response from Copilot');
+      if ((!data.response && data.response !== 0) && !data.draftData) {
+        throw new Error(data.error || 'Empty response from Copilot — please try again');
       }
 
       const assistantMsg: CopilotMessage = {
