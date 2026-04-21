@@ -1003,43 +1003,57 @@ function CheckDetailPanel({
     if (!user?.id || !check) return;
     setBypassingEndorsements(true);
     try {
-      // Waive all pending/sent endorsements
-      const { error: waiveErr } = await supabase
+      const now = new Date().toISOString();
+
+      const { error: endorsementErr } = await supabase
         .from("check_endorsements")
         .update({
-          status: "waived",
-          notes: "Bypassed — physical signatures already present on check",
-          updated_at: new Date().toISOString(),
+          status: "signed",
+          signed_at: now,
+          signature_method: "physical_check",
+          notes: "Physical endorsements already received on check",
+          updated_at: now,
         })
         .eq("check_id", checkId)
-        .in("status", ["pending", "sent"]);
-      if (waiveErr) throw waiveErr;
+        .not("status", "in", '("signed","waived")');
+      if (endorsementErr) throw endorsementErr;
 
-      // Move check to approved_for_deposit
-      const { error: statusErr } = await supabase
-        .from("check_intake_items")
+      const { error: payeeErr } = await supabase
+        .from("check_payees")
         .update({
-          status: "approved_for_deposit",
-          updated_at: new Date().toISOString(),
+          endorsement_status: "signed",
+          endorsed_at: now,
+          updated_at: now,
         })
-        .eq("id", checkId);
-      if (statusErr) throw statusErr;
+        .eq("check_id", checkId)
+        .not("endorsement_status", "eq", "signed");
+      if (payeeErr) throw payeeErr;
 
-      // Log audit entry
+      const { error: decisionErr } = await supabase.rpc("submit_check_review_decision", {
+        p_check_id: checkId,
+        p_reviewer_id: user.id,
+        p_deposit_path: "branch_deposit_required",
+        p_reviewer_notes: "Physical endorsements already received; moved directly to branch deposit.",
+      });
+      if (decisionErr) throw decisionErr;
+
       await supabase.from("check_audit_log").insert({
         check_id: checkId,
         event_type: "endorsement_bypass",
         actor_id: user.id,
-        event_description: "Endorsements bypassed — physical signatures confirmed on check. Moved directly to approved for deposit.",
+        event_description: "Physical endorsements confirmed on check. Moved directly to branch deposit.",
       });
 
-      toast({ title: "Endorsements bypassed", description: "Check moved to approved for deposit." });
+      toast({ title: "Moved to Branch Deposit", description: "Endorsements were marked received from the physical check." });
       qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+      qc.invalidateQueries({ queryKey: ["review-check-detail", checkId] });
       qc.invalidateQueries({ queryKey: ["check-endorsements-summary", checkId] });
       qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-review-queue"] });
+      qc.invalidateQueries({ queryKey: ["check-dashboard-counts"] });
       onRefresh();
     } catch (e: any) {
-      toast({ title: "Bypass failed", description: e.message, variant: "destructive" });
+      toast({ title: "Move failed", description: e.message, variant: "destructive" });
     } finally {
       setBypassingEndorsements(false);
     }
