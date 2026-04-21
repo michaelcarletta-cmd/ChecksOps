@@ -180,7 +180,7 @@ export function useClaimControlBoard() {
         }
       }
 
-      return (claims || []).map((c: any) => {
+      return activeClaims.map((c: any) => {
         const storedOps = c.claim_operational_state?.[0] || c.claim_operational_state || null;
         const normalizedStatus = normalizeStatus(c.status);
         const activity = activityMap[c.id];
