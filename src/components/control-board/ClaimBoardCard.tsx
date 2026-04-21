@@ -44,7 +44,7 @@ export function ClaimBoardCard({ entry }: ClaimBoardCardProps) {
   const daysInactive = ops?.days_since_last_activity || 0;
   const pressureScore = ops?.pressure_score || 0;
   const nextAction = ops?.next_best_action;
-  const lifecycleStage = ops?.lifecycle_stage || entry.status || "new";
+  const displayStatus = entry.status || "Unknown";
 
   const hasUrgentMicrotasks = entry.immediate_microtasks > 0 || entry.blocking_microtasks > 0;
 
@@ -119,8 +119,8 @@ export function ClaimBoardCard({ entry }: ClaimBoardCardProps) {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <Badge variant="outline" className="text-xs capitalize">
-              {lifecycleStage.replace(/_/g, " ")}
+            <Badge variant="outline" className="text-xs">
+              {displayStatus}
             </Badge>
             <span className={`text-xs font-semibold ${fuConfig.color}`}>
               {fuConfig.label}
