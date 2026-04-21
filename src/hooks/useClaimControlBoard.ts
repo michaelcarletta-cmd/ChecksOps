@@ -95,7 +95,7 @@ export function useClaimControlBoard() {
           updated_at,
           claim_operational_state (*)
         `)
-        .not("status", "in", '("Claim Settled","Dead File","Closed")')
+        .not("status", "in", '("Claim Settled","Dead File","Closed","Fee Collection","Job Completed / Prepare Depreciation Package")')
         .order("created_at", { ascending: false })
         .limit(500);
 
