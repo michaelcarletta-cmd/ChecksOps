@@ -115,6 +115,16 @@ export function ClaimBoardCard({ entry }: ClaimBoardCardProps) {
               <Ban className="h-3 w-3" /> {entry.blocking_microtasks} blocking
             </span>
           )}
+          {(entry.overdue_tasks || 0) > 0 && (
+            <span className="flex items-center gap-1 text-destructive font-medium">
+              <AlertTriangle className="h-3 w-3" /> {entry.overdue_tasks} overdue tasks
+            </span>
+          )}
+          {(entry.open_tasks || 0) > 0 && (
+            <span className="flex items-center gap-1 text-foreground font-medium">
+              {entry.open_tasks} open tasks
+            </span>
+          )}
         </div>
 
         {/* Next best action */}

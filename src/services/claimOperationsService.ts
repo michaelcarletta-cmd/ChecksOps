@@ -104,6 +104,8 @@ export interface ClaimBoardEntry {
   // Aggregated microtask info
   immediate_microtasks: number;
   blocking_microtasks: number;
+  open_tasks?: number;
+  overdue_tasks?: number;
 }
 
 // ======================== FOLLOW-UP STATUS ========================
