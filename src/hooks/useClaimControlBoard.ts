@@ -208,7 +208,7 @@ export function useClaimControlBoard() {
           next_best_action: nextAction.action,
           next_best_action_confidence: nextAction.confidence,
           follow_up_status: followUpStatus,
-          last_activity_at: c.updated_at || c.created_at,
+          last_activity_at: activity?.last_activity_at || c.updated_at || c.created_at,
           days_since_last_activity: daysInactive,
           pressure_score: Math.round(pressureScore * 10) / 10,
           priority_rank: computePriorityRank(pressureScore, followUpStatus, {
