@@ -1,75 +1,78 @@
 
 
-## Fix: GPT-5 `max_tokens` → `max_completion_tokens`
+# Making Claims Control Board and Tasks Actually Useful
 
-**Root cause.** After Phase 4 routing, Copilot calls `openai/gpt-5*` models via the Lovable AI Gateway. GPT-5 (and newer reasoning models) reject the legacy `max_tokens` parameter and require `max_completion_tokens`. Our centralized `openaiClient.ts` unconditionally sends `max_tokens` → gateway returns 400 → user sees the toast.
+## Problem Summary
+The control board shows every claim as "on track" with 0 days inactive because it uses `claims.updated_at` as its only activity signal — any minor database touch resets the clock. There are no auto-generated tasks, so the board only reflects manually created microtasks. The flat card list makes it hard to spot which claims actually need attention.
 
-This is a one-file fix in the shared AI client. Every edge function (Copilot, war room, rebuttal, vision, tools) benefits automatically.
+---
 
-### What I'll change
+## Plan
 
-**File:** `supabase/functions/_shared/ai/openaiClient.ts`
+### 1. Fix "Last Activity" to Use Real Activity Signals
+Create a database view or query that computes true last activity per claim by checking the most recent timestamp across multiple tables:
+- `claim_notes.created_at` (last note added)
+- `claim_microtasks.created_at` (last task created)
+- `tasks.created_at` (legacy tasks)
+- `claim_photos.created_at` (last photo uploaded)
+- `documents.created_at` (last document uploaded)
+- `claims.status` change timestamp
 
-Add a tiny helper that picks the right token-limit key based on the target model, then use it in all three body builders:
+Update `useClaimControlBoard.ts` to fetch this computed `last_real_activity_at` instead of relying on `claims.updated_at`. This single change will immediately make days-inactive, pressure scores, and follow-up statuses accurate.
 
-```text
-Model pattern                              → Key
-─────────────────────────────────────────────────────────────
-openai/gpt-5*        (Lovable gateway)     → max_completion_tokens
-openai/gpt-5.2       (Lovable gateway)     → max_completion_tokens
-openai/o1* / o3*     (if ever used)        → max_completion_tokens
-google/*             (Lovable gateway)     → max_tokens   (accepted)
-gpt-4o / gpt-4o-mini (direct OpenAI fbck)  → max_tokens   (accepted)
-```
+### 2. Auto-Generate Microtasks from Claim State
+Create a database function (triggered by cron or claim status changes) that auto-generates microtasks when certain conditions are met:
+- **Carrier Review > 14 days** → "Follow up with carrier on pending review"
+- **No notes in 10+ days on active claim** → "Add status update note"
+- **Inspection scheduled but no photos** → "Upload inspection photos"
+- **Estimate submitted, no carrier response 21+ days** → "Escalate: no carrier response"
+- **Check received but not deposited 7+ days** → "Process received check"
+- **Recoverable Depreciation pending 30+ days** → "Follow up on RD payment"
 
-Apply in three places:
-1. `callOpenAI` (line ~170) — text chat body
-2. `callVision` (line ~217) — vision body
-3. `callWithTools` (line ~261) — tool-call body
-4. `executeChat` fallback branch (line ~115) — when we fall back from `openai/gpt-5*` to `gpt-4o`, strip `max_completion_tokens` and re-add as `max_tokens` so the legacy OpenAI endpoint accepts it.
+These auto-tasks get `task_type = 'auto'` so they're distinguishable from manual ones. They won't duplicate if one already exists for that claim + type.
 
-### Helper sketch
+### 3. Redesign Control Board Layout for Scannability
+Replace the flat card list with a **grouped lane view**:
+- **Needs Action Now** (escalation + overdue) — red accent, always visible at top
+- **Due Soon** (due status) — amber accent
+- **Waiting on Carrier** (carrier-waiting statuses) — neutral, collapsed count
+- **On Track** — collapsed by default, just a count with expand option
 
-```ts
-function tokenLimitKey(model: string): "max_tokens" | "max_completion_tokens" {
-  if (/^openai\/(gpt-5|o[13])/i.test(model)) return "max_completion_tokens";
-  return "max_tokens";
-}
+Each group shows a count badge in the header. Claims within each group are sorted by pressure score. This lets you immediately see "12 claims need action, 8 are due soon" without scrolling through 200+ cards.
 
-function withTokenLimit(body: Record<string, unknown>, model: string, limit: number) {
-  body[tokenLimitKey(model)] = limit;
-  return body;
-}
-```
+### 4. Add Quick-Action Buttons on Board Cards
+Add inline action buttons directly on each claim card so you don't have to open the claim to take common actions:
+- **Add Note** — opens a quick note composer inline
+- **Snooze** — mark claim as "reviewed, check back in X days" (resets follow-up timer)
+- **Mark Contacted** — logs a "contacted carrier" activity, resetting the inactivity clock
 
-In the fallback branch, rewrite the body before calling OpenAI directly:
-```ts
-const fbBody = { ...body };
-delete fbBody.max_completion_tokens;
-fbBody.max_tokens = opts.maxTokens ?? 2000; // legacy key for gpt-4o
-```
+### 5. Daily Digest Summary at Top of Board
+Add a compact summary bar showing:
+- Claims needing action today (count)
+- Claims with no activity in 14+ days
+- Overdue microtasks across all claims
+- Claims waiting on carrier response 20+ days
 
-### Also sweep
+---
 
-Two other call sites pass the raw `max_tokens` field in ad-hoc payloads — quick audit while I'm in there:
+## Technical Details
 
-- `supabase/functions/claims-ai-assistant/index.ts` lines 6342, 6421 — uses `google/gemini-2.5-flash`, so `max_tokens` stays correct. No change.
-- `supabase/functions/darwin-ai-analysis/index.ts` line 10560 — payload is then forwarded into the shared helpers via `maxTokens` (lines 10658/10678), which will pick up the fix automatically. No change needed.
-- `supabase/functions/photo-damage-analyzer/index.ts` line 241 — same story, forwards into `callVision`/`callWithTools`. Fix propagates.
-- `supabase/functions/_shared/ai/pdfVisionOcr.ts` line 114 — uses `gpt-4o-mini` direct, `max_tokens` is correct there. No change.
+**Database changes:**
+- New migration: `CREATE OR REPLACE FUNCTION compute_claim_last_activity(claim_uuid UUID)` that queries across notes, photos, documents, tasks tables and returns the max timestamp
+- New migration: `CREATE OR REPLACE FUNCTION auto_generate_claim_microtasks()` with duplicate-prevention logic (`ON CONFLICT DO NOTHING` on claim_id + task_type)
+- Add a cron entry to run auto-generation every 2 hours (low-cost, no AI involved — pure SQL)
 
-So only **one file** actually needs editing.
+**Frontend changes:**
+- `useClaimControlBoard.ts` — replace `c.updated_at` with a subquery or joined computed column for real activity
+- `ClaimsControlBoard.tsx` — restructure from flat list to grouped lanes with collapsible sections
+- `ClaimBoardCard.tsx` — add quick-action buttons (note, snooze, mark contacted)
+- New `BoardSummaryBar.tsx` component for the daily digest strip
 
-### Deploy
-
-Redeploy the functions that re-bundle the shared module:
-`darwin-copilot`, `darwin-ai-analysis`, `darwin-photo-intelligence`, `photo-damage-analyzer`, `analyze-single-photo`, `darwin-process-document`, `darwin-estimate-import`, `claims-ai-assistant`.
-
-### Verification
-
-After deploy, reproduce in Copilot with a normal chat message. Then tail edge logs for `darwin-copilot` — should return `choices[0].message.content` cleanly, no 400.
-
-### Risk
-
-Low. The only behavioral change is the JSON key name for the token cap, gated by the model prefix. Gemini and legacy OpenAI paths are untouched.
+**Files affected:**
+- `src/hooks/useClaimControlBoard.ts`
+- `src/pages/ClaimsControlBoard.tsx`
+- `src/components/control-board/ClaimBoardCard.tsx`
+- `src/components/control-board/BoardSummaryBar.tsx` (new)
+- `src/services/claimOperationsService.ts`
+- 2 new database migrations
 
