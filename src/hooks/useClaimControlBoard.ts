@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { ClaimBoardEntry, ClaimOperationalState } from "@/services/claimOperationsService";
 
@@ -7,6 +8,27 @@ import { ClaimBoardEntry, ClaimOperationalState } from "@/services/claimOperatio
  * for the Claims Control Board.
  */
 export function useClaimControlBoard() {
+  const queryClient = useQueryClient();
+
+  // Realtime subscription: refetch when microtasks change
+  useEffect(() => {
+    const channel = supabase
+      .channel("control-board-microtasks")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "claim_microtasks" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["claim-control-board"] });
+          queryClient.invalidateQueries({ queryKey: ["global-immediate-microtasks"] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
   return useQuery({
     queryKey: ["claim-control-board"],
     queryFn: async (): Promise<ClaimBoardEntry[]> => {
@@ -69,6 +91,6 @@ export function useClaimControlBoard() {
         blocking_microtasks: microtaskCounts[c.id]?.blocking || 0,
       }));
     },
-    refetchInterval: 60000, // Refresh every minute
+    refetchInterval: 60000,
   });
 }
