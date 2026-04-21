@@ -1,7 +1,12 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import {
   ClaimBoardEntry,
   FollowUpStatus,
@@ -15,6 +20,9 @@ import {
   ShieldAlert,
   Zap,
   Ban,
+  MessageSquarePlus,
+  PhoneCall,
+  Send,
 } from "lucide-react";
 
 interface ClaimBoardCardProps {
@@ -23,6 +31,12 @@ interface ClaimBoardCardProps {
 
 export function ClaimBoardCard({ entry }: ClaimBoardCardProps) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [showNoteInput, setShowNoteInput] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [saving, setSaving] = useState(false);
+
   const ops = entry.ops;
   const followUp = (ops?.follow_up_status || "on_track") as FollowUpStatus;
   const fuConfig = FOLLOWUP_STATUS_CONFIG[followUp] || FOLLOWUP_STATUS_CONFIG.on_track;
@@ -32,10 +46,8 @@ export function ClaimBoardCard({ entry }: ClaimBoardCardProps) {
   const nextAction = ops?.next_best_action;
   const lifecycleStage = ops?.lifecycle_stage || entry.status || "new";
 
-  const hasFlags = ops?.stale_flag || ops?.contradiction_flag || ops?.high_exposure_flag;
   const hasUrgentMicrotasks = entry.immediate_microtasks > 0 || entry.blocking_microtasks > 0;
 
-  // Border color based on urgency
   const borderClass =
     followUp === "escalation"
       ? "border-red-500 dark:border-red-400"
@@ -43,10 +55,51 @@ export function ClaimBoardCard({ entry }: ClaimBoardCardProps) {
       ? "border-amber-500 dark:border-amber-400"
       : "border-border";
 
+  const handleAddNote = async () => {
+    if (!noteText.trim()) return;
+    setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from("claim_events").insert({
+        claim_id: entry.claim_id,
+        event_type: "note",
+        summary: noteText.trim(),
+        actor: user?.email || "staff",
+        is_manual: true,
+      });
+      toast({ title: "Note added" });
+      setNoteText("");
+      setShowNoteInput(false);
+      queryClient.invalidateQueries({ queryKey: ["claim-control-board"] });
+    } catch {
+      toast({ title: "Failed to add note", variant: "destructive" });
+    }
+    setSaving(false);
+  };
+
+  const handleMarkContacted = async () => {
+    setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from("claim_events").insert({
+        claim_id: entry.claim_id,
+        event_type: "communication",
+        summary: "Contacted carrier — status check",
+        actor: user?.email || "staff",
+        is_manual: true,
+      });
+      toast({ title: "Marked as contacted" });
+      queryClient.invalidateQueries({ queryKey: ["claim-control-board"] });
+    } catch {
+      toast({ title: "Failed to log contact", variant: "destructive" });
+    }
+    setSaving(false);
+  };
+
   return (
     <Card className={`p-4 ${borderClass} hover:shadow-md transition-shadow`}>
-      <div className="flex flex-col gap-3">
-        {/* Top row: claim info + follow-up badge */}
+      <div className="flex flex-col gap-2.5">
+        {/* Top row */}
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
@@ -87,7 +140,6 @@ export function ClaimBoardCard({ entry }: ClaimBoardCardProps) {
             </strong>
           </span>
 
-          {/* Flags */}
           {ops?.stale_flag && (
             <span className="flex items-center gap-1 text-amber-500">
               <Clock className="h-3 w-3" /> Stale
@@ -104,7 +156,6 @@ export function ClaimBoardCard({ entry }: ClaimBoardCardProps) {
             </span>
           )}
 
-          {/* Microtask indicators */}
           {entry.immediate_microtasks > 0 && (
             <span className="flex items-center gap-1 text-red-500 font-medium">
               <Zap className="h-3 w-3" /> {entry.immediate_microtasks} immediate
@@ -134,6 +185,26 @@ export function ClaimBoardCard({ entry }: ClaimBoardCardProps) {
           </p>
         )}
 
+        {/* Quick note input */}
+        {showNoteInput && (
+          <div className="flex gap-2">
+            <Input
+              placeholder="Quick note..."
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              className="text-sm h-8"
+              onKeyDown={(e) => e.key === "Enter" && handleAddNote()}
+              autoFocus
+            />
+            <Button size="sm" variant="default" onClick={handleAddNote} disabled={saving || !noteText.trim()}>
+              <Send className="h-3 w-3" />
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => { setShowNoteInput(false); setNoteText(""); }}>
+              ✕
+            </Button>
+          </div>
+        )}
+
         {/* Action buttons */}
         <div className="flex items-center gap-2 flex-wrap">
           <Button
@@ -142,17 +213,32 @@ export function ClaimBoardCard({ entry }: ClaimBoardCardProps) {
             onClick={() => navigate(`/claims/${entry.claim_id}`)}
           >
             <ExternalLink className="h-3 w-3 mr-1" />
-            Open Claim
+            Open
           </Button>
           <Button
             size="sm"
             variant="outline"
-            onClick={() => {
-              navigate(`/claims/${entry.claim_id}?tab=warroom`);
-            }}
+            onClick={() => navigate(`/claims/${entry.claim_id}?tab=warroom`)}
           >
             <Swords className="h-3 w-3 mr-1" />
             War Room
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setShowNoteInput(!showNoteInput)}
+          >
+            <MessageSquarePlus className="h-3 w-3 mr-1" />
+            Note
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleMarkContacted}
+            disabled={saving}
+          >
+            <PhoneCall className="h-3 w-3 mr-1" />
+            Contacted
           </Button>
         </div>
       </div>
