@@ -119,8 +119,8 @@ export function ClaimBoardCard({ entry }: ClaimBoardCardProps) {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <Badge variant="outline" className="text-xs capitalize">
-              {lifecycleStage.replace(/_/g, " ")}
+            <Badge variant="outline" className="text-xs">
+              {displayStatus}
             </Badge>
             <span className={`text-xs font-semibold ${fuConfig.color}`}>
               {fuConfig.label}
