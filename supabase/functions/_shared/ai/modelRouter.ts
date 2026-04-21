@@ -73,9 +73,8 @@ const STRONG_MODEL_TASKS: Set<DarwinTaskType> = new Set([
   "war_room",
 ]);
 
-/** Tasks that should use GPT-5-mini (reasoning, but cost-aware) */
+/** Tasks that should use GPT-5-mini (reasoning, but cost-aware) — only autonomous_agent */
 const REASONING_MODEL_TASKS: Set<DarwinTaskType> = new Set([
-  "copilot_reasoning",
   "autonomous_agent",
 ]);
 
