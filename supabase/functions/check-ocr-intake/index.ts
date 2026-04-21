@@ -287,17 +287,56 @@ function evaluateEligibility(
 }
 
 function parseStrictJson(rawText: string): unknown {
-  const trimmed = rawText.trim();
+  let trimmed = rawText.trim();
+
+  // Strip markdown fences
+  trimmed = trimmed
+    .replace(/^```json\s*/im, "")
+    .replace(/^```\s*/im, "")
+    .replace(/```\s*$/im, "")
+    .trim();
+
+  // Direct parse
   if (trimmed.startsWith("{")) {
     try {
       return JSON.parse(trimmed);
-    } catch { /* fall through */ }
+    } catch { /* fall through to recovery */ }
   }
 
-  const fenceMatch = trimmed.match(/```(?:json)?\s*\n(\{[\s\S]*?\})\s*\n```/);
+  // Fenced block extraction
+  const fenceMatch = rawText.match(/```(?:json)?\s*\n(\{[\s\S]*?\})\s*\n```/);
   if (fenceMatch) {
     try {
       return JSON.parse(fenceMatch[1]);
+    } catch { /* fall through */ }
+  }
+
+  // Truncation recovery: find the outermost { and try to close truncated JSON
+  const objStart = trimmed.indexOf("{");
+  if (objStart !== -1) {
+    let candidate = trimmed.slice(objStart);
+    // Count unclosed braces/brackets and attempt to close them
+    let openBraces = 0, openBrackets = 0;
+    let inString = false, escape = false;
+    for (const ch of candidate) {
+      if (escape) { escape = false; continue; }
+      if (ch === "\\") { escape = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === "{") openBraces++;
+      if (ch === "}") openBraces--;
+      if (ch === "[") openBrackets++;
+      if (ch === "]") openBrackets--;
+    }
+    // Remove trailing incomplete key-value or array element
+    candidate = candidate.replace(/,\s*"[^"]*"?\s*:?\s*(?:\{[^}]*)?$/, "");
+    candidate = candidate.replace(/,\s*\{[^}]*$/, "");
+    candidate = candidate.replace(/,\s*$/, "");
+    // Close unclosed brackets/braces
+    for (let i = 0; i < Math.max(0, openBrackets); i++) candidate += "]";
+    for (let i = 0; i < Math.max(0, openBraces); i++) candidate += "}";
+    try {
+      return JSON.parse(candidate);
     } catch { /* fall through */ }
   }
 
@@ -561,7 +600,7 @@ Rules:
           messages: [{ role: "user", content }],
           jsonMode: true,
           temperature: 0,
-          maxTokens: 1500,
+          maxTokens: 4000,
         });
       } catch (fetchErr) {
         const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
