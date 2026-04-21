@@ -185,7 +185,7 @@ const ClaimsControlBoard = () => {
       {/* Grouped lanes */}
       {claims.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
-          <p className="text-lg">All claims are closed.</p>
+          <p className="text-lg font-medium">All claims resolved — no active claims to display</p>
         </div>
       ) : (
         <div className="space-y-3">

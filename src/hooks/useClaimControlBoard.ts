@@ -56,16 +56,23 @@ const deriveLifecycleStage = (status?: string | null) => {
 export function useClaimControlBoard() {
   const queryClient = useQueryClient();
 
-  // Realtime subscription: refetch when microtasks change
+  // Realtime subscription: refetch when microtasks or claim statuses change
   useEffect(() => {
     const channel = supabase
-      .channel("control-board-microtasks")
+      .channel("control-board-realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "claim_microtasks" },
         () => {
           queryClient.invalidateQueries({ queryKey: ["claim-control-board"] });
           queryClient.invalidateQueries({ queryKey: ["global-immediate-microtasks"] });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "claims" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["claim-control-board"] });
         }
       )
       .subscribe();
@@ -95,7 +102,7 @@ export function useClaimControlBoard() {
           updated_at,
           claim_operational_state (*)
         `)
-        .not("status", "in", '("Claim Settled","Dead File","Closed","Fee Collection","Job Completed / Prepare Depreciation Package")')
+        .not("status", "in", '("Claim Settled","Dead File","Closed","closed","Fee Collection","Job Completed / Prepare Depreciation Package","Job Completed","Settled","Complete","Completed")')
         .order("created_at", { ascending: false })
         .limit(500);
 
@@ -103,6 +110,17 @@ export function useClaimControlBoard() {
         console.error("[ClaimControlBoard] fetch error", error);
         return [];
       }
+
+      // Client-side safety filter: exclude any closed/settled status variants
+      const CLOSED_STATUSES = new Set([
+        "closed", "claim settled", "dead file", "fee collection",
+        "job completed / prepare depreciation package", "job completed",
+        "settled", "complete", "completed",
+      ]);
+      const activeClaims = (claims || []).filter((c: any) => {
+        const s = (c.status || "").trim().toLowerCase();
+        return !CLOSED_STATUSES.has(s);
+      });
 
       // Fetch real last activity from the view
       const { data: activityData } = await supabase
@@ -120,7 +138,7 @@ export function useClaimControlBoard() {
       }
 
       // Fetch microtask counts per claim
-      const claimIds = (claims || []).map((c: any) => c.id);
+      const claimIds = activeClaims.map((c: any) => c.id);
       let microtaskCounts: Record<string, { immediate: number; blocking: number; overdue: number }> = {};
       let taskCounts: Record<string, { open: number; overdue: number; immediate: number; blocking: number }> = {};
 
@@ -162,7 +180,7 @@ export function useClaimControlBoard() {
         }
       }
 
-      return (claims || []).map((c: any) => {
+      return activeClaims.map((c: any) => {
         const storedOps = c.claim_operational_state?.[0] || c.claim_operational_state || null;
         const normalizedStatus = normalizeStatus(c.status);
         const activity = activityMap[c.id];
