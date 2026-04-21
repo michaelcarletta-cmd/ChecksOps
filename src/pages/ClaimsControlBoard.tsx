@@ -65,6 +65,7 @@ const ClaimsControlBoard = () => {
   const overdueCount = claims.filter(c => c.ops?.follow_up_status === "overdue").length;
   const staleCount = claims.filter(c => c.ops?.stale_flag).length;
   const highExposureCount = claims.filter(c => c.ops?.high_exposure_flag).length;
+  const outstandingTaskCount = claims.filter(c => c.immediate_microtasks > 0 || c.blocking_microtasks > 0 || c.ops?.follow_up_status === "overdue" || c.ops?.follow_up_status === "escalation").length;
 
   if (isLoading) {
     return (
@@ -86,7 +87,9 @@ const ClaimsControlBoard = () => {
       <div>
         <h1 className="text-2xl md:text-3xl font-bold text-foreground">Claims Control Board</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          {claims.length} active claims • Claim operations command center
+          {claims.length} active claims • {outstandingTaskCount > 0 
+            ? `${outstandingTaskCount} claims with outstanding tasks` 
+            : "All current claims on track"}
         </p>
       </div>
 
