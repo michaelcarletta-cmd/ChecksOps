@@ -111,6 +111,17 @@ export function useClaimControlBoard() {
         return [];
       }
 
+      // Client-side safety filter: exclude any closed/settled status variants
+      const CLOSED_STATUSES = new Set([
+        "closed", "claim settled", "dead file", "fee collection",
+        "job completed / prepare depreciation package", "job completed",
+        "settled", "complete", "completed",
+      ]);
+      const activeClaims = (claims || []).filter((c: any) => {
+        const s = (c.status || "").trim().toLowerCase();
+        return !CLOSED_STATUSES.has(s);
+      });
+
       // Fetch real last activity from the view
       const { data: activityData } = await supabase
         .from("claim_last_activity" as any)
