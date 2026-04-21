@@ -987,6 +987,52 @@ function CheckDetailPanel({
 
   const canUndo = check && ['branch_deposit_required', 'approved_for_deposit', 'loss_draft_required', 'reissue_requested'].includes(check.status) && check.status !== 'deposited';
 
+  const handleBypassEndorsements = async () => {
+    if (!user?.id || !check) return;
+    setBypassingEndorsements(true);
+    try {
+      // Waive all pending/sent endorsements
+      const { error: waiveErr } = await supabase
+        .from("check_endorsements")
+        .update({
+          status: "waived",
+          notes: "Bypassed — physical signatures already present on check",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("check_id", checkId)
+        .in("status", ["pending", "sent"]);
+      if (waiveErr) throw waiveErr;
+
+      // Move check to approved_for_deposit
+      const { error: statusErr } = await supabase
+        .from("check_intake_items")
+        .update({
+          status: "approved_for_deposit",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", checkId);
+      if (statusErr) throw statusErr;
+
+      // Log audit entry
+      await supabase.from("check_audit_log").insert({
+        check_id: checkId,
+        event_type: "endorsement_bypass",
+        actor_id: user.id,
+        event_description: "Endorsements bypassed — physical signatures confirmed on check. Moved directly to approved for deposit.",
+      });
+
+      toast({ title: "Endorsements bypassed", description: "Check moved to approved for deposit." });
+      qc.invalidateQueries({ queryKey: ["check-detail", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-endorsements-summary", checkId] });
+      qc.invalidateQueries({ queryKey: ["check-audit", checkId] });
+      onRefresh();
+    } catch (e: any) {
+      toast({ title: "Bypass failed", description: e.message, variant: "destructive" });
+    } finally {
+      setBypassingEndorsements(false);
+    }
+  };
+
   const handleUndoDecision = async () => {
     if (!user?.id || !check) return;
     setUndoing(true);
