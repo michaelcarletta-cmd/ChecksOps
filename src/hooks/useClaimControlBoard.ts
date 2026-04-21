@@ -1,7 +1,54 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { ClaimBoardEntry, ClaimOperationalState } from "@/services/claimOperationsService";
+import {
+  ClaimBoardEntry,
+  ClaimOperationalState,
+  computeFollowUpStatus,
+  computeNextBestAction,
+  computePressureScore,
+  computePriorityRank,
+  daysBetween,
+  FollowUpStatus,
+} from "@/services/claimOperationsService";
+
+const ATTENTION_STATUSES = [
+  "Appraisal",
+  "Carrier Denial",
+  "DOBI Complaint Filed",
+  "DOBI Compliance",
+  "Litigation",
+  "On Hold",
+  "Repair Attempt / Sample Needed",
+  "Research / Investigation",
+  "Reissue of Check Requested",
+  "Schedule Reinspection",
+  "Submitted Rebuttal to Carrier",
+  "Waiting on ACV Funds",
+  "Waiting on Insurance Funds (ACV)",
+  "Waiting on Mortgage Check",
+];
+
+const CARRIER_WAITING_STATUSES = [
+  "Carrier Review",
+  "Funding from Insurance",
+  "Recoverable Depreciation Requested",
+  "Waiting on ACV Funds",
+  "Waiting on Insurance Funds (ACV)",
+];
+
+const normalizeStatus = (status?: string | null) => (status || "").trim();
+
+const deriveLifecycleStage = (status?: string | null) => {
+  const normalized = normalizeStatus(status);
+  if (["Claim Filed", "Claim Assigned to Freedom Adjustment", "Inspections", "Schedule Reinspection"].includes(normalized)) return "inspection_pending";
+  if (["Freedom Adjustment Review", "Repair Attempt / Sample Needed", "Research / Investigation", "Prove It Method"].includes(normalized)) return "estimate_in_progress";
+  if (["Carrier Review", "Submitted Rebuttal to Carrier", "Recoverable Depreciation Requested"].includes(normalized)) return "supplement_submitted";
+  if (["Appraisal"].includes(normalized)) return "appraisal";
+  if (["Litigation", "DOBI Complaint Filed", "DOBI Compliance", "Carrier Denial"].includes(normalized)) return "litigation";
+  if (["Funding from Insurance", "Waiting on ACV Funds", "Waiting on Insurance Funds (ACV)", "Waiting on Mortgage Check", "Check Uploaded for Processing", "Check Processing on iink", "Check Received - No Mortgage", "Check Cleared - Issue Funds", "Reissue of Check Requested", "Fee Collection", "Recoverable Depreciation"].includes(normalized)) return "negotiation";
+  return "new";
+};
 
 /**
  * Fetches all active claims joined with their operational state
