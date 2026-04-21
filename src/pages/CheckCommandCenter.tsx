@@ -856,6 +856,7 @@ function CheckDetailPanel({
   const [frontImageDimensions, setFrontImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [backImageDimensions, setBackImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [movingToDeposited, setMovingToDeposited] = useState(false);
+  const [bypassingEndorsements, setBypassingEndorsements] = useState(false);
   const [branchApprovedAt, setBranchApprovedAt] = useState<number | null>(null);
   const [showForceMove, setShowForceMove] = useState(false);
   const { user } = useAuth();
