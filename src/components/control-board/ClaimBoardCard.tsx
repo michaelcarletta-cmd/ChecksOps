@@ -137,7 +137,9 @@ export function ClaimBoardCard({ entry }: ClaimBoardCardProps) {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => navigate(`/claims/${entry.claim_id}?tab=warroom`)}
+            onClick={() => {
+              navigate(`/claims/${entry.claim_id}?tab=warroom`);
+            }}
           >
             <Swords className="h-3 w-3 mr-1" />
             War Room

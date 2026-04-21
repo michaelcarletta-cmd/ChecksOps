@@ -6,6 +6,7 @@ import { NeedsActionStrip } from "@/components/control-board/NeedsActionStrip";
 import { ClaimBoardEntry, FollowUpStatus } from "@/services/claimOperationsService";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Search, SlidersHorizontal } from "lucide-react";
 
@@ -65,6 +66,7 @@ const ClaimsControlBoard = () => {
   const overdueCount = claims.filter(c => c.ops?.follow_up_status === "overdue").length;
   const staleCount = claims.filter(c => c.ops?.stale_flag).length;
   const highExposureCount = claims.filter(c => c.ops?.high_exposure_flag).length;
+  const outstandingTaskCount = claims.filter(c => c.immediate_microtasks > 0 || c.blocking_microtasks > 0 || c.ops?.follow_up_status === "overdue" || c.ops?.follow_up_status === "escalation").length;
 
   if (isLoading) {
     return (
@@ -86,7 +88,9 @@ const ClaimsControlBoard = () => {
       <div>
         <h1 className="text-2xl md:text-3xl font-bold text-foreground">Claims Control Board</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          {claims.length} active claims • Claim operations command center
+          {claims.length} active claims • {outstandingTaskCount > 0 
+            ? `${outstandingTaskCount} claims with outstanding tasks` 
+            : "All current claims on track"}
         </p>
       </div>
 
@@ -157,7 +161,14 @@ const ClaimsControlBoard = () => {
       </div>
 
       {/* Claims list */}
-      {filtered.length === 0 ? (
+      {claims.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <p className="text-lg">All claims are closed.</p>
+          <Button variant="link" onClick={() => window.location.href = "/claims"}>
+            View archived claims →
+          </Button>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <p className="text-lg">No claims match your filters</p>
         </div>
