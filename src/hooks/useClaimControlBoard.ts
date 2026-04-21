@@ -9,7 +9,6 @@ import {
   computePressureScore,
   computePriorityRank,
   daysBetween,
-  FollowUpStatus,
 } from "@/services/claimOperationsService";
 
 const ATTENTION_STATUSES = [
@@ -98,7 +97,7 @@ export function useClaimControlBoard() {
         `)
         .not("status", "in", '("Claim Settled","Dead File","Closed")')
         .order("created_at", { ascending: false })
-        .limit(200);
+        .limit(500);
 
       if (error) {
         console.error("[ClaimControlBoard] fetch error", error);
