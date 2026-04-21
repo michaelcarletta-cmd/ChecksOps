@@ -153,21 +153,24 @@ export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
     promptHash: pHash,
   };
 
-  // ── 7. Persist to caches ───────────────────────────────────────
-  setCache(cacheKey, result);
-  // Best-effort DB write (non-blocking on success path; await for correctness in Deno isolates)
-  if (!opts.skipCache) {
-    await writeDbResponseCache(
-      cacheKey,
-      {
-        task: opts.task,
-        claimId: opts.claimId || null,
-        model,
-        searchMode: config.searchMode,
-        promptHash: pHash,
-      },
-      result,
-    );
+  // ── 7. Persist to caches (skip if empty response) ───────────────
+  if (result.text) {
+    setCache(cacheKey, result);
+    if (!opts.skipCache) {
+      await writeDbResponseCache(
+        cacheKey,
+        {
+          task: opts.task,
+          claimId: opts.claimId || null,
+          model,
+          searchMode: config.searchMode,
+          promptHash: pHash,
+        },
+        result,
+      );
+    }
+  } else {
+    console.warn(`[generate] Empty AI response for task=${opts.task} model=${model} — skipping cache`);
   }
 
   if (opts.claimId && opts.claimDataType) {
