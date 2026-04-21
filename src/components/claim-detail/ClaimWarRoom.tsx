@@ -33,15 +33,18 @@ interface ClaimWarRoomProps {
 
 export const ClaimWarRoom = ({ claimId, claim }: ClaimWarRoomProps) => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [isOpen, setIsOpen] = useState(() => searchParams.get("tab") === "warroom");
+  const [isOpen, setIsOpen] = useState(false);
 
   // Auto-open when navigated with ?tab=warroom
   useEffect(() => {
     if (searchParams.get("tab") === "warroom") {
-      setIsOpen(true);
-      // Clean up the query param
-      searchParams.delete("tab");
-      setSearchParams(searchParams, { replace: true });
+      // Use a small delay to ensure the component is fully mounted
+      const timer = setTimeout(() => {
+        setIsOpen(true);
+        searchParams.delete("tab");
+        setSearchParams(searchParams, { replace: true });
+      }, 100);
+      return () => clearTimeout(timer);
     }
   }, [searchParams, setSearchParams]);
   const [insights, setInsights] = useState<any>(null);
