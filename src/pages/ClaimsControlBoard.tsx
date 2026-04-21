@@ -160,7 +160,14 @@ const ClaimsControlBoard = () => {
       </div>
 
       {/* Claims list */}
-      {filtered.length === 0 ? (
+      {claims.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <p className="text-lg">All claims are closed.</p>
+          <Button variant="link" onClick={() => window.location.href = "/claims"}>
+            View archived claims →
+          </Button>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <p className="text-lg">No claims match your filters</p>
         </div>
