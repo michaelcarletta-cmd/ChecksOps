@@ -216,12 +216,15 @@ export default function CheckCommandCenter() {
   });
 
   const { data: checks = [], isLoading } = useQuery({
-    queryKey: ["check-intake-items"],
+    queryKey: ["check-intake-items", tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("check_intake_items")
-        .select("*, check_payees(*)")
-        .order("created_at", { ascending: false });
+        .select("*, check_payees(*)");
+      if (isWhiteLabel && tenantId) {
+        query = query.eq("tenant_id", tenantId);
+      }
+      const { data, error } = await query.order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as CheckItem[];
     },
