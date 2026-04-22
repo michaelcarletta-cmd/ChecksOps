@@ -7,10 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Building2, ExternalLink, Loader2, Pencil, Power, Upload, X } from "lucide-react";
+import { Plus, Building2, ExternalLink, Loader2, Pencil, Power, Upload, X, Trash2 } from "lucide-react";
 
 interface TenantForm {
   name: string;
@@ -54,6 +55,7 @@ export function TenantManagement() {
   const [form, setForm] = useState<TenantForm>(defaultForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: tenants, isLoading } = useQuery({
@@ -84,7 +86,7 @@ export function TenantManagement() {
       const { error: uploadError } = await supabase.storage.from("tenant-logos").upload(path, file);
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from("tenant-logos").getPublicUrl(path);
-      setForm({ ...form, logo_url: urlData.publicUrl });
+      setForm((prev) => ({ ...prev, logo_url: urlData.publicUrl }));
       toast({ title: "Logo uploaded" });
     } catch (e: any) {
       toast({ title: "Upload failed", description: e.message, variant: "destructive" });
@@ -152,6 +154,21 @@ export function TenantManagement() {
     },
   });
 
+  const deleteTenant = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("tenants").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tenants"] });
+      setDeleteTarget(null);
+      toast({ title: "Tenant Deleted", description: "The tenant and its associated data have been removed." });
+    },
+    onError: (e: any) => {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    },
+  });
+
   const toggleStatus = useMutation({
     mutationFn: async ({ id, currentStatus }: { id: string; currentStatus: string }) => {
       const newStatus = currentStatus === "active" ? "inactive" : "active";
@@ -196,7 +213,15 @@ export function TenantManagement() {
     }
   };
 
-  const LogoUploader = () => (
+  const updateField = (field: keyof TenantForm, value: any) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const updateConfigField = (field: string, value: string) => {
+    setForm((prev) => ({ ...prev, email_provider_config: { ...prev.email_provider_config, [field]: value } }));
+  };
+
+  const renderLogoUploader = () => (
     <div className="space-y-2">
       <Label>Logo</Label>
       <input
@@ -216,7 +241,7 @@ export function TenantManagement() {
             <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
               Replace
             </Button>
-            <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => setForm({ ...form, logo_url: "" })}>
+            <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => updateField("logo_url", "")}>
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -243,7 +268,7 @@ export function TenantManagement() {
         <span>or paste a URL:</span>
         <Input
           value={form.logo_url}
-          onChange={(e) => setForm({ ...form, logo_url: e.target.value })}
+          onChange={(e) => updateField("logo_url", e.target.value)}
           placeholder="https://..."
           className="h-7 text-xs"
         />
@@ -251,14 +276,14 @@ export function TenantManagement() {
     </div>
   );
 
-  const EmailConfigFields = () => (
+  const renderEmailConfig = () => (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>From Name</Label>
           <Input
             value={form.email_from_name}
-            onChange={(e) => setForm({ ...form, email_from_name: e.target.value })}
+            onChange={(e) => updateField("email_from_name", e.target.value)}
             placeholder="Acme Insurance"
           />
         </div>
@@ -266,7 +291,7 @@ export function TenantManagement() {
           <Label>From Email</Label>
           <Input
             value={form.email_from_address}
-            onChange={(e) => setForm({ ...form, email_from_address: e.target.value })}
+            onChange={(e) => updateField("email_from_address", e.target.value)}
             placeholder="checks@acme.com"
           />
         </div>
@@ -276,13 +301,13 @@ export function TenantManagement() {
           <Label>Reply-To</Label>
           <Input
             value={form.email_reply_to}
-            onChange={(e) => setForm({ ...form, email_reply_to: e.target.value })}
+            onChange={(e) => updateField("email_reply_to", e.target.value)}
             placeholder="support@acme.com"
           />
         </div>
         <div className="space-y-2">
           <Label>Email Provider</Label>
-          <Select value={form.email_provider} onValueChange={(v) => setForm({ ...form, email_provider: v, email_provider_config: {} })}>
+          <Select value={form.email_provider} onValueChange={(v) => setForm((prev) => ({ ...prev, email_provider: v, email_provider_config: {} }))}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">Not configured</SelectItem>
@@ -299,7 +324,7 @@ export function TenantManagement() {
               <Label>SMTP Host</Label>
               <Input
                 value={form.email_provider_config.host || ""}
-                onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, host: e.target.value } })}
+                onChange={(e) => updateConfigField("host", e.target.value)}
                 placeholder="smtp.example.com"
               />
             </div>
@@ -307,7 +332,7 @@ export function TenantManagement() {
               <Label>SMTP Port</Label>
               <Input
                 value={form.email_provider_config.port || ""}
-                onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, port: e.target.value } })}
+                onChange={(e) => updateConfigField("port", e.target.value)}
                 placeholder="587"
               />
             </div>
@@ -315,7 +340,7 @@ export function TenantManagement() {
               <Label>Username</Label>
               <Input
                 value={form.email_provider_config.username || ""}
-                onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, username: e.target.value } })}
+                onChange={(e) => updateConfigField("username", e.target.value)}
               />
             </div>
             <div className="space-y-2">
@@ -323,7 +348,7 @@ export function TenantManagement() {
               <Input
                 type="password"
                 value={form.email_provider_config.password || ""}
-                onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, password: e.target.value } })}
+                onChange={(e) => updateConfigField("password", e.target.value)}
               />
             </div>
           </div>
@@ -347,18 +372,18 @@ export function TenantManagement() {
     </div>
   );
 
-  const BrandingFields = ({ isEdit }: { isEdit?: boolean }) => (
+  const renderBrandingFields = (isEdit?: boolean) => (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Organization Name</Label>
-          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+          <Input value={form.name} onChange={(e) => updateField("name", e.target.value)} required />
         </div>
         <div className="space-y-2">
           <Label>URL Slug</Label>
           <Input
             value={form.slug}
-            onChange={(e) => setForm({ ...form, slug: e.target.value })}
+            onChange={(e) => updateField("slug", e.target.value)}
             placeholder="my-company"
             required
             disabled={isEdit}
@@ -366,38 +391,38 @@ export function TenantManagement() {
           {!isEdit && <p className="text-xs text-muted-foreground">Used in the URL: /wl/my-company</p>}
         </div>
       </div>
-      <LogoUploader />
+      {renderLogoUploader()}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Primary Color</Label>
           <div className="flex gap-2">
-            <Input type="color" value={form.primary_color} onChange={(e) => setForm({ ...form, primary_color: e.target.value })} className="w-12 h-10 p-1" />
-            <Input value={form.primary_color} onChange={(e) => setForm({ ...form, primary_color: e.target.value })} />
+            <Input type="color" value={form.primary_color} onChange={(e) => updateField("primary_color", e.target.value)} className="w-12 h-10 p-1" />
+            <Input value={form.primary_color} onChange={(e) => updateField("primary_color", e.target.value)} />
           </div>
         </div>
         <div className="space-y-2">
           <Label>Secondary Color</Label>
           <div className="flex gap-2">
-            <Input type="color" value={form.secondary_color} onChange={(e) => setForm({ ...form, secondary_color: e.target.value })} className="w-12 h-10 p-1" />
-            <Input value={form.secondary_color} onChange={(e) => setForm({ ...form, secondary_color: e.target.value })} />
+            <Input type="color" value={form.secondary_color} onChange={(e) => updateField("secondary_color", e.target.value)} className="w-12 h-10 p-1" />
+            <Input value={form.secondary_color} onChange={(e) => updateField("secondary_color", e.target.value)} />
           </div>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Custom Domain</Label>
-          <Input value={form.custom_domain} onChange={(e) => setForm({ ...form, custom_domain: e.target.value })} placeholder="checks.company.com" />
+          <Input value={form.custom_domain} onChange={(e) => updateField("custom_domain", e.target.value)} placeholder="checks.company.com" />
         </div>
         <div className="space-y-2">
           <Label>Max Checks/Month</Label>
-          <Input type="number" value={form.max_checks_per_month} onChange={(e) => setForm({ ...form, max_checks_per_month: parseInt(e.target.value) || 100 })} />
+          <Input type="number" value={form.max_checks_per_month} onChange={(e) => updateField("max_checks_per_month", parseInt(e.target.value) || 100)} />
         </div>
       </div>
       {isEdit && (
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label>Status</Label>
-            <Select value={form.subscription_status} onValueChange={(v) => setForm({ ...form, subscription_status: v })}>
+            <Select value={form.subscription_status} onValueChange={(v) => updateField("subscription_status", v)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="active">Active</SelectItem>
@@ -409,7 +434,7 @@ export function TenantManagement() {
           </div>
           <div className="space-y-2">
             <Label>Plan Tier</Label>
-            <Select value={form.plan_tier} onValueChange={(v) => setForm({ ...form, plan_tier: v })}>
+            <Select value={form.plan_tier} onValueChange={(v) => updateField("plan_tier", v)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="starter">Starter</SelectItem>
@@ -423,7 +448,7 @@ export function TenantManagement() {
     </div>
   );
 
-  const TenantFormContent = ({ isEdit, onSubmit, isPending }: { isEdit?: boolean; onSubmit: () => void; isPending: boolean }) => (
+  const renderFormContent = (isEdit: boolean, onSubmit: () => void, isPending: boolean) => (
     <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="space-y-4">
       <Tabs defaultValue="branding" className="w-full">
         <TabsList className="w-full">
@@ -431,10 +456,10 @@ export function TenantManagement() {
           <TabsTrigger value="email" className="flex-1">Email</TabsTrigger>
         </TabsList>
         <TabsContent value="branding" className="mt-4">
-          <BrandingFields isEdit={isEdit} />
+          {renderBrandingFields(isEdit)}
         </TabsContent>
         <TabsContent value="email" className="mt-4">
-          <EmailConfigFields />
+          {renderEmailConfig()}
         </TabsContent>
       </Tabs>
       <Button type="submit" className="w-full" disabled={isPending}>
@@ -457,7 +482,7 @@ export function TenantManagement() {
           </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle>Create New Tenant</DialogTitle></DialogHeader>
-            <TenantFormContent onSubmit={() => createTenant.mutate(form)} isPending={createTenant.isPending} />
+            {renderFormContent(false, () => createTenant.mutate(form), createTenant.isPending)}
           </DialogContent>
         </Dialog>
       </div>
@@ -466,9 +491,31 @@ export function TenantManagement() {
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Edit Tenant</DialogTitle></DialogHeader>
-          <TenantFormContent isEdit onSubmit={() => { if (editingId) updateTenant.mutate({ id: editingId, data: form }); }} isPending={updateTenant.isPending} />
+          {renderFormContent(true, () => { if (editingId) updateTenant.mutate({ id: editingId, data: form }); }, updateTenant.isPending)}
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Tenant</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{deleteTarget?.name}</strong>? This will permanently remove the tenant and all associated users, checks, and endorsement data. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (deleteTarget) deleteTenant.mutate(deleteTarget.id); }}
+            >
+              {deleteTenant.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {isLoading ? (
         <div className="flex justify-center py-8">
@@ -510,15 +557,26 @@ export function TenantManagement() {
                 <div className="w-6 h-6 rounded-full border" style={{ backgroundColor: t.primary_color }} title={`Primary: ${t.primary_color}`} />
                 <div className="flex items-center gap-1">
                   {!t.is_system_tenant && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      title={t.subscription_status === "active" ? "Deactivate" : "Activate"}
-                      onClick={() => toggleStatus.mutate({ id: t.id, currentStatus: t.subscription_status })}
-                    >
-                      <Power className={`h-4 w-4 ${t.subscription_status === "active" ? "text-emerald-400" : "text-muted-foreground"}`} />
-                    </Button>
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        title={t.subscription_status === "active" ? "Deactivate" : "Activate"}
+                        onClick={() => toggleStatus.mutate({ id: t.id, currentStatus: t.subscription_status })}
+                      >
+                        <Power className={`h-4 w-4 ${t.subscription_status === "active" ? "text-emerald-400" : "text-muted-foreground"}`} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        title="Delete"
+                        onClick={() => setDeleteTarget({ id: t.id, name: t.name })}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </>
                   )}
                   <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={() => openEdit(t)}>
                     <Pencil className="h-4 w-4" />
