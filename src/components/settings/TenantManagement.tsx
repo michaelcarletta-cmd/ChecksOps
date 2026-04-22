@@ -598,6 +598,15 @@ export function TenantManagement() {
           ))}
         </div>
       )}
+
+      {usersTarget && (
+        <TenantUserManagement
+          tenantId={usersTarget.id}
+          tenantName={usersTarget.name}
+          isOpen={true}
+          onClose={() => setUsersTarget(null)}
+        />
+      )}
     </div>
   );
 }
