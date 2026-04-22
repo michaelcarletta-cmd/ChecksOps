@@ -31,6 +31,7 @@ interface Claim {
   updated_at: string;
   loss_type: string;
   is_closed: boolean;
+  is_guided_mode: boolean;
 }
 
 interface ClaimsTableConnectedProps {
