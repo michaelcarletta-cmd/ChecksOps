@@ -93,13 +93,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
       userId = existingUser.id;
       console.log("User already exists:", userId);
 
-      // Update password so the new credentials work
       const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        email,
         password,
         email_confirm: true,
+        user_metadata: {
+          ...(existingUser.user_metadata ?? {}),
+          full_name: full_name || existingUser.user_metadata?.full_name || null,
+          role: "tenant_user",
+        },
       });
+
       if (updateErr) {
-        console.error("Error updating user password:", updateErr);
+        console.error("Error updating existing user:", updateErr);
+        return new Response(
+          JSON.stringify({ error: `Failed to refresh existing user credentials: ${updateErr.message}` }),
+          { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
       }
     } else {
       // Create auth user
@@ -122,12 +132,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
       console.log("Created new user:", userId);
     }
 
-    // Always upsert profile
-    await supabaseAdmin.from("profiles").upsert({
+    const { error: profileErr } = await supabaseAdmin.from("profiles").upsert({
       id: userId,
       full_name: full_name || existingUser?.user_metadata?.full_name || null,
       email,
     }, { onConflict: "id" });
+
+    if (profileErr) {
+      console.error("Error upserting profile:", profileErr);
+      return new Response(
+        JSON.stringify({ error: `Failed to save profile: ${profileErr.message}` }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
 
     // Check if already a member of this tenant
     const { data: existing } = await supabaseAdmin
