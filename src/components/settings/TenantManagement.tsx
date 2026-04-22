@@ -326,6 +326,15 @@ export function TenantManagement() {
             />
           </div>
         </div>
+        <div className="rounded-md bg-muted p-3 space-y-1">
+          <p className="text-xs font-medium text-foreground">Quick Setup for Gmail / Outlook:</p>
+          <p className="text-xs text-muted-foreground">
+            <strong>Gmail:</strong> Host: smtp.gmail.com · Port: 587 · Username: your Gmail · Password: <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener" className="underline">App Password</a> (requires 2FA enabled)
+          </p>
+          <p className="text-xs text-muted-foreground">
+            <strong>Outlook:</strong> Host: smtp.office365.com · Port: 587 · Username: your Outlook email · Password: your account password
+          </p>
+        </div>
       )}
 
       {form.email_provider !== "none" && (
