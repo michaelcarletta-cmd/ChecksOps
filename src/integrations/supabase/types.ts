@@ -7565,6 +7565,7 @@ export type Database = {
           insurance_email: string | null
           insurance_phone: string | null
           is_closed: boolean
+          is_guided_mode: boolean
           jobnimbus_job_id: string | null
           last_activity_at: string | null
           latest_signature_request_id: string | null
@@ -7638,6 +7639,7 @@ export type Database = {
           insurance_email?: string | null
           insurance_phone?: string | null
           is_closed?: boolean
+          is_guided_mode?: boolean
           jobnimbus_job_id?: string | null
           last_activity_at?: string | null
           latest_signature_request_id?: string | null
@@ -7711,6 +7713,7 @@ export type Database = {
           insurance_email?: string | null
           insurance_phone?: string | null
           is_closed?: boolean
+          is_guided_mode?: boolean
           jobnimbus_job_id?: string | null
           last_activity_at?: string | null
           latest_signature_request_id?: string | null
@@ -11390,6 +11393,213 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      guided_claim_access: {
+        Row: {
+          claim_id: string
+          created_at: string
+          id: string
+          relationship: string
+          user_id: string
+        }
+        Insert: {
+          claim_id: string
+          created_at?: string
+          id?: string
+          relationship?: string
+          user_id: string
+        }
+        Update: {
+          claim_id?: string
+          created_at?: string
+          id?: string
+          relationship?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guided_claim_access_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "guided_claim_access_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "guided_claim_access_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guided_claim_map: {
+        Row: {
+          claim_id: string
+          confidence: number | null
+          created_at: string
+          escalation_flags: Json | null
+          id: string
+          issue_summary: string | null
+          missing_documents: Json | null
+          pressure_points: Json | null
+          recommended_next_step: string | null
+          timeline: Json | null
+          updated_at: string
+        }
+        Insert: {
+          claim_id: string
+          confidence?: number | null
+          created_at?: string
+          escalation_flags?: Json | null
+          id?: string
+          issue_summary?: string | null
+          missing_documents?: Json | null
+          pressure_points?: Json | null
+          recommended_next_step?: string | null
+          timeline?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          claim_id?: string
+          confidence?: number | null
+          created_at?: string
+          escalation_flags?: Json | null
+          id?: string
+          issue_summary?: string | null
+          missing_documents?: Json | null
+          pressure_points?: Json | null
+          recommended_next_step?: string | null
+          timeline?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guided_claim_map_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "guided_claim_map_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "guided_claim_map_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: true
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guided_communications: {
+        Row: {
+          actual_attachments: Json | null
+          analysis: Json | null
+          body: string
+          cc_email: string | null
+          claim_id: string
+          comm_type: string
+          created_at: string
+          id: string
+          issue_summary: string | null
+          marked_sent_at: string | null
+          recipient_email: string | null
+          recommended_attachments: Json | null
+          response_file_id: string | null
+          response_received_at: string | null
+          sent_at: string | null
+          sent_to: string | null
+          short_body: string | null
+          status: string
+          subject: string | null
+          task_type: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          actual_attachments?: Json | null
+          analysis?: Json | null
+          body: string
+          cc_email?: string | null
+          claim_id: string
+          comm_type?: string
+          created_at?: string
+          id?: string
+          issue_summary?: string | null
+          marked_sent_at?: string | null
+          recipient_email?: string | null
+          recommended_attachments?: Json | null
+          response_file_id?: string | null
+          response_received_at?: string | null
+          sent_at?: string | null
+          sent_to?: string | null
+          short_body?: string | null
+          status?: string
+          subject?: string | null
+          task_type?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          actual_attachments?: Json | null
+          analysis?: Json | null
+          body?: string
+          cc_email?: string | null
+          claim_id?: string
+          comm_type?: string
+          created_at?: string
+          id?: string
+          issue_summary?: string | null
+          marked_sent_at?: string | null
+          recipient_email?: string | null
+          recommended_attachments?: Json | null
+          response_file_id?: string | null
+          response_received_at?: string | null
+          sent_at?: string | null
+          sent_to?: string | null
+          short_body?: string | null
+          status?: string
+          subject?: string | null
+          task_type?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guided_communications_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "guided_communications_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "guided_communications_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       hidden_loss_checklist_items: {
         Row: {
@@ -15850,6 +16060,7 @@ export type Database = {
               insurance_email: string | null
               insurance_phone: string | null
               is_closed: boolean
+              is_guided_mode: boolean
               jobnimbus_job_id: string | null
               last_activity_at: string | null
               latest_signature_request_id: string | null
@@ -15948,6 +16159,7 @@ export type Database = {
               insurance_email: string | null
               insurance_phone: string | null
               is_closed: boolean
+              is_guided_mode: boolean
               jobnimbus_job_id: string | null
               last_activity_at: string | null
               latest_signature_request_id: string | null
@@ -17133,6 +17345,7 @@ export type Database = {
         | "contractor"
         | "referrer"
         | "read_only"
+        | "guided"
       automation_mode: "active" | "passive" | "suspended" | "closed"
       claim_doc_decision:
         | "deny_full"
@@ -17359,6 +17572,7 @@ export const Constants = {
         "contractor",
         "referrer",
         "read_only",
+        "guided",
       ],
       automation_mode: ["active", "passive", "suspended", "closed"],
       claim_doc_decision: [
