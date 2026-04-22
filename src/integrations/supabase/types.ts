@@ -16383,6 +16383,12 @@ export type Database = {
         Returns: boolean
       }
       geomfromewkt: { Args: { "": string }; Returns: unknown }
+      get_all_insurance_carriers: {
+        Args: never
+        Returns: {
+          carrier_name: string
+        }[]
+      }
       get_check_dashboard_counts: { Args: never; Returns: Json }
       get_claim_money_snapshot: { Args: { p_claim_id: string }; Returns: Json }
       get_deposit_aging_summary: { Args: never; Returns: Json }
