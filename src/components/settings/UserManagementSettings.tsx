@@ -18,30 +18,32 @@ interface Profile {
 interface UserRole {
   id: string;
   user_id: string;
-  role: "admin" | "staff" | "client" | "contractor" | "referrer" | "read_only";
+  role: "admin" | "staff" | "client" | "contractor" | "referrer" | "read_only" | "guided";
 }
 
 interface UserWithRoles extends Profile {
   roles: UserRole[];
 }
 
-const ROLE_LABELS = {
+const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
   staff: "Staff",
   client: "Client",
   contractor: "Contractor",
   referrer: "Referrer",
   read_only: "Read Only",
+  guided: "Guided",
 };
 
-const ROLE_COLORS = {
+const ROLE_COLORS: Record<string, string> = {
   admin: "destructive",
   staff: "default",
   client: "secondary",
   contractor: "outline",
   referrer: "outline",
   read_only: "secondary",
-} as const;
+  guided: "outline",
+};
 
 export function UserManagementSettings() {
   const [users, setUsers] = useState<UserWithRoles[]>([]);
@@ -457,7 +459,7 @@ export function UserManagementSettings() {
                     user.roles.map((userRole) => (
                       <Badge
                         key={userRole.id}
-                        variant={ROLE_COLORS[userRole.role]}
+                        variant={ROLE_COLORS[userRole.role] as "default" | "destructive" | "outline" | "secondary"}
                         className="flex items-center gap-2"
                       >
                         {ROLE_LABELS[userRole.role]}

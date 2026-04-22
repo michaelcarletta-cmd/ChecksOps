@@ -30,6 +30,8 @@ const ContractorPortal = lazy(() => import("./pages/ContractorPortal"));
 const Sign = lazy(() => import("./pages/Sign"));
 const Endorse = lazy(() => import("./pages/Endorse"));
 const PaymentDirectionPage = lazy(() => import("./pages/PaymentDirectionPage"));
+const GuidedAuth = lazy(() => import("./pages/GuidedAuth"));
+const GuidedPortal = lazy(() => import("./pages/GuidedPortal"));
 
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Workspaces = lazy(() => import("./pages/Workspaces"));
@@ -111,6 +113,8 @@ function AppRoutes() {
             ? <Navigate to="/client-portal" replace />
             : user && userRole === "contractor"
             ? <Navigate to="/contractor-portal" replace />
+            : user && userRole === "guided"
+            ? <Navigate to="/guided" replace />
             : user && !inPasswordRecoveryFlow
             ? <Navigate to="/" replace />
             : <Suspense fallback={<PageLoader />}><Auth /></Suspense>
@@ -121,6 +125,8 @@ function AppRoutes() {
       <Route path="/endorse" element={<Suspense fallback={<PageLoader />}><Endorse /></Suspense>} />
       <Route path="/payment-direction/:token" element={<Suspense fallback={<PageLoader />}><PaymentDirectionPage /></Suspense>} />
       <Route path="/portal" element={<Suspense fallback={<PageLoader />}><PortalLogin /></Suspense>} />
+      <Route path="/guided/auth" element={<Suspense fallback={<PageLoader />}><GuidedAuth /></Suspense>} />
+      <Route path="/guided" element={<Suspense fallback={<PageLoader />}><GuidedPortal /></Suspense>} />
       {/* Redirect unauthenticated portal visitors to PIN login */}
       {!user && (
         <>
@@ -151,6 +157,16 @@ function AppRoutes() {
         <Route path="/contractor-portal" element={<Suspense fallback={<PageLoader />}><ContractorPortal /></Suspense>} />
         <Route path="/claims/:id" element={<Suspense fallback={<PageLoader />}><ClaimDetail /></Suspense>} />
         <Route path="*" element={<Navigate to="/contractor-portal" replace />} />
+      </Routes>
+    );
+  }
+
+  if (user && userRole === "guided") {
+    return (
+      <Routes>
+        {publicRoutes}
+        <Route path="/guided" element={<Suspense fallback={<PageLoader />}><GuidedPortal /></Suspense>} />
+        <Route path="*" element={<Navigate to="/guided" replace />} />
       </Routes>
     );
   }
