@@ -141,8 +141,17 @@ export function GuidedClaimHome({ claimId, onSelectTask }: Props) {
           </div>
         </div>
       )}
+      {/* Referral Alerts - Contractor/PA/Attorney recommendations */}
+      {alerts.length > 0 && (
+        <GuidedReferralAlert
+          alerts={alerts}
+          claimState={claimState}
+          onDismiss={dismissAlert}
+          onActioned={markActioned}
+        />
+      )}
 
-      {/* Claim Map */}
+
       <Card className="border-border bg-card">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-foreground text-base">Darwin's Claim Analysis</CardTitle>
