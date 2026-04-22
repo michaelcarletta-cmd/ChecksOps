@@ -267,12 +267,17 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
       filtered = filtered.filter((claim) => claim.loss_type === lossTypeFilter);
     }
 
+    // Guided claims filter
+    if (showGuided) {
+      filtered = filtered.filter((claim) => claim.is_guided_mode);
+    }
+
     return filtered.sort((a, b) => {
       const aHasNotification = claimsWithNotifications.has(a.id) ? 1 : 0;
       const bHasNotification = claimsWithNotifications.has(b.id) ? 1 : 0;
       return bHasNotification - aHasNotification;
     });
-  }, [claims, searchQuery, statusFilter, lossTypeFilter, showClosed, claimsWithNotifications]);
+  }, [claims, searchQuery, statusFilter, lossTypeFilter, showClosed, showGuided, claimsWithNotifications]);
 
   const toggleClaimSelection = (claimId: string) => {
     const newSelected = new Set(selectedClaims);
