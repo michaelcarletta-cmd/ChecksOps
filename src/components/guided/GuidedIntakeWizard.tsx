@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Upload, CheckCircle2, FileText, ArrowRight, ArrowLeft } from "lucide-react";
+import { Loader2, Upload, CheckCircle2, FileText, ArrowRight, ArrowLeft, Plus } from "lucide-react";
 
 interface Props {
   userId: string;
@@ -37,19 +37,44 @@ const DOCUMENT_TYPES = [
   { key: "prior_emails", label: "Prior Emails / Correspondence", required: false },
 ];
 
+const US_STATES = [
+  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA",
+  "KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
+  "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT",
+  "VA","WA","WV","WI","WY","DC",
+];
+
+function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 10);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
 export function GuidedIntakeWizard({ userId, onComplete, onCancel }: Props) {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [claimId, setClaimId] = useState<string | null>(null);
   const { toast } = useToast();
 
+  // Carrier list from DB
+  const [carrierList, setCarrierList] = useState<string[]>([]);
+  const [carrierLoading, setCarrierLoading] = useState(true);
+  const [addingNewCarrier, setAddingNewCarrier] = useState(false);
+  const newCarrierRef = useRef<HTMLInputElement>(null);
+
   // Step 1: Claim info
   const [carrier, setCarrier] = useState("");
+  const [customCarrier, setCustomCarrier] = useState("");
   const [claimNumber, setClaimNumber] = useState("");
   const [adjusterName, setAdjusterName] = useState("");
   const [adjusterEmail, setAdjusterEmail] = useState("");
+  const [adjusterPhone, setAdjusterPhone] = useState("");
   const [lossDate, setLossDate] = useState("");
-  const [propertyAddress, setPropertyAddress] = useState("");
+  const [streetAddress, setStreetAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [zip, setZip] = useState("");
   const [lossType, setLossType] = useState("");
   const [claimStatus, setClaimStatus] = useState("");
 
@@ -57,45 +82,81 @@ export function GuidedIntakeWizard({ userId, onComplete, onCancel }: Props) {
   const [uploadedDocs, setUploadedDocs] = useState<Record<string, boolean>>({});
   const [uploading, setUploading] = useState<string | null>(null);
 
+  useEffect(() => {
+    const loadCarriers = async () => {
+      const { data } = await supabase
+        .from("claims")
+        .select("insurance_company")
+        .not("insurance_company", "is", null)
+        .not("insurance_company", "eq", "");
+
+      if (data) {
+        const unique = [...new Set(data.map((d: any) => d.insurance_company as string))].sort();
+        setCarrierList(unique);
+      }
+      setCarrierLoading(false);
+    };
+    loadCarriers();
+  }, []);
+
+  const resolvedCarrier = carrier === "__new__" ? customCarrier.trim() : carrier;
+
+  const buildFullAddress = () => {
+    const parts = [streetAddress, city, state].filter(Boolean);
+    let addr = parts.join(", ");
+    if (zip) addr += ` ${zip}`;
+    return addr.trim() || null;
+  };
+
+  const handleCarrierSelect = (val: string) => {
+    if (val === "__new__") {
+      setCarrier("__new__");
+      setAddingNewCarrier(true);
+      setTimeout(() => newCarrierRef.current?.focus(), 50);
+    } else {
+      setCarrier(val);
+      setAddingNewCarrier(false);
+      setCustomCarrier("");
+    }
+  };
+
   const handleCreateClaim = async () => {
-    if (!carrier || !claimNumber) {
+    if (!resolvedCarrier || !claimNumber) {
       toast({ title: "Required fields", description: "Please fill in carrier and claim number.", variant: "destructive" });
       return;
     }
 
     setLoading(true);
     try {
-      // Create the claim
       const { data: claim, error } = await supabase
         .from("claims")
         .insert({
-          insurance_company: carrier,
+          insurance_company: resolvedCarrier,
           claim_number: claimNumber,
           loss_date: lossDate || null,
           loss_type: lossType || null,
           status: claimStatus || "New",
           is_guided_mode: true,
           policyholder_name: "",
-          policyholder_address: propertyAddress || null,
+          policyholder_address: buildFullAddress(),
         })
         .select()
         .single();
 
       if (error) throw error;
 
-      // Link user to claim
       await supabase.from("guided_claim_access").insert({
         user_id: userId,
         claim_id: claim.id,
         relationship: "policyholder",
       });
 
-      // Add adjuster if provided
       if (adjusterName) {
         await supabase.from("claim_adjusters").insert({
           claim_id: claim.id,
           adjuster_name: adjusterName,
           adjuster_email: adjusterEmail || null,
+          adjuster_phone: adjusterPhone || null,
         });
       }
 
@@ -166,14 +227,47 @@ export function GuidedIntakeWizard({ userId, onComplete, onCancel }: Props) {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Carrier dropdown */}
               <div className="space-y-2">
-                <Label>Carrier *</Label>
-                <Input value={carrier} onChange={e => setCarrier(e.target.value)} placeholder="e.g. State Farm" />
+                <Label>Insurance Company *</Label>
+                {carrierLoading ? (
+                  <div className="flex items-center gap-2 h-10 px-3 border border-border rounded-md bg-muted/30">
+                    <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Loading...</span>
+                  </div>
+                ) : (
+                  <Select value={carrier} onValueChange={handleCarrierSelect}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select carrier" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      {carrierList.map(c => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                      <SelectItem value="__new__">
+                        <span className="flex items-center gap-1 text-primary font-medium">
+                          <Plus className="h-3 w-3" /> Add New Company
+                        </span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+                {addingNewCarrier && (
+                  <Input
+                    ref={newCarrierRef}
+                    value={customCarrier}
+                    onChange={e => setCustomCarrier(e.target.value)}
+                    placeholder="Enter insurance company name"
+                    className="mt-1"
+                  />
+                )}
               </div>
+
               <div className="space-y-2">
                 <Label>Claim Number *</Label>
                 <Input value={claimNumber} onChange={e => setClaimNumber(e.target.value)} placeholder="e.g. 12-3456-789" />
               </div>
+
               <div className="space-y-2">
                 <Label>Adjuster Name</Label>
                 <Input value={adjusterName} onChange={e => setAdjusterName(e.target.value)} placeholder="Adjuster name" />
@@ -183,13 +277,49 @@ export function GuidedIntakeWizard({ userId, onComplete, onCancel }: Props) {
                 <Input type="email" value={adjusterEmail} onChange={e => setAdjusterEmail(e.target.value)} placeholder="adjuster@carrier.com" />
               </div>
               <div className="space-y-2">
+                <Label>Adjuster Phone</Label>
+                <Input
+                  type="tel"
+                  value={adjusterPhone}
+                  onChange={e => setAdjusterPhone(formatPhone(e.target.value))}
+                  placeholder="xxx-xxx-xxxx"
+                  maxLength={12}
+                />
+              </div>
+              <div className="space-y-2">
                 <Label>Date of Loss</Label>
                 <Input type="date" value={lossDate} onChange={e => setLossDate(e.target.value)} />
               </div>
-              <div className="space-y-2">
-                <Label>Property Address</Label>
-                <Input value={propertyAddress} onChange={e => setPropertyAddress(e.target.value)} placeholder="123 Main St, City, State" />
+            </div>
+
+            {/* Address fields */}
+            <div className="space-y-2">
+              <Label>Property Address</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
+                  <Input value={streetAddress} onChange={e => setStreetAddress(e.target.value)} placeholder="Street address" />
+                </div>
+                <Input value={city} onChange={e => setCity(e.target.value)} placeholder="City" />
+                <div className="grid grid-cols-2 gap-3">
+                  <Select value={state} onValueChange={setState}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="State" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      {US_STATES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={zip}
+                    onChange={e => setZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
+                    placeholder="Zip"
+                    maxLength={5}
+                  />
+                </div>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Loss Type</Label>
                 <Select value={lossType} onValueChange={setLossType}>
