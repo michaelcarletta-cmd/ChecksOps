@@ -3,12 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, X, Users, UserCheck } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { UserPlus, X, Users, UserCheck, Compass } from "lucide-react";
 
 interface ClaimAccessManagementProps {
   claimId: string;
+  isGuidedMode?: boolean;
 }
 
 interface Profile {
@@ -24,14 +27,16 @@ interface Client {
   phone: string | null;
 }
 
-export function ClaimAccessManagement({ claimId }: ClaimAccessManagementProps) {
+export function ClaimAccessManagement({ claimId, isGuidedMode }: ClaimAccessManagementProps) {
   const [allClients, setAllClients] = useState<Client[]>([]);
   const [contractors, setContractors] = useState<Profile[]>([]);
   const [assignedContractors, setAssignedContractors] = useState<Profile[]>([]);
   const [currentClientId, setCurrentClientId] = useState<string | null>(null);
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [selectedContractor, setSelectedContractor] = useState<string>("");
+  const [guidedToggling, setGuidedToggling] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     fetchClients();
@@ -211,8 +216,52 @@ export function ClaimAccessManagement({ claimId }: ClaimAccessManagementProps) {
 
   const currentClient = allClients.find(c => c.id === currentClientId);
 
+  const handleGuidedModeToggle = async (enabled: boolean) => {
+    setGuidedToggling(true);
+    const { error } = await supabase
+      .from("claims")
+      .update({ is_guided_mode: enabled })
+      .eq("id", claimId);
+    setGuidedToggling(false);
+    if (error) {
+      toast({ title: "Error", description: "Failed to update guided mode", variant: "destructive" });
+    } else {
+      toast({ title: enabled ? "Guided Mode enabled" : "Guided Mode disabled" });
+      queryClient.invalidateQueries({ queryKey: ["claim"] });
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Guided Claim Mode */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Compass className="h-5 w-5" />
+            Guided Claim Mode
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Enable Guided Mode</p>
+              <p className="text-xs text-muted-foreground">
+                Allows the policyholder to self-manage this claim with Darwin guidance
+              </p>
+            </div>
+            <Switch
+              checked={!!isGuidedMode}
+              onCheckedChange={handleGuidedModeToggle}
+              disabled={guidedToggling}
+            />
+          </div>
+          {isGuidedMode && (
+            <p className="text-xs text-muted-foreground bg-muted/50 rounded p-2 border border-border">
+              The policyholder can access this claim at <span className="font-mono text-foreground">/guided</span> to upload documents, receive AI-drafted communications, and send them from their own email.
+            </p>
+          )}
+        </CardContent>
+      </Card>
       {/* Client Assignment */}
       <Card>
         <CardHeader>
