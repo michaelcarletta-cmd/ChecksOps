@@ -230,7 +230,7 @@ export default function CheckCommandCenter() {
     },
   });
 
-  const newChecks = checks.filter((c) => c.status === "uploaded" || c.ocr_status === "pending");
+  
   const awaitingEndorsement = checks.filter(
     (c) =>
       c.deposit_recommendation === "endorsements_pending" ||
