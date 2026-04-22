@@ -652,6 +652,7 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
           password={credentialsDialog.password}
           userType="Tenant User"
           userName={credentialsDialog.userName}
+          tenantName={tenantName}
         />
       )}
     </>
@@ -659,12 +660,20 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
 }
 
 function generatePassword(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-  const specials = "!@#$%";
+  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const lower = "abcdefghjkmnpqrstuvwxyz";
+  const digits = "23456789";
+  const specials = "!@#$%&";
+  const all = upper + lower + digits + specials;
+  // Guarantee at least one of each category
   let password = "";
-  for (let i = 0; i < 10; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
+  password += upper.charAt(Math.floor(Math.random() * upper.length));
+  password += lower.charAt(Math.floor(Math.random() * lower.length));
+  password += digits.charAt(Math.floor(Math.random() * digits.length));
   password += specials.charAt(Math.floor(Math.random() * specials.length));
-  return password;
+  for (let i = 0; i < 8; i++) {
+    password += all.charAt(Math.floor(Math.random() * all.length));
+  }
+  // Shuffle
+  return password.split("").sort(() => Math.random() - 0.5).join("");
 }
