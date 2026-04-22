@@ -82,7 +82,7 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
   return <>{children}</>;
 }
 
-function AppRoutes() {
+function AppRoutesInner() {
   const { user, userRole, loading, sessionExpiredReason, clearSessionExpiredReason } = useAuth();
   const { toast } = useToast();
   const inPasswordRecoveryFlow =
