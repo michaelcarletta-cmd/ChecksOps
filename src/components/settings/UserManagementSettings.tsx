@@ -459,7 +459,7 @@ export function UserManagementSettings() {
                     user.roles.map((userRole) => (
                       <Badge
                         key={userRole.id}
-                        variant={ROLE_COLORS[userRole.role]}
+                        variant={ROLE_COLORS[userRole.role] as "default" | "destructive" | "outline" | "secondary"}
                         className="flex items-center gap-2"
                       >
                         {ROLE_LABELS[userRole.role]}
