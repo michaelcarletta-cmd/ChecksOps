@@ -27,14 +27,16 @@ interface Client {
   phone: string | null;
 }
 
-export function ClaimAccessManagement({ claimId }: ClaimAccessManagementProps) {
+export function ClaimAccessManagement({ claimId, isGuidedMode }: ClaimAccessManagementProps) {
   const [allClients, setAllClients] = useState<Client[]>([]);
   const [contractors, setContractors] = useState<Profile[]>([]);
   const [assignedContractors, setAssignedContractors] = useState<Profile[]>([]);
   const [currentClientId, setCurrentClientId] = useState<string | null>(null);
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [selectedContractor, setSelectedContractor] = useState<string>("");
+  const [guidedToggling, setGuidedToggling] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     fetchClients();
