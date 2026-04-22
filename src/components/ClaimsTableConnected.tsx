@@ -430,15 +430,27 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
               </SelectContent>
             </Select>
 
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="show-closed"
-                checked={showClosed}
-                onCheckedChange={(checked) => setShowClosed(checked as boolean)}
-              />
-              <Label htmlFor="show-closed" className="text-sm cursor-pointer">
-                Show closed claims
-              </Label>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="show-closed"
+                  checked={showClosed}
+                  onCheckedChange={(checked) => setShowClosed(checked as boolean)}
+                />
+                <Label htmlFor="show-closed" className="text-sm cursor-pointer">
+                  Show closed
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="show-guided"
+                  checked={showGuided}
+                  onCheckedChange={(checked) => setShowGuided(checked as boolean)}
+                />
+                <Label htmlFor="show-guided" className="text-sm cursor-pointer">
+                  Guided claims
+                </Label>
+              </div>
             </div>
           </div>
         </div>
