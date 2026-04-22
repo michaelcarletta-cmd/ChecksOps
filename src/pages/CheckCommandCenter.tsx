@@ -31,7 +31,7 @@ import { format } from "date-fns";
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
 import { EndorsementChecklist } from "@/components/check-review/EndorsementChecklist";
 import { DepositPacketGenerator } from "@/components/check-review/DepositPacketGenerator";
-import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards";
+import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards"; // kept for potential future use
 import { LossDraftDashboard } from "@/components/loss-draft/LossDraftDashboard";
 import { EndorsementAdjuster } from "@/components/checks/EndorsementAdjuster";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
@@ -39,12 +39,12 @@ import { EndorsementOverride } from "@/lib/endorsementLayout";
 import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
 import { DepositOperationsConsole, BranchDepositManifest } from "@/components/deposit-ops/DepositOperationsConsole";
 import { ReconciliationDashboard } from "@/components/deposit-ops/ReconciliationDashboard";
-import { ExceptionResolutionPanel } from "@/components/deposit-ops/ExceptionResolutionPanel";
-import { DepositAgingDashboard } from "@/components/deposit-ops/DepositAgingDashboard";
+
+
 import { DepositReports } from "@/components/deposit-ops/DepositReports";
-import { DepositKPIDashboard, DepositOwnerQueue } from "@/components/deposit-ops/DepositOwnerQueue";
+import { DepositOwnerQueue } from "@/components/deposit-ops/DepositOwnerQueue";
 import { DepositManagerCommandCenter } from "@/components/deposit-ops/DepositManagerCommandCenter";
-import { ArrowDownToLine, Scale, Timer, FileBarChart, Shield as ShieldIcon, BarChart3, Users as UsersIcon, Command } from "lucide-react";
+import { ArrowDownToLine, Scale, FileBarChart, Users as UsersIcon, Command } from "lucide-react";
 import { CheckCenterHelpButton } from "@/components/check-review/CheckCenterHelp";
 
 /* ------------------------------------------------------------------ */
