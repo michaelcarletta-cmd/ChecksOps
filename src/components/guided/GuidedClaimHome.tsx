@@ -41,6 +41,12 @@ export function GuidedClaimHome({ claimId, onSelectTask }: Props) {
   const [loading, setLoading] = useState(true);
   const [buildingMap, setBuildingMap] = useState(false);
   const { toast } = useToast();
+  const { alerts, dismissAlert, markActioned } = useReferralAlerts(claimId);
+
+  // Extract state from property address for referral matching
+  const claimState = claim?.property_address
+    ? extractStateFromAddress(claim.property_address)
+    : null;
 
   useEffect(() => {
     loadClaimData();
