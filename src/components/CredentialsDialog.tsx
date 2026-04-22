@@ -21,6 +21,7 @@ interface CredentialsDialogProps {
   pin?: string;
   userType: string;
   userName?: string;
+  tenantName?: string;
 }
 
 export const CredentialsDialog = ({
@@ -31,6 +32,7 @@ export const CredentialsDialog = ({
   pin,
   userType,
   userName,
+  tenantName,
 }: CredentialsDialogProps) => {
   const [copiedPin, setCopiedPin] = useState(false);
   const [copiedEmail, setCopiedEmail] = useState(false);
@@ -68,7 +70,7 @@ export const CredentialsDialog = ({
     try {
       const appUrl = window.location.origin;
       const { data, error } = await supabase.functions.invoke("send-portal-invite", {
-        body: { email, password, pin, userType, userName, appUrl },
+        body: { email, password, pin, userType, userName, appUrl, tenantName },
       });
 
       if (error) throw error;
