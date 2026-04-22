@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { isWithinBusinessHours, outsideBusinessHoursResponse } from "../_shared/business-hours-gate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,6 +9,12 @@ const corsHeaders = {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Business hours gate: skip execution outside 6 AM – 10 PM ET
+  if (!isWithinBusinessHours()) {
+    console.log("Skipping darwin-proactive-warnings: outside business hours");
+    return outsideBusinessHoursResponse(corsHeaders);
   }
 
   const cronSecret = Deno.env.get("CRON_SECRET");

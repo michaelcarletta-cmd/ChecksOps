@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.49.1";
+import { isWithinBusinessHours, outsideBusinessHoursResponse } from "../_shared/business-hours-gate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,6 +47,12 @@ function computeEscalationLevel(task: ImmediateTask): number {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
+  }
+
+  // Business hours gate: skip execution outside 6 AM – 10 PM ET
+  if (!isWithinBusinessHours()) {
+    console.log("Skipping process-immediate-notifications: outside business hours");
+    return outsideBusinessHoursResponse(corsHeaders);
   }
 
   try {
