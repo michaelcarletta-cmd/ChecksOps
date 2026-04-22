@@ -251,8 +251,7 @@ export default function CheckCommandCenter() {
   const branchDeposit = checks.filter((c) => c.status === "branch_deposit_required");
 
   const filteredChecks =
-    activeTab === "new" ? newChecks
-    : activeTab === "endorsements" ? awaitingEndorsement
+    activeTab === "endorsements" ? awaitingEndorsement
     : activeTab === "ready" ? readyForDeposit
     : activeTab === "review" ? needsReview
     : activeTab === "reissue" ? reissueRequested
