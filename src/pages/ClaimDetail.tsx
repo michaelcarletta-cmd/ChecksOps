@@ -266,6 +266,11 @@ const ClaimDetail = () => {
           <div className="flex-1">
             <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
               <h1 className="text-xl md:text-3xl font-bold text-foreground">{claim.claim_number}</h1>
+              {claim.is_guided_mode && (
+                <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-accent text-accent-foreground border border-border whitespace-nowrap">
+                  Guided Mode
+                </span>
+              )}
               {isStaffOrAdmin && (
                 <ClaimStatusSelect 
                   claimId={claim.id} 
