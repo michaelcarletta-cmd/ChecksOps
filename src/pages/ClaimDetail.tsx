@@ -34,6 +34,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 // Lazy load Darwin tab as a single organized component
 const DarwinTab = lazy(() => import("@/components/claim-detail/DarwinTab").then(m => ({ default: m.DarwinTab })));
+const GuidedClaimStaffView = lazy(() => import("@/components/guided/GuidedClaimStaffView").then(m => ({ default: m.GuidedClaimStaffView })));
 
 // Loading fallback for Darwin components
 const DarwinLoadingFallback = () => (
