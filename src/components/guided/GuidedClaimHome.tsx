@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, AlertTriangle, FileText, MessageSquare, Clock, Upload, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useReferralAlerts } from "@/hooks/useReferralAlerts";
+import { GuidedReferralAlert } from "./GuidedReferralAlert";
 
 interface Props {
   claimId: string;
