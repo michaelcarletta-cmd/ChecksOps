@@ -6,6 +6,7 @@ import { getFunctionErrorMessage } from "@/lib/edgeFunctionError";
 import { FunctionsHttpError, FunctionsRelayError, FunctionsFetchError } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { useTenantFilter } from "@/hooks/useTenantFilter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -156,6 +157,7 @@ const endorsementColors: Record<string, string> = {
 export default function CheckCommandCenter() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { tenantId, isWhiteLabel, applyFilter } = useTenantFilter();
   const [activeTab, setActiveTab] = useState("all");
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
@@ -214,12 +216,15 @@ export default function CheckCommandCenter() {
   });
 
   const { data: checks = [], isLoading } = useQuery({
-    queryKey: ["check-intake-items"],
+    queryKey: ["check-intake-items", tenantId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("check_intake_items")
-        .select("*, check_payees(*)")
-        .order("created_at", { ascending: false });
+        .select("*, check_payees(*)");
+      if (isWhiteLabel && tenantId) {
+        query = query.eq("tenant_id", tenantId);
+      }
+      const { data, error } = await query.order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as CheckItem[];
     },
@@ -647,6 +652,7 @@ function SummaryCard({
 
 function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
   const { toast } = useToast();
+  const { tenantId } = useTenantFilter();
   const [frontFile, setFrontFile] = useState<File | null>(null);
   const [backFile, setBackFile] = useState<File | null>(null);
   const [claimId, setClaimId] = useState<string>("");
@@ -712,6 +718,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
           back_image_path: backPath,
           claim_id: claimId || null,
           uploaded_by: user.id,
+          ...(tenantId ? { tenant_id: tenantId } : {}),
         })
         .select()
         .single();
