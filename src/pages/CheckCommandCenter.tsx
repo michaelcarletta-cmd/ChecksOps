@@ -157,6 +157,7 @@ const endorsementColors: Record<string, string> = {
 export default function CheckCommandCenter() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { tenantId, isWhiteLabel, applyFilter } = useTenantFilter();
   const [activeTab, setActiveTab] = useState("all");
   const [selectedCheck, setSelectedCheck] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
