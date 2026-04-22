@@ -31,6 +31,7 @@ interface Claim {
   updated_at: string;
   loss_type: string;
   is_closed: boolean;
+  is_guided_mode: boolean;
 }
 
 interface ClaimsTableConnectedProps {
@@ -43,6 +44,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
   const [lossTypeFilter, setLossTypeFilter] = useState<string>("all");
   // Show closed claims by default for client/contractor portals for tracking purposes
   const [showClosed, setShowClosed] = useState(portalType === "client" || portalType === "contractor" || portalType === "referrer");
+  const [showGuided, setShowGuided] = useState(false);
   const [selectedClaims, setSelectedClaims] = useState<Set<string>>(new Set());
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -266,12 +268,17 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
       filtered = filtered.filter((claim) => claim.loss_type === lossTypeFilter);
     }
 
+    // Guided claims filter
+    if (showGuided) {
+      filtered = filtered.filter((claim) => claim.is_guided_mode);
+    }
+
     return filtered.sort((a, b) => {
       const aHasNotification = claimsWithNotifications.has(a.id) ? 1 : 0;
       const bHasNotification = claimsWithNotifications.has(b.id) ? 1 : 0;
       return bHasNotification - aHasNotification;
     });
-  }, [claims, searchQuery, statusFilter, lossTypeFilter, showClosed, claimsWithNotifications]);
+  }, [claims, searchQuery, statusFilter, lossTypeFilter, showClosed, showGuided, claimsWithNotifications]);
 
   const toggleClaimSelection = (claimId: string) => {
     const newSelected = new Set(selectedClaims);
@@ -430,15 +437,27 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
               </SelectContent>
             </Select>
 
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="show-closed"
-                checked={showClosed}
-                onCheckedChange={(checked) => setShowClosed(checked as boolean)}
-              />
-              <Label htmlFor="show-closed" className="text-sm cursor-pointer">
-                Show closed claims
-              </Label>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="show-closed"
+                  checked={showClosed}
+                  onCheckedChange={(checked) => setShowClosed(checked as boolean)}
+                />
+                <Label htmlFor="show-closed" className="text-sm cursor-pointer">
+                  Show closed
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="show-guided"
+                  checked={showGuided}
+                  onCheckedChange={(checked) => setShowGuided(checked as boolean)}
+                />
+                <Label htmlFor="show-guided" className="text-sm cursor-pointer">
+                  Guided claims
+                </Label>
+              </div>
             </div>
           </div>
         </div>
@@ -471,6 +490,9 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                             </Badge>
                           )}
                           <span className="text-sm font-semibold text-foreground">{claim.claim_number || "—"}</span>
+                          {claim.is_guided_mode && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent text-accent-foreground border border-border">Guided</span>
+                          )}
                         </div>
                         <p className="text-sm text-foreground mt-0.5">{claim.policyholder_name || "—"}</p>
                       </div>
@@ -547,6 +569,9 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                             </Badge>
                           )}
                           <span className="text-sm">{claim.claim_number || "—"}</span>
+                          {claim.is_guided_mode && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent text-accent-foreground border border-border">Guided</span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
