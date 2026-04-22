@@ -15,6 +15,7 @@ interface PortalInviteRequest {
   userType: string;
   userName?: string;
   appUrl?: string;
+  tenantName?: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -23,9 +24,10 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { email, password, pin, userType, userName, appUrl }: PortalInviteRequest = await req.json();
+    const { email, password, pin, userType, userName, appUrl, tenantName }: PortalInviteRequest = await req.json();
 
-    console.log(`Sending portal invite to ${email} for ${userType}`);
+    const companyName = tenantName || "Freedom Claims";
+    console.log(`Sending portal invite to ${email} for ${userType} (company: ${companyName})`);
 
     const loginUrl = appUrl ? `${appUrl}/portal` : "https://freedomclaims.lovable.app/portal";
     const isClient = userType.toLowerCase() === "client" && pin;
@@ -66,7 +68,7 @@ const handler = async (req: Request): Promise<Response> => {
       </head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #1e3a5f 0%, #2d4a6f 100%); padding: 30px; border-radius: 8px 8px 0 0; text-align: center;">
-          <h1 style="color: white; margin: 0; font-size: 24px;">Freedom Claims</h1>
+          <h1 style="color: white; margin: 0; font-size: 24px;">${companyName}</h1>
           <p style="color: rgba(255,255,255,0.8); margin: 10px 0 0 0;">${userType} Portal Access</p>
         </div>
         
@@ -89,16 +91,16 @@ const handler = async (req: Request): Promise<Response> => {
         </div>
         
         <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-          <p style="margin: 0;">© ${new Date().getFullYear()} Freedom Claims. All rights reserved.</p>
+          <p style="margin: 0;">© ${new Date().getFullYear()} ${companyName}. All rights reserved.</p>
         </div>
       </body>
       </html>
     `;
 
     const emailResponse = await resend.emails.send({
-      from: "Freedom Claims <claims@freedomclaims.work>",
+      from: `${companyName} <claims@freedomclaims.work>`,
       to: [email],
-      subject: `Your Freedom Claims ${userType} Portal Access`,
+      subject: `Your ${companyName} ${userType} Portal Access`,
       html: htmlContent,
     });
 
