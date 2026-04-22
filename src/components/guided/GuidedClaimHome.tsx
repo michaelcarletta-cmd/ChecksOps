@@ -44,9 +44,11 @@ export function GuidedClaimHome({ claimId, onSelectTask }: Props) {
   const { alerts, dismissAlert, markActioned } = useReferralAlerts(claimId);
 
   // Extract state from property address for referral matching
-  const claimState = claim?.property_address
-    ? extractStateFromAddress(claim.property_address)
-    : null;
+  const claimState = (() => {
+    if (!claim?.property_address) return null;
+    const stateMatch = claim.property_address.match(/\b([A-Z]{2})\b\s*\d{5}/);
+    return stateMatch ? stateMatch[1] : null;
+  })();
 
   useEffect(() => {
     loadClaimData();
