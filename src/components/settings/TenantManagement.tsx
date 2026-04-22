@@ -286,146 +286,55 @@ export function TenantManagement() {
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">Not configured</SelectItem>
-              <SelectItem value="google_mail">Google Mail</SelectItem>
-              <SelectItem value="microsoft_outlook">Microsoft Outlook</SelectItem>
-              <SelectItem value="resend">Resend</SelectItem>
-              <SelectItem value="sendgrid">SendGrid</SelectItem>
               <SelectItem value="smtp">SMTP</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      {form.email_provider === "google_mail" && (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Google Client ID</Label>
-            <Input
-              value={form.email_provider_config.client_id || ""}
-              onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, client_id: e.target.value } })}
-              placeholder="xxxx.apps.googleusercontent.com"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Google Client Secret</Label>
-            <Input
-              type="password"
-              value={form.email_provider_config.client_secret || ""}
-              onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, client_secret: e.target.value } })}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Google Refresh Token</Label>
-            <Input
-              type="password"
-              value={form.email_provider_config.refresh_token || ""}
-              onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, refresh_token: e.target.value } })}
-              placeholder="Obtained via OAuth consent flow"
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Requires a Google Cloud project with Gmail API enabled and OAuth 2.0 credentials configured.
-          </p>
-        </div>
-      )}
-
-      {form.email_provider === "microsoft_outlook" && (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Azure Client ID (Application ID)</Label>
-            <Input
-              value={form.email_provider_config.client_id || ""}
-              onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, client_id: e.target.value } })}
-              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Azure Client Secret</Label>
-            <Input
-              type="password"
-              value={form.email_provider_config.client_secret || ""}
-              onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, client_secret: e.target.value } })}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Tenant ID</Label>
-            <Input
-              value={form.email_provider_config.tenant_id || ""}
-              onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, tenant_id: e.target.value } })}
-              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Refresh Token</Label>
-            <Input
-              type="password"
-              value={form.email_provider_config.refresh_token || ""}
-              onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, refresh_token: e.target.value } })}
-              placeholder="Obtained via OAuth consent flow"
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Requires a Microsoft Entra (Azure AD) app registration with Mail.Send permission.
-          </p>
-        </div>
-      )}
-
-      {form.email_provider === "resend" && (
-        <div className="space-y-2">
-          <Label>Resend API Key</Label>
-          <Input
-            type="password"
-            value={form.email_provider_config.api_key || ""}
-            onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, api_key: e.target.value } })}
-            placeholder="re_..."
-          />
-        </div>
-      )}
-
-      {form.email_provider === "sendgrid" && (
-        <div className="space-y-2">
-          <Label>SendGrid API Key</Label>
-          <Input
-            type="password"
-            value={form.email_provider_config.api_key || ""}
-            onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, api_key: e.target.value } })}
-            placeholder="SG...."
-          />
-        </div>
-      )}
-
       {form.email_provider === "smtp" && (
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>SMTP Host</Label>
-            <Input
-              value={form.email_provider_config.host || ""}
-              onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, host: e.target.value } })}
-              placeholder="smtp.example.com"
-            />
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>SMTP Host</Label>
+              <Input
+                value={form.email_provider_config.host || ""}
+                onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, host: e.target.value } })}
+                placeholder="smtp.example.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>SMTP Port</Label>
+              <Input
+                value={form.email_provider_config.port || ""}
+                onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, port: e.target.value } })}
+                placeholder="587"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Username</Label>
+              <Input
+                value={form.email_provider_config.username || ""}
+                onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, username: e.target.value } })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Password</Label>
+              <Input
+                type="password"
+                value={form.email_provider_config.password || ""}
+                onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, password: e.target.value } })}
+              />
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label>SMTP Port</Label>
-            <Input
-              value={form.email_provider_config.port || ""}
-              onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, port: e.target.value } })}
-              placeholder="587"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Username</Label>
-            <Input
-              value={form.email_provider_config.username || ""}
-              onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, username: e.target.value } })}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Password</Label>
-            <Input
-              type="password"
-              value={form.email_provider_config.password || ""}
-              onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, password: e.target.value } })}
-            />
+          <div className="rounded-md bg-muted p-3 space-y-1">
+            <p className="text-xs font-medium text-foreground">Quick Setup for Gmail / Outlook:</p>
+            <p className="text-xs text-muted-foreground">
+              <strong>Gmail:</strong> Host: smtp.gmail.com · Port: 587 · Username: your Gmail · Password: <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener" className="underline">App Password</a> (requires 2FA enabled)
+            </p>
+            <p className="text-xs text-muted-foreground">
+              <strong>Outlook:</strong> Host: smtp.office365.com · Port: 587 · Username: your Outlook email · Password: your account password
+            </p>
           </div>
         </div>
       )}
