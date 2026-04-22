@@ -118,7 +118,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         user_metadata: {
           ...(existingUser.user_metadata ?? {}),
           full_name: normalizedFullName || existingUser.user_metadata?.full_name || null,
-          role: "tenant_user",
+          role: "staff",
         },
       });
 
@@ -135,7 +135,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         email: normalizedEmail,
         password,
         email_confirm: true,
-        user_metadata: { full_name: normalizedFullName, role: "tenant_user" },
+        user_metadata: { full_name: normalizedFullName, role: "staff" },
       });
 
       if (createErr) {
