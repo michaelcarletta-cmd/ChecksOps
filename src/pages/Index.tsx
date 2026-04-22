@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, DollarSign, ListTodo, TrendingUp } from "lucide-react";
+import { FileText, DollarSign, ListTodo, TrendingUp, Bot } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow, startOfMonth, endOfMonth } from "date-fns";
@@ -16,6 +16,8 @@ import { QueueFullOverrideDialog } from "@/components/execution/QueueFullOverrid
 import { useImmediateTasks } from "@/hooks/useImmediateTasks";
 import { useExecutionQueue } from "@/hooks/useExecutionQueue";
 import { ExecutionTask } from "@/services/taskExecutionService";
+import { DarwinClaimAssistant } from "@/components/dashboard/DarwinClaimAssistant";
+import { Button } from "@/components/ui/button";
 
 const Index = () => {
   useRenderCount("DashboardIndex");
