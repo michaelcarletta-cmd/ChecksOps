@@ -717,6 +717,7 @@ function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
           back_image_path: backPath,
           claim_id: claimId || null,
           uploaded_by: user.id,
+          ...(tenantId ? { tenant_id: tenantId } : {}),
         })
         .select()
         .single();
