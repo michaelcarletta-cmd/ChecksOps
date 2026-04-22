@@ -113,6 +113,8 @@ function AppRoutes() {
             ? <Navigate to="/client-portal" replace />
             : user && userRole === "contractor"
             ? <Navigate to="/contractor-portal" replace />
+            : user && userRole === "guided"
+            ? <Navigate to="/guided" replace />
             : user && !inPasswordRecoveryFlow
             ? <Navigate to="/" replace />
             : <Suspense fallback={<PageLoader />}><Auth /></Suspense>
