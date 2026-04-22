@@ -44,6 +44,7 @@ import { AuditLogSettings } from "@/components/settings/AuditLogSettings";
 import { NotificationDeliveryLogView } from "@/components/settings/NotificationDeliveryLogView";
 import StatusUrgencyNotificationsSettings from "@/components/settings/StatusUrgencyNotificationsSettings";
 import { JobNimbusSyncDiagnostics } from "@/components/settings/JobNimbusSyncDiagnostics";
+import { TenantManagement } from "@/components/settings/TenantManagement";
 
 import { useQuery } from "@tanstack/react-query";
 import { WorkspaceList } from "@/components/workspaces/WorkspaceList";
@@ -653,6 +654,9 @@ export default function Settings() {
           )}
           {isAdmin && (
             <TabsTrigger value="backup" className="w-full md:w-auto justify-start text-base font-medium px-4">Backup Status</TabsTrigger>
+          )}
+          {isAdmin && (
+            <TabsTrigger value="white-label" className="w-full md:w-auto justify-start text-base font-medium px-4">White-Label Tenants</TabsTrigger>
           )}
         </TabsList>
 
