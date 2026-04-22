@@ -84,33 +84,10 @@ export function GuidedIntakeWizard({ userId, onComplete, onCancel }: Props) {
 
   useEffect(() => {
     const loadCarriers = async () => {
-      // Fetch all unique insurance companies across all claims
-      const allCarriers: string[] = [];
-      let from = 0;
-      const pageSize = 1000;
-      let keepGoing = true;
-
-      while (keepGoing) {
-        const { data } = await supabase
-          .from("claims")
-          .select("insurance_company")
-          .not("insurance_company", "is", null)
-          .not("insurance_company", "eq", "")
-          .range(from, from + pageSize - 1);
-
-        if (data && data.length > 0) {
-          data.forEach((d: any) => {
-            if (d.insurance_company) allCarriers.push(d.insurance_company);
-          });
-          if (data.length < pageSize) keepGoing = false;
-          else from += pageSize;
-        } else {
-          keepGoing = false;
-        }
+      const { data, error } = await supabase.rpc("get_all_insurance_carriers");
+      if (!error && data) {
+        setCarrierList(data.map((d: any) => d.carrier_name));
       }
-
-      const unique = [...new Set(allCarriers)].sort();
-      setCarrierList(unique);
       setCarrierLoading(false);
     };
     loadCarriers();
