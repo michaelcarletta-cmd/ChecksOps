@@ -43,6 +43,7 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
   const [lossTypeFilter, setLossTypeFilter] = useState<string>("all");
   // Show closed claims by default for client/contractor portals for tracking purposes
   const [showClosed, setShowClosed] = useState(portalType === "client" || portalType === "contractor" || portalType === "referrer");
+  const [showGuided, setShowGuided] = useState(false);
   const [selectedClaims, setSelectedClaims] = useState<Set<string>>(new Set());
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
