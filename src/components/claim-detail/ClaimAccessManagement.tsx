@@ -3,12 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { UserPlus, X, Users, UserCheck } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { UserPlus, X, Users, UserCheck, Compass } from "lucide-react";
 
 interface ClaimAccessManagementProps {
   claimId: string;
+  isGuidedMode?: boolean;
 }
 
 interface Profile {
