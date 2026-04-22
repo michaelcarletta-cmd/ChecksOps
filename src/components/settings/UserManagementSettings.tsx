@@ -25,23 +25,25 @@ interface UserWithRoles extends Profile {
   roles: UserRole[];
 }
 
-const ROLE_LABELS = {
+const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
   staff: "Staff",
   client: "Client",
   contractor: "Contractor",
   referrer: "Referrer",
   read_only: "Read Only",
+  guided: "Guided",
 };
 
-const ROLE_COLORS = {
+const ROLE_COLORS: Record<string, string> = {
   admin: "destructive",
   staff: "default",
   client: "secondary",
   contractor: "outline",
   referrer: "outline",
   read_only: "secondary",
-} as const;
+  guided: "outline",
+};
 
 export function UserManagementSettings() {
   const [users, setUsers] = useState<UserWithRoles[]>([]);
