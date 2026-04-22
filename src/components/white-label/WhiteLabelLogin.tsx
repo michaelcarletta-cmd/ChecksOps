@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useTenant } from "@/contexts/TenantContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,8 @@ import { Loader2 } from "lucide-react";
 export function WhiteLabelLogin() {
   const { tenant } = useTenant();
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -42,12 +45,40 @@ export function WhiteLabelLogin() {
         throw new Error(payload?.msg || payload?.error_description || payload?.error || "Invalid credentials");
       }
 
-      const { error } = await supabase.auth.setSession({
+      const { data: sessionData, error } = await supabase.auth.setSession({
         access_token: payload.access_token,
         refresh_token: payload.refresh_token,
       });
 
       if (error) throw error;
+
+      const authenticatedUserId = sessionData.user?.id ?? sessionData.session?.user?.id;
+      if (!authenticatedUserId) {
+        throw new Error("Unable to start your session");
+      }
+
+      const { data: membership, error: membershipError } = await supabase
+        .from("tenant_users")
+        .select("id")
+        .eq("tenant_id", tenant.id)
+        .eq("user_id", authenticatedUserId)
+        .maybeSingle();
+
+      if (membershipError) {
+        await supabase.auth.signOut();
+        throw new Error("Unable to verify organization access");
+      }
+
+      if (!membership) {
+        await supabase.auth.signOut();
+        throw new Error(`This account doesn't have access to ${tenant.name}`);
+      }
+
+      const checksPath = location.pathname.startsWith(`/wl/${tenant.slug}`)
+        ? `/wl/${tenant.slug}/checks`
+        : "/checks";
+
+      navigate(checksPath, { replace: true });
     } catch (err: any) {
       toast({
         title: "Login Failed",
