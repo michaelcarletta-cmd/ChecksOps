@@ -1,4 +1,4 @@
-import { useParams, Routes, Route, Navigate } from "react-router-dom";
+import { useParams, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { TenantProvider } from "@/contexts/TenantContext";
 import { TenantThemeProvider } from "@/components/white-label/TenantThemeProvider";
 import { WhiteLabelLogin } from "@/components/white-label/WhiteLabelLogin";
@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 function WhiteLabelRoutes() {
   const { tenant, loading, error } = useTenant();
   const { user, loading: authLoading } = useAuth();
+  const location = useLocation();
 
   // Check tenant membership
   const { data: isMember, isLoading: memberLoading } = useQuery({
@@ -28,7 +29,7 @@ function WhiteLabelRoutes() {
     enabled: !!tenant?.id && !!user?.id,
   });
 
-  if (loading || authLoading) {
+  if (loading || authLoading || (user && memberLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -64,7 +65,7 @@ function WhiteLabelRoutes() {
 
   // User is logged in but not a member of this tenant.
   // Let them reach the login screen so they can switch accounts instead of hard-blocking.
-  if (user && !memberLoading && !isMember && window.location.pathname !== `/wl/${tenant.slug}/login`) {
+  if (user && !memberLoading && !isMember && location.pathname !== `/wl/${tenant.slug}/login`) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-2">
@@ -87,7 +88,16 @@ function WhiteLabelRoutes() {
             : <WhiteLabelLogin />
         }
       />
-      <Route path="checks" element={<WhiteLabelCheckCenter />} />
+      <Route
+        path="checks"
+        element={
+          !user
+            ? <Navigate to={`/wl/${tenant.slug}/login`} replace />
+            : isMember
+              ? <WhiteLabelCheckCenter />
+              : <Navigate to={`/wl/${tenant.slug}/login`} replace />
+        }
+      />
       <Route path="*" element={<Navigate to={user && isMember ? "checks" : "login"} replace />} />
     </Routes>
   );
