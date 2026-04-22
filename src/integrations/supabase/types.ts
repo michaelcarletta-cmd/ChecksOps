@@ -16743,6 +16743,10 @@ export type Database = {
         }[]
       }
       get_check_dashboard_counts: { Args: never; Returns: Json }
+      get_check_dashboard_counts_for_tenant: {
+        Args: { _tenant_id: string }
+        Returns: Json
+      }
       get_claim_money_snapshot: { Args: { p_claim_id: string }; Returns: Json }
       get_deposit_aging_summary: { Args: never; Returns: Json }
       get_deposit_exception_kpis: { Args: never; Returns: Json }
