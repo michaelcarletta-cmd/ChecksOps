@@ -490,6 +490,9 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                             </Badge>
                           )}
                           <span className="text-sm font-semibold text-foreground">{claim.claim_number || "—"}</span>
+                          {claim.is_guided_mode && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent text-accent-foreground border border-border">Guided</span>
+                          )}
                         </div>
                         <p className="text-sm text-foreground mt-0.5">{claim.policyholder_name || "—"}</p>
                       </div>
@@ -566,6 +569,9 @@ export const ClaimsTableConnected = ({ portalType }: ClaimsTableConnectedProps) 
                             </Badge>
                           )}
                           <span className="text-sm">{claim.claim_number || "—"}</span>
+                          {claim.is_guided_mode && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent text-accent-foreground border border-border">Guided</span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
