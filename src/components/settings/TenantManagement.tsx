@@ -286,10 +286,6 @@ export function TenantManagement() {
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">Not configured</SelectItem>
-              <SelectItem value="google_mail">Google Mail</SelectItem>
-              <SelectItem value="microsoft_outlook">Microsoft Outlook</SelectItem>
-              <SelectItem value="resend">Resend</SelectItem>
-              <SelectItem value="sendgrid">SendGrid</SelectItem>
               <SelectItem value="smtp">SMTP</SelectItem>
             </SelectContent>
           </Select>
