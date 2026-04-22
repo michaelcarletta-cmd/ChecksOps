@@ -30,6 +30,7 @@ const Index = () => {
   const { activeTasks, backlogTasks, blockedTasks, loading: queueLoading, refetch: refetchQueue } = useExecutionQueue();
   const [interruptTask, setInterruptTask] = useState<ExecutionTask | null>(null);
   const [queueFullTask, setQueueFullTask] = useState<ExecutionTask | null>(null);
+  const [darwinOpen, setDarwinOpen] = useState(false);
 
   const activeInterrupt = interruptTask || pendingInterrupt;
   const handleRefetchAll = () => { refetchQueue(); refetchImmediate(); };
