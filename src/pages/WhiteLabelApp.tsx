@@ -62,8 +62,9 @@ function WhiteLabelRoutes() {
     );
   }
 
-  // User is logged in but not a member of this tenant
-  if (user && !memberLoading && !isMember) {
+  // User is logged in but not a member of this tenant.
+  // Let them reach the login screen so they can switch accounts instead of hard-blocking.
+  if (user && !memberLoading && !isMember && window.location.pathname !== `/wl/${tenant.slug}/login`) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-2">
