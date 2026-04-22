@@ -202,7 +202,24 @@ function AppRoutesInner() {
   );
 }
 
-// App component - updated to force cache refresh
+// Custom domain detection wrapper
+function AppRoutes() {
+  const { tenantSlug, loading } = useCustomDomainTenant();
+
+  if (loading) {
+    return <PageLoader />;
+  }
+
+  // If a custom domain matched a tenant, render the white-label app directly
+  if (tenantSlug) {
+    return <CustomDomainWhiteLabelApp slug={tenantSlug} />;
+  }
+
+  // Normal app routing
+  return <AppRoutesInner />;
+}
+
+// App component
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
