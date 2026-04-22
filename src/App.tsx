@@ -8,6 +8,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppLayout } from "./components/AppLayout";
 import { useAuth } from "./hooks/useAuth";
 import { useToast } from "./hooks/use-toast";
+import { useCustomDomainTenant } from "./hooks/useCustomDomainTenant";
+import { CustomDomainWhiteLabelApp } from "./components/white-label/CustomDomainWhiteLabelApp";
 
 // Lazy load all page components for code splitting
 const Index = lazy(() => import("./pages/Index"));
