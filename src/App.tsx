@@ -30,6 +30,8 @@ const ContractorPortal = lazy(() => import("./pages/ContractorPortal"));
 const Sign = lazy(() => import("./pages/Sign"));
 const Endorse = lazy(() => import("./pages/Endorse"));
 const PaymentDirectionPage = lazy(() => import("./pages/PaymentDirectionPage"));
+const GuidedAuth = lazy(() => import("./pages/GuidedAuth"));
+const GuidedPortal = lazy(() => import("./pages/GuidedPortal"));
 
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Workspaces = lazy(() => import("./pages/Workspaces"));
