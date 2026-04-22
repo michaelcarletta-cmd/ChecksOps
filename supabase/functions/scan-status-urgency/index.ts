@@ -7,6 +7,7 @@
 // - Auto-resolves notifications when the claim leaves the breaching status
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { isWithinBusinessHours, outsideBusinessHoursResponse } from "../_shared/business-hours-gate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
