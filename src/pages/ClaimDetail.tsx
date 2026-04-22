@@ -267,7 +267,29 @@ const ClaimDetail = () => {
           <div className="flex-1">
             <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
               <h1 className="text-xl md:text-3xl font-bold text-foreground">{claim.claim_number}</h1>
-              {claim.is_guided_mode && (
+              {isStaffOrAdmin && (
+                <Button
+                  variant={claim.is_guided_mode ? "secondary" : "outline"}
+                  size="sm"
+                  className="h-6 text-[10px] px-2 gap-1"
+                  onClick={async () => {
+                    const newVal = !claim.is_guided_mode;
+                    const { error } = await supabase
+                      .from("claims")
+                      .update({ is_guided_mode: newVal })
+                      .eq("id", claim.id);
+                    if (error) {
+                      toast({ title: "Error", description: "Failed to update guided mode", variant: "destructive" });
+                    } else {
+                      toast({ title: newVal ? "Guided Mode enabled" : "Guided Mode disabled" });
+                      queryClient.invalidateQueries({ queryKey: ["claim", id] });
+                    }
+                  }}
+                >
+                  {claim.is_guided_mode ? "✓ Guided Mode" : "Enable Guided Mode"}
+                </Button>
+              )}
+              {!isStaffOrAdmin && claim.is_guided_mode && (
                 <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-accent text-accent-foreground border border-border whitespace-nowrap">
                   Guided Mode
                 </span>
