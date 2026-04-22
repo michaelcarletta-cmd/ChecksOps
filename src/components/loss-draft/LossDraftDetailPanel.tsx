@@ -112,6 +112,8 @@ export function LossDraftDetailPanel({
   const [actionNotes, setActionNotes] = useState("");
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingDocId, setUploadingDocId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: draft } = useQuery({
     queryKey: ["loss-draft-detail", lossDraftId],
