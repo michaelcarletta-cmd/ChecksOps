@@ -271,6 +271,8 @@ const Index = () => {
         onClose={() => setQueueFullTask(null)}
         onRefetch={handleRefetchAll}
       />
+      {/* Darwin Claim Assistant Panel */}
+      <DarwinClaimAssistant open={darwinOpen} onClose={() => setDarwinOpen(false)} />
     </div>
   );
 };
