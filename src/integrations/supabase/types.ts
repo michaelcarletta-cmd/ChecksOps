@@ -12350,6 +12350,8 @@ export type Database = {
           document_label: string
           document_type: string
           file_id: string | null
+          file_name: string | null
+          file_path: string | null
           id: string
           is_required: boolean
           is_submitted: boolean
@@ -12364,6 +12366,8 @@ export type Database = {
           document_label: string
           document_type: string
           file_id?: string | null
+          file_name?: string | null
+          file_path?: string | null
           id?: string
           is_required?: boolean
           is_submitted?: boolean
@@ -12378,6 +12382,8 @@ export type Database = {
           document_label?: string
           document_type?: string
           file_id?: string | null
+          file_name?: string | null
+          file_path?: string | null
           id?: string
           is_required?: boolean
           is_submitted?: boolean
