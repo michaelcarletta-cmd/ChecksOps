@@ -652,6 +652,7 @@ function SummaryCard({
 
 function CheckUploadForm({ onSuccess }: { onSuccess: () => void }) {
   const { toast } = useToast();
+  const { tenantId } = useTenantFilter();
   const [frontFile, setFrontFile] = useState<File | null>(null);
   const [backFile, setBackFile] = useState<File | null>(null);
   const [claimId, setClaimId] = useState<string>("");
