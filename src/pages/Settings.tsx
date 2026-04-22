@@ -938,6 +938,11 @@ export default function Settings() {
             <BackupStatusSettings />
           </TabsContent>
         )}
+        {isAdmin && (
+          <TabsContent value="white-label" className="w-full">
+            <TenantManagement />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
