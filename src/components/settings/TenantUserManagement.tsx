@@ -663,7 +663,7 @@ function generatePassword(): string {
   const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
   const lower = "abcdefghjkmnpqrstuvwxyz";
   const digits = "23456789";
-  const specials = "!@#$%&";
+  const specials = "!#&*+-?";
   const all = upper + lower + digits + specials;
   // Guarantee at least one of each category
   let password = "";
