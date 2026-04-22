@@ -6,11 +6,12 @@ import { useTenant } from "@/contexts/TenantContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 
 function CustomDomainRoutes() {
   const { tenant, loading, error } = useTenant();
   const { user, loading: authLoading } = useAuth();
+  const location = useLocation();
 
   const { data: isMember, isLoading: memberLoading } = useQuery({
     queryKey: ["tenant-membership", tenant?.id, user?.id],
@@ -27,7 +28,7 @@ function CustomDomainRoutes() {
     enabled: !!tenant?.id && !!user?.id,
   });
 
-  if (loading || authLoading) {
+  if (loading || authLoading || (user && memberLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -59,7 +60,7 @@ function CustomDomainRoutes() {
     );
   }
 
-  if (user && !memberLoading && !isMember) {
+  if (user && !memberLoading && !isMember && location.pathname !== "/login") {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-2">
@@ -83,7 +84,11 @@ function CustomDomainRoutes() {
       <Route
         path="/checks"
         element={
-          !user ? <Navigate to="/login" replace /> : <WhiteLabelCheckCenter />
+          !user
+            ? <Navigate to="/login" replace />
+            : isMember
+              ? <WhiteLabelCheckCenter />
+              : <Navigate to="/login" replace />
         }
       />
       <Route path="*" element={<Navigate to={user && isMember ? "/checks" : "/login"} replace />} />
