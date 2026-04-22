@@ -15093,6 +15093,11 @@ export type Database = {
         Row: {
           created_at: string
           custom_domain: string | null
+          email_from_address: string | null
+          email_from_name: string | null
+          email_provider: string | null
+          email_provider_config: Json | null
+          email_reply_to: string | null
           id: string
           is_system_tenant: boolean | null
           logo_url: string | null
@@ -15109,6 +15114,11 @@ export type Database = {
         Insert: {
           created_at?: string
           custom_domain?: string | null
+          email_from_address?: string | null
+          email_from_name?: string | null
+          email_provider?: string | null
+          email_provider_config?: Json | null
+          email_reply_to?: string | null
           id?: string
           is_system_tenant?: boolean | null
           logo_url?: string | null
@@ -15125,6 +15135,11 @@ export type Database = {
         Update: {
           created_at?: string
           custom_domain?: string | null
+          email_from_address?: string | null
+          email_from_name?: string | null
+          email_provider?: string | null
+          email_provider_config?: Json | null
+          email_reply_to?: string | null
           id?: string
           is_system_tenant?: boolean | null
           logo_url?: string | null
