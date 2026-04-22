@@ -388,15 +388,22 @@ const ClaimDetail = () => {
 
       {isStaffOrAdmin ? (
         /* Staff/Admin: Render Darwin directly, no tab bar needed */
-        <Suspense fallback={<DarwinLoadingFallback />}>
-          <DarwinTab
-            claimId={claim.id}
-            claim={claim}
-            userRole={userRole}
-            isStaffOrAdmin={isStaffOrAdmin}
-            onClaimUpdated={handleClaimUpdated}
-          />
-        </Suspense>
+        <>
+          {claim.is_guided_mode && (
+            <Suspense fallback={null}>
+              <GuidedClaimStaffView claimId={claim.id} />
+            </Suspense>
+          )}
+          <Suspense fallback={<DarwinLoadingFallback />}>
+            <DarwinTab
+              claimId={claim.id}
+              claim={claim}
+              userRole={userRole}
+              isStaffOrAdmin={isStaffOrAdmin}
+              onClaimUpdated={handleClaimUpdated}
+            />
+          </Suspense>
+        </>
       ) : (
         /* Portal users: Keep existing tab navigation */
         <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="w-full">
