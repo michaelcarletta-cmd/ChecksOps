@@ -152,9 +152,27 @@ const Index = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">Welcome back! Here's your overview</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-muted-foreground mt-1">Welcome back! Here's your overview</p>
+        </div>
+        <Button
+          onClick={() => setDarwinOpen(true)}
+          variant="outline"
+          className="gap-2 border-primary/30 hover:bg-primary/5 hidden lg:flex"
+        >
+          <Bot className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium">Darwin Assistant</span>
+        </Button>
+        {/* Mobile FAB */}
+        <Button
+          onClick={() => setDarwinOpen(true)}
+          size="icon"
+          className="lg:hidden fixed bottom-6 right-6 z-30 h-12 w-12 rounded-full shadow-lg"
+        >
+          <Bot className="h-5 w-5" />
+        </Button>
       </div>
 
       {/* Stats Grid */}
