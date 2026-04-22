@@ -202,17 +202,14 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
   // Add user mutation
   const addUser = useMutation({
     mutationFn: async () => {
-      // Create auth user via edge function or directly
       const password = generatePassword();
-      const { data: signUpData, error: signUpError } = await supabase.auth.admin
-        ? // fallback: use supabase functions
-          await supabase.functions.invoke("create-tenant-user", {
-            body: { email: newEmail, password, full_name: newName, tenant_id: tenantId, role: newRole },
-          })
-        : { data: null, error: new Error("Not supported") };
+      const { data, error } = await supabase.functions.invoke("create-tenant-user", {
+        body: { email: newEmail, password, full_name: newName, tenant_id: tenantId, role: newRole },
+      });
 
-      if (signUpError) throw signUpError;
-      return { email: newEmail, password, userName: newName, ...signUpData };
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return { email: newEmail, password, userName: newName, ...data };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["tenant-users", tenantId] });
