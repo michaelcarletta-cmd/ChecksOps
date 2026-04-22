@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
   AlertTriangle, CheckCircle2, Building2, RotateCcw,
 } from "lucide-react";
+import { useTenantFilter } from "@/hooks/useTenantFilter";
 
 interface DashboardCounts {
   manual_review: number;
@@ -16,9 +17,20 @@ interface DashboardCounts {
 }
 
 export function CheckDashboardCards() {
+  const { tenantId, isWhiteLabel } = useTenantFilter();
+
   const { data: counts } = useQuery({
-    queryKey: ["check-dashboard-counts"],
+    queryKey: ["check-dashboard-counts", tenantId],
     queryFn: async () => {
+      if (isWhiteLabel && tenantId) {
+        // Use tenant-scoped RPC
+        const { data, error } = await supabase.rpc("get_check_dashboard_counts_for_tenant", {
+          _tenant_id: tenantId,
+        });
+        if (error) throw error;
+        return data as unknown as DashboardCounts;
+      }
+      // System tenant — use original RPC
       const { data, error } = await supabase.rpc("get_check_dashboard_counts");
       if (error) throw error;
       return data as unknown as DashboardCounts;
