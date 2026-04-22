@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, DollarSign, ListTodo, TrendingUp, Bot } from "lucide-react";
+import { FileText, DollarSign, ListTodo, TrendingUp } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow, startOfMonth, endOfMonth } from "date-fns";
@@ -16,8 +16,6 @@ import { QueueFullOverrideDialog } from "@/components/execution/QueueFullOverrid
 import { useImmediateTasks } from "@/hooks/useImmediateTasks";
 import { useExecutionQueue } from "@/hooks/useExecutionQueue";
 import { ExecutionTask } from "@/services/taskExecutionService";
-import { DarwinClaimAssistant } from "@/components/dashboard/DarwinClaimAssistant";
-import { Button } from "@/components/ui/button";
 
 const Index = () => {
   useRenderCount("DashboardIndex");
@@ -30,7 +28,6 @@ const Index = () => {
   const { activeTasks, backlogTasks, blockedTasks, loading: queueLoading, refetch: refetchQueue } = useExecutionQueue();
   const [interruptTask, setInterruptTask] = useState<ExecutionTask | null>(null);
   const [queueFullTask, setQueueFullTask] = useState<ExecutionTask | null>(null);
-  const [darwinOpen, setDarwinOpen] = useState(false);
 
   const activeInterrupt = interruptTask || pendingInterrupt;
   const handleRefetchAll = () => { refetchQueue(); refetchImmediate(); };
@@ -152,27 +149,9 @@ const Index = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Welcome back! Here's your overview</p>
-        </div>
-        <Button
-          onClick={() => setDarwinOpen(true)}
-          variant="outline"
-          className="gap-2 border-primary/30 hover:bg-primary/5 hidden lg:flex"
-        >
-          <Bot className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium">Darwin Assistant</span>
-        </Button>
-        {/* Mobile FAB */}
-        <Button
-          onClick={() => setDarwinOpen(true)}
-          size="icon"
-          className="lg:hidden fixed bottom-6 right-6 z-30 h-12 w-12 rounded-full shadow-lg"
-        >
-          <Bot className="h-5 w-5" />
-        </Button>
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+        <p className="text-muted-foreground mt-1">Welcome back! Here's your overview</p>
       </div>
 
       {/* Stats Grid */}
@@ -271,8 +250,6 @@ const Index = () => {
         onClose={() => setQueueFullTask(null)}
         onRefetch={handleRefetchAll}
       />
-      {/* Darwin Claim Assistant Panel */}
-      <DarwinClaimAssistant open={darwinOpen} onClose={() => setDarwinOpen(false)} />
     </div>
   );
 };
