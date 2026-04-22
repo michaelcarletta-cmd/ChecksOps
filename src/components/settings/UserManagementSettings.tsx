@@ -18,7 +18,7 @@ interface Profile {
 interface UserRole {
   id: string;
   user_id: string;
-  role: "admin" | "staff" | "client" | "contractor" | "referrer" | "read_only";
+  role: "admin" | "staff" | "client" | "contractor" | "referrer" | "read_only" | "guided";
 }
 
 interface UserWithRoles extends Profile {
