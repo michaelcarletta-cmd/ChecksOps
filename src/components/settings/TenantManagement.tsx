@@ -286,6 +286,8 @@ export function TenantManagement() {
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">Not configured</SelectItem>
+              <SelectItem value="google_mail">Google Mail</SelectItem>
+              <SelectItem value="microsoft_outlook">Microsoft Outlook</SelectItem>
               <SelectItem value="resend">Resend</SelectItem>
               <SelectItem value="sendgrid">SendGrid</SelectItem>
               <SelectItem value="smtp">SMTP</SelectItem>
@@ -293,6 +295,80 @@ export function TenantManagement() {
           </Select>
         </div>
       </div>
+
+      {form.email_provider === "google_mail" && (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Google Client ID</Label>
+            <Input
+              value={form.email_provider_config.client_id || ""}
+              onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, client_id: e.target.value } })}
+              placeholder="xxxx.apps.googleusercontent.com"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Google Client Secret</Label>
+            <Input
+              type="password"
+              value={form.email_provider_config.client_secret || ""}
+              onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, client_secret: e.target.value } })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Google Refresh Token</Label>
+            <Input
+              type="password"
+              value={form.email_provider_config.refresh_token || ""}
+              onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, refresh_token: e.target.value } })}
+              placeholder="Obtained via OAuth consent flow"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Requires a Google Cloud project with Gmail API enabled and OAuth 2.0 credentials configured.
+          </p>
+        </div>
+      )}
+
+      {form.email_provider === "microsoft_outlook" && (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Azure Client ID (Application ID)</Label>
+            <Input
+              value={form.email_provider_config.client_id || ""}
+              onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, client_id: e.target.value } })}
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Azure Client Secret</Label>
+            <Input
+              type="password"
+              value={form.email_provider_config.client_secret || ""}
+              onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, client_secret: e.target.value } })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Tenant ID</Label>
+            <Input
+              value={form.email_provider_config.tenant_id || ""}
+              onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, tenant_id: e.target.value } })}
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Refresh Token</Label>
+            <Input
+              type="password"
+              value={form.email_provider_config.refresh_token || ""}
+              onChange={(e) => setForm({ ...form, email_provider_config: { ...form.email_provider_config, refresh_token: e.target.value } })}
+              placeholder="Obtained via OAuth consent flow"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Requires a Microsoft Entra (Azure AD) app registration with Mail.Send permission.
+          </p>
+        </div>
+      )}
 
       {form.email_provider === "resend" && (
         <div className="space-y-2">
