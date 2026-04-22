@@ -92,6 +92,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (existingUser) {
       userId = existingUser.id;
       console.log("User already exists:", userId);
+
+      // Update password so the new credentials work
+      const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        password,
+        email_confirm: true,
+      });
+      if (updateErr) {
+        console.error("Error updating user password:", updateErr);
+      }
     } else {
       // Create auth user
       const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
@@ -111,15 +120,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       userId = newUser.user.id;
       console.log("Created new user:", userId);
-
-      // Create profile
-      await supabaseAdmin.from("profiles").upsert({
-        id: userId,
-        full_name,
-        email,
-        role: "tenant_user",
-      }, { onConflict: "id" });
     }
+
+    // Always upsert profile
+    await supabaseAdmin.from("profiles").upsert({
+      id: userId,
+      full_name: full_name || existingUser?.user_metadata?.full_name || null,
+      email,
+    }, { onConflict: "id" });
 
     // Check if already a member of this tenant
     const { data: existing } = await supabaseAdmin
