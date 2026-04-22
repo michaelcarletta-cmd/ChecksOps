@@ -652,6 +652,7 @@ export function TenantUserManagement({ tenantId, tenantName, isOpen, onClose }: 
           password={credentialsDialog.password}
           userType="Tenant User"
           userName={credentialsDialog.userName}
+          tenantName={tenantName}
         />
       )}
     </>
