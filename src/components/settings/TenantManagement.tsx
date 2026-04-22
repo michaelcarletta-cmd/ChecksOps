@@ -88,8 +88,8 @@ export function TenantManagement() {
         secondary_color: data.secondary_color,
         custom_domain: data.custom_domain || null,
         max_checks_per_month: data.max_checks_per_month,
-        subscription_status: data.subscription_status,
-        plan_tier: data.plan_tier,
+        subscription_status: data.subscription_status as "active" | "trial" | "inactive" | "suspended",
+        plan_tier: data.plan_tier as "starter" | "pro" | "enterprise",
       }).eq("id", id);
       if (error) throw error;
     },
