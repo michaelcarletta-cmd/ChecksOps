@@ -31,7 +31,7 @@ import { format } from "date-fns";
 import { CheckReviewQueue, ReviewDecisionPanel } from "@/components/check-review/CheckReviewConsole";
 import { EndorsementChecklist } from "@/components/check-review/EndorsementChecklist";
 import { DepositPacketGenerator } from "@/components/check-review/DepositPacketGenerator";
-import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards";
+import { CheckDashboardCards } from "@/components/check-review/CheckDashboardCards"; // kept for potential future use
 import { LossDraftDashboard } from "@/components/loss-draft/LossDraftDashboard";
 import { EndorsementAdjuster } from "@/components/checks/EndorsementAdjuster";
 import { DepositImageViewer } from "@/components/checks/DepositImageViewer";
@@ -39,12 +39,12 @@ import { EndorsementOverride } from "@/lib/endorsementLayout";
 import { LossDraftDetailPanel } from "@/components/loss-draft/LossDraftDetailPanel";
 import { DepositOperationsConsole, BranchDepositManifest } from "@/components/deposit-ops/DepositOperationsConsole";
 import { ReconciliationDashboard } from "@/components/deposit-ops/ReconciliationDashboard";
-import { ExceptionResolutionPanel } from "@/components/deposit-ops/ExceptionResolutionPanel";
-import { DepositAgingDashboard } from "@/components/deposit-ops/DepositAgingDashboard";
+
+
 import { DepositReports } from "@/components/deposit-ops/DepositReports";
-import { DepositKPIDashboard, DepositOwnerQueue } from "@/components/deposit-ops/DepositOwnerQueue";
+import { DepositOwnerQueue } from "@/components/deposit-ops/DepositOwnerQueue";
 import { DepositManagerCommandCenter } from "@/components/deposit-ops/DepositManagerCommandCenter";
-import { ArrowDownToLine, Scale, Timer, FileBarChart, Shield as ShieldIcon, BarChart3, Users as UsersIcon, Command } from "lucide-react";
+import { ArrowDownToLine, Scale, FileBarChart, Users as UsersIcon, Command } from "lucide-react";
 import { CheckCenterHelpButton } from "@/components/check-review/CheckCenterHelp";
 
 /* ------------------------------------------------------------------ */
@@ -230,7 +230,7 @@ export default function CheckCommandCenter() {
     },
   });
 
-  const newChecks = checks.filter((c) => c.status === "uploaded" || c.ocr_status === "pending");
+  
   const awaitingEndorsement = checks.filter(
     (c) =>
       c.deposit_recommendation === "endorsements_pending" ||
@@ -251,8 +251,7 @@ export default function CheckCommandCenter() {
   const branchDeposit = checks.filter((c) => c.status === "branch_deposit_required");
 
   const filteredChecks =
-    activeTab === "new" ? newChecks
-    : activeTab === "endorsements" ? awaitingEndorsement
+    activeTab === "endorsements" ? awaitingEndorsement
     : activeTab === "ready" ? readyForDeposit
     : activeTab === "review" ? needsReview
     : activeTab === "reissue" ? reissueRequested
@@ -326,13 +325,10 @@ export default function CheckCommandCenter() {
         </div>
       </div>
 
-      {/* Phase 2 Dashboard Cards */}
-      <CheckDashboardCards />
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
         <TabsList className="w-full flex-wrap h-auto gap-1 p-1">
           <TabsTrigger value="all" className="text-xs">All ({checks.length})</TabsTrigger>
-          <TabsTrigger value="new" className="text-xs">New ({newChecks.length})</TabsTrigger>
           <TabsTrigger value="endorsements" className="text-xs">Endorsing ({awaitingEndorsement.length})</TabsTrigger>
           <TabsTrigger value="review" className="text-xs flex items-center gap-1">
             <ClipboardCheck className="h-3 w-3" />Review ({needsReview.length})
@@ -346,20 +342,11 @@ export default function CheckCommandCenter() {
           <TabsTrigger value="reconciliation" className="text-xs flex items-center gap-1">
             <Scale className="h-3 w-3" />Reconciliation
           </TabsTrigger>
-          <TabsTrigger value="exceptions" className="text-xs flex items-center gap-1">
-            <ShieldIcon className="h-3 w-3" />Exceptions
-          </TabsTrigger>
-          <TabsTrigger value="aging" className="text-xs flex items-center gap-1">
-            <Timer className="h-3 w-3" />Aging/SLA
-          </TabsTrigger>
           <TabsTrigger value="reports" className="text-xs flex items-center gap-1">
             <FileBarChart className="h-3 w-3" />Reports
           </TabsTrigger>
           <TabsTrigger value="lossdraft" className="text-xs flex items-center gap-1">
             <Landmark className="h-3 w-3" />Loss Draft
-          </TabsTrigger>
-          <TabsTrigger value="kpis" className="text-xs flex items-center gap-1">
-            <BarChart3 className="h-3 w-3" />KPIs
           </TabsTrigger>
           <TabsTrigger value="workqueue" className="text-xs flex items-center gap-1">
             <UsersIcon className="h-3 w-3" />Work Queue
@@ -384,19 +371,6 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
-        {/* Exceptions Tab */}
-        {activeTab === "exceptions" && (
-          <div className="mt-3">
-            <ExceptionResolutionPanel />
-          </div>
-        )}
-
-        {/* Aging/SLA Tab */}
-        {activeTab === "aging" && (
-          <div className="mt-3">
-            <DepositAgingDashboard />
-          </div>
-        )}
 
         {/* Reports Tab */}
         {activeTab === "reports" && (
@@ -405,12 +379,6 @@ export default function CheckCommandCenter() {
           </div>
         )}
 
-        {/* KPIs Tab */}
-        {activeTab === "kpis" && (
-          <div className="mt-3">
-            <DepositKPIDashboard />
-          </div>
-        )}
 
         {/* Work Queue Tab */}
         {activeTab === "workqueue" && (
