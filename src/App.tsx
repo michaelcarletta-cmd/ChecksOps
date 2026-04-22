@@ -8,6 +8,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppLayout } from "./components/AppLayout";
 import { useAuth } from "./hooks/useAuth";
 import { useToast } from "./hooks/use-toast";
+import { useCustomDomainTenant } from "./hooks/useCustomDomainTenant";
+import { CustomDomainWhiteLabelApp } from "./components/white-label/CustomDomainWhiteLabelApp";
 
 // Lazy load all page components for code splitting
 const Index = lazy(() => import("./pages/Index"));
@@ -80,7 +82,7 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
   return <>{children}</>;
 }
 
-function AppRoutes() {
+function AppRoutesInner() {
   const { user, userRole, loading, sessionExpiredReason, clearSessionExpiredReason } = useAuth();
   const { toast } = useToast();
   const inPasswordRecoveryFlow =
@@ -200,7 +202,24 @@ function AppRoutes() {
   );
 }
 
-// App component - updated to force cache refresh
+// Custom domain detection wrapper
+function AppRoutes() {
+  const { tenantSlug, loading } = useCustomDomainTenant();
+
+  if (loading) {
+    return <PageLoader />;
+  }
+
+  // If a custom domain matched a tenant, render the white-label app directly
+  if (tenantSlug) {
+    return <CustomDomainWhiteLabelApp slug={tenantSlug} />;
+  }
+
+  // Normal app routing
+  return <AppRoutesInner />;
+}
+
+// App component
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
