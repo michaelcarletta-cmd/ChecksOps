@@ -49,6 +49,12 @@ Deno.serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  // Business hours gate: skip execution outside 6 AM – 10 PM ET
+  if (!isWithinBusinessHours()) {
+    console.log("Skipping process-immediate-notifications: outside business hours");
+    return outsideBusinessHoursResponse(corsHeaders);
+  }
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

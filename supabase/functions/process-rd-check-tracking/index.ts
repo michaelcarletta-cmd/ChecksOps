@@ -19,6 +19,12 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Business hours gate: skip execution outside 6 AM – 10 PM ET
+  if (!isWithinBusinessHours()) {
+    console.log("Skipping process-rd-check-tracking: outside business hours");
+    return outsideBusinessHoursResponse(corsHeaders);
+  }
+
   const cronSecret = Deno.env.get('CRON_SECRET');
   const providedSecret = req.headers.get('x-cron-secret');
   

@@ -51,6 +51,12 @@ function todayUTC(): Date {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // Business hours gate: skip execution outside 6 AM – 10 PM ET
+  if (!isWithinBusinessHours()) {
+    console.log("Skipping scan-status-urgency: outside business hours");
+    return outsideBusinessHoursResponse(corsHeaders);
+  }
+
   // Cron-style auth: accept any bearer or x-cron-secret
   const auth = req.headers.get("authorization") || req.headers.get("Authorization");
   const cronHdr = req.headers.get("x-cron-secret");
