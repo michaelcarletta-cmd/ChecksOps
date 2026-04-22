@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Send, Building2, ArrowRightLeft, DollarSign, CheckCircle2,
-  Clock, AlertTriangle, Landmark,
+  Clock, AlertTriangle, Landmark, Upload, FileText, Trash2, Download,
 } from "lucide-react";
 import { format } from "date-fns";
 import { escrowStatusConfig } from "./LossDraftDashboard";
@@ -64,6 +64,8 @@ interface DocItem {
   is_submitted: boolean;
   submitted_at: string | null;
   notes: string | null;
+  file_path: string | null;
+  file_name: string | null;
 }
 
 interface AuditEntry {
@@ -110,6 +112,8 @@ export function LossDraftDetailPanel({
   const [actionNotes, setActionNotes] = useState("");
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingDocId, setUploadingDocId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: draft } = useQuery({
     queryKey: ["loss-draft-detail", lossDraftId],
@@ -209,6 +213,76 @@ export function LossDraftDetailPanel({
       invalidateAll();
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleFileUpload = async (docId: string, file: File) => {
+    if (!user?.id || !draft) return;
+    setUploadingDocId(docId);
+    try {
+      const filePath = `${draft.claim_id}/${lossDraftId}/${docId}/${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("loss-draft-documents")
+        .upload(filePath, file, { upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { error: updateError } = await supabase
+        .from("loss_draft_documents")
+        .update({
+          file_path: filePath,
+          file_name: file.name,
+          is_submitted: true,
+          submitted_at: new Date().toISOString(),
+          submitted_by: user.id,
+        })
+        .eq("id", docId);
+      if (updateError) throw updateError;
+
+      toast({ title: "Document uploaded", description: `${file.name} uploaded successfully.` });
+      invalidateAll();
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: e.message, variant: "destructive" });
+    } finally {
+      setUploadingDocId(null);
+    }
+  };
+
+  const handleFileDownload = async (doc: DocItem) => {
+    if (!doc.file_path) return;
+    try {
+      const { data, error } = await supabase.storage
+        .from("loss-draft-documents")
+        .download(doc.file_path);
+      if (error) throw error;
+      const url = URL.createObjectURL(data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = doc.file_name || "document";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      toast({ title: "Download failed", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleFileDelete = async (doc: DocItem) => {
+    if (!doc.file_path) return;
+    try {
+      const { error: delError } = await supabase.storage
+        .from("loss-draft-documents")
+        .remove([doc.file_path]);
+      if (delError) throw delError;
+
+      const { error: updateError } = await supabase
+        .from("loss_draft_documents")
+        .update({ file_path: null, file_name: null })
+        .eq("id", doc.id);
+      if (updateError) throw updateError;
+
+      toast({ title: "File removed" });
+      invalidateAll();
+    } catch (e: any) {
+      toast({ title: "Delete failed", description: e.message, variant: "destructive" });
     }
   };
 
@@ -341,24 +415,81 @@ export function LossDraftDetailPanel({
         {/* Documents tab */}
         <TabsContent value="docs" className="mt-0 flex-1 overflow-auto">
           <ScrollArea className="h-full">
-            <div className="p-4 space-y-2">
+            <div className="p-4 space-y-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.xls,.xlsx"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file && uploadingDocId) {
+                    handleFileUpload(uploadingDocId, file);
+                  }
+                  e.target.value = "";
+                }}
+              />
               {docs.length === 0 ? (
                 <p className="text-xs text-muted-foreground italic">No document checklist generated yet.</p>
               ) : (
                 docs.map(d => (
-                  <div key={d.id} className="flex items-center gap-2 py-1">
-                    <Checkbox checked={d.is_submitted} onCheckedChange={(checked) => toggleDoc(d.id, !!checked)} />
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-xs ${d.is_submitted ? "line-through text-muted-foreground" : ""}`}>{d.document_label}</p>
-                      {d.is_required && !d.is_submitted && (
-                        <Badge variant="destructive" className="text-[9px] px-1">Required</Badge>
+                  <div key={d.id} className="border rounded-lg p-2 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <Checkbox checked={d.is_submitted} onCheckedChange={(checked) => toggleDoc(d.id, !!checked)} />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs ${d.is_submitted ? "line-through text-muted-foreground" : ""}`}>{d.document_label}</p>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          {d.is_required && !d.is_submitted && (
+                            <Badge variant="destructive" className="text-[9px] px-1">Required</Badge>
+                          )}
+                          {d.submitted_at && (
+                            <span className="text-[10px] text-muted-foreground">
+                              {format(new Date(d.submitted_at), "M/d")}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* File attachment area */}
+                    <div className="pl-6">
+                      {d.file_path ? (
+                        <div className="flex items-center gap-1.5 bg-accent/30 rounded px-2 py-1">
+                          <FileText className="h-3 w-3 text-muted-foreground shrink-0" />
+                          <span className="text-[10px] truncate flex-1">{d.file_name}</span>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-5 w-5"
+                            onClick={() => handleFileDownload(d)}
+                          >
+                            <Download className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-5 w-5 text-destructive"
+                            onClick={() => handleFileDelete(d)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-[10px] gap-1"
+                          disabled={uploadingDocId === d.id}
+                          onClick={() => {
+                            setUploadingDocId(d.id);
+                            fileInputRef.current?.click();
+                          }}
+                        >
+                          <Upload className="h-3 w-3" />
+                          {uploadingDocId === d.id ? "Uploading..." : "Upload File"}
+                        </Button>
                       )}
                     </div>
-                    {d.submitted_at && (
-                      <span className="text-[10px] text-muted-foreground shrink-0">
-                        {format(new Date(d.submitted_at), "M/d")}
-                      </span>
-                    )}
                   </div>
                 ))
               )}
