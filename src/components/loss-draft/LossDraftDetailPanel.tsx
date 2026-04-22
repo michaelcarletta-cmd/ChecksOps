@@ -64,6 +64,8 @@ interface DocItem {
   is_submitted: boolean;
   submitted_at: string | null;
   notes: string | null;
+  file_path: string | null;
+  file_name: string | null;
 }
 
 interface AuditEntry {
