@@ -21,10 +21,32 @@ export function WhiteLabelLogin() {
     try {
       const normalizedEmail = email.trim().toLowerCase();
       const normalizedPassword = password.trim();
-      const { error } = await supabase.auth.signInWithPassword({
-        email: normalizedEmail,
-        password: normalizedPassword,
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/auth/v1/token?grant_type=password`,
+        {
+          method: "POST",
+          headers: {
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: normalizedEmail,
+            password: normalizedPassword,
+          }),
+        }
+      );
+
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload?.msg || payload?.error_description || payload?.error || "Invalid credentials");
+      }
+
+      const { error } = await supabase.auth.setSession({
+        access_token: payload.access_token,
+        refresh_token: payload.refresh_token,
       });
+
       if (error) throw error;
     } catch (err: any) {
       toast({
