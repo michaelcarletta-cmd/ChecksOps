@@ -159,6 +159,16 @@ function AppRoutes() {
     );
   }
 
+  if (user && userRole === "guided") {
+    return (
+      <Routes>
+        {publicRoutes}
+        <Route path="/guided" element={<Suspense fallback={<PageLoader />}><GuidedPortal /></Suspense>} />
+        <Route path="*" element={<Navigate to="/guided" replace />} />
+      </Routes>
+    );
+  }
+
   // Admin and staff routes
   return (
     <Routes>
