@@ -69,14 +69,14 @@ export function GuidedIntakeWizard({ userId, onComplete, onCancel }: Props) {
       const { data: claim, error } = await supabase
         .from("claims")
         .insert({
-          carrier,
+          insurance_company: carrier,
           claim_number: claimNumber,
           loss_date: lossDate || null,
-          property_address: propertyAddress || null,
           loss_type: lossType || null,
           status: claimStatus || "New",
           is_guided_mode: true,
-          policyholder_name: "", // Will be filled from profile
+          policyholder_name: "",
+          policyholder_address: propertyAddress || null,
         })
         .select()
         .single();
