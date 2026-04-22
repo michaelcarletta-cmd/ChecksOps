@@ -216,6 +216,76 @@ export function LossDraftDetailPanel({
     }
   };
 
+  const handleFileUpload = async (docId: string, file: File) => {
+    if (!user?.id || !draft) return;
+    setUploadingDocId(docId);
+    try {
+      const filePath = `${draft.claim_id}/${lossDraftId}/${docId}/${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("loss-draft-documents")
+        .upload(filePath, file, { upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { error: updateError } = await supabase
+        .from("loss_draft_documents")
+        .update({
+          file_path: filePath,
+          file_name: file.name,
+          is_submitted: true,
+          submitted_at: new Date().toISOString(),
+          submitted_by: user.id,
+        })
+        .eq("id", docId);
+      if (updateError) throw updateError;
+
+      toast({ title: "Document uploaded", description: `${file.name} uploaded successfully.` });
+      invalidateAll();
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: e.message, variant: "destructive" });
+    } finally {
+      setUploadingDocId(null);
+    }
+  };
+
+  const handleFileDownload = async (doc: DocItem) => {
+    if (!doc.file_path) return;
+    try {
+      const { data, error } = await supabase.storage
+        .from("loss-draft-documents")
+        .download(doc.file_path);
+      if (error) throw error;
+      const url = URL.createObjectURL(data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = doc.file_name || "document";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      toast({ title: "Download failed", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleFileDelete = async (doc: DocItem) => {
+    if (!doc.file_path) return;
+    try {
+      const { error: delError } = await supabase.storage
+        .from("loss-draft-documents")
+        .remove([doc.file_path]);
+      if (delError) throw delError;
+
+      const { error: updateError } = await supabase
+        .from("loss_draft_documents")
+        .update({ file_path: null, file_name: null })
+        .eq("id", doc.id);
+      if (updateError) throw updateError;
+
+      toast({ title: "File removed" });
+      invalidateAll();
+    } catch (e: any) {
+      toast({ title: "Delete failed", description: e.message, variant: "destructive" });
+    }
+  };
+
   if (!draft) return null;
 
   const sc = escrowStatusConfig[draft.escrow_status] ?? { label: draft.escrow_status, color: "" };
