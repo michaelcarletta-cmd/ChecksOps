@@ -85,21 +85,39 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // Check if user already exists
     let userId: string;
     const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedFullName = full_name?.trim() || null;
+
     const existingUser = listData?.users?.find(
-      (u: any) => u.email?.toLowerCase() === email.toLowerCase()
+      (u: any) => u.email?.toLowerCase() === normalizedEmail
     );
 
     if (existingUser) {
       userId = existingUser.id;
       console.log("User already exists:", userId);
 
+      // IMPORTANT: if they're already in this tenant, do not mutate auth credentials.
+      const { data: existingMembership } = await supabaseAdmin
+        .from("tenant_users")
+        .select("id")
+        .eq("tenant_id", tenant_id)
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (existingMembership) {
+        return new Response(
+          JSON.stringify({ error: "User is already a member of this tenant" }),
+          { status: 409, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+
       const { error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-        email,
+        email: normalizedEmail,
         password,
         email_confirm: true,
         user_metadata: {
           ...(existingUser.user_metadata ?? {}),
-          full_name: full_name || existingUser.user_metadata?.full_name || null,
+          full_name: normalizedFullName || existingUser.user_metadata?.full_name || null,
           role: "tenant_user",
         },
       });
@@ -114,10 +132,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     } else {
       // Create auth user
       const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
-        email,
+        email: normalizedEmail,
         password,
         email_confirm: true,
-        user_metadata: { full_name, role: "tenant_user" },
+        user_metadata: { full_name: normalizedFullName, role: "tenant_user" },
       });
 
       if (createErr) {
@@ -134,8 +152,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const { error: profileErr } = await supabaseAdmin.from("profiles").upsert({
       id: userId,
-      full_name: full_name || existingUser?.user_metadata?.full_name || null,
-      email,
+      full_name: normalizedFullName || existingUser?.user_metadata?.full_name || null,
+      email: normalizedEmail,
     }, { onConflict: "id" });
 
     if (profileErr) {
@@ -143,21 +161,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return new Response(
         JSON.stringify({ error: `Failed to save profile: ${profileErr.message}` }),
         { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
-    }
-
-    // Check if already a member of this tenant
-    const { data: existing } = await supabaseAdmin
-      .from("tenant_users")
-      .select("id")
-      .eq("tenant_id", tenant_id)
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (existing) {
-      return new Response(
-        JSON.stringify({ error: "User is already a member of this tenant" }),
-        { status: 409, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
