@@ -13460,6 +13460,213 @@ export type Database = {
         }
         Relationships: []
       }
+      referral_alerts: {
+        Row: {
+          actioned_at: string | null
+          alert_type: Database["public"]["Enums"]["referral_alert_type"]
+          claim_id: string
+          created_at: string
+          email_sent: boolean
+          id: string
+          is_actioned: boolean
+          is_dismissed: boolean
+          message: string | null
+          notification_method: string
+          trigger_reason: string
+          updated_at: string
+        }
+        Insert: {
+          actioned_at?: string | null
+          alert_type: Database["public"]["Enums"]["referral_alert_type"]
+          claim_id: string
+          created_at?: string
+          email_sent?: boolean
+          id?: string
+          is_actioned?: boolean
+          is_dismissed?: boolean
+          message?: string | null
+          notification_method?: string
+          trigger_reason: string
+          updated_at?: string
+        }
+        Update: {
+          actioned_at?: string | null
+          alert_type?: Database["public"]["Enums"]["referral_alert_type"]
+          claim_id?: string
+          created_at?: string
+          email_sent?: boolean
+          id?: string
+          is_actioned?: boolean
+          is_dismissed?: boolean
+          message?: string | null
+          notification_method?: string
+          trigger_reason?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_alerts_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "referral_alerts_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "referral_alerts_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      referral_professionals: {
+        Row: {
+          company: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          discovery_source: string | null
+          email: string | null
+          id: string
+          is_active: boolean
+          is_auto_discovered: boolean
+          is_premium: boolean
+          logo_url: string | null
+          name: string
+          phone: string | null
+          premium_expires_at: string | null
+          professional_type: Database["public"]["Enums"]["professional_type"]
+          rating: number | null
+          reviews_count: number | null
+          specialties: string[]
+          states_served: string[]
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string
+          website: string | null
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          discovery_source?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          is_auto_discovered?: boolean
+          is_premium?: boolean
+          logo_url?: string | null
+          name: string
+          phone?: string | null
+          premium_expires_at?: string | null
+          professional_type: Database["public"]["Enums"]["professional_type"]
+          rating?: number | null
+          reviews_count?: number | null
+          specialties?: string[]
+          states_served?: string[]
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+          website?: string | null
+        }
+        Update: {
+          company?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          discovery_source?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          is_auto_discovered?: boolean
+          is_premium?: boolean
+          logo_url?: string | null
+          name?: string
+          phone?: string | null
+          premium_expires_at?: string | null
+          professional_type?: Database["public"]["Enums"]["professional_type"]
+          rating?: number | null
+          reviews_count?: number | null
+          specialties?: string[]
+          states_served?: string[]
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
+      referral_recommendations: {
+        Row: {
+          claim_id: string
+          created_at: string
+          id: string
+          position: number
+          professional_id: string
+          recommendation_reason: string
+          selected_at: string | null
+          was_selected: boolean
+        }
+        Insert: {
+          claim_id: string
+          created_at?: string
+          id?: string
+          position?: number
+          professional_id: string
+          recommendation_reason: string
+          selected_at?: string | null
+          was_selected?: boolean
+        }
+        Update: {
+          claim_id?: string
+          created_at?: string
+          id?: string
+          position?: number
+          professional_id?: string
+          recommendation_reason?: string
+          selected_at?: string | null
+          was_selected?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_recommendations_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_last_activity"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "referral_recommendations_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claim_money_snapshot"
+            referencedColumns: ["claim_id"]
+          },
+          {
+            foreignKeyName: "referral_recommendations_claim_id_fkey"
+            columns: ["claim_id"]
+            isOneToOne: false
+            referencedRelation: "claims"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referral_recommendations_professional_id_fkey"
+            columns: ["professional_id"]
+            isOneToOne: false
+            referencedRelation: "referral_professionals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       referrers: {
         Row: {
           company: string | null
@@ -17436,6 +17643,11 @@ export type Database = {
         | "synctera"
         | "treasury_prime"
         | "increase"
+      professional_type: "contractor" | "public_adjuster" | "attorney"
+      referral_alert_type:
+        | "needs_contractor"
+        | "needs_public_adjuster"
+        | "needs_attorney"
     }
     CompositeTypes: {
       geometry_dump: {
@@ -17670,6 +17882,12 @@ export const Constants = {
         "synctera",
         "treasury_prime",
         "increase",
+      ],
+      professional_type: ["contractor", "public_adjuster", "attorney"],
+      referral_alert_type: [
+        "needs_contractor",
+        "needs_public_adjuster",
+        "needs_attorney",
       ],
     },
   },

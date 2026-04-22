@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, AlertTriangle, FileText, MessageSquare, Clock, Upload, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useReferralAlerts } from "@/hooks/useReferralAlerts";
+import { GuidedReferralAlert } from "./GuidedReferralAlert";
 
 interface Props {
   claimId: string;
@@ -39,6 +41,14 @@ export function GuidedClaimHome({ claimId, onSelectTask }: Props) {
   const [loading, setLoading] = useState(true);
   const [buildingMap, setBuildingMap] = useState(false);
   const { toast } = useToast();
+  const { alerts, dismissAlert, markActioned } = useReferralAlerts(claimId);
+
+  // Extract state from property address for referral matching
+  const claimState = (() => {
+    if (!claim?.property_address) return null;
+    const stateMatch = claim.property_address.match(/\b([A-Z]{2})\b\s*\d{5}/);
+    return stateMatch ? stateMatch[1] : null;
+  })();
 
   useEffect(() => {
     loadClaimData();
@@ -79,6 +89,16 @@ export function GuidedClaimHome({ claimId, onSelectTask }: Props) {
 
       await supabase.from("guided_claim_map").upsert(mapData, { onConflict: "claim_id" });
       setClaimMap(mapData);
+
+      // Check for escalation triggers after map is built
+      try {
+        await supabase.functions.invoke("referral-engine", {
+          body: { action: "check_escalation", claimId },
+        });
+      } catch (e) {
+        console.warn("Referral escalation check failed:", e);
+      }
+
       toast({ title: "Claim map built", description: "Darwin analyzed your claim." });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -131,8 +151,17 @@ export function GuidedClaimHome({ claimId, onSelectTask }: Props) {
           </div>
         </div>
       )}
+      {/* Referral Alerts - Contractor/PA/Attorney recommendations */}
+      {alerts.length > 0 && (
+        <GuidedReferralAlert
+          alerts={alerts}
+          claimState={claimState}
+          onDismiss={dismissAlert}
+          onActioned={markActioned}
+        />
+      )}
 
-      {/* Claim Map */}
+
       <Card className="border-border bg-card">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-foreground text-base">Darwin's Claim Analysis</CardTitle>
