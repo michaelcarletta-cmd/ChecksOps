@@ -123,6 +123,8 @@ function AppRoutes() {
       <Route path="/endorse" element={<Suspense fallback={<PageLoader />}><Endorse /></Suspense>} />
       <Route path="/payment-direction/:token" element={<Suspense fallback={<PageLoader />}><PaymentDirectionPage /></Suspense>} />
       <Route path="/portal" element={<Suspense fallback={<PageLoader />}><PortalLogin /></Suspense>} />
+      <Route path="/guided/auth" element={<Suspense fallback={<PageLoader />}><GuidedAuth /></Suspense>} />
+      <Route path="/guided" element={<Suspense fallback={<PageLoader />}><GuidedPortal /></Suspense>} />
       {/* Redirect unauthenticated portal visitors to PIN login */}
       {!user && (
         <>
