@@ -89,6 +89,16 @@ export function GuidedClaimHome({ claimId, onSelectTask }: Props) {
 
       await supabase.from("guided_claim_map").upsert(mapData, { onConflict: "claim_id" });
       setClaimMap(mapData);
+
+      // Check for escalation triggers after map is built
+      try {
+        await supabase.functions.invoke("referral-engine", {
+          body: { action: "check_escalation", claimId },
+        });
+      } catch (e) {
+        console.warn("Referral escalation check failed:", e);
+      }
+
       toast({ title: "Claim map built", description: "Darwin analyzed your claim." });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
