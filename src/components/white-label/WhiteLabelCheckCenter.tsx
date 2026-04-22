@@ -22,7 +22,13 @@ export function WhiteLabelCheckCenter() {
   const [usersOpen, setUsersOpen] = useState(false);
 
   if (loading) return <PageLoader />;
-  if (!user) return <Navigate to={`/wl/${tenant?.slug}/login`} replace />;
+  if (!user) {
+    // Support both /wl/{slug} routes and custom domain routes
+    const loginPath = tenant?.slug && window.location.pathname.startsWith("/wl/")
+      ? `/wl/${tenant.slug}/login`
+      : "/login";
+    return <Navigate to={loginPath} replace />;
+  }
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
