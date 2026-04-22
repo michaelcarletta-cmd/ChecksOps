@@ -128,7 +128,7 @@ export default function GuidedPortal() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="font-medium text-foreground">{claim.claim_number || "No claim number"}</p>
-                        <p className="text-sm text-muted-foreground">{claim.carrier || "Unknown carrier"} — {claim.property_address || "No address"}</p>
+                        <p className="text-sm text-muted-foreground">{claim.insurance_company || "Unknown carrier"} — {claim.policyholder_address || "No address"}</p>
                       </div>
                       <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">
                         {claim.status || "New"}
