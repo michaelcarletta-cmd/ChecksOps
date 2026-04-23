@@ -250,8 +250,49 @@ export default function CheckCommandCenter() {
     : activeTab === "branch" ? branchDeposit
     : checks;
 
+  const lossDraftChecks = checks.filter((c) => c.status === "loss_draft_required");
+
+  const summaryCards = [
+    {
+      label: "Endorsing",
+      count: awaitingEndorsement.length,
+      icon: Send,
+      gradient: "from-amber-500/20 to-amber-600/10",
+      iconColor: "text-amber-400",
+      borderColor: "border-amber-500/30",
+      tab: "endorsements",
+    },
+    {
+      label: "Review",
+      count: needsReview.length,
+      icon: ClipboardCheck,
+      gradient: "from-orange-500/20 to-orange-600/10",
+      iconColor: "text-orange-400",
+      borderColor: "border-orange-500/30",
+      tab: "review",
+    },
+    {
+      label: "Ready for Deposit",
+      count: readyForDeposit.length,
+      icon: CheckCircle2,
+      gradient: "from-emerald-500/20 to-emerald-600/10",
+      iconColor: "text-emerald-400",
+      borderColor: "border-emerald-500/30",
+      tab: "ready",
+    },
+    {
+      label: "Loss Draft",
+      count: lossDraftChecks.length,
+      icon: Landmark,
+      gradient: "from-violet-500/20 to-violet-600/10",
+      iconColor: "text-violet-400",
+      borderColor: "border-violet-500/30",
+      tab: "lossdraft",
+    },
+  ];
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Check Command Center</h1>
@@ -260,45 +301,6 @@ export default function CheckCommandCenter() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Sheet open={helpOpen} onOpenChange={setHelpOpen}>
-            <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="h-9 w-9">
-                <HelpCircle className="h-4 w-4" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="right" className="w-[320px] sm:w-[320px]">
-              <SheetHeader>
-                <SheetTitle>How to Use Check Command Center</SheetTitle>
-              </SheetHeader>
-              <div className="mt-6 space-y-6">
-                <HelpStep
-                  step={1}
-                  title="Receive Endorsement"
-                  description="When a check arrives with 'Branch Endorsement Required' status, it means all payees must sign before the check can be deposited. The endorsement checklist tracks each payee's signature status."
-                />
-                <HelpStep
-                  step={2}
-                  title="Move to Branch"
-                  description="Once endorsements are complete, the check moves to the Branch tab. A reviewer assigns the deposit path — either direct deposit, branch deposit, or loss draft if a mortgage company is involved."
-                />
-                <HelpStep
-                  step={3}
-                  title="Approve for Deposit"
-                  description="Click 'Approve for Deposit' to mark the check ready. For branch deposits, use 'Move to Deposited' once the physical deposit is complete. If stuck, use 'Force Move to Deposited'."
-                />
-                <HelpStep
-                  step={4}
-                  title="Check Deposited"
-                  description="Final state — the check has been deposited and is awaiting clearance. The accounting entry is auto-posted and the check appears in reconciliation reports."
-                />
-              </div>
-              <div className="mt-8">
-                <Button variant="outline" className="w-full" onClick={() => setHelpOpen(false)}>
-                  Dismiss
-                </Button>
-              </div>
-            </SheetContent>
-          </Sheet>
           <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
             <DialogTrigger asChild>
               <Button><Upload className="h-4 w-4 mr-2" />Upload Check</Button>
@@ -317,6 +319,27 @@ export default function CheckCommandCenter() {
         </div>
       </div>
 
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {summaryCards.map((c) => (
+          <button
+            key={c.label}
+            onClick={() => { setActiveTab(c.tab); setSelectedCheck(null); setReviewCheckId(null); }}
+            className={`group relative overflow-hidden rounded-xl border ${c.borderColor} bg-gradient-to-br ${c.gradient} p-4 text-left transition-all hover:scale-[1.02] hover:shadow-lg hover:shadow-black/10 active:scale-[0.98]`}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-3xl font-bold tracking-tight">{c.count}</p>
+                <p className="text-xs font-medium text-muted-foreground mt-1">{c.label}</p>
+              </div>
+              <div className={`rounded-lg bg-background/50 p-2 ${c.iconColor}`}>
+                <c.icon className="h-5 w-5" />
+              </div>
+            </div>
+            <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-white/5 pointer-events-none" />
+          </button>
+        ))}
+      </div>
 
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSelectedCheck(null); setReviewCheckId(null); }}>
         <TabsList className="w-full flex-wrap h-auto gap-1 p-1">
